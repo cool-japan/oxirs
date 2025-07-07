@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
 
@@ -1114,7 +1113,7 @@ impl AdaptiveIntelligentCache {
         }
     }
 
-    fn should_promote(&self, key: &CacheKey, value: &CacheValue, current_tier: usize) -> bool {
+    fn should_promote(&self, _key: &CacheKey, value: &CacheValue, current_tier: usize) -> bool {
         // Use ML model to determine if item should be promoted
         let access_frequency = value.access_count as f64;
         let recency_score = self.calculate_recency_score(value.last_accessed);
@@ -1183,7 +1182,7 @@ impl AdaptiveIntelligentCache {
         Ok(())
     }
 
-    fn collect_tier_items(&self, tier_id: u32) -> Vec<CacheItem> {
+    fn collect_tier_items(&self, _tier_id: u32) -> Vec<CacheItem> {
         // This would collect all items from the tier for eviction analysis
         // Simplified implementation
         Vec::new()
@@ -1196,14 +1195,14 @@ impl AdaptiveIntelligentCache {
         hasher.finish()
     }
 
-    fn update_store_metrics(&mut self, tier_id: u32, latency: Duration) {
+    fn update_store_metrics(&mut self, tier_id: u32, _latency: Duration) {
         // Update tier-specific metrics
-        if let Some(tier_metrics) = self.metrics.tier_metrics.get_mut(&tier_id) {
+        if let Some(_tier_metrics) = self.metrics.tier_metrics.get_mut(&tier_id) {
             // Update tier metrics
         }
     }
 
-    fn update_hit_metrics(&mut self, tier_id: u32, latency: Duration) {
+    fn update_hit_metrics(&mut self, _tier_id: u32, latency: Duration) {
         self.metrics.hit_count.fetch_add(1, Ordering::Relaxed);
         self.metrics.total_requests.fetch_add(1, Ordering::Relaxed);
 
@@ -1263,13 +1262,13 @@ impl AdaptiveIntelligentCache {
         let miss_count = self.metrics.miss_count.load(Ordering::Relaxed);
         let total = hit_count + miss_count;
 
-        metrics.push_str(&format!("oxirs_cache_hits_total {}\n", hit_count));
-        metrics.push_str(&format!("oxirs_cache_misses_total {}\n", miss_count));
-        metrics.push_str(&format!("oxirs_cache_requests_total {}\n", total));
+        metrics.push_str(&format!("oxirs_cache_hits_total {hit_count}\n"));
+        metrics.push_str(&format!("oxirs_cache_misses_total {miss_count}\n"));
+        metrics.push_str(&format!("oxirs_cache_requests_total {total}\n"));
 
         if total > 0 {
             let hit_rate = hit_count as f64 / total as f64;
-            metrics.push_str(&format!("oxirs_cache_hit_rate {:.4}\n", hit_rate));
+            metrics.push_str(&format!("oxirs_cache_hit_rate {hit_rate:.4}\n"));
         }
 
         metrics.push_str(&format!(
@@ -1294,8 +1293,8 @@ impl AdaptiveIntelligentCache {
         let hit_count = self.metrics.hit_count.load(Ordering::Relaxed);
         let miss_count = self.metrics.miss_count.load(Ordering::Relaxed);
 
-        csv.push_str(&format!("hit_count,{},{}\n", hit_count, now));
-        csv.push_str(&format!("miss_count,{},{}\n", miss_count, now));
+        csv.push_str(&format!("hit_count,{hit_count},{now}\n"));
+        csv.push_str(&format!("miss_count,{miss_count},{now}\n"));
         csv.push_str(&format!(
             "memory_utilization,{:.4},{}\n",
             self.calculate_memory_utilization(),
@@ -1417,6 +1416,12 @@ pub enum ExportFormat {
 }
 
 // Placeholder implementations for complex components
+impl Default for AccessPatternAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AccessPatternAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -1437,6 +1442,12 @@ impl AccessPatternAnalyzer {
 }
 
 // Additional placeholder implementations...
+impl Default for SeasonalPatternDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SeasonalPatternDetector {
     pub fn new() -> Self {
         Self {
@@ -1448,6 +1459,12 @@ impl SeasonalPatternDetector {
     }
 }
 
+impl Default for QueryClusteringEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryClusteringEngine {
     pub fn new() -> Self {
         Self {
@@ -1455,6 +1472,12 @@ impl QueryClusteringEngine {
             cluster_assignments: HashMap::new(),
             cluster_centroids: Vec::new(),
         }
+    }
+}
+
+impl Default for TemporalAccessPredictor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1469,6 +1492,12 @@ impl TemporalAccessPredictor {
             },
             prediction_horizon: Duration::from_secs(3600),
         }
+    }
+}
+
+impl Default for PredictivePrefetcher {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1514,6 +1543,12 @@ impl PredictivePrefetcher {
     }
 }
 
+impl Default for PrefetchModels {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PrefetchModels {
     pub fn new() -> Self {
         Self {
@@ -1536,6 +1571,12 @@ impl PrefetchModels {
                 },
             },
         }
+    }
+}
+
+impl Default for CacheOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1626,6 +1667,12 @@ impl TierPlacementModel {
     }
 }
 
+impl Default for AccessTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AccessTracker {
     pub fn new() -> Self {
         Self {
@@ -1635,11 +1682,11 @@ impl AccessTracker {
         }
     }
 
-    pub fn on_access(&mut self, key: &CacheKey, access_time: Instant) {
+    pub fn on_access(&mut self, key: &CacheKey, _access_time: Instant) {
         *self.access_counts.entry(key.clone()).or_insert(0) += 1;
         self.access_times
             .entry(key.clone())
-            .or_insert_with(VecDeque::new)
+            .or_default()
             .push_back(SystemTime::now());
     }
 
@@ -1647,7 +1694,7 @@ impl AccessTracker {
         // Record that an item was stored
         self.access_times
             .entry(key.clone())
-            .or_insert_with(VecDeque::new);
+            .or_default();
     }
 
     pub fn on_remove(&mut self, key: &CacheKey) {
@@ -1660,6 +1707,12 @@ impl AccessTracker {
 #[derive(Debug)]
 pub struct LRUEvictionPolicy {
     access_order: VecDeque<CacheKey>,
+}
+
+impl Default for LRUEvictionPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LRUEvictionPolicy {
@@ -1709,6 +1762,12 @@ pub struct LFUEvictionPolicy {
     frequency_map: HashMap<CacheKey, u64>,
 }
 
+impl Default for LFUEvictionPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LFUEvictionPolicy {
     pub fn new() -> Self {
         Self {
@@ -1728,7 +1787,7 @@ impl EvictionPolicy for LFUEvictionPolicy {
         let items_to_evict = (bytes_to_evict / 1024).max(1) as usize;
 
         let mut frequency_pairs: Vec<_> = self.frequency_map.iter().collect();
-        frequency_pairs.sort_by_key(|(_, &freq)| freq);
+        frequency_pairs.sort_by_key(|&(_, &freq)| freq);
 
         frequency_pairs
             .iter()
@@ -1755,6 +1814,12 @@ pub struct AdaptiveEvictionPolicy {
     lru_component: LRUEvictionPolicy,
     lfu_component: LFUEvictionPolicy,
     lru_weight: f64,
+}
+
+impl Default for AdaptiveEvictionPolicy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AdaptiveEvictionPolicy {

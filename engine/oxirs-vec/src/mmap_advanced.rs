@@ -6,17 +6,16 @@
 //! - NUMA-aware memory allocation
 //! - Swapping policies for memory pressure
 
-use anyhow::{bail, Context, Result};
-use crossbeam_utils::CachePadded;
+use anyhow::{bail, Result};
 use lru::LruCache;
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use memmap2::Mmap;
 use oxirs_core::parallel::*;
-use parking_lot::{Mutex, RwLock};
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use parking_lot::RwLock;
+use std::collections::{HashMap, VecDeque};
 use std::num::NonZeroUsize;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Page size for lazy loading (16KB for better vector alignment)
 const VECTOR_PAGE_SIZE: usize = 16384;
@@ -84,13 +83,25 @@ struct AccessPattern {
 
 /// Page cache entry with metadata
 #[derive(Debug)]
-struct PageCacheEntry {
+pub struct PageCacheEntry {
     data: Vec<u8>,
     page_id: usize,
     last_access: Instant,
     access_count: AtomicUsize,
     dirty: bool,
     numa_node: i32,
+}
+
+impl PageCacheEntry {
+    /// Get the data slice
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Get the NUMA node
+    pub fn numa_node(&self) -> i32 {
+        self.numa_node
+    }
 }
 
 /// Eviction policy for page cache
@@ -273,19 +284,88 @@ impl AdvancedMemoryMap {
     /// Predictive prefetching based on access patterns
     fn prefetch_pages(&self, current_page: usize) {
         let patterns = self.access_patterns.read();
+        let freq = self.page_frequency.read();
 
-        // Simple sequential prefetching for now
-        for i in 1..=self.prefetch_distance {
-            let prefetch_page = current_page + i;
+        // Analyze recent access patterns for intelligent prefetching
+        let recent_patterns: Vec<_> = patterns.iter().rev().take(10).collect();
 
-            // Spawn async prefetch
-            let self_clone = self.clone_ref();
-            spawn(move || {
-                let _ = self_clone.get_page(prefetch_page);
-            });
+        // Check for sequential access pattern
+        let is_sequential = recent_patterns
+            .windows(2)
+            .all(|w| w[0].page_id > 0 && w[0].page_id == w[1].page_id + 1);
+
+        // Check for strided access pattern
+        let stride = if recent_patterns.len() >= 3 {
+            let diff1 = recent_patterns[0]
+                .page_id
+                .saturating_sub(recent_patterns[1].page_id);
+            let diff2 = recent_patterns[1]
+                .page_id
+                .saturating_sub(recent_patterns[2].page_id);
+            if diff1 == diff2 && diff1 > 0 && diff1 <= 10 {
+                Some(diff1)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        // Adaptive prefetching based on patterns
+        if is_sequential {
+            // Aggressive sequential prefetching
+            for i in 1..=(self.prefetch_distance * 2) {
+                let prefetch_page = current_page + i;
+                self.async_prefetch(prefetch_page);
+            }
+        } else if let Some(stride) = stride {
+            // Strided prefetching
+            for i in 1..=self.prefetch_distance {
+                let prefetch_page = current_page + (i * stride);
+                self.async_prefetch(prefetch_page);
+            }
+        } else {
+            // Conservative prefetching with frequency-based hints
+            for i in 1..=self.prefetch_distance {
+                let prefetch_page = current_page + i;
+
+                // Check if this page has been accessed frequently
+                let frequency = *freq.get(&prefetch_page).unwrap_or(&0);
+                if frequency > 0 {
+                    self.async_prefetch(prefetch_page);
+                }
+            }
         }
 
-        // TODO: Implement more sophisticated pattern-based prefetching
+        // Prefetch frequently accessed pages near current page
+        let nearby_range = current_page.saturating_sub(3)..=(current_page + 3);
+        for page_id in nearby_range {
+            let frequency = *freq.get(&page_id).unwrap_or(&0);
+            if frequency > 2 && page_id != current_page {
+                self.async_prefetch(page_id);
+            }
+        }
+    }
+
+    /// Asynchronous prefetch with throttling
+    pub fn async_prefetch(&self, page_id: usize) {
+        // Check if page is already in cache
+        {
+            let cache = self.page_cache.read();
+            if cache.contains(&page_id) {
+                return;
+            }
+        }
+
+        // Check memory pressure before prefetching
+        if *self.memory_pressure.read() >= MemoryPressure::High {
+            return;
+        }
+
+        let self_clone = self.clone_ref();
+        spawn(move || {
+            let _ = self_clone.get_page(page_id);
+        });
     }
 
     /// Check system memory pressure
@@ -484,6 +564,12 @@ pub struct NumaVectorAllocator {
     current_node: AtomicUsize,
 }
 
+impl Default for NumaVectorAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NumaVectorAllocator {
     pub fn new() -> Self {
         let numa_nodes = if numa::is_available() {
@@ -513,6 +599,30 @@ impl NumaVectorAllocator {
         // For now, just use standard allocation
         // TODO: Implement actual NUMA allocation when libc bindings are available
         vec![0u8; size]
+    }
+
+    /// Allocate optimized vector with NUMA awareness (specialized for f32 vectors)
+    pub fn allocate_vector_on_node(&self, dimensions: usize, node: Option<i32>) -> Vec<f32> {
+        if !numa::is_available() {
+            // Pre-allocate with optimal alignment for SIMD operations
+            let mut vec = Vec::with_capacity(dimensions);
+            vec.resize(dimensions, 0.0f32);
+            return vec;
+        }
+
+        let target_node = node.unwrap_or_else(|| {
+            // Use current CPU's NUMA node for better locality
+            self.preferred_node()
+        });
+
+        // For better performance, use aligned allocation
+        let mut vec = Vec::with_capacity(dimensions);
+        vec.resize(dimensions, 0.0f32);
+
+        // TODO: When NUMA bindings are available, use numa_alloc_onnode
+        // and bind the memory to the specific node
+
+        vec
     }
 
     /// Get preferred NUMA node for current thread

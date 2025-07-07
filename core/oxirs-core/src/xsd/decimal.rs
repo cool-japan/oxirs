@@ -419,7 +419,7 @@ impl fmt::Display for Decimal {
         
         if fractional_part != 0 {
             // Remove trailing zeros
-            let mut fractional_str = format!("{:018}", fractional_part);
+            let mut fractional_str = format!("{fractional_part}");
             while fractional_str.ends_with('0') && fractional_str.len() > 1 {
                 fractional_str.pop();
             }

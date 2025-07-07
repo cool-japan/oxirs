@@ -43,19 +43,14 @@ fn example_local_arena() -> Result<(), Box<dyn std::error::Error>> {
     let arena_term3 = arena.alloc_term(&term3);
 
     println!("\nAllocated terms:");
-    match arena_term1 {
-        oxirs_core::store::ArenaTerm::NamedNode(s) => println!("  NamedNode: {}", s.as_str()),
-        _ => {}
+    if let oxirs_core::store::ArenaTerm::NamedNode(s) = arena_term1 {
+        println!("  NamedNode: {}", s.as_str());
     }
-    match arena_term2 {
-        oxirs_core::store::ArenaTerm::Literal { value, .. } => {
-            println!("  Literal: {}", value.as_str())
-        }
-        _ => {}
+    if let oxirs_core::store::ArenaTerm::Literal { value, .. } = arena_term2 {
+        println!("  Literal: {}", value.as_str());
     }
-    match arena_term3 {
-        oxirs_core::store::ArenaTerm::BlankNode(s) => println!("  BlankNode: {}", s.as_str()),
-        _ => {}
+    if let oxirs_core::store::ArenaTerm::BlankNode(s) = arena_term3 {
+        println!("  BlankNode: {}", s.as_str());
     }
 
     println!("\nTotal allocated: {} bytes", arena.allocated_bytes());
@@ -76,10 +71,10 @@ fn example_concurrent_arena() -> Result<(), Box<dyn std::error::Error>> {
             let arena = Arc::clone(&arena);
             std::thread::spawn(move || {
                 for i in 0..10 {
-                    let uri = format!("http://example.org/thread{}/resource{}", thread_id, i);
+                    let uri = format!("http://example.org/thread{thread_id}/resource{i}");
                     let allocated = arena.alloc_str(&uri);
                     if i == 0 {
-                        println!("Thread {}: allocated '{}'", thread_id, allocated);
+                        println!("Thread {thread_id}: allocated '{allocated}'");
                     }
                 }
             })
@@ -135,14 +130,12 @@ fn example_graph_arena() -> Result<(), Box<dyn std::error::Error>> {
 
     let arena_triple = arena.alloc_triple(&triple);
     println!("\nAllocated triple:");
-    match arena_triple.subject {
-        oxirs_core::store::ArenaTerm::NamedNode(s) => print!("  Subject: {}", s.as_str()),
-        _ => {}
+    if let oxirs_core::store::ArenaTerm::NamedNode(s) = arena_triple.subject {
+        print!("  Subject: {}", s.as_str());
     }
     print!(" -> {}", arena_triple.predicate.as_str());
-    match arena_triple.object {
-        oxirs_core::store::ArenaTerm::NamedNode(s) => println!(" -> Object: {}", s.as_str()),
-        _ => {}
+    if let oxirs_core::store::ArenaTerm::NamedNode(s) = arena_triple.object {
+        println!(" -> Object: {}", s.as_str());
     }
 
     println!();
@@ -166,7 +159,7 @@ fn example_scoped_arena() -> Result<(), Box<dyn std::error::Error>> {
 
         // Allocate in the scope
         for i in 0..5 {
-            scoped.alloc_str(&format!("scoped allocation {}", i));
+            scoped.alloc_str(&format!("scoped allocation {i}"));
         }
 
         println!("Scoped allocations: {} bytes", scoped.scope_allocated());
@@ -191,10 +184,7 @@ fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let mut heap_allocated = Vec::with_capacity(NUM_ALLOCATIONS);
     for i in 0..NUM_ALLOCATIONS {
-        let term = Term::NamedNode(NamedNode::new(&format!(
-            "http://example.org/resource{}",
-            i
-        ))?);
+        let term = Term::NamedNode(NamedNode::new(format!("http://example.org/resource{i}"))?);
         heap_allocated.push(term);
     }
     let heap_duration = start.elapsed();
@@ -203,10 +193,7 @@ fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     let arena = LocalArena::with_capacity(1024 * 1024); // 1MB
     let start = Instant::now();
     for i in 0..NUM_ALLOCATIONS {
-        let term = Term::NamedNode(NamedNode::new(&format!(
-            "http://example.org/resource{}",
-            i
-        ))?);
+        let term = Term::NamedNode(NamedNode::new(format!("http://example.org/resource{i}"))?);
         arena.alloc_term(&term);
     }
     let arena_duration = start.elapsed();

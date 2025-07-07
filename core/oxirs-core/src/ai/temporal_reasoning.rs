@@ -716,7 +716,7 @@ impl TemporalReasoner {
         // Get facts based on query type
         match &query.query_type {
             TemporalQueryType::ValidAt { time } => {
-                for (_timestamp, time_facts) in &self.temporal_kb.facts_by_time {
+                for time_facts in self.temporal_kb.facts_by_time.values() {
                     for fact in time_facts {
                         if fact.validity.contains(*time) {
                             facts.push(fact.clone());
@@ -725,7 +725,7 @@ impl TemporalReasoner {
                 }
             }
             TemporalQueryType::ValidDuring { interval } => {
-                for (_timestamp, time_facts) in &self.temporal_kb.facts_by_time {
+                for time_facts in self.temporal_kb.facts_by_time.values() {
                     for fact in time_facts {
                         if fact.validity.overlaps(interval) {
                             facts.push(fact.clone());

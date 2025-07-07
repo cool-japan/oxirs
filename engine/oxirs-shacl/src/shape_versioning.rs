@@ -6,23 +6,16 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::SystemTime;
 
 use anyhow::Result;
-use indexmap::IndexMap;
 use semver::{Version, VersionReq};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
+use oxirs_core::Store;
 
-use crate::{
-    constraints::*, report::*, validation::ValidationEngine, Constraint, ConstraintComponentId,
-    Result as ShaclResult, Severity, Shape, ShapeId, ShapeType, ValidationConfig, ValidationReport,
-};
+use crate::{constraints::Constraint, Shape, ShapeId};
 
 /// Shape version identifier
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -647,7 +640,7 @@ impl ShapeVersionRegistry {
             if !new_shape.constraints.contains_key(old_constraint_id) {
                 result.add_issue(CompatibilityIssue {
                     issue_type: CompatibilityIssueType::ConstraintRemoved,
-                    description: format!("Constraint removed: {:?}", old_constraint_id),
+                    description: format!("Constraint removed: {old_constraint_id:?}"),
                     severity: ImpactSeverity::High,
                 });
             }
@@ -658,7 +651,7 @@ impl ShapeVersionRegistry {
             if !old_shape.constraints.contains_key(new_constraint_id) {
                 result.add_issue(CompatibilityIssue {
                     issue_type: CompatibilityIssueType::ConstraintAdded,
-                    description: format!("New constraint added: {:?}", new_constraint_id),
+                    description: format!("New constraint added: {new_constraint_id:?}"),
                     severity: ImpactSeverity::Medium,
                 });
             }
@@ -730,7 +723,7 @@ impl VersionComparison {
     pub fn compare(shape1: &Shape, shape2: &Shape) -> Self {
         let mut constraints_added = Vec::new();
         let mut constraints_removed = Vec::new();
-        let mut constraints_modified = Vec::new();
+        let constraints_modified = Vec::new();
 
         // Find added constraints
         for (constraint_id, constraint) in &shape2.constraints {
@@ -776,6 +769,12 @@ pub struct CompatibilityResult {
 
     /// Compatibility issues found
     pub issues: Vec<CompatibilityIssue>,
+}
+
+impl Default for CompatibilityResult {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CompatibilityResult {
@@ -843,6 +842,12 @@ pub struct MigrationResult {
     pub summary: String,
 }
 
+impl Default for MigrationResult {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MigrationResult {
     /// Create a new migration result
     pub fn new() -> Self {
@@ -880,6 +885,12 @@ pub struct MigrationStepResult {
     pub execution_time: std::time::Duration,
 }
 
+impl Default for VersionValidationStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VersionValidationStats {
     /// Create new validation statistics
     pub fn new() -> Self {
@@ -906,7 +917,8 @@ impl VersionValidationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Severity, ShapeMetadata};
+    use crate::{ConstraintComponentId, Severity, ShapeMetadata, ShapeType};
+    use indexmap::IndexMap;
 
     #[test]
     fn test_shape_version_registry() {

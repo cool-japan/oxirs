@@ -307,30 +307,30 @@ impl HybridQueryEngine {
     /// Execute a hybrid query with advanced optimization
     pub async fn execute_hybrid_query(&mut self, query: HybridQuery) -> Result<HybridQueryResult> {
         let start_time = std::time::Instant::now();
-        
+
         // Phase 1: Query Analysis and Planning
         let execution_plan = self.analyze_and_plan(&query).await?;
-        
+
         // Phase 2: Vector Search (if needed)
         let vector_results = if let Some(vector_params) = &query.vector_search {
             Some(self.execute_vector_search(vector_params).await?)
         } else {
             None
         };
-        
+
         // Phase 3: SPARQL Query Execution with ARQ Optimization
         let sparql_results = self.execute_sparql_query(&query.sparql_query, &execution_plan).await?;
-        
+
         // Phase 4: SHACL Validation (if enabled)
         let validation_results = if let Some(constraints) = &query.validation_constraints {
             Some(self.validate_results(&sparql_results, constraints).await?)
         } else {
             None
         };
-        
+
         // Phase 5: Inference and Reasoning
         let inferred_facts = self.apply_inference_rules(&query.inference_rules, &sparql_results).await?;
-        
+
         // Phase 6: Result Integration and Post-processing
         let final_results = self.integrate_results(
             query.id,
@@ -340,13 +340,13 @@ impl HybridQueryEngine {
             inferred_facts,
             start_time.elapsed(),
         ).await?;
-        
+
         // Update statistics
         self.stats.total_queries += 1;
-        self.stats.avg_execution_time_ms = 
-            (self.stats.avg_execution_time_ms * (self.stats.total_queries - 1) as f64 + 
+        self.stats.avg_execution_time_ms =
+            (self.stats.avg_execution_time_ms * (self.stats.total_queries - 1) as f64 +
              start_time.elapsed().as_millis() as f64) / self.stats.total_queries as f64;
-        
+
         Ok(final_results)
     }
 
@@ -365,14 +365,14 @@ impl HybridQueryEngine {
             parallel_opportunities: self.identify_parallelization(query),
             optimization_level: OptimizationLevel::Aggressive,
         };
-        
+
         Ok(plan)
     }
 
     /// Execute vector similarity search
     async fn execute_vector_search(&mut self, params: &VectorSearchParams) -> Result<VectorResults> {
         self.stats.vector_searches += 1;
-        
+
         // Simulate vector search execution
         let similar_resources = vec![
             SimilarResource {
@@ -386,7 +386,7 @@ impl HybridQueryEngine {
                 embedding_vector: Some(vec![0.15, 0.25, 0.35]),
             },
         ];
-        
+
         Ok(VectorResults {
             similar_resources,
             search_time_ms: 5,
@@ -405,7 +405,7 @@ impl HybridQueryEngine {
                 binding
             },
         ];
-        
+
         Ok(SparqlResults {
             bindings,
             total_results: 1,
@@ -415,7 +415,7 @@ impl HybridQueryEngine {
     /// Validate results using SHACL constraints
     async fn validate_results(&mut self, results: &SparqlResults, constraints: &ShaclConstraints) -> Result<ValidationResults> {
         self.stats.validation_checks += 1;
-        
+
         // Simulate SHACL validation
         Ok(ValidationResults {
             conforms: true,
@@ -427,7 +427,7 @@ impl HybridQueryEngine {
     /// Apply inference rules to derive new facts
     async fn apply_inference_rules(&mut self, rules: &[InferenceRule], results: &SparqlResults) -> Result<Vec<InferredFact>> {
         self.stats.inference_steps += rules.len() as u64;
-        
+
         // Simulate inference
         let inferred_facts = vec![
             InferredFact {
@@ -437,7 +437,7 @@ impl HybridQueryEngine {
                 rule_applied: "RDFS_SubClass".to_string(),
             },
         ];
-        
+
         Ok(inferred_facts)
     }
 
@@ -507,36 +507,36 @@ impl HybridQueryEngine {
     /// Estimate query execution cost
     fn estimate_query_cost(&self, query: &HybridQuery) -> f64 {
         let mut cost = 100.0; // Base cost
-        
+
         if query.vector_search.is_some() {
             cost += 50.0; // Vector search cost
         }
-        
+
         if query.validation_constraints.is_some() {
             cost += 30.0; // Validation cost
         }
-        
+
         cost += query.inference_rules.len() as f64 * 20.0; // Inference cost
-        
+
         cost
     }
 
     /// Identify parallelization opportunities
     fn identify_parallelization(&self, query: &HybridQuery) -> Vec<ParallelizationOpportunity> {
         let mut opportunities = vec![];
-        
+
         if query.vector_search.is_some() {
             opportunities.push(ParallelizationOpportunity::VectorSearch);
         }
-        
+
         if query.validation_constraints.is_some() {
             opportunities.push(ParallelizationOpportunity::Validation);
         }
-        
+
         if !query.inference_rules.is_empty() {
             opportunities.push(ParallelizationOpportunity::Inference);
         }
-        
+
         opportunities
     }
 
@@ -666,15 +666,15 @@ mod tests {
     #[tokio::test]
     async fn test_hybrid_query_execution() {
         let mut engine = HybridQueryEngine::new();
-        
+
         let query = HybridQueryBuilder::new("SELECT ?s ?p ?o WHERE { ?s ?p ?o }")
             .with_vector_search("semantic similarity", 10, 0.8)
             .with_validation("http://example.org/shapes")
             .with_inference_rule("custom", "?s rdf:type ?t", "?s custom:inferred true")
             .build();
-        
+
         let result = engine.execute_hybrid_query(query).await.unwrap();
-        
+
         assert_eq!(result.sparql_results.total_results, 1);
         assert!(result.vector_results.is_some());
         assert!(result.validation_results.is_some());
@@ -686,7 +686,7 @@ mod tests {
         let query = HybridQueryBuilder::new("SELECT ?s WHERE { ?s rdf:type ?type }")
             .with_vector_search("find similar entities", 5, 0.9)
             .build();
-        
+
         assert!(query.vector_search.is_some());
         assert_eq!(query.vector_search.unwrap().k, 5);
     }
@@ -694,12 +694,12 @@ mod tests {
     #[tokio::test]
     async fn test_engine_statistics() {
         let mut engine = HybridQueryEngine::new();
-        
+
         let query = HybridQueryBuilder::new("SELECT ?s WHERE { ?s rdf:type ?type }")
             .build();
-        
+
         let _ = engine.execute_hybrid_query(query).await.unwrap();
-        
+
         let stats = engine.get_stats();
         assert_eq!(stats.total_queries, 1);
         assert!(stats.avg_execution_time_ms > 0.0);

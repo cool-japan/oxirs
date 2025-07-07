@@ -538,7 +538,7 @@ impl WasmQueryCompiler {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", plan).hash(&mut hasher);
+        format!("{plan:?}").hash(&mut hasher);
         hasher.finish()
     }
 
@@ -807,7 +807,7 @@ impl StreamingWasmCompiler {
     pub async fn compile_streaming(
         &self,
         plan: &ExecutionPlan,
-    ) -> Result<impl futures::Stream<Item = Result<Vec<u8>, OxirsError>>, OxirsError> {
+    ) -> Result<impl futures::Stream<Item = Result<Vec<u8>, OxirsError>> + use<>, OxirsError> {
         use futures::stream;
 
         // Generate full module

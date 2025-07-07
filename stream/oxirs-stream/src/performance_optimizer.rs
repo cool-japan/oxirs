@@ -13,9 +13,7 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock, Semaphore};
-use tokio::time;
-use tracing::{debug, info, warn};
-use uuid::Uuid;
+use tracing::{debug, info};
 
 // Additional imports for enhanced ML capabilities
 use nalgebra::{DMatrix, DVector};
@@ -201,6 +199,12 @@ pub struct BatchPerformancePoint {
     pub timestamp: DateTime<Utc>,
 }
 
+impl Default for BatchSizePredictor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BatchSizePredictor {
     /// Create a new batch size predictor
     pub fn new() -> Self {
@@ -305,7 +309,7 @@ impl BatchSizePredictor {
     pub fn validate_prediction(
         &mut self,
         predicted: usize,
-        actual_latency: f64,
+        _actual_latency: f64,
         actual_batch_size: usize,
     ) {
         if actual_batch_size == 0 {
@@ -434,6 +438,12 @@ pub struct FeatureEngineer {
     statistical_features: StatisticalFeatures,
 }
 
+impl Default for FeatureEngineer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Model selection and ensemble strategy
 #[derive(Debug)]
 pub struct ModelSelector {
@@ -473,6 +483,12 @@ pub struct FeatureScaler {
     stds: Vec<f64>,
     /// Whether scaler is fitted
     fitted: bool,
+}
+
+impl Default for FeatureScaler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Polynomial feature generator
@@ -578,7 +594,7 @@ impl EnhancedMLPredictor {
         }
 
         // Engineer features if enabled
-        let engineered_features = if self.config.enable_feature_engineering {
+        let _engineered_features = if self.config.enable_feature_engineering {
             self.feature_engineer.engineer_features(&point)?
         } else {
             point.features
@@ -833,16 +849,16 @@ impl PolynomialRegressor {
 
         // Higher-order terms
         for degree in 2..=self.degree {
-            for i in 0..features.len() {
-                poly_features.push(features[i].powi(degree as i32));
+            for &feature in features {
+                poly_features.push(feature.powi(degree as i32));
             }
         }
 
         // Interaction terms (for degree >= 2)
         if self.degree >= 2 {
-            for i in 0..features.len() {
-                for j in (i + 1)..features.len() {
-                    poly_features.push(features[i] * features[j]);
+            for (i, &feature_i) in features.iter().enumerate() {
+                for &feature_j in features.iter().skip(i + 1) {
+                    poly_features.push(feature_i * feature_j);
                 }
             }
         }
@@ -1057,18 +1073,24 @@ impl FeatureEngineer {
         let mut engineered = features.to_vec();
 
         // Add polynomial features
-        for i in 0..features.len() {
-            engineered.push(features[i].powi(2)); // Quadratic terms
+        for &feature in features {
+            engineered.push(feature.powi(2)); // Quadratic terms
         }
 
         // Add interaction features
-        for i in 0..features.len() {
-            for j in (i + 1)..features.len() {
-                engineered.push(features[i] * features[j]);
+        for (i, &feature_i) in features.iter().enumerate() {
+            for &feature_j in features.iter().skip(i + 1) {
+                engineered.push(feature_i * feature_j);
             }
         }
 
         Ok(engineered)
+    }
+}
+
+impl Default for ModelSelector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1081,6 +1103,12 @@ impl ModelSelector {
             ensemble_weights: (0.5, 0.5),
             switch_threshold: 0.1,
         }
+    }
+}
+
+impl Default for ModelPerformanceMetrics {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1271,6 +1299,12 @@ impl NetworkAwareCompressor {
             ),
             level_adjustments: AtomicU64::new(self.stats.level_adjustments.load(Ordering::Relaxed)),
         }
+    }
+}
+
+impl Default for BandwidthTracker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1886,9 +1920,8 @@ impl StreamEventMetadata for StreamEvent {
             StreamEvent::ErrorOccurred { metadata, .. } => metadata,
             _ => {
                 // For unmatched event types, return a static reference
-                use std::sync::LazyLock;
-                static DEFAULT_METADATA: LazyLock<EventMetadata> =
-                    LazyLock::new(|| EventMetadata::default());
+                use once_cell::sync::Lazy;
+                static DEFAULT_METADATA: Lazy<EventMetadata> = Lazy::new(EventMetadata::default);
                 &DEFAULT_METADATA
             }
         }
@@ -1903,12 +1936,12 @@ mod tests {
 
     fn create_test_event(id: usize) -> StreamEvent {
         StreamEvent::TripleAdded {
-            subject: format!("http://test.org/subject_{}", id),
+            subject: format!("http://test.org/subject_{id}"),
             predicate: "http://test.org/predicate".to_string(),
-            object: format!("\"test_value_{}\"", id),
+            object: format!("\"test_value_{id}\""),
             graph: None,
             metadata: EventMetadata {
-                event_id: format!("test_event_{}", id),
+                event_id: format!("test_event_{id}"),
                 timestamp: Utc::now(),
                 source: "test".to_string(),
                 user: None,
@@ -2229,13 +2262,18 @@ impl PerformancePredictor {
             let decision = TuningDecision {
                 timestamp: Utc::now(),
                 parameter: "auto_tune".to_string(),
-                old_value: format!("{:?}", current_config),
-                new_value: format!("{:?}", best_config),
+                old_value: format!("{current_config:?}"),
+                new_value: format!("{best_config:?}"),
                 predicted_improvement: (best_predicted_throughput
                     - current_performance.throughput_eps)
                     / current_performance.throughput_eps,
                 actual_improvement: None,
-                confidence: 0.8, // TODO: Calculate actual confidence
+                confidence: self
+                    .calculate_tuning_confidence(
+                        (best_predicted_throughput - current_performance.throughput_eps)
+                            / current_performance.throughput_eps,
+                    )
+                    .await,
             };
 
             self.auto_tuner.tuning_history.write().await.push(decision);
@@ -2254,6 +2292,60 @@ impl PerformancePredictor {
         } else {
             Ok(None)
         }
+    }
+
+    /// Calculate confidence for tuning decision based on historical accuracy and prediction magnitude
+    async fn calculate_tuning_confidence(&self, predicted_improvement: f64) -> f64 {
+        // Base confidence starts at 0.5
+        let mut confidence = 0.5;
+
+        // Factor 1: Historical accuracy of predictions
+        let total_predictions = self
+            .prediction_stats
+            .total_predictions
+            .load(Ordering::Relaxed);
+        let accurate_predictions = self
+            .prediction_stats
+            .accurate_predictions
+            .load(Ordering::Relaxed);
+
+        if total_predictions > 0 {
+            let accuracy_rate = accurate_predictions as f64 / total_predictions as f64;
+            confidence += (accuracy_rate - 0.5) * 0.4; // Scale historical accuracy to ±0.2
+        }
+
+        // Factor 2: Tuning success rate
+        let total_tunings = self
+            .prediction_stats
+            .total_tuning_decisions
+            .load(Ordering::Relaxed);
+        let successful_tunings = self
+            .prediction_stats
+            .successful_tunings
+            .load(Ordering::Relaxed);
+
+        if total_tunings > 0 {
+            let tuning_success_rate = successful_tunings as f64 / total_tunings as f64;
+            confidence += (tuning_success_rate - 0.5) * 0.3; // Scale tuning success to ±0.15
+        }
+
+        // Factor 3: Magnitude of predicted improvement (larger improvements are less certain)
+        let improvement_penalty = if predicted_improvement > 0.5 {
+            // Large improvements (>50%) reduce confidence
+            (predicted_improvement - 0.5) * 0.2
+        } else {
+            0.0
+        };
+        confidence -= improvement_penalty;
+
+        // Factor 4: Average prediction error
+        let avg_error = *self.prediction_stats.average_prediction_error.read().await;
+        if avg_error > 0.0 {
+            confidence -= (avg_error * 0.1).min(0.2); // Higher error reduces confidence
+        }
+
+        // Ensure confidence stays within reasonable bounds [0.1, 0.95]
+        confidence.clamp(0.1, 0.95)
     }
 
     /// Get current prediction accuracy statistics
@@ -2376,7 +2468,7 @@ impl PerformancePredictor {
 
         // Simple least squares implementation (placeholder)
         // In a real implementation, you'd use a proper linear algebra library
-        for i in 0..feature_count {
+        for (i, coeff) in coefficients.iter_mut().enumerate().take(feature_count) {
             let mut sum_xy = 0.0;
             let mut sum_x = 0.0;
             let mut sum_y = 0.0;
@@ -2393,7 +2485,7 @@ impl PerformancePredictor {
 
             let denominator = n as f64 * sum_x2 - sum_x * sum_x;
             if denominator.abs() > 1e-10 {
-                coefficients[i] = (n as f64 * sum_xy - sum_x * sum_y) / denominator;
+                *coeff = (n as f64 * sum_xy - sum_x * sum_y) / denominator;
             }
         }
 
@@ -2447,9 +2539,8 @@ impl PerformancePredictor {
         // Batch size variations
         for factor in [0.8, 1.2, 1.5] {
             let mut config = base_config.clone();
-            config.max_batch_size = ((config.max_batch_size as f64 * factor) as usize)
-                .max(100)
-                .min(50000);
+            config.max_batch_size =
+                ((config.max_batch_size as f64 * factor) as usize).clamp(100, 50000);
             variations.push(config);
         }
 
@@ -2457,7 +2548,7 @@ impl PerformancePredictor {
         for delta in [-1, 1, 2] {
             let mut config = base_config.clone();
             config.parallel_workers =
-                (config.parallel_workers as i32 + delta).max(1).min(32) as usize;
+                (config.parallel_workers as i32 + delta).clamp(1, 32) as usize;
             variations.push(config);
         }
 

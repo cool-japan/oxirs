@@ -151,12 +151,14 @@ impl PlatformCapabilities {
     }
 
     #[cfg(not(feature = "cuda"))]
+    #[allow(dead_code)]
     fn detect_cuda() -> bool {
         false
     }
 
     /// Check if OpenCL is available
     #[cfg(feature = "opencl")]
+    #[allow(dead_code)]
     fn detect_opencl() -> bool {
         // Check for OpenCL libraries
         #[cfg(target_os = "linux")]
@@ -179,18 +181,21 @@ impl PlatformCapabilities {
     }
 
     #[cfg(not(feature = "opencl"))]
+    #[allow(dead_code)]
     fn detect_opencl() -> bool {
         false
     }
 
     /// Check if Metal is available
     #[cfg(all(target_os = "macos", feature = "metal"))]
+    #[allow(dead_code)]
     fn detect_metal() -> bool {
         // Metal is available on all modern macOS systems
         true
     }
 
     #[cfg(not(all(target_os = "macos", feature = "metal")))]
+    #[allow(dead_code)]
     fn detect_metal() -> bool {
         false
     }

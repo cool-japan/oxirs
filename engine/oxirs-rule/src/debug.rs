@@ -5,11 +5,11 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::fmt::{self, Display};
 use std::time::{Duration, Instant};
 
-use crate::{Rule, RuleAtom, RuleEngine, Term};
+use crate::{RuleAtom, RuleEngine};
 
 /// Debug trace entry recording rule execution steps
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,6 +114,12 @@ pub struct DebuggableRuleEngine {
     pub debug_enabled: bool,
 }
 
+impl Default for DebuggableRuleEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DebuggableRuleEngine {
     /// Create a new debuggable rule engine
     pub fn new() -> Self {
@@ -193,7 +199,7 @@ impl DebuggableRuleEngine {
         // Build derivation path
         let derivation = self.build_derivation_path(goal)?;
         if let Some(path) = derivation {
-            let goal_key = format!("{:?}", goal);
+            let goal_key = format!("{goal:?}");
             self.debug_session.derivations.insert(goal_key, path);
         }
 
@@ -221,7 +227,7 @@ impl DebuggableRuleEngine {
 
     /// Get derivation path for a fact
     pub fn get_derivation(&self, fact: &RuleAtom) -> Option<&DerivationPath> {
-        let key = format!("{:?}", fact);
+        let key = format!("{fact:?}");
         self.debug_session.derivations.get(&key)
     }
 
@@ -267,7 +273,7 @@ impl DebuggableRuleEngine {
             "Cache misses: {}\n",
             self.debug_session.metrics.cache_misses
         ));
-        report.push_str("\n");
+        report.push('\n');
 
         // Rule execution times
         report.push_str("RULE EXECUTION TIMES:\n");
@@ -286,11 +292,10 @@ impl DebuggableRuleEngine {
                 .get(*rule)
                 .unwrap_or(&0);
             report.push_str(&format!(
-                "  {}: {:?} (executed {} times)\n",
-                rule, time, count
+                "  {rule}: {time:?} (executed {count} times)\n"
             ));
         }
-        report.push_str("\n");
+        report.push('\n');
 
         // Conflicts
         if !self.debug_session.conflicts.is_empty() {
@@ -301,23 +306,23 @@ impl DebuggableRuleEngine {
                     conflict.severity, conflict.conflict_type, conflict.resolution_suggestion
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // Derivation paths
         if !self.debug_session.derivations.is_empty() {
             report.push_str("DERIVATION PATHS:\n");
             for (fact, path) in &self.debug_session.derivations {
-                report.push_str(&format!("  Fact: {}\n", fact));
+                report.push_str(&format!("  Fact: {fact}\n"));
                 report.push_str(&format!("  Depth: {}\n", path.total_depth));
-                report.push_str(&format!("  Rules involved: {:?}\n", path.involved_rules));
+                report.push_str(&format!("  Rules involved: {}\n", path.involved_rules.iter().cloned().collect::<Vec<_>>().join(", ")));
                 for step in &path.steps {
                     report.push_str(&format!(
                         "    Step {}: {} -> {:?}\n",
                         step.step_number, step.rule_name, step.conclusion
                     ));
                 }
-                report.push_str("\n");
+                report.push('\n');
             }
         }
 

@@ -106,7 +106,7 @@ impl UpdateCoordinator {
 
         // Create update processing channel
         let (sender, mut receiver) = mpsc::unbounded_channel::<UpdateOperation>();
-        
+
         {
             let mut sender_guard = self.update_sender.write()
                 .map_err(|_| anyhow::anyhow!("Failed to acquire sender lock"))?;
@@ -164,7 +164,7 @@ impl UpdateCoordinator {
 
         let sender_guard = self.update_sender.read()
             .map_err(|_| anyhow::anyhow!("Failed to acquire sender lock"))?;
-        
+
         if let Some(sender) = sender_guard.as_ref() {
             sender.send(operation)
                 .map_err(|_| anyhow::anyhow!("Failed to send update operation"))?;
@@ -232,7 +232,7 @@ impl UpdateCoordinator {
         let result = self.execute_update_operation(operation).await;
 
         self.active_workers.fetch_sub(1, Ordering::Relaxed);
-        
+
         if result.is_ok() {
             self.processed_count.fetch_add(1, Ordering::Relaxed);
         }
@@ -327,13 +327,13 @@ mod tests {
     async fn test_coordinator_start_stop() {
         let config = PipelineConfig::default();
         let coordinator = UpdateCoordinator::new(&config).unwrap();
-        
+
         assert!(!coordinator.is_running());
-        
+
         let start_result = coordinator.start().await;
         assert!(start_result.is_ok());
         assert!(coordinator.is_running());
-        
+
         let stop_result = coordinator.stop().await;
         assert!(stop_result.is_ok());
     }
@@ -342,17 +342,17 @@ mod tests {
     async fn test_update_submission() {
         let config = PipelineConfig::default();
         let coordinator = UpdateCoordinator::new(&config).unwrap();
-        
+
         coordinator.start().await.unwrap();
-        
+
         let operation = UpdateOperation::Insert {
             id: "test_id".to_string(),
             content: "test_content".to_string(),
         };
-        
+
         let result = coordinator.submit_update(operation).await;
         assert!(result.is_ok());
-        
+
         coordinator.stop().await.unwrap();
     }
 }

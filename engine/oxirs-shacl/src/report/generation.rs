@@ -4,14 +4,13 @@
 //! SHACL validation reports in multiple formats including RDF formats (Turtle, JSON-LD,
 //! RDF/XML, N-Triples) and structured data formats (JSON, HTML, CSV, YAML).
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Write;
 
 use crate::{
     report::{ReportFormat, ValidationReport},
-    validation::ValidationViolation,
     Result, Severity, ShaclError,
 };
 
@@ -51,7 +50,7 @@ pub fn generate_turtle_report(report: &ValidationReport) -> Result<String> {
     let report_iri = format!("_:ValidationReport_{}", generate_timestamp_id());
 
     // Validation report
-    writeln!(output, "{} a sh:ValidationReport ;", report_iri)?;
+    writeln!(output, "{report_iri} a sh:ValidationReport ;")?;
     writeln!(
         output,
         "    sh:conforms {} ;",
@@ -114,7 +113,7 @@ pub fn generate_turtle_report(report: &ValidationReport) -> Result<String> {
                 Severity::Warning => "sh:Warning",
                 Severity::Info => "sh:Info",
             };
-            writeln!(output, "            sh:resultSeverity {} ;", severity_iri)?;
+            writeln!(output, "            sh:resultSeverity {severity_iri} ;")?;
 
             // Result message
             if let Some(message) = &violation.result_message {
@@ -228,7 +227,7 @@ pub fn generate_jsonld_report(report: &ValidationReport) -> Result<String> {
     }
 
     serde_json::to_string_pretty(&json_report)
-        .map_err(|e| ShaclError::ReportGeneration(format!("JSON-LD serialization error: {}", e)))
+        .map_err(|e| ShaclError::ReportGeneration(format!("JSON-LD serialization error: {e}")))
 }
 
 /// Generate RDF/XML format validation report
@@ -252,20 +251,18 @@ pub fn generate_rdfxml_report(report: &ValidationReport) -> Result<String> {
     let report_id = format!("report_{}", generate_timestamp_id());
     writeln!(
         output,
-        "  <sh:ValidationReport rdf:about=\"#{}\"_>",
-        report_id
+        "  <sh:ValidationReport rdf:about=\"#{report_id}\"_>"
     )?;
-    writeln!(output, "    <sh:conforms rdf:datatype=\"http://www.w3.org/2001/XMLSchema#boolean\">{}</sh:conforms>", 
+    writeln!(output, "    <sh:conforms rdf:datatype=\"http://www.w3.org/2001/XMLSchema#boolean\">{}</sh:conforms>",
         if report.conforms() { "true" } else { "false" })?;
 
     // Validation results
     for (i, violation) in report.violations().iter().enumerate() {
-        let result_id = format!("result_{}_{}", report_id, i);
+        let result_id = format!("result_{report_id}_{i}");
         writeln!(output, "    <sh:result>")?;
         writeln!(
             output,
-            "      <sh:ValidationResult rdf:about=\"#{}\">",
-            result_id
+            "      <sh:ValidationResult rdf:about=\"#{result_id}\">"
         )?;
 
         writeln!(
@@ -290,7 +287,7 @@ pub fn generate_rdfxml_report(report: &ValidationReport) -> Result<String> {
             )?;
         }
 
-        writeln!(output, "        <sh:sourceConstraintComponent rdf:resource=\"http://www.w3.org/ns/shacl#{}\"/>", 
+        writeln!(output, "        <sh:sourceConstraintComponent rdf:resource=\"http://www.w3.org/ns/shacl#{}\"/>",
             violation.source_constraint_component.as_str())?;
 
         writeln!(
@@ -306,8 +303,7 @@ pub fn generate_rdfxml_report(report: &ValidationReport) -> Result<String> {
         };
         writeln!(
             output,
-            "        <sh:resultSeverity rdf:resource=\"{}\"/>",
-            severity_iri
+            "        <sh:resultSeverity rdf:resource=\"{severity_iri}\"/>"
         )?;
 
         if let Some(message) = &violation.result_message {
@@ -335,10 +331,10 @@ pub fn generate_ntriples_report(report: &ValidationReport) -> Result<String> {
     let report_iri = format!("_:report{}", generate_timestamp_id());
 
     // Report type
-    writeln!(output, "{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .", report_iri)?;
+    writeln!(output, "{report_iri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .")?;
 
     // Conforms
-    writeln!(output, "{} <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .", 
+    writeln!(output, "{} <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .",
         report_iri, if report.conforms() { "true" } else { "false" })?;
 
     // Results
@@ -348,12 +344,11 @@ pub fn generate_ntriples_report(report: &ValidationReport) -> Result<String> {
         // Link to result
         writeln!(
             output,
-            "{} <http://www.w3.org/ns/shacl#result> {} .",
-            report_iri, result_iri
+            "{report_iri} <http://www.w3.org/ns/shacl#result> {result_iri} ."
         )?;
 
         // Result type
-        writeln!(output, "{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationResult> .", result_iri)?;
+        writeln!(output, "{result_iri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationResult> .")?;
 
         // Focus node
         writeln!(
@@ -384,7 +379,7 @@ pub fn generate_ntriples_report(report: &ValidationReport) -> Result<String> {
         }
 
         // Source constraint component
-        writeln!(output, "{} <http://www.w3.org/ns/shacl#sourceConstraintComponent> <http://www.w3.org/ns/shacl#{}> .", 
+        writeln!(output, "{} <http://www.w3.org/ns/shacl#sourceConstraintComponent> <http://www.w3.org/ns/shacl#{}> .",
             result_iri, violation.source_constraint_component.as_str())?;
 
         // Source shape
@@ -403,8 +398,7 @@ pub fn generate_ntriples_report(report: &ValidationReport) -> Result<String> {
         };
         writeln!(
             output,
-            "{} <http://www.w3.org/ns/shacl#resultSeverity> {} .",
-            result_iri, severity_iri
+            "{result_iri} <http://www.w3.org/ns/shacl#resultSeverity> {severity_iri} ."
         )?;
 
         // Result message
@@ -449,14 +443,11 @@ pub fn generate_json_report(report: &ValidationReport) -> Result<String> {
             );
 
             if let Some(path) = &violation.result_path {
-                v.insert(
-                    "resultPath".to_string(),
-                    Value::String(format!("{:?}", path)),
-                );
+                v.insert("resultPath".to_string(), Value::String(format!("{path:?}")));
             }
 
             if let Some(value) = &violation.value {
-                v.insert("value".to_string(), Value::String(format!("{:?}", value)));
+                v.insert("value".to_string(), Value::String(format!("{value:?}")));
             }
 
             v.insert(
@@ -495,39 +486,21 @@ pub fn generate_json_report(report: &ValidationReport) -> Result<String> {
 
     stats.insert(
         "violations".to_string(),
-        Value::Number(
-            severity_counts
-                .get(&Severity::Violation)
-                .unwrap_or(&0)
-                .clone()
-                .into(),
-        ),
+        Value::Number((*severity_counts.get(&Severity::Violation).unwrap_or(&0)).into()),
     );
     stats.insert(
         "warnings".to_string(),
-        Value::Number(
-            severity_counts
-                .get(&Severity::Warning)
-                .unwrap_or(&0)
-                .clone()
-                .into(),
-        ),
+        Value::Number((*severity_counts.get(&Severity::Warning).unwrap_or(&0)).into()),
     );
     stats.insert(
         "info".to_string(),
-        Value::Number(
-            severity_counts
-                .get(&Severity::Info)
-                .unwrap_or(&0)
-                .clone()
-                .into(),
-        ),
+        Value::Number((*severity_counts.get(&Severity::Info).unwrap_or(&0)).into()),
     );
 
     json_report.insert("statistics".to_string(), Value::Object(stats));
 
     serde_json::to_string_pretty(&json_report)
-        .map_err(|e| ShaclError::ReportGeneration(format!("JSON serialization error: {}", e)))
+        .map_err(|e| ShaclError::ReportGeneration(format!("JSON serialization error: {e}")))
 }
 
 /// Generate HTML format validation report
@@ -650,8 +623,7 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
 
             writeln!(
                 output,
-                "                    <tr class=\"{}\">",
-                severity_class
+                "                    <tr class=\"{severity_class}\">"
             )?;
             writeln!(
                 output,
@@ -669,7 +641,7 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
                 violation
                     .result_path
                     .as_ref()
-                    .map(|p| format!("{:?}", p))
+                    .map(|p| format!("{p:?}"))
                     .unwrap_or_else(|| "-".to_string())
             )?;
             writeln!(
@@ -678,7 +650,7 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
                 violation
                     .value
                     .as_ref()
-                    .map(|v| format!("{:?}", v))
+                    .map(|v| format!("{v:?}"))
                     .unwrap_or_else(|| "-".to_string())
             )?;
             writeln!(
@@ -736,12 +708,12 @@ pub fn generate_csv_report(report: &ValidationReport) -> Result<String> {
         let result_path = violation
             .result_path
             .as_ref()
-            .map(|p| format!("{:?}", p))
+            .map(|p| format!("{p:?}"))
             .unwrap_or_else(|| "".to_string());
         let value = violation
             .value
             .as_ref()
-            .map(|v| format!("{:?}", v))
+            .map(|v| format!("{v:?}"))
             .unwrap_or_else(|| "".to_string());
         let message = violation
             .result_message
@@ -833,11 +805,11 @@ pub fn generate_text_report(report: &ValidationReport) -> Result<String> {
             writeln!(output, "   Focus Node: {:?}", violation.focus_node)?;
 
             if let Some(path) = &violation.result_path {
-                writeln!(output, "   Result Path: {:?}", path)?;
+                writeln!(output, "   Result Path: {path:?}")?;
             }
 
             if let Some(value) = &violation.value {
-                writeln!(output, "   Value: {:?}", value)?;
+                writeln!(output, "   Value: {value:?}")?;
             }
 
             writeln!(
@@ -918,7 +890,7 @@ pub fn generate_yaml_report(report: &ValidationReport) -> Result<String> {
                 writeln!(
                     output,
                     "      resultPath: \"{}\"",
-                    format!("{:?}", path).replace("\"", "\\\"")
+                    format!("{path:?}").replace("\"", "\\\"")
                 )?;
             }
 
@@ -926,7 +898,7 @@ pub fn generate_yaml_report(report: &ValidationReport) -> Result<String> {
                 writeln!(
                     output,
                     "      value: \"{}\"",
-                    format!("{:?}", value).replace("\"", "\\\"")
+                    format!("{value:?}").replace("\"", "\\\"")
                 )?;
             }
 
@@ -969,15 +941,15 @@ fn generate_timestamp_id() -> String {
 }
 
 fn format_term_turtle(term: &oxirs_core::model::Term) -> String {
-    format!("{:?}", term) // Placeholder - should use proper Turtle formatting
+    format!("{term:?}") // Placeholder - should use proper Turtle formatting
 }
 
 fn format_path_turtle(path: &crate::paths::PropertyPath) -> String {
-    format!("{:?}", path) // Placeholder - should use proper Turtle formatting
+    format!("{path:?}") // Placeholder - should use proper Turtle formatting
 }
 
 fn format_iri_turtle(iri: &str) -> String {
-    format!("<{}>", iri)
+    format!("<{iri}>")
 }
 
 fn escape_turtle_string(s: &str) -> String {
@@ -990,24 +962,24 @@ fn escape_turtle_string(s: &str) -> String {
 
 fn format_term_jsonld(term: &oxirs_core::model::Term) -> Value {
     // Placeholder - should use proper JSON-LD formatting
-    Value::String(format!("{:?}", term))
+    Value::String(format!("{term:?}"))
 }
 
 fn format_path_jsonld(path: &crate::paths::PropertyPath) -> Value {
     // Placeholder - should use proper JSON-LD formatting
-    Value::String(format!("{:?}", path))
+    Value::String(format!("{path:?}"))
 }
 
 fn format_term_rdfxml(term: &oxirs_core::model::Term) -> String {
-    format!("{:?}", term) // Placeholder - should use proper RDF/XML formatting
+    format!("{term:?}") // Placeholder - should use proper RDF/XML formatting
 }
 
 fn format_path_rdfxml(path: &crate::paths::PropertyPath) -> String {
-    format!("{:?}", path) // Placeholder - should use proper RDF/XML formatting
+    format!("{path:?}") // Placeholder - should use proper RDF/XML formatting
 }
 
 fn format_term_rdfxml_value(term: &oxirs_core::model::Term) -> String {
-    escape_xml_string(&format!("{:?}", term))
+    escape_xml_string(&format!("{term:?}"))
 }
 
 fn escape_xml_string(s: &str) -> String {
@@ -1019,11 +991,11 @@ fn escape_xml_string(s: &str) -> String {
 }
 
 fn format_term_ntriples(term: &oxirs_core::model::Term) -> String {
-    format!("{:?}", term) // Placeholder - should use proper N-Triples formatting
+    format!("{term:?}") // Placeholder - should use proper N-Triples formatting
 }
 
 fn format_path_ntriples(path: &crate::paths::PropertyPath) -> String {
-    format!("{:?}", path) // Placeholder - should use proper N-Triples formatting
+    format!("{path:?}") // Placeholder - should use proper N-Triples formatting
 }
 
 fn escape_ntriples_string(s: &str) -> String {

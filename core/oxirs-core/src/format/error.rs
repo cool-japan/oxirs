@@ -101,11 +101,11 @@ impl fmt::Display for RdfSyntaxError {
         write!(f, "Syntax error: {}", self.message)?;
 
         if let Some(position) = &self.position {
-            write!(f, " at {}", position)?;
+            write!(f, " at {position}")?;
         }
 
         if let Some(context) = &self.context {
-            write!(f, "\nContext: {}", context)?;
+            write!(f, "\nContext: {context}")?;
         }
 
         Ok(())
@@ -172,15 +172,15 @@ impl RdfParseError {
 impl fmt::Display for RdfParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Syntax(err) => write!(f, "{}", err),
-            Self::Io(err) => write!(f, "I/O error: {}", err),
-            Self::InvalidIri(iri) => write!(f, "Invalid IRI: {}", iri),
-            Self::InvalidLiteral(literal) => write!(f, "Invalid literal: {}", literal),
-            Self::InvalidBlankNode(bnode) => write!(f, "Invalid blank node: {}", bnode),
-            Self::InvalidDatatype(datatype) => write!(f, "Invalid datatype: {}", datatype),
-            Self::InvalidLanguageTag(tag) => write!(f, "Invalid language tag: {}", tag),
-            Self::UnsupportedFeature(feature) => write!(f, "Unsupported feature: {}", feature),
-            Self::Internal(msg) => write!(f, "Internal error: {}", msg),
+            Self::Syntax(err) => write!(f, "{err}"),
+            Self::Io(err) => write!(f, "I/O error: {err}"),
+            Self::InvalidIri(iri) => write!(f, "Invalid IRI: {iri}"),
+            Self::InvalidLiteral(literal) => write!(f, "Invalid literal: {literal}"),
+            Self::InvalidBlankNode(bnode) => write!(f, "Invalid blank node: {bnode}"),
+            Self::InvalidDatatype(datatype) => write!(f, "Invalid datatype: {datatype}"),
+            Self::InvalidLanguageTag(tag) => write!(f, "Invalid language tag: {tag}"),
+            Self::UnsupportedFeature(feature) => write!(f, "Unsupported feature: {feature}"),
+            Self::Internal(msg) => write!(f, "Internal error: {msg}"),
         }
     }
 }
@@ -284,12 +284,12 @@ impl FormatError {
 impl fmt::Display for FormatError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Parse(err) => write!(f, "Parse error: {}", err),
-            Self::Serialize(err) => write!(f, "Serialization error: {}", err),
-            Self::UnsupportedFormat(format) => write!(f, "Unsupported format: {}", format),
-            Self::InvalidData(msg) => write!(f, "Invalid data: {}", msg),
-            Self::MissingComponent(component) => write!(f, "Missing component: {}", component),
-            Self::Configuration(msg) => write!(f, "Configuration error: {}", msg),
+            Self::Parse(err) => write!(f, "Parse error: {err}"),
+            Self::Serialize(err) => write!(f, "Serialization error: {err}"),
+            Self::UnsupportedFormat(format) => write!(f, "Unsupported format: {format}"),
+            Self::InvalidData(msg) => write!(f, "Invalid data: {msg}"),
+            Self::MissingComponent(component) => write!(f, "Missing component: {component}"),
+            Self::Configuration(msg) => write!(f, "Configuration error: {msg}"),
         }
     }
 }

@@ -10,9 +10,9 @@ use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::{broadcast, Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
-use crate::ast::{Document, Field, OperationType};
+use crate::ast::{Document, OperationType};
 
 /// Zero-trust security configuration
 #[derive(Debug, Clone)]
@@ -574,7 +574,7 @@ impl ZeroTrustSecurityManager {
     }
 
     /// Validate authentication token
-    async fn validate_authentication_token(&self, token: &str) -> Result<AuthenticationInfo> {
+    async fn validate_authentication_token(&self, _token: &str) -> Result<AuthenticationInfo> {
         // In a real implementation, this would validate JWT tokens or similar
         Ok(AuthenticationInfo {
             user_id: Some("test_user".to_string()),
@@ -590,7 +590,7 @@ impl ZeroTrustSecurityManager {
     async fn calculate_trust_score(
         &self,
         context: &SecurityContext,
-        request: &SecurityRequest,
+        _request: &SecurityRequest,
     ) -> Result<f64> {
         let mut score: f64 = 1.0;
 
@@ -620,7 +620,7 @@ impl ZeroTrustSecurityManager {
     async fn analyze_behavior(
         &self,
         context: &mut SecurityContext,
-        request: &SecurityRequest,
+        _request: &SecurityRequest,
     ) -> Result<()> {
         if let Some(ref user_id) = context.user_id {
             let profiles = self.behavioral_profiles.read().await;
@@ -966,12 +966,12 @@ impl EncryptionManager {
         }
     }
 
-    pub async fn encrypt(&self, data: &str, key_id: &str) -> Result<String> {
+    pub async fn encrypt(&self, data: &str, _key_id: &str) -> Result<String> {
         // Implement encryption logic
         Ok(format!("encrypted:{}", data))
     }
 
-    pub async fn decrypt(&self, encrypted_data: &str, key_id: &str) -> Result<String> {
+    pub async fn decrypt(&self, encrypted_data: &str, _key_id: &str) -> Result<String> {
         // Implement decryption logic
         if let Some(stripped) = encrypted_data.strip_prefix("encrypted:") {
             Ok(stripped.to_string())

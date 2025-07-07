@@ -117,20 +117,35 @@ impl ShapeParser {
         format: &str,
         base_iri: Option<&str>,
     ) -> Result<Vec<Shape>> {
-        // Create a temporary store and load the RDF data
-        // Create a temporary in-memory store for parsing
-        // Note: For now we'll use a placeholder store type
-        // In a real implementation this would need proper RDF parsing
-        return Ok(Vec::new()); // Placeholder until proper Store implementation is available
+        // For now, only support Turtle format since it's the most common for SHACL
+        // and the tests use Turtle format
+        if format.to_lowercase() != "turtle" && format.to_lowercase() != "ttl" {
+            return Err(ShaclError::ShapeParsing(format!(
+                "RDF parsing currently only supports Turtle format, got: {}",
+                format
+            )));
+        }
 
-        // Parse the RDF data into the store
-        // Note: This is a simplified implementation - the actual implementation
-        // would need proper RDF parsing based on format
+        use oxirs_core::format::TurtleParser;
+        
+        // Parse RDF triples using Turtle parser
+        let parser = TurtleParser::new();
+        tracing::debug!("Parsing Turtle data:\n{}", rdf_data);
+        let triples = parser.parse_slice(rdf_data.as_bytes())
+            .map_err(|e| {
+                tracing::error!("Turtle parsing failed: {}", e);
+                ShaclError::ShapeParsing(format!("Failed to parse Turtle data: {}", e))
+            })?;
+        tracing::debug!("Parsed {} triples", triples.len());
 
-        // For now, return empty shapes as this would require implementing
-        // a full RDF parser which is beyond scope of this refactoring
-        tracing::warn!("RDF parsing from string not yet implemented in refactored parser");
-        Ok(Vec::new())
+        // Convert triples to a Graph structure
+        let mut graph = Graph::new();
+        for triple in triples {
+            graph.insert(triple);
+        }
+
+        // Use the existing graph parsing logic
+        self.parse_shapes_from_graph(&graph)
     }
 
     /// Parse shapes from an RDF graph
@@ -158,15 +173,14 @@ impl ShapeParser {
         // SHACL namespace
         let shacl_ns = "http://www.w3.org/ns/shacl#";
         let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid RDF type IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid RDF type IRI: {e}")))?;
 
         // Find explicit NodeShape and PropertyShape instances
         let shape_types = vec![
-            NamedNode::new(&format!("{}NodeShape", shacl_ns))
-                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid NodeShape IRI: {}", e)))?,
-            NamedNode::new(&format!("{}PropertyShape", shacl_ns)).map_err(|e| {
-                ShaclError::ShapeParsing(format!("Invalid PropertyShape IRI: {}", e))
-            })?,
+            NamedNode::new(format!("{shacl_ns}NodeShape"))
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid NodeShape IRI: {e}")))?,
+            NamedNode::new(format!("{shacl_ns}PropertyShape"))
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid PropertyShape IRI: {e}")))?,
         ];
 
         for shape_type in shape_types {
@@ -199,8 +213,8 @@ impl ShapeParser {
         ];
 
         for prop_name in shape_properties {
-            let prop_iri = NamedNode::new(&format!("{}{}", shacl_ns, prop_name))
-                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid property IRI: {}", e)))?;
+            let prop_iri = NamedNode::new(format!("{shacl_ns}{prop_name}"))
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid property IRI: {e}")))?;
 
             let triples = graph.query_triples(None, Some(&Predicate::NamedNode(prop_iri)), None);
 
@@ -248,9 +262,8 @@ impl ShapeParser {
             return Ok(cached_shape.clone());
         }
 
-        let shape_node = NamedNode::new(shape_iri).map_err(|e| {
-            ShaclError::ShapeParsing(format!("Invalid shape IRI {}: {}", shape_iri, e))
-        })?;
+        let shape_node = NamedNode::new(shape_iri)
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid shape IRI {shape_iri}: {e}")))?;
 
         // Determine shape type
         let shape_type = self.determine_shape_type(graph, &shape_node)?;
@@ -307,13 +320,13 @@ impl ShapeParser {
     /// Determine the type of a shape from the graph
     fn determine_shape_type(&self, graph: &Graph, shape_node: &NamedNode) -> Result<ShapeType> {
         let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid RDF type IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid RDF type IRI: {e}")))?;
 
         let node_shape_type = NamedNode::new("http://www.w3.org/ns/shacl#NodeShape")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid NodeShape IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid NodeShape IRI: {e}")))?;
 
         let property_shape_type = NamedNode::new("http://www.w3.org/ns/shacl#PropertyShape")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid PropertyShape IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid PropertyShape IRI: {e}")))?;
 
         // Check for explicit type declarations
         let type_triples = graph.query_triples(
@@ -334,7 +347,7 @@ impl ShapeParser {
 
         // If no explicit type, check for sh:path property (indicates PropertyShape)
         let path_prop = NamedNode::new("http://www.w3.org/ns/shacl#path")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid path property IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid path property IRI: {e}")))?;
 
         let path_triples = graph.query_triples(
             Some(&Subject::NamedNode(shape_node.clone())),
@@ -342,7 +355,7 @@ impl ShapeParser {
             None,
         );
 
-        if path_triples.len() > 0 {
+        if !path_triples.is_empty() {
             return Ok(ShapeType::PropertyShape);
         }
 
@@ -358,7 +371,7 @@ impl ShapeParser {
         shape: &mut Shape,
     ) -> Result<()> {
         let path_prop = NamedNode::new("http://www.w3.org/ns/shacl#path")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid path property IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid path property IRI: {e}")))?;
 
         let path_triples = graph.query_triples(
             Some(&Subject::NamedNode(shape_node.clone())),
@@ -444,7 +457,7 @@ impl ShapeParser {
     ) -> Result<Option<PropertyPath>> {
         let inverse_prop =
             NamedNode::new("http://www.w3.org/ns/shacl#inversePath").map_err(|e| {
-                ShaclError::ShapeParsing(format!("Invalid inversePath property IRI: {}", e))
+                ShaclError::ShapeParsing(format!("Invalid inversePath property IRI: {e}"))
             })?;
 
         let triples = graph.query_triples(
@@ -472,7 +485,7 @@ impl ShapeParser {
     ) -> Result<Option<PropertyPath>> {
         let alternative_prop = NamedNode::new("http://www.w3.org/ns/shacl#alternativePath")
             .map_err(|e| {
-                ShaclError::ShapeParsing(format!("Invalid alternativePath property IRI: {}", e))
+                ShaclError::ShapeParsing(format!("Invalid alternativePath property IRI: {e}"))
             })?;
 
         let triples = graph.query_triples(
@@ -500,7 +513,7 @@ impl ShapeParser {
     ) -> Result<Option<PropertyPath>> {
         // Check if this blank node is the head of an RDF list
         let first_prop = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid first property IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid first property IRI: {e}")))?;
 
         let first_triples = graph.query_triples(
             Some(&Subject::BlankNode(blank_node.clone())),
@@ -508,7 +521,7 @@ impl ShapeParser {
             None,
         );
 
-        if first_triples.len() > 0 {
+        if !first_triples.is_empty() {
             // This is an RDF list, parse it as a sequence
             let paths =
                 self.parse_rdf_list_as_paths(graph, &Object::BlankNode(blank_node.clone()))?;
@@ -528,7 +541,7 @@ impl ShapeParser {
     ) -> Result<Option<PropertyPath>> {
         let zero_or_more_prop = NamedNode::new("http://www.w3.org/ns/shacl#zeroOrMorePath")
             .map_err(|e| {
-                ShaclError::ShapeParsing(format!("Invalid zeroOrMorePath property IRI: {}", e))
+                ShaclError::ShapeParsing(format!("Invalid zeroOrMorePath property IRI: {e}"))
             })?;
 
         let triples = graph.query_triples(
@@ -553,7 +566,7 @@ impl ShapeParser {
     ) -> Result<Option<PropertyPath>> {
         let one_or_more_prop =
             NamedNode::new("http://www.w3.org/ns/shacl#oneOrMorePath").map_err(|e| {
-                ShaclError::ShapeParsing(format!("Invalid oneOrMorePath property IRI: {}", e))
+                ShaclError::ShapeParsing(format!("Invalid oneOrMorePath property IRI: {e}"))
             })?;
 
         let triples = graph.query_triples(
@@ -578,7 +591,7 @@ impl ShapeParser {
     ) -> Result<Option<PropertyPath>> {
         let zero_or_one_prop =
             NamedNode::new("http://www.w3.org/ns/shacl#zeroOrOnePath").map_err(|e| {
-                ShaclError::ShapeParsing(format!("Invalid zeroOrOnePath property IRI: {}", e))
+                ShaclError::ShapeParsing(format!("Invalid zeroOrOnePath property IRI: {e}"))
             })?;
 
         let triples = graph.query_triples(
@@ -605,11 +618,11 @@ impl ShapeParser {
         let mut current = list_object.clone();
 
         let first_prop = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid first property IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid first property IRI: {e}")))?;
         let rest_prop = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid rest property IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid rest property IRI: {e}")))?;
         let nil_node = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
-            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid nil IRI: {}", e)))?;
+            .map_err(|e| ShaclError::ShapeParsing(format!("Invalid nil IRI: {e}")))?;
 
         loop {
             match &current {

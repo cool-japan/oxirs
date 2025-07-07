@@ -10,7 +10,7 @@ pub struct CrossLanguageProcessor {
 
 impl CrossLanguageProcessor {
     pub fn new() -> Self {
-        let mut supported_languages = vec![
+        let supported_languages = vec![
             "en".to_string(),
             "es".to_string(),
             "fr".to_string(),

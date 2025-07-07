@@ -5,19 +5,17 @@
 
 use crate::{
     advanced_analytics::VectorAnalyticsEngine,
-    real_time_updates::{RealTimeVectorUpdater, UpdateOperation},
     similarity::{SimilarityMetric, SimilarityResult},
-    SearchResult, Vector, VectorId, VectorStore,
+    Vector,
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{mpsc, Mutex};
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tokio::sync::Mutex;
+use tracing::{debug, error, info};
 
 /// Distributed node configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -470,7 +468,7 @@ impl DistributedVectorSearch {
         let mut results = Vec::new();
         for i in 0..query.k.min(10) {
             results.push(SimilarityResult {
-                uri: format!("{}:vector_{}", node_id, i),
+                uri: format!("{node_id}:vector_{i}"),
                 similarity: 0.9 - (i as f32 * 0.1),
                 metadata: Some(HashMap::new()),
                 metrics: HashMap::new(),
@@ -521,7 +519,7 @@ impl DistributedVectorSearch {
         let values = vector.as_f32();
         let sum: f32 = values.iter().sum();
         let partition_id = (sum.abs() % 10.0) as usize;
-        format!("partition_{}", partition_id)
+        format!("partition_{partition_id}")
     }
 
     /// Compute consistent hash partition for vector
@@ -694,8 +692,8 @@ mod tests {
         // Register test nodes
         for i in 0..3 {
             let config = DistributedNodeConfig {
-                node_id: format!("node{}", i),
-                endpoint: format!("http://localhost:808{}", i),
+                node_id: format!("node{i}"),
+                endpoint: format!("http://localhost:808{i}"),
                 region: "us-west-1".to_string(),
                 capacity: 100000,
                 load_factor: 0.3,

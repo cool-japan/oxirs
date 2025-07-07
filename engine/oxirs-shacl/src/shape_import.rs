@@ -3,17 +3,16 @@
 //! Provides comprehensive support for importing external SHACL shapes, handling
 //! dependencies, resolving references, and managing circular dependencies.
 
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use oxirs_core::{model::NamedNode, RdfTerm, Store, Term};
+use oxirs_core::{model::NamedNode, RdfTerm, Term};
 
 use crate::{
-    iri_resolver::{IriResolutionError, IriResolver},
+    iri_resolver::IriResolver,
     shapes::{object_to_term, ShapeParser},
     Result, ShaclError, Shape, ShapeId, Target,
 };
@@ -208,8 +207,7 @@ impl ShapeImportManager {
         // Check for circular dependency
         if self.processing_imports.contains(&resolved_iri) {
             return Err(ShaclError::Configuration(format!(
-                "Circular import dependency detected: {}",
-                resolved_iri
+                "Circular import dependency detected: {resolved_iri}"
             )));
         }
 
@@ -324,7 +322,7 @@ impl ShapeImportManager {
     /// Validate source IRI based on security policy
     fn validate_source_iri(&self, source_iri: &str) -> Result<()> {
         let url = Url::parse(source_iri).map_err(|e| {
-            ShaclError::Configuration(format!("Invalid source IRI {}: {}", source_iri, e))
+            ShaclError::Configuration(format!("Invalid source IRI {source_iri}: {e}"))
         })?;
 
         match url.scheme() {
@@ -346,8 +344,7 @@ impl ShapeImportManager {
             "urn" => {} // URN schemes allowed for abstract references
             scheme => {
                 return Err(ShaclError::Configuration(format!(
-                    "Unsupported URI scheme: {}",
-                    scheme
+                    "Unsupported URI scheme: {scheme}"
                 )));
             }
         }
@@ -358,7 +355,7 @@ impl ShapeImportManager {
     /// Fetch content from external source
     fn fetch_content(&self, source_iri: &str) -> Result<(String, String, usize)> {
         let url = Url::parse(source_iri).map_err(|e| {
-            ShaclError::Configuration(format!("Invalid source IRI {}: {}", source_iri, e))
+            ShaclError::Configuration(format!("Invalid source IRI {source_iri}: {e}"))
         })?;
 
         match url.scheme() {
@@ -374,7 +371,7 @@ impl ShapeImportManager {
     /// Fetch content via HTTP(S)
     fn fetch_http_content(&self, url: &str) -> Result<(String, String, usize)> {
         let parsed_url = Url::parse(url)
-            .map_err(|e| ShaclError::Configuration(format!("Invalid URL {}: {}", url, e)))?;
+            .map_err(|e| ShaclError::Configuration(format!("Invalid URL {url}: {e}")))?;
 
         // Validate scheme
         match parsed_url.scheme() {
@@ -401,9 +398,7 @@ impl ShapeImportManager {
             .danger_accept_invalid_certs(false) // Always validate SSL certificates
             .redirect(reqwest::redirect::Policy::limited(5)) // Limit redirects for security
             .build()
-            .map_err(|e| {
-                ShaclError::Configuration(format!("Failed to create HTTP client: {}", e))
-            })?;
+            .map_err(|e| ShaclError::Configuration(format!("Failed to create HTTP client: {e}")))?;
 
         // Build request with custom headers
         let mut request = client.get(url);
@@ -417,7 +412,7 @@ impl ShapeImportManager {
         // Send request
         let response = request
             .send()
-            .map_err(|e| ShaclError::Configuration(format!("HTTP request failed: {}", e)))?;
+            .map_err(|e| ShaclError::Configuration(format!("HTTP request failed: {e}")))?;
 
         // Check response status
         if !response.status().is_success() {
@@ -457,9 +452,9 @@ impl ShapeImportManager {
         }
 
         // Download content
-        let content = response.text().map_err(|e| {
-            ShaclError::Configuration(format!("Failed to read response body: {}", e))
-        })?;
+        let content = response
+            .text()
+            .map_err(|e| ShaclError::Configuration(format!("Failed to read response body: {e}")))?;
 
         // Check actual content size
         let content_size = content.len();
@@ -484,7 +479,7 @@ impl ShapeImportManager {
     fn fetch_file_content(&self, url: &Url) -> Result<(String, String, usize)> {
         let path = url
             .to_file_path()
-            .map_err(|_| ShaclError::Configuration(format!("Invalid file path: {}", url)))?;
+            .map_err(|_| ShaclError::Configuration(format!("Invalid file path: {url}")))?;
 
         let content = std::fs::read_to_string(&path).map_err(|e| {
             ShaclError::Configuration(format!("Failed to read file {}: {}", path.display(), e))
@@ -590,8 +585,8 @@ impl ShapeImportManager {
     }
 
     /// Extract import directives from RDF content
-    fn extract_import_directives(&self, content: &str) -> Result<Vec<ImportDirective>> {
-        use oxirs_core::model::{Object, Predicate, Subject};
+    pub fn extract_import_directives(&self, content: &str) -> Result<Vec<ImportDirective>> {
+        use oxirs_core::model::Predicate;
         use oxirs_core::parser::{Parser, ParserConfig, RdfFormat};
 
         let mut directives = Vec::new();
@@ -762,8 +757,7 @@ impl ShapeImportManager {
         for (source, deps) in &self.dependency_graph {
             if self.has_circular_dependency(source, deps, &mut HashSet::new()) {
                 return Err(ShaclError::Configuration(format!(
-                    "Circular dependency detected starting from: {}",
-                    source
+                    "Circular dependency detected starting from: {source}"
                 )));
             }
         }
@@ -993,14 +987,14 @@ impl ShapeImportManager {
         // Try to extract the local part from the original IRI
         if let Some(hash_pos) = original_iri.rfind('#') {
             let local_part = &original_iri[hash_pos + 1..];
-            let new_iri = format!("{}{}", target_namespace, local_part);
+            let new_iri = format!("{target_namespace}{local_part}");
             Some(ShapeId::new(new_iri))
         } else if let Some(slash_pos) = original_iri.rfind('/') {
             let local_part = &original_iri[slash_pos + 1..];
             let new_iri = if target_namespace.ends_with('#') || target_namespace.ends_with('/') {
-                format!("{}{}", target_namespace, local_part)
+                format!("{target_namespace}{local_part}")
             } else {
-                format!("{}#{}", target_namespace, local_part)
+                format!("{target_namespace}#{local_part}")
             };
             Some(ShapeId::new(new_iri))
         } else {
@@ -1167,13 +1161,13 @@ impl ShapeImportManager {
         // Extract local part and combine with target namespace
         if let Some(hash_pos) = original_iri.rfind('#') {
             let local_part = &original_iri[hash_pos + 1..];
-            Some(format!("{}{}", target_namespace, local_part))
+            Some(format!("{target_namespace}{local_part}"))
         } else if let Some(slash_pos) = original_iri.rfind('/') {
             let local_part = &original_iri[slash_pos + 1..];
             if target_namespace.ends_with('#') || target_namespace.ends_with('/') {
-                Some(format!("{}{}", target_namespace, local_part))
+                Some(format!("{target_namespace}{local_part}"))
             } else {
-                Some(format!("{}#{}", target_namespace, local_part))
+                Some(format!("{target_namespace}#{local_part}"))
             }
         } else {
             // Can't extract local part, return None to keep original
@@ -1253,5 +1247,169 @@ mod tests {
             manager.determine_format("text/turtle", &Some("jsonld".to_string()), "test.ttl"),
             "jsonld"
         );
+    }
+
+    #[test]
+    fn test_extract_owl_imports() {
+        let manager = ShapeImportManager::default();
+        
+        let rdf_content = r#"
+            @prefix owl: <http://www.w3.org/2002/07/owl#> .
+            @prefix ex: <http://example.org/> .
+            
+            ex:MyOntology owl:imports <http://example.org/other-shapes.ttl> .
+        "#;
+        
+        let directives = manager.extract_import_directives(rdf_content).unwrap();
+        assert_eq!(directives.len(), 1);
+        assert_eq!(directives[0].source_iri, "http://example.org/other-shapes.ttl");
+        assert!(matches!(directives[0].import_type, ImportType::Include));
+    }
+
+    #[test]
+    fn test_extract_shacl_imports() {
+        let manager = ShapeImportManager::default();
+        
+        let rdf_content = r#"
+            @prefix sh: <http://www.w3.org/ns/shacl#> .
+            @prefix ex: <http://example.org/> .
+            
+            ex:MyShapes sh:include <http://example.org/base-shapes.ttl> .
+            ex:MyShapes sh:imports <http://example.org/additional-shapes.ttl> .
+        "#;
+        
+        let directives = manager.extract_import_directives(rdf_content).unwrap();
+        assert_eq!(directives.len(), 2);
+        
+        // Check that we have both include and imports directives
+        let has_include = directives.iter().any(|d| matches!(d.import_type, ImportType::Include));
+        let has_selective = directives.iter().any(|d| matches!(d.import_type, ImportType::Selective));
+        assert!(has_include);
+        assert!(has_selective);
+    }
+
+    #[test]
+    fn test_external_reference_detection() {
+        let manager = ShapeImportManager::default();
+        
+        // HTTP URLs should be considered external
+        assert!(manager.is_external_reference("http://example.org/shapes.ttl"));
+        assert!(manager.is_external_reference("https://example.org/shapes.ttl"));
+        
+        // File URLs should be considered external if allowed
+        assert!(manager.is_external_reference("file:///path/to/shapes.ttl"));
+        
+        // Relative IRIs should not be considered external
+        assert!(!manager.is_external_reference("relative-shape"));
+        assert!(!manager.is_external_reference("#LocalShape"));
+    }
+
+    #[test]
+    fn test_import_directive_creation() {
+        let directive = ImportDirective {
+            source_iri: "https://example.org/shapes.ttl".to_string(),
+            target_namespace: Some("http://myorg.org/shapes#".to_string()),
+            specific_shapes: Some(vec!["Shape1".to_string(), "Shape2".to_string()]),
+            import_type: ImportType::Selective,
+            format_hint: Some("turtle".to_string()),
+        };
+        
+        assert_eq!(directive.source_iri, "https://example.org/shapes.ttl");
+        assert_eq!(directive.target_namespace, Some("http://myorg.org/shapes#".to_string()));
+        assert!(matches!(directive.import_type, ImportType::Selective));
+        assert_eq!(directive.format_hint, Some("turtle".to_string()));
+    }
+
+    #[test]
+    fn test_namespace_mapping_creation() {
+        let import_type = ImportType::NamespaceMapping("http://mapped.example.org/".to_string());
+        
+        match import_type {
+            ImportType::NamespaceMapping(ns) => {
+                assert_eq!(ns, "http://mapped.example.org/");
+            }
+            _ => panic!("Expected NamespaceMapping"),
+        }
+    }
+
+    #[test]
+    fn test_import_statistics_tracking() {
+        let mut manager = ShapeImportManager::default();
+        
+        // Initial statistics should be zero
+        let stats = manager.get_statistics();
+        assert_eq!(stats.total_imports, 0);
+        assert_eq!(stats.successful_imports, 0);
+        assert_eq!(stats.failed_imports, 0);
+        assert_eq!(stats.cache_hits, 0);
+        assert_eq!(stats.total_shapes_imported, 0);
+    }
+
+    #[test]
+    fn test_cache_ttl_expiration() {
+        let config = ShapeImportConfig {
+            cache_ttl: std::time::Duration::from_millis(1), // Very short TTL
+            ..Default::default()
+        };
+        
+        let manager = ShapeImportManager::new(config);
+        
+        // Cache should be empty initially
+        assert!(manager.get_cached_import("http://example.org/test").is_none());
+        
+        // After TTL expiration, cache should still be empty (nothing was cached)
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        assert!(manager.get_cached_import("http://example.org/test").is_none());
+    }
+
+    #[test]
+    fn test_security_configuration() {
+        let config = ShapeImportConfig {
+            allow_http: false,
+            allow_file: false,
+            max_resource_size: 1024,
+            ..Default::default()
+        };
+        
+        let manager = ShapeImportManager::new(config);
+        
+        // HTTP should be blocked
+        assert!(manager.validate_source_iri("http://example.org/shapes.ttl").is_err());
+        
+        // File should be blocked
+        assert!(manager.validate_source_iri("file:///path/to/shapes.ttl").is_err());
+        
+        // HTTPS should still be allowed
+        assert!(manager.validate_source_iri("https://example.org/shapes.ttl").is_ok());
+    }
+
+    #[test]
+    fn test_import_depth_limits() {
+        let config = ShapeImportConfig {
+            max_import_depth: 2,
+            ..Default::default()
+        };
+        
+        let mut manager = ShapeImportManager::new(config);
+        
+        let directive = ImportDirective {
+            source_iri: "https://example.org/shapes.ttl".to_string(),
+            target_namespace: None,
+            specific_shapes: None,
+            import_type: ImportType::Include,
+            format_hint: None,
+        };
+        
+        // Should fail when exceeding max depth
+        let result = manager.import_shapes(&directive, 3);
+        assert!(result.is_err());
+        
+        // Should succeed within depth limit
+        // Note: This will fail due to network access, but at least we test the depth check
+        let result = manager.import_shapes(&directive, 1);
+        // The error should be about network access, not depth
+        if let Err(e) = result {
+            assert!(!e.to_string().contains("Maximum import depth"));
+        }
     }
 }

@@ -799,11 +799,14 @@ impl EmbeddingModel for BiomedicalEmbedding {
         let mut embeddings = Vec::new();
 
         for text in texts {
-            if let Ok(embedding) = self.get_entity_embedding(text) {
-                embeddings.push(embedding.values);
-            } else {
-                // Return zero embedding for unknown entities
-                embeddings.push(vec![0.0; self.config.base_config.dimensions]);
+            match self.get_entity_embedding(text) {
+                Ok(embedding) => {
+                    embeddings.push(embedding.values);
+                }
+                _ => {
+                    // Return zero embedding for unknown entities
+                    embeddings.push(vec![0.0; self.config.base_config.dimensions]);
+                }
             }
         }
 

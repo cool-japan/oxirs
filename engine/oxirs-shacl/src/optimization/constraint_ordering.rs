@@ -5,12 +5,12 @@
 //! implementing early termination for performance.
 
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::time::{Duration, Instant};
 
 use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
-    ConstraintComponentId, Result, ShaclError, ShapeId,
+    ConstraintComponentId, Result,
 };
 
 /// Constraint selectivity analyzer for optimal evaluation ordering
@@ -231,7 +231,7 @@ impl ConstraintSelectivityAnalyzer {
         let constraint_key = self.get_constraint_type_key(constraint);
 
         // Update selectivity stats with careful borrowing
-        let (total_evaluations, confidence) = {
+        let (_total_evaluations, confidence) = {
             let selectivity_stats = self
                 .constraint_selectivity
                 .entry(constraint_key.clone())
@@ -526,13 +526,13 @@ impl ConstraintSelectivityAnalyzer {
 
         // Calculate overall performance metrics
         let mut total_selectivity = 0.0;
-        let mut total_confidence = 0.0;
+        let mut _total_confidence = 0.0;
         let mut constraint_count = 0;
 
         for stats in self.constraint_selectivity.values() {
             if stats.confidence > 0.5 {
                 total_selectivity += stats.selectivity;
-                total_confidence += stats.confidence;
+                _total_confidence += stats.confidence;
                 constraint_count += 1;
             }
         }

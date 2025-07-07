@@ -26,17 +26,13 @@ use tokio::sync::{RwLock, Semaphore};
 use uuid::Uuid;
 
 // Import OxiRS components
-use oxirs_stream::backend::StreamBackend as Backend;
 use oxirs_stream::{
-    BackendOptimizer, CQRSSystem, ConnectionPool, EventMetadata, EventPriority,
-    MultiRegionReplicationManager as MultiRegionReplication, SecurityManager, SparqlOperationType,
-    StreamBackendType, StreamConfig,
+    EventMetadata, SparqlOperationType, StreamBackendType, StreamConfig,
 };
 // TODO: Fix imports when StreamConsumer/StreamProducer are implemented
 // use oxirs_stream::StreamConsumer as Consumer;
 use oxirs_stream::StreamEvent as Event;
 // use oxirs_stream::StreamProducer as Producer;
-use oxirs_stream::time_travel::TimeTravelEngine as TimeTravel;
 
 /// Comprehensive benchmark configuration
 #[derive(Debug, Clone)]
@@ -176,6 +172,12 @@ impl MetricsCollector {
         throughputs.clear();
         *errors = 0;
         memory_samples.clear();
+    }
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -568,7 +570,7 @@ impl EcosystemBenchmarkSuite {
                 let _permit = permit; // Keep permit alive
 
                 // Simulate memory-intensive operations
-                let config = StreamConfig {
+                let _config = StreamConfig {
                     backend: StreamBackendType::Memory {
                         max_size: Some(10000),
                         persistence: false,
@@ -582,7 +584,7 @@ impl EcosystemBenchmarkSuite {
 
                 // Create many events to test memory usage
                 for i in 0..1000 {
-                    let event = Event::SparqlUpdate {
+                    let _event = Event::SparqlUpdate {
                         query: format!("INSERT DATA {{ <http://example.org/subject{}> <http://example.org/predicate> \"Memory test\" }}", i),
                         operation_type: SparqlOperationType::Insert,
                         metadata: EventMetadata {
@@ -603,8 +605,7 @@ impl EcosystemBenchmarkSuite {
                 }
 
                 // Simulate memory usage measurement
-                let memory_usage = 50.0 + (concurrency as f64 * 10.0); // Simulated
-                memory_usage
+                50.0 + (concurrency as f64 * 10.0) // Simulated
             });
 
             handles.push(handle);
@@ -629,7 +630,7 @@ impl EcosystemBenchmarkSuite {
             let handle = tokio::spawn(async move {
                 let _permit = permit; // Keep permit alive
 
-                let config = StreamConfig {
+                let _config = StreamConfig {
                     backend: StreamBackendType::Memory {
                         max_size: Some(10000),
                         persistence: false,
@@ -643,7 +644,7 @@ impl EcosystemBenchmarkSuite {
 
                 let mut events_sent = 0u64;
                 for i in 0..1000 {
-                    let event = Event::SparqlUpdate {
+                    let _event = Event::SparqlUpdate {
                         query: format!("INSERT DATA {{ <http://example.org/subject{}> <http://example.org/predicate> \"Scale test\" }}", i),
                         operation_type: SparqlOperationType::Insert,
                         metadata: EventMetadata {
@@ -872,7 +873,7 @@ mod tests {
     #[tokio::test]
     async fn test_benchmark_suite_creation() {
         let config = BenchmarkConfig::default();
-        let suite = EcosystemBenchmarkSuite::new(config);
+        let _suite = EcosystemBenchmarkSuite::new(config);
 
         // Test that we can run a simple benchmark
         // TODO: Fix when proper backend types are available

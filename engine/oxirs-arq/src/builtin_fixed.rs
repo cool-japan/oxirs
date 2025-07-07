@@ -3,7 +3,6 @@
 //! This module implements essential SPARQL 1.1 built-in functions
 //! as specified in the W3C recommendation.
 
-use crate::algebra::{Expression, Iri, Literal, Term};
 use crate::extensions::{
     AggregateState, CustomAggregate, CustomFunction, ExecutionContext, ExtensionRegistry, Value,
     ValueType,
@@ -14,8 +13,7 @@ use md5;
 use rand::Rng;
 use regex::Regex;
 use sha1::{Digest as Sha1Digest, Sha1};
-use sha2::{Digest, Sha256, Sha384, Sha512};
-use std::collections::HashMap;
+use sha2::{Sha256, Sha384, Sha512};
 use urlencoding;
 use uuid::Uuid;
 
@@ -1210,7 +1208,7 @@ impl CustomFunction for RandFunction {
         }
 
         let mut rng = rand::thread_rng();
-        Ok(Value::Float(rng.gen::<f64>()))
+        Ok(Value::Float(rng.r#gen::<f64>()))
     }
 }
 
@@ -1795,7 +1793,7 @@ impl CustomFunction for StruuidFunction {
         }
 
         let uuid = Uuid::new_v4();
-        Ok(Value::String(format!("urn:uuid:{}", uuid)))
+        Ok(Value::String(format!("urn:uuid:{uuid}")))
     }
 }
 

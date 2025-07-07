@@ -5,7 +5,6 @@
 
 use anyhow::Result;
 use chrono::Utc;
-use oxirs_stream::performance_optimizer::PerformanceConfig;
 use oxirs_stream::*;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -40,9 +39,9 @@ impl Default for TestConfig {
 fn create_test_events(count: usize) -> Vec<StreamEvent> {
     (0..count)
         .map(|i| StreamEvent::TripleAdded {
-            subject: format!("http://example.org/subject{}", i),
+            subject: format!("http://example.org/subject{i}"),
             predicate: "http://example.org/predicate".to_string(),
-            object: format!("\"Test object {}\"", i),
+            object: format!("\"Test object {i}\""),
             graph: None,
             metadata: EventMetadata {
                 event_id: Uuid::new_v4().to_string(),
@@ -133,7 +132,7 @@ mod memory_backend_tests {
         // Test publishing events
         let events = create_test_events(5);
         for (i, event) in events.iter().enumerate() {
-            println!("Publishing event {}: {:?}", i, event);
+            println!("Publishing event {i}: {event:?}");
             stream.publish(event.clone()).await?;
         }
 
@@ -143,7 +142,7 @@ mod memory_backend_tests {
         // Check how many events are in global storage
         let global_events = oxirs_stream::get_memory_events();
         let event_count = global_events.read().await.len();
-        println!("Events in global storage: {}", event_count);
+        println!("Events in global storage: {event_count}");
 
         // Add small delay to ensure events are available
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -153,19 +152,19 @@ mod memory_backend_tests {
         for i in 0..5 {
             match timeout(Duration::from_secs(1), stream.consume()).await {
                 Ok(Ok(Some(event))) => {
-                    println!("Consumed event {}: {:?}", i, event);
+                    println!("Consumed event {i}: {event:?}");
                     received_events.push(event);
                 }
                 Ok(Ok(None)) => {
-                    println!("No event received at iteration {}", i);
+                    println!("No event received at iteration {i}");
                     break;
                 }
                 Ok(Err(e)) => {
-                    println!("Error consuming event at iteration {}: {}", i, e);
+                    println!("Error consuming event at iteration {i}: {e}");
                     break;
                 }
                 Err(_) => {
-                    println!("Timeout at iteration {}", i);
+                    println!("Timeout at iteration {i}");
                     break;
                 }
             }
@@ -227,10 +226,13 @@ mod memory_backend_tests {
         let start = std::time::Instant::now();
         let mut received_count = 0;
         for _ in 0..event_count {
-            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(100), stream.consume()).await {
-                received_count += 1;
-            } else {
-                break;
+            match timeout(Duration::from_millis(100), stream.consume()).await {
+                Ok(Ok(Some(_))) => {
+                    received_count += 1;
+                }
+                _ => {
+                    break;
+                }
             }
         }
         let consume_duration = start.elapsed();
@@ -646,8 +648,6 @@ mod kinesis_backend_tests {
 #[cfg(test)]
 mod rdf_patch_integration_tests {
     use super::*;
-    use oxirs_stream::delta::*;
-    use oxirs_stream::patch::*;
 
     #[tokio::test]
     async fn test_rdf_patch_streaming() -> Result<()> {
@@ -769,7 +769,7 @@ mod monitoring_integration_tests {
     use super::*;
     use oxirs_stream::monitoring::{
         ConsumerMetricsUpdate, HealthStatus, MetricsCollector, MonitoringConfig,
-        ProducerMetricsUpdate, StreamingMetrics,
+        ProducerMetricsUpdate,
     };
 
     #[tokio::test]
@@ -890,10 +890,13 @@ mod performance_tests {
         let start = std::time::Instant::now();
         let mut consumed_count = 0;
         for _ in 0..event_count {
-            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(1), stream.consume()).await {
-                consumed_count += 1;
-            } else {
-                break;
+            match timeout(Duration::from_millis(1), stream.consume()).await {
+                Ok(Ok(Some(_))) => {
+                    consumed_count += 1;
+                }
+                _ => {
+                    break;
+                }
             }
         }
         let consume_duration = start.elapsed();
@@ -947,13 +950,13 @@ mod performance_tests {
                     latencies.push(latency);
                 }
                 Ok(Ok(None)) => {
-                    println!("No event received at iteration {}", i);
+                    println!("No event received at iteration {i}");
                 }
                 Ok(Err(e)) => {
-                    println!("Error consuming event at iteration {}: {}", i, e);
+                    println!("Error consuming event at iteration {i}: {e}");
                 }
                 Err(_) => {
-                    println!("Timeout at iteration {}", i);
+                    println!("Timeout at iteration {i}");
                 }
             }
         }

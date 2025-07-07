@@ -214,9 +214,9 @@ impl QuantumGeneticOptimizer {
         let mut fitness = structure.dna.primary_strand.len() as f64 * 0.1;
 
         // Add consciousness-inspired factors
-        fitness += Self::calculate_pattern_harmony(&structure) * 0.3;
-        fitness += Self::calculate_emotional_resonance(&structure) * 0.2;
-        fitness += Self::calculate_quantum_advantage(&structure) * 0.4;
+        fitness += Self::calculate_pattern_harmony(structure) * 0.3;
+        fitness += Self::calculate_emotional_resonance(structure) * 0.2;
+        fitness += Self::calculate_quantum_advantage(structure) * 0.4;
 
         fitness.min(100.0) // Cap at 100 for numerical stability
     }
@@ -287,14 +287,15 @@ impl QuantumGeneticOptimizer {
 
         // Get consciousness state for evolution guidance
         let consciousness_state = {
-            if let Ok(consciousness) = self.consciousness.read() {
-                (
+            match self.consciousness.read() {
+                Ok(consciousness) => (
                     consciousness.consciousness_level,
                     consciousness.emotional_state.clone(),
                     consciousness.integration_level,
-                )
-            } else {
-                (0.5, EmotionalState::Calm, 0.5) // Default fallback
+                ),
+                _ => {
+                    (0.5, EmotionalState::Calm, 0.5) // Default fallback
+                }
             }
         };
 
@@ -420,7 +421,7 @@ impl QuantumGeneticOptimizer {
         // Quantum measurement collapse based on amplitude probabilities
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let random_value: f64 = rng.gen();
+        let random_value: f64 = rng.r#gen();
 
         let mut cumulative_probability = 0.0;
         for (strategy, amplitude) in &self.strategy_superposition.strategy_amplitudes {
@@ -497,7 +498,7 @@ impl QuantumGeneticOptimizer {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        if rng.gen::<f64>() < self.quantum_coherence * 0.1 {
+        if rng.r#gen::<f64>() < self.quantum_coherence * 0.1 {
             Some(ConsciousnessEvolutionInsight {
                 generation,
                 insight_type: match strategy {
@@ -510,9 +511,9 @@ impl QuantumGeneticOptimizer {
                 },
                 confidence: self.quantum_coherence,
                 emotional_context: EmotionalState::Creative, // Default for insights
-                triggering_pattern: format!("generation_{}_pattern", generation),
-                quantum_state_hash: rng.gen(),
-                fitness_improvement: rng.gen::<f64>() * 10.0,
+                triggering_pattern: format!("generation_{generation}_pattern"),
+                quantum_state_hash: rng.r#gen(),
+                fitness_improvement: rng.r#gen::<f64>() * 10.0,
             })
         } else {
             None

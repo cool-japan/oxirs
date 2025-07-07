@@ -1,4 +1,4 @@
-use crate::{Vector, VectorData, VectorError};
+use crate::{Vector, VectorError};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -29,8 +29,7 @@ impl SparseVector {
         if let Some(&max_idx) = indices.iter().max() {
             if max_idx >= dimensions {
                 return Err(VectorError::InvalidDimensions(format!(
-                    "Index {} exceeds dimensions {}",
-                    max_idx, dimensions
+                    "Index {max_idx} exceeds dimensions {dimensions}"
                 )));
             }
         }
@@ -276,7 +275,7 @@ impl CSRMatrix {
         for vec in vectors {
             // Sort by column index for CSR format
             let mut sorted_entries: Vec<_> = vec.values.iter().collect();
-            sorted_entries.sort_by_key(|(&idx, _)| idx);
+            sorted_entries.sort_by_key(|&(&idx, _)| idx);
 
             for (&idx, &val) in sorted_entries {
                 values.push(val);
@@ -326,7 +325,7 @@ impl CSRMatrix {
 
         let mut result = vec![0.0; self.shape.0];
 
-        for row in 0..self.shape.0 {
+        for (row, result_val) in result.iter_mut().enumerate().take(self.shape.0) {
             let start = self.row_ptrs[row];
             let end = self.row_ptrs[row + 1];
 
@@ -337,7 +336,7 @@ impl CSRMatrix {
                     sum += self.values[i] * vec_val;
                 }
             }
-            result[row] = sum;
+            *result_val = sum;
         }
 
         Ok(result)

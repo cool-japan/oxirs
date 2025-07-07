@@ -5,8 +5,8 @@ use super::context::{
 use super::error::JsonLdErrorCode;
 use super::profile::JsonLdProcessingMode;
 use super::{JsonLdSyntaxError, MAX_CONTEXT_RECURSION};
-use crate::model::iri::Iri;
 use json_event_parser::JsonEvent;
+use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error;
@@ -1625,6 +1625,7 @@ impl JsonLdExpansionConverter {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn on_literal_value(
         &mut self,
         value: JsonLdValue,

@@ -5,7 +5,7 @@
 use crate::ast::Value;
 use crate::types::ScalarType;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, TimeZone, Utc};
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;

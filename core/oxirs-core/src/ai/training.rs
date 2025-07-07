@@ -4,12 +4,31 @@
 //! including knowledge graph embeddings, graph neural networks, and other ML models.
 
 use crate::ai::{GraphNeuralNetwork, KnowledgeGraphEmbedding};
-use crate::model::Triple;
+use crate::model::{Triple, Subject, Predicate, Object};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use rand::seq::SliceRandom;
+use rand::Rng;
+
+/// Negative sampling strategy for training
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NegativeSamplingStrategy {
+    /// Random corruption of entities
+    Random,
+    /// Type-constrained sampling based on entity types
+    TypeConstrained,
+    /// Adversarial sampling using model scores
+    Adversarial,
+}
+
+impl Default for NegativeSamplingStrategy {
+    fn default() -> Self {
+        NegativeSamplingStrategy::Random
+    }
+}
 
 /// Training configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,6 +71,9 @@ pub struct TrainingConfig {
 
     /// Logging configuration
     pub logging: LoggingConfig,
+
+    /// Negative sampling strategy
+    pub negative_sampling_strategy: NegativeSamplingStrategy,
 }
 
 impl Default for TrainingConfig {
@@ -105,6 +127,7 @@ impl Default for TrainingConfig {
                 tensorboard_dir: Some("./logs".to_string()),
                 wandb_project: None,
             },
+            negative_sampling_strategy: NegativeSamplingStrategy::Random,
         }
     }
 }
@@ -377,6 +400,12 @@ pub struct TrainingMetrics {
     pub additional_metrics: HashMap<String, Vec<f32>>,
 }
 
+impl Default for TrainingMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrainingMetrics {
     /// Create new empty training metrics
     pub fn new() -> Self {
@@ -397,6 +426,7 @@ impl TrainingMetrics {
     }
 
     /// Update metrics for an epoch
+    #[allow(clippy::too_many_arguments)]
     pub fn update_epoch(
         &mut self,
         epoch: usize,
@@ -617,14 +647,108 @@ impl DefaultTrainer {
         // Simplified negative sampling
         // In a real implementation, this would be more sophisticated
         let num_negatives = (positive_triples.len() as f32 * ratio) as usize;
-        let negatives = Vec::with_capacity(num_negatives);
 
-        // TODO: Implement proper negative sampling strategies
-        // - Random corruption of head/tail entities
-        // - Type-constrained negative sampling
-        // - Adversarial negative sampling
-
-        negatives
+        // Implement negative sampling strategies
+        let mut negative_triples = Vec::with_capacity(num_negatives);
+        let mut rng = rand::thread_rng();
+        
+        // Get all entities and relations from positive triples
+        let mut subjects = HashSet::new();
+        let mut objects = HashSet::new();
+        let mut relations = HashSet::new();
+        
+        for triple in positive_triples {
+            subjects.insert(triple.subject().clone());
+            objects.insert(triple.object().clone());
+            relations.insert(triple.predicate().clone());
+        }
+        
+        let subject_vec: Vec<_> = subjects.into_iter().collect();
+        let object_vec: Vec<_> = objects.into_iter().collect();
+        let relation_vec: Vec<_> = relations.into_iter().collect();
+        
+        // Generate negative samples by corruption
+        for _ in 0..num_negatives {
+            if let Some(pos_triple) = positive_triples.choose(&mut rng) {
+                match self.config.negative_sampling_strategy {
+                    NegativeSamplingStrategy::Random => {
+                        // Random corruption of head or tail
+                        if rng.gen_bool(0.5) {
+                            // Corrupt head
+                            if let Some(random_subject) = subject_vec.choose(&mut rng) {
+                                let corrupted = Triple::new(
+                                    random_subject.clone(),
+                                    pos_triple.predicate().clone(),
+                                    pos_triple.object().clone(),
+                                );
+                                // Check if this is actually a positive triple
+                                if !positive_triples.contains(&corrupted) {
+                                    negative_triples.push(corrupted);
+                                }
+                            }
+                        } else {
+                            // Corrupt tail
+                            if let Some(random_object) = object_vec.choose(&mut rng) {
+                                let corrupted = Triple::new(
+                                    pos_triple.subject().clone(),
+                                    pos_triple.predicate().clone(),
+                                    random_object.clone(),
+                                );
+                                // Check if this is actually a positive triple
+                                if !positive_triples.contains(&corrupted) {
+                                    negative_triples.push(corrupted);
+                                }
+                            }
+                        }
+                    }
+                    NegativeSamplingStrategy::TypeConstrained => {
+                        // For type-constrained, we would filter entities by type
+                        // For now, use random sampling as fallback
+                        if rng.gen_bool(0.5) {
+                            // Corrupt subject
+                            if let Some(random_subject) = subject_vec.choose(&mut rng) {
+                                let corrupted = Triple::new(
+                                    random_subject.clone(),
+                                    pos_triple.predicate().clone(),
+                                    pos_triple.object().clone(),
+                                );
+                                if !positive_triples.contains(&corrupted) {
+                                    negative_triples.push(corrupted);
+                                }
+                            }
+                        } else {
+                            // Corrupt object
+                            if let Some(random_object) = object_vec.choose(&mut rng) {
+                                let corrupted = Triple::new(
+                                    pos_triple.subject().clone(),
+                                    pos_triple.predicate().clone(),
+                                    random_object.clone(),
+                                );
+                                if !positive_triples.contains(&corrupted) {
+                                    negative_triples.push(corrupted);
+                                }
+                            }
+                        }
+                    }
+                    NegativeSamplingStrategy::Adversarial => {
+                        // Adversarial sampling would use model scores to find hard negatives
+                        // For now, use random as fallback
+                        if let Some(random_object) = object_vec.choose(&mut rng) {
+                            let corrupted = Triple::new(
+                                pos_triple.subject().clone(),
+                                pos_triple.predicate().clone(),
+                                random_object.clone(),
+                            );
+                            if !positive_triples.contains(&corrupted) {
+                                negative_triples.push(corrupted);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        negative_triples
     }
 
     /// Compute training loss
@@ -647,39 +771,239 @@ impl DefaultTrainer {
                 }
             }
             LossFunction::BinaryCrossEntropy => {
-                // TODO: Implement BCE loss
-                0.0
+                // Binary Cross Entropy loss for link prediction
+                let mut total_loss = 0.0;
+                let count = positive_scores.len() + negative_scores.len();
+                
+                // Positive examples (label = 1)
+                for &score in positive_scores {
+                    let prob = 1.0 / (1.0 + (-score).exp()); // sigmoid
+                    let loss = -(1.0 * prob.ln());
+                    total_loss += loss;
+                }
+                
+                // Negative examples (label = 0)
+                for &score in negative_scores {
+                    let prob = 1.0 / (1.0 + (-score).exp()); // sigmoid
+                    let loss = -(0.0 * prob.ln() + (1.0 - 0.0) * (1.0 - prob).ln());
+                    total_loss += loss;
+                }
+                
+                if count > 0 {
+                    total_loss / count as f32
+                } else {
+                    0.0
+                }
             }
             LossFunction::CrossEntropy => {
-                // TODO: Implement CE loss
-                0.0
+                // Multi-class cross entropy loss
+                let mut total_loss = 0.0;
+                let num_classes = positive_scores.len().max(negative_scores.len());
+                
+                if num_classes > 0 {
+                    // Softmax normalization
+                    let all_scores: Vec<f32> = positive_scores.iter()
+                        .chain(negative_scores.iter())
+                        .cloned()
+                        .collect();
+                    
+                    let max_score = all_scores.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                    let exp_scores: Vec<f32> = all_scores.iter()
+                        .map(|&s| (s - max_score).exp())
+                        .collect();
+                    let sum_exp: f32 = exp_scores.iter().sum();
+                    
+                    // Cross entropy for positive examples
+                    for i in 0..positive_scores.len() {
+                        let prob = exp_scores[i] / sum_exp;
+                        total_loss -= prob.ln();
+                    }
+                    
+                    total_loss / positive_scores.len() as f32
+                } else {
+                    0.0
+                }
             }
             _ => {
-                // TODO: Implement other loss functions
-                0.0
+                // Default to margin ranking loss
+                let mut total_loss = 0.0;
+                let mut count = 0;
+                
+                for (pos_score, neg_score) in positive_scores.iter().zip(negative_scores.iter()) {
+                    let loss = (neg_score - pos_score + 1.0).max(0.0); // margin = 1.0
+                    total_loss += loss;
+                    count += 1;
+                }
+                
+                if count > 0 {
+                    total_loss / count as f32
+                } else {
+                    0.0
+                }
             }
         }
     }
 
     /// Compute evaluation metrics
-    fn compute_metrics(
+    async fn compute_metrics(
         &self,
-        _test_triples: &[Triple],
-        _model: &dyn KnowledgeGraphEmbedding,
-    ) -> HashMap<String, f32> {
+        test_triples: &[Triple],
+        model: &dyn KnowledgeGraphEmbedding,
+    ) -> Result<HashMap<String, f32>> {
         let mut metrics = HashMap::new();
 
-        // TODO: Implement proper metric computation
-        // - Mean Reciprocal Rank (MRR)
-        // - Hits@K for K=1,3,10
-        // - Link prediction accuracy
+        if test_triples.is_empty() {
+            metrics.insert("mrr".to_string(), 0.0);
+            metrics.insert("hits_at_1".to_string(), 0.0);
+            metrics.insert("hits_at_3".to_string(), 0.0);
+            metrics.insert("hits_at_10".to_string(), 0.0);
+            return Ok(metrics);
+        }
 
-        metrics.insert("mrr".to_string(), 0.0);
-        metrics.insert("hits_at_1".to_string(), 0.0);
-        metrics.insert("hits_at_3".to_string(), 0.0);
-        metrics.insert("hits_at_10".to_string(), 0.0);
+        // Collect all entities for ranking evaluation (convert subjects to objects for unified handling)
+        let mut all_entities = HashSet::new();
+        for triple in test_triples {
+            // Convert subject to object for unified entity ranking
+            match triple.subject() {
+                Subject::NamedNode(nn) => { all_entities.insert(Object::NamedNode(nn.clone())); },
+                Subject::BlankNode(bn) => { all_entities.insert(Object::BlankNode(bn.clone())); },
+                Subject::Variable(_) => {}, // Skip variables in training evaluation
+                Subject::QuotedTriple(_) => {}, // Skip quoted triples in training evaluation
+            }
+            all_entities.insert(triple.object().clone());
+        }
+        let entity_vec: Vec<_> = all_entities.into_iter().collect();
 
-        metrics
+        let mut reciprocal_ranks = Vec::new();
+        let mut hits_at_1 = 0;
+        let mut hits_at_3 = 0;
+        let mut hits_at_10 = 0;
+
+        // Evaluate link prediction for each test triple
+        for test_triple in test_triples {
+            // Head prediction: given (?, r, t), predict h
+            let head_rank = self.compute_entity_rank(
+                &test_triple.subject(),
+                &test_triple.predicate(),
+                &test_triple.object(),
+                &entity_vec,
+                model,
+                true, // predict head
+            ).await?;
+
+            // Tail prediction: given (h, r, ?), predict t  
+            let tail_rank = self.compute_entity_rank(
+                &test_triple.subject(),
+                &test_triple.predicate(),
+                &test_triple.object(),
+                &entity_vec,
+                model,
+                false, // predict tail
+            ).await?;
+
+            // Use the best rank for each triple
+            let best_rank = head_rank.min(tail_rank);
+            
+            reciprocal_ranks.push(1.0 / best_rank as f32);
+            
+            if best_rank <= 1 {
+                hits_at_1 += 1;
+            }
+            if best_rank <= 3 {
+                hits_at_3 += 1;
+            }
+            if best_rank <= 10 {
+                hits_at_10 += 1;
+            }
+        }
+
+        let num_test = test_triples.len() as f32;
+        let mrr = reciprocal_ranks.iter().sum::<f32>() / num_test;
+
+        metrics.insert("mrr".to_string(), mrr);
+        metrics.insert("hits_at_1".to_string(), hits_at_1 as f32 / num_test);
+        metrics.insert("hits_at_3".to_string(), hits_at_3 as f32 / num_test);
+        metrics.insert("hits_at_10".to_string(), hits_at_10 as f32 / num_test);
+
+        Ok(metrics)
+    }
+
+    /// Compute the rank of the correct entity in link prediction
+    async fn compute_entity_rank(
+        &self,
+        correct_subject: &Subject,
+        predicate: &Predicate,
+        correct_object: &Object,
+        all_entities: &[Object],
+        model: &dyn KnowledgeGraphEmbedding,
+        predict_head: bool,
+    ) -> Result<usize> {
+        let mut scores = Vec::new();
+        
+        if predict_head {
+            // Predict head: score all (e, r, t) combinations
+            for entity in all_entities {
+                // Convert Object to Subject for head prediction
+                let candidate_subject = match entity {
+                    Object::NamedNode(nn) => Subject::NamedNode(nn.clone()),
+                    Object::BlankNode(bn) => Subject::BlankNode(bn.clone()),
+                    Object::Literal(_) => continue, // Literals can't be subjects
+                    Object::Variable(v) => Subject::Variable(v.clone()),
+                    Object::QuotedTriple(qt) => Subject::QuotedTriple(qt.clone()),
+                };
+                
+                let candidate_triple = Triple::new(
+                    candidate_subject.clone(),
+                    predicate.clone(),
+                    correct_object.clone(),
+                );
+                let score = model.score_triple(
+                    &candidate_subject.to_string(),
+                    &predicate.to_string(),
+                    &correct_object.to_string(),
+                ).await?;
+                scores.push((score, entity));
+            }
+        } else {
+            // Predict tail: score all (h, r, e) combinations
+            for entity in all_entities {
+                let candidate_triple = Triple::new(
+                    correct_subject.clone(),
+                    predicate.clone(),
+                    entity.clone(),
+                );
+                let score = model.score_triple(
+                    &correct_subject.to_string(),
+                    &predicate.to_string(),
+                    &entity.to_string(),
+                ).await?;
+                scores.push((score, entity));
+            }
+        }
+
+        // Sort by score (descending - higher scores are better)
+        scores.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Find the rank of the correct entity
+        let correct_entity_as_object = if predict_head {
+            // Convert subject to object for comparison
+            match correct_subject {
+                Subject::NamedNode(nn) => Object::NamedNode(nn.clone()),
+                Subject::BlankNode(bn) => Object::BlankNode(bn.clone()),
+                Subject::Variable(v) => Object::Variable(v.clone()),
+                Subject::QuotedTriple(qt) => Object::QuotedTriple(qt.clone()),
+            }
+        } else {
+            correct_object.clone()
+        };
+
+        for (rank, (_, entity)) in scores.iter().enumerate() {
+            if *entity == &correct_entity_as_object {
+                return Ok(rank + 1); // Ranks are 1-indexed
+            }
+        }
+
+        Ok(all_entities.len()) // Worst possible rank
     }
 }
 
@@ -833,7 +1157,7 @@ impl Trainer for DefaultTrainer {
         test_data: &[Triple],
         _metrics: &[TrainingMetric],
     ) -> Result<HashMap<String, f32>> {
-        let computed_metrics = self.compute_metrics(test_data, model.as_ref());
+        let computed_metrics = self.compute_metrics(test_data, model.as_ref()).await?;
         Ok(computed_metrics)
     }
 }
@@ -942,10 +1266,12 @@ mod tests {
 
     #[test]
     fn test_learning_rate_scheduler() {
-        let mut config = TrainingConfig::default();
-        config.lr_scheduler = LearningRateScheduler::StepDecay {
-            step_size: 100,
-            gamma: 0.1,
+        let config = TrainingConfig {
+            lr_scheduler: LearningRateScheduler::StepDecay {
+                step_size: 100,
+                gamma: 0.1,
+            },
+            ..Default::default()
         };
 
         let mut trainer = DefaultTrainer::new(config);

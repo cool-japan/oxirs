@@ -150,7 +150,7 @@ impl RdfProcessor {
         if let Some(base) = &config.base_iri {
             namespaces.set_base(base.clone());
         }
-        
+
         Self {
             store,
             namespaces,
@@ -162,19 +162,19 @@ impl RdfProcessor {
     pub async fn process_file(&mut self, path: &Path) -> Result<ProcessingStats> {
         let format = RdfFormat::from_extension(path)
             .ok_or_else(|| anyhow!("Unknown RDF format for file: {:?}", path))?;
-        
+
         // Check file size
         let metadata = tokio::fs::metadata(path).await?;
         if self.config.max_file_size > 0 && metadata.len() > self.config.max_file_size as u64 {
             return Err(anyhow!("File size exceeds maximum: {} bytes", metadata.len()));
         }
-        
+
         // Decide whether to use streaming
-        let use_streaming = self.config.use_streaming && 
+        let use_streaming = self.config.use_streaming &&
             metadata.len() > self.config.streaming_threshold as u64;
-        
+
         let file = tokio::fs::File::open(path).await?;
-        
+
         if use_streaming {
             self.process_stream(file, format).await
         } else {
@@ -189,7 +189,7 @@ impl RdfProcessor {
     pub async fn process_data(&mut self, data: &[u8], format: RdfFormat) -> Result<ProcessingStats> {
         let start_time = std::time::Instant::now();
         let mut stats = ProcessingStats::default();
-        
+
         match format {
             RdfFormat::RdfXml | RdfFormat::Turtle | RdfFormat::NTriples => {
                 self.process_graph_format(data, format, &mut stats)?;
@@ -201,7 +201,7 @@ impl RdfProcessor {
                 self.process_jsonld(data, &mut stats).await?;
             }
         }
-        
+
         stats.processing_time = start_time.elapsed();
         Ok(stats)
     }
@@ -214,7 +214,7 @@ impl RdfProcessor {
     ) -> Result<ProcessingStats> {
         let start_time = std::time::Instant::now();
         let mut stats = ProcessingStats::default();
-        
+
         // For streaming, we need to handle line-based formats specially
         match format {
             RdfFormat::NTriples | RdfFormat::NQuads => {
@@ -228,7 +228,7 @@ impl RdfProcessor {
                 self.process_data(&buffer, format).await?;
             }
         }
-        
+
         stats.processing_time = start_time.elapsed();
         Ok(stats)
     }
@@ -242,17 +242,17 @@ impl RdfProcessor {
     ) -> Result<()> {
         let graph_format = format.to_graph_format()
             .ok_or_else(|| anyhow!("Not a graph format: {:?}", format))?;
-        
+
         let graph = Graph::parse(
             std::io::Cursor::new(data),
             graph_format,
             self.config.base_iri.as_deref(),
         )?;
-        
+
         // Add triples to store and collect stats
         for triple in graph.iter() {
             self.store.insert(&Quad::from(triple.clone()))?;
-            
+
             if self.config.collect_stats {
                 stats.triples_processed += 1;
                 stats.subjects.insert(triple.subject.to_string());
@@ -260,12 +260,12 @@ impl RdfProcessor {
                 stats.objects.insert(triple.object.to_string());
             }
         }
-        
+
         // Extract namespaces from Turtle
         if format == RdfFormat::Turtle {
             self.extract_turtle_prefixes(std::str::from_utf8(data)?)?;
         }
-        
+
         Ok(())
     }
 
@@ -278,17 +278,17 @@ impl RdfProcessor {
     ) -> Result<()> {
         let dataset_format = format.to_dataset_format()
             .ok_or_else(|| anyhow!("Not a dataset format: {:?}", format))?;
-        
+
         let dataset = Dataset::parse(
             std::io::Cursor::new(data),
             dataset_format,
             self.config.base_iri.as_deref(),
         )?;
-        
+
         // Add quads to store and collect stats
         for quad in dataset.iter() {
             self.store.insert(quad)?;
-            
+
             if self.config.collect_stats {
                 stats.quads_processed += 1;
                 stats.subjects.insert(quad.subject.to_string());
@@ -299,7 +299,7 @@ impl RdfProcessor {
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -320,16 +320,16 @@ impl RdfProcessor {
     ) -> Result<()> {
         let mut lines = reader.lines();
         let mut line_number = 0;
-        
+
         while let Some(line) = lines.next_line().await? {
             line_number += 1;
-            
+
             // Skip empty lines and comments
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with('#') {
                 continue;
             }
-            
+
             // Parse the line
             match format {
                 RdfFormat::NTriples => {
@@ -361,7 +361,7 @@ impl RdfProcessor {
                 _ => unreachable!(),
             }
         }
-        
+
         Ok(())
     }
 
@@ -389,7 +389,7 @@ impl RdfProcessor {
     fn extract_turtle_prefixes(&mut self, content: &str) -> Result<()> {
         // Simple regex-based extraction for @prefix declarations
         let prefix_regex = Regex::new(r"@prefix\s+(\w+):\s*<([^>]+)>\s*\.")?;
-        
+
         for cap in prefix_regex.captures_iter(content) {
             if let (Some(prefix), Some(namespace)) = (cap.get(1), cap.get(2)) {
                 self.namespaces.add_prefix(
@@ -398,7 +398,7 @@ impl RdfProcessor {
                 );
             }
         }
-        
+
         // Extract @base declaration
         let base_regex = Regex::new(r"@base\s*<([^>]+)>\s*\.")?;
         if let Some(cap) = base_regex.captures(content) {
@@ -406,14 +406,14 @@ impl RdfProcessor {
                 self.namespaces.set_base(base.as_str().to_string());
             }
         }
-        
+
         Ok(())
     }
 
     /// Convert loaded RDF data to rule atoms
     pub fn to_rule_atoms(&self) -> Result<Vec<RuleAtom>> {
         let mut atoms = Vec::new();
-        
+
         // Use query_quads instead of iter() which might not exist
         for quad in self.store.query_quads(None, None, None, None)? {
             if quad.graph_name() != &oxirs_core::model::GraphName::DefaultGraph {
@@ -421,23 +421,23 @@ impl RdfProcessor {
                 // In the future, we could represent these as 4-ary predicates
                 continue;
             }
-            
+
             let atom = RuleAtom::Triple {
                 subject: self.term_to_rule_term(&quad.subject().clone().into())?,
                 predicate: self.term_to_rule_term(&quad.predicate().clone().into())?,
                 object: self.term_to_rule_term(&quad.object().clone().into())?,
             };
-            
+
             atoms.push(atom);
         }
-        
+
         Ok(atoms)
     }
 
     /// Convert an RDF term to a rule term
     fn term_to_rule_term(&self, term: &oxirs_core::model::Term) -> Result<RuleTerm> {
         use oxirs_core::model::Term;
-        
+
         match term {
             Term::NamedNode(n) => Ok(RuleTerm::Constant(self.namespaces.compact(n.as_str()))),
             Term::BlankNode(b) => Ok(RuleTerm::Constant(format!("_:{}", b.as_str()))),
@@ -501,7 +501,7 @@ impl FactManager {
     /// Add a fact
     pub fn add_fact(&mut self, fact: RdfRuleAtom) -> Result<()> {
         self.total_facts += 1;
-        
+
         if self.memory_facts.len() < self.max_memory_facts {
             self.memory_facts.push(fact);
         } else if let Some(path) = &self.storage_path {
@@ -510,7 +510,7 @@ impl FactManager {
         } else {
             return Err(anyhow!("Memory limit reached and no storage path configured"));
         }
-        
+
         Ok(())
     }
 
@@ -558,14 +558,14 @@ mod tests {
     async fn test_process_turtle() {
         let store = Arc::new(Store::new().unwrap());
         let mut processor = RdfProcessor::new(store.clone());
-        
+
         let turtle_data = r#"
             @prefix ex: <http://example.org/> .
             ex:subject ex:predicate ex:object .
         "#;
-        
+
         let stats = processor.process_data(turtle_data.as_bytes(), RdfFormat::Turtle).await.unwrap();
-        
+
         assert_eq!(stats.triples_processed, 1);
         assert_eq!(store.len().unwrap(), 1);
     }
@@ -574,11 +574,11 @@ mod tests {
     async fn test_process_ntriples() {
         let store = Arc::new(Store::new().unwrap());
         let mut processor = RdfProcessor::new(store.clone());
-        
+
         let ntriples_data = r#"<http://example.org/subject> <http://example.org/predicate> <http://example.org/object> ."#;
-        
+
         let stats = processor.process_data(ntriples_data.as_bytes(), RdfFormat::NTriples).await.unwrap();
-        
+
         assert_eq!(stats.triples_processed, 1);
         assert_eq!(store.len().unwrap(), 1);
     }
@@ -592,14 +592,14 @@ mod tests {
             ..Default::default()
         };
         let mut processor = RdfProcessor::with_config(store.clone(), config);
-        
+
         // Create a temporary file with N-Triples data
         let mut temp_file = NamedTempFile::new().unwrap();
         writeln!(temp_file, "<http://example.org/s1> <http://example.org/p> <http://example.org/o1> .").unwrap();
         writeln!(temp_file, "<http://example.org/s2> <http://example.org/p> <http://example.org/o2> .").unwrap();
-        
+
         let stats = processor.process_file(temp_file.path()).await.unwrap();
-        
+
         assert_eq!(stats.triples_processed, 2);
         assert_eq!(store.len().unwrap(), 2);
     }
@@ -607,19 +607,19 @@ mod tests {
     #[test]
     fn test_fact_manager() {
         let mut manager = FactManager::new(2);
-        
+
         let fact1 = RdfRuleAtom::Triple {
             subject: RdfTerm::NamedNode(NamedNode::new("http://example.org/s1").unwrap()),
             predicate: RdfTerm::NamedNode(NamedNode::new("http://example.org/p").unwrap()),
             object: RdfTerm::NamedNode(NamedNode::new("http://example.org/o1").unwrap()),
         };
-        
+
         manager.add_fact(fact1.clone()).unwrap();
         assert_eq!(manager.total_count(), 1);
-        
+
         manager.add_fact(fact1.clone()).unwrap();
         assert_eq!(manager.total_count(), 2);
-        
+
         // Third fact would exceed memory limit without storage
         assert!(manager.add_fact(fact1).is_err());
     }

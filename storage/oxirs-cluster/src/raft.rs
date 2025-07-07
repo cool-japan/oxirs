@@ -6,7 +6,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Display;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 

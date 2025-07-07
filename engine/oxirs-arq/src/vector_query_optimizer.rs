@@ -9,11 +9,9 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use tracing::{debug, info, span, warn, Level};
+use tracing::{info, span, Level};
 
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
-use crate::cost_model::{CostEstimate, CostModel};
 use crate::integrated_query_planner::{
     IntegratedExecutionPlan, IntegratedPlannerConfig, IntegratedQueryPlanner,
 };

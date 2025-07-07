@@ -3,15 +3,9 @@
 //! This module provides seamless integration between oxirs-vec's vector operations
 //! and oxirs-core's RDF term system, enabling semantic vector search on RDF data.
 
-use crate::{similarity::SimilarityMetric, Vector, VectorId, VectorStore, VectorStoreTrait};
+use crate::{similarity::SimilarityMetric, Vector, VectorId, VectorStoreTrait};
 use anyhow::{anyhow, Result};
-use oxirs_core::{
-    model::{
-        BlankNode, Graph, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Term,
-        Triple, Variable,
-    },
-    OxirsError,
-};
+use oxirs_core::model::{GraphName, Literal, NamedNode, Term};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -220,7 +214,7 @@ impl RdfVectorIntegration {
             let mut graph_cache = self.graph_cache.write().unwrap();
             graph_cache
                 .entry(graph)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(vector_id.clone());
         }
 
@@ -372,7 +366,7 @@ impl RdfVectorIntegration {
                             algorithm: "text_similarity".to_string(),
                             processing_time_us: processing_time,
                             confidence: self.calculate_confidence(similarity, &mapping.metadata),
-                            explanation: Some(format!("Text similarity match: '{}'", query_text)),
+                            explanation: Some(format!("Text similarity match: '{query_text}'")),
                         },
                     });
                 }
@@ -549,11 +543,11 @@ impl RdfVectorIntegration {
         );
 
         if let Some(namespace) = &metadata.namespace {
-            explanation.push_str(&format!(", namespace: {}", namespace));
+            explanation.push_str(&format!(", namespace: {namespace}"));
         }
 
         if let Some(language) = &metadata.language {
-            explanation.push_str(&format!(", language: {}", language));
+            explanation.push_str(&format!(", language: {language}"));
         }
 
         Some(explanation)
@@ -629,8 +623,8 @@ pub struct RdfIntegrationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::MemoryVectorIndex;
-    use oxirs_core::model::*;
+    use crate::VectorStore;
+    use oxirs_core::model::{NamedNode, Term};
 
     #[test]
     fn test_rdf_term_registration() {

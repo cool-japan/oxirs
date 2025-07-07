@@ -83,11 +83,15 @@ pub async fn initiate_oauth2_flow(
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
-    // TODO: Implement is_oauth2_enabled method
-    // For now, assume OAuth2 is not enabled
-    return Err(FusekiError::service_unavailable(
-        "OAuth2 authentication not configured",
-    ));
+    // Check if OAuth2 is enabled
+    if !auth_service.is_oauth2_enabled() {
+        return Ok(Json(OAuth2AuthResponse {
+            success: false,
+            authorization_url: None,
+            state: None,
+            message: "OAuth2 authentication not configured".to_string(),
+        }));
+    }
 
     // Determine redirect URI
     let redirect_uri = params.redirect_uri.unwrap_or_else(|| {
@@ -120,11 +124,11 @@ pub async fn initiate_oauth2_flow(
 
     let use_pkce = params.use_pkce.unwrap_or(true);
 
-    // TODO: Implement generate_oauth2_auth_url method
-    match Ok((
-        "https://example.com/oauth2/auth".to_string(),
-        "placeholder_state".to_string(),
-    )) {
+    // Generate OAuth2 authorization URL
+    match auth_service
+        .generate_oauth2_auth_url(&redirect_uri, &scopes, use_pkce)
+        .await
+    {
         Ok((authorization_url, state_param)) => {
             info!(
                 "Generated OAuth2 authorization URL with state: {}",

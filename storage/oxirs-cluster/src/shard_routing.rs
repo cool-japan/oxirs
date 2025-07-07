@@ -8,10 +8,10 @@ use crate::shard_manager::ShardManager;
 use crate::{ClusterError, Result};
 use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 
 /// Query routing plan
 #[derive(Debug, Clone)]

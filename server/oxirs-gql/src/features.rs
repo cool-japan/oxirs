@@ -10,8 +10,7 @@ pub use crate::validation::*;
 
 /// Feature components
 pub mod components {
-    //! Individual feature components
-
+    /// Individual feature components
     /// Query optimization and caching
     pub mod optimization {
         pub use crate::optimizer::*;
@@ -129,8 +128,6 @@ pub mod performance {
 
 /// Security utilities
 pub mod security {
-    use anyhow::Result;
-    use std::collections::HashSet;
 
     /// Common GraphQL security patterns
     pub struct SecurityPatterns;

@@ -96,7 +96,7 @@ impl ConstraintValidator for MinCountConstraint {
 impl ConstraintEvaluator for MinCountConstraint {
     fn evaluate(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         let value_count = context.values.len() as u32;
@@ -167,7 +167,7 @@ impl ConstraintValidator for MaxCountConstraint {
 impl ConstraintEvaluator for MaxCountConstraint {
     fn evaluate(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         let value_count = context.values.len() as u32;

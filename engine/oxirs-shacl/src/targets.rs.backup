@@ -6,11 +6,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashSet, VecDeque};
 
 use oxirs_core::{
-    model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
-    ConcreteStore, OxirsError, Store,
+    model::{NamedNode, RdfTerm, Term},
+    Store,
 };
 
-use crate::{Result, ShaclError, SHACL_VOCAB};
+use crate::{Result, ShaclError};
 
 /// SHACL target types for selecting nodes to validate
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -723,7 +723,7 @@ impl TargetSelector {
         match target {
             Target::Class(class_iri) => {
                 let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}> {{", graph)
+                    format!("GRAPH <{graph}> {{")
                 } else {
                     String::new()
                 };
@@ -746,7 +746,7 @@ impl TargetSelector {
                     Term::BlankNode(bn) => {
                         Ok(format!("SELECT (?{} AS ?target) WHERE {{ }}", bn.as_str()))
                     }
-                    Term::Literal(lit) => Ok(format!("SELECT ({} AS ?target) WHERE {{ }}", lit)),
+                    Term::Literal(lit) => Ok(format!("SELECT ({lit} AS ?target) WHERE {{ }}")),
                     _ => Err(ShaclError::ValidationEngine(
                         "Unsupported term type for node target".to_string(),
                     )),
@@ -754,7 +754,7 @@ impl TargetSelector {
             }
             Target::ObjectsOf(property) => {
                 let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}> {{", graph)
+                    format!("GRAPH <{graph}> {{")
                 } else {
                     String::new()
                 };
@@ -770,7 +770,7 @@ impl TargetSelector {
             }
             Target::SubjectsOf(property) => {
                 let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}> {{", graph)
+                    format!("GRAPH <{graph}> {{")
                 } else {
                     String::new()
                 };
@@ -797,7 +797,7 @@ impl TargetSelector {
             Target::Implicit(class_iri) => {
                 // Same as class target
                 let graph_clause = if let Some(graph) = graph_name {
-                    format!("GRAPH <{}> {{", graph)
+                    format!("GRAPH <{graph}> {{")
                 } else {
                     String::new()
                 };
@@ -865,32 +865,32 @@ impl TargetSelector {
             Target::Class(_) | Target::Implicit(_) => {
                 // Add hint for type index if available
                 if self.should_use_index_hint("type_index") {
-                    optimized_query = format!("# Use type index\n{}", optimized_query);
+                    optimized_query = format!("# Use type index\n{optimized_query}");
                 }
             }
             Target::ObjectsOf(_) => {
                 // Add hint for predicate index
                 if self.should_use_index_hint("predicate_index") {
-                    optimized_query = format!("# Use predicate index\n{}", optimized_query);
+                    optimized_query = format!("# Use predicate index\n{optimized_query}");
                 }
             }
             Target::SubjectsOf(_) => {
                 // Add hint for subject index
                 if self.should_use_index_hint("subject_index") {
-                    optimized_query = format!("# Use subject index\n{}", optimized_query);
+                    optimized_query = format!("# Use subject index\n{optimized_query}");
                 }
             }
             _ => {} // No specific optimization for other types
         }
 
         // Add LIMIT clause if max_results is configured
-        if self.optimization_config.parallel_threshold > 0 {
-            if !optimized_query.to_uppercase().contains("LIMIT") {
-                optimized_query = format!(
-                    "{} LIMIT {}",
-                    optimized_query, self.optimization_config.parallel_threshold
-                );
-            }
+        if self.optimization_config.parallel_threshold > 0
+            && !optimized_query.to_uppercase().contains("LIMIT")
+        {
+            optimized_query = format!(
+                "{} LIMIT {}",
+                optimized_query, self.optimization_config.parallel_threshold
+            );
         }
 
         Ok(optimized_query)
@@ -1059,8 +1059,7 @@ impl TargetSelector {
         // Add performance hints
         if self.optimization_config.enable_adaptive_optimization {
             optimized_query = format!(
-                "# Query plan: {:?}, Est. cardinality: {}\n{}",
-                execution_strategy, estimated_cardinality, optimized_query
+                "# Query plan: {execution_strategy:?}, Est. cardinality: {estimated_cardinality}\n{optimized_query}"
             );
         }
 
@@ -1291,14 +1290,14 @@ impl TargetSelector {
         target: &Target,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
-        use oxirs_core::model::{GraphName, NamedNode as CoreNamedNode, Object, Predicate, Quad};
+        use oxirs_core::model::{GraphName, NamedNode as CoreNamedNode, Object, Predicate};
 
         match target {
             Target::Class(class_iri) => {
                 // Find all subjects that have rdf:type = class_iri
                 let rdf_type = Predicate::NamedNode(
                     CoreNamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").map_err(
-                        |e| ShaclError::TargetSelection(format!("Invalid RDF type IRI: {}", e)),
+                        |e| ShaclError::TargetSelection(format!("Invalid RDF type IRI: {e}")),
                     )?,
                 );
 
@@ -1516,8 +1515,7 @@ impl TargetSelector {
             Err(e) => {
                 tracing::error!("SPARQL target query execution failed: {}", e);
                 Err(ShaclError::SparqlExecution(format!(
-                    "SPARQL target query execution failed: {}",
-                    e
+                    "SPARQL target query execution failed: {e}"
                 )))
             }
         }
@@ -1814,17 +1812,15 @@ impl TargetSelector {
         // Add LIMIT if specified
         if let Some(limit) = options.limit {
             if !optimized_query.contains("LIMIT") {
-                optimized_query.push_str(&format!(" LIMIT {}", limit));
+                optimized_query.push_str(&format!(" LIMIT {limit}"));
             }
         }
 
         // Add ORDER BY for deterministic results if requested
-        if options.deterministic_results {
-            if !optimized_query.contains("ORDER BY") {
-                optimized_query =
-                    optimized_query.replace("SELECT DISTINCT ?target", "SELECT DISTINCT ?target");
-                optimized_query.push_str(" ORDER BY ?target");
-            }
+        if options.deterministic_results && !optimized_query.contains("ORDER BY") {
+            optimized_query =
+                optimized_query.replace("SELECT DISTINCT ?target", "SELECT DISTINCT ?target");
+            optimized_query.push_str(" ORDER BY ?target");
         }
 
         // Add index hints based on target type
@@ -1851,10 +1847,8 @@ impl TargetSelector {
         match target {
             Target::Class(_) | Target::Implicit(_) => {
                 if self.should_use_index_hint("type_index") {
-                    optimized_query = format!(
-                        "# HINT: Use type index for rdf:type lookups\n{}",
-                        optimized_query
-                    );
+                    optimized_query =
+                        format!("# HINT: Use type index for rdf:type lookups\n{optimized_query}");
                 }
             }
             Target::ObjectsOf(property) => {
@@ -2039,7 +2033,7 @@ impl TargetSelector {
             }
             Target::Node(node) => {
                 "node".hash(&mut hasher);
-                format!("{:?}", node).hash(&mut hasher);
+                format!("{node:?}").hash(&mut hasher);
             }
             Target::ObjectsOf(property) => {
                 "objects_of".hash(&mut hasher);
@@ -2168,7 +2162,7 @@ impl TargetSelector {
                 let where_clause = &query.sparql[where_start + 7..];
                 if let Some(where_end) = where_clause.rfind('}') {
                     let where_content = &where_clause[..where_end].trim();
-                    union_parts.push(format!("{{ {} }}", where_content));
+                    union_parts.push(format!("{{ {where_content} }}"));
                 }
             }
         }
@@ -2201,7 +2195,7 @@ impl TargetSelector {
                 let where_clause = &target_query[where_start + 7..];
                 if let Some(where_end) = where_clause.rfind('}') {
                     let where_content = where_clause[..where_end].trim();
-                    union_parts.push(format!("{{ {} }}", where_content));
+                    union_parts.push(format!("{{ {where_content} }}"));
                 }
             }
         }
@@ -2232,17 +2226,17 @@ impl TargetSelector {
         let mut subqueries = Vec::new();
         for (i, target) in targets.iter().enumerate() {
             let target_query = self.generate_target_query(target, graph_name)?;
-            let var_name = format!("target{}", i);
+            let var_name = format!("target{i}");
 
             // Replace ?target with specific variable
-            let modified_query = target_query.replace("?target", &format!("?{}", var_name));
+            let modified_query = target_query.replace("?target", &format!("?{var_name}"));
             subqueries.push((var_name, modified_query));
         }
 
         // Create filter conditions to ensure all variables refer to the same node
         let mut filter_conditions = Vec::new();
         for i in 1..subqueries.len() {
-            filter_conditions.push(format!("?target0 = ?target{}", i));
+            filter_conditions.push(format!("?target0 = ?target{i}"));
         }
 
         let filter_clause = if !filter_conditions.is_empty() {
@@ -2315,9 +2309,7 @@ impl TargetSelector {
         };
 
         Ok(format!(
-            "SELECT DISTINCT ?target WHERE {{\n  {}\n  FILTER NOT EXISTS {{\n    {}\n    FILTER(?target = ?excluded)\n  }}\n}}",
-            primary_where,
-            exclusion_where
+            "SELECT DISTINCT ?target WHERE {{\n  {primary_where}\n  FILTER NOT EXISTS {{\n    {exclusion_where}\n    FILTER(?target = ?excluded)\n  }}\n}}"
         ))
     }
 
@@ -2350,7 +2342,7 @@ impl TargetSelector {
         let condition_clause = match condition {
             TargetCondition::SparqlAsk { query, prefixes: _ } => {
                 // Use the ASK query as a filter condition
-                format!("FILTER EXISTS {{ {} }}", query)
+                format!("FILTER EXISTS {{ {query} }}")
             }
             TargetCondition::PropertyExists {
                 property,
@@ -2378,7 +2370,7 @@ impl TargetSelector {
                 let value_str = match value {
                     Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
                     Term::Literal(lit) => format!("\"{}\"", lit.value()),
-                    _ => format!("{:?}", value),
+                    _ => format!("{value:?}"),
                 };
 
                 match direction {
@@ -2426,14 +2418,12 @@ impl TargetSelector {
                 let mut filters = Vec::new();
                 if let Some(min) = min_count {
                     filters.push(format!(
-                        "(SELECT (COUNT(*) AS ?count) WHERE {{ {} }}) >= {}",
-                        base_pattern, min
+                        "(SELECT (COUNT(*) AS ?count) WHERE {{ {base_pattern} }}) >= {min}"
                     ));
                 }
                 if let Some(max) = max_count {
                     filters.push(format!(
-                        "(SELECT (COUNT(*) AS ?count) WHERE {{ {} }}) <= {}",
-                        base_pattern, max
+                        "(SELECT (COUNT(*) AS ?count) WHERE {{ {base_pattern} }}) <= {max}"
                     ));
                 }
 
@@ -2453,9 +2443,9 @@ impl TargetSelector {
                     let term_str = match term {
                         Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
                         Term::Literal(lit) => format!("\"{}\"", lit.value()),
-                        _ => format!("{:?}", term),
+                        _ => format!("{term:?}"),
                     };
-                    format!("BIND({} AS ?{})", term_str, var)
+                    format!("BIND({term_str} AS ?{var})")
                 })
                 .collect::<Vec<_>>()
                 .join("\n  ")
@@ -2464,8 +2454,7 @@ impl TargetSelector {
         };
 
         Ok(format!(
-            "SELECT DISTINCT ?target WHERE {{\n  {}\n  {}\n  {}\n}}",
-            base_where, condition_clause, context_bindings
+            "SELECT DISTINCT ?target WHERE {{\n  {base_where}\n  {condition_clause}\n  {context_bindings}\n}}"
         ))
     }
 
@@ -2523,7 +2512,7 @@ impl TargetSelector {
         // Add depth limit if specified
         let depth_limit = if max_depth > 0 {
             // This is a simplified approach - in practice, you'd need more sophisticated depth limiting
-            format!("# Depth limited to {} levels", max_depth)
+            format!("# Depth limited to {max_depth} levels")
         } else {
             String::new()
         };
@@ -2535,8 +2524,7 @@ impl TargetSelector {
         };
 
         Ok(format!(
-            "{} WHERE {{\n  {}\n  {}\n  {}\n}}",
-            select_clause, root_where, relationship_pattern, depth_limit
+            "{select_clause} WHERE {{\n  {root_where}\n  {relationship_pattern}\n  {depth_limit}\n}}"
         ))
     }
 
@@ -2581,8 +2569,7 @@ impl TargetSelector {
             .join("\n  ");
 
         Ok(format!(
-            "SELECT DISTINCT ?target WHERE {{\n  {}\n  {}\n  {}\n}}",
-            start_where, path_pattern, filter_conditions
+            "SELECT DISTINCT ?target WHERE {{\n  {start_where}\n  {path_pattern}\n  {filter_conditions}\n}}"
         ))
     }
 
@@ -2648,7 +2635,7 @@ impl TargetSelector {
                     let current_end = if i == paths.len() - 1 {
                         end_var.to_string()
                     } else {
-                        format!("?intermediate{}", i)
+                        format!("?intermediate{i}")
                     };
 
                     let pattern = self.generate_property_path_pattern(
@@ -2680,19 +2667,18 @@ impl TargetSelector {
             PropertyPath::ZeroOrMore(inner_path) => {
                 let inner_pattern =
                     self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
-                Ok(format!("({})* {}", inner_pattern, end_var))
+                Ok(format!("({inner_pattern})* {end_var}"))
             }
             PropertyPath::OneOrMore(inner_path) => {
                 let inner_pattern =
                     self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
-                Ok(format!("({})+", inner_pattern))
+                Ok(format!("({inner_pattern})+"))
             }
             PropertyPath::ZeroOrOne(inner_path) => {
                 let inner_pattern =
                     self.generate_property_path_pattern(inner_path, start_var, end_var, direction)?;
                 Ok(format!(
-                    "{{ {} }} UNION {{ BIND({} AS {}) }}",
-                    inner_pattern, start_var, end_var
+                    "{{ {inner_pattern} }} UNION {{ BIND({start_var} AS {end_var}) }}"
                 ))
             }
         }
@@ -2714,14 +2700,14 @@ impl TargetSelector {
                 let value_str = match value {
                     Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
                     Term::Literal(lit) => format!("\"{}\"", lit.value()),
-                    _ => format!("{:?}", value),
+                    _ => format!("{value:?}"),
                 };
                 Ok(format!("?target <{}> {} .", property.as_str(), value_str))
             }
             PathFilter::SparqlCondition {
                 condition,
                 prefixes: _,
-            } => Ok(format!("FILTER({})", condition)),
+            } => Ok(format!("FILTER({condition})")),
         }
     }
 
@@ -2897,9 +2883,7 @@ impl TargetSelector {
         condition: &TargetCondition,
         graph_name: Option<&str>,
     ) -> Result<bool> {
-        use oxirs_core::model::{
-            GraphName, NamedNode as CoreNamedNode, Object, Predicate, Subject,
-        };
+        use oxirs_core::model::{NamedNode as CoreNamedNode, Object, Predicate, Subject};
 
         match condition {
             TargetCondition::SparqlAsk {
@@ -2915,7 +2899,7 @@ impl TargetSelector {
             } => {
                 let property_predicate =
                     Predicate::NamedNode(CoreNamedNode::new(property.as_str()).map_err(|e| {
-                        ShaclError::TargetSelection(format!("Invalid property IRI: {}", e))
+                        ShaclError::TargetSelection(format!("Invalid property IRI: {e}"))
                     })?);
 
                 let exists = match direction {
@@ -2979,7 +2963,7 @@ impl TargetSelector {
             TargetCondition::HasType { class_iri } => {
                 let rdf_type = Predicate::NamedNode(
                     CoreNamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").map_err(
-                        |e| ShaclError::TargetSelection(format!("Invalid RDF type IRI: {}", e)),
+                        |e| ShaclError::TargetSelection(format!("Invalid RDF type IRI: {e}")),
                     )?,
                 );
                 let class_object = Object::NamedNode(class_iri.clone());
@@ -3097,7 +3081,7 @@ impl TargetSelector {
             HierarchicalRelationship::SubclassOf => {
                 let subclass_prop = Predicate::NamedNode(
                     CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").map_err(
-                        |e| ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {}", e)),
+                        |e| ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {e}")),
                     )?,
                 );
 
@@ -3113,7 +3097,7 @@ impl TargetSelector {
                 // Find all nodes that are subclasses of the current node
                 let subclass_prop = Predicate::NamedNode(
                     CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subClassOf").map_err(
-                        |e| ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {}", e)),
+                        |e| ShaclError::TargetSelection(format!("Invalid subClassOf IRI: {e}")),
                     )?,
                 );
                 let object = match node {
@@ -3134,7 +3118,7 @@ impl TargetSelector {
                 let subprop_prop = Predicate::NamedNode(
                     CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subPropertyOf")
                         .map_err(|e| {
-                            ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {}", e))
+                            ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {e}"))
                         })?,
                 );
 
@@ -3150,7 +3134,7 @@ impl TargetSelector {
                 let subprop_prop = Predicate::NamedNode(
                     CoreNamedNode::new("http://www.w3.org/2000/01/rdf-schema#subPropertyOf")
                         .map_err(|e| {
-                            ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {}", e))
+                            ShaclError::TargetSelection(format!("Invalid subPropertyOf IRI: {e}"))
                         })?,
                 );
                 let object = match node {
@@ -3186,7 +3170,7 @@ impl TargetSelector {
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         use crate::paths::PropertyPath;
-        use oxirs_core::model::{NamedNode as CoreNamedNode, Object, Predicate, Subject};
+        use oxirs_core::model::{Object, Predicate, Subject};
 
         match path {
             PropertyPath::Predicate(prop) => {
@@ -3430,8 +3414,8 @@ mod tests {
         let target = Target::class(class_iri);
 
         let query = selector.generate_target_query(&target, None).unwrap();
-        println!("Generated query: '{}'", query);
-        eprintln!("Generated query: '{}'", query);
+        println!("Generated query: '{query}'");
+        eprintln!("Generated query: '{query}'");
 
         assert!(query.contains("SELECT"));
         assert!(query.contains("?target"));
@@ -3440,51 +3424,50 @@ mod tests {
 
     #[test]
     fn debug_direct_sparql_execution() {
-        use oxirs_core::model::{GraphName, Quad};
-        use oxirs_core::{query::QueryEngine, Store};
+        use oxirs_core::{query::QueryEngine, ConcreteStore, Store};
 
-        let mut store = ConcreteStore::new().unwrap();
+        let store = ConcreteStore::new().unwrap();
 
         // Test simple query first
         let simple_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        println!("Testing simple query: '{}'", simple_query);
+        println!("Testing simple query: '{simple_query}'");
 
         let query_engine = QueryEngine::new();
         let result = query_engine.query(simple_query, &store);
 
         match result {
-            Ok(result) => println!("Simple query executed successfully: {:?}", result),
+            Ok(result) => println!("Simple query executed successfully: {result:?}"),
             Err(e) => {
-                println!("Simple query failed: {}", e);
-                eprintln!("Simple query failed: {}", e);
+                println!("Simple query failed: {e}");
+                eprintln!("Simple query failed: {e}");
             }
         }
 
         // Test with simpler IRI first
         let simple_iri_query = "SELECT DISTINCT ?target WHERE { ?target <http://example.org/type> <http://example.org/Person> . }";
-        println!("Testing simple IRI query: '{}'", simple_iri_query);
+        println!("Testing simple IRI query: '{simple_iri_query}'");
 
         let result2 = query_engine.query(simple_iri_query, &store);
 
         match result2 {
-            Ok(result) => println!("Simple IRI query executed successfully: {:?}", result),
+            Ok(result) => println!("Simple IRI query executed successfully: {result:?}"),
             Err(e) => {
-                println!("Simple IRI query failed: {}", e);
-                eprintln!("Simple IRI query failed: {}", e);
+                println!("Simple IRI query failed: {e}");
+                eprintln!("Simple IRI query failed: {e}");
             }
         }
 
         // Test our specific query with long RDF type IRI
         let query = "SELECT DISTINCT ?target WHERE { ?target <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person> . }";
-        println!("Testing RDF type query: '{}'", query);
+        println!("Testing RDF type query: '{query}'");
 
         let result3 = query_engine.query(query, &store);
 
         match result3 {
-            Ok(result) => println!("RDF type query executed successfully: {:?}", result),
+            Ok(result) => println!("RDF type query executed successfully: {result:?}"),
             Err(e) => {
-                println!("RDF type query failed: {}", e);
-                eprintln!("RDF type query failed: {}", e);
+                println!("RDF type query failed: {e}");
+                eprintln!("RDF type query failed: {e}");
             }
         }
     }

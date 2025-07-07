@@ -86,7 +86,7 @@ pub struct ResourceUsage {
 }
 
 /// Performance service managing all optimization features
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PerformanceService {
     config: PerformanceConfig,
 
@@ -860,6 +860,198 @@ pub mod timing {
     }
 }
 
+/// Intelligent Cache Warming System
+///
+/// This system proactively warms the cache with frequently-used queries
+/// to improve cold-start performance and reduce latency for common operations.
+#[derive(Debug)]
+pub struct IntelligentCacheWarmer {
+    /// Query frequency tracking
+    query_frequencies: Arc<RwLock<HashMap<String, QueryFrequency>>>,
+    /// Warming schedule configuration
+    config: CacheWarmingConfig,
+    /// Performance service for cache operations
+    performance_service: Arc<PerformanceService>,
+}
+
+#[derive(Debug, Clone)]
+pub struct QueryFrequency {
+    pub query_hash: String,
+    pub frequency: f64,
+    pub last_executed: SystemTime,
+    pub avg_execution_time: Duration,
+    pub priority_score: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct CacheWarmingConfig {
+    /// Minimum frequency threshold for warming
+    pub min_frequency_threshold: f64,
+    /// Maximum number of queries to warm
+    pub max_warm_queries: usize,
+    /// Warming interval
+    pub warming_interval: Duration,
+    /// Enable predictive warming based on time patterns
+    pub enable_predictive_warming: bool,
+}
+
+impl Default for CacheWarmingConfig {
+    fn default() -> Self {
+        Self {
+            min_frequency_threshold: 0.1,
+            max_warm_queries: 100,
+            warming_interval: Duration::from_secs(300), // 5 minutes
+            enable_predictive_warming: true,
+        }
+    }
+}
+
+impl IntelligentCacheWarmer {
+    /// Create new intelligent cache warmer
+    pub fn new(config: CacheWarmingConfig, performance_service: Arc<PerformanceService>) -> Self {
+        Self {
+            query_frequencies: Arc::new(RwLock::new(HashMap::new())),
+            config,
+            performance_service,
+        }
+    }
+
+    /// Record query execution for frequency tracking
+    pub async fn record_query_execution(&self, query_hash: String, execution_time: Duration) {
+        let mut frequencies = self.query_frequencies.write().await;
+
+        let entry = frequencies
+            .entry(query_hash.clone())
+            .or_insert_with(|| QueryFrequency {
+                query_hash: query_hash.clone(),
+                frequency: 0.0,
+                last_executed: SystemTime::now(),
+                avg_execution_time: execution_time,
+                priority_score: 0.0,
+            });
+
+        // Update frequency using exponential moving average
+        entry.frequency = entry.frequency * 0.9 + 0.1;
+        entry.last_executed = SystemTime::now();
+
+        // Update average execution time
+        entry.avg_execution_time = Duration::from_millis(
+            (entry.avg_execution_time.as_millis() as f64 * 0.8
+                + execution_time.as_millis() as f64 * 0.2) as u64,
+        );
+
+        // Calculate priority score (higher frequency, recent usage, faster execution = higher priority)
+        let recency_factor = self.calculate_recency_factor(entry.last_executed);
+        let speed_factor = 1.0 / (entry.avg_execution_time.as_millis() as f64 + 1.0);
+        entry.priority_score = entry.frequency * recency_factor * speed_factor;
+
+        debug!(
+            "Updated query frequency for {}: {:.3}",
+            query_hash, entry.frequency
+        );
+    }
+
+    /// Calculate recency factor for priority scoring
+    fn calculate_recency_factor(&self, last_executed: SystemTime) -> f64 {
+        match last_executed.elapsed() {
+            Ok(elapsed) => {
+                let hours = elapsed.as_secs() as f64 / 3600.0;
+                (1.0 / (hours + 1.0)).min(1.0)
+            }
+            Err(_) => 0.0,
+        }
+    }
+
+    /// Get queries that should be warmed
+    pub async fn get_warm_candidates(&self) -> Vec<QueryFrequency> {
+        let frequencies = self.query_frequencies.read().await;
+
+        let mut candidates: Vec<QueryFrequency> = frequencies
+            .values()
+            .filter(|q| q.frequency >= self.config.min_frequency_threshold)
+            .cloned()
+            .collect();
+
+        // Sort by priority score (highest first)
+        candidates.sort_by(|a, b| b.priority_score.partial_cmp(&a.priority_score).unwrap());
+
+        // Take top N candidates
+        candidates.truncate(self.config.max_warm_queries);
+
+        info!("Identified {} queries for cache warming", candidates.len());
+        candidates
+    }
+
+    /// Perform intelligent cache warming
+    pub async fn warm_cache(&self) -> FusekiResult<()> {
+        let candidates = self.get_warm_candidates().await;
+
+        for query_freq in candidates {
+            // Check if query is already cached
+            let cache_key = QueryCacheKey {
+                query_hash: query_freq.query_hash.clone(),
+                dataset: "default".to_string(), // Would be more sophisticated in real implementation
+                parameters: vec![],
+            };
+
+            if self
+                .performance_service
+                .get_cached_query(&cache_key)
+                .await
+                .is_none()
+            {
+                debug!("Warming cache for query: {}", query_freq.query_hash);
+
+                // In a real implementation, we would re-execute the query here
+                // For now, we'll simulate cache warming
+                self.simulate_cache_warming(&cache_key).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Simulate cache warming (in real implementation, would execute the actual query)
+    async fn simulate_cache_warming(&self, cache_key: &QueryCacheKey) -> FusekiResult<()> {
+        // Simulate query execution and caching
+        let simulated_result = format!(
+            "{{\"warmed\": true, \"query\": \"{}\"}}",
+            cache_key.query_hash
+        );
+
+        self.performance_service
+            .cache_query_result(
+                cache_key.clone(),
+                simulated_result,
+                "application/json".to_string(),
+                50, // Simulated execution time
+            )
+            .await;
+
+        debug!("Cache warmed for query: {}", cache_key.query_hash);
+        Ok(())
+    }
+
+    /// Start background cache warming task
+    pub fn start_warming_task(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
+        let interval = self.config.warming_interval;
+
+        tokio::spawn(async move {
+            let mut warming_interval = tokio::time::interval(interval);
+
+            loop {
+                warming_interval.tick().await;
+
+                if let Err(e) = self.warm_cache().await {
+                    warn!("Cache warming failed: {}", e);
+                } else {
+                    info!("Cache warming cycle completed successfully");
+                }
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -978,12 +1170,12 @@ mod tests {
         let _permit1 = service.acquire_query_permit().await.unwrap();
         let _permit2 = service.acquire_query_permit().await.unwrap();
 
-        // Should work within limits
-        assert!(service.query_semaphore.available_permits() <= 10);
+        // Should work within limits (started with 50, acquired 2, should have 48 remaining)
+        assert!(service.query_semaphore.available_permits() == 48);
     }
 
-    #[test]
-    fn test_cache_decision() {
+    #[tokio::test]
+    async fn test_cache_decision() {
         let service = create_test_performance_service();
 
         // Should cache longer queries

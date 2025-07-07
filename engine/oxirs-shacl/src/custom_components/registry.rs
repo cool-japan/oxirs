@@ -23,7 +23,7 @@ use super::{
         ValidationRule,
     },
     performance::{ComponentExecutionContext, ComponentPerformanceStats, ExecutionMetrics},
-    security::{SecurityPolicy, SecurityViolation},
+    security::SecurityPolicy,
     standard::{
         EmailValidationComponent, RangeConstraintComponent, RegexConstraintComponent,
         SparqlConstraintComponent, UrlValidationComponent,
@@ -128,8 +128,7 @@ impl CustomConstraintRegistry {
         for dependency in &library.dependencies {
             if !self.libraries.contains_key(dependency) {
                 return Err(ShaclError::Configuration(format!(
-                    "Library dependency {} not found",
-                    dependency
+                    "Library dependency {dependency} not found"
                 )));
             }
         }
@@ -509,8 +508,7 @@ impl CustomConstraintRegistry {
             ParameterConstraint::Pattern(pattern) => {
                 if regex::Regex::new(pattern).is_err() {
                     return Err(ShaclError::Configuration(format!(
-                        "Invalid regex pattern: {}",
-                        pattern
+                        "Invalid regex pattern: {pattern}"
                     )));
                 }
             }
@@ -518,8 +516,7 @@ impl CustomConstraintRegistry {
                 if let (Some(min_val), Some(max_val)) = (min, max) {
                     if min_val > max_val {
                         return Err(ShaclError::Configuration(format!(
-                            "Invalid range: min ({}) > max ({})",
-                            min_val, max_val
+                            "Invalid range: min ({min_val}) > max ({max_val})"
                         )));
                     }
                 }
@@ -556,7 +553,7 @@ impl CustomConstraintRegistry {
 
             // Validate parameter if present
             if let Some(value) = parameters.get(&param_def.name) {
-                self.validate_parameter_value(&param_def, value)?;
+                self.validate_parameter_value(param_def, value)?;
             }
         }
 
@@ -564,8 +561,7 @@ impl CustomConstraintRegistry {
         for param_name in parameters.keys() {
             if !metadata.parameters.iter().any(|p| &p.name == param_name) {
                 return Err(ShaclError::Configuration(format!(
-                    "Unknown parameter: {}",
-                    param_name
+                    "Unknown parameter: {param_name}"
                 )));
             }
         }
@@ -613,8 +609,8 @@ impl CustomConstraintRegistry {
 
     fn check_circular_dependencies(
         &self,
-        component_id: &ConstraintComponentId,
-        new_dependencies: &HashSet<ConstraintComponentId>,
+        _component_id: &ConstraintComponentId,
+        _new_dependencies: &HashSet<ConstraintComponentId>,
     ) -> Result<()> {
         // Implementation similar to original
         Ok(())
@@ -665,7 +661,7 @@ impl CustomConstraintRegistry {
         }
     }
 
-    fn matches_datatype(&self, value: &Term, expected_datatype: &str) -> bool {
+    fn matches_datatype(&self, _value: &Term, _expected_datatype: &str) -> bool {
         // Implementation similar to original
         true // Simplified for now
     }
@@ -685,7 +681,7 @@ impl CustomConstraintRegistry {
             Term::NamedNode(node) => node.as_str().to_string(),
             Term::BlankNode(node) => format!("_:{}", node.as_str()),
             Term::Literal(lit) => lit.value().to_string(),
-            _ => format!("{:?}", term),
+            _ => format!("{term:?}"),
         }
     }
 

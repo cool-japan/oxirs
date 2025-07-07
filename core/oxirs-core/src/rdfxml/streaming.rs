@@ -36,6 +36,7 @@ pub struct DomFreeStreamingRdfXmlParser {
     term_interner: Arc<StringInterner>,
     performance_monitor: Arc<RdfXmlPerformanceMonitor>,
     arena: Bump,
+    #[allow(dead_code)]
     buffer_pool: Arc<RdfXmlBufferPool>,
 }
 
@@ -105,17 +106,23 @@ pub struct RdfXmlPerformanceMonitor {
     triples_generated: AtomicUsize,
     namespace_lookups: AtomicUsize,
     zero_copy_operations: AtomicUsize,
+    #[allow(dead_code)]
     memory_allocations: AtomicUsize,
     parse_errors: AtomicUsize,
     start_time: Instant,
+    #[allow(dead_code)]
     processing_times: Arc<ParkingLotMutex<VecDeque<Duration>>>,
 }
 
 /// Buffer pool for RDF/XML processing
 pub struct RdfXmlBufferPool {
+    #[allow(dead_code)]
     xml_buffers: Arc<Mutex<Vec<Vec<u8>>>>,
+    #[allow(dead_code)]
     string_buffers: Arc<Mutex<Vec<String>>>,
+    #[allow(dead_code)]
     max_buffers: usize,
+    #[allow(dead_code)]
     buffer_size: usize,
 }
 
@@ -442,8 +449,17 @@ impl DomFreeStreamingRdfXmlParser {
                         ElementType::ParseType(self.parse_parse_type(&attr_value)?);
                 }
                 _ => {
-                    // Regular attribute
-                    context.attributes.insert(attr_name, attr_value);
+                    // Handle XML namespace declarations
+                    if let Some(prefix) = attr_name.strip_prefix("xmlns:") {
+                        // Remove "xmlns:" prefix
+                        self.declare_namespace(prefix, &attr_value)?;
+                    } else if attr_name == "xmlns" {
+                        // Default namespace declaration
+                        self.set_default_namespace(&attr_value)?;
+                    } else {
+                        // Regular attribute
+                        context.attributes.insert(attr_name, attr_value);
+                    }
                 }
             }
         }
@@ -478,11 +494,11 @@ impl DomFreeStreamingRdfXmlParser {
         for (name, value) in &context.attributes {
             if let Some(prefix) = name.strip_prefix("xmlns:") {
                 // Remove "xmlns:" prefix
-                self.declare_namespace(prefix, value).await?;
+                self.declare_namespace(prefix, value)?;
             } else if name == "xmlns" {
-                self.set_default_namespace(value).await?;
+                self.set_default_namespace(value)?;
             } else if name.starts_with("xml:base") {
-                self.set_base_uri(value).await?;
+                self.set_base_uri(value)?;
             }
         }
 
@@ -759,7 +775,7 @@ impl DomFreeStreamingRdfXmlParser {
         self.namespace_stack.last()?.base_uri.clone()
     }
 
-    async fn declare_namespace(
+    fn declare_namespace(
         &mut self,
         prefix: &str,
         namespace: &str,
@@ -772,14 +788,14 @@ impl DomFreeStreamingRdfXmlParser {
         Ok(())
     }
 
-    async fn set_default_namespace(&mut self, namespace: &str) -> Result<(), RdfXmlParseError> {
+    fn set_default_namespace(&mut self, namespace: &str) -> Result<(), RdfXmlParseError> {
         if let Some(context) = self.namespace_stack.last_mut() {
             context.default_namespace = Some(namespace.to_string());
         }
         Ok(())
     }
 
-    async fn set_base_uri(&mut self, base_uri: &str) -> Result<(), RdfXmlParseError> {
+    fn set_base_uri(&mut self, base_uri: &str) -> Result<(), RdfXmlParseError> {
         if let Some(context) = self.namespace_stack.last_mut() {
             context.base_uri = Some(base_uri.to_string());
         }
@@ -878,6 +894,7 @@ impl RdfXmlPerformanceMonitor {
         self.elements_processed.fetch_add(1, Ordering::Relaxed);
     }
 
+    #[allow(dead_code)]
     fn record_triples_generated(&self, count: usize) {
         self.triples_generated.fetch_add(count, Ordering::Relaxed);
     }
@@ -927,6 +944,7 @@ impl RdfXmlBufferPool {
         }
     }
 
+    #[allow(dead_code)]
     fn get_xml_buffer(&self) -> Vec<u8> {
         let mut buffers = self.xml_buffers.lock().unwrap();
         buffers
@@ -934,6 +952,7 @@ impl RdfXmlBufferPool {
             .unwrap_or_else(|| Vec::with_capacity(self.buffer_size))
     }
 
+    #[allow(dead_code)]
     fn return_xml_buffer(&self, mut buffer: Vec<u8>) {
         buffer.clear();
         let mut buffers = self.xml_buffers.lock().unwrap();

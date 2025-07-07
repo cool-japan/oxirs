@@ -481,10 +481,9 @@ impl MetricsCollector {
 
     /// Check if metrics need to be collected based on interval
     pub fn should_collect(&self) -> bool {
-        if let Ok(last) = self.last_collection.lock() {
-            last.elapsed() >= self.collection_interval
-        } else {
-            true
+        match self.last_collection.lock() {
+            Ok(last) => last.elapsed() >= self.collection_interval,
+            _ => true,
         }
     }
 
@@ -575,7 +574,6 @@ impl MetricsReport {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
 
     #[test]
     fn test_time_series_metrics() {

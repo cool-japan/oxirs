@@ -765,6 +765,12 @@ pub trait AnomalyDetectionAlgorithm: std::fmt::Debug + Send + Sync {
     fn sensitivity(&self) -> f64;
 }
 
+impl Default for TemporalConsciousness {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemporalConsciousness {
     /// Create a new temporal consciousness instance
     pub fn new() -> Self {

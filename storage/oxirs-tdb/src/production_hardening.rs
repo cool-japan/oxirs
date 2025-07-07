@@ -11,7 +11,7 @@
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 use thiserror::Error;
 
 /// Production hardening errors
@@ -427,7 +427,7 @@ impl HealthMonitor {
     }
 
     /// Attempt automatic recovery from errors
-    pub fn attempt_recovery(&self, component: &str, error: &str) -> Result<()> {
+    pub fn attempt_recovery(&self, component: &str, _error: &str) -> Result<()> {
         match component {
             "memory" => self.recover_memory(),
             "disk" => self.recover_disk_space(),

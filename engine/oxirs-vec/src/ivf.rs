@@ -7,10 +7,9 @@
 
 use crate::{
     pq::{PQConfig, PQIndex},
-    Vector, VectorIndex, VectorPrecision,
+    Vector, VectorIndex,
 };
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 /// Quantization strategy for residuals
@@ -163,7 +162,7 @@ impl InvertedList {
         self.vectors.push((uri, VectorStorage::Full(vector)));
     }
 
-    fn add_residual(&mut self, uri: String, residual: Vector, centroid: &Vector) -> Result<()> {
+    fn add_residual(&mut self, uri: String, residual: Vector, _centroid: &Vector) -> Result<()> {
         match &self.quantization {
             QuantizationStrategy::ProductQuantization(_) => {
                 if let Some(ref mut pq_index) = self.pq_index {
@@ -241,7 +240,7 @@ impl InvertedList {
     fn add_multi_codebook(&mut self, uri: String, residual: Vector) -> Result<()> {
         let mut codebook_codes = Vec::new();
 
-        for (i, pq_index) in self.multi_codebook_pq.iter_mut().enumerate() {
+        for (_i, pq_index) in self.multi_codebook_pq.iter_mut().enumerate() {
             // Train this codebook's PQ if not already trained
             if !pq_index.is_trained() {
                 let training_residuals = vec![residual.clone()];
@@ -434,10 +433,9 @@ impl InvertedList {
         let max_error = reconstruction_errors.iter().fold(0.0f32, |a, &b| a.max(b));
         if max_error > 0.0 {
             let mut total_weight = 0.0;
-            for i in 0..num_codebooks {
+            for (i, &error) in reconstruction_errors.iter().enumerate().take(num_codebooks) {
                 // Higher weight for lower error
-                self.codebook_weights[i] =
-                    (max_error - reconstruction_errors[i] + 1e-6) / max_error;
+                self.codebook_weights[i] = (max_error - error + 1e-6) / max_error;
                 total_weight += self.codebook_weights[i];
             }
 
@@ -996,7 +994,7 @@ impl VectorIndex for IvfIndex {
         Ok(all_results)
     }
 
-    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+    fn get_vector(&self, _uri: &str) -> Option<&Vector> {
         // IVF doesn't maintain a direct URI to vector mapping
         // Would need to search through all inverted lists
         // For efficiency, we return None
@@ -1053,7 +1051,7 @@ mod tests {
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{}", i), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone()).unwrap();
         }
 
         // Search for nearest neighbors
@@ -1182,7 +1180,7 @@ mod tests {
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{}", i), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone()).unwrap();
         }
 
         // Search for nearest neighbors
@@ -1238,7 +1236,7 @@ mod tests {
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{}", i), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone()).unwrap();
         }
 
         // Search for nearest neighbors
@@ -1290,8 +1288,7 @@ mod tests {
             let index = IvfIndex::new(config);
             assert!(
                 index.is_ok(),
-                "Failed to create index with strategy: {:?}",
-                strategy
+                "Failed to create index with strategy: {strategy:?}"
             );
         }
     }

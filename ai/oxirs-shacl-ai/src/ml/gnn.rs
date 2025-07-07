@@ -1120,26 +1120,26 @@ impl GraphNeuralNetwork {
         for (i, grad) in gradients.iter().skip(1).enumerate() {
             if i < self.layers.len() {
                 match &mut self.layers[i] {
-                    GNNLayer::GCNLayer(ref mut layer) => {
+                    GNNLayer::GCNLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.weight = &layer.weight - &update;
                     }
-                    GNNLayer::GATLayer(ref mut layer) => {
+                    GNNLayer::GATLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.weight = &layer.weight - &update;
                     }
-                    GNNLayer::GINLayer(ref mut layer) => {
+                    GNNLayer::GINLayer(layer) => {
                         for mlp_weight in &mut layer.mlp_layers {
                             let update = &grad.weight_gradients * learning_rate;
                             *mlp_weight = &*mlp_weight - &update;
                         }
                     }
-                    GNNLayer::GraphSAGELayer(ref mut layer) => {
+                    GNNLayer::GraphSAGELayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.weight_self = &layer.weight_self - &update;
                         layer.weight_neighbor = &layer.weight_neighbor - &update;
                     }
-                    GNNLayer::MPNNLayer(ref mut layer) => {
+                    GNNLayer::MPNNLayer(layer) => {
                         for weight in &mut layer.message_net {
                             let update = &grad.weight_gradients * learning_rate;
                             *weight = &*weight - &update;
@@ -1149,26 +1149,26 @@ impl GraphNeuralNetwork {
                             *weight = &*weight - &update;
                         }
                     }
-                    GNNLayer::GraphCompletionLayer(ref mut layer) => {
+                    GNNLayer::GraphCompletionLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.entity_encoder = &layer.entity_encoder - &update;
                         layer.relation_encoder = &layer.relation_encoder - &update;
                     }
-                    GNNLayer::EntityCompletionLayer(ref mut layer) => {
+                    GNNLayer::EntityCompletionLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.entity_embedding = &layer.entity_embedding - &update;
                     }
-                    GNNLayer::RelationCompletionLayer(ref mut layer) => {
+                    GNNLayer::RelationCompletionLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.pattern_encoder = &layer.pattern_encoder - &update;
                         layer.relation_embedding = &layer.relation_embedding - &update;
                     }
-                    GNNLayer::GraphTransformerLayer(ref mut layer) => {
+                    GNNLayer::GraphTransformerLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.attention_weights = &layer.attention_weights - &update;
                         layer.feed_forward = &layer.feed_forward - &update;
                     }
-                    GNNLayer::HierarchicalGraphTransformerLayer(ref mut layer) => {
+                    GNNLayer::HierarchicalGraphTransformerLayer(layer) => {
                         let update = &grad.weight_gradients * learning_rate;
                         layer.hierarchical_attention = &layer.hierarchical_attention - &update;
                         layer.level_encoders = layer

@@ -6,15 +6,11 @@
 //! - Memory pooling for reduced allocations
 //! - SIMD-optimized bulk operations
 
-use crate::algebra::{Binding, Solution, Term, Variable};
-use crate::executor::config::ParallelConfig;
+use crate::algebra::{Solution, Term, Variable};
 use anyhow::Result;
 use std::alloc::{alloc, dealloc, Layout};
-use std::cell::UnsafeCell;
 use std::collections::HashMap;
-use std::ptr::NonNull;
 use std::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
-use std::sync::Arc;
 
 /// Lock-free work-stealing deque for high-performance parallel execution
 pub struct LockFreeWorkStealingQueue<T> {
@@ -208,17 +204,18 @@ impl<T> MemoryPool<T> {
 
     /// Get an object from the pool (or create new one)
     pub fn acquire(&self) -> PooledObject<T> {
-        if let Some(obj) = self.available.steal() {
-            PooledObject {
+        match self.available.steal() {
+            Some(obj) => PooledObject {
                 object: Some(obj),
                 pool: self,
-            }
-        } else {
-            // Create new object if pool is empty
-            let obj = Box::new((self.factory)());
-            PooledObject {
-                object: Some(obj),
-                pool: self,
+            },
+            _ => {
+                // Create new object if pool is empty
+                let obj = Box::new((self.factory)());
+                PooledObject {
+                    object: Some(obj),
+                    pool: self,
+                }
             }
         }
     }

@@ -1,9 +1,9 @@
-use crate::model::iri::{Iri, IriParseError};
 use crate::model::literal::LanguageTag;
 use crate::model::term::{Object, Predicate, Subject};
 use crate::model::{BlankNode, Literal, NamedNode, NamedOrBlankNode, Term, Triple};
 use crate::rdfxml::error::{RdfXmlParseError, RdfXmlSyntaxError};
 use crate::rdfxml::utils::*;
+use oxiri::{Iri, IriParseError};
 use quick_xml::escape::{resolve_xml_entity, unescape_with};
 use quick_xml::events::attributes::Attribute;
 use quick_xml::events::*;
@@ -493,7 +493,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
         let event = self
             .parser
             .reader
-            .read_event_into_async(&mut self.reader_buffer)
+            .read_event_async(&mut self.reader_buffer)
             .await?;
         self.parser.parse_event(event, &mut self.results)
     }
@@ -1582,7 +1582,9 @@ impl<R> InternalRdfXmlParser<R> {
         base_iri: Option<&Iri<String>>,
         attribute: &Attribute<'_>,
     ) -> Result<NamedNode, RdfXmlParseError> {
-        Ok(self.resolve_iri(base_iri, self.convert_attribute(attribute)?)?)
+        let converted = self.convert_attribute(attribute)?;
+        self.resolve_iri(base_iri, converted)
+            .map_err(RdfXmlParseError::Syntax)
     }
 
     fn resolve_iri(
@@ -1592,7 +1594,7 @@ impl<R> InternalRdfXmlParser<R> {
     ) -> Result<NamedNode, RdfXmlSyntaxError> {
         if let Some(base_iri) = base_iri.or_else(|| self.current_base_iri()) {
             Ok(NamedNode::new_unchecked(if self.lenient {
-                base_iri.resolve_unchecked(&relative_iri)
+                base_iri.resolve_unchecked(&relative_iri).into_inner()
             } else {
                 base_iri
                     .resolve(&relative_iri)

@@ -7,14 +7,12 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    ConcreteStore, Store,
+    ConcreteStore,
 };
 use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
-    ShapeType, Target, ValidationConfig, ValidationStrategy, Validator,
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Shape, ShapeId, Target,
+    ValidationConfig, ValidationStrategy, Validator,
 };
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 /// Advanced benchmark configuration for ultra-high performance testing
 #[derive(Debug, Clone)]
@@ -80,15 +78,13 @@ enum DataComplexity {
 fn create_simple_validation_data(store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
     // Create basic person data with simple constraints
     for i in 0..size {
-        let person_iri = NamedNode::new(&format!("http://example.org/person{}", i)).unwrap();
-        let name_literal = Term::Literal(Literal::new(&format!("Person {}", i)));
-        let age_literal = Term::Literal(Literal::new(&format!("{}", 20 + (i % 60))));
+        let person_iri = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
+        let name_literal = Term::Literal(Literal::new(format!("Person {i}")));
+        let age_literal = Term::Literal(Literal::new(format!("{}", 20 + (i % 60))));
 
         // Simple constraints
-        let mut person_shape = Shape::node_shape(ShapeId::new(&format!(
-            "http://example.org/PersonShape{}",
-            i
-        )));
+        let mut person_shape =
+            Shape::node_shape(ShapeId::new(format!("http://example.org/PersonShape{i}")));
         person_shape.add_target(Target::Class(
             NamedNode::new("http://example.org/Person").unwrap(),
         ));
@@ -112,7 +108,7 @@ fn create_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &m
         ]);
 
         let mut complex_shape = Shape::property_shape(
-            ShapeId::new(&format!("http://example.org/ComplexShape{}", i)),
+            ShapeId::new(format!("http://example.org/ComplexShape{i}")),
             complex_path,
         );
 
@@ -165,7 +161,7 @@ fn create_ultra_complex_validation_data(
         ]);
 
         let mut ultra_shape = Shape::property_shape(
-            ShapeId::new(&format!("http://example.org/QuantumShape{}", i)),
+            ShapeId::new(format!("http://example.org/QuantumShape{i}")),
             quantum_path,
         );
 
@@ -226,7 +222,7 @@ fn create_quantum_enhanced_validation_data(
         ]);
 
         let mut quantum_consciousness_shape = Shape::property_shape(
-            ShapeId::new(&format!("http://example.org/ConsciousnessShape{}", i)),
+            ShapeId::new(format!("http://example.org/ConsciousnessShape{i}")),
             consciousness_path,
         );
 

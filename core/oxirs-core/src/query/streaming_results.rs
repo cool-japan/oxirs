@@ -195,6 +195,7 @@ impl SelectResults {
     }
 
     /// Get the next solution, blocking if necessary
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Option<Solution>, OxirsError> {
         if self.is_cancelled() {
             return Ok(None);
@@ -320,13 +321,13 @@ impl Stream for SelectResultStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // Try non-blocking first
         match self.results.try_next() {
-            Ok(Some(solution)) => return Poll::Ready(Some(Ok(solution))),
+            Ok(Some(solution)) => Poll::Ready(Some(Ok(solution))),
             Ok(None) => {
                 // Would block, need to wait
                 cx.waker().wake_by_ref();
-                return Poll::Pending;
+                Poll::Pending
             }
-            Err(e) => return Poll::Ready(Some(Err(e))),
+            Err(e) => Poll::Ready(Some(Err(e))),
         }
     }
 }
@@ -368,6 +369,7 @@ impl ConstructResults {
         self.cancel_token.store(true, Ordering::Relaxed);
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn next(&mut self) -> Result<Option<Triple>, OxirsError> {
         if self.cancel_token.load(Ordering::Relaxed) {
             return Ok(None);
@@ -517,6 +519,12 @@ impl StreamingQueryResults {
 /// Builder for creating streaming result sets
 pub struct StreamingResultBuilder {
     config: StreamingConfig,
+}
+
+impl Default for StreamingResultBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StreamingResultBuilder {

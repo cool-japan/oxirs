@@ -1,12 +1,12 @@
 //! Graph-aware vector search for named graph filtering and contextual search
 //!
 //! This module provides graph-scoped vector search capabilities that enable:
-//! - Named graph filtering for vector searches  
+//! - Named graph filtering for vector searches
 //! - Contextual search within specific RDF graphs
 //! - Hierarchical graph search patterns
 //! - Cross-graph similarity analysis
 
-use crate::{similarity::SimilarityMetric, Vector, VectorStore};
+use crate::VectorStore;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -43,6 +43,7 @@ impl Default for GraphAwareConfig {
 
 /// Graph hierarchy for hierarchical search
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct GraphHierarchy {
     /// Parent-child relationships between graphs
     pub parent_child: HashMap<String, Vec<String>>,
@@ -52,15 +53,6 @@ pub struct GraphHierarchy {
     pub graph_weights: HashMap<String, f32>,
 }
 
-impl Default for GraphHierarchy {
-    fn default() -> Self {
-        Self {
-            parent_child: HashMap::new(),
-            graph_types: HashMap::new(),
-            graph_weights: HashMap::new(),
-        }
-    }
-}
 
 /// Graph context for search operations
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeSet, HashMap};
 use std::net::SocketAddr;
 use std::time::{Duration, SystemTime};
-use tokio::time::{sleep, timeout};
+use tokio::time::timeout;
 
 /// Discovery mechanism configuration
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -503,7 +503,7 @@ impl DiscoveryService {
 
     /// Multicast-based discovery implementation
     async fn discover_via_multicast(&mut self, group: &str, port: u16) -> Result<Vec<NodeInfo>> {
-        use std::net::{IpAddr, Ipv4Addr};
+        use std::net::IpAddr;
         use tokio::net::UdpSocket;
 
         tracing::debug!("Running multicast discovery on {}:{}", group, port);
@@ -518,7 +518,7 @@ impl DiscoveryService {
             .map_err(|e| anyhow::anyhow!("Failed to bind UDP socket: {}", e))?;
 
         // Enable multicast
-        let multicast_ip = match multicast_addr.ip() {
+        let _multicast_ip = match multicast_addr.ip() {
             IpAddr::V4(ip) => ip,
             _ => return Err(anyhow::anyhow!("Only IPv4 multicast supported")),
         };

@@ -5,7 +5,6 @@ use crate::{Vector, VectorIndex};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
 
 #[cfg(feature = "gpu")]
 use crate::gpu::GpuAccelerator;
@@ -328,11 +327,7 @@ impl HnswIndex {
 
         // Store the current connections before removal for potential optimization
         let node_id = self.uri_to_id[&uri];
-        let old_connections = if let Some(node) = self.nodes.get(node_id) {
-            Some(node.connections.clone())
-        } else {
-            None
-        };
+        let _old_connections = self.nodes.get(node_id).map(|node| node.connections.clone());
 
         // Remove the old vector
         self.remove(&uri)?;

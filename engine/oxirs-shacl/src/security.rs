@@ -2,7 +2,7 @@
 //!
 //! This module provides comprehensive security features for SHACL validation, particularly
 //! for SPARQL constraints to prevent injection attacks and ensure safe execution.
-//! 
+//!
 //! Features include:
 //! - Query sanitization and analysis
 //! - Execution sandboxing with resource limits
@@ -18,17 +18,16 @@ pub mod secure_executor;
 
 // Re-export key types for convenience
 pub use advanced::{
-    SecurityPolicyManager, SecurityContext, SecurityPolicy, Permission, SecurityConstraints,
-    SecurityEvent, SecurityEventType, SecurityMetrics, InjectionAnalysisResult,
-    PolicyAuthorizationResult, ExecutionConstraints,
+    ExecutionConstraints, InjectionAnalysisResult, Permission, PolicyAuthorizationResult,
+    SecurityConstraints, SecurityContext, SecurityEvent, SecurityEventType, SecurityMetrics,
+    SecurityPolicy, SecurityPolicyManager,
 };
 pub use secure_executor::{
-    SecureSparqlExecutor, SecureExecutorFactory, SecureConstraintResult, SecureQueryResult,
-    ComprehensiveSecurityMetrics, utils,
+    utils, ComprehensiveSecurityMetrics, SecureConstraintResult, SecureExecutorFactory,
+    SecureQueryResult, SecureSparqlExecutor,
 };
 
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -138,19 +137,17 @@ impl SparqlSecurityAnalyzer {
     pub fn new(config: SecurityConfig) -> Result<Self> {
         let dangerous_patterns = vec![
             // Potential injection patterns
-            Regex::new(r"(?i)\b(drop|delete|insert|clear|create|load)\s+(?:data|graph|silent)")?
-                .into(),
-            Regex::new(r"(?i)\bservice\s+<[^>]*>")?.into(),
-            Regex::new(r"(?i)\bfrom\s+named\s+<[^>]*>")?.into(),
-            Regex::new(r"(?i)\binto\s+(?:graph\s+)?<[^>]*>")?.into(),
+            Regex::new(r"(?i)\b(drop|delete|insert|clear|create|load)\s+(?:data|graph|silent)")?,
+            Regex::new(r"(?i)\bservice\s+<[^>]*>")?,
+            Regex::new(r"(?i)\bfrom\s+named\s+<[^>]*>")?,
+            Regex::new(r"(?i)\binto\s+(?:graph\s+)?<[^>]*>")?,
             // Recursive or complex constructs
-            Regex::new(r"(?i)\b(?:union|optional|exists|not\s+exists)\s*\{")?.into(),
-            Regex::new(r"\{[^}]*\{[^}]*\{[^}]*\{")? // Deep nesting
-                .into(),
+            Regex::new(r"(?i)\b(?:union|optional|exists|not\s+exists)\s*\{")?,
+            Regex::new(r"\{[^}]*\{[^}]*\{[^}]*\{")?,
             // Potential DoS patterns
-            Regex::new(r"(?i)\b(?:count|sum|avg|min|max)\s*\(\s*\*\s*\)")?.into(),
+            Regex::new(r"(?i)\b(?:count|sum|avg|min|max)\s*\(\s*\*\s*\)")?,
             // File system access
-            Regex::new(r"(?i)file://")?.into(),
+            Regex::new(r"(?i)file://")?,
         ];
 
         let function_extractor = Regex::new(r"(?i)\b([A-Z_][A-Z0-9_]*)\s*\(")?;
@@ -323,7 +320,7 @@ impl SparqlSecurityAnalyzer {
                     analysis.violations.push(SecurityViolation {
                         violation_type: SecurityViolationType::DisallowedFunction,
                         severity: SecuritySeverity::Medium,
-                        message: format!("Disallowed function: {}", func),
+                        message: format!("Disallowed function: {func}"),
                         pattern_id: None,
                         position: Some(function_name.start()),
                     });
@@ -347,7 +344,7 @@ impl SparqlSecurityAnalyzer {
                     analysis.violations.push(SecurityViolation {
                         violation_type: SecurityViolationType::DisallowedPrefix,
                         severity: SecuritySeverity::Low,
-                        message: format!("Disallowed prefix: {}", prefix),
+                        message: format!("Disallowed prefix: {prefix}"),
                         pattern_id: None,
                         position: Some(prefix_name.start()),
                     });

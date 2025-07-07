@@ -120,22 +120,76 @@ impl Session {
         }
     }
 
-    pub async fn process_message(&mut self, content: String) -> Result<crate::messages::Message> {
-        // TODO: Implement actual message processing
-        let response = crate::messages::Message {
+    pub async fn process_message(
+        &mut self,
+        content: String,
+        llm_manager: &mut LLMManager,
+    ) -> Result<crate::messages::Message> {
+        // Update last activity
+        self.last_activity = chrono::Utc::now();
+
+        // Create user message
+        let user_msg = crate::messages::Message {
             id: format!("msg_{}", uuid::Uuid::new_v4()),
-            role: crate::messages::MessageRole::Assistant,
-            content: crate::messages::MessageContent::Text(format!("Echo: {}", content)),
+            role: crate::messages::MessageRole::User,
+            content: crate::messages::MessageContent::Text(content.clone()),
             timestamp: chrono::Utc::now(),
             metadata: None,
             thread_id: None,
             parent_message_id: None,
-            token_count: None,
+            token_count: Some(content.len() / 4), // Rough estimate
             reactions: Vec::new(),
             attachments: Vec::new(),
             rich_elements: Vec::new(),
         };
+
+        // Add user message to session
+        self.messages.push(user_msg.clone());
+
+        // Prepare LLM request
+        let llm_request = LLMRequest {
+            messages: vec![super::types::ChatMessage {
+                role: super::types::ChatRole::User,
+                content: content.clone(),
+                metadata: None,
+            }],
+            system_prompt: Some("You are a helpful AI assistant integrated with OxiRS Chat. Provide informative and helpful responses.".to_string()),
+            max_tokens: Some(1000),
+            temperature: 0.7,
+            use_case: UseCase::Conversation,
+            priority: Priority::Normal,
+            timeout: Some(Duration::from_secs(30)),
+        };
+
+        // Generate response using LLM
+        let llm_response = llm_manager.generate_response(llm_request).await?;
+
+        // Create assistant message
+        let response = crate::messages::Message {
+            id: format!("msg_{}", uuid::Uuid::new_v4()),
+            role: crate::messages::MessageRole::Assistant,
+            content: crate::messages::MessageContent::Text(llm_response.content),
+            timestamp: chrono::Utc::now(),
+            metadata: Some(crate::messages::MessageMetadata {
+                source: Some("llm-manager".to_string()),
+                confidence: Some(0.85), // Default confidence
+                processing_time_ms: Some(llm_response.latency.as_millis() as u64),
+                model_used: Some(llm_response.model_used.clone()),
+                temperature: Some(0.7),
+                max_tokens: Some(1000),
+                custom_fields: std::collections::HashMap::new(),
+            }),
+            thread_id: None,
+            parent_message_id: Some(user_msg.id),
+            token_count: Some(llm_response.usage.completion_tokens),
+            reactions: Vec::new(),
+            attachments: Vec::new(),
+            rich_elements: Vec::new(),
+        };
+
+        // Add response to session
         self.messages.push(response.clone());
+
         Ok(response)
     }
 }
@@ -191,21 +245,156 @@ impl ProviderUsage {
     }
 }
 
-/// Rate limiter implementation
+/// Rate limiter implementation using token bucket algorithm
 pub struct RateLimiter {
-    // Simplified rate limiter - in production would use more sophisticated implementation
     enabled: bool,
+    buckets: Arc<TokioMutex<HashMap<String, TokenBucket>>>,
+}
+
+/// Token bucket for rate limiting
+#[derive(Debug, Clone)]
+struct TokenBucket {
+    tokens: f64,
+    last_refill: std::time::Instant,
+    capacity: f64,
+    refill_rate: f64, // tokens per second
+    requests_per_minute: usize,
+    window_start: std::time::Instant,
+    request_count: usize,
+}
+
+impl TokenBucket {
+    fn new(capacity: f64, refill_rate: f64, requests_per_minute: usize) -> Self {
+        let now = std::time::Instant::now();
+        Self {
+            tokens: capacity,
+            last_refill: now,
+            capacity,
+            refill_rate,
+            requests_per_minute,
+            window_start: now,
+            request_count: 0,
+        }
+    }
+
+    fn refill(&mut self) {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(self.last_refill).as_secs_f64();
+
+        // Refill tokens based on elapsed time
+        let tokens_to_add = elapsed * self.refill_rate;
+        self.tokens = (self.tokens + tokens_to_add).min(self.capacity);
+        self.last_refill = now;
+
+        // Reset request count if window has passed
+        if now.duration_since(self.window_start) >= Duration::from_secs(60) {
+            self.request_count = 0;
+            self.window_start = now;
+        }
+    }
+
+    fn try_consume(&mut self, tokens: f64) -> bool {
+        self.refill();
+
+        // Check requests per minute limit
+        if self.request_count >= self.requests_per_minute {
+            return false;
+        }
+
+        // Check token bucket limit
+        if self.tokens >= tokens {
+            self.tokens -= tokens;
+            self.request_count += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    fn get_wait_time(&self) -> Duration {
+        let tokens_needed = 1.0 - self.tokens;
+        if tokens_needed <= 0.0 {
+            Duration::from_secs(0)
+        } else {
+            Duration::from_secs_f64(tokens_needed / self.refill_rate)
+        }
+    }
 }
 
 impl RateLimiter {
-    pub fn new(_config: &super::config::RateLimitConfig) -> Self {
-        Self { enabled: true }
+    pub fn new(config: &super::config::RateLimitConfig) -> Self {
+        Self {
+            enabled: true, // Always enabled for simplicity
+            buckets: Arc::new(TokioMutex::new(HashMap::new())),
+        }
     }
 
-    pub async fn check_rate_limit(&self, _provider: &str) -> Result<()> {
-        // TODO: Implement actual rate limiting
-        Ok(())
+    pub async fn check_rate_limit(&self, provider: &str) -> Result<()> {
+        if !self.enabled {
+            return Ok(());
+        }
+
+        let mut buckets = self.buckets.lock().await;
+
+        // Get or create bucket for provider
+        let bucket = buckets.entry(provider.to_string()).or_insert_with(|| {
+            // Default rate limits (configurable in production)
+            let capacity = 10.0; // burst capacity
+            let refill_rate = 1.0; // 1 token per second
+            let requests_per_minute = 60; // 60 requests per minute
+            TokenBucket::new(capacity, refill_rate, requests_per_minute)
+        });
+
+        // Try to consume a token
+        if bucket.try_consume(1.0) {
+            Ok(())
+        } else {
+            let wait_time = bucket.get_wait_time();
+            Err(anyhow!(
+                "Rate limit exceeded for provider: {}. Please wait {:?}",
+                provider,
+                wait_time
+            ))
+        }
     }
+
+    pub async fn get_rate_limit_status(&self, provider: &str) -> Result<RateLimitStatus> {
+        if !self.enabled {
+            return Ok(RateLimitStatus {
+                provider: provider.to_string(),
+                tokens_available: f64::INFINITY,
+                requests_remaining: usize::MAX,
+                reset_time: None,
+            });
+        }
+
+        let mut buckets = self.buckets.lock().await;
+        let bucket = buckets
+            .entry(provider.to_string())
+            .or_insert_with(|| TokenBucket::new(10.0, 1.0, 60));
+
+        bucket.refill();
+
+        let next_reset = bucket.window_start + Duration::from_secs(60);
+
+        Ok(RateLimitStatus {
+            provider: provider.to_string(),
+            tokens_available: bucket.tokens,
+            requests_remaining: bucket
+                .requests_per_minute
+                .saturating_sub(bucket.request_count),
+            reset_time: Some(next_reset),
+        })
+    }
+}
+
+/// Rate limit status information
+#[derive(Debug, Clone)]
+pub struct RateLimitStatus {
+    pub provider: String,
+    pub tokens_available: f64,
+    pub requests_remaining: usize,
+    pub reset_time: Option<std::time::Instant>,
 }
 
 /// Main LLM manager
@@ -457,10 +646,155 @@ impl EnhancedLLMManager {
         store: Arc<dyn oxirs_core::Store>,
         persistence_path: P,
     ) -> Result<Self> {
-        let config = LLMConfig::default();
+        // Create persistence directory if it doesn't exist
+        let path = persistence_path.as_ref();
+        if !path.exists() {
+            std::fs::create_dir_all(path)
+                .map_err(|e| anyhow!("Failed to create persistence directory: {}", e))?;
+        }
+
+        // Create configuration with persistence enabled
+        let mut config = LLMConfig::default();
+
+        // Configure rate limiting for persistence
+        config.rate_limits.burst_allowed = true;
+
+        // Create the manager with enhanced configuration
         let mut manager = Self::new(config)?;
-        // TODO: Implement actual persistence logic
+
+        // Initialize persistence by loading existing sessions
+        manager.load_persisted_sessions(path).await?;
+
+        // Set up automatic session persistence
+        manager
+            .setup_session_persistence(path.to_path_buf())
+            .await?;
+
+        info!(
+            "Enhanced LLM manager initialized with persistence at: {:?}",
+            path
+        );
         Ok(manager)
+    }
+
+    /// Load persisted sessions from disk
+    async fn load_persisted_sessions<P: AsRef<std::path::Path>>(
+        &mut self,
+        persistence_path: P,
+    ) -> Result<()> {
+        let path = persistence_path.as_ref();
+        let session_files = std::fs::read_dir(path)
+            .map_err(|e| anyhow!("Failed to read persistence directory: {}", e))?;
+
+        let mut loaded_count = 0;
+
+        for entry in session_files.flatten() {
+            let file_path = entry.path();
+            if file_path.extension().and_then(|s| s.to_str()) == Some("session") {
+                if let Some(session_id) = file_path.file_stem().and_then(|s| s.to_str()) {
+                    match self
+                        .load_session_from_file(&file_path, session_id.to_string())
+                        .await
+                    {
+                        Ok(_) => {
+                            loaded_count += 1;
+                            debug!("Loaded session: {}", session_id);
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to load session {} from {:?}: {}",
+                                session_id, file_path, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        info!("Loaded {} persisted sessions", loaded_count);
+        Ok(())
+    }
+
+    /// Load a single session from a file
+    async fn load_session_from_file<P: AsRef<std::path::Path>>(
+        &mut self,
+        file_path: P,
+        session_id: String,
+    ) -> Result<()> {
+        use tokio::fs::File;
+        use tokio::io::AsyncReadExt;
+
+        let mut file = File::open(file_path).await?;
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents).await?;
+
+        // Deserialize the session
+        let session: Session = bincode::deserialize(&contents)
+            .map_err(|e| anyhow!("Failed to deserialize session: {}", e))?;
+
+        // Add to active sessions
+        let locked_session = Arc::new(TokioMutex::new(session));
+        let mut sessions = self.sessions.lock().await;
+        sessions.insert(session_id, locked_session);
+
+        Ok(())
+    }
+
+    /// Set up automatic session persistence
+    async fn setup_session_persistence(&self, persistence_path: std::path::PathBuf) -> Result<()> {
+        let sessions = Arc::clone(&self.sessions);
+        let path = persistence_path;
+
+        // Start background task for periodic session persistence
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(300)); // Save every 5 minutes
+
+            loop {
+                interval.tick().await;
+
+                let sessions_guard = sessions.lock().await;
+                for (session_id, session_arc) in sessions_guard.iter() {
+                    let session_guard = session_arc.lock().await;
+
+                    // Save session to file
+                    let session_file = path.join(format!("{}.session", session_id));
+
+                    match Self::save_session_to_file(&*session_guard, &session_file).await {
+                        Ok(_) => debug!("Saved session: {}", session_id),
+                        Err(e) => error!("Failed to save session {}: {}", session_id, e),
+                    }
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    /// Save a session to a file
+    async fn save_session_to_file<P: AsRef<std::path::Path>>(
+        session: &Session,
+        file_path: P,
+    ) -> Result<()> {
+        use tokio::fs::File;
+        use tokio::io::AsyncWriteExt;
+
+        // Serialize the session
+        let serialized = bincode::serialize(session)
+            .map_err(|e| anyhow!("Failed to serialize session: {}", e))?;
+
+        // Write to temporary file first, then rename for atomic operation
+        let temp_path = file_path.as_ref().with_extension("session.tmp");
+
+        {
+            let mut file = File::create(&temp_path).await?;
+            file.write_all(&serialized).await?;
+            file.sync_all().await?;
+        }
+
+        // Atomic rename
+        std::fs::rename(&temp_path, file_path.as_ref())?;
+
+        Ok(())
     }
 
     /// Get or create a session for the given session ID
@@ -480,10 +814,35 @@ impl EnhancedLLMManager {
     /// Get session statistics
     pub async fn get_session_stats(&self) -> SessionStats {
         let sessions = self.sessions.lock().await;
+
+        // Calculate actual session durations
+        let mut total_duration_secs = 0.0;
+        let mut valid_sessions = 0;
+
+        for session_arc in sessions.values() {
+            let session = session_arc.lock().await;
+
+            // Calculate session duration from creation to last activity
+            let duration = session
+                .last_activity
+                .signed_duration_since(chrono::DateTime::<chrono::Utc>::from(session.created_at))
+                .to_std()
+                .unwrap_or(Duration::from_secs(0));
+
+            total_duration_secs += duration.as_secs_f64();
+            valid_sessions += 1;
+        }
+
+        let average_session_duration = if valid_sessions > 0 {
+            total_duration_secs / valid_sessions as f64
+        } else {
+            0.0
+        };
+
         SessionStats {
             active_sessions: sessions.len(),
             total_sessions: sessions.len(), // Simplified - all sessions are considered active
-            average_session_duration: 0.0,  // TODO: Track session durations
+            average_session_duration,
         }
     }
 
@@ -860,7 +1219,7 @@ impl EnhancedLLMManager {
         query: &str,
     ) -> Result<CrossModalResponse> {
         if let Some(reasoning) = &self.cross_modal_reasoning {
-            reasoning.reason(input, query).await
+            reasoning.reason(input, query).await.map_err(|e| anyhow!(e))
         } else {
             Err(anyhow!("Cross-modal reasoning not enabled"))
         }
@@ -902,7 +1261,10 @@ impl EnhancedLLMManager {
         request: &LLMRequest,
     ) -> Result<super::performance_optimization::OptimizedRequest> {
         if let Some(optimizer) = &self.performance_optimizer {
-            optimizer.optimize_request(request).await
+            optimizer
+                .optimize_request(request)
+                .await
+                .map_err(|e| anyhow!(e))
         } else {
             Err(anyhow!("Performance optimization not enabled"))
         }
@@ -911,7 +1273,10 @@ impl EnhancedLLMManager {
     /// Run system benchmark
     pub async fn run_benchmark(&self, config: BenchmarkConfig) -> Result<BenchmarkResult> {
         if let Some(optimizer) = &self.performance_optimizer {
-            optimizer.benchmark_system(config).await
+            optimizer
+                .benchmark_system(config)
+                .await
+                .map_err(|e| anyhow!(e))
         } else {
             Err(anyhow!("Performance optimization not enabled"))
         }
@@ -922,7 +1287,10 @@ impl EnhancedLLMManager {
         &self,
     ) -> Result<Vec<OptimizationRecommendation>> {
         if let Some(optimizer) = &self.performance_optimizer {
-            optimizer.generate_optimization_recommendations().await
+            optimizer
+                .generate_optimization_recommendations()
+                .await
+                .map_err(|e| anyhow!(e))
         } else {
             Err(anyhow!("Performance optimization not enabled"))
         }
@@ -931,7 +1299,10 @@ impl EnhancedLLMManager {
     /// Get comprehensive performance report
     pub async fn get_performance_report(&self) -> Result<PerformanceReport> {
         if let Some(optimizer) = &self.performance_optimizer {
-            optimizer.get_performance_report().await
+            optimizer
+                .get_performance_report()
+                .await
+                .map_err(|e| anyhow!(e))
         } else {
             Err(anyhow!("Performance optimization not enabled"))
         }

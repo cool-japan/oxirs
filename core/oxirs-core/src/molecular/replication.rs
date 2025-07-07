@@ -2,7 +2,6 @@
 
 use super::dna_structures::{NucleotideData, SpecialMarker};
 use crate::error::OxirsResult;
-// Removed unused imports: NamedNode, Term
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 
@@ -291,7 +290,7 @@ impl Ligase {
     }
 
     /// Join DNA fragments
-    pub fn join_fragments(&self, _strand: &mut Vec<NucleotideData>) -> OxirsResult<()> {
+    pub fn join_fragments(&self, _strand: &mut [NucleotideData]) -> OxirsResult<()> {
         // Simulate ligation process
         // In this simplified model, we just ensure strand continuity
         Ok(())
@@ -316,13 +315,13 @@ impl Primase {
             let nucleotide = match i % 4 {
                 0 => NucleotideData::Cytosine(SpecialMarker::StartCodon),
                 1 => NucleotideData::Adenine(crate::model::Term::NamedNode(
-                    crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap(),
+                    crate::model::NamedNode::new(format!("primer:{i}")).unwrap(),
                 )),
                 2 => NucleotideData::Thymine(crate::model::Term::NamedNode(
-                    crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap(),
+                    crate::model::NamedNode::new(format!("primer:{i}")).unwrap(),
                 )),
                 3 => NucleotideData::Guanine(crate::model::Term::NamedNode(
-                    crate::model::NamedNode::new(&format!("primer:{}", i)).unwrap(),
+                    crate::model::NamedNode::new(format!("primer:{i}")).unwrap(),
                 )),
                 _ => unreachable!(),
             };
@@ -362,7 +361,7 @@ impl ProofreadingSystem {
         {
             // Attempt correction
             if fastrand::f64() < self.correction_efficiency {
-                return Ok(Some(self.correct_nucleotide(template)?));
+                return self.correct_nucleotide(template).map(Some);
             }
         }
         Ok(None)
@@ -385,6 +384,12 @@ impl ProofreadingSystem {
     pub fn correction_count(&self) -> u64 {
         // Simplified simulation
         42
+    }
+}
+
+impl Default for ExonucleaseActivity {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -500,7 +505,9 @@ mod tests {
     #[test]
     fn test_polymerase_complement_synthesis() {
         let polymerase = DnaPolymerase::new();
-        let adenine = NucleotideData::Adenine(Term::NamedNode(NamedNode::new("test").unwrap()));
+        let adenine = NucleotideData::Adenine(Term::NamedNode(
+            NamedNode::new("http://example.org/test").unwrap(),
+        ));
 
         if let Ok(NucleotideData::Thymine(_)) = polymerase.synthesize_complement(&adenine) {
             // Test passed
@@ -512,12 +519,17 @@ mod tests {
     #[test]
     fn test_mismatch_detection() {
         let detector = MismatchDetector::new();
-        let adenine = NucleotideData::Adenine(Term::NamedNode(NamedNode::new("test").unwrap()));
-        let thymine = NucleotideData::Thymine(Term::NamedNode(NamedNode::new("test").unwrap()));
+        let adenine = NucleotideData::Adenine(Term::NamedNode(
+            NamedNode::new("http://example.org/test1").unwrap(),
+        ));
+        let thymine = NucleotideData::Thymine(Term::NamedNode(
+            NamedNode::new("http://example.org/test2").unwrap(),
+        ));
 
         // This should generally not be detected as a mismatch (valid pair)
         let result = detector.detect_mismatch(&adenine, &thymine).unwrap();
-        // Due to false positive rate, we can't assert exact result, but it should work
-        assert!(result == true || result == false);
+        // Due to false positive rate, we can't assert exact result, but it should be boolean
+        // Result is already boolean type, no need for tautology assertion
+        let _ = result; // Confirm result is used
     }
 }

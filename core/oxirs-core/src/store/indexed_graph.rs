@@ -8,6 +8,9 @@ use crate::store::term_interner::TermInterner;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 
+/// Type alias for complex index structures
+type TripleIndex = Arc<RwLock<BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>>>;
+
 /// Interned triple representation using term IDs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct InternedTriple {
@@ -30,11 +33,11 @@ pub struct IndexedGraph {
     /// Term interner for string deduplication
     interner: Arc<TermInterner>,
     /// SPO index: Subject -> Predicate -> Object
-    spo_index: Arc<RwLock<BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>>>,
+    spo_index: TripleIndex,
     /// POS index: Predicate -> Object -> Subject
-    pos_index: Arc<RwLock<BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>>>,
+    pos_index: TripleIndex,
     /// OSP index: Object -> Subject -> Predicate
-    osp_index: Arc<RwLock<BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>>>,
+    osp_index: TripleIndex,
     /// Total number of triples
     triple_count: Arc<RwLock<usize>>,
     /// Index statistics for query optimization
@@ -123,23 +126,23 @@ impl IndexedGraph {
 
         // Insert into SPO index
         spo.entry(triple.subject_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(triple.predicate_id)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(triple.object_id);
 
         // Insert into POS index
         pos.entry(triple.predicate_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(triple.object_id)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(triple.subject_id);
 
         // Insert into OSP index
         osp.entry(triple.object_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(triple.subject_id)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(triple.predicate_id);
 
         // Update counts
@@ -176,26 +179,26 @@ impl IndexedGraph {
             let exists = spo
                 .get(&triple.subject_id)
                 .and_then(|po| po.get(&triple.predicate_id))
-                .map_or(false, |o_set| o_set.contains(&triple.object_id));
+                .is_some_and(|o_set| o_set.contains(&triple.object_id));
 
             if !exists {
                 // Insert into all indexes
                 spo.entry(triple.subject_id)
-                    .or_insert_with(BTreeMap::new)
+                    .or_default()
                     .entry(triple.predicate_id)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(triple.object_id);
 
                 pos.entry(triple.predicate_id)
-                    .or_insert_with(BTreeMap::new)
+                    .or_default()
                     .entry(triple.object_id)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(triple.subject_id);
 
                 osp.entry(triple.object_id)
-                    .or_insert_with(BTreeMap::new)
+                    .or_default()
                     .entry(triple.subject_id)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(triple.predicate_id);
 
                 inserted_count += 1;
@@ -735,7 +738,7 @@ impl IndexedGraph {
     }
 
     /// Iterator over all triples in the graph
-    pub fn iter(&self) -> impl Iterator<Item = Triple> {
+    pub fn iter(&self) -> impl Iterator<Item = Triple> + use<> {
         self.query(None, None, None).into_iter()
     }
 
@@ -794,10 +797,10 @@ fn count_index_entries(index: &BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>) -> u
 /// Estimate memory usage of an index
 fn estimate_index_memory(index: &BTreeMap<u32, BTreeMap<u32, BTreeSet<u32>>>) -> usize {
     let mut total = 0;
-    for (_, inner) in index {
+    for inner in index.values() {
         total += 4; // Key size
         total += 24; // BTreeMap overhead
-        for (_, set) in inner {
+        for set in inner.values() {
             total += 4; // Key size
             total += 24; // BTreeSet overhead
             total += set.len() * 4; // Values

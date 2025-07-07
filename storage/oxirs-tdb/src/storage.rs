@@ -3,7 +3,7 @@
 //! Core storage layer for TDB implementation with production hardening,
 //! input validation, and comprehensive error handling.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use thiserror::Error;
@@ -284,7 +284,7 @@ impl MemoryStorage {
     }
 
     /// Check resource limits before operation
-    fn check_limits(&self, operation: &str) -> Result<(), StorageError> {
+    fn check_limits(&self, _operation: &str) -> Result<(), StorageError> {
         // Check quad count limit
         if let Some(max_quads) = self.config.max_quads {
             if self.quads.len() >= max_quads {
@@ -541,7 +541,7 @@ impl StorageBackend for MemoryStorage {
         })();
 
         // Update metrics (cast to mutable for this call)
-        let duration = start_time.elapsed();
+        let _duration = start_time.elapsed();
         // Note: We need to work around the immutable self here
         // In a real implementation, we'd use interior mutability (e.g., RefCell, Mutex)
 
@@ -617,7 +617,6 @@ impl StorageBackend for MemoryStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[test]
     fn test_storage_validation() {

@@ -132,9 +132,9 @@ fn create_sample_knowledge_graph() -> Result<Vec<Triple>> {
             for (k, entity_k) in entities.iter().enumerate() {
                 if i != k && (i + j + k) % 3 == 0 {
                     // Create some sparsity
-                    let subject = NamedNode::new(&format!("http://example.org/{}", entity_i))?;
-                    let predicate = NamedNode::new(&format!("http://example.org/{}", relation_j))?;
-                    let object = NamedNode::new(&format!("http://example.org/{}", entity_k))?;
+                    let subject = NamedNode::new(&format!("http://example.org/{entity_i}"))?;
+                    let predicate = NamedNode::new(&format!("http://example.org/{relation_j}"))?;
+                    let object = NamedNode::new(&format!("http://example.org/{entity_k}"))?;
 
                     triples.push(Triple::new(subject, predicate, object));
                 }
@@ -489,8 +489,8 @@ fn create_large_knowledge_graph() -> Result<Vec<Triple>> {
                 // 10 connections per entity-relation pair
                 if (i + j + k) % 5 == 0 {
                     // Create sparsity
-                    let subject = NamedNode::new(&format!("http://example.org/entity_{}", i))?;
-                    let predicate = NamedNode::new(&format!("http://example.org/relation_{}", j))?;
+                    let subject = NamedNode::new(&format!("http://example.org/entity_{i}"))?;
+                    let predicate = NamedNode::new(&format!("http://example.org/relation_{j}"))?;
                     let object = NamedNode::new(&format!(
                         "http://example.org/entity_{}",
                         (i + k + 1) % 1000

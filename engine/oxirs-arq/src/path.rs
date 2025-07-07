@@ -3,9 +3,8 @@
 //! This module implements SPARQL 1.1 property paths, allowing complex navigation
 //! through RDF graphs using path expressions.
 
-use crate::algebra::{Binding, Iri, Solution, Term, Variable};
-use anyhow::{anyhow, bail, Result};
-use oxirs_core::model::NamedNode;
+use crate::algebra::{Solution, Term, Variable};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -591,10 +590,10 @@ impl Default for PropertyPathEvaluator {
 /// Convenience macros for building property paths
 #[macro_export]
 macro_rules! path_seq {
-    ($first:expr, $second:expr) => {
+    ($first:expr_2021, $second:expr_2021) => {
         PropertyPath::Sequence(Box::new($first), Box::new($second))
     };
-    ($first:expr, $second:expr, $($rest:expr),+) => {
+    ($first:expr_2021, $second:expr_2021, $($rest:expr_2021),+) => {
         PropertyPath::Sequence(
             Box::new($first),
             Box::new(path_seq!($second, $($rest),+))
@@ -604,10 +603,10 @@ macro_rules! path_seq {
 
 #[macro_export]
 macro_rules! path_alt {
-    ($first:expr, $second:expr) => {
+    ($first:expr_2021, $second:expr_2021) => {
         PropertyPath::Alternative(Box::new($first), Box::new($second))
     };
-    ($first:expr, $second:expr, $($rest:expr),+) => {
+    ($first:expr_2021, $second:expr_2021, $($rest:expr_2021),+) => {
         PropertyPath::Alternative(
             Box::new($first),
             Box::new(path_alt!($second, $($rest),+))
@@ -617,28 +616,28 @@ macro_rules! path_alt {
 
 #[macro_export]
 macro_rules! path_star {
-    ($path:expr) => {
+    ($path:expr_2021) => {
         PropertyPath::ZeroOrMore(Box::new($path))
     };
 }
 
 #[macro_export]
 macro_rules! path_plus {
-    ($path:expr) => {
+    ($path:expr_2021) => {
         PropertyPath::OneOrMore(Box::new($path))
     };
 }
 
 #[macro_export]
 macro_rules! path_opt {
-    ($path:expr) => {
+    ($path:expr_2021) => {
         PropertyPath::ZeroOrOne(Box::new($path))
     };
 }
 
 #[macro_export]
 macro_rules! path_inv {
-    ($path:expr) => {
+    ($path:expr_2021) => {
         PropertyPath::Inverse(Box::new($path))
     };
 }
@@ -647,6 +646,7 @@ macro_rules! path_inv {
 mod tests {
     use super::*;
     use crate::algebra::{Iri, Literal};
+    use oxirs_core::model::NamedNode;
     use std::collections::HashMap;
 
     struct TestDataset {

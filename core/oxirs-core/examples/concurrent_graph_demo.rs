@@ -4,7 +4,7 @@ use oxirs_core::concurrent::ConcurrentGraph;
 use oxirs_core::model::{NamedNode, Object, Predicate, Subject, Triple};
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 fn main() {
     println!("=== OxiRS Concurrent Graph Demo ===\n");
@@ -30,21 +30,24 @@ fn demo_basic_operations(graph: &Arc<ConcurrentGraph>) {
     );
 
     match graph.insert(triple.clone()) {
-        Ok(inserted) => println!("Triple inserted: {}", inserted),
-        Err(e) => println!("Error inserting triple: {}", e),
+        Ok(inserted) => println!("Triple inserted: {inserted}"),
+        Err(e) => println!("Error inserting triple: {e}"),
     }
 
     // Check if triple exists
-    println!("Triple exists: {}", graph.contains(&triple));
-    println!("Graph size: {}", graph.len());
+    let exists = graph.contains(&triple);
+    println!("Triple exists: {exists}");
+    let size = graph.len();
+    println!("Graph size: {size}");
 
     // Remove the triple
     match graph.remove(&triple) {
-        Ok(removed) => println!("Triple removed: {}", removed),
-        Err(e) => println!("Error removing triple: {}", e),
+        Ok(removed) => println!("Triple removed: {removed}"),
+        Err(e) => println!("Error removing triple: {e}"),
     }
 
-    println!("Graph size after removal: {}\n", graph.len());
+    let size = graph.len();
+    println!("Graph size after removal: {size}\n");
 }
 
 fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
@@ -67,13 +70,12 @@ fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
                 for i in 0..triples_per_thread {
                     let triple = Triple::new(
                         Subject::NamedNode(
-                            NamedNode::new(&format!("http://thread{}/entity{}", thread_id, i))
-                                .unwrap(),
+                            NamedNode::new(format!("http://thread{thread_id}/entity{i}")).unwrap(),
                         ),
                         Predicate::NamedNode(
                             NamedNode::new("http://example.org/property").unwrap(),
                         ),
-                        Object::NamedNode(NamedNode::new(&format!("http://value{}", i)).unwrap()),
+                        Object::NamedNode(NamedNode::new(format!("http://value{i}")).unwrap()),
                     );
                     graph.insert(triple).unwrap();
                 }
@@ -88,16 +90,10 @@ fn demo_concurrent_writes(graph: &Arc<ConcurrentGraph>) {
 
     let duration = start.elapsed();
 
-    println!(
-        "Inserted {} triples from {} threads in {:?}",
-        graph.len(),
-        num_threads,
-        duration
-    );
-    println!(
-        "Throughput: {:.2} triples/sec\n",
-        (num_threads * triples_per_thread) as f64 / duration.as_secs_f64()
-    );
+    let graph_size = graph.len();
+    println!("Inserted {graph_size} triples from {num_threads} threads in {duration:?}");
+    let throughput = (num_threads * triples_per_thread) as f64 / duration.as_secs_f64();
+    println!("Throughput: {throughput:.2} triples/sec\n");
 }
 
 fn demo_pattern_matching(graph: &Arc<ConcurrentGraph>) {
@@ -116,13 +112,13 @@ fn demo_pattern_matching(graph: &Arc<ConcurrentGraph>) {
                 if subj != obj {
                     let triple = Triple::new(
                         Subject::NamedNode(
-                            NamedNode::new(&format!("http://example.org/{}", subj)).unwrap(),
+                            NamedNode::new(format!("http://example.org/{subj}")).unwrap(),
                         ),
                         Predicate::NamedNode(
-                            NamedNode::new(&format!("http://example.org/{}", pred)).unwrap(),
+                            NamedNode::new(format!("http://example.org/{pred}")).unwrap(),
                         ),
                         Object::NamedNode(
-                            NamedNode::new(&format!("http://example.org/{}", obj)).unwrap(),
+                            NamedNode::new(format!("http://example.org/{obj}")).unwrap(),
                         ),
                     );
                     graph.insert(triple).unwrap();
@@ -174,11 +170,11 @@ fn demo_performance(graph: &Arc<ConcurrentGraph>) {
                 for i in 0..ops_per_thread {
                     let triple = Triple::new(
                         Subject::NamedNode(
-                            NamedNode::new(&format!("http://s{}", thread_id * ops_per_thread + i))
+                            NamedNode::new(format!("http://s{}", thread_id * ops_per_thread + i))
                                 .unwrap(),
                         ),
                         Predicate::NamedNode(NamedNode::new("http://p").unwrap()),
-                        Object::NamedNode(NamedNode::new(&format!("http://o{}", i)).unwrap()),
+                        Object::NamedNode(NamedNode::new(format!("http://o{i}")).unwrap()),
                     );
                     graph.insert(triple).unwrap();
                 }

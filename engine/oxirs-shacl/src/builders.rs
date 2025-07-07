@@ -15,8 +15,6 @@
 //! - **Performance Optimization**: Built-in caching, parallel processing, and adaptive optimization
 //! - **Enterprise Features**: Memory management, timeout handling, and error recovery
 
-#[cfg(feature = "async")]
-use futures::future::try_join_all;
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
@@ -27,14 +25,13 @@ use tokio::time::timeout;
 use oxirs_core::{model::NamedNode, Store};
 
 use crate::{
-    constraints::*,
+    constraints::Constraint,
     optimization::ValidationStrategy,
     paths::PropertyPath,
     report::{ReportFormat, ValidationReport},
     shapes::{ShapeParser, ShapeParsingConfig},
     targets::Target,
-    Constraint, ConstraintComponentId, Result, ShaclError, Shape, ShapeId, ShapeType,
-    ValidationConfig, Validator,
+    ConstraintComponentId, Result, ShaclError, Shape, ShapeId, ValidationConfig, Validator,
 };
 
 /// Fluent builder for validation configuration
@@ -206,17 +203,17 @@ impl ShapeLoaderBuilder {
     }
 
     /// Add TTL file to load shapes from
-    pub fn from_turtle_file<P: AsRef<Path>>(mut self, path: P) -> Self {
+    pub fn from_turtle_file<P: AsRef<Path>>(self, path: P) -> Self {
         self.from_file(path, Some("turtle".to_string()))
     }
 
     /// Add RDF/XML file to load shapes from
-    pub fn from_rdfxml_file<P: AsRef<Path>>(mut self, path: P) -> Self {
+    pub fn from_rdfxml_file<P: AsRef<Path>>(self, path: P) -> Self {
         self.from_file(path, Some("rdfxml".to_string()))
     }
 
     /// Add JSON-LD file to load shapes from
-    pub fn from_jsonld_file<P: AsRef<Path>>(mut self, path: P) -> Self {
+    pub fn from_jsonld_file<P: AsRef<Path>>(self, path: P) -> Self {
         self.from_file(path, Some("jsonld".to_string()))
     }
 
@@ -887,7 +884,7 @@ impl EnhancedValidatorBuilder {
     }
 
     /// Build the validator asynchronously with advanced configuration
-    pub async fn build_async(mut self) -> Result<Validator> {
+    pub async fn build_async(self) -> Result<Validator> {
         // Apply timeout to the entire build process
         timeout(
             self.async_config.default_timeout,

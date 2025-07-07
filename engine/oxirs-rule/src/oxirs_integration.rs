@@ -86,7 +86,7 @@ pub fn rule_atom_to_triple(atom: &RuleAtom) -> Result<Triple> {
             let rdf_subject = rule_term_to_subject(subject)?;
             let rdf_predicate = rule_term_to_predicate(predicate)?;
             let rdf_object = rule_term_to_object(object)?;
-            
+
             Ok(Triple::new(rdf_subject, rdf_predicate, rdf_object))
         }
         RuleAtom::Builtin { .. } => {
@@ -134,7 +134,7 @@ pub fn triple_to_rule_atom(triple: &Triple) -> RuleAtom {
     let subject = subject_to_rule_term(triple.subject());
     let predicate = predicate_to_rule_term(triple.predicate());
     let object = object_to_rule_term(triple.object());
-    
+
     RuleAtom::Triple { subject, predicate, object }
 }
 
@@ -202,12 +202,12 @@ mod tests {
     fn test_variable_conversion() {
         let rule_var = RuleTerm::Variable("x".to_string());
         let rdf_term = rule_term_to_rdf_term(&rule_var).unwrap();
-        
+
         assert!(matches!(rdf_term, RdfTerm::Variable(_)));
         if let RdfTerm::Variable(v) = rdf_term {
             assert_eq!(v.name(), "x");
         }
-        
+
         // Round trip
         let back = rdf_term_to_rule_term(&RdfTerm::Variable(Variable::new("x").unwrap()));
         assert_eq!(back, rule_var);
@@ -217,12 +217,12 @@ mod tests {
     fn test_iri_conversion() {
         let rule_iri = RuleTerm::Constant("http://example.org/test".to_string());
         let rdf_term = rule_term_to_rdf_term(&rule_iri).unwrap();
-        
+
         assert!(matches!(rdf_term, RdfTerm::NamedNode(_)));
         if let RdfTerm::NamedNode(n) = &rdf_term {
             assert_eq!(n.as_str(), "http://example.org/test");
         }
-        
+
         // Round trip
         let back = rdf_term_to_rule_term(&rdf_term);
         assert_eq!(back, rule_iri);
@@ -232,7 +232,7 @@ mod tests {
     fn test_blank_node_conversion() {
         let rule_blank = RuleTerm::Constant("_:b1".to_string());
         let rdf_term = rule_term_to_rdf_term(&rule_blank).unwrap();
-        
+
         assert!(matches!(rdf_term, RdfTerm::BlankNode(_)));
         if let RdfTerm::BlankNode(b) = &rdf_term {
             assert_eq!(b.id(), "b1");
@@ -244,25 +244,25 @@ mod tests {
         // Simple literal
         let rule_lit = RuleTerm::Literal("\"hello\"".to_string());
         let rdf_term = rule_term_to_rdf_term(&rule_lit).unwrap();
-        
+
         assert!(matches!(rdf_term, RdfTerm::Literal(_)));
         if let RdfTerm::Literal(l) = &rdf_term {
             assert_eq!(l.value(), "hello");
         }
-        
+
         // Typed literal
         let typed_lit = RuleTerm::Literal("\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>".to_string());
         let rdf_typed = rule_term_to_rdf_term(&typed_lit).unwrap();
-        
+
         if let RdfTerm::Literal(l) = &rdf_typed {
             assert_eq!(l.value(), "42");
             assert!(l.datatype().is_some());
         }
-        
+
         // Language-tagged literal
         let lang_lit = RuleTerm::Literal("\"bonjour\"@fr".to_string());
         let rdf_lang = rule_term_to_rdf_term(&lang_lit).unwrap();
-        
+
         if let RdfTerm::Literal(l) = &rdf_lang {
             assert_eq!(l.value(), "bonjour");
             assert_eq!(l.language(), Some("fr"));
@@ -276,12 +276,12 @@ mod tests {
             predicate: RuleTerm::Constant("http://xmlns.com/foaf/0.1/knows".to_string()),
             object: RuleTerm::Constant("http://example.org/bob".to_string()),
         };
-        
+
         let triple = rule_atom_to_triple(&rule_atom).unwrap();
         assert_eq!(triple.subject().to_string(), "<http://example.org/alice>");
         assert_eq!(triple.predicate().to_string(), "<http://xmlns.com/foaf/0.1/knows>");
         assert_eq!(triple.object().to_string(), "<http://example.org/bob>");
-        
+
         // Round trip
         let back = triple_to_rule_atom(&triple);
         assert_eq!(back, rule_atom);

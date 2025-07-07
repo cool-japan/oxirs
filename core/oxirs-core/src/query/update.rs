@@ -138,8 +138,7 @@ impl<'a> UpdateExecutor<'a> {
         // For now, return an error as we don't have HTTP loading capability
         // In a full implementation, this would fetch RDF from the source IRI
         Err(OxirsError::Update(format!(
-            "LOAD operation not implemented for source: {}",
-            source
+            "LOAD operation not implemented for source: {source}"
         )))
     }
 
@@ -483,10 +482,7 @@ impl<'a> UpdateExecutor<'a> {
                 let left_where = self.extract_where_clause(&left_sparql)?;
                 let right_where = self.extract_where_clause(&right_sparql)?;
 
-                Ok(format!(
-                    "SELECT * WHERE {{ {} . {} }}",
-                    left_where, right_where
-                ))
+                Ok(format!("SELECT * WHERE {{ {left_where} . {right_where} }}"))
             }
             GraphPattern::Filter { expr, inner } => {
                 let inner_sparql = self.graph_pattern_to_sparql(inner)?;
@@ -494,8 +490,7 @@ impl<'a> UpdateExecutor<'a> {
                 let filter_expr = self.expression_to_sparql(expr)?;
 
                 Ok(format!(
-                    "SELECT * WHERE {{ {} FILTER ({}) }}",
-                    inner_where, filter_expr
+                    "SELECT * WHERE {{ {inner_where} FILTER ({filter_expr}) }}"
                 ))
             }
             GraphPattern::Union(left, right) => {
@@ -506,13 +501,11 @@ impl<'a> UpdateExecutor<'a> {
                 let right_where = self.extract_where_clause(&right_sparql)?;
 
                 Ok(format!(
-                    "SELECT * WHERE {{ {{ {} }} UNION {{ {} }} }}",
-                    left_where, right_where
+                    "SELECT * WHERE {{ {{ {left_where} }} UNION {{ {right_where} }} }}"
                 ))
             }
             _ => Err(OxirsError::Update(format!(
-                "Graph pattern type not yet supported in SPARQL conversion: {:?}",
-                pattern
+                "Graph pattern type not yet supported in SPARQL conversion: {pattern:?}"
             ))),
         }
     }
@@ -523,7 +516,7 @@ impl<'a> UpdateExecutor<'a> {
         let predicate = self.term_pattern_to_sparql(&pattern.predicate)?;
         let object = self.term_pattern_to_sparql(&pattern.object)?;
 
-        Ok(format!("{} {} {}", subject, predicate, object))
+        Ok(format!("{subject} {predicate} {object}"))
     }
 
     /// Convert a term pattern to SPARQL syntax
@@ -545,6 +538,7 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Convert an expression to SPARQL syntax
+    #[allow(clippy::only_used_in_recursion)]
     fn expression_to_sparql(&self, expr: &Expression) -> Result<String> {
         match expr {
             Expression::Variable(var) => Ok(format!("?{}", var.name())),
@@ -567,25 +561,24 @@ impl<'a> UpdateExecutor<'a> {
             Expression::Equal(left, right) => {
                 let left_sparql = self.expression_to_sparql(left)?;
                 let right_sparql = self.expression_to_sparql(right)?;
-                Ok(format!("({} = {})", left_sparql, right_sparql))
+                Ok(format!("({left_sparql} = {right_sparql})"))
             }
             Expression::And(left, right) => {
                 let left_sparql = self.expression_to_sparql(left)?;
                 let right_sparql = self.expression_to_sparql(right)?;
-                Ok(format!("({} && {})", left_sparql, right_sparql))
+                Ok(format!("({left_sparql} && {right_sparql})"))
             }
             Expression::Or(left, right) => {
                 let left_sparql = self.expression_to_sparql(left)?;
                 let right_sparql = self.expression_to_sparql(right)?;
-                Ok(format!("({} || {})", left_sparql, right_sparql))
+                Ok(format!("({left_sparql} || {right_sparql})"))
             }
             Expression::Not(inner) => {
                 let inner_sparql = self.expression_to_sparql(inner)?;
-                Ok(format!("(!{})", inner_sparql))
+                Ok(format!("(!{inner_sparql})"))
             }
             _ => Err(OxirsError::Update(format!(
-                "Expression type not yet supported in SPARQL conversion: {:?}",
-                expr
+                "Expression type not yet supported in SPARQL conversion: {expr:?}"
             ))),
         }
     }
@@ -611,6 +604,7 @@ impl<'a> UpdateExecutor<'a> {
 }
 
 /// SPARQL UPDATE parser (simplified)
+#[derive(Default)]
 pub struct UpdateParser;
 
 impl UpdateParser {
@@ -634,8 +628,7 @@ impl UpdateParser {
             self.parse_clear(trimmed)
         } else {
             Err(OxirsError::Parse(format!(
-                "Unsupported UPDATE operation: {}",
-                trimmed
+                "Unsupported UPDATE operation: {trimmed}"
             )))
         }
     }
@@ -716,7 +709,7 @@ impl UpdateParser {
                 if let Some(iri_end) = after_graph.find('>') {
                     let iri_str = &after_graph[iri_start + 1..iri_end];
                     let graph_node = NamedNode::new(iri_str)
-                        .map_err(|e| OxirsError::Parse(format!("Invalid graph IRI: {}", e)))?;
+                        .map_err(|e| OxirsError::Parse(format!("Invalid graph IRI: {e}")))?;
                     GraphTarget::Named(graph_node)
                 } else {
                     return Err(OxirsError::Parse(

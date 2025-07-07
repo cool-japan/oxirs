@@ -472,7 +472,7 @@ impl AdvancedPatternAnalyzer {
                 .await?;
 
             analysis.pattern_scores.insert(
-                format!("pattern_{}", idx),
+                format!("pattern_{idx}"),
                 PatternScore {
                     pattern: pattern.clone(),
                     complexity: pattern_features.pattern_complexity,
@@ -483,14 +483,14 @@ impl AdvancedPatternAnalyzer {
                     quantum_enhancement: analysis
                         .quantum_insights
                         .as_ref()
-                        .and_then(|qi| qi.pattern_enhancements.get(&format!("pattern_{}", idx)))
+                        .and_then(|qi| qi.pattern_enhancements.get(&format!("pattern_{idx}")))
                         .cloned(),
                     consciousness_score: analysis
                         .consciousness_analysis
                         .as_ref()
                         .and_then(|ca| {
                             ca.pattern_consciousness_scores
-                                .get(&format!("pattern_{}", idx))
+                                .get(&format!("pattern_{idx}"))
                         })
                         .cloned()
                         .unwrap_or(0.0),
@@ -971,7 +971,7 @@ impl AdvancedPatternAnalyzer {
             * 2;
         recommendations.push(ExecutionRecommendation {
             recommendation_type: RecommendationType::Timeout,
-            description: format!("Set timeout to {} seconds", timeout),
+            description: format!("Set timeout to {timeout} seconds"),
             confidence: 0.7,
             parameters: HashMap::from([("timeout_seconds".to_string(), timeout.to_string())]),
         });

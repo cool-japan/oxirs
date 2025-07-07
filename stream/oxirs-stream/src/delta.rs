@@ -12,9 +12,8 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use tracing::{debug, error, warn};
-use uuid::Uuid;
+use std::collections::HashSet;
+use tracing::{debug, warn};
 
 /// Delta computation for SPARQL Updates with advanced parsing
 pub struct DeltaComputer {
@@ -79,7 +78,7 @@ impl DeltaComputer {
         let mut patch = RdfPatch::new();
 
         // Track if we're in a transaction
-        let mut in_transaction = false;
+        let mut _in_transaction = false;
 
         for event in events {
             let operation = match event {
@@ -162,18 +161,18 @@ impl DeltaComputer {
                     }
                 }
                 StreamEvent::TransactionBegin { transaction_id, .. } => {
-                    in_transaction = true;
+                    _in_transaction = true;
                     patch.transaction_id = Some(transaction_id.clone());
                     PatchOperation::TransactionBegin {
                         transaction_id: Some(transaction_id.clone()),
                     }
                 }
                 StreamEvent::TransactionCommit { .. } => {
-                    in_transaction = false;
+                    _in_transaction = false;
                     PatchOperation::TransactionCommit
                 }
                 StreamEvent::TransactionAbort { .. } => {
-                    in_transaction = false;
+                    _in_transaction = false;
                     PatchOperation::TransactionAbort
                 }
                 StreamEvent::SparqlUpdate { query, .. } => {
@@ -236,9 +235,9 @@ impl DeltaComputer {
         let mut current = String::new();
         let mut in_quotes = false;
         let mut brace_depth = 0;
-        let mut chars = update.chars().peekable();
+        let chars = update.chars().peekable();
 
-        while let Some(c) = chars.next() {
+        for c in chars {
             match c {
                 '"' => {
                     in_quotes = !in_quotes;
@@ -743,9 +742,8 @@ impl DeltaComputer {
                 format!("{}{}", scheme_and_domain.to_lowercase(), path)
             } else {
                 // No path, just normalize scheme and domain
-                let normalized = uri.to_lowercase();
                 // Don't remove trailing slashes as they might be significant
-                normalized
+                uri.to_lowercase()
             }
         } else {
             // For non-HTTP URIs, return as-is to preserve case sensitivity
@@ -890,13 +888,13 @@ impl DeltaComputer {
                     object,
                     ..
                 } => {
-                    format!("{}|{}|{}", subject, predicate, object)
+                    format!("{subject}|{predicate}|{object}")
                 }
                 StreamEvent::GraphCleared { graph, .. } => {
-                    format!("graph_clear|{:?}", graph)
+                    format!("graph_clear|{graph:?}")
                 }
                 StreamEvent::SparqlUpdate { query, .. } => {
-                    format!("sparql|{}", query)
+                    format!("sparql|{query}")
                 }
                 _ => {
                     // Other events get unique keys to avoid deduplication
@@ -978,7 +976,7 @@ pub struct DeltaProcessor {
 }
 
 #[derive(Debug, Default)]
-struct ProcessorStats {
+pub struct ProcessorStats {
     updates_processed: u64,
     events_generated: u64,
     batches_sent: u64,
@@ -1132,6 +1130,7 @@ impl BatchDeltaProcessor {
 mod tests {
     use super::*;
     use crate::{EventMetadata, StreamEvent};
+    use std::collections::HashMap;
 
     #[test]
     fn test_sparql_parsing() {

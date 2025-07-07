@@ -130,7 +130,8 @@ pub use production_hardening::{
     CircuitBreaker, EdgeCaseValidator, HealthMetrics, HealthMonitor, ResourceLimits,
 };
 pub use query_optimizer::{
-    IndexType, OptimizationRecommendation, PatternType, QueryCostModel, QueryOptimizer,
+    AdaptiveIndexManager, IndexRecommendation, IndexType, OptimizationRecommendation,
+    OptimizationReport, PatternAnalysisSummary, PatternType, QueryCostModel, QueryOptimizer,
     QueryPattern, QueryStatisticsSummary, QueryStats,
 };
 pub use timestamp_ordering::{
@@ -138,6 +139,7 @@ pub use timestamp_ordering::{
     NodeId as TimestampNodeId, TimestampBundle, TimestampManager, TimestampStats, VectorClock,
 };
 pub use triple_store::{Quad, Triple, TripleStore, TripleStoreConfig, TripleStoreStats};
+pub use wal::{SchemaOperation, WalConfig, WalManager, WalStats};
 
 // Export both simple and advanced configs
 // Removed TdbConfig alias to avoid conflict with config::TdbConfig
@@ -945,7 +947,7 @@ impl TdbStore {
             "pattern_type".to_string(),
             format!("{:?}", pattern.pattern_type()),
         );
-        labels.insert("index_used".to_string(), format!("{:?}", index_used));
+        labels.insert("index_used".to_string(), format!("{index_used:?}"));
         labels.insert("result_count".to_string(), result_count.to_string());
 
         self.metrics_collector
@@ -1002,12 +1004,42 @@ impl TdbStore {
         self.metrics_collector.should_collect()
     }
 
+    /// Get adaptive indexing recommendations
+    pub fn get_index_recommendations(&self) -> Result<Vec<IndexRecommendation>> {
+        self.query_optimizer.get_index_recommendations()
+    }
+
+    /// Get pattern analysis for understanding query behavior
+    pub fn get_pattern_analysis(&self) -> Result<PatternAnalysisSummary> {
+        self.query_optimizer.get_pattern_analysis()
+    }
+
+    /// Check if new indices should be created based on usage patterns
+    pub fn should_create_indices(&self) -> Result<bool> {
+        self.query_optimizer.should_create_indices()
+    }
+
+    /// Get the most beneficial index to create next
+    pub fn get_next_index_to_create(&self) -> Result<Option<IndexRecommendation>> {
+        self.query_optimizer.get_next_index_to_create()
+    }
+
+    /// Generate comprehensive optimization report
+    pub fn generate_optimization_report(&self) -> Result<OptimizationReport> {
+        self.query_optimizer.generate_optimization_report()
+    }
+
+    /// Reset adaptive indexing data (useful for fresh analysis)
+    pub fn reset_adaptive_indexing(&self) -> Result<()> {
+        self.query_optimizer.reset_adaptive_indexing()
+    }
+
     /// Trigger metrics collection
     pub fn collect_metrics(&self) -> Result<()> {
         if self.should_collect_metrics() {
             // Collect current system state
             let stats = self.get_stats()?;
-            let storage_metrics = StorageMetrics {
+            let _storage_metrics = StorageMetrics {
                 total_triples: stats.total_triples,
                 database_size_bytes: stats.total_triples * 100, // Estimated bytes per triple
                 index_size_bytes: stats.total_triples * 50,     // Estimated index size

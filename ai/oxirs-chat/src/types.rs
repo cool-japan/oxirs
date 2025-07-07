@@ -278,6 +278,27 @@ pub enum RichContentElement {
         range: TimelineRange,
         styling: TimelineStyling,
     },
+    /// Quantum-enhanced search results visualization
+    QuantumVisualization {
+        results: Vec<QuantumSearchResult>,
+        entanglement_map: std::collections::HashMap<String, f32>,
+    },
+    /// Consciousness-aware processing insights
+    ConsciousnessInsights {
+        insights: Vec<ConsciousnessInsight>,
+        awareness_level: f32,
+    },
+    /// Advanced reasoning chain visualization
+    ReasoningChain {
+        reasoning_steps: Vec<ReasoningStep>,
+        confidence_score: f32,
+    },
+    /// SPARQL query results with execution metadata
+    SPARQLResults {
+        query: String,
+        results: Vec<std::collections::HashMap<String, String>>,
+        execution_time: Duration,
+    },
 }
 
 /// Query execution status for SPARQL queries
@@ -864,19 +885,28 @@ pub enum MarkerShape {
 pub enum StreamResponseChunk {
     /// Status update with processing stage and progress
     Status {
-        stage: String,
+        stage: ProcessingStage,
         progress: f32, // 0.0 to 1.0
+        message: Option<String>,
     },
-    /// Context information available during processing
-    Context { content: String },
+    /// Context information found during retrieval
+    Context {
+        facts: Vec<String>,
+        sparql_results: Option<std::collections::HashMap<String, String>>,
+        entities: Vec<String>,
+    },
     /// Incremental content being generated
-    Content { content: String, is_final: bool },
+    Content { text: String, is_complete: bool },
     /// Error occurred during processing
-    Error { message: String },
+    Error {
+        error: StructuredError,
+        recoverable: bool,
+    },
     /// Processing complete with final message
     Complete {
-        message: crate::Message,
         total_time: Duration,
+        token_count: usize,
+        final_message: Option<String>,
     },
 }
 
@@ -884,12 +914,14 @@ pub enum StreamResponseChunk {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProcessingStage {
     Initializing,
-    RagRetrieval,
-    RagComplete,
-    SparqlProcessing,
-    SparqlComplete,
-    ResponseGeneration,
-    Complete,
+    RetrievingContext,
+    GeneratingSparql,
+    ExecutingQuery,
+    QuantumProcessing,
+    ConsciousnessProcessing,
+    AdvancedReasoning,
+    GeneratingResponse,
+    Finalizing,
 }
 
 impl ProcessingStage {
@@ -897,12 +929,14 @@ impl ProcessingStage {
     pub fn display_name(&self) -> &'static str {
         match self {
             ProcessingStage::Initializing => "Initializing",
-            ProcessingStage::RagRetrieval => "Retrieving Knowledge",
-            ProcessingStage::RagComplete => "Knowledge Retrieved",
-            ProcessingStage::SparqlProcessing => "Processing Query",
-            ProcessingStage::SparqlComplete => "Query Complete",
-            ProcessingStage::ResponseGeneration => "Generating Response",
-            ProcessingStage::Complete => "Complete",
+            ProcessingStage::RetrievingContext => "Retrieving Context",
+            ProcessingStage::GeneratingSparql => "Generating SPARQL",
+            ProcessingStage::ExecutingQuery => "Executing Query",
+            ProcessingStage::QuantumProcessing => "Quantum Processing",
+            ProcessingStage::ConsciousnessProcessing => "Consciousness Processing",
+            ProcessingStage::AdvancedReasoning => "Advanced Reasoning",
+            ProcessingStage::GeneratingResponse => "Generating Response",
+            ProcessingStage::Finalizing => "Finalizing",
         }
     }
 
@@ -910,12 +944,223 @@ impl ProcessingStage {
     pub fn expected_progress(&self) -> f32 {
         match self {
             ProcessingStage::Initializing => 0.0,
-            ProcessingStage::RagRetrieval => 0.1,
-            ProcessingStage::RagComplete => 0.3,
-            ProcessingStage::SparqlProcessing => 0.5,
-            ProcessingStage::SparqlComplete => 0.6,
-            ProcessingStage::ResponseGeneration => 0.7,
-            ProcessingStage::Complete => 1.0,
+            ProcessingStage::RetrievingContext => 0.1,
+            ProcessingStage::GeneratingSparql => 0.3,
+            ProcessingStage::ExecutingQuery => 0.5,
+            ProcessingStage::QuantumProcessing => 0.6,
+            ProcessingStage::ConsciousnessProcessing => 0.7,
+            ProcessingStage::AdvancedReasoning => 0.8,
+            ProcessingStage::GeneratingResponse => 0.9,
+            ProcessingStage::Finalizing => 1.0,
         }
     }
+}
+
+/// Quantum search result for quantum-enhanced visualizations
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantumSearchResult {
+    pub triple: String,
+    pub score: f32,
+    pub quantum_amplitude: f32,
+    pub phase: f32,
+    pub entanglement_factor: f32,
+    pub coherence_time: f32,
+}
+
+/// Consciousness processing insight
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConsciousnessInsight {
+    pub content: String,
+    pub confidence: f32,
+    pub insight_type: ConsciousnessInsightType,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+}
+
+/// Type of consciousness insight
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ConsciousnessInsightType {
+    MemoryTrace,
+    EmotionalResonance,
+    AttentionFocus,
+    MetacognitiveLearning,
+    TemporalCoherence,
+}
+
+/// Reasoning step in an advanced reasoning chain
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReasoningStep {
+    pub reasoning_type: ReasoningType,
+    pub premise_triples: Vec<String>,
+    pub conclusion_triple: Option<String>,
+    pub confidence: f32,
+    pub explanation: String,
+}
+
+/// Type of reasoning used in a step
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ReasoningType {
+    Deductive,
+    Inductive,
+    Causal,
+    Temporal,
+    Analogical,
+    Probabilistic,
+}
+
+/// Enhanced streaming response chunk with more detailed error handling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EnhancedStreamResponseChunk {
+    /// Status update with detailed stage information
+    Status {
+        stage: ProcessingStage,
+        progress: f32,
+        stage_details: String,
+        estimated_remaining_ms: Option<u64>,
+    },
+    /// Context information with categorization
+    Context {
+        content: String,
+        context_type: ContextType,
+        confidence: f32,
+    },
+    /// Incremental content with metadata
+    Content {
+        content: String,
+        is_final: bool,
+        content_type: ContentType,
+        word_count: usize,
+    },
+    /// Structured error with recovery suggestions
+    Error {
+        error: StructuredError,
+        recovery_suggestions: Vec<String>,
+        can_retry: bool,
+    },
+    /// Processing complete with comprehensive metadata
+    Complete {
+        message: crate::Message,
+        total_time: Duration,
+        performance_metrics: ProcessingMetrics,
+    },
+}
+
+/// Type of context information being streamed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContextType {
+    KnowledgeGraphFacts,
+    EntityExtraction,
+    SparqlGeneration,
+    SparqlExecution,
+    QuantumEnhancement,
+    ConsciousnessInsights,
+    ReasoningAnalysis,
+}
+
+/// Type of content being streamed
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ContentType {
+    PlainText,
+    FormattedText,
+    RichContent,
+    CodeBlock,
+    Table,
+    Visualization,
+}
+
+/// Structured error information for better error handling
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StructuredError {
+    pub error_type: ErrorType,
+    pub message: String,
+    pub error_code: Option<String>,
+    pub component: String,
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub context: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Type of error that occurred
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum ErrorType {
+    RagRetrievalError,
+    SparqlGenerationError,
+    SparqlExecutionError,
+    LlmGenerationError,
+    QuantumProcessingError,
+    ConsciousnessProcessingError,
+    ReasoningError,
+    NetworkError,
+    TimeoutError,
+    ValidationError,
+    InternalError,
+}
+
+/// Performance metrics for processing
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProcessingMetrics {
+    pub total_time_ms: u64,
+    pub rag_retrieval_time_ms: u64,
+    pub sparql_generation_time_ms: u64,
+    pub sparql_execution_time_ms: u64,
+    pub llm_generation_time_ms: u64,
+    pub quantum_processing_time_ms: u64,
+    pub consciousness_processing_time_ms: u64,
+    pub reasoning_time_ms: u64,
+    pub memory_usage_mb: f32,
+    pub cpu_usage_percent: f32,
+    pub cache_hit_rate: f32,
+    pub token_count: usize,
+    pub request_size_bytes: usize,
+    pub response_size_bytes: usize,
+}
+
+// Enhanced context preservation types
+
+/// Conversation analysis for intelligent context compression
+#[derive(Debug, Default, Clone)]
+pub struct ConversationAnalysis {
+    pub question_count: usize,
+    pub resolved_questions: usize,
+    pub unresolved_questions: usize,
+    pub assistant_response_count: usize,
+    pub error_mentions: usize,
+    pub code_examples: usize,
+}
+
+/// Key concept extracted from conversation
+#[derive(Debug, Clone)]
+pub struct KeyConcept {
+    pub name: String,
+    pub frequency: usize,
+    pub importance: f32,
+    pub context: String,
+}
+
+/// Key outcome or decision from conversation
+#[derive(Debug, Clone)]
+pub struct KeyOutcome {
+    pub description: String,
+    pub message_id: String,
+    pub outcome_type: OutcomeType,
+    pub confidence: f32,
+}
+
+/// Type of outcome identified in conversation
+#[derive(Debug, Clone)]
+pub enum OutcomeType {
+    Solution,
+    Decision,
+    Example,
+    Error,
+    Recommendation,
+}
+
+/// User interaction patterns for personalization
+#[derive(Debug, Default, Clone)]
+pub struct InteractionPatterns {
+    pub user_message_count: usize,
+    pub average_user_message_length: usize,
+    pub complex_questions: usize,
+    pub simple_questions: usize,
+    pub technical_messages: usize,
+    pub preferred_response_style: Option<String>,
 }

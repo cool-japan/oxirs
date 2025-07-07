@@ -28,6 +28,15 @@ pub struct CudaKernel {
 unsafe impl Send for CudaKernel {}
 unsafe impl Sync for CudaKernel {}
 
+/// Parameters for similarity kernel execution
+#[derive(Debug, Clone)]
+pub struct SimilarityKernelParams {
+    pub query_count: usize,
+    pub db_count: usize,
+    pub dim: usize,
+    pub metric: String,
+}
+
 /// GPU acceleration engine for vector operations
 #[derive(Debug)]
 pub struct GpuAccelerator {
@@ -74,6 +83,7 @@ impl GpuAccelerator {
         Ok(streams)
     }
 
+    #[allow(unused_variables)]
     fn create_cuda_stream(device_id: i32) -> Result<*mut std::ffi::c_void> {
         #[cfg(feature = "cuda")]
         {
@@ -115,7 +125,7 @@ impl GpuAccelerator {
         // Allocate GPU buffers
         let mut query_buffer = GpuBuffer::new(queries.len(), self.config.device_id)?;
         let mut db_buffer = GpuBuffer::new(database.len(), self.config.device_id)?;
-        let mut result_buffer = GpuBuffer::new(query_count * db_count, self.config.device_id)?;
+        let result_buffer = GpuBuffer::new(query_count * db_count, self.config.device_id)?;
 
         // Copy data to GPU
         query_buffer.copy_from_host(queries)?;
@@ -128,15 +138,21 @@ impl GpuAccelerator {
             _ => return Err(anyhow!("Unsupported similarity metric for GPU")),
         };
 
+        // Create kernel parameters
+        let params = SimilarityKernelParams {
+            query_count,
+            db_count,
+            dim,
+            metric: kernel_name.to_string(),
+        };
+
         // Launch kernel
         self.launch_similarity_kernel(
             kernel_name,
             &query_buffer,
             &db_buffer,
             &result_buffer,
-            query_count,
-            db_count,
-            dim,
+            &params,
         )?;
 
         // Copy results back
@@ -158,9 +174,7 @@ impl GpuAccelerator {
         query_buffer: &GpuBuffer,
         db_buffer: &GpuBuffer,
         result_buffer: &GpuBuffer,
-        query_count: usize,
-        db_count: usize,
-        dim: usize,
+        params: &SimilarityKernelParams,
     ) -> Result<()> {
         #[cfg(feature = "cuda")]
         {
@@ -170,7 +184,7 @@ impl GpuAccelerator {
             // Calculate grid and block dimensions
             let (blocks, threads) = self
                 .device
-                .calculate_optimal_block_config(query_count * db_count);
+                .calculate_optimal_block_config(params.query_count * params.db_count);
 
             // Launch kernel
             self.launch_kernel_impl(
@@ -181,9 +195,9 @@ impl GpuAccelerator {
                     query_buffer.ptr() as *mut std::ffi::c_void,
                     db_buffer.ptr() as *mut std::ffi::c_void,
                     result_buffer.ptr() as *mut std::ffi::c_void,
-                    &query_count as *const usize as *mut std::ffi::c_void,
-                    &db_count as *const usize as *mut std::ffi::c_void,
-                    &dim as *const usize as *mut std::ffi::c_void,
+                    &params.query_count as *const usize as *mut std::ffi::c_void,
+                    &params.db_count as *const usize as *mut std::ffi::c_void,
+                    &params.dim as *const usize as *mut std::ffi::c_void,
                 ],
             )?;
         }
@@ -195,9 +209,7 @@ impl GpuAccelerator {
                 query_buffer,
                 db_buffer,
                 result_buffer,
-                query_count,
-                db_count,
-                dim,
+                params,
                 kernel_name,
             )?;
         }
@@ -208,34 +220,32 @@ impl GpuAccelerator {
     #[cfg(not(feature = "cuda"))]
     fn compute_similarity_cpu(
         &self,
-        query_buffer: &GpuBuffer,
-        db_buffer: &GpuBuffer,
-        result_buffer: &GpuBuffer,
-        query_count: usize,
-        db_count: usize,
-        dim: usize,
-        metric: &str,
+        _query_buffer: &GpuBuffer,
+        _db_buffer: &GpuBuffer,
+        _result_buffer: &GpuBuffer,
+        params: &SimilarityKernelParams,
+        _metric: &str,
     ) -> Result<()> {
         // Simplified CPU fallback
-        let query_data = vec![0.0f32; query_count * dim];
-        let db_data = vec![0.0f32; db_count * dim];
-        let mut results = vec![0.0f32; query_count * db_count];
+        let query_data = vec![0.0f32; params.query_count * params.dim];
+        let db_data = vec![0.0f32; params.db_count * params.dim];
+        let mut results = vec![0.0f32; params.query_count * params.db_count];
 
         // Copy data from "GPU" buffers (actually host memory in fallback)
         // In real implementation, this would be proper GPU memory access
 
-        for i in 0..query_count {
-            for j in 0..db_count {
-                let query_vec = &query_data[i * dim..(i + 1) * dim];
-                let db_vec = &db_data[j * dim..(j + 1) * dim];
+        for i in 0..params.query_count {
+            for j in 0..params.db_count {
+                let query_vec = &query_data[i * params.dim..(i + 1) * params.dim];
+                let db_vec = &db_data[j * params.dim..(j + 1) * params.dim];
 
-                let similarity = match metric {
+                let similarity = match params.metric.as_str() {
                     "cosine_similarity" => self.compute_cosine_similarity(query_vec, db_vec),
                     "euclidean_distance" => self.compute_euclidean_distance(query_vec, db_vec),
                     _ => 0.0,
                 };
 
-                results[i * db_count + j] = similarity;
+                results[i * params.db_count + j] = similarity;
             }
         }
 
@@ -295,6 +305,7 @@ impl GpuAccelerator {
         Ok(compiled_kernel)
     }
 
+    #[allow(unused_variables)]
     fn compile_kernel(&self, name: &str, source: &str) -> Result<CudaKernel> {
         #[cfg(feature = "cuda")]
         {

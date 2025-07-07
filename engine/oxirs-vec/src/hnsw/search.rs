@@ -1,7 +1,7 @@
 //! Search algorithms for HNSW index
 
 use crate::hnsw::{Candidate, HnswIndex};
-use crate::{Vector, VectorIndex};
+use crate::Vector;
 use anyhow::Result;
 use std::collections::BinaryHeap;
 
@@ -50,11 +50,7 @@ impl HnswIndex {
         let results: Vec<(String, f32)> = final_results
             .into_iter()
             .filter_map(|candidate| {
-                if let Some(node) = self.nodes().get(candidate.id) {
-                    Some((node.uri.clone(), candidate.distance))
-                } else {
-                    None
-                }
+                self.nodes().get(candidate.id).map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
 
@@ -182,11 +178,7 @@ impl HnswIndex {
             .into_iter()
             .take(k)
             .filter_map(|candidate| {
-                if let Some(node) = self.nodes().get(candidate.id) {
-                    Some((node.uri.clone(), candidate.distance))
-                } else {
-                    None
-                }
+                self.nodes().get(candidate.id).map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
 
@@ -352,11 +344,7 @@ impl HnswIndex {
             .into_iter()
             .take(k)
             .filter_map(|candidate| {
-                if let Some(node) = self.nodes().get(candidate.id) {
-                    Some((node.uri.clone(), candidate.distance))
-                } else {
-                    None
-                }
+                self.nodes().get(candidate.id).map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
 

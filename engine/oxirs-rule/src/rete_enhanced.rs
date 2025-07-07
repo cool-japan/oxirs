@@ -8,12 +8,11 @@
 //! - Builtin predicate evaluation
 
 use crate::forward::Substitution;
-use crate::{Rule, RuleAtom, Term};
+use crate::{RuleAtom, Term};
 use anyhow::{anyhow, Result};
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
-use tracing::{debug, info, trace, warn};
+use tracing::warn;
 
 /// Enhanced token with timestamp and priority
 #[derive(Debug, Clone)]
@@ -334,7 +333,7 @@ impl BetaMemory {
 
     /// Evict least recently used token
     fn evict_lru(&mut self) {
-        if let Some((&oldest_key, _)) = self.access_times.iter().min_by_key(|(_, &time)| time) {
+        if let Some((&oldest_key, _)) = self.access_times.iter().min_by_key(|&(_, &time)| time) {
             if oldest_key < 1000000 {
                 // Left side
                 if oldest_key < self.left_tokens.len() {

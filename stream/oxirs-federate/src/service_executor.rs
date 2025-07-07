@@ -1055,7 +1055,7 @@ impl JoinExecutor {
         if let Some((min_idx, _)) = remaining
             .iter()
             .enumerate()
-            .min_by_key(|(_, &idx)| self.get_result_size(inputs[idx]))
+            .min_by_key(|&(_, &idx)| self.get_result_size(inputs[idx]))
         {
             order.push(remaining.remove(min_idx));
         }

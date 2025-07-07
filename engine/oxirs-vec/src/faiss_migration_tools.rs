@@ -12,25 +12,16 @@
 //! - Automatic format detection and conversion
 
 use crate::{
-    faiss_compatibility::{
-        FaissCompatibility, FaissIndexMetadata, FaissIndexType, FaissMetricType,
-    },
-    faiss_integration::{FaissConfig, FaissIndex},
-    faiss_native_integration::{NativeFaissConfig, NativeFaissIndex},
-    hnsw::{HnswConfig, HnswIndex},
-    index::{IndexConfig, VectorIndex},
-    ivf::{IvfConfig, IvfIndex},
-    similarity::SimilarityMetric,
-    Vector, VectorPrecision,
+    faiss_compatibility::FaissIndexType, faiss_native_integration::NativeFaissConfig,
 };
-use anyhow::{Context, Error as AnyhowError, Result};
+use anyhow::{Error as AnyhowError, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{debug, info, span, Level};
 
 /// Migration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -576,8 +567,7 @@ impl FaissMigrationTool {
         // Read file header to detect format
         if !source_path.exists() {
             return Err(AnyhowError::msg(format!(
-                "Source path does not exist: {:?}",
-                source_path
+                "Source path does not exist: {source_path:?}"
             )));
         }
 
@@ -634,7 +624,7 @@ impl FaissMigrationTool {
     async fn validate_source_data(
         &self,
         source_path: &Path,
-        format: &MigrationFormat,
+        _format: &MigrationFormat,
     ) -> Result<SourceMetadata> {
         let span = span!(Level::DEBUG, "validate_source_data");
         let _enter = span.enter();
@@ -658,7 +648,7 @@ impl FaissMigrationTool {
     }
 
     /// Create target index based on source metadata
-    async fn create_target_index(&self, source_metadata: &SourceMetadata) -> Result<TargetIndex> {
+    async fn create_target_index(&self, _source_metadata: &SourceMetadata) -> Result<TargetIndex> {
         let span = span!(Level::DEBUG, "create_target_index");
         let _enter = span.enter();
 
@@ -675,7 +665,7 @@ impl FaissMigrationTool {
                 // Create appropriate FAISS index
                 debug!("Creating FAISS native index: {:?}", index_type);
                 Ok(TargetIndex::FaissNative {
-                    index_type: index_type.clone(),
+                    index_type: *index_type,
                     config,
                 })
             }
@@ -764,10 +754,10 @@ impl FaissMigrationTool {
     /// Incremental data transfer with checkpoints
     async fn transfer_incremental(
         &self,
-        source_path: &Path,
+        _source_path: &Path,
         _source_format: &MigrationFormat,
         _target_index: TargetIndex,
-        target_path: &Path,
+        _target_path: &Path,
         batch_size: usize,
         checkpoint_interval: usize,
     ) -> Result<()> {
@@ -818,8 +808,8 @@ impl FaissMigrationTool {
         // Simulate parallel processing
         let handles = (0..thread_count)
             .map(|thread_id| {
-                let source_path = source_path.to_path_buf();
-                let target_path = target_path.to_path_buf();
+                let _source_path = source_path.to_path_buf();
+                let _target_path = target_path.to_path_buf();
 
                 tokio::spawn(async move {
                     info!("Thread {} processing data", thread_id);
@@ -830,7 +820,7 @@ impl FaissMigrationTool {
             .collect::<Vec<_>>();
 
         for handle in handles {
-            handle.await.map_err(|e| AnyhowError::new(e))??;
+            handle.await.map_err(AnyhowError::new)??;
         }
 
         Ok(())
@@ -865,7 +855,7 @@ impl FaissMigrationTool {
             processed_count,
             batch_index: processed_count / 1000, // Assume 1000 vectors per batch
             state_data: HashMap::new(),
-            checksum: format!("checkpoint_{}", processed_count),
+            checksum: format!("checkpoint_{processed_count}"),
         };
 
         {
@@ -947,8 +937,8 @@ impl FaissMigrationTool {
     /// Verify performance preservation
     async fn verify_performance_preservation(
         &self,
-        source_path: &Path,
-        target_path: &Path,
+        _source_path: &Path,
+        _target_path: &Path,
     ) -> Result<bool> {
         debug!("Verifying performance preservation");
 
@@ -979,8 +969,8 @@ impl FaissMigrationTool {
     /// Compare performance between source and target
     async fn compare_performance(
         &self,
-        source_path: &Path,
-        target_path: &Path,
+        _source_path: &Path,
+        _target_path: &Path,
     ) -> Result<PerformanceComparison> {
         let span = span!(Level::DEBUG, "compare_performance");
         let _enter = span.enter();
@@ -1035,7 +1025,7 @@ impl FaissMigrationTool {
         state.processed_vectors = current;
         state.total_vectors = total;
 
-        if let Some(ref progress) = *self.progress.lock().unwrap() {
+        if let Some(ref _progress) = *self.progress.lock().unwrap() {
             // Update progress bar (simplified)
             debug!(
                 "Progress: {}/{} ({}%)",
@@ -1081,13 +1071,12 @@ impl FaissMigrationTool {
     }
 
     fn generate_recommendations(&self) -> Result<Vec<String>> {
-        let mut recommendations = Vec::new();
-
-        recommendations.push("Consider enabling GPU acceleration for large datasets".to_string());
-        recommendations
-            .push("Use incremental migration strategy for datasets > 10M vectors".to_string());
-        recommendations.push("Enable compression to reduce storage requirements".to_string());
-        recommendations.push("Monitor memory usage during large migrations".to_string());
+        let recommendations = vec![
+            "Consider enabling GPU acceleration for large datasets".to_string(),
+            "Use incremental migration strategy for datasets > 10M vectors".to_string(),
+            "Enable compression to reduce storage requirements".to_string(),
+            "Monitor memory usage during large migrations".to_string(),
+        ];
 
         Ok(recommendations)
     }

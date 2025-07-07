@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, RwLock};
-use tokio::time::{interval, timeout};
-use tracing::{debug, error, info, warn};
+use tokio::time::interval;
+use tracing::{debug, info};
 
 /// Health status of a cluster node
 #[derive(Debug, Clone, Serialize, Deserialize)]

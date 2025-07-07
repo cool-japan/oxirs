@@ -41,6 +41,7 @@ pub struct BindingSite {
 
 /// Binding specificity
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum BindingSpecificity {
     DNA,
     RNA,
@@ -407,6 +408,7 @@ pub enum DnaRepairType {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum DamageSensorType {
     ATM,
     ATR,
@@ -415,6 +417,7 @@ pub enum DamageSensorType {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum MetabolicSensorType {
     AMPK,
     MTor,
@@ -557,6 +560,12 @@ impl CheckpointSystem {
     }
 }
 
+impl Default for SpindleCheckpoint {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpindleCheckpoint {
     /// Create new spindle checkpoint
     pub fn new() -> Self {
@@ -564,13 +573,13 @@ impl SpindleCheckpoint {
             mad_proteins: vec![
                 MadProtein {
                     protein_type: MadProteinType::Mad1,
-                    activity_level: 1.0,
+                    activity_level: 0.1, // Low activity for aligned chromosomes
                     localization: ProteinLocalization::Kinetochore,
                     binding_partners: vec!["Mad2".to_string()],
                 },
                 MadProtein {
                     protein_type: MadProteinType::Mad2,
-                    activity_level: 1.0,
+                    activity_level: 0.1, // Low activity for aligned chromosomes
                     localization: ProteinLocalization::Kinetochore,
                     binding_partners: vec!["Mad1".to_string(), "Cdc20".to_string()],
                 },
@@ -592,7 +601,7 @@ impl SpindleCheckpoint {
             apc_c_regulation: ApcCRegulation {
                 cdc20_level: 0.5,
                 cdh1_level: 0.1,
-                activity_state: ApcCActivityState::Inactive,
+                activity_state: ApcCActivityState::Active, // Active for healthy checkpoint
                 substrate_recognition: SubstrateRecognition {
                     destruction_box: true,
                     ken_box: true,
@@ -615,6 +624,12 @@ impl SpindleCheckpoint {
         );
 
         Ok(mad_activity < 0.5 && apc_active)
+    }
+}
+
+impl Default for DnaDamageCheckpoint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -667,6 +682,12 @@ impl DnaDamageCheckpoint {
     }
 }
 
+impl Default for ReplicationCheckpoint {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReplicationCheckpoint {
     /// Create new replication checkpoint
     pub fn new() -> Self {
@@ -685,6 +706,12 @@ impl ReplicationCheckpoint {
     pub fn check_completion(&self) -> OxirsResult<bool> {
         let stalled_forks = self.replication_forks.iter().filter(|f| f.stalled).count();
         Ok(stalled_forks == 0)
+    }
+}
+
+impl Default for MetabolicCheckpoint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -722,6 +749,12 @@ impl MetabolicCheckpoint {
     /// Check resource availability
     pub fn check_resources(&self) -> OxirsResult<bool> {
         Ok(self.energy_levels.energy_charge > 0.7 && self.nutrient_availability.glucose > 1.0)
+    }
+}
+
+impl Default for QualityControlCheckpoint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

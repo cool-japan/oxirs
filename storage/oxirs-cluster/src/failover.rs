@@ -3,9 +3,7 @@
 //! Automated failover and recovery system for OxiRS cluster nodes.
 //! Handles leader election, node replacement, and service recovery.
 
-use crate::health_monitor::{
-    HealthEvent, HealthMonitor, NodeHealth, NodeHealthLevel, NodeHealthStatus,
-};
+use crate::health_monitor::{HealthEvent, HealthMonitor, NodeHealthLevel};
 use crate::raft::OxirsNodeId;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};

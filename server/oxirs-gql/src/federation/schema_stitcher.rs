@@ -1,17 +1,15 @@
 //! Schema stitching engine for merging multiple GraphQL schemas
 
 use anyhow::{Context, Result};
-use async_trait::async_trait;
 use chrono;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use super::config::{RemoteEndpoint, RetryStrategy};
-use crate::ast::{Document, OperationDefinition, OperationType, SelectionSet, Value};
+use crate::ast::Value;
 use crate::introspection::IntrospectionQuery;
-use crate::types::{FieldType, GraphQLType, ObjectType, Schema};
+use crate::types::{GraphQLType, ObjectType, Schema};
 
 /// Schema stitching engine for merging multiple GraphQL schemas
 pub struct SchemaStitcher {

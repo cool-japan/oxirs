@@ -7,8 +7,8 @@ use std::collections::{HashMap, HashSet};
 
 use tracing::{debug, span, Level};
 
-use crate::functions::{Expression, ExpressionEvaluator, StarFunction};
-use crate::model::{StarGraph, StarTerm, StarTriple, Variable};
+use crate::functions::{Expression, ExpressionEvaluator};
+use crate::model::{StarGraph, StarTerm, StarTriple};
 use crate::store::StarStore;
 use crate::{StarError, StarResult};
 
@@ -934,8 +934,8 @@ impl QueryParser {
                 // Extract variables
                 let parts: Vec<&str> = line.split_whitespace().collect();
                 for part in &parts[1..] {
-                    if part.starts_with('?') {
-                        select_vars.push(part[1..].to_string());
+                    if let Some(stripped) = part.strip_prefix('?') {
+                        select_vars.push(stripped.to_string());
                     }
                 }
             } else if line.to_uppercase().contains("WHERE") {
@@ -958,10 +958,7 @@ impl QueryParser {
         let parts = Self::tokenize_pattern(line)?;
 
         if parts.len() != 3 {
-            return Err(StarError::query_error(format!(
-                "Invalid triple pattern: {}",
-                line
-            )));
+            return Err(StarError::query_error(format!("Invalid triple pattern: {line}")));
         }
 
         let subject = Self::parse_term_pattern(&parts[0])?;
@@ -1019,8 +1016,8 @@ impl QueryParser {
         let term_str = term_str.trim();
 
         // Variable
-        if term_str.starts_with('?') {
-            return Ok(TermPattern::Variable(term_str[1..].to_string()));
+        if let Some(stripped) = term_str.strip_prefix('?') {
+            return Ok(TermPattern::Variable(stripped.to_string()));
         }
 
         // Quoted triple pattern
@@ -1044,8 +1041,7 @@ impl QueryParser {
         }
 
         // Blank node
-        if term_str.starts_with("_:") {
-            let id = &term_str[2..];
+        if let Some(id) = term_str.strip_prefix("_:") {
             return StarTerm::blank_node(id);
         }
 
@@ -1058,8 +1054,7 @@ impl QueryParser {
         }
 
         Err(StarError::query_error(format!(
-            "Cannot parse term: {}",
-            term_str
+            "Cannot parse term: {term_str}"
         )))
     }
 }
@@ -1153,7 +1148,7 @@ mod tests {
 
     #[test]
     fn test_bgp_execution() {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         // Add some test data
         let triple1 = StarTriple::new(
@@ -1314,7 +1309,7 @@ mod tests {
         // Add multiple triples
         for i in 0..10 {
             let triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/person{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/person{i}")).unwrap(),
                 StarTerm::iri("http://example.org/age").unwrap(),
                 StarTerm::literal(&format!("{}", 20 + i)).unwrap(),
             );
@@ -1383,8 +1378,6 @@ mod tests {
 
     #[test]
     fn test_sparql_star_functions_in_filters() {
-        use crate::functions::{Expression, StarFunction};
-
         let store = StarStore::new();
 
         // Add test data with quoted triples
@@ -1429,8 +1422,6 @@ mod tests {
 
     #[test]
     fn test_sparql_star_function_composition() {
-        use crate::functions::{Expression, StarFunction};
-
         let store = StarStore::new();
 
         // Create nested quoted triple
@@ -1484,8 +1475,6 @@ mod tests {
 
     #[test]
     fn test_filter_with_triple_construction() {
-        use crate::functions::Expression;
-
         let store = StarStore::new();
 
         // Add some triples

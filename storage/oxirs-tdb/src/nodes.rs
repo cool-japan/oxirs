@@ -4,11 +4,10 @@
 //! Provides efficient serialization with dictionary compression and term interning.
 
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{self, Debug, Display};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::{Arc, Mutex, RwLock};
 
 use crate::compression::{
@@ -1191,19 +1190,17 @@ impl NodeTable {
         match self.config.default_compression {
             CompressionType::Dictionary => {
                 // Dictionary compression for strings
-                if let Ok(dict_data) = self.dictionary_compress(data, term) {
-                    Ok((dict_data, CompressionType::Dictionary))
-                } else {
-                    Ok((data.to_vec(), CompressionType::None))
+                match self.dictionary_compress(data, term) {
+                    Ok(dict_data) => Ok((dict_data, CompressionType::Dictionary)),
+                    _ => Ok((data.to_vec(), CompressionType::None)),
                 }
             }
             CompressionType::Prefix => {
                 // Prefix compression for IRIs
                 if let Term::Iri(iri) = term {
-                    if let Ok(prefix_data) = self.prefix_compress(iri) {
-                        Ok((prefix_data, CompressionType::Prefix))
-                    } else {
-                        Ok((data.to_vec(), CompressionType::None))
+                    match self.prefix_compress(iri) {
+                        Ok(prefix_data) => Ok((prefix_data, CompressionType::Prefix)),
+                        _ => Ok((data.to_vec(), CompressionType::None)),
                     }
                 } else {
                     Ok((data.to_vec(), CompressionType::None))
@@ -1285,19 +1282,15 @@ impl NodeTable {
 
     fn legacy_compress_data(&self, data: &[u8], term: &Term) -> Result<(Vec<u8>, CompressionType)> {
         match self.config.default_compression {
-            CompressionType::Dictionary => {
-                if let Ok(dict_data) = self.dictionary_compress(data, term) {
-                    Ok((dict_data, CompressionType::Dictionary))
-                } else {
-                    Ok((data.to_vec(), CompressionType::None))
-                }
-            }
+            CompressionType::Dictionary => match self.dictionary_compress(data, term) {
+                Ok(dict_data) => Ok((dict_data, CompressionType::Dictionary)),
+                _ => Ok((data.to_vec(), CompressionType::None)),
+            },
             CompressionType::Prefix => {
                 if let Term::Iri(iri) = term {
-                    if let Ok(prefix_data) = self.prefix_compress(iri) {
-                        Ok((prefix_data, CompressionType::Prefix))
-                    } else {
-                        Ok((data.to_vec(), CompressionType::None))
+                    match self.prefix_compress(iri) {
+                        Ok(prefix_data) => Ok((prefix_data, CompressionType::Prefix)),
+                        _ => Ok((data.to_vec(), CompressionType::None)),
                     }
                 } else {
                     Ok((data.to_vec(), CompressionType::None))
@@ -1329,7 +1322,7 @@ impl NodeTable {
         Ok(())
     }
 
-    fn dictionary_compress(&self, data: &[u8], term: &Term) -> Result<Vec<u8>> {
+    fn dictionary_compress(&self, _data: &[u8], term: &Term) -> Result<Vec<u8>> {
         // For complex terms with metadata, don't use dictionary compression
         match term {
             Term::Literal {
@@ -1437,7 +1430,7 @@ impl NodeTable {
 
         let prefix = iri_prefixes
             .iter()
-            .find(|(_, &id)| id == prefix_id)
+            .find(|&(_, &id)| id == prefix_id)
             .map(|(prefix, _)| prefix)
             .ok_or_else(|| anyhow!("Prefix ID {} not found", prefix_id))?;
 

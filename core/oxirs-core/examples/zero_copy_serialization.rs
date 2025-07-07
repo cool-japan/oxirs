@@ -1,7 +1,7 @@
 //! Example demonstrating zero-copy serialization for efficient RDF processing
 
 use bytes::Buf;
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use oxirs_core::io::{
     MmapReader, MmapWriter, ZeroCopyDeserialize, ZeroCopySerialize, ZeroCopyTerm, ZeroCopyTriple,
 };
@@ -56,11 +56,8 @@ fn basic_example() -> Result<(), Box<dyn std::error::Error>> {
     assert!(remaining.is_empty());
 
     // Access data without allocation
-    match &deserialized.subject {
-        ZeroCopyTerm::NamedNode(iri) => {
-            println!("Subject: {}", iri.as_str());
-        }
-        _ => {}
+    if let ZeroCopyTerm::NamedNode(iri) = &deserialized.subject {
+        println!("Subject: {}", iri.as_str());
     }
     println!("Predicate: {}", deserialized.predicate.as_str());
     match &deserialized.object {
@@ -295,12 +292,12 @@ fn large_dataset_example() -> Result<(), Box<dyn std::error::Error>> {
         let process_time = start.elapsed();
         let process_rate = num_triples as f64 / process_time.as_secs_f64();
 
-        println!("  Processing time: {:?}", process_time);
-        println!("  Processing rate: {:.0} triples/second", process_rate);
+        println!("  Processing time: {process_time:?}");
+        println!("  Processing rate: {process_rate:.0} triples/second");
         println!("  Object types:");
-        println!("    Literals: {}", literal_count);
-        println!("    Named nodes: {}", named_node_count);
-        println!("    Blank nodes: {}", blank_node_count);
+        println!("    Literals: {literal_count}");
+        println!("    Named nodes: {named_node_count}");
+        println!("    Blank nodes: {blank_node_count}");
     }
 
     Ok(())

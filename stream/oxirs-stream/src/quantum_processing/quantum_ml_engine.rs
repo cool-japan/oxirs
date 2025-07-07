@@ -1,12 +1,12 @@
 //! Quantum machine learning engine for advanced pattern recognition and optimization
 
 use super::QuantumConfig;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Quantum machine learning engine with comprehensive algorithm support
 pub struct QuantumMLEngine {
@@ -190,7 +190,7 @@ impl QuantumMLEngine {
         // Input layer with Hadamard gates for superposition
         let input_layer = QuantumLayer {
             layer_type: LayerType::PQC,
-            gates: (0..qubit_count).map(|i| QuantumGate::H(i)).collect(),
+            gates: (0..qubit_count).map(QuantumGate::H).collect(),
             parameters: vec![0.0; qubit_count],
             entanglement: EntanglementPattern::Linear,
         };
@@ -201,7 +201,7 @@ impl QuantumMLEngine {
             let mut gates = Vec::new();
 
             // Add rotation gates
-            for qubit in 0..qubit_count {
+            for _qubit in 0..qubit_count {
                 gates.push(QuantumGate::RY(0.0)); // Will be parameterized
                 gates.push(QuantumGate::RZ(0.0)); // Will be parameterized
             }
@@ -227,7 +227,7 @@ impl QuantumMLEngine {
         // Output layer with measurements
         let output_layer = QuantumLayer {
             layer_type: LayerType::QPooling,
-            gates: (0..qubit_count).map(|i| QuantumGate::Z(i)).collect(),
+            gates: (0..qubit_count).map(QuantumGate::Z).collect(),
             parameters: vec![],
             entanglement: EntanglementPattern::Linear,
         };
@@ -359,10 +359,15 @@ impl QuantumMLEngine {
         // Simplified gate operations for demonstration
         match gate {
             QuantumGate::H(qubit) => self.apply_hadamard(state, *qubit).await,
+            QuantumGate::RX(angle) => self.apply_rotation_x(state, *angle).await,
             QuantumGate::RY(angle) => self.apply_rotation_y(state, *angle).await,
             QuantumGate::RZ(angle) => self.apply_rotation_z(state, *angle).await,
+            QuantumGate::X(qubit) => self.apply_pauli_x(state, *qubit).await,
+            QuantumGate::Y(qubit) => self.apply_pauli_y(state, *qubit).await,
+            QuantumGate::Z(qubit) => self.apply_pauli_z(state, *qubit).await,
             QuantumGate::CNOT(control, target) => self.apply_cnot(state, *control, *target).await,
-            _ => Ok(state.clone()), // Placeholder for other gates
+            QuantumGate::CPhase(phase, control, target) => self.apply_cphase(state, *phase, *control, *target).await,
+            QuantumGate::Toffoli(control1, control2, target) => self.apply_toffoli(state, *control1, *control2, *target).await,
         }
     }
 
@@ -395,7 +400,7 @@ impl QuantumMLEngine {
 
         let mut new_amplitudes = state.amplitudes.clone();
         for amp in &mut new_amplitudes {
-            *amp = *amp * cos_half; // Simplified - should be proper matrix multiplication
+            *amp *= cos_half; // Simplified - should be proper matrix multiplication
         }
 
         Ok(QuantumState {
@@ -410,7 +415,7 @@ impl QuantumMLEngine {
 
         let mut new_amplitudes = state.amplitudes.clone();
         for amp in &mut new_amplitudes {
-            *amp = *amp * phase_real; // Simplified - ignoring imaginary part for now
+            *amp *= phase_real; // Simplified - ignoring imaginary part for now
         }
 
         Ok(QuantumState {
@@ -430,6 +435,123 @@ impl QuantumMLEngine {
 
         for i in 0..n_states {
             if (i >> control) & 1 == 1 {
+                let j = i ^ (1 << target);
+                if j < n_states {
+                    new_amplitudes.swap(i, j);
+                }
+            }
+        }
+
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
+    }
+
+    /// Apply rotation around X-axis
+    async fn apply_rotation_x(&self, state: &QuantumState, angle: f64) -> Result<QuantumState> {
+        // Simplified rotation implementation
+        let cos_half = (angle / 2.0).cos();
+        let _sin_half = (angle / 2.0).sin();
+
+        let mut new_amplitudes = state.amplitudes.clone();
+        for amp in &mut new_amplitudes {
+            *amp *= cos_half; // Simplified - should be proper matrix multiplication
+        }
+
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
+    }
+
+    /// Apply Pauli-X gate
+    async fn apply_pauli_x(&self, state: &QuantumState, qubit: usize) -> Result<QuantumState> {
+        let mut new_amplitudes = state.amplitudes.clone();
+        let n_states = new_amplitudes.len();
+
+        for i in 0..n_states {
+            let j = i ^ (1 << qubit);
+            if j < n_states && i != j {
+                new_amplitudes.swap(i, j);
+            }
+        }
+
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
+    }
+
+    /// Apply Pauli-Y gate
+    async fn apply_pauli_y(&self, state: &QuantumState, qubit: usize) -> Result<QuantumState> {
+        let mut new_amplitudes = state.amplitudes.clone();
+        let n_states = new_amplitudes.len();
+
+        for i in 0..n_states {
+            let j = i ^ (1 << qubit);
+            if j < n_states && i != j {
+                // Pauli-Y involves both bit flip and phase
+                new_amplitudes.swap(i, j);
+                if (i >> qubit) & 1 == 1 {
+                    new_amplitudes[i] *= -1.0; // Apply -i phase factor (simplified)
+                }
+            }
+        }
+
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
+    }
+
+    /// Apply Pauli-Z gate
+    async fn apply_pauli_z(&self, state: &QuantumState, qubit: usize) -> Result<QuantumState> {
+        let mut new_amplitudes = state.amplitudes.clone();
+
+        for (i, amp) in new_amplitudes.iter_mut().enumerate() {
+            if (i >> qubit) & 1 == 1 {
+                *amp *= -1.0; // Apply phase flip
+            }
+        }
+
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
+    }
+
+    /// Apply Controlled Phase gate
+    async fn apply_cphase(
+        &self,
+        state: &QuantumState,
+        phase: f64,
+        control: usize,
+        target: usize,
+    ) -> Result<QuantumState> {
+        let mut new_amplitudes = state.amplitudes.clone();
+        let phase_factor = phase.cos(); // Simplified phase implementation
+
+        for (i, amp) in new_amplitudes.iter_mut().enumerate() {
+            if ((i >> control) & 1 == 1) && ((i >> target) & 1 == 1) {
+                *amp *= phase_factor; // Apply phase when both qubits are |1⟩
+            }
+        }
+
+        Ok(QuantumState {
+            amplitudes: new_amplitudes,
+        })
+    }
+
+    /// Apply Toffoli gate (CCX)
+    async fn apply_toffoli(
+        &self,
+        state: &QuantumState,
+        control1: usize,
+        control2: usize,
+        target: usize,
+    ) -> Result<QuantumState> {
+        let mut new_amplitudes = state.amplitudes.clone();
+        let n_states = new_amplitudes.len();
+
+        for i in 0..n_states {
+            // Only flip target if both control qubits are |1⟩
+            if ((i >> control1) & 1 == 1) && ((i >> control2) & 1 == 1) {
                 let j = i ^ (1 << target);
                 if j < n_states {
                     new_amplitudes.swap(i, j);

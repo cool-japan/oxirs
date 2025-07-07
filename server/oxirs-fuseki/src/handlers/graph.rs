@@ -17,6 +17,7 @@ use crate::{
     server::AppState,
     store::Store,
 };
+use std::sync::Arc;
 use axum::{
     body::Body,
     extract::{Query, State},
@@ -66,7 +67,7 @@ mod rdf_content_types {
 #[instrument(skip(state, headers, body))]
 pub async fn graph_store_handler(
     method: Method,
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Query(params): Query<GraphStoreParams>,
     body: Body,

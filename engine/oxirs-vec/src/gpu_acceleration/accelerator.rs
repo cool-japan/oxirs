@@ -37,7 +37,7 @@ impl GpuAccelerator {
     /// Create new GPU accelerator with specified configuration
     pub fn new(config: GpuConfig) -> Result<Self> {
         let device = super::get_gpu_device(config.device_id)?;
-        
+
         Ok(Self {
             config,
             device,

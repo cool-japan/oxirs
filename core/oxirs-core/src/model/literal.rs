@@ -7,11 +7,13 @@ use crate::model::{NamedNode, NamedNodeRef, ObjectTerm, RdfTerm};
 use crate::vocab::{rdf, xsd};
 use crate::OxirsError;
 use lazy_static::lazy_static;
+use oxilangtag::LanguageTag as OxiLanguageTag;
+use oxsdatatypes::{Boolean, Date, DateTime, Decimal, Double, Float, Integer, Time};
 use regex::Regex;
 use std::borrow::Cow;
 use std::fmt::{self, Write};
 use std::hash::Hash;
-// use std::str::FromStr; // Used for parsing but currently commented out
+use std::str::FromStr;
 
 /// Language tag validation error type
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -107,52 +109,13 @@ lazy_static! {
     ).expect("Time regex compilation failed");
 }
 
-/// Validates a language tag according to BCP 47 (RFC 5646)
+/// Validates a language tag according to BCP 47 (RFC 5646) using oxilangtag
 fn validate_language_tag(tag: &str) -> Result<(), LanguageTagParseError> {
-    if tag.is_empty() {
-        return Err(LanguageTagParseError {
-            message: "Language tag cannot be empty".to_string(),
-        });
-    }
-
-    // Check overall structure with regex
-    if !LANGUAGE_TAG_REGEX.is_match(tag) {
-        return Err(LanguageTagParseError {
-            message: format!(
-                "Invalid language tag format: '{}'. Must follow BCP 47 specification",
-                tag
-            ),
-        });
-    }
-
-    // Additional validations for common cases
-    let parts: Vec<&str> = tag.split('-').collect();
-
-    if parts.is_empty() {
-        return Err(LanguageTagParseError {
-            message: "Language tag cannot be empty".to_string(),
-        });
-    }
-
-    // First part should be a valid language subtag
-    let language_subtag = parts[0];
-    if language_subtag.len() < 2 || language_subtag.len() > 8 {
-        return Err(LanguageTagParseError {
-            message: format!(
-                "Invalid language subtag length: '{}'. Must be 2-8 characters",
-                language_subtag
-            ),
-        });
-    }
-
-    // Check for common invalid patterns
-    if tag.starts_with('-') || tag.ends_with('-') || tag.contains("--") {
-        return Err(LanguageTagParseError {
-            message: format!("Invalid language tag structure: '{}'", tag),
-        });
-    }
-
-    Ok(())
+    OxiLanguageTag::parse(tag)
+        .map(|_| ())
+        .map_err(|e| LanguageTagParseError {
+            message: format!("Invalid language tag '{tag}': {e}"),
+        })
 }
 
 /// Validates a literal value against its XSD datatype
@@ -166,19 +129,12 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
             Ok(())
         }
 
-        // Boolean type
-        "http://www.w3.org/2001/XMLSchema#boolean" => {
-            if BOOLEAN_REGEX.is_match(value) {
-                Ok(())
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid boolean value: '{}'. Must be true, false, 1, or 0",
-                    value
-                )))
-            }
-        }
+        // Boolean type - use oxsdatatypes Boolean parsing
+        "http://www.w3.org/2001/XMLSchema#boolean" => Boolean::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid boolean value '{value}': {e}"))),
 
-        // Integer types
+        // Integer types - use oxsdatatypes Integer parsing with range validation
         "http://www.w3.org/2001/XMLSchema#integer"
         | "http://www.w3.org/2001/XMLSchema#long"
         | "http://www.w3.org/2001/XMLSchema#int"
@@ -191,126 +147,35 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
         | "http://www.w3.org/2001/XMLSchema#positiveInteger"
         | "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
         | "http://www.w3.org/2001/XMLSchema#negativeInteger"
-        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
-            if INTEGER_REGEX.is_match(value) {
-                // Additional validation for specific integer types
-                validate_integer_range(value, datatype_iri)
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid integer format: '{}'",
-                    value
-                )))
-            }
-        }
+        | "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => Integer::from_str(value)
+            .map_err(|e| OxirsError::Parse(format!("Invalid integer value '{value}': {e}")))
+            .and_then(|integer| validate_integer_range_oxs(integer, datatype_iri)),
 
-        // Decimal types
-        "http://www.w3.org/2001/XMLSchema#decimal" => {
-            if DECIMAL_REGEX.is_match(value) {
-                Ok(())
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid decimal format: '{}'",
-                    value
-                )))
-            }
-        }
+        // Decimal type - use oxsdatatypes Decimal parsing
+        "http://www.w3.org/2001/XMLSchema#decimal" => Decimal::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid decimal value '{value}': {e}"))),
 
-        // Floating point types
-        "http://www.w3.org/2001/XMLSchema#double" | "http://www.w3.org/2001/XMLSchema#float" => {
-            if DOUBLE_REGEX.is_match(value) {
-                Ok(())
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid floating point format: '{}'",
-                    value
-                )))
-            }
-        }
+        // Floating point types - use oxsdatatypes Float/Double parsing
+        "http://www.w3.org/2001/XMLSchema#float" => Float::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid float value '{value}': {e}"))),
+        "http://www.w3.org/2001/XMLSchema#double" => Double::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid double value '{value}': {e}"))),
 
-        // Date/time types
-        "http://www.w3.org/2001/XMLSchema#dateTime" => {
-            if DATETIME_REGEX.is_match(value) {
-                Ok(())
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid dateTime format: '{}'. Expected ISO 8601 format",
-                    value
-                )))
-            }
-        }
+        // Date/time types - use oxsdatatypes parsing
+        "http://www.w3.org/2001/XMLSchema#dateTime" => DateTime::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid dateTime value '{value}': {e}"))),
 
-        "http://www.w3.org/2001/XMLSchema#date" => {
-            if DATE_REGEX.is_match(value) {
-                // Additional validation for valid date values
-                let date_part = if value.contains('T') {
-                    value.split('T').next().unwrap()
-                } else if value.contains('Z') || value.contains('+') || value.contains('-') {
-                    &value[..10]
-                } else {
-                    value
-                };
+        "http://www.w3.org/2001/XMLSchema#date" => Date::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid date value '{value}': {e}"))),
 
-                let parts: Vec<&str> = date_part.split('-').collect();
-                if parts.len() == 3 {
-                    let year: i32 = parts[0].parse().map_err(|_| {
-                        OxirsError::Parse(format!("Invalid year in date: {}", value))
-                    })?;
-                    let month: u32 = parts[1].parse().map_err(|_| {
-                        OxirsError::Parse(format!("Invalid month in date: {}", value))
-                    })?;
-                    let day: u32 = parts[2].parse().map_err(|_| {
-                        OxirsError::Parse(format!("Invalid day in date: {}", value))
-                    })?;
-
-                    // Validate month
-                    if month < 1 || month > 12 {
-                        return Err(OxirsError::Parse(format!(
-                            "Invalid month in date: {}. Month must be between 01 and 12",
-                            value
-                        )));
-                    }
-
-                    // Validate day based on month
-                    let max_day = match month {
-                        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
-                        4 | 6 | 9 | 11 => 30,
-                        2 => {
-                            // Check for leap year
-                            if (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0) {
-                                29
-                            } else {
-                                28
-                            }
-                        }
-                        _ => unreachable!(),
-                    };
-
-                    if day < 1 || day > max_day {
-                        return Err(OxirsError::Parse(format!(
-                            "Invalid day in date: {}. Day must be between 01 and {} for month {}",
-                            value, max_day, month
-                        )));
-                    }
-                }
-                Ok(())
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid date format: '{}'. Expected YYYY-MM-DD format",
-                    value
-                )))
-            }
-        }
-
-        "http://www.w3.org/2001/XMLSchema#time" => {
-            if TIME_REGEX.is_match(value) {
-                Ok(())
-            } else {
-                Err(OxirsError::Parse(format!(
-                    "Invalid time format: '{}'. Expected HH:MM:SS format",
-                    value
-                )))
-            }
-        }
+        "http://www.w3.org/2001/XMLSchema#time" => Time::from_str(value)
+            .map(|_| ())
+            .map_err(|e| OxirsError::Parse(format!("Invalid time value '{value}': {e}"))),
 
         // For unknown datatypes, don't validate
         _ => Ok(()),
@@ -318,93 +183,168 @@ pub fn validate_xsd_value(value: &str, datatype_iri: &str) -> Result<(), OxirsEr
 }
 
 /// Validates integer values against their specific type ranges
+#[allow(dead_code)]
 fn validate_integer_range(value: &str, datatype_iri: &str) -> Result<(), OxirsError> {
     let parsed_value: i64 = value
         .parse()
-        .map_err(|_| OxirsError::Parse(format!("Cannot parse integer: '{}'", value)))?;
+        .map_err(|_| OxirsError::Parse(format!("Cannot parse integer: '{value}'")))?;
 
     match datatype_iri {
         "http://www.w3.org/2001/XMLSchema#byte" => {
-            if parsed_value < -128 || parsed_value > 127 {
+            if !(-128..=127).contains(&parsed_value) {
                 return Err(OxirsError::Parse(format!(
-                    "Byte value out of range: {}. Must be between -128 and 127",
-                    parsed_value
+                    "Byte value out of range: {parsed_value}. Must be between -128 and 127"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#short" => {
-            if parsed_value < -32768 || parsed_value > 32767 {
+            if !(-32768..=32767).contains(&parsed_value) {
                 return Err(OxirsError::Parse(format!(
-                    "Short value out of range: {}. Must be between -32768 and 32767",
-                    parsed_value
+                    "Short value out of range: {parsed_value}. Must be between -32768 and 32767"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#int" => {
-            if parsed_value < -2147483648 || parsed_value > 2147483647 {
+            if !(-2147483648..=2147483647).contains(&parsed_value) {
                 return Err(OxirsError::Parse(format!(
-                    "Int value out of range: {}. Must be between -2147483648 and 2147483647",
-                    parsed_value
+                    "Int value out of range: {parsed_value}. Must be between -2147483648 and 2147483647"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#unsignedByte" => {
-            if parsed_value < 0 || parsed_value > 255 {
+            if !(0..=255).contains(&parsed_value) {
                 return Err(OxirsError::Parse(format!(
-                    "Unsigned byte value out of range: {}. Must be between 0 and 255",
-                    parsed_value
+                    "Unsigned byte value out of range: {parsed_value}. Must be between 0 and 255"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#unsignedShort" => {
-            if parsed_value < 0 || parsed_value > 65535 {
+            if !(0..=65535).contains(&parsed_value) {
                 return Err(OxirsError::Parse(format!(
-                    "Unsigned short value out of range: {}. Must be between 0 and 65535",
-                    parsed_value
+                    "Unsigned short value out of range: {parsed_value}. Must be between 0 and 65535"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#unsignedInt" => {
-            if parsed_value < 0 || parsed_value > 4294967295 {
+            if !(0..=4294967295).contains(&parsed_value) {
                 return Err(OxirsError::Parse(format!(
-                    "Unsigned int value out of range: {}. Must be between 0 and 4294967295",
-                    parsed_value
+                    "Unsigned int value out of range: {parsed_value}. Must be between 0 and 4294967295"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#positiveInteger" => {
             if parsed_value <= 0 {
                 return Err(OxirsError::Parse(format!(
-                    "Positive integer must be greater than 0, got: {}",
-                    parsed_value
+                    "Positive integer must be greater than 0, got: {parsed_value}"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
             if parsed_value < 0 {
                 return Err(OxirsError::Parse(format!(
-                    "Non-negative integer must be >= 0, got: {}",
-                    parsed_value
+                    "Non-negative integer must be >= 0, got: {parsed_value}"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
             if parsed_value >= 0 {
                 return Err(OxirsError::Parse(format!(
-                    "Negative integer must be less than 0, got: {}",
-                    parsed_value
+                    "Negative integer must be less than 0, got: {parsed_value}"
                 )));
             }
         }
         "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
             if parsed_value > 0 {
                 return Err(OxirsError::Parse(format!(
-                    "Non-positive integer must be <= 0, got: {}",
-                    parsed_value
+                    "Non-positive integer must be <= 0, got: {parsed_value}"
                 )));
             }
         }
         _ => {} // Other integer types don't have additional range restrictions in this simplified implementation
+    }
+
+    Ok(())
+}
+
+/// Validates integer values against their specific type ranges using oxsdatatypes Integer
+fn validate_integer_range_oxs(integer: Integer, datatype_iri: &str) -> Result<(), OxirsError> {
+    // Convert oxsdatatypes Integer to i64 for range checking
+    let parsed_value: i64 = integer.to_string().parse().map_err(|_| {
+        OxirsError::Parse("Cannot convert integer to i64 for range validation".to_string())
+    })?;
+
+    match datatype_iri {
+        "http://www.w3.org/2001/XMLSchema#byte" => {
+            if !(-128..=127).contains(&parsed_value) {
+                return Err(OxirsError::Parse(format!(
+                    "Byte value out of range: {parsed_value}. Must be between -128 and 127"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#short" => {
+            if !(-32768..=32767).contains(&parsed_value) {
+                return Err(OxirsError::Parse(format!(
+                    "Short value out of range: {parsed_value}. Must be between -32768 and 32767"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#int" => {
+            if !(-2147483648..=2147483647).contains(&parsed_value) {
+                return Err(OxirsError::Parse(format!(
+                    "Int value out of range: {parsed_value}. Must be between -2147483648 and 2147483647"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedByte" => {
+            if !(0..=255).contains(&parsed_value) {
+                return Err(OxirsError::Parse(format!(
+                    "Unsigned byte value out of range: {parsed_value}. Must be between 0 and 255"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedShort" => {
+            if !(0..=65535).contains(&parsed_value) {
+                return Err(OxirsError::Parse(format!(
+                    "Unsigned short value out of range: {parsed_value}. Must be between 0 and 65535"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#unsignedInt" => {
+            if !(0..=4294967295).contains(&parsed_value) {
+                return Err(OxirsError::Parse(format!(
+                    "Unsigned int value out of range: {parsed_value}. Must be between 0 and 4294967295"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#positiveInteger" => {
+            if parsed_value <= 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Positive integer must be greater than 0, got: {parsed_value}"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#nonNegativeInteger" => {
+            if parsed_value < 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Non-negative integer must be >= 0, got: {parsed_value}"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#negativeInteger" => {
+            if parsed_value >= 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Negative integer must be less than 0, got: {parsed_value}"
+                )));
+            }
+        }
+        "http://www.w3.org/2001/XMLSchema#nonPositiveInteger" => {
+            if parsed_value > 0 {
+                return Err(OxirsError::Parse(format!(
+                    "Non-positive integer must be <= 0, got: {parsed_value}"
+                )));
+            }
+        }
+        _ => {} // Other integer types don't have additional range restrictions
     }
 
     Ok(())
@@ -792,7 +732,7 @@ impl Literal {
                     "http://www.w3.org/2001/XMLSchema#decimal" => {
                         if let Some(dec_val) = self.as_f64() {
                             // Format decimal properly - remove trailing zeros after decimal point
-                            let formatted = format!("{}", dec_val);
+                            let formatted = format!("{dec_val}");
                             if formatted.contains('.') {
                                 let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
                                 return Literal::new_typed(
@@ -805,7 +745,7 @@ impl Literal {
                                 );
                             } else {
                                 return Literal::new_typed(
-                                    format!("{}.0", formatted),
+                                    format!("{formatted}.0"),
                                     datatype.clone(),
                                 );
                             }
@@ -831,9 +771,9 @@ impl Literal {
                                 let formatted = if float_val.abs() >= 1e6
                                     || (float_val.abs() < 1e-3 && float_val != 0.0)
                                 {
-                                    format!("{:E}", float_val)
+                                    format!("{float_val:E}")
                                 } else {
-                                    format!("{}", float_val)
+                                    format!("{float_val}")
                                 };
                                 return Literal::new_typed(formatted, datatype.clone());
                             }
@@ -843,10 +783,7 @@ impl Literal {
                     | "http://www.w3.org/2001/XMLSchema#normalizedString" => {
                         // Normalize whitespace for normalizedString
                         if dt_iri == "http://www.w3.org/2001/XMLSchema#normalizedString" {
-                            let normalized = value
-                                .replace('\t', " ")
-                                .replace('\n', " ")
-                                .replace('\r', " ");
+                            let normalized = value.replace(['\t', '\n', '\r'], " ");
                             return Literal::new_typed(normalized, datatype.clone());
                         }
                     }
@@ -1105,7 +1042,7 @@ impl<'a> LiteralRef<'a> {
             },
             LiteralRefContent::TypedLiteral { value, datatype } => LiteralContent::TypedLiteral {
                 value: value.to_owned(),
-                datatype: datatype.to_owned(),
+                datatype: datatype.into_owned(),
             },
         })
     }
@@ -1440,7 +1377,7 @@ mod tests {
         }
         assert!(!literal.is_lang_string());
         assert!(!literal.is_typed());
-        assert_eq!(format!("{}", literal), "\"Hello\"");
+        assert_eq!(format!("{literal}"), "\"Hello\"");
     }
 
     #[test]
@@ -1454,7 +1391,7 @@ mod tests {
         }
         assert!(literal.is_lang_string());
         assert!(!literal.is_typed());
-        assert_eq!(format!("{}", literal), "\"Hello\"@en");
+        assert_eq!(format!("{literal}"), "\"Hello\"@en");
     }
 
     #[test]
@@ -1472,7 +1409,7 @@ mod tests {
         assert!(!literal.is_lang_string());
         assert!(literal.is_typed());
         assert_eq!(
-            format!("{}", literal),
+            format!("{literal}"),
             "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>"
         );
     }

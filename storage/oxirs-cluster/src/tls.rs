@@ -5,18 +5,16 @@
 
 use anyhow::{anyhow, Result};
 use ring::rand::SecureRandom;
-use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use rustls::{ClientConfig, ServerConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fs;
 use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 use tokio_rustls::{TlsAcceptor, TlsConnector};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 use crate::raft::OxirsNodeId;
 

@@ -65,9 +65,7 @@ pub trait CustomConstraintComponent: Send + Sync + std::fmt::Debug {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constraints::ConstraintContext;
-    use crate::ShapeId;
-    use oxirs_core::model::{Literal, NamedNode};
+    use oxirs_core::model::Literal;
 
     #[test]
     fn test_registry_registration() {

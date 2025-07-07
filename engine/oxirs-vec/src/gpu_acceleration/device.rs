@@ -23,14 +23,14 @@ impl GpuDevice {
         let memory_score = self.free_memory as f64 / (1024.0 * 1024.0 * 1024.0); // GB
         let compute_score = self.peak_flops / 1e12; // TFLOPS
         let bandwidth_score = self.memory_bandwidth as f64 / 1000.0; // TB/s
-        
+
         // Weighted combination of different performance factors
         memory_score * 0.3 + compute_score * 0.5 + bandwidth_score * 0.2
     }
 
     /// Check if device supports required compute capability
     pub fn supports_compute_capability(&self, required: (i32, i32)) -> bool {
-        self.compute_capability.0 > required.0 || 
+        self.compute_capability.0 > required.0 ||
         (self.compute_capability.0 == required.0 && self.compute_capability.1 >= required.1)
     }
 }
@@ -52,7 +52,7 @@ pub fn query_gpu_devices() -> Result<Vec<GpuDevice>> {
 /// Get the best GPU device based on performance and memory
 pub fn get_best_gpu_device() -> Result<GpuDevice> {
     let devices = query_gpu_devices()?;
-    
+
     if devices.is_empty() {
         return Err(anyhow!("No GPU devices available"));
     }
@@ -78,7 +78,7 @@ pub fn get_gpu_device(device_id: i32) -> Result<GpuDevice> {
 #[cfg(feature = "cuda")]
 fn get_cuda_devices() -> Result<Vec<GpuDevice>> {
     use cuda_runtime_sys::*;
-    
+
     let mut device_count: i32 = 0;
     unsafe {
         let result = cudaGetDeviceCount(&mut device_count);
@@ -100,7 +100,7 @@ fn get_cuda_devices() -> Result<Vec<GpuDevice>> {
 #[cfg(feature = "cuda")]
 fn get_cuda_device_info(device_id: i32) -> Result<GpuDevice> {
     use cuda_runtime_sys::*;
-    
+
     let mut props: cudaDeviceProp = unsafe { std::mem::zeroed() };
     unsafe {
         let result = cudaGetDeviceProperties(&mut props, device_id);
@@ -117,7 +117,7 @@ fn get_cuda_device_info(device_id: i32) -> Result<GpuDevice> {
         if result != cudaError_t::cudaSuccess {
             return Err(anyhow!("Failed to set device {}", device_id));
         }
-        
+
         let result = cudaMemGetInfo(&mut free_memory, &mut total_memory);
         if result != cudaError_t::cudaSuccess {
             return Err(anyhow!("Failed to get memory info for device {}", device_id));

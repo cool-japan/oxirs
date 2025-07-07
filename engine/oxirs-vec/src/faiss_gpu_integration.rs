@@ -12,21 +12,18 @@
 //! - GPU performance monitoring and tuning
 
 use crate::{
-    faiss_integration::{FaissConfig, FaissIndex, FaissSearchParams},
-    faiss_native_integration::{NativeFaissConfig, NativeFaissIndex},
-    gpu::{GpuAccelerator, GpuBuffer, GpuConfig, GpuExecutionConfig, GpuMemoryPool},
-    similarity::SimilarityMetric,
-    Vector, VectorPrecision,
+    faiss_integration::{FaissConfig, FaissSearchParams},
+    gpu::GpuExecutionConfig,
 };
-use anyhow::{Context, Error as AnyhowError, Result};
+use anyhow::{Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
     Arc, Mutex, RwLock,
 };
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot, Semaphore};
+use tokio::sync::oneshot;
 use tracing::{debug, error, info, span, warn, Level};
 
 /// GPU configuration for FAISS integration
@@ -632,7 +629,7 @@ impl FaissGpuIndex {
         let _enter = span.enter();
 
         // Convert FaissGpuConfig to GpuConfig for the accelerator
-        let base_gpu_config = crate::gpu::GpuConfig {
+        let _base_gpu_config = crate::gpu::GpuConfig {
             device_id: gpu_config.device_ids.first().copied().unwrap_or(0),
             enable_mixed_precision: true,
             enable_tensor_cores: true,
@@ -816,7 +813,7 @@ impl FaissGpuIndex {
     /// Select optimal device and stream for operation
     async fn select_optimal_stream(
         compute_streams: &Arc<RwLock<HashMap<i32, Vec<GpuComputeStream>>>>,
-        operation: &GpuOperation,
+        _operation: &GpuOperation,
     ) -> Result<(i32, usize)> {
         let streams = compute_streams.read().unwrap();
 
@@ -842,9 +839,9 @@ impl FaissGpuIndex {
     /// Execute operation on specific device
     async fn execute_operation_on_device(
         operation: GpuOperation,
-        device_id: i32,
-        stream_id: usize,
-        gpu_config: &FaissGpuConfig,
+        _device_id: i32,
+        _stream_id: usize,
+        _gpu_config: &FaissGpuConfig,
     ) -> Result<GpuOperationResult> {
         let start_time = Instant::now();
 
@@ -860,14 +857,14 @@ impl FaissGpuIndex {
                 for _query in query_vectors {
                     let mut query_results = Vec::new();
                     for i in 0..*k {
-                        query_results.push((format!("gpu_result_{}", i), 0.95 - (i as f32 * 0.05)));
+                        query_results.push((format!("gpu_result_{i}"), 0.95 - (i as f32 * 0.05)));
                     }
                     results.push(query_results);
                 }
 
                 GpuResultData::SearchResults(results)
             }
-            GpuOperationType::Add { vectors, .. } => {
+            GpuOperationType::Add { vectors: _, .. } => {
                 // Simulate GPU-accelerated vector addition
                 tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
                 GpuResultData::AdditionComplete
@@ -1009,7 +1006,7 @@ impl FaissGpuIndex {
     /// Manage GPU memory pools
     async fn manage_gpu_memory(
         memory_pools: &Arc<RwLock<HashMap<i32, FaissGpuMemoryPool>>>,
-        gpu_config: &FaissGpuConfig,
+        _gpu_config: &FaissGpuConfig,
     ) -> Result<()> {
         let pools = memory_pools.read().unwrap();
 
@@ -1090,7 +1087,7 @@ impl FaissGpuIndex {
             balancer
                 .performance_history
                 .entry(device_id)
-                .or_insert_with(VecDeque::new)
+                .or_default()
                 .push_back(snapshot);
 
             // Keep only recent history

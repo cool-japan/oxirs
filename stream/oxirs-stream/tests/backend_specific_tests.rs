@@ -2,20 +2,18 @@
 //!
 //! Detailed tests for each streaming backend's unique features and capabilities.
 
-use anyhow::Result;
 use chrono::Utc;
 use oxirs_stream::*;
 use std::collections::HashMap;
-use std::time::Duration;
-use tokio::time::timeout;
 use uuid::Uuid;
 
 /// Helper to create test event with metadata
+#[allow(dead_code)]
 fn create_test_event_with_metadata(id: &str, data: &str) -> StreamEvent {
     StreamEvent::TripleAdded {
-        subject: format!("http://example.org/{}", id),
+        subject: format!("http://example.org/{id}"),
         predicate: "http://example.org/data".to_string(),
-        object: format!("\"{}\"", data),
+        object: format!("\"{data}\""),
         graph: None,
         metadata: EventMetadata {
             event_id: Uuid::new_v4().to_string(),
@@ -31,7 +29,7 @@ fn create_test_event_with_metadata(id: &str, data: &str) -> StreamEvent {
                 props.insert("test_data".to_string(), data.to_string());
                 props
             },
-            checksum: Some(format!("checksum_{}", id)),
+            checksum: Some(format!("checksum_{id}")),
         },
     }
 }
@@ -514,7 +512,7 @@ mod nats_specific_tests {
         // Test resilience during node failures
         for i in 0..10 {
             let event =
-                create_test_event_with_metadata(&format!("cluster_{}", i), &format!("data_{}", i));
+                create_test_event_with_metadata(&format!("cluster_{i}"), &format!("data_{i}"));
 
             let result = stream.publish(event).await;
             if result.is_err() {
@@ -678,7 +676,7 @@ mod redis_specific_tests {
         // Publish events
         for i in 0..6 {
             let event =
-                create_test_event_with_metadata(&format!("cg_{}", i), &format!("group_data_{}", i));
+                create_test_event_with_metadata(&format!("cg_{i}"), &format!("group_data_{i}"));
             producer.publish(event).await?;
         }
 
@@ -781,8 +779,8 @@ mod redis_specific_tests {
         // Test sharding across cluster nodes
         for i in 0..15 {
             let event = create_test_event_with_metadata(
-                &format!("shard_{}", i),
-                &format!("cluster_data_{}", i),
+                &format!("shard_{i}"),
+                &format!("cluster_data_{i}"),
             );
             stream.publish(event).await?;
         }
@@ -1058,8 +1056,8 @@ mod kinesis_specific_tests {
         // Test high-volume publishing to trigger auto-scaling
         for i in 0..100 {
             let event = create_test_event_with_metadata(
-                &format!("scale_{}", i),
-                &format!("scaling_data_{}", i),
+                &format!("scale_{i}"),
+                &format!("scaling_data_{i}"),
             );
 
             let result = stream.publish(event).await;

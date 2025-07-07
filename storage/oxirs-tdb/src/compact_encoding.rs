@@ -115,7 +115,6 @@ impl CompactEncoder {
         }
 
         let original_size = node_ids.len() * 8; // 8 bytes per u64
-        let mut result: Vec<u8> = Vec::new();
 
         let encoded = match self.scheme {
             CompactEncodingScheme::VarInt => {
@@ -205,7 +204,7 @@ impl CompactEncoder {
     }
 
     /// Variable-length integer encoding (LEB128)
-    fn encode_varint(&self, mut value: u64) -> Vec<u8> {
+    fn encode_varint(&self, value: u64) -> Vec<u8> {
         let mut result = Vec::new();
         self.encode_varint_to_vec(&mut result, value);
         result
@@ -665,7 +664,7 @@ mod tests {
         let sparse = vec![1, 1000, 2000, 3000, 4000];
         let clustered = vec![100, 101, 102, 103, 104, 200, 201, 202, 203, 204];
 
-        for test_data in vec![sequential, sparse, clustered] {
+        for test_data in [sequential, sparse, clustered] {
             let encoded = encoder.encode_node_id_sequence(&test_data);
             let decoded = decoder.decode_node_id_sequence(&encoded).unwrap();
             assert_eq!(test_data, decoded);

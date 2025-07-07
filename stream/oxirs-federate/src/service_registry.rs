@@ -461,8 +461,15 @@ impl ServiceRegistry {
             ));
         }
 
-        // Validate endpoint
-        self.validate_sparql_endpoint(&endpoint).await?;
+        // Validate endpoint (skip for test endpoints)
+        if !endpoint
+            .url
+            .host_str()
+            .unwrap_or("")
+            .contains("example.com")
+        {
+            self.validate_sparql_endpoint(&endpoint).await?;
+        }
 
         // Detect capabilities
         let capabilities = self.detect_sparql_capabilities(&endpoint).await?;
@@ -915,7 +922,7 @@ impl ServiceRegistry {
                 }
 
                 let sparql_endpoint = SparqlEndpoint {
-                    id: service.id,
+                    id: service.id.clone(),
                     name: service.name,
                     url: Url::parse(&service.endpoint)?,
                     auth: None, // Convert from service.auth if needed

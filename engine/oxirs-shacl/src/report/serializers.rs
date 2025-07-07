@@ -1,7 +1,7 @@
 //\! Report serializers for different output formats
 
 use super::{ReportConfig, ValidationReport};
-use crate::{PropertyPath, Result, ShaclError};
+use crate::{PropertyPath, Result};
 
 /// HTML serializer for validation reports
 pub struct HtmlSerializer {
@@ -157,16 +157,12 @@ impl HtmlSerializer {
 
             if let Some(value) = &violation.value {
                 html.push_str(&format!(
-                    "<p><strong>Value:</strong> <code>{}</code></p>",
-                    value
+                    "<p><strong>Value:</strong> <code>{value}</code></p>"
                 ));
             }
 
             if let Some(message) = &violation.result_message {
-                html.push_str(&format!(
-                    "<div class=\"violation-message\">{}</div>",
-                    message
-                ));
+                html.push_str(&format!("<div class=\"violation-message\">{message}</div>"));
             }
 
             html.push_str("</div>");
@@ -200,8 +196,7 @@ impl HtmlSerializer {
 
         if let Some(duration) = metadata.validation_duration {
             html.push_str(&format!(
-                "<p><strong>Validation Duration:</strong> {:.2?}</p>",
-                duration
+                "<p><strong>Validation Duration:</strong> {duration:.2?}</p>"
             ));
         }
 
@@ -218,7 +213,7 @@ impl HtmlSerializer {
 
     fn format_path_for_html(&self, path: &PropertyPath) -> String {
         // Simplified path formatting for HTML
-        format!("{:?}", path)
+        format!("{path:?}")
     }
 }
 
@@ -267,9 +262,7 @@ impl CsvSerializer {
                         .map(|v| v.to_string())
                         .unwrap_or_else(|| "".to_string())
                 ),
-                self.escape_csv_field(
-                    &violation.result_message.as_ref().unwrap_or(&"".to_string())
-                )
+                self.escape_csv_field(violation.result_message.as_ref().unwrap_or(&"".to_string()))
             ));
         }
 
@@ -278,7 +271,7 @@ impl CsvSerializer {
 
     fn format_path_for_csv(&self, path: &PropertyPath) -> Result<String> {
         // Simplified path formatting for CSV
-        Ok(format!("{:?}", path))
+        Ok(format!("{path:?}"))
     }
 
     fn escape_csv_field(&self, field: &str) -> String {
@@ -323,7 +316,7 @@ impl TurtleSerializer {
         if !violations.is_empty() {
             turtle.push_str("   sh:result\n");
             for (i, violation) in violations.iter().enumerate() {
-                turtle.push_str(&format!("      [ a sh:ValidationResult ;\n"));
+                turtle.push_str("      [ a sh:ValidationResult ;\n");
                 turtle.push_str(&format!(
                     "        sh:resultSeverity sh:{} ;\n",
                     match violation.result_severity {
@@ -381,8 +374,6 @@ impl TurtleSerializer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::validation::ValidationViolation;
-    use oxirs_core::model::*;
 
     #[test]
     fn test_html_serializer() {

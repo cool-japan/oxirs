@@ -299,7 +299,7 @@ impl ConstraintValidator for PatternConstraint {
 impl ConstraintEvaluator for PatternConstraint {
     fn evaluate(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // Build the regex with flags
@@ -350,8 +350,7 @@ impl ConstraintEvaluator for PatternConstraint {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
                         Some(format!(
-                            "Value {} is not a literal, cannot check pattern",
-                            value
+                            "Value {value} is not a literal, cannot check pattern"
                         )),
                     ));
                 }
@@ -543,8 +542,7 @@ impl ConstraintEvaluator for UniqueLangConstraint {
                             return Ok(ConstraintEvaluationResult::violated(
                                 Some(value.clone()),
                                 Some(format!(
-                                    "Duplicate language tag '{}' found, but unique languages required",
-                                    lang
+                                    "Duplicate language tag '{lang}' found, but unique languages required"
                                 )),
                             ));
                         }

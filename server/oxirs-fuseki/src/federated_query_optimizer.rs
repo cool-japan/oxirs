@@ -873,11 +873,17 @@ impl CardinalityEstimator {
         if query.contains("LIMIT") {
             if let Some(limit_pos) = query.find("LIMIT") {
                 let limit_str = &query[limit_pos + 5..].trim();
-                if let Some(space_pos) = limit_str.find(' ') {
-                    let limit_val = &limit_str[..space_pos];
-                    if let Ok(limit) = limit_val.parse::<u64>() {
-                        return Ok(limit);
-                    }
+                
+                // Extract the limit value (handle both cases: with space after or at end of query)
+                let limit_val = if let Some(space_pos) = limit_str.find(' ') {
+                    &limit_str[..space_pos]
+                } else {
+                    // No space found, use the entire remaining string
+                    limit_str
+                };
+                
+                if let Ok(limit) = limit_val.parse::<u64>() {
+                    return Ok(limit);
                 }
             }
         }

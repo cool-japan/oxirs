@@ -1514,10 +1514,13 @@ impl EmbeddingModel for NeuralSymbolicModel {
                 }
             });
 
-            if let Ok(embedding) = self.integrated_forward(&input) {
-                results.push(embedding.to_vec());
-            } else {
-                results.push(vec![0.0; self.config.base_config.dimensions]);
+            match self.integrated_forward(&input) {
+                Ok(embedding) => {
+                    results.push(embedding.to_vec());
+                }
+                _ => {
+                    results.push(vec![0.0; self.config.base_config.dimensions]);
+                }
             }
         }
 

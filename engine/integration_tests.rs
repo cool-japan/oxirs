@@ -120,20 +120,20 @@ impl OxirsIntegrationTestSuite {
     /// Run all integration tests
     pub fn run_all_tests(&mut self) -> Result<IntegrationTestReport> {
         let start_time = Instant::now();
-        
+
         if self.config.verbose_logging {
             println!("Starting OxiRS Engine Integration Tests...");
         }
 
         // Run core module tests
         self.run_core_integration_tests()?;
-        
+
         // Run cross-module integration tests
         self.run_cross_module_tests()?;
-        
+
         // Run performance benchmarks
         self.run_performance_benchmarks()?;
-        
+
         // Run end-to-end workflow tests
         self.run_e2e_workflow_tests()?;
 
@@ -427,7 +427,7 @@ impl OxirsIntegrationTestSuite {
     /// Group test results by module
     fn group_results_by_module(&self) -> HashMap<String, ModuleTestResults> {
         let mut module_results = HashMap::new();
-        
+
         for module in self.results.iter().map(|r| r.module.clone()).collect::<std::collections::HashSet<_>>() {
             let module_tests: Vec<_> = self.results.iter().filter(|r| r.module == module).cloned().collect();
             let passed = module_tests.iter().filter(|r| r.status == TestStatus::Passed).count();
@@ -575,7 +575,7 @@ impl OxirsIntegrationTestSuite {
         }
         let mut sorted = values.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         let mid = sorted.len() / 2;
         if sorted.len() % 2 == 0 {
             (sorted[mid - 1] + sorted[mid]) / 2.0
@@ -590,19 +590,19 @@ impl OxirsIntegrationTestSuite {
         }
         let mut sorted = values.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        
+
         let index = ((sorted.len() as f64 - 1.0) * percentile) as usize;
         sorted[index.min(sorted.len() - 1)]
     }
 
     fn identify_bottlenecks(&self) -> Vec<String> {
         let mut bottlenecks = Vec::new();
-        
+
         // Identify slow tests
         let slow_tests: Vec<_> = self.results.iter()
             .filter(|r| r.execution_time > Duration::from_millis(1000))
             .collect();
-        
+
         if !slow_tests.is_empty() {
             bottlenecks.push(format!("{} tests are running slowly", slow_tests.len()));
         }
@@ -611,7 +611,7 @@ impl OxirsIntegrationTestSuite {
         let memory_intensive: Vec<_> = self.results.iter()
             .filter(|r| r.memory_used > 100 * 1024 * 1024) // 100MB
             .collect();
-        
+
         if !memory_intensive.is_empty() {
             bottlenecks.push(format!("{} tests use high memory", memory_intensive.len()));
         }
@@ -620,7 +620,7 @@ impl OxirsIntegrationTestSuite {
     }
 
     // Individual test implementations (simplified)
-    
+
     fn test_arq_sparql_basic(_config: &IntegrationTestConfig) -> Result<TestExecutionResult> {
         // Simulate ARQ SPARQL test
         std::thread::sleep(Duration::from_millis(50));
@@ -712,7 +712,7 @@ impl OxirsIntegrationTestSuite {
     }
 
     // Cross-module integration tests
-    
+
     fn test_arq_vec_integration(_config: &IntegrationTestConfig) -> Result<TestExecutionResult> {
         // Simulate ARQ-Vector integration test
         std::thread::sleep(Duration::from_millis(200));
@@ -763,7 +763,7 @@ impl OxirsIntegrationTestSuite {
     }
 
     // Performance benchmark tests
-    
+
     fn benchmark_sparql_performance(_config: &IntegrationTestConfig) -> Result<TestExecutionResult> {
         // Simulate SPARQL performance benchmark
         std::thread::sleep(Duration::from_millis(400));
@@ -810,7 +810,7 @@ impl OxirsIntegrationTestSuite {
     }
 
     // End-to-end workflow tests
-    
+
     fn test_kg_workflow(_config: &IntegrationTestConfig) -> Result<TestExecutionResult> {
         // Simulate knowledge graph workflow test
         std::thread::sleep(Duration::from_millis(800));
@@ -991,13 +991,13 @@ mod tests {
     fn test_performance_score_calculation() {
         let suite = OxirsIntegrationTestSuite::new();
         let metrics = hashmap!["efficiency_score".to_string() => 0.9];
-        
+
         let score = suite.calculate_performance_score(
             "oxirs-vec",
             Duration::from_millis(50),
             &metrics,
         );
-        
+
         // Should be a high score since it's within threshold with good efficiency
         assert!(score > 80.0);
     }

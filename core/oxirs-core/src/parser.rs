@@ -69,7 +69,7 @@ impl RdfFormat {
 }
 
 /// Configuration for RDF parsing
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ParserConfig {
     /// Base IRI for resolving relative IRIs
     pub base_iri: Option<String>,
@@ -77,16 +77,6 @@ pub struct ParserConfig {
     pub ignore_errors: bool,
     /// Maximum number of errors to collect before stopping
     pub max_errors: Option<usize>,
-}
-
-impl Default for ParserConfig {
-    fn default() -> Self {
-        ParserConfig {
-            base_iri: None,
-            ignore_errors: false,
-            max_errors: None,
-        }
-    }
 }
 
 /// RDF parser interface
@@ -337,7 +327,7 @@ impl Parser {
                             current_token.push_str("^^");
                             if chars.peek() == Some(&'<') {
                                 // IRI datatype
-                                while let Some(next_char) = chars.next() {
+                                for next_char in chars.by_ref() {
                                     current_token.push(next_char);
                                     if next_char == '>' {
                                         break;
@@ -381,8 +371,7 @@ impl Parser {
             Ok(Subject::BlankNode(blank_node))
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid subject: {}. Must be IRI or blank node",
-                token
+                "Invalid subject: {token}. Must be IRI or blank node"
             )))
         }
     }
@@ -394,8 +383,7 @@ impl Parser {
             Ok(Predicate::NamedNode(named_node))
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid predicate: {}. Must be IRI",
-                token
+                "Invalid predicate: {token}. Must be IRI"
             )))
         }
     }
@@ -415,8 +403,7 @@ impl Parser {
             self.parse_literal(token)
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid object: {}. Must be IRI, blank node, or literal",
-                token
+                "Invalid object: {token}. Must be IRI, blank node, or literal"
             )))
         }
     }
@@ -433,15 +420,15 @@ impl Parser {
         let mut escaped = false;
         let chars: Vec<char> = token.chars().collect();
 
-        for i in 1..chars.len() {
+        for (i, &ch) in chars.iter().enumerate().skip(1) {
             if escaped {
                 escaped = false;
                 continue;
             }
 
-            if chars[i] == '\\' {
+            if ch == '\\' {
                 escaped = true;
-            } else if chars[i] == '"' {
+            } else if ch == '"' {
                 end_quote_pos = Some(i);
                 break;
             }
@@ -456,9 +443,8 @@ impl Parser {
         // Check for language tag or datatype
         let remaining = &token[end_quote_pos + 1..];
 
-        if remaining.starts_with('@') {
+        if let Some(lang_tag) = remaining.strip_prefix('@') {
             // Language tag
-            let lang_tag = &remaining[1..];
             let literal = Literal::new_lang(literal_value, lang_tag)?;
             Ok(Object::Literal(literal))
         } else if remaining.starts_with("^^<") && remaining.ends_with('>') {
@@ -473,20 +459,54 @@ impl Parser {
             Ok(Object::Literal(literal))
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid literal syntax: {}",
-                token
+                "Invalid literal syntax: {token}"
             )))
         }
     }
 
-    fn parse_trig<F>(&self, data: &str, handler: F) -> Result<()>
+    fn parse_trig<F>(&self, data: &str, mut handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // Simplified implementation - for now just create empty quads
-        // TODO: Implement proper TriG parsing when Rio API is stable
-        let _ = data;
-        let _ = handler;
+        // Basic TriG parser - handles simple cases
+        let mut parser = TrigParserState::new(self.config.base_iri.as_deref());
+
+        for (line_num, line) in data.lines().enumerate() {
+            let line = line.trim();
+
+            // Skip empty lines and comments
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            match parser.parse_line(line) {
+                Ok(quads) => {
+                    for quad in quads {
+                        handler(quad)?;
+                    }
+                }
+                Err(e) => {
+                    if self.config.ignore_errors {
+                        tracing::warn!("TriG parse error on line {}: {}", line_num + 1, e);
+                        continue;
+                    } else {
+                        return Err(OxirsError::Parse(format!(
+                            "TriG parse error on line {}: {}",
+                            line_num + 1,
+                            e
+                        )));
+                    }
+                }
+            }
+        }
+
+        // Handle any pending statements
+        if let Some(quads) = parser.finalize()? {
+            for quad in quads {
+                handler(quad)?;
+            }
+        }
+
         Ok(())
     }
 
@@ -581,8 +601,7 @@ impl Parser {
             Ok(GraphName::BlankNode(blank_node))
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid graph name: {}. Must be IRI or blank node",
-                token
+                "Invalid graph name: {token}. Must be IRI or blank node"
             )))
         }
     }
@@ -597,17 +616,382 @@ impl Parser {
         ))
     }
 
-    fn parse_jsonld<F>(&self, _data: &str, _handler: F) -> Result<()>
+    fn parse_jsonld<F>(&self, data: &str, mut handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // TODO: Implement JSON-LD parsing when oxjsonld is available
-        Err(OxirsError::Parse(
-            "JSON-LD parsing not yet implemented".to_string(),
-        ))
+        // Basic JSON-LD parser implementation using existing jsonld module
+        use crate::jsonld::to_rdf::JsonLdParser;
+        
+        let parser = JsonLdParser::new();
+        let parser = if let Some(base_iri) = &self.config.base_iri {
+            parser.with_base_iri(base_iri.clone()).map_err(|e| {
+                OxirsError::Parse(format!("Invalid base IRI: {e}"))
+            })?
+        } else {
+            parser
+        };
+
+        // Parse JSON-LD data into quads
+        for result in parser.for_slice(data.as_bytes()) {
+            match result {
+                Ok(quad) => handler(quad)?,
+                Err(e) => {
+                    if self.config.ignore_errors {
+                        tracing::warn!("JSON-LD parse error: {}", e);
+                        continue;
+                    } else {
+                        return Err(OxirsError::Parse(format!("JSON-LD parse error: {e}")));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     // Native parsing implementation complete - no external dependencies needed
+}
+
+/// TriG parser state for handling named graphs and multi-line statements
+struct TrigParserState {
+    prefixes: HashMap<String, String>,
+    base_iri: Option<String>,
+    pending_statement: String,
+    current_graph: Option<GraphName>,
+}
+
+impl TrigParserState {
+    fn new(base_iri: Option<&str>) -> Self {
+        let mut prefixes = HashMap::new();
+        // Add default prefixes
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
+        TrigParserState {
+            prefixes,
+            base_iri: base_iri.map(|s| s.to_string()),
+            pending_statement: String::new(),
+            current_graph: None,
+        }
+    }
+
+    fn parse_line(&mut self, line: &str) -> Result<Vec<Quad>> {
+        let line = line.trim();
+
+        // Handle directives
+        if line.starts_with("@prefix") {
+            return self.parse_prefix_directive(line);
+        }
+
+        if line.starts_with("@base") {
+            return self.parse_base_directive(line);
+        }
+
+        // Handle graph blocks
+        if line.contains("{") {
+            return self.parse_graph_start(line);
+        }
+
+        if line == "}" {
+            self.current_graph = None;
+            return Ok(Vec::new());
+        }
+
+        // Accumulate multi-line statements
+        self.pending_statement.push_str(line);
+        self.pending_statement.push(' ');
+
+        // Check if statement is complete (ends with .)
+        if line.ends_with('.') {
+            let statement = self.pending_statement.trim().to_string();
+            self.pending_statement.clear();
+            return self.parse_statement(&statement);
+        }
+
+        Ok(Vec::new())
+    }
+
+    fn finalize(&mut self) -> Result<Option<Vec<Quad>>> {
+        if !self.pending_statement.trim().is_empty() {
+            let statement = self.pending_statement.trim().to_string();
+            self.pending_statement.clear();
+            return self.parse_statement(&statement).map(Some);
+        }
+        Ok(None)
+    }
+
+    fn parse_prefix_directive(&mut self, line: &str) -> Result<Vec<Quad>> {
+        // @prefix ns: <http://example.org/ns#> .
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        if parts.len() < 3 {
+            return Err(OxirsError::Parse("Invalid @prefix directive".to_string()));
+        }
+
+        let prefix = parts[1].trim_end_matches(':');
+        let iri = parts[2];
+
+        if !iri.starts_with('<') || !iri.ends_with('>') {
+            return Err(OxirsError::Parse(
+                "IRI must be enclosed in angle brackets".to_string(),
+            ));
+        }
+
+        let iri = &iri[1..iri.len() - 1];
+        self.prefixes.insert(prefix.to_string(), iri.to_string());
+
+        Ok(Vec::new())
+    }
+
+    fn parse_base_directive(&mut self, line: &str) -> Result<Vec<Quad>> {
+        // @base <http://example.org/> .
+        let parts: Vec<&str> = line.split_whitespace().collect();
+
+        if parts.len() < 2 {
+            return Err(OxirsError::Parse("Invalid @base directive".to_string()));
+        }
+
+        let iri = parts[1];
+
+        if !iri.starts_with('<') || !iri.ends_with('>') {
+            return Err(OxirsError::Parse(
+                "Base IRI must be enclosed in angle brackets".to_string(),
+            ));
+        }
+
+        let iri = &iri[1..iri.len() - 1];
+        self.base_iri = Some(iri.to_string());
+
+        Ok(Vec::new())
+    }
+
+    fn parse_graph_start(&mut self, line: &str) -> Result<Vec<Quad>> {
+        // Parse: <graph_name> { or { for default graph
+        if line.trim() == "{" {
+            // Default graph
+            self.current_graph = Some(GraphName::DefaultGraph);
+        } else {
+            // Named graph: <iri> {
+            let graph_part = line.replace('{', "").trim().to_string();
+            if graph_part.starts_with('<') && graph_part.ends_with('>') {
+                let iri = &graph_part[1..graph_part.len() - 1];
+                let named_node = NamedNode::new(iri)?;
+                self.current_graph = Some(GraphName::NamedNode(named_node));
+            } else {
+                return Err(OxirsError::Parse(
+                    "Invalid graph name in TriG".to_string(),
+                ));
+            }
+        }
+
+        Ok(Vec::new())
+    }
+
+    fn parse_statement(&mut self, statement: &str) -> Result<Vec<Quad>> {
+        if statement.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+
+        // Parse as Turtle triple then convert to quad with current graph
+        let triple = self.parse_turtle_statement(statement)?;
+        let graph_name = self.current_graph.clone().unwrap_or(GraphName::DefaultGraph);
+        let quad = Quad::new(
+            triple.subject().clone(),
+            triple.predicate().clone(),
+            triple.object().clone(),
+            graph_name,
+        );
+
+        Ok(vec![quad])
+    }
+
+    fn parse_turtle_statement(&mut self, statement: &str) -> Result<Triple> {
+        // Simple implementation - parse basic subject predicate object .
+        let statement = statement.trim();
+        let statement = if let Some(stripped) = statement.strip_suffix('.') {
+            stripped.trim()
+        } else {
+            statement
+        };
+
+        // Split the statement into tokens (simplified)
+        let mut tokens = Vec::new();
+        let mut current_token = String::new();
+        let mut in_quotes = false;
+        let mut escaped = false;
+
+        for c in statement.chars() {
+            if escaped {
+                current_token.push(c);
+                escaped = false;
+            } else if c == '\\' && in_quotes {
+                escaped = true;
+                current_token.push(c);
+            } else if c == '"' {
+                current_token.push(c);
+                in_quotes = !in_quotes;
+            } else if c.is_whitespace() && !in_quotes {
+                if !current_token.is_empty() {
+                    tokens.push(current_token.clone());
+                    current_token.clear();
+                }
+            } else {
+                current_token.push(c);
+            }
+        }
+
+        if !current_token.is_empty() {
+            tokens.push(current_token);
+        }
+
+        if tokens.len() < 3 {
+            return Err(OxirsError::Parse(
+                "Invalid triple: need subject, predicate, object".to_string(),
+            ));
+        }
+
+        // Parse subject
+        let subject = self.parse_subject_term(&tokens[0])?;
+
+        // Parse predicate  
+        let predicate = self.parse_predicate_term(&tokens[1])?;
+
+        // Parse object
+        let object = self.parse_object_term(&tokens[2])?;
+
+        Ok(Triple::new(subject, predicate, object))
+    }
+
+    fn parse_subject_term(&self, token: &str) -> Result<Subject> {
+        if token.starts_with('<') && token.ends_with('>') {
+            let iri = &token[1..token.len() - 1];
+            let named_node = NamedNode::new(iri)?;
+            Ok(Subject::NamedNode(named_node))
+        } else if token.starts_with("_:") {
+            let blank_node = BlankNode::new(token)?;
+            Ok(Subject::BlankNode(blank_node))
+        } else if token.contains(':') {
+            // Prefixed name
+            let expanded = self.expand_prefixed_name(token)?;
+            let named_node = NamedNode::new(&expanded)?;
+            Ok(Subject::NamedNode(named_node))
+        } else {
+            Err(OxirsError::Parse(format!(
+                "Invalid subject: {token}. Must be IRI or blank node"
+            )))
+        }
+    }
+
+    fn parse_predicate_term(&self, token: &str) -> Result<Predicate> {
+        if token.starts_with('<') && token.ends_with('>') {
+            let iri = &token[1..token.len() - 1];
+            Ok(Predicate::NamedNode(NamedNode::new(iri)?))
+        } else if token.contains(':') {
+            // Prefixed name
+            let expanded = self.expand_prefixed_name(token)?;
+            Ok(Predicate::NamedNode(NamedNode::new(&expanded)?))
+        } else {
+            Err(OxirsError::Parse(format!(
+                "Invalid predicate: {token}. Must be IRI"
+            )))
+        }
+    }
+
+    fn parse_object_term(&self, token: &str) -> Result<Object> {
+        if token.starts_with('"') {
+            // Literal
+            self.parse_literal_term(token)
+        } else if token.starts_with('<') && token.ends_with('>') {
+            let iri = &token[1..token.len() - 1];
+            let named_node = NamedNode::new(iri)?;
+            Ok(Object::NamedNode(named_node))
+        } else if token.starts_with("_:") {
+            let blank_node = BlankNode::new(token)?;
+            Ok(Object::BlankNode(blank_node))
+        } else if token.contains(':') {
+            // Prefixed name
+            let expanded = self.expand_prefixed_name(token)?;
+            let named_node = NamedNode::new(&expanded)?;
+            Ok(Object::NamedNode(named_node))
+        } else {
+            Err(OxirsError::Parse(format!(
+                "Invalid object: {token}. Must be IRI, blank node, or literal"
+            )))
+        }
+    }
+
+    fn parse_literal_term(&self, token: &str) -> Result<Object> {
+        // Parse "value"@lang or "value"^^<datatype> or just "value"
+        if !token.starts_with('"') {
+            return Err(OxirsError::Parse("Literal must start with quote".to_string()));
+        }
+
+        // Find the end quote
+        let mut end_quote = 1;
+        let mut escaped = false;
+        let chars: Vec<char> = token.chars().collect();
+
+        while end_quote < chars.len() {
+            if escaped {
+                escaped = false;
+            } else if chars[end_quote] == '\\' {
+                escaped = true;
+            } else if chars[end_quote] == '"' {
+                break;
+            }
+            end_quote += 1;
+        }
+
+        if end_quote >= chars.len() {
+            return Err(OxirsError::Parse("Unterminated literal".to_string()));
+        }
+
+        let value = &token[1..end_quote];
+        let remainder = &token[end_quote + 1..];
+
+        if remainder.is_empty() {
+            // Simple literal
+            Ok(Object::Literal(Literal::new_simple_literal(value)))
+        } else if let Some(lang) = remainder.strip_prefix('@') {
+            // Language tag
+            let literal = Literal::new_language_tagged_literal(value, lang)?;
+            Ok(Object::Literal(literal))
+        } else if let Some(datatype_token) = remainder.strip_prefix("^^") {
+            // Datatype
+            if datatype_token.starts_with('<') && datatype_token.ends_with('>') {
+                let datatype_iri = &datatype_token[1..datatype_token.len() - 1];
+                let datatype = NamedNode::new(datatype_iri)?;
+                Ok(Object::Literal(Literal::new_typed_literal(value, datatype)))
+            } else {
+                Err(OxirsError::Parse("Invalid datatype IRI".to_string()))
+            }
+        } else {
+            Err(OxirsError::Parse("Invalid literal format".to_string()))
+        }
+    }
+
+    fn expand_prefixed_name(&self, name: &str) -> Result<String> {
+        if let Some((prefix, local)) = name.split_once(':') {
+            if let Some(namespace) = self.prefixes.get(prefix) {
+                Ok(format!("{namespace}{local}"))
+            } else {
+                Err(OxirsError::Parse(format!("Unknown prefix: {prefix}")))
+            }
+        } else {
+            Err(OxirsError::Parse("Invalid prefixed name".to_string()))
+        }
+    }
 }
 
 /// Turtle parser state for handling multi-line statements and abbreviations
@@ -671,7 +1055,7 @@ impl TurtleParserState {
         if !self.pending_statement.trim().is_empty() {
             let statement = self.pending_statement.trim().to_string();
             self.pending_statement.clear();
-            return Ok(Some(self.parse_statement(&statement)?));
+            return self.parse_statement(&statement).map(Some);
         }
         Ok(None)
     }
@@ -910,15 +1294,15 @@ impl TurtleParserState {
         let mut escaped = false;
         let chars: Vec<char> = token.chars().collect();
 
-        for i in 1..chars.len() {
+        for (i, &ch) in chars.iter().enumerate().skip(1) {
             if escaped {
                 escaped = false;
                 continue;
             }
 
-            if chars[i] == '\\' {
+            if ch == '\\' {
                 escaped = true;
-            } else if chars[i] == '"' {
+            } else if ch == '"' {
                 end_quote_pos = Some(i);
                 break;
             }
@@ -933,14 +1317,12 @@ impl TurtleParserState {
         // Check for language tag or datatype
         let remaining = &token[end_quote_pos + 1..];
 
-        if remaining.starts_with('@') {
+        if let Some(lang_tag) = remaining.strip_prefix('@') {
             // Language tag
-            let lang_tag = &remaining[1..];
             let literal = Literal::new_lang(literal_value, lang_tag)?;
             Ok(Object::Literal(literal))
-        } else if remaining.starts_with("^^") {
+        } else if let Some(datatype_part) = remaining.strip_prefix("^^") {
             // Datatype
-            let datatype_part = &remaining[2..];
             if datatype_part.starts_with('<') && datatype_part.ends_with('>') {
                 // IRI datatype
                 let datatype_iri = self.resolve_iri(&datatype_part[1..datatype_part.len() - 1])?;
@@ -955,8 +1337,7 @@ impl TurtleParserState {
                 Ok(Object::Literal(literal))
             } else {
                 Err(OxirsError::Parse(format!(
-                    "Invalid datatype: {}",
-                    datatype_part
+                    "Invalid datatype: {datatype_part}"
                 )))
             }
         } else if remaining.is_empty() {
@@ -965,8 +1346,7 @@ impl TurtleParserState {
             Ok(Object::Literal(literal))
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid literal syntax: {}",
-                token
+                "Invalid literal syntax: {token}"
             )))
         }
     }
@@ -983,8 +1363,7 @@ impl TurtleParserState {
             }
         } else {
             Err(OxirsError::Parse(format!(
-                "Invalid prefixed name: {}",
-                prefixed_name
+                "Invalid prefixed name: {prefixed_name}"
             )))
         }
     }
@@ -1472,9 +1851,9 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
         let result = parser.parse_str_to_quads(ntriples_data);
 
         if let Err(e) = &result {
-            println!("Parse error: {}", e);
+            println!("Parse error: {e}");
         }
-        assert!(result.is_ok(), "Parse failed: {:?}", result);
+        assert!(result.is_ok(), "Parse failed: {result:?}");
 
         let quads = result.unwrap();
         assert_eq!(quads.len(), 1);
@@ -1733,8 +2112,7 @@ ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
         for triple in original_graph.iter() {
             assert!(
                 parsed_graph.contains(triple),
-                "Parsed graph missing triple: {}",
-                triple
+                "Parsed graph missing triple: {triple}"
             );
         }
     }

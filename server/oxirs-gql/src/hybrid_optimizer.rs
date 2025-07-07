@@ -3,18 +3,16 @@
 //! This module integrates quantum-inspired optimization with machine learning
 //! to provide the most advanced query optimization capabilities available.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::ast::Document;
-use crate::ml_optimizer::{
-    MLOptimizerConfig, MLQueryOptimizer, PerformancePrediction, TrainingSample,
-};
+use crate::ml_optimizer::{MLOptimizerConfig, MLQueryOptimizer, PerformancePrediction};
 use crate::performance::PerformanceTracker;
 use crate::quantum_optimizer::{
     OptimizationResult, QuantumOptimizerConfig, QuantumQueryOptimizer, QueryOptimizationProblem,

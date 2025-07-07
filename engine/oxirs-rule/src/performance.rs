@@ -74,7 +74,7 @@ pub struct PerformanceThresholds {
     pub max_rule_loading_time: u64,
     /// Maximum acceptable forward chaining time (ms)
     pub max_forward_chaining_time: u64,
-    /// Maximum acceptable backward chaining time (ms)  
+    /// Maximum acceptable backward chaining time (ms)
     pub max_backward_chaining_time: u64,
     /// Maximum memory usage (MB)
     pub max_memory_usage: usize,
@@ -91,6 +91,12 @@ impl Default for PerformanceThresholds {
             max_memory_usage: 1024,           // 1 GB
             max_iterations: 1000,
         }
+    }
+}
+
+impl Default for RuleEngineProfiler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -133,7 +139,7 @@ impl RuleEngineProfiler {
 
                 self.operation_timings
                     .entry(operation_name.to_string())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(duration);
             } else {
                 warn!(
@@ -173,11 +179,11 @@ impl RuleEngineProfiler {
         F: FnOnce() -> R,
     {
         self.start_operation(operation_name);
-        self.record_memory_snapshot(&format!("before_{}", operation_name));
+        self.record_memory_snapshot(&format!("before_{operation_name}"));
 
         let result = operation();
 
-        self.record_memory_snapshot(&format!("after_{}", operation_name));
+        self.record_memory_snapshot(&format!("after_{operation_name}"));
         self.end_operation(operation_name);
 
         result
@@ -298,7 +304,7 @@ impl RuleEngineProfiler {
         if !metrics.warnings.is_empty() {
             println!("\n=== Performance Warnings ===");
             for warning in &metrics.warnings {
-                println!("⚠️  {}", warning);
+                println!("⚠️  {warning}");
             }
         }
 
@@ -309,7 +315,7 @@ impl RuleEngineProfiler {
             sorted_timings.reverse();
 
             for (operation, duration) in sorted_timings {
-                println!("{}: {:?}", operation, duration);
+                println!("{operation}: {duration:?}");
             }
         }
     }
@@ -428,11 +434,11 @@ impl PerformanceTestHarness {
 
         for i in 0..size {
             facts.push(RuleAtom::Triple {
-                subject: Term::Constant(format!("http://example.org/entity{}", i)),
+                subject: Term::Constant(format!("http://example.org/entity{i}")),
                 predicate: Term::Constant(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                 ),
-                object: Term::Constant(format!("http://example.org/Type{}", i % 100)),
+                object: Term::Constant(format!("http://example.org/Type{val}", val = i % 100)),
             });
         }
 
@@ -445,20 +451,20 @@ impl PerformanceTestHarness {
 
         for i in 0..size {
             rules.push(Rule {
-                name: format!("large_rule_{}", i),
+                name: format!("large_rule_{i}"),
                 body: vec![RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
                     predicate: Term::Constant(
                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                     ),
-                    object: Term::Constant(format!("http://example.org/Type{}", i % 100)),
+                    object: Term::Constant(format!("http://example.org/Type{val}", val = i % 100)),
                 }],
                 head: vec![RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
                     predicate: Term::Constant(
                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                     ),
-                    object: Term::Constant(format!("http://example.org/DerivedType{}", i)),
+                    object: Term::Constant(format!("http://example.org/DerivedType{i}")),
                 }],
             });
         }
@@ -754,18 +760,19 @@ impl ParallelRuleEngine {
     pub fn add_rules(&mut self, rules: Vec<Rule>) -> Result<(), String> {
         let start_time = Instant::now();
 
-        if let Ok(mut rule_storage) = self.rules.lock() {
-            rule_storage.extend(rules.clone());
+        match self.rules.lock() {
+            Ok(mut rule_storage) => {
+                rule_storage.extend(rules.clone());
 
-            if let Ok(mut metrics) = self.metrics.lock() {
-                metrics.rules_processed += rules.len();
-                metrics.rule_loading_time += start_time.elapsed();
+                if let Ok(mut metrics) = self.metrics.lock() {
+                    metrics.rules_processed += rules.len();
+                    metrics.rule_loading_time += start_time.elapsed();
+                }
+
+                info!("Added {} rules to parallel engine", rules.len());
+                Ok(())
             }
-
-            info!("Added {} rules to parallel engine", rules.len());
-            Ok(())
-        } else {
-            Err("Failed to acquire rule storage lock".to_string())
+            _ => Err("Failed to acquire rule storage lock".to_string()),
         }
     }
 
@@ -813,10 +820,11 @@ impl ParallelRuleEngine {
         }
 
         // Collect results
-        let results = if let Ok(derived) = derived_facts.lock() {
-            derived.clone()
-        } else {
-            return Err("Failed to acquire derived facts lock".to_string());
+        let results = match derived_facts.lock() {
+            Ok(derived) => derived.clone(),
+            _ => {
+                return Err("Failed to acquire derived facts lock".to_string());
+            }
         };
 
         // Update metrics
@@ -885,27 +893,28 @@ impl ParallelRuleEngine {
 
     /// Get performance metrics
     pub fn get_metrics(&self) -> PerformanceMetrics {
-        if let Ok(metrics) = self.metrics.lock() {
-            metrics.clone()
-        } else {
-            warn!("Failed to acquire metrics lock");
-            PerformanceMetrics {
-                total_time: Duration::new(0, 0),
-                rule_loading_time: Duration::new(0, 0),
-                fact_processing_time: Duration::new(0, 0),
-                forward_chaining_time: Duration::new(0, 0),
-                backward_chaining_time: Duration::new(0, 0),
-                rules_processed: 0,
-                facts_processed: 0,
-                inferred_facts: 0,
-                memory_stats: MemoryStats {
-                    peak_memory_usage: 0,
-                    facts_memory: 0,
-                    rules_memory: 0,
-                    derived_facts_memory: 0,
-                },
-                rule_timings: HashMap::new(),
-                warnings: Vec::new(),
+        match self.metrics.lock() {
+            Ok(metrics) => metrics.clone(),
+            _ => {
+                warn!("Failed to acquire metrics lock");
+                PerformanceMetrics {
+                    total_time: Duration::new(0, 0),
+                    rule_loading_time: Duration::new(0, 0),
+                    fact_processing_time: Duration::new(0, 0),
+                    forward_chaining_time: Duration::new(0, 0),
+                    backward_chaining_time: Duration::new(0, 0),
+                    rules_processed: 0,
+                    facts_processed: 0,
+                    inferred_facts: 0,
+                    memory_stats: MemoryStats {
+                        peak_memory_usage: 0,
+                        facts_memory: 0,
+                        rules_memory: 0,
+                        derived_facts_memory: 0,
+                    },
+                    rule_timings: HashMap::new(),
+                    warnings: Vec::new(),
+                }
             }
         }
     }
@@ -939,10 +948,13 @@ pub struct ChangeTracker {
     /// Newly added facts since last reasoning
     added_facts: Vec<RuleAtom>,
     /// Facts removed since last reasoning
+    #[allow(dead_code)]
     removed_facts: Vec<RuleAtom>,
     /// Rules affected by changes
+    #[allow(dead_code)]
     affected_rules: Vec<String>,
     /// Last reasoning timestamp
+    #[allow(dead_code)]
     last_reasoning_time: Option<std::time::Instant>,
 }
 
@@ -981,13 +993,14 @@ impl IncrementalReasoningEngine {
             rules.len()
         );
 
-        if let Ok(mut engine) = self.base_engine.lock() {
-            for rule in rules {
-                engine.add_rule(rule);
+        match self.base_engine.lock() {
+            Ok(mut engine) => {
+                for rule in rules {
+                    engine.add_rule(rule);
+                }
+                Ok(())
             }
-            Ok(())
-        } else {
-            Err("Failed to acquire engine lock".to_string())
+            _ => Err("Failed to acquire engine lock".to_string()),
         }
     }
 
@@ -1164,20 +1177,22 @@ impl IncrementalReasoningEngine {
 
     /// Check if a fact is already known (to avoid duplicates)
     fn fact_already_known(&self, fact: &RuleAtom) -> bool {
-        if let Ok(materialized) = self.materialized_facts.lock() {
-            materialized.contains(fact)
-        } else {
-            false // If we can't check, assume it's new
+        match self.materialized_facts.lock() {
+            Ok(materialized) => materialized.contains(fact),
+            _ => {
+                false // If we can't check, assume it's new
+            }
         }
     }
 
     /// Get current incremental reasoning metrics
     pub fn get_incremental_metrics(&self) -> IncrementalMetrics {
-        if let Ok(metrics) = self.incremental_metrics.lock() {
-            metrics.clone()
-        } else {
-            warn!("Failed to acquire metrics lock");
-            IncrementalMetrics::default()
+        match self.incremental_metrics.lock() {
+            Ok(metrics) => metrics.clone(),
+            _ => {
+                warn!("Failed to acquire metrics lock");
+                IncrementalMetrics::default()
+            }
         }
     }
 
@@ -1217,33 +1232,34 @@ impl IncrementalReasoningEngine {
             facts.len()
         );
 
-        if let Ok(mut engine) = self.base_engine.lock() {
-            engine.clear();
-            engine.add_facts(facts);
+        match self.base_engine.lock() {
+            Ok(mut engine) => {
+                engine.clear();
+                engine.add_facts(facts);
 
-            match engine.forward_chain(&[]) {
-                Ok(derived_facts) => {
-                    // Cache all derived facts
-                    if let Ok(mut materialized) = self.materialized_facts.lock() {
-                        materialized.clear();
-                        materialized.extend(derived_facts.clone());
+                match engine.forward_chain(&[]) {
+                    Ok(derived_facts) => {
+                        // Cache all derived facts
+                        if let Ok(mut materialized) = self.materialized_facts.lock() {
+                            materialized.clear();
+                            materialized.extend(derived_facts.clone());
+                        }
+
+                        // Build dependency graph for future incremental updates
+                        self.build_dependency_graph(&derived_facts)?;
+
+                        info!(
+                            "Full reasoning completed in {:?}, cached {} facts",
+                            start_time.elapsed(),
+                            derived_facts.len()
+                        );
+
+                        Ok(derived_facts)
                     }
-
-                    // Build dependency graph for future incremental updates
-                    self.build_dependency_graph(&derived_facts)?;
-
-                    info!(
-                        "Full reasoning completed in {:?}, cached {} facts",
-                        start_time.elapsed(),
-                        derived_facts.len()
-                    );
-
-                    Ok(derived_facts)
+                    Err(e) => Err(format!("Full reasoning failed: {e}"))
                 }
-                Err(e) => Err(format!("Full reasoning failed: {}", e)),
             }
-        } else {
-            Err("Failed to acquire engine lock".to_string())
+            _ => Err("Failed to acquire engine lock".to_string()),
         }
     }
 
@@ -1412,9 +1428,9 @@ impl HybridReasoningEngine {
                 parallel_threshold,
                 complexity_threshold,
             } => {
-                if new_facts.len() > *parallel_threshold {
-                    "parallel"
-                } else if self.estimate_rule_complexity()? > *complexity_threshold {
+                if new_facts.len() > *parallel_threshold
+                    || self.estimate_rule_complexity()? > *complexity_threshold
+                {
                     "parallel"
                 } else {
                     "incremental"
@@ -1460,27 +1476,28 @@ impl HybridReasoningEngine {
 
     /// Get combined performance metrics
     pub fn get_performance_metrics(&self) -> PerformanceMetrics {
-        if let Ok(metrics) = self.performance_monitor.lock() {
-            metrics.clone()
-        } else {
-            warn!("Failed to acquire performance monitor lock");
-            PerformanceMetrics {
-                total_time: Duration::new(0, 0),
-                rule_loading_time: Duration::new(0, 0),
-                fact_processing_time: Duration::new(0, 0),
-                forward_chaining_time: Duration::new(0, 0),
-                backward_chaining_time: Duration::new(0, 0),
-                rules_processed: 0,
-                facts_processed: 0,
-                inferred_facts: 0,
-                memory_stats: MemoryStats {
-                    peak_memory_usage: 0,
-                    facts_memory: 0,
-                    rules_memory: 0,
-                    derived_facts_memory: 0,
-                },
-                rule_timings: HashMap::new(),
-                warnings: Vec::new(),
+        match self.performance_monitor.lock() {
+            Ok(metrics) => metrics.clone(),
+            _ => {
+                warn!("Failed to acquire performance monitor lock");
+                PerformanceMetrics {
+                    total_time: Duration::new(0, 0),
+                    rule_loading_time: Duration::new(0, 0),
+                    fact_processing_time: Duration::new(0, 0),
+                    forward_chaining_time: Duration::new(0, 0),
+                    backward_chaining_time: Duration::new(0, 0),
+                    rules_processed: 0,
+                    facts_processed: 0,
+                    inferred_facts: 0,
+                    memory_stats: MemoryStats {
+                        peak_memory_usage: 0,
+                        facts_memory: 0,
+                        rules_memory: 0,
+                        derived_facts_memory: 0,
+                    },
+                    rule_timings: HashMap::new(),
+                    warnings: Vec::new(),
+                }
             }
         }
     }

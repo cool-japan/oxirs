@@ -5,41 +5,40 @@
 //!
 //! Features:
 //! - B-tree indexing for efficient quoted triple lookups
-//! - Bulk insertion optimizations for large datasets  
+//! - Bulk insertion optimizations for large datasets
 //! - Memory-mapped storage options for persistent storage
 //! - Compression for quoted triple storage
 //! - Connection pooling for concurrent access
 //! - Cache optimization strategies
 //! - Transaction support with ACID properties
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use oxirs_core::rdf_store::{ConcreteStore as CoreStore, Store};
-use tracing::{debug, info, span, warn, Level};
+use tracing::{debug, info, span, Level};
 
-use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
+use crate::model::{StarGraph, StarTerm, StarTriple};
 use crate::{StarConfig, StarError, StarResult, StarStatistics};
 
 /// Conversion utilities for StarTerm to core RDF terms
 mod conversion {
     use super::*;
     use oxirs_core::model::{
-        BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode as CoreNamedNode, Object,
-        Predicate, Subject, Term, Triple,
+        BlankNode as CoreBlankNode, NamedNode as CoreNamedNode, Object, Predicate, Subject,
     };
 
     pub fn star_term_to_subject(term: &StarTerm) -> StarResult<Subject> {
         match term {
             StarTerm::NamedNode(nn) => {
                 let named_node =
-                    CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
+                    CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
                 Ok(Subject::NamedNode(named_node))
             }
             StarTerm::BlankNode(bn) => {
-                let blank_node = CoreBlankNode::new(&bn.id).map_err(|e| StarError::CoreError(e))?;
+                let blank_node = CoreBlankNode::new(&bn.id).map_err(StarError::CoreError)?;
                 Ok(Subject::BlankNode(blank_node))
             }
             StarTerm::Literal(_) => Err(StarError::invalid_term_type(
@@ -58,7 +57,7 @@ mod conversion {
         match term {
             StarTerm::NamedNode(nn) => {
                 let named_node =
-                    CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
+                    CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
                 Ok(Predicate::NamedNode(named_node))
             }
             _ => Err(StarError::invalid_term_type(
@@ -71,16 +70,32 @@ mod conversion {
         match term {
             StarTerm::NamedNode(nn) => {
                 let named_node =
-                    CoreNamedNode::new(&nn.iri).map_err(|e| StarError::CoreError(e))?;
+                    CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
                 Ok(Object::NamedNode(named_node))
             }
             StarTerm::BlankNode(bn) => {
-                let blank_node = CoreBlankNode::new(&bn.id).map_err(|e| StarError::CoreError(e))?;
+                let blank_node = CoreBlankNode::new(&bn.id).map_err(StarError::CoreError)?;
                 Ok(Object::BlankNode(blank_node))
             }
             StarTerm::Literal(lit) => {
-                let literal = CoreLiteral::new(&lit.value);
-                Ok(Object::Literal(literal))
+                let core_literal = if let Some(ref language) = lit.language {
+                    // Language-tagged literal
+                    oxirs_core::model::Literal::new_language_tagged_literal(&lit.value, language)
+                        .map_err(|e| {
+                            StarError::parse_error(format!("Invalid language tag: {e}"))
+                        })?
+                } else if let Some(ref datatype) = lit.datatype {
+                    // Typed literal
+                    let core_datatype =
+                        oxirs_core::model::NamedNode::new(&datatype.iri).map_err(|e| {
+                            StarError::invalid_term_type(format!("Invalid datatype IRI: {e}"))
+                        })?;
+                    oxirs_core::model::Literal::new_typed_literal(&lit.value, core_datatype)
+                } else {
+                    // Simple literal
+                    oxirs_core::model::Literal::new_simple_literal(&lit.value)
+                };
+                Ok(Object::Literal(core_literal))
             }
             StarTerm::QuotedTriple(_) => Err(StarError::invalid_term_type(
                 "Quoted triple cannot be converted to core RDF object".to_string(),
@@ -99,7 +114,7 @@ struct QuotedTripleIndex {
     signature_to_indices: BTreeMap<String, BTreeSet<usize>>,
     /// Subject-based index for S?? pattern queries
     subject_index: BTreeMap<String, BTreeSet<usize>>,
-    /// Predicate-based index for ?P? pattern queries  
+    /// Predicate-based index for ?P? pattern queries
     predicate_index: BTreeMap<String, BTreeSet<usize>>,
     /// Object-based index for ??O pattern queries
     object_index: BTreeMap<String, BTreeSet<usize>>,
@@ -235,12 +250,11 @@ impl ConnectionPool {
         drop(active_count);
         available = self.connection_available.wait(available).unwrap();
 
-        if let Some(store) = available.pop_front() {
-            Ok(PooledConnection::new(store, self.clone()))
-        } else {
-            Err(StarError::query_error(
+        match available.pop_front() {
+            Some(store) => Ok(PooledConnection::new(store, self.clone())),
+            _ => Err(StarError::query_error(
                 "No connections available".to_string(),
-            ))
+            )),
         }
     }
 
@@ -457,7 +471,7 @@ impl StarCache {
     fn find_least_frequent_key(&self) -> Option<String> {
         let freq = self.access_frequency.read().unwrap();
         freq.iter()
-            .min_by_key(|(_, &count)| count)
+            .min_by_key(|&(_, &count)| count)
             .map(|(key, _)| key.clone())
     }
 
@@ -602,11 +616,11 @@ impl StarStore {
 
         // Insert into core store (convert triple to quad in default graph)
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
-        eprintln!("DEBUG: Created core quad for insertion: {:?}", core_quad);
+        eprintln!("DEBUG: Created core quad for insertion: {core_quad:?}");
         let mut core_store = self.core_store.write().unwrap();
-        let result = CoreStore::insert_quad(&mut *core_store, core_quad)
-            .map_err(|e| StarError::CoreError(e));
-        eprintln!("DEBUG: Core store insert result: {:?}", result);
+        let result = CoreStore::insert_quad(&mut core_store, core_quad)
+            .map_err(StarError::CoreError);
+        eprintln!("DEBUG: Core store insert result: {result:?}");
         result?;
 
         eprintln!("DEBUG: Successfully inserted regular triple");
@@ -654,7 +668,7 @@ impl StarStore {
         index
             .nesting_depth_index
             .entry(depth)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(triple_index);
     }
 
@@ -671,7 +685,7 @@ impl StarStore {
             index
                 .signature_to_indices
                 .entry(signature)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // Index by subject signature for S?? queries
@@ -679,7 +693,7 @@ impl StarStore {
             index
                 .subject_index
                 .entry(subject_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // Recursively index nested quoted triples
@@ -692,7 +706,7 @@ impl StarStore {
             index
                 .signature_to_indices
                 .entry(signature)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // Index by predicate signature for ?P? queries
@@ -700,7 +714,7 @@ impl StarStore {
             index
                 .predicate_index
                 .entry(predicate_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // ALSO index the subject and object of the quoted triple found in predicate position
@@ -708,14 +722,14 @@ impl StarStore {
             index
                 .subject_index
                 .entry(qt_subject_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             let qt_object_key = format!("OBJ:{}", qt.object);
             index
                 .object_index
                 .entry(qt_object_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // Recursively index nested quoted triples
@@ -728,7 +742,7 @@ impl StarStore {
             index
                 .signature_to_indices
                 .entry(signature)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // Index by object signature for ??O queries
@@ -736,7 +750,7 @@ impl StarStore {
             index
                 .object_index
                 .entry(object_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // ALSO index the subject and predicate of the quoted triple found in object position
@@ -745,14 +759,14 @@ impl StarStore {
             index
                 .subject_index
                 .entry(qt_subject_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             let qt_predicate_key = format!("PRED:{}", qt.predicate);
             index
                 .predicate_index
                 .entry(qt_predicate_key)
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(triple_index);
 
             // Recursively index nested quoted triples
@@ -782,6 +796,7 @@ impl StarStore {
     }
 
     /// Count quoted triples within a single triple
+    #[allow(clippy::only_used_in_recursion)]
     fn count_quoted_triples_in_triple(&self, triple: &StarTriple) -> usize {
         let mut count = 0;
 
@@ -814,7 +829,7 @@ impl StarStore {
         let span = span!(Level::DEBUG, "remove_triple");
         let _enter = span.enter();
 
-        eprintln!("DEBUG: Attempting to remove triple: {}", triple);
+        eprintln!("DEBUG: Attempting to remove triple: {triple}");
         eprintln!(
             "DEBUG: Triple contains quoted triples: {}",
             triple.contains_quoted_triples()
@@ -865,12 +880,12 @@ impl StarStore {
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 eprintln!("DEBUG: Successfully converted to core triple");
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
-                eprintln!("DEBUG: Created core quad: {:?}", core_quad);
-                match CoreStore::remove_quad(&mut *core_store, &core_quad) {
+                eprintln!("DEBUG: Created core quad: {core_quad:?}");
+                match CoreStore::remove_quad(&mut core_store, &core_quad) {
                     Ok(removed) => {
-                        eprintln!("DEBUG: Core store remove_quad returned: {}", removed);
+                        eprintln!("DEBUG: Core store remove_quad returned: {removed}");
                         if removed {
-                            eprintln!("DEBUG: Removed regular triple: {}", triple);
+                            eprintln!("DEBUG: Removed regular triple: {triple}");
                             return Ok(true);
                         } else {
                             eprintln!(
@@ -879,7 +894,7 @@ impl StarStore {
                         }
                     }
                     Err(e) => {
-                        eprintln!("DEBUG: Core store remove_quad failed with error: {:?}", e);
+                        eprintln!("DEBUG: Core store remove_quad failed with error: {e:?}");
                     }
                 }
             } else {
@@ -983,17 +998,17 @@ impl StarStore {
             let mut found_indices = BTreeSet::new();
 
             // Search in all index types for the subject term, as it could appear in any position within quoted triples
-            let subject_key = format!("SUBJ:{}", subject_term);
+            let subject_key = format!("SUBJ:{subject_term}");
             if let Some(indices) = index.subject_index.get(&subject_key) {
                 found_indices.extend(indices);
             }
 
-            let predicate_key = format!("PRED:{}", subject_term);
+            let predicate_key = format!("PRED:{subject_term}");
             if let Some(indices) = index.predicate_index.get(&predicate_key) {
                 found_indices.extend(indices);
             }
 
-            let object_key = format!("OBJ:{}", subject_term);
+            let object_key = format!("OBJ:{subject_term}");
             if let Some(indices) = index.object_index.get(&object_key) {
                 found_indices.extend(indices);
             }
@@ -1007,7 +1022,7 @@ impl StarStore {
 
         // Use predicate index if predicate pattern is provided
         if let Some(predicate_term) = predicate_pattern {
-            let predicate_key = format!("PRED:{}", predicate_term);
+            let predicate_key = format!("PRED:{predicate_term}");
             if let Some(indices) = index.predicate_index.get(&predicate_key) {
                 if let Some(ref mut candidates) = candidate_indices {
                     *candidates = candidates.intersection(indices).cloned().collect();
@@ -1025,7 +1040,7 @@ impl StarStore {
 
         // Use object index if object pattern is provided
         if let Some(object_term) = object_pattern {
-            let object_key = format!("OBJ:{}", object_term);
+            let object_key = format!("OBJ:{object_term}");
             if let Some(indices) = index.object_index.get(&object_key) {
                 if let Some(ref mut candidates) = candidate_indices {
                     *candidates = candidates.intersection(indices).cloned().collect();
@@ -1067,21 +1082,41 @@ impl StarStore {
         let span = span!(Level::DEBUG, "find_triples_by_nesting_depth");
         let _enter = span.enter();
 
+        let mut results = Vec::new();
+        let max_d = max_depth.unwrap_or(usize::MAX);
+
+        // If we're looking for depth 0 triples, include regular triples from core_store
+        if min_depth == 0 {
+            let core_store = self.core_store.read().unwrap();
+            if let Ok(quads) = core_store.find_quads(None, None, None, None) {
+                for quad in quads {
+                    let core_triple = quad.to_triple();
+                    if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
+                        if !star_triple.contains_quoted_triples() {
+                            results.push(star_triple);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Find star triples (quoted triples) by nesting depth
         let index = self.quoted_triple_index.read().unwrap();
         let star_triples = self.star_triples.read().unwrap();
         let mut result_indices = BTreeSet::new();
 
-        let max_d = max_depth.unwrap_or(usize::MAX);
-
-        for (&depth, indices) in index.nesting_depth_index.range(min_depth..=max_d) {
+        for (&_depth, indices) in index.nesting_depth_index.range(min_depth..=max_d) {
             result_indices.extend(indices);
         }
 
-        result_indices
-            .iter()
-            .filter_map(|&idx: &usize| star_triples.get(idx))
-            .cloned()
-            .collect()
+        results.extend(
+            result_indices
+                .iter()
+                .filter_map(|&idx: &usize| star_triples.get(idx))
+                .cloned(),
+        );
+
+        results
     }
 
     /// Get the number of triples in the store
@@ -1115,6 +1150,13 @@ impl StarStore {
             star_triples.clear();
         }
 
+        // Clear the core store by recreating it
+        // Note: This is a workaround since clear_all/remove_quad have trait/impl conflicts
+        {
+            let mut core_store = self.core_store.write().unwrap();
+            *core_store = CoreStore::new().map_err(StarError::CoreError)?;
+        }
+
         {
             let mut index = self.quoted_triple_index.write().unwrap();
             index.clear();
@@ -1140,9 +1182,24 @@ impl StarStore {
         let star_triples = self.star_triples.read().unwrap();
         let mut graph = StarGraph::new();
 
+        // Add star triples (containing quoted triples)
         for triple in star_triples.iter() {
             // Unwrap is safe here because we validate on insert
             graph.insert(triple.clone()).unwrap();
+        }
+
+        // Add regular triples from core store
+        let core_store = self.core_store.read().unwrap();
+        if let Ok(quads) = core_store.find_quads(None, None, None, None) {
+            for quad in quads {
+                let core_triple = quad.to_triple();
+                if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
+                    // Only add if it doesn't contain quoted triples (those are already in star_triples)
+                    if !star_triple.contains_quoted_triples() {
+                        graph.insert(star_triple).unwrap();
+                    }
+                }
+            }
         }
 
         graph
@@ -1221,7 +1278,7 @@ impl StarStore {
         // If no quoted triple patterns, also query core store
         let has_quoted_pattern = [subject, predicate, object]
             .iter()
-            .any(|term| term.map_or(false, |t| t.is_quoted_triple()));
+            .any(|term| term.is_some_and(|t| t.is_quoted_triple()));
 
         if !has_quoted_pattern {
             // Convert patterns to core RDF terms and query core store
@@ -1265,7 +1322,7 @@ impl StarStore {
                 core_object.as_ref(),
                 None, // Query all graphs
             )
-            .map_err(|e| StarError::CoreError(e))?;
+            .map_err(StarError::CoreError)?;
 
         // Convert results back to StarTriples
         let mut results = Vec::new();
@@ -1330,7 +1387,30 @@ impl StarStore {
         match object {
             oxirs_core::model::Object::NamedNode(nn) => Ok(StarTerm::iri(nn.as_str())?),
             oxirs_core::model::Object::BlankNode(bn) => Ok(StarTerm::blank_node(bn.as_str())?),
-            oxirs_core::model::Object::Literal(lit) => Ok(StarTerm::literal(lit.value())?),
+            oxirs_core::model::Object::Literal(lit) => {
+                let language = lit.language().map(|lang| lang.to_string());
+                let datatype = if lit.is_lang_string() {
+                    // Language-tagged literals don't need explicit datatype
+                    None
+                } else {
+                    let dt_iri = lit.datatype().as_str();
+                    // Don't include xsd:string datatype for simple literals (it's implicit)
+                    if dt_iri == "http://www.w3.org/2001/XMLSchema#string" {
+                        None
+                    } else {
+                        Some(crate::model::NamedNode {
+                            iri: dt_iri.to_string(),
+                        })
+                    }
+                };
+
+                let star_literal = crate::model::Literal {
+                    value: lit.value().to_string(),
+                    language,
+                    datatype,
+                };
+                Ok(StarTerm::Literal(star_literal))
+            }
             oxirs_core::model::Object::Variable(_) => Err(StarError::invalid_term_type(
                 "Variables are not supported in objects for RDF-star storage".to_string(),
             )),
@@ -1392,12 +1472,36 @@ impl Default for StarStore {
 impl StarStore {
     /// Get a vector of all triples (cloned to avoid lifetime issues)
     pub fn all_triples(&self) -> Vec<StarTriple> {
-        let star_triples = self.star_triples.read().unwrap();
-        star_triples.clone()
+        let mut all_triples = Vec::new();
+
+        // Add star triples (containing quoted triples)
+        {
+            let star_triples = self.star_triples.read().unwrap();
+            all_triples.extend(star_triples.clone());
+        }
+
+        // Add regular triples from core store
+        {
+            let core_store = self.core_store.read().unwrap();
+            if let Ok(quads) = core_store.find_quads(None, None, None, None) {
+                drop(core_store); // Release lock before conversion
+                for quad in quads {
+                    let core_triple = quad.to_triple();
+                    if let Ok(star_triple) = self.convert_from_core_triple(&core_triple) {
+                        // Only add if it doesn't contain quoted triples (those are already in star_triples)
+                        if !star_triple.contains_quoted_triples() {
+                            all_triples.push(star_triple);
+                        }
+                    }
+                }
+            }
+        }
+
+        all_triples
     }
 
     /// Get an iterator over all triples using a safe implementation
-    pub fn iter(&self) -> impl Iterator<Item = StarTriple> {
+    pub fn iter(&self) -> impl Iterator<Item = StarTriple> + use<> {
         // Clone all triples to avoid holding the lock
         // This is safe but potentially memory-intensive for large stores
         // For production use, consider using the streaming_iter method
@@ -1520,7 +1624,7 @@ impl StarStore {
         for handle in handles {
             handle
                 .join()
-                .map_err(|e| StarError::query_error(format!("Thread join error: {:?}", e)))??;
+                .map_err(|e| StarError::query_error(format!("Thread join error: {e:?}")))??;
         }
 
         Ok(())
@@ -1744,20 +1848,21 @@ impl<'a> StreamingTripleIterator<'a> {
     }
 
     fn load_next_chunk(&mut self) -> bool {
-        let star_triples = self.store.star_triples.read().unwrap();
+        // Get all triples (both star triples and regular triples from core store)
+        let all_triples = self.store.all_triples();
 
         // Calculate the range for the next chunk
         let start = self.total_processed;
-        let end = (start + self.chunk_size).min(star_triples.len());
+        let end = (start + self.chunk_size).min(all_triples.len());
 
-        if start >= star_triples.len() {
+        if start >= all_triples.len() {
             return false;
         }
 
         // Load the chunk
         self.current_chunk.clear();
         self.current_chunk
-            .extend(star_triples.iter().skip(start).take(end - start).cloned());
+            .extend(all_triples.iter().skip(start).take(end - start).cloned());
 
         self.current_index = 0;
         !self.current_chunk.is_empty()
@@ -1769,11 +1874,10 @@ impl<'a> Iterator for StreamingTripleIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // If we've exhausted the current chunk, load the next one
-        if self.current_index >= self.current_chunk.len() {
-            if !self.load_next_chunk() {
+        if self.current_index >= self.current_chunk.len()
+            && !self.load_next_chunk() {
                 return None;
             }
-        }
 
         // Return the next triple from the current chunk
         let triple = self.current_chunk.get(self.current_index).cloned();
@@ -1948,9 +2052,9 @@ mod tests {
         // Insert multiple triples
         for i in 0..100 {
             let triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                 StarTerm::iri("http://example.org/p").unwrap(),
-                StarTerm::iri(&format!("http://example.org/o{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/o{i}")).unwrap(),
             );
             store.insert(&triple).unwrap();
         }
@@ -1965,8 +2069,7 @@ mod tests {
             }
             assert_eq!(
                 count, 100,
-                "Streaming iterator with chunk size {} should return all triples",
-                chunk_size
+                "Streaming iterator with chunk size {chunk_size} should return all triples"
             );
         }
 

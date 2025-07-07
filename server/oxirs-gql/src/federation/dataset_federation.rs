@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use futures_util::future;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::time::{Duration, Instant};
 
 /// RDF dataset federation manager
@@ -67,10 +67,10 @@ mod duration_serde {
 }
 
 mod instant_serde {
-    use serde::{Deserialize, Deserializer, Serializer};
+    use serde::{Deserializer, Serializer};
     use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
-    pub fn serialize<S>(instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
+    pub fn serialize<S>(_instant: &Instant, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -105,7 +105,7 @@ pub struct CostModel {
 
 /// Federated query execution step
 #[derive(Debug, Clone)]
-pub(crate) struct FederatedStep {
+pub struct FederatedStep {
     pub endpoint_id: String,
     pub sparql_query: String,
     pub expected_result_size: Option<u64>,
@@ -113,7 +113,7 @@ pub(crate) struct FederatedStep {
 
 /// Join pattern for optimization
 #[derive(Debug, Clone)]
-pub(crate) struct JoinPattern {
+pub struct JoinPattern {
     pub left_step: usize,
     pub right_step: usize,
     pub join_variables: Vec<String>,
@@ -200,8 +200,6 @@ impl DatasetFederation {
 
     /// Execute a federated query plan
     async fn execute_federated_plan(&self, plan: &[FederatedStep]) -> Result<serde_json::Value> {
-        let mut results: Vec<serde_json::Value> = Vec::new();
-
         // Execute steps in parallel where possible
         let futures: Vec<_> = plan
             .iter()

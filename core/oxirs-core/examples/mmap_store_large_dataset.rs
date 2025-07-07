@@ -8,16 +8,16 @@
 
 use anyhow::Result;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject};
-use oxirs_core::store::{MmapStore, StoreStats};
+use oxirs_core::store::MmapStore;
 use std::path::Path;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 fn main() -> Result<()> {
     // Create a store in a temporary directory
     let store_path = Path::new("/tmp/oxirs_large_dataset");
-    std::fs::create_dir_all(&store_path)?;
+    std::fs::create_dir_all(store_path)?;
 
-    println!("Creating memory-mapped RDF store at: {:?}", store_path);
+    println!("Creating memory-mapped RDF store at: {store_path:?}");
     println!("This example will generate and query a large RDF dataset.");
     println!();
 
@@ -48,7 +48,7 @@ fn main() -> Result<()> {
     demonstrate_memory_efficiency(&store)?;
 
     println!("\nExample completed successfully!");
-    println!("Store remains on disk at: {:?}", store_path);
+    println!("Store remains on disk at: {store_path:?}");
     println!("You can re-run this example to see persistence in action.");
 
     Ok(())
@@ -63,20 +63,17 @@ fn populate_large_dataset(store: &MmapStore) -> Result<()> {
     const PROPERTIES_PER_ENTITY: usize = 20;
     const BATCH_SIZE: usize = 1000;
 
-    println!(
-        "Generating {} entities with {} properties each...",
-        NUM_ENTITIES, PROPERTIES_PER_ENTITY
-    );
+    println!("Generating {NUM_ENTITIES} entities with {PROPERTIES_PER_ENTITY} properties each...");
     println!(
         "Total quads to generate: {}",
         NUM_ENTITIES * PROPERTIES_PER_ENTITY
     );
 
-    let mut batch_count = 0;
+    let mut _batch_count = 0;
     let mut total_quads = 0;
 
     // Common predicates
-    let predicates = vec![
+    let predicates = [
         NamedNode::new("http://example.org/name")?,
         NamedNode::new("http://example.org/age")?,
         NamedNode::new("http://example.org/email")?,
@@ -101,42 +98,36 @@ fn populate_large_dataset(store: &MmapStore) -> Result<()> {
 
     // Generate data in batches
     for entity_id in 0..NUM_ENTITIES {
-        let subject = Subject::NamedNode(NamedNode::new(&format!(
-            "http://example.org/entity/{}",
-            entity_id
+        let subject = Subject::NamedNode(NamedNode::new(format!(
+            "http://example.org/entity/{entity_id}"
         ))?);
 
         // Add properties for this entity
         for (prop_idx, predicate) in predicates.iter().enumerate() {
             let object = match prop_idx {
-                0 => Object::Literal(Literal::new_simple_literal(&format!(
-                    "Entity {}",
-                    entity_id
-                ))),
+                0 => Object::Literal(Literal::new_simple_literal(format!("Entity {entity_id}"))),
                 1 => Object::Literal(Literal::new_typed(
-                    &format!("{}", 20 + (entity_id % 50)),
+                    format!("{}", 20 + (entity_id % 50)),
                     NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?,
                 )),
-                2 => Object::Literal(Literal::new_simple_literal(&format!(
-                    "entity{}@example.org",
-                    entity_id
+                2 => Object::Literal(Literal::new_simple_literal(format!(
+                    "entity{entity_id}@example.org"
                 ))),
                 10 => Object::Literal(Literal::new_typed(
-                    &format!("{}", 50000 + (entity_id * 1000)),
+                    format!("{}", 50000 + (entity_id * 1000)),
                     NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal")?,
                 )),
                 11 => Object::Literal(Literal::new_typed(
                     "2024-01-01",
                     NamedNode::new("http://www.w3.org/2001/XMLSchema#date")?,
                 )),
-                12 => Object::NamedNode(NamedNode::new(&format!(
+                12 => Object::NamedNode(NamedNode::new(format!(
                     "http://example.org/entity/{}",
                     entity_id / 10
                 ))?),
                 17 => Object::Literal(Literal::new_language_tagged_literal("English", "en")?),
-                _ => Object::Literal(Literal::new_simple_literal(&format!(
-                    "Value {}_{}",
-                    entity_id, prop_idx
+                _ => Object::Literal(Literal::new_simple_literal(format!(
+                    "Value {entity_id}_{prop_idx}"
                 ))),
             };
 
@@ -144,7 +135,7 @@ fn populate_large_dataset(store: &MmapStore) -> Result<()> {
             let graph = if entity_id % 100 == 0 {
                 GraphName::DefaultGraph
             } else {
-                GraphName::NamedNode(NamedNode::new(&format!(
+                GraphName::NamedNode(NamedNode::new(format!(
                     "http://example.org/graph/{}",
                     entity_id % 10
                 ))?)
@@ -164,15 +155,13 @@ fn populate_large_dataset(store: &MmapStore) -> Result<()> {
         // Flush periodically
         if (entity_id + 1) % BATCH_SIZE == 0 {
             store.flush()?;
-            batch_count += 1;
+            _batch_count += 1;
 
             let elapsed = start.elapsed();
             let rate = total_quads as f64 / elapsed.as_secs_f64();
             println!(
-                "  Processed {} entities ({} quads) - {:.0} quads/sec",
-                entity_id + 1,
-                total_quads,
-                rate
+                "  Processed {} entities ({total_quads} quads) - {rate:.0} quads/sec",
+                entity_id + 1
             );
         }
     }
@@ -314,9 +303,8 @@ fn demonstrate_memory_efficiency(store: &MmapStore) -> Result<()> {
 
     for i in 0..1000 {
         let entity_id = i * 10;
-        let subject = Subject::NamedNode(NamedNode::new(&format!(
-            "http://example.org/entity/{}",
-            entity_id
+        let subject = Subject::NamedNode(NamedNode::new(format!(
+            "http://example.org/entity/{entity_id}"
         ))?);
 
         // Just count the results

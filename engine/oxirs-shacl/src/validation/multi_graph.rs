@@ -13,28 +13,25 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "async")]
 use anyhow::Result;
 #[cfg(feature = "async")]
-use futures::{stream, StreamExt, TryStreamExt};
-#[cfg(feature = "async")]
 use indexmap::IndexMap;
 #[cfg(feature = "async")]
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "async")]
-use tokio::sync::{mpsc, Semaphore};
+use tokio::sync::Semaphore;
 
 #[cfg(feature = "async")]
 use oxirs_core::{
-    model::{GraphName, NamedNode, Quad, Term, Triple},
-    ConcreteStore, Store,
+    model::{GraphName, Term, Triple},
+    Store,
 };
+
+
+#[cfg(test)]
+use oxirs_core::ConcreteStore;
 
 #[cfg(feature = "async")]
 use crate::{
-    constraints::*,
-    paths::*,
-    report::*,
-    targets::*,
-    validation::{ValidationEngine, ValidationStats},
-    Result as ShaclResult, Shape, ShapeId, ValidationConfig, ValidationReport,
+    targets::*, validation::ValidationEngine, Shape, ShapeId, ValidationConfig, ValidationReport,
 };
 
 /// Configuration for multi-graph validation
@@ -625,7 +622,7 @@ impl MultiGraphValidationEngine {
                     results.insert(graph_name, result);
                 }
                 Err(e) => {
-                    eprintln!("Graph validation error: {}", e);
+                    eprintln!("Graph validation error: {e}");
                     // Continue with partial results if enabled
                     if !self.config.enable_partial_validation {
                         return Err(e);
@@ -809,7 +806,7 @@ impl MultiGraphValidationEngine {
         &self,
         shape: &Shape,
         stores: &HashMap<GraphName, Arc<dyn Store>>,
-        graph_results: &HashMap<GraphName, GraphValidationResult>,
+        _graph_results: &HashMap<GraphName, GraphValidationResult>,
     ) -> Result<Vec<CrossGraphViolation>> {
         let mut violations = Vec::new();
 
@@ -867,7 +864,7 @@ impl MultiGraphValidationEngine {
         constraint_id: &crate::ConstraintComponentId,
         sparql_constraint: &crate::sparql::SparqlConstraint,
         stores: &HashMap<GraphName, Arc<dyn Store>>,
-        current_graph: &GraphName,
+        _current_graph: &GraphName,
     ) -> Result<Option<CrossGraphViolation>> {
         // Construct federated SPARQL query
         let query = self.build_federated_sparql_query(
@@ -896,8 +893,7 @@ impl MultiGraphValidationEngine {
                 involved_graphs: stores.keys().cloned().collect(),
                 evidence,
                 message: format!(
-                    "Cross-graph SPARQL constraint violated for focus node: {}",
-                    focus_node
+                    "Cross-graph SPARQL constraint violated for focus node: {focus_node}"
                 ),
                 severity: crate::Severity::Violation,
             }))
@@ -924,7 +920,7 @@ impl MultiGraphValidationEngine {
                 // Check if the same subject-predicate exists in other graphs with different values
                 for (other_graph_name, other_store) in stores {
                     if graph_name != other_graph_name {
-                        let other_quad = oxirs_core::model::Quad::new(
+                        let _other_quad = oxirs_core::model::Quad::new(
                             subject.clone(),
                             predicate.clone(),
                             object.clone(),
@@ -962,8 +958,7 @@ impl MultiGraphValidationEngine {
                                     federated_results: Vec::new(),
                                 },
                                 message: format!(
-                                    "Equality constraint violated: {} {} has different values across graphs",
-                                    subject, predicate
+                                    "Equality constraint violated: {subject} {predicate} has different values across graphs"
                                 ),
                                 severity: crate::Severity::Violation,
                             });
@@ -1017,8 +1012,7 @@ impl MultiGraphValidationEngine {
                                     federated_results: Vec::new(),
                                 },
                                 message: format!(
-                                    "Disjointness constraint violated: {} exists in multiple graphs",
-                                    subject
+                                    "Disjointness constraint violated: {subject} exists in multiple graphs"
                                 ),
                                 severity: crate::Severity::Violation,
                             });
@@ -1046,7 +1040,7 @@ impl MultiGraphValidationEngine {
         federated_query.push_str("PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n");
 
         // Replace focus node placeholder
-        let query_with_focus = base_query.replace("$this", &format!("{}", focus_node));
+        let query_with_focus = base_query.replace("$this", &format!("{focus_node}"));
 
         // Add GRAPH clauses for each graph
         federated_query.push_str("SELECT * WHERE {\n");
@@ -1055,8 +1049,7 @@ impl MultiGraphValidationEngine {
                 federated_query.push_str(" UNION ");
             }
             federated_query.push_str(&format!(
-                "{{ GRAPH <{}> {{ {} }} }}",
-                graph_name, query_with_focus
+                "{{ GRAPH <{graph_name}> {{ {query_with_focus} }} }}"
             ));
         }
         federated_query.push_str("\n}");
@@ -1074,7 +1067,7 @@ impl MultiGraphValidationEngine {
 
         // For now, simulate query execution
         // In a real implementation, this would use a SPARQL engine
-        for (graph_name, _store) in stores {
+        for graph_name in stores.keys() {
             let result = QueryResult {
                 source: graph_name.clone(),
                 query: query.to_string(),
@@ -1312,6 +1305,12 @@ impl RemoteGraphClient {
     }
 }
 
+impl Default for MultiGraphStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiGraphStats {
     /// Create new multi-graph statistics
     pub fn new() -> Self {
@@ -1337,6 +1336,7 @@ impl MultiGraphStats {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxirs_core::NamedNode;
 
     #[tokio::test]
     async fn test_multi_graph_validation_basic() {

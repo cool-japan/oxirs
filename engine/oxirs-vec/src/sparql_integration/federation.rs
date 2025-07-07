@@ -43,7 +43,7 @@ impl FederatedVectorService {
             return Err(anyhow!("Client not initialized"));
         }
 
-        let request_body = self.serialize_query(query)?;
+        let _request_body = self.serialize_query(query)?;
         let start_time = Instant::now();
 
         // In a real implementation, this would make an actual HTTP request

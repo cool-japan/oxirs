@@ -1,12 +1,12 @@
 use crate::{Vector, VectorData, VectorError};
 use half::f16;
-use std::collections::HashMap;
 use std::io::{Read, Write};
-use tracing::debug;
 use zstd;
 
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum CompressionMethod {
+    #[default]
     None,
     Zstd {
         level: i32,
@@ -34,11 +34,6 @@ pub enum AdaptiveQuality {
     BestRatio, // Prioritize compression ratio over speed
 }
 
-impl Default for CompressionMethod {
-    fn default() -> Self {
-        CompressionMethod::None
-    }
-}
 
 pub trait VectorCompressor: Send + Sync {
     fn compress(&self, vector: &Vector) -> Result<Vec<u8>, VectorError>;
@@ -498,7 +493,7 @@ impl VectorAnalysis {
         })
     }
 
-    fn binary_analysis(vector_count: usize) -> Self {
+    fn binary_analysis(_vector_count: usize) -> Self {
         Self {
             sparsity: 0.0,
             range: 1.0,
@@ -727,8 +722,8 @@ impl AdaptiveCompressor {
 
     fn train_compressor(
         &self,
-        compressor: &mut dyn VectorCompressor,
-        vectors: &[Vector],
+        _compressor: &mut dyn VectorCompressor,
+        _vectors: &[Vector],
     ) -> Result<(), VectorError> {
         // This is a bit hacky since we need to downcast to train specific compressor types
         // In a real implementation, we'd want a training trait
@@ -770,7 +765,7 @@ impl VectorCompressor for AdaptiveCompressor {
         if let Some(compressor) = &self.current_method {
             let start = std::time::Instant::now();
             let result = compressor.compress(vector);
-            let compression_time = start.elapsed().as_secs_f64() * 1000.0;
+            let _compression_time = start.elapsed().as_secs_f64() * 1000.0;
 
             // Update metrics (note: this requires mutable access, so we can't update here)
             // In a real implementation, we'd use interior mutability or restructure
@@ -787,7 +782,7 @@ impl VectorCompressor for AdaptiveCompressor {
         if let Some(compressor) = &self.current_method {
             let start = std::time::Instant::now();
             let result = compressor.decompress(data, dimensions);
-            let decompression_time = start.elapsed().as_secs_f64() * 1000.0;
+            let _decompression_time = start.elapsed().as_secs_f64() * 1000.0;
 
             // Update metrics (note: this requires mutable access)
 
@@ -959,8 +954,7 @@ fn bytes_to_vector(data: &[u8], dimensions: usize) -> Result<Vector, VectorError
             Ok(Vector::binary(data[..dimensions].to_vec()))
         }
         _ => Err(VectorError::InvalidData(format!(
-            "Unknown vector type: {}",
-            type_byte
+            "Unknown vector type: {type_byte}"
         ))),
     }
 }
@@ -1117,7 +1111,7 @@ mod tests {
         println!("Compressed size: {} bytes", compressed.len());
 
         // Test that compression works and produces reasonable output
-        assert!(compressed.len() > 0);
+        assert!(!compressed.is_empty());
         assert!(compressed.len() < original.dimensions * 4); // Some compression achieved
 
         // Note: PCA decompression may require additional implementation for full compatibility

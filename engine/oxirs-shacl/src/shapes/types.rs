@@ -27,6 +27,12 @@ pub struct ShapeParsingContext {
     pub stats: ShapeParsingStats,
 }
 
+impl Default for ShapeParsingContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShapeParsingContext {
     /// Create a new parsing context with default configuration
     pub fn new() -> Self {

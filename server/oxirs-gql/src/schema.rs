@@ -968,7 +968,7 @@ impl SchemaGenerator {
         writeln!(sdl).unwrap();
     }
 
-    fn load_mock_vocabulary(&self, ontology_uri: &str) -> Result<RdfVocabulary> {
+    fn load_mock_vocabulary(&self, _ontology_uri: &str) -> Result<RdfVocabulary> {
         // Enhanced mock vocabulary for demonstration
         let mut classes = HashMap::new();
         let mut properties = HashMap::new();

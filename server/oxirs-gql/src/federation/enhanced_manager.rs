@@ -7,12 +7,12 @@ use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use super::config::{FederationConfig, RemoteEndpoint, RetryStrategy};
 use super::query_planner::{QueryPlan, QueryPlanner, QueryStep};
@@ -391,7 +391,7 @@ impl QueryAnalytics {
 
     /// Get recommended service for a query pattern
     pub fn get_recommended_service(&self, query_hash: &str) -> Option<String> {
-        if let Some(pattern_stats) = self.query_patterns.get(query_hash) {
+        if let Some(_pattern_stats) = self.query_patterns.get(query_hash) {
             // Find the service with best performance for this pattern
             let mut best_service = None;
             let mut best_score = f64::NEG_INFINITY;
@@ -786,7 +786,7 @@ impl EnhancedFederationManager {
         let success = result.is_ok();
 
         // Record execution statistics
-        if let Ok(ref plan_result) = result {
+        if let Ok(ref _plan_result) = result {
             // Record analytics for each service used
             for step in &query_plan.steps {
                 let service_id = &step.endpoint_id;
@@ -909,7 +909,7 @@ impl EnhancedFederationManager {
         &self,
         query_plan: &QueryPlan,
         context: &FederationContext,
-        query_hash: &str,
+        _query_hash: &str,
         recommended_service: Option<String>,
     ) -> Result<FederationResult> {
         // If we have a recommended service from analytics, try to use it
@@ -1237,7 +1237,7 @@ impl EnhancedFederationManager {
 
     /// Set up event handling for service discovery
     async fn setup_event_handling(&self) -> Result<()> {
-        let schema_rebuild_handler = SchemaRebuildHandler {
+        let _schema_rebuild_handler = SchemaRebuildHandler {
             manager: self as *const Self,
         };
 
@@ -1276,7 +1276,6 @@ impl ServiceDiscoveryEventHandler for SchemaRebuildHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::Schema;
 
     #[tokio::test]
     async fn test_load_balancer_round_robin() {

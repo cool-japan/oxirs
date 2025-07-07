@@ -313,20 +313,20 @@ impl ApplicationTaskEvaluator {
 
     /// Get evaluation history
     pub fn get_evaluation_history(&self) -> Result<Vec<ApplicationEvalResults>> {
-        if let Ok(history) = self.evaluation_history.read() {
-            Ok(history.iter().cloned().collect())
-        } else {
-            Err(anyhow!("Failed to read evaluation history"))
+        match self.evaluation_history.read() {
+            Ok(history) => Ok(history.iter().cloned().collect()),
+            _ => Err(anyhow!("Failed to read evaluation history")),
         }
     }
 
     /// Clear evaluation history
     pub fn clear_history(&self) -> Result<()> {
-        if let Ok(mut history) = self.evaluation_history.write() {
-            history.clear();
-            Ok(())
-        } else {
-            Err(anyhow!("Failed to clear evaluation history"))
+        match self.evaluation_history.write() {
+            Ok(mut history) => {
+                history.clear();
+                Ok(())
+            }
+            _ => Err(anyhow!("Failed to clear evaluation history")),
         }
     }
 

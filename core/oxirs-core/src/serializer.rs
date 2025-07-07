@@ -69,7 +69,7 @@ impl Serializer {
                     result.push_str(&format!("<{}>", node.as_str()));
                 }
                 crate::model::Subject::BlankNode(node) => {
-                    result.push_str(&format!("{}", node));
+                    result.push_str(&format!("{node}"));
                 }
                 crate::model::Subject::Variable(_) => {
                     return Err(crate::OxirsError::Serialize(
@@ -105,7 +105,7 @@ impl Serializer {
                     result.push_str(&format!("<{}>", node.as_str()));
                 }
                 crate::model::Object::BlankNode(node) => {
-                    result.push_str(&format!("{}", node));
+                    result.push_str(&format!("{node}"));
                 }
                 crate::model::Object::Literal(literal) => {
                     result.push('"');
@@ -124,7 +124,7 @@ impl Serializer {
 
                     // Add language tag or datatype
                     if let Some(lang) = literal.language() {
-                        result.push_str(&format!("@{}", lang));
+                        result.push_str(&format!("@{lang}"));
                     } else {
                         let datatype = literal.datatype();
                         if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
@@ -197,7 +197,7 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             }
             crate::model::Subject::BlankNode(node) => {
-                result.push_str(&format!("{}", node));
+                result.push_str(&format!("{node}"));
             }
             crate::model::Subject::Variable(_) => {
                 return Err(crate::OxirsError::Serialize(
@@ -233,7 +233,7 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             }
             crate::model::Object::BlankNode(node) => {
-                result.push_str(&format!("{}", node));
+                result.push_str(&format!("{node}"));
             }
             crate::model::Object::Literal(literal) => {
                 result.push('"');
@@ -252,7 +252,7 @@ impl Serializer {
 
                 // Add language tag or datatype
                 if let Some(lang) = literal.language() {
-                    result.push_str(&format!("@{}", lang));
+                    result.push_str(&format!("@{lang}"));
                 } else {
                     let datatype = literal.datatype();
                     if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
@@ -280,7 +280,7 @@ impl Serializer {
                 result.push_str(&format!("<{}>", node.as_str()));
             }
             GraphName::BlankNode(node) => {
-                result.push_str(&format!("{}", node));
+                result.push_str(&format!("{node}"));
             }
             GraphName::Variable(_) => {
                 return Err(crate::OxirsError::Serialize(
@@ -356,7 +356,7 @@ impl TurtleSerializer {
 
         for (namespace, prefix) in prefix_entries {
             if self.used_namespaces.contains(namespace) {
-                result.push_str(&format!("@prefix {}: <{}> .\n", prefix, namespace));
+                result.push_str(&format!("@prefix {prefix}: <{namespace}> .\n"));
             }
         }
 
@@ -373,12 +373,12 @@ impl TurtleSerializer {
         for triple in graph.iter() {
             subjects_map
                 .entry(triple.subject().clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(triple);
         }
 
         let mut subject_entries: Vec<_> = subjects_map.iter().collect();
-        subject_entries.sort_by_key(|(subject, _)| format!("{}", subject));
+        subject_entries.sort_by_key(|(subject, _)| format!("{subject}"));
 
         for (i, (subject, triples)) in subject_entries.iter().enumerate() {
             if i > 0 {
@@ -396,12 +396,12 @@ impl TurtleSerializer {
             for triple in triples.iter() {
                 predicates_map
                     .entry(triple.predicate().clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(triple.object());
             }
 
             let mut predicate_entries: Vec<_> = predicates_map.iter().collect();
-            predicate_entries.sort_by_key(|(predicate, _)| format!("{}", predicate));
+            predicate_entries.sort_by_key(|(predicate, _)| format!("{predicate}"));
 
             for (j, (predicate, objects)) in predicate_entries.iter().enumerate() {
                 if j == 0 {
@@ -437,24 +437,18 @@ impl TurtleSerializer {
     }
 
     fn mark_namespace_used(&mut self, subject: &crate::model::Subject) {
-        match subject {
-            crate::model::Subject::NamedNode(node) => {
-                if let Some(namespace) = self.extract_namespace(node.as_str()) {
-                    self.used_namespaces.insert(namespace);
-                }
+        if let crate::model::Subject::NamedNode(node) = subject {
+            if let Some(namespace) = self.extract_namespace(node.as_str()) {
+                self.used_namespaces.insert(namespace);
             }
-            _ => {}
         }
     }
 
     fn mark_namespace_used_predicate(&mut self, predicate: &crate::model::Predicate) {
-        match predicate {
-            crate::model::Predicate::NamedNode(node) => {
-                if let Some(namespace) = self.extract_namespace(node.as_str()) {
-                    self.used_namespaces.insert(namespace);
-                }
+        if let crate::model::Predicate::NamedNode(node) = predicate {
+            if let Some(namespace) = self.extract_namespace(node.as_str()) {
+                self.used_namespaces.insert(namespace);
             }
-            _ => {}
         }
     }
 
@@ -479,10 +473,9 @@ impl TurtleSerializer {
         // Find the namespace part of an IRI
         if let Some(hash_pos) = iri.rfind('#') {
             Some(format!("{}#", &iri[..hash_pos]))
-        } else if let Some(slash_pos) = iri.rfind('/') {
-            Some(format!("{}/", &iri[..slash_pos]))
         } else {
-            None
+            iri.rfind('/')
+                .map(|slash_pos| format!("{}/", &iri[..slash_pos]))
         }
     }
 
@@ -542,13 +535,13 @@ impl TurtleSerializer {
                 let local_name = &iri[namespace.len()..];
                 // Ensure local name is valid
                 if self.is_valid_local_name(local_name) {
-                    return Ok(format!("{}:{}", prefix, local_name));
+                    return Ok(format!("{prefix}:{local_name}"));
                 }
             }
         }
 
         // Fall back to full IRI
-        Ok(format!("<{}>", iri))
+        Ok(format!("<{iri}>"))
     }
 
     fn is_valid_local_name(&self, name: &str) -> bool {
@@ -586,7 +579,7 @@ impl TurtleSerializer {
 
         // Add language tag or datatype
         if let Some(lang) = literal.language() {
-            result.push_str(&format!("@{}", lang));
+            result.push_str(&format!("@{lang}"));
         } else {
             let datatype = literal.datatype();
             // Check if it's the default string type

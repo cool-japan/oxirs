@@ -5,7 +5,8 @@ use std::collections::HashMap;
 
 use oxirs_core::model::{NamedNode, Term};
 
-use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId, ValidationViolation};
+use crate::validation::ValidationViolation;
+use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId};
 
 /// Constraint evaluation context
 #[derive(Debug, Clone)]
@@ -171,7 +172,7 @@ impl ConstraintEvaluationResult {
                 result_path: None,
                 result_severity: Severity::Violation,
                 result_message: message,
-                details: details,
+                details,
                 nested_results: Vec::new(),
             }),
             _ => None,

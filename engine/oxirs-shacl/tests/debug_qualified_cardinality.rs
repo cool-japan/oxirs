@@ -78,7 +78,7 @@ fn debug_qualified_cardinality_min_violation() {
         println!("Shape: {} (type: {:?})", id.as_str(), shape.shape_type);
         println!("  Targets: {}", shape.targets.len());
         for target in &shape.targets {
-            println!("    Target: {:?}", target);
+            println!("    Target: {target:?}");
         }
         println!("  Constraints: {}", shape.constraints.len());
         for (cid, constraint) in &shape.constraints {
@@ -94,7 +94,7 @@ fn debug_qualified_cardinality_min_violation() {
     println!("Violations: {}", report.violation_count());
 
     for (i, violation) in report.violations.iter().enumerate() {
-        println!("Violation {}: {:?}", i, violation);
+        println!("Violation {i}: {violation:?}");
     }
 
     // This should fail because Alice knows 0 Friends but needs at least 1

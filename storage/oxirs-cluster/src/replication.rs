@@ -3,9 +3,8 @@
 //! High-level data replication management for distributed RDF storage.
 //! Works with Raft consensus to ensure consistent replication.
 
-use crate::raft::{OxirsNodeId, RdfCommand, RdfResponse};
-use anyhow::Result;
-use std::collections::{BTreeSet, HashMap};
+use crate::raft::OxirsNodeId;
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
 

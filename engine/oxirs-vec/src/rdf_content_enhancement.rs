@@ -10,14 +10,13 @@
 
 use crate::{
     embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
-    kg_embeddings::{KGEmbeddingConfig, KGEmbeddingModel, Triple},
-    similarity::SimilarityMetric,
-    Vector, VectorError,
+    kg_embeddings::KGEmbeddingModel,
+    Vector,
 };
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Configuration for RDF content enhancement
@@ -236,7 +235,7 @@ impl RdfContentProcessor {
 
     /// Generate property path embeddings
     pub fn generate_property_path_embedding(&mut self, path: &PropertyPath) -> Result<Vector> {
-        let path_key = format!("{:?}", path);
+        let path_key = format!("{path:?}");
 
         // Check cache first
         if let Some(cached) = self.relationship_cache.get(&path_key) {
@@ -260,13 +259,13 @@ impl RdfContentProcessor {
             for constraint in &path.constraints {
                 match constraint {
                     PathConstraint::TypeFilter(type_uri) => {
-                        prop_text.push_str(&format!(" [type:{}]", type_uri));
+                        prop_text.push_str(&format!(" [type:{type_uri}]"));
                     }
                     PathConstraint::PropertyFilter(prop, value) => {
-                        prop_text.push_str(&format!(" [{}:{:?}]", prop, value));
+                        prop_text.push_str(&format!(" [{prop}:{value:?}]"));
                     }
                     PathConstraint::LanguageFilter(lang) => {
-                        prop_text.push_str(&format!(" [@{}]", lang));
+                        prop_text.push_str(&format!(" [@{lang}]"));
                     }
                 }
             }
@@ -355,14 +354,14 @@ impl RdfContentProcessor {
         let mut context_text = String::new();
 
         if let Some(graph_uri) = &context.graph_uri {
-            context_text.push_str(&format!("graph:{} ", graph_uri));
+            context_text.push_str(&format!("graph:{graph_uri} "));
         }
 
         // Add neighbor information
         if !context.neighbors.is_empty() {
             context_text.push_str("neighbors:");
             for neighbor in &context.neighbors {
-                context_text.push_str(&format!(" {}", neighbor));
+                context_text.push_str(&format!(" {neighbor}"));
             }
         }
 
@@ -380,15 +379,15 @@ impl RdfContentProcessor {
         let mut temporal_text = String::new();
 
         if let Some(valid_from) = &temporal.valid_from {
-            temporal_text.push_str(&format!("from:{} ", valid_from));
+            temporal_text.push_str(&format!("from:{valid_from} "));
         }
 
         if let Some(valid_to) = &temporal.valid_to {
-            temporal_text.push_str(&format!("to:{} ", valid_to));
+            temporal_text.push_str(&format!("to:{valid_to} "));
         }
 
         if let Some(created) = &temporal.created_at {
-            temporal_text.push_str(&format!("created:{} ", created));
+            temporal_text.push_str(&format!("created:{created} "));
         }
 
         if temporal_text.is_empty() {
@@ -587,14 +586,14 @@ impl PropertyAggregator {
             // Aggregate values for this property
             for value in values {
                 match value {
-                    RdfValue::IRI(iri) => property_text.push_str(&format!(" {}", iri)),
-                    RdfValue::Literal(lit, _) => property_text.push_str(&format!(" {}", lit)),
-                    RdfValue::LangString(lit, _) => property_text.push_str(&format!(" {}", lit)),
-                    RdfValue::Boolean(b) => property_text.push_str(&format!(" {}", b)),
-                    RdfValue::Integer(i) => property_text.push_str(&format!(" {}", i)),
-                    RdfValue::Float(f) => property_text.push_str(&format!(" {}", f)),
+                    RdfValue::IRI(iri) => property_text.push_str(&format!(" {iri}")),
+                    RdfValue::Literal(lit, _) => property_text.push_str(&format!(" {lit}")),
+                    RdfValue::LangString(lit, _) => property_text.push_str(&format!(" {lit}")),
+                    RdfValue::Boolean(b) => property_text.push_str(&format!(" {b}")),
+                    RdfValue::Integer(i) => property_text.push_str(&format!(" {i}")),
+                    RdfValue::Float(f) => property_text.push_str(&format!(" {f}")),
                     RdfValue::Date(d) | RdfValue::DateTime(d) => {
-                        property_text.push_str(&format!(" {}", d))
+                        property_text.push_str(&format!(" {d}"))
                     }
                 }
             }

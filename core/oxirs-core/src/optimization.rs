@@ -227,8 +227,8 @@ impl<'a> TermRef<'a> {
     /// Convert to an owned Term (allocating if necessary)
     pub fn to_owned(&self) -> Result<Term, crate::OxirsError> {
         match self {
-            TermRef::NamedNode(iri) => Ok(Term::NamedNode(NamedNode::new(*iri)?)),
-            TermRef::BlankNode(id) => Ok(Term::BlankNode(BlankNode::new(*id)?)),
+            TermRef::NamedNode(iri) => NamedNode::new(*iri).map(Term::NamedNode),
+            TermRef::BlankNode(id) => BlankNode::new(*id).map(Term::BlankNode),
             TermRef::Literal(value, datatype, language) => {
                 let literal = if let Some(lang) = language {
                     Literal::new_lang(*value, *lang)?
@@ -240,7 +240,7 @@ impl<'a> TermRef<'a> {
                 };
                 Ok(Term::Literal(literal))
             }
-            TermRef::Variable(name) => Ok(Term::Variable(Variable::new(*name)?)),
+            TermRef::Variable(name) => Variable::new(*name).map(Term::Variable),
         }
     }
 
@@ -268,18 +268,18 @@ impl<'a> TermRef<'a> {
 impl<'a> std::fmt::Display for TermRef<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TermRef::NamedNode(iri) => write!(f, "<{}>", iri),
-            TermRef::BlankNode(id) => write!(f, "{}", id),
+            TermRef::NamedNode(iri) => write!(f, "<{iri}>"),
+            TermRef::BlankNode(id) => write!(f, "{id}"),
             TermRef::Literal(value, datatype, language) => {
-                write!(f, "\"{}\"", value)?;
+                write!(f, "\"{value}\"")?;
                 if let Some(lang) = language {
-                    write!(f, "@{}", lang)?;
+                    write!(f, "@{lang}")?;
                 } else if let Some(dt) = datatype {
-                    write!(f, "^^<{}>", dt)?;
+                    write!(f, "^^<{dt}>")?;
                 }
                 Ok(())
             }
-            TermRef::Variable(name) => write!(f, "?{}", name),
+            TermRef::Variable(name) => write!(f, "?{name}"),
         }
     }
 }
@@ -663,7 +663,7 @@ impl OptimizedGraph {
             Object::BlankNode(b) => InternedString::new_with_interner(b.as_str(), &self.interner),
             Object::Literal(l) => {
                 // For literals, we store a serialized representation
-                let serialized = format!("{}", l);
+                let serialized = format!("{l}");
                 InternedString::new_with_interner(&serialized, &self.interner)
             }
             Object::Variable(v) => InternedString::new_with_interner(v.as_str(), &self.interner),
@@ -677,11 +677,11 @@ impl OptimizedGraph {
     fn unintern_subject(&self, interned: &InternedString) -> Result<Subject, crate::OxirsError> {
         let s = interned.as_str();
         if s.starts_with("?") || s.starts_with("$") {
-            Ok(Subject::Variable(Variable::new(&s[1..])?))
+            Variable::new(&s[1..]).map(Subject::Variable)
         } else if s.starts_with("_:") {
-            Ok(Subject::BlankNode(BlankNode::new(s)?))
+            BlankNode::new(s).map(Subject::BlankNode)
         } else {
-            Ok(Subject::NamedNode(NamedNode::new(s)?))
+            NamedNode::new(s).map(Subject::NamedNode)
         }
     }
 
@@ -692,9 +692,9 @@ impl OptimizedGraph {
     ) -> Result<Predicate, crate::OxirsError> {
         let s = interned.as_str();
         if s.starts_with("?") || s.starts_with("$") {
-            Ok(Predicate::Variable(Variable::new(&s[1..])?))
+            Variable::new(&s[1..]).map(Predicate::Variable)
         } else {
-            Ok(Predicate::NamedNode(NamedNode::new(s)?))
+            NamedNode::new(s).map(Predicate::NamedNode)
         }
     }
 
@@ -702,11 +702,11 @@ impl OptimizedGraph {
     fn unintern_object(&self, interned: &InternedString) -> Result<Object, crate::OxirsError> {
         let s = interned.as_str();
         if s.starts_with("?") || s.starts_with("$") {
-            return Ok(Object::Variable(Variable::new(&s[1..])?));
-        } else if s.starts_with("\"") {
+            return Variable::new(&s[1..]).map(Object::Variable);
+        } else if let Some(stripped) = s.strip_prefix("\"") {
             // Parse literal (simplified - would need full parser for production)
-            if let Some(end_quote) = s[1..].find('"') {
-                let value = &s[1..end_quote + 1];
+            if let Some(end_quote) = stripped.find('"') {
+                let value = &stripped[..end_quote];
                 return Ok(Object::Literal(Literal::new(value)));
             }
             // If no end quote found, treat as a simple literal
@@ -714,9 +714,9 @@ impl OptimizedGraph {
         }
 
         if s.starts_with("_:") {
-            Ok(Object::BlankNode(BlankNode::new(s)?))
+            BlankNode::new(s).map(Object::BlankNode)
         } else {
-            Ok(Object::NamedNode(NamedNode::new(s)?))
+            NamedNode::new(s).map(Object::NamedNode)
         }
     }
 }
@@ -1119,9 +1119,9 @@ mod tests {
             .map(|i| {
                 let graph = Arc::clone(&graph);
                 thread::spawn(move || {
-                    let subject = NamedNode::new(&format!("http://example.org/s{}", i)).unwrap();
+                    let subject = NamedNode::new(format!("http://example.org/s{i}")).unwrap();
                     let predicate = NamedNode::new("http://example.org/p").unwrap();
-                    let object = Literal::new(&format!("object{}", i));
+                    let object = Literal::new(format!("object{i}"));
                     let triple = Triple::new(subject, predicate, object);
 
                     graph.insert(&triple)
@@ -1151,8 +1151,7 @@ impl ZeroCopyBuffer {
 
     /// Create a new zero-copy buffer with the given capacity
     pub fn with_capacity(capacity: usize) -> Self {
-        let mut vec = Vec::with_capacity(capacity);
-        vec.resize(capacity, 0);
+        let vec = vec![0; capacity];
         let data = vec.into_boxed_slice();
 
         ZeroCopyBuffer {

@@ -554,12 +554,15 @@ impl SubscriptionManager {
         subscription_id: &str,
     ) -> FusekiResult<()> {
         // Verify ownership
-        if let Some(sub) = self.subscriptions.get(subscription_id) {
-            if sub.connection_id != connection_id {
-                return Err(FusekiError::forbidden("Not subscription owner"));
+        match self.subscriptions.get(subscription_id) {
+            Some(sub) => {
+                if sub.connection_id != connection_id {
+                    return Err(FusekiError::forbidden("Not subscription owner"));
+                }
             }
-        } else {
-            return Err(FusekiError::not_found("Subscription not found"));
+            _ => {
+                return Err(FusekiError::not_found("Subscription not found"));
+            }
         }
 
         // Remove subscription
@@ -1026,7 +1029,7 @@ impl QueryExecutor {
 /// WebSocket endpoint handler
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<crate::server::AppState>,
+    State(state): State<Arc<crate::server::AppState>>,
     user: Option<AuthUser>,
 ) -> Response {
     if let Some(ref subscription_manager) = state.subscription_manager {

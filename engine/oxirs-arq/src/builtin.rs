@@ -3,23 +3,13 @@
 //! This module implements the complete set of SPARQL 1.1 built-in functions
 //! as specified in the W3C recommendation.
 
-use crate::algebra::{Expression, Iri, Literal, Term};
 use crate::extensions::{
     AggregateState, CustomAggregate, CustomFunction, ExecutionContext, ExtensionRegistry, Value,
     ValueType,
 };
-use anyhow::{anyhow, bail, Result};
-use chrono::{DateTime, Datelike, NaiveDateTime, TimeZone, Utc};
+use anyhow::{bail, Result};
+use chrono::Datelike;
 use regex::Regex;
-use std::collections::HashMap;
-use std::str::FromStr;
-
-/// Add clone_function method to all CustomFunction implementations
-macro_rules! add_clone_function {
-    ($impl_block:item) => {
-        $impl_block
-    };
-}
 
 /// Register all built-in SPARQL functions
 pub fn register_builtin_functions(registry: &ExtensionRegistry) -> Result<()> {
@@ -389,7 +379,7 @@ impl CustomFunction for BlankFunction {
                 Ok(Value::BlankNode(id))
             }
             1 => match &args[0] {
-                Value::String(s) => Ok(Value::BlankNode(format!("_:{}", s))),
+                Value::String(s) => Ok(Value::BlankNode(format!("_:{s}"))),
                 _ => bail!("bnode() requires a string argument"),
             },
             _ => bail!("bnode() takes 0 or 1 arguments"),
@@ -1480,7 +1470,7 @@ impl CustomFunction for RegexFunction {
             _ => bail!("regex() second argument must be a string"),
         };
 
-        let flags = if args.len() == 3 {
+        let _flags = if args.len() == 3 {
             match &args[2] {
                 Value::String(s) => s,
                 Value::Literal { value, .. } => value,
@@ -1644,7 +1634,7 @@ impl AggregateState for SumState {
 
 // Placeholder implementations for missing functions and aggregates
 macro_rules! stub_function {
-    ($name:ident, $iri:expr, $arity:expr, $doc:expr) => {
+    ($name:ident, $iri:expr_2021, $arity:expr_2021, $doc:expr_2021) => {
         #[derive(Debug, Clone)]
         struct $name;
 
@@ -1696,7 +1686,7 @@ impl AggregateState for StubAggregateState {
 }
 
 macro_rules! stub_aggregate {
-    ($name:ident, $iri:expr, $doc:expr) => {
+    ($name:ident, $iri:expr_2021, $doc:expr_2021) => {
         #[derive(Debug, Clone)]
         struct $name;
 

@@ -6,11 +6,11 @@
 use crate::forward::Substitution;
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use tracing::{debug, info, trace, warn};
 
 /// Proof context for tracking derivation paths
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ProofContext {
     /// Derivation path (goals that led to this point)
     pub path: Vec<RuleAtom>,
@@ -18,16 +18,6 @@ pub struct ProofContext {
     pub substitution: Substitution,
     /// Depth of the current proof attempt
     pub depth: usize,
-}
-
-impl Default for ProofContext {
-    fn default() -> Self {
-        Self {
-            path: Vec::new(),
-            substitution: HashMap::new(),
-            depth: 0,
-        }
-    }
 }
 
 /// Proof result
@@ -472,6 +462,7 @@ impl BackwardChainer {
     }
 
     /// Unify two terms
+    #[allow(clippy::only_used_in_recursion)]
     fn unify_terms(
         &self,
         term1: &Term,
@@ -534,6 +525,7 @@ impl BackwardChainer {
     }
 
     /// Substitute variables in a term
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_term(&self, term: &Term, substitution: &Substitution) -> Term {
         match term {
             Term::Variable(var) => substitution

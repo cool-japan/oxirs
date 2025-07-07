@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 
 use super::config::{FederationConfig, RemoteEndpoint};
 use super::dataset_federation::{DatasetFederation, SparqlEndpoint};
-use super::query_planner::{QueryPlan, QueryPlanner};
+use super::query_planner::QueryPlanner;
 use super::schema_stitcher::SchemaStitcher;
 use crate::types::Schema;
 

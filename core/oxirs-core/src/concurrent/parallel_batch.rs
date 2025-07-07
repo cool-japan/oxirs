@@ -14,6 +14,9 @@ use std::sync::{Arc, Barrier};
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Type alias for transform functions
+type TransformFn = Arc<dyn Fn(&Triple) -> Option<Triple> + Send + Sync>;
+
 /// Batch operation types
 #[derive(Clone)]
 pub enum BatchOperation {
@@ -28,7 +31,7 @@ pub enum BatchOperation {
         object: Option<Object>,
     },
     /// Transform triples using a function
-    Transform(Arc<dyn Fn(&Triple) -> Option<Triple> + Send + Sync>),
+    Transform(TransformFn),
 }
 
 impl std::fmt::Debug for BatchOperation {
@@ -478,9 +481,9 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://subject/{id}")).unwrap()),
-            Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{id}")).unwrap()),
-            Object::NamedNode(NamedNode::new(&format!("http://object/{id}")).unwrap()),
+            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
+            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
+            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
         )
     }
 
@@ -622,7 +625,7 @@ mod tests {
 
         processor.set_progress_callback(move |current, _total| {
             progress_count_clone.fetch_add(1, Ordering::Relaxed);
-            println!("Progress: {}/{}", current, _total);
+            println!("Progress: {current}/{_total}");
         });
 
         // Submit operations

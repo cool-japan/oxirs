@@ -9,11 +9,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
-use crate::raft::{OxirsNodeId, RdfCommand, RdfResponse};
+use crate::raft::{OxirsNodeId, RdfCommand};
 
 /// Raft node state
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

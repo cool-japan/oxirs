@@ -133,10 +133,10 @@ impl StarDocumentation {
 
     /// Get best practices by category
     pub fn get_best_practices(&self, category: Option<PracticeCategory>) -> Vec<&BestPractice> {
-        if let Some(cat) = category {
+        if let Some(_cat) = category {
             self.best_practices
                 .iter()
-                .filter(|practice| matches!(&practice.category, cat))
+                .filter(|practice| matches!(&practice.category, _cat))
                 .collect()
         } else {
             self.best_practices.iter().collect()
@@ -200,8 +200,8 @@ impl StarDocumentation {
         // Examples section
         html.push_str("<section id=\"examples\">\n");
         html.push_str("<h2>Examples</h2>\n");
-        for (key, example) in &self.examples {
-            html.push_str(&format!("<div class=\"example\">\n"));
+        for example in self.examples.values() {
+            html.push_str("<div class=\"example\">\n");
             html.push_str(&format!("<h3>{}</h3>\n", example.title));
             html.push_str(&format!("<p>{}</p>\n", example.description));
             html.push_str(&format!(
@@ -210,7 +210,7 @@ impl StarDocumentation {
             ));
             html.push_str(&format!("<pre><code>{}</code></pre>\n", example.code));
             if let Some(output) = &example.expected_output {
-                html.push_str(&format!("<div class=\"output\"><strong>Expected Output:</strong><br><pre>{}</pre></div>\n", output));
+                html.push_str(&format!("<div class=\"output\"><strong>Expected Output:</strong><br><pre>{output}</pre></div>\n"));
             }
             html.push_str("</div>\n");
         }
@@ -436,11 +436,11 @@ println!("Performance report: {:#?}", report);"#
                 Lesson {
                     title: "What is RDF-star?".to_string(),
                     content: r#"
-RDF-star is an extension to RDF that allows triples to be used as subjects or objects 
+RDF-star is an extension to RDF that allows triples to be used as subjects or objects
 in other triples. This enables direct annotation of statements with metadata such as:
 
 - Certainty scores
-- Provenance information  
+- Provenance information
 - Temporal validity
 - Source attribution
 
@@ -610,7 +610,7 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
         ] {
             let examples = self.get_examples_by_difficulty(difficulty.clone());
             if !examples.is_empty() {
-                section.push_str(&format!("### {:?} Examples\n\n", difficulty));
+                section.push_str(&format!("### {difficulty:?} Examples\n\n"));
 
                 for example in examples {
                     section.push_str(&format!("#### {}\n\n", example.title));
@@ -619,7 +619,7 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
 
                     if let Some(output) = &example.expected_output {
                         section
-                            .push_str(&format!("**Expected Output:**\n```\n{}\n```\n\n", output));
+                            .push_str(&format!("**Expected Output:**\n```\n{output}\n```\n\n"));
                     }
                 }
             }
@@ -631,7 +631,7 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
     fn generate_tutorials_section(&self) -> String {
         let mut section = String::new();
 
-        for (key, tutorial) in &self.tutorials {
+        for tutorial in self.tutorials.values() {
             section.push_str(&format!("### {}\n\n", tutorial.title));
             section.push_str(&format!("{}\n\n", tutorial.description));
             section.push_str(&format!(
@@ -642,16 +642,16 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
             if !tutorial.prerequisites.is_empty() {
                 section.push_str("**Prerequisites:**\n");
                 for prereq in &tutorial.prerequisites {
-                    section.push_str(&format!("- {}\n", prereq));
+                    section.push_str(&format!("- {prereq}\n"));
                 }
-                section.push_str("\n");
+                section.push('\n');
             }
 
             section.push_str("**Lessons:**\n");
             for (i, lesson) in tutorial.lessons.iter().enumerate() {
                 section.push_str(&format!("{}. {}\n", i + 1, lesson.title));
             }
-            section.push_str("\n");
+            section.push('\n');
         }
 
         section
@@ -669,7 +669,7 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
         ] {
             let practices = self.get_best_practices(Some(category.clone()));
             if !practices.is_empty() {
-                section.push_str(&format!("### {:?} Best Practices\n\n", category));
+                section.push_str(&format!("### {category:?} Best Practices\n\n"));
 
                 for practice in practices {
                     section.push_str(&format!("#### {}\n\n", practice.title));
@@ -677,12 +677,12 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
 
                     if let Some(do_example) = &practice.do_example {
                         section.push_str("**Do:**\n");
-                        section.push_str(&format!("```rust\n{}\n```\n\n", do_example));
+                        section.push_str(&format!("```rust\n{do_example}\n```\n\n"));
                     }
 
                     if let Some(dont_example) = &practice.dont_example {
                         section.push_str("**Don't:**\n");
-                        section.push_str(&format!("```rust\n{}\n```\n\n", dont_example));
+                        section.push_str(&format!("```rust\n{dont_example}\n```\n\n"));
                     }
 
                     section.push_str(&format!("**Rationale:** {}\n\n", practice.rationale));

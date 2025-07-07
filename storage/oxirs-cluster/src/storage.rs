@@ -11,10 +11,9 @@ use async_trait::async_trait;
 use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -1470,7 +1469,7 @@ impl PersistentStorage {
 }
 
 /// Write-ahead log operation
-
+///
 /// Crash recovery report
 #[derive(Debug, Clone)]
 pub struct RecoveryReport {

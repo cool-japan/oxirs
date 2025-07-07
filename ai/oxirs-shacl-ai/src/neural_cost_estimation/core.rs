@@ -116,44 +116,46 @@ impl NeuralCostEstimationEngine {
         let start_time = Instant::now();
 
         // Extract features
-        let features = if let Ok(mut extractor) = self.feature_extractor.lock() {
-            extractor.extract_features(patterns, context)?
-        } else {
-            return Err(ShaclAiError::DataProcessing(
-                "Failed to lock feature extractor".to_string(),
-            )
-            .into());
+        let features = match self.feature_extractor.lock() {
+            Ok(mut extractor) => extractor.extract_features(patterns, context)?,
+            _ => {
+                return Err(ShaclAiError::DataProcessing(
+                    "Failed to lock feature extractor".to_string(),
+                )
+                .into());
+            }
         };
 
         // Make prediction using deep network
         let prediction_start = Instant::now();
-        let base_prediction = if let Ok(network) = self.deep_network.lock() {
-            network.forward(&features, false)?
-        } else {
-            return Err(
-                ShaclAiError::DataProcessing("Failed to lock deep network".to_string()).into(),
-            );
+        let base_prediction = match self.deep_network.lock() {
+            Ok(network) => network.forward(&features, false)?,
+            _ => {
+                return Err(ShaclAiError::DataProcessing(
+                    "Failed to lock deep network".to_string(),
+                )
+                .into());
+            }
         };
 
         // Get ensemble prediction
-        let ensemble_prediction = if let Ok(mut ensemble) = self.ensemble_predictor.lock() {
-            ensemble.predict(&features)?
-        } else {
-            base_prediction.clone()
+        let ensemble_prediction = match self.ensemble_predictor.lock() {
+            Ok(mut ensemble) => ensemble.predict(&features)?,
+            _ => base_prediction.clone(),
         };
 
         // Apply context-aware adjustments
-        let adjusted_prediction = if let Ok(mut adjuster) = self.context_adjuster.lock() {
-            adjuster.adjust_cost(&ensemble_prediction, context)?
-        } else {
-            ensemble_prediction
+        let adjusted_prediction = match self.context_adjuster.lock() {
+            Ok(mut adjuster) => adjuster.adjust_cost(&ensemble_prediction, context)?,
+            _ => ensemble_prediction,
         };
 
         // Quantify uncertainty
-        let final_prediction = if let Ok(mut quantifier) = self.uncertainty_quantifier.lock() {
-            quantifier.quantify_uncertainty(&adjusted_prediction, &features)?
-        } else {
-            adjusted_prediction
+        let final_prediction = match self.uncertainty_quantifier.lock() {
+            Ok(mut quantifier) => {
+                quantifier.quantify_uncertainty(&adjusted_prediction, &features)?
+            }
+            _ => adjusted_prediction,
         };
 
         self.stats.total_predictions += 1;
@@ -171,13 +173,14 @@ impl NeuralCostEstimationEngine {
         prediction: &CostPrediction,
     ) -> Result<()> {
         // Extract features for training
-        let features = if let Ok(mut extractor) = self.feature_extractor.lock() {
-            extractor.extract_features(patterns, context)?
-        } else {
-            return Err(ShaclAiError::DataProcessing(
-                "Failed to lock feature extractor".to_string(),
-            )
-            .into());
+        let features = match self.feature_extractor.lock() {
+            Ok(mut extractor) => extractor.extract_features(patterns, context)?,
+            _ => {
+                return Err(ShaclAiError::DataProcessing(
+                    "Failed to lock feature extractor".to_string(),
+                )
+                .into());
+            }
         };
 
         // Update deep network
@@ -227,12 +230,16 @@ impl NeuralCostEstimationEngine {
         let historical_data = TrainingData::default();
 
         // Train deep network
-        let training_stats = if let Ok(mut network) = self.deep_network.lock() {
-            network.train_on_batch(&historical_data.features, &historical_data.targets)?
-        } else {
-            return Err(
-                ShaclAiError::DataProcessing("Failed to lock deep network".to_string()).into(),
-            );
+        let training_stats = match self.deep_network.lock() {
+            Ok(mut network) => {
+                network.train_on_batch(&historical_data.features, &historical_data.targets)?
+            }
+            _ => {
+                return Err(ShaclAiError::DataProcessing(
+                    "Failed to lock deep network".to_string(),
+                )
+                .into());
+            }
         };
 
         // Update ensemble models

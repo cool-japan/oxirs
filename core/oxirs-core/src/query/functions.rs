@@ -88,6 +88,12 @@ pub enum ReturnType {
     Dynamic,
 }
 
+impl Default for FunctionRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FunctionRegistry {
     /// Create new function registry with SPARQL 1.2 built-ins
     pub fn new() -> Self {
@@ -222,7 +228,7 @@ impl FunctionRegistry {
         else if let Some(func) = self.extensions.get(name) {
             func.execute(args)
         } else {
-            Err(OxirsError::Query(format!("Unknown function: {}", name)))
+            Err(OxirsError::Query(format!("Unknown function: {name}")))
         }
     }
 }
@@ -258,7 +264,7 @@ fn fn_strlen(args: &[Term]) -> Result<Term, OxirsError> {
         Term::Literal(lit) => {
             let len = lit.value().chars().count() as i64;
             Ok(Term::Literal(Literal::new_typed(
-                &len.to_string(),
+                len.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -332,7 +338,7 @@ fn fn_replace(args: &[Term]) -> Result<Term, OxirsError> {
             };
 
             let regex = Regex::new(&regex_str)
-                .map_err(|e| OxirsError::Query(format!("Invalid regex: {}", e)))?;
+                .map_err(|e| OxirsError::Query(format!("Invalid regex: {e}")))?;
 
             let result = regex.replace_all(text.value(), replacement.value());
             Ok(Term::Literal(Literal::new(result.as_ref())))
@@ -368,7 +374,7 @@ fn fn_regex(args: &[Term]) -> Result<Term, OxirsError> {
             };
 
             let regex = Regex::new(&regex_str)
-                .map_err(|e| OxirsError::Query(format!("Invalid regex: {}", e)))?;
+                .map_err(|e| OxirsError::Query(format!("Invalid regex: {e}")))?;
 
             let matches = regex.is_match(text.value());
             Ok(Term::Literal(Literal::new_typed(
@@ -525,7 +531,7 @@ fn fn_ucase(args: &[Term]) -> Result<Term, OxirsError> {
     }
 
     match &args[0] {
-        Term::Literal(lit) => Ok(Term::Literal(Literal::new(&lit.value().to_uppercase()))),
+        Term::Literal(lit) => Ok(Term::Literal(Literal::new(lit.value().to_uppercase()))),
         _ => Err(OxirsError::Query(
             "UCASE requires string argument".to_string(),
         )),
@@ -540,7 +546,7 @@ fn fn_lcase(args: &[Term]) -> Result<Term, OxirsError> {
     }
 
     match &args[0] {
-        Term::Literal(lit) => Ok(Term::Literal(Literal::new(&lit.value().to_lowercase()))),
+        Term::Literal(lit) => Ok(Term::Literal(Literal::new(lit.value().to_lowercase()))),
         _ => Err(OxirsError::Query(
             "LCASE requires string argument".to_string(),
         )),
@@ -568,12 +574,12 @@ fn fn_abs(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = lit.datatype();
             if dt.as_str() == "http://www.w3.org/2001/XMLSchema#integer" {
                 Ok(Term::Literal(Literal::new_typed(
-                    &(result as i64).to_string(),
+                    (result as i64).to_string(),
                     NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
                 )))
             } else {
                 Ok(Term::Literal(Literal::new_typed(
-                    &result.to_string(),
+                    result.to_string(),
                     NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
                 )))
             }
@@ -599,7 +605,7 @@ fn fn_ceil(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("CEIL requires numeric argument".to_string()))?;
             let result = value.ceil() as i64;
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -624,7 +630,7 @@ fn fn_floor(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("FLOOR requires numeric argument".to_string()))?;
             let result = value.floor() as i64;
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -649,7 +655,7 @@ fn fn_round(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("ROUND requires numeric argument".to_string()))?;
             let result = value.round() as i64;
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -662,9 +668,9 @@ fn fn_round(args: &[Term]) -> Result<Term, OxirsError> {
 fn fn_rand(_args: &[Term]) -> Result<Term, OxirsError> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
-    let value: f64 = rng.gen();
+    let value: f64 = rng.r#gen();
     Ok(Term::Literal(Literal::new_typed(
-        &value.to_string(),
+        value.to_string(),
         NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
     )))
 }
@@ -689,7 +695,7 @@ fn fn_sqrt(args: &[Term]) -> Result<Term, OxirsError> {
             }
             let result = value.sqrt();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -714,7 +720,7 @@ fn fn_sin(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("SIN requires numeric argument".to_string()))?;
             let result = value.sin();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -739,7 +745,7 @@ fn fn_cos(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("COS requires numeric argument".to_string()))?;
             let result = value.cos();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -764,7 +770,7 @@ fn fn_tan(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("TAN requires numeric argument".to_string()))?;
             let result = value.tan();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -787,14 +793,14 @@ fn fn_asin(args: &[Term]) -> Result<Term, OxirsError> {
                 .value()
                 .parse::<f64>()
                 .map_err(|_| OxirsError::Query("ASIN requires numeric argument".to_string()))?;
-            if value < -1.0 || value > 1.0 {
+            if !(-1.0..=1.0).contains(&value) {
                 return Err(OxirsError::Query(
                     "ASIN argument must be between -1 and 1".to_string(),
                 ));
             }
             let result = value.asin();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -817,14 +823,14 @@ fn fn_acos(args: &[Term]) -> Result<Term, OxirsError> {
                 .value()
                 .parse::<f64>()
                 .map_err(|_| OxirsError::Query("ACOS requires numeric argument".to_string()))?;
-            if value < -1.0 || value > 1.0 {
+            if !(-1.0..=1.0).contains(&value) {
                 return Err(OxirsError::Query(
                     "ACOS argument must be between -1 and 1".to_string(),
                 ));
             }
             let result = value.acos();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -849,7 +855,7 @@ fn fn_atan(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("ATAN requires numeric argument".to_string()))?;
             let result = value.atan();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -878,7 +884,7 @@ fn fn_atan2(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("ATAN2 requires numeric arguments".to_string()))?;
             let result = y.atan2(x);
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -903,7 +909,7 @@ fn fn_exp(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("EXP requires numeric argument".to_string()))?;
             let result = value.exp();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -931,7 +937,7 @@ fn fn_log(args: &[Term]) -> Result<Term, OxirsError> {
             }
             let result = value.ln();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -961,7 +967,7 @@ fn fn_log10(args: &[Term]) -> Result<Term, OxirsError> {
             }
             let result = value.log10();
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -990,7 +996,7 @@ fn fn_pow(args: &[Term]) -> Result<Term, OxirsError> {
                 .map_err(|_| OxirsError::Query("POW requires numeric arguments".to_string()))?;
             let result = base.powf(exp);
             Ok(Term::Literal(Literal::new_typed(
-                &result.to_string(),
+                result.to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
             )))
         }
@@ -1005,7 +1011,7 @@ fn fn_pow(args: &[Term]) -> Result<Term, OxirsError> {
 fn fn_now(_args: &[Term]) -> Result<Term, OxirsError> {
     let now = Utc::now();
     Ok(Term::Literal(Literal::new_typed(
-        &now.to_rfc3339(),
+        now.to_rfc3339(),
         NamedNode::new("http://www.w3.org/2001/XMLSchema#dateTime").unwrap(),
     )))
 }
@@ -1022,7 +1028,7 @@ fn fn_year(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = DateTime::parse_from_rfc3339(lit.value())
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
-                &dt.year().to_string(),
+                dt.year().to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -1044,7 +1050,7 @@ fn fn_month(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = DateTime::parse_from_rfc3339(lit.value())
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
-                &dt.month().to_string(),
+                dt.month().to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -1066,7 +1072,7 @@ fn fn_day(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = DateTime::parse_from_rfc3339(lit.value())
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
-                &dt.day().to_string(),
+                dt.day().to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -1088,7 +1094,7 @@ fn fn_hours(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = DateTime::parse_from_rfc3339(lit.value())
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
-                &dt.hour().to_string(),
+                dt.hour().to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -1110,7 +1116,7 @@ fn fn_minutes(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = DateTime::parse_from_rfc3339(lit.value())
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
-                &dt.minute().to_string(),
+                dt.minute().to_string(),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
             )))
         }
@@ -1132,7 +1138,7 @@ fn fn_seconds(args: &[Term]) -> Result<Term, OxirsError> {
             let dt = DateTime::parse_from_rfc3339(lit.value())
                 .map_err(|_| OxirsError::Query("Invalid dateTime".to_string()))?;
             Ok(Term::Literal(Literal::new_typed(
-                &format!("{}.{}", dt.second(), dt.nanosecond() / 1_000_000_000),
+                format!("{}.{:09}", dt.second(), dt.nanosecond()),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal").unwrap(),
             )))
         }
@@ -1218,7 +1224,7 @@ fn fn_sha1(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha1::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{:x}", result);
+            let hex = format!("{result:x}");
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -1240,7 +1246,7 @@ fn fn_sha256(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha256::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{:x}", result);
+            let hex = format!("{result:x}");
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -1262,7 +1268,7 @@ fn fn_sha384(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha384::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{:x}", result);
+            let hex = format!("{result:x}");
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -1284,7 +1290,7 @@ fn fn_sha512(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = Sha512::new();
             hasher.update(lit.value().as_bytes());
             let result = hasher.finalize();
-            let hex = format!("{:x}", result);
+            let hex = format!("{result:x}");
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query(
@@ -1305,7 +1311,7 @@ fn fn_md5(args: &[Term]) -> Result<Term, OxirsError> {
             let mut hasher = md5::Context::new();
             hasher.consume(lit.value().as_bytes());
             let result = hasher.compute();
-            let hex = format!("{:x}", result);
+            let hex = format!("{result:x}");
             Ok(Term::Literal(Literal::new(&hex)))
         }
         _ => Err(OxirsError::Query("MD5 requires string literal".to_string())),
@@ -1438,14 +1444,14 @@ fn fn_strlang(args: &[Term]) -> Result<Term, OxirsError> {
 fn fn_uuid(_args: &[Term]) -> Result<Term, OxirsError> {
     use uuid::Uuid;
     let uuid = Uuid::new_v4();
-    let iri = NamedNode::new(format!("urn:uuid:{}", uuid))?;
+    let iri = NamedNode::new(format!("urn:uuid:{uuid}"))?;
     Ok(Term::NamedNode(iri))
 }
 
 fn fn_struuid(_args: &[Term]) -> Result<Term, OxirsError> {
     use uuid::Uuid;
     let uuid = Uuid::new_v4();
-    Ok(Term::Literal(Literal::new(&uuid.to_string())))
+    Ok(Term::Literal(Literal::new(uuid.to_string())))
 }
 
 // Aggregate functions (placeholder implementations)

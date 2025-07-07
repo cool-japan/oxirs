@@ -121,6 +121,12 @@ pub struct IntuitionNetwork {
     learning_rate: f64,
 }
 
+impl Default for IntuitionNetwork {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IntuitionNetwork {
     /// Create a new intuition network with random weights
     pub fn new() -> Self {
@@ -234,6 +240,12 @@ pub struct GutFeelingEngine {
     emotional_weights: HashMap<String, f64>,
 }
 
+impl Default for GutFeelingEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GutFeelingEngine {
     /// Create a new gut feeling engine
     pub fn new() -> Self {
@@ -332,6 +344,12 @@ pub enum CreativeTechnique {
     ArtisticPrinciples,
     /// Use biomimetic approaches
     BiomimeticOptimization,
+}
+
+impl Default for CreativityEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CreativityEngine {
@@ -455,35 +473,35 @@ impl IntuitiveQueryPlanner {
         let characteristics = self.extract_pattern_characteristics(patterns);
 
         // Calculate intuitive scores
-        let intuitive_scores = if let Ok(network) = self.intuition_network.read() {
-            patterns
+        let intuitive_scores = match self.intuition_network.read() {
+            Ok(network) => patterns
                 .iter()
                 .enumerate()
                 .map(|(i, _)| network.calculate_intuitive_score(&characteristics[i]))
-                .collect::<Vec<_>>()
-        } else {
-            vec![0.5; patterns.len()]
+                .collect::<Vec<_>>(),
+            _ => {
+                vec![0.5; patterns.len()]
+            }
         };
 
         // Get gut feeling assessment
-        let gut_feelings = if let Ok(gut) = self.gut_feeling.read() {
-            patterns
+        let gut_feelings = match self.gut_feeling.read() {
+            Ok(gut) => patterns
                 .iter()
-                .enumerate()
-                .map(|(_i, pattern)| {
+                .map(|pattern| {
                     let signature = format!("{pattern:?}");
                     gut.calculate_gut_feeling(&signature, context)
                 })
-                .collect::<Vec<_>>()
-        } else {
-            vec![0.5; patterns.len()]
+                .collect::<Vec<_>>(),
+            _ => {
+                vec![0.5; patterns.len()]
+            }
         };
 
         // Generate creative optimizations
-        let creative_opts = if let Ok(mut creativity) = self.creativity.write() {
-            creativity.generate_creative_optimizations(patterns)
-        } else {
-            Vec::new()
+        let creative_opts = match self.creativity.write() {
+            Ok(mut creativity) => creativity.generate_creative_optimizations(patterns),
+            _ => Vec::new(),
         };
 
         // Combine all factors to create plan
@@ -678,7 +696,7 @@ mod tests {
         };
 
         let score = engine.calculate_gut_feeling("test_pattern", &context);
-        assert!(score >= 0.0 && score <= 1.0);
+        assert!((0.0..=1.0).contains(&score));
     }
 
     #[test]

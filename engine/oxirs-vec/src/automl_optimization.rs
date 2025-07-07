@@ -7,19 +7,19 @@
 
 use crate::{
     advanced_analytics::VectorAnalyticsEngine,
-    benchmarking::{BenchmarkConfig, BenchmarkResult, BenchmarkSuite},
-    embeddings::{EmbeddingGenerator, EmbeddingStrategy},
-    similarity::{SimilarityMetric, SimilarityResult},
-    Vector, VectorError, VectorStore,
+    benchmarking::{BenchmarkConfig, BenchmarkSuite},
+    embeddings::EmbeddingStrategy,
+    similarity::SimilarityMetric,
+    VectorStore,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
-use tracing::{debug, info, span, warn, Level};
+use tracing::{info, span, warn, Level};
 use uuid::Uuid;
 
 /// AutoML optimization configuration
@@ -276,7 +276,7 @@ impl AutoMLOptimizer {
         );
 
         let start_time = Instant::now();
-        let mut optimization_state = self.optimization_state.lock().await;
+        let optimization_state = self.optimization_state.lock().await;
 
         // Generate optimization trials
         let trials = self.generate_optimization_trials()?;
@@ -396,7 +396,7 @@ impl AutoMLOptimizer {
                                 trial_id: Uuid::new_v4().to_string(),
                                 embedding_strategy: embedding_strategy.clone(),
                                 vector_dimension,
-                                similarity_metric: similarity_metric.clone(),
+                                similarity_metric: *similarity_metric,
                                 index_config: self.generate_index_config()?,
                                 hyperparameters: {
                                     let mut params = HashMap::new();
@@ -498,8 +498,8 @@ impl AutoMLOptimizer {
         let mut cv_scores = Vec::new();
 
         for fold in 0..self.config.cross_validation_folds {
-            let start_idx = fold * fold_size;
-            let end_idx = if fold == self.config.cross_validation_folds - 1 {
+            let _start_idx = fold * fold_size;
+            let _end_idx = if fold == self.config.cross_validation_folds - 1 {
                 validation_data.len()
             } else {
                 (fold + 1) * fold_size
@@ -625,8 +625,7 @@ impl AutoMLOptimizer {
             vector_dimension: search_space.vector_dimensions
                 [((random_seed >> 8) % search_space.vector_dimensions.len() as u64) as usize],
             similarity_metric: search_space.similarity_metrics
-                [((random_seed >> 16) % search_space.similarity_metrics.len() as u64) as usize]
-                .clone(),
+                [((random_seed >> 16) % search_space.similarity_metrics.len() as u64) as usize],
             index_config: self.generate_index_config()?,
             hyperparameters: {
                 let mut params = HashMap::new();
@@ -899,7 +898,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_optimization_with_sample_data() {
-        let optimizer = AutoMLOptimizer::with_default_config().unwrap();
+        let _optimizer = AutoMLOptimizer::with_default_config().unwrap();
 
         let training_data = vec![
             (

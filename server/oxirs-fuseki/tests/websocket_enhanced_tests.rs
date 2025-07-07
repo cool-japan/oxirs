@@ -69,7 +69,7 @@ mod enhanced_websocket_tests {
         assert!(metrics.is_some());
 
         let metrics = metrics.unwrap();
-        assert!(metrics.total_updates >= 0);
+        let _ = metrics.total_updates; // Always non-negative for unsigned types
         assert!(metrics.average_execution_time_ms >= 0.0);
 
         // Cleanup

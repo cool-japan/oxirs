@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 /// Shard operation types
 #[derive(Debug, Clone, Serialize, Deserialize)]

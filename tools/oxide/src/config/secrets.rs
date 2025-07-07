@@ -458,18 +458,21 @@ mod tests {
     #[test]
     fn test_secret_manager_creation() {
         let dir = tempdir().unwrap();
-        std::env::set_var("OXIDE_SECRETS_DIR", dir.path());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("OXIDE_SECRETS_DIR", dir.path()) };
 
         let manager = SecretManager::new(SecretBackend::File).unwrap();
         assert!(!manager.is_unlocked());
 
-        std::env::remove_var("OXIDE_SECRETS_DIR");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("OXIDE_SECRETS_DIR") };
     }
 
     #[test]
     fn test_secret_storage_and_retrieval() {
         let dir = tempdir().unwrap();
-        std::env::set_var("OXIDE_SECRETS_DIR", dir.path());
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("OXIDE_SECRETS_DIR", dir.path()) };
 
         let mut manager = SecretManager::new(SecretBackend::File).unwrap();
         manager.unlock("test-password").unwrap();
@@ -487,17 +490,20 @@ mod tests {
         let secrets = manager.list_secrets().unwrap();
         assert!(secrets.iter().any(|s| s.name == "test-key"));
 
-        std::env::remove_var("OXIDE_SECRETS_DIR");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("OXIDE_SECRETS_DIR") };
     }
 
     #[test]
     fn test_environment_secret() {
-        std::env::set_var("OXIDE_SECRET_API_KEY", "secret-api-key");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::set_var("OXIDE_SECRET_API_KEY", "secret-api-key") };
 
         let mut manager = SecretManager::new(SecretBackend::File).unwrap();
         let value = manager.get_secret("api-key").unwrap();
         assert_eq!(value, "secret-api-key");
 
-        std::env::remove_var("OXIDE_SECRET_API_KEY");
+        // TODO: Audit that the environment access only happens in single-threaded code.
+        unsafe { std::env::remove_var("OXIDE_SECRET_API_KEY") };
     }
 }

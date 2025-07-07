@@ -102,6 +102,8 @@ pub struct OptimisticTransactionInfo {
     pub phase: TransactionPhase,
     /// Transaction start time
     pub start_time: SystemTime,
+    /// Transaction commit time (only set when committed)
+    pub commit_time: Option<SystemTime>,
     /// Transaction start version
     pub start_version: u64,
     /// Read set with detailed metadata
@@ -122,6 +124,7 @@ impl OptimisticTransactionInfo {
             id,
             phase: TransactionPhase::Active,
             start_time: SystemTime::now(),
+            commit_time: None,
             start_version,
             read_set: Vec::new(),
             write_set: Vec::new(),
@@ -208,13 +211,20 @@ impl VersionVector {
         let mut all_leq = true;
         let mut some_less = false;
 
-        for (&node_id, &other_time) in &other.timestamps {
+        // Get all nodes from both vectors
+        let mut all_nodes = std::collections::HashSet::new();
+        all_nodes.extend(self.timestamps.keys());
+        all_nodes.extend(other.timestamps.keys());
+
+        for &node_id in &all_nodes {
             let self_time = self.timestamps.get(&node_id).unwrap_or(&0);
-            if self_time > &other_time {
+            let other_time = other.timestamps.get(&node_id).unwrap_or(&0);
+
+            if self_time > other_time {
                 all_leq = false;
                 break;
             }
-            if self_time < &other_time {
+            if self_time < other_time {
                 some_less = true;
             }
         }
@@ -525,35 +535,41 @@ impl OptimisticConcurrencyController {
 
         // Check conflicts with committed transactions
         for committed_tx in history.iter() {
-            if committed_tx.start_time > tx_info.start_time {
-                // Check read-write conflicts
-                for read_entry in &tx_info.read_set {
-                    for write_entry in &committed_tx.write_set {
-                        if read_entry.key == write_entry.key {
-                            return Ok(Some(ValidationResult::Conflict {
-                                conflict_type: ConflictType::ReadWrite,
-                                conflicting_transaction: committed_tx.id,
-                                conflicting_key: read_entry.key.clone(),
-                                reason: format!("Read key '{}' at version {} conflicts with committed write at version {}", 
-                                    read_entry.key, read_entry.version, write_entry.version),
-                            }));
-                        }
+            // First, check for version-based write-write conflicts with ALL committed transactions
+            // regardless of timing (this is crucial for optimistic concurrency control)
+            for write_entry in &tx_info.write_set {
+                for committed_write in &committed_tx.write_set {
+                    if write_entry.key == committed_write.key {
+                        // Always detect write-write conflicts when same key is written
+                        // This is the core of optimistic concurrency control
+                        return Ok(Some(ValidationResult::Conflict {
+                            conflict_type: ConflictType::WriteWrite,
+                            conflicting_transaction: committed_tx.id,
+                            conflicting_key: write_entry.key.clone(),
+                            reason: format!(
+                                "Write-write conflict: key '{}' written by transaction {} (version {}) conflicts with committed transaction {} (version {})",
+                                write_entry.key, tx_id, write_entry.version, committed_tx.id, committed_write.version
+                            ),
+                        }));
                     }
                 }
+            }
 
-                // Check write-write conflicts
-                for write_entry in &tx_info.write_set {
-                    for committed_write in &committed_tx.write_set {
-                        if write_entry.key == committed_write.key {
-                            return Ok(Some(ValidationResult::Conflict {
-                                conflict_type: ConflictType::WriteWrite,
-                                conflicting_transaction: committed_tx.id,
-                                conflicting_key: write_entry.key.clone(),
-                                reason: format!(
-                                    "Write key '{}' conflicts with committed transaction {}",
-                                    write_entry.key, committed_tx.id
-                                ),
-                            }));
+            // Then check for timing-based conflicts (read-write conflicts)
+            if let Some(commit_time) = committed_tx.commit_time {
+                if commit_time > tx_info.start_time {
+                    // Check read-write conflicts
+                    for read_entry in &tx_info.read_set {
+                        for write_entry in &committed_tx.write_set {
+                            if read_entry.key == write_entry.key {
+                                return Ok(Some(ValidationResult::Conflict {
+                                    conflict_type: ConflictType::ReadWrite,
+                                    conflicting_transaction: committed_tx.id,
+                                    conflicting_key: read_entry.key.clone(),
+                                    reason: format!("Read key '{}' at version {} conflicts with committed write at version {}", 
+                                        read_entry.key, read_entry.version, write_entry.version),
+                                }));
+                            }
                         }
                     }
                 }
@@ -753,6 +769,7 @@ impl OptimisticConcurrencyController {
                 .remove(&tx_id)
                 .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
             tx_info.phase = TransactionPhase::Committed;
+            tx_info.commit_time = Some(SystemTime::now());
             tx_info
         };
 
@@ -1027,7 +1044,7 @@ mod tests {
         for i in 0..5 {
             let tx = controller.begin_transaction().unwrap();
             controller
-                .record_write(tx, format!("key{}", i), i + 1, None, WriteOperation::Insert)
+                .record_write(tx, format!("key{i}"), i + 1, None, WriteOperation::Insert)
                 .unwrap();
             controller.validate_transaction(tx).unwrap();
             controller.commit_transaction(tx).unwrap();

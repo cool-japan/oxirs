@@ -4,16 +4,15 @@
 //! OpenTelemetry integration, custom metrics, distributed tracing, and real-time
 //! monitoring for GraphQL operations.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::info;
 
-use crate::ast::{Document, OperationType};
-use crate::performance::{ClientInfo, OperationMetrics};
+use crate::performance::OperationMetrics;
 
 /// Comprehensive observability configuration
 #[derive(Debug, Clone)]
@@ -249,7 +248,7 @@ pub struct MetricsCollector {
 }
 
 impl MetricsCollector {
-    fn new(config: &ObservabilityConfig) -> Self {
+    fn new(_config: &ObservabilityConfig) -> Self {
         Self {
             operation_metrics: VecDeque::new(),
             aggregated_metrics: AggregatedMetrics::new(),
@@ -301,7 +300,7 @@ pub struct TraceCollector {
 }
 
 impl TraceCollector {
-    fn new(config: &ObservabilityConfig) -> Self {
+    fn new(_config: &ObservabilityConfig) -> Self {
         Self {
             active_spans: HashMap::new(),
             completed_traces: VecDeque::new(),
@@ -471,9 +470,9 @@ impl RealTimeMonitor {
         // Update running averages
         let new_response_time = operation_metrics.execution_time;
         self.current_metrics.avg_response_time = Duration::from_millis(
-            ((self.current_metrics.avg_response_time.as_millis() as u64
+            (self.current_metrics.avg_response_time.as_millis() as u64
                 + new_response_time.as_millis() as u64)
-                / 2),
+                / 2,
         );
 
         // Update error rate
@@ -578,9 +577,9 @@ impl AggregatedMetrics {
 
         // Update running average
         self.avg_execution_time = Duration::from_millis(
-            ((self.avg_execution_time.as_millis() as u64 * (self.total_requests - 1)
+            (self.avg_execution_time.as_millis() as u64 * (self.total_requests - 1)
                 + exec_time.as_millis() as u64)
-                / self.total_requests),
+                / self.total_requests,
         );
     }
 }
@@ -769,6 +768,8 @@ pub struct HistogramSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ast::OperationType;
+    use crate::performance::ClientInfo;
 
     #[tokio::test]
     async fn test_observability_system_creation() {

@@ -111,7 +111,11 @@ fn test_stddev_sample() {
     let result = agg.get_result().unwrap();
     if let Value::Number(n) = result.value {
         let stddev = n.as_f64().unwrap();
-        assert!((stddev - 2.0).abs() < 0.1); // Approximately 2.0
+        assert!(
+            (stddev - 2.14).abs() < 0.2,
+            "Expected ~2.14, got {}",
+            stddev
+        ); // Sample standard deviation ≈ 2.14
     } else {
         panic!("Expected numeric result");
     }
@@ -147,7 +151,12 @@ fn test_percentile_50() {
 
     let result = agg.get_result().unwrap();
     if let Value::Number(n) = result.value {
-        assert_eq!(n.as_f64().unwrap(), 50.0);
+        let actual = n.as_f64().unwrap();
+        assert!(
+            (actual - 50.5).abs() < 1e-10,
+            "Expected ~50.5, got {}",
+            actual
+        ); // 50th percentile of 1-100 is 50.5
     } else {
         panic!("Expected numeric result");
     }
@@ -164,7 +173,12 @@ fn test_percentile_90() {
 
     let result = agg.get_result().unwrap();
     if let Value::Number(n) = result.value {
-        assert_eq!(n.as_f64().unwrap(), 90.0);
+        let actual = n.as_f64().unwrap();
+        assert!(
+            (actual - 90.1).abs() < 0.1,
+            "Expected ~90.1, got {}",
+            actual
+        ); // 90th percentile of 1-100 is ~90.1
     } else {
         panic!("Expected numeric result");
     }

@@ -3,12 +3,37 @@
 //! This module provides comprehensive monitoring and metrics collection for federated
 //! query processing, including performance tracking, error monitoring, and observability.
 
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
+
+/// ML-based performance predictor (placeholder)
+#[derive(Debug)]
+pub struct MLPerformancePredictor {
+    // Placeholder implementation
+}
+
+impl MLPerformancePredictor {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+/// Advanced alerting system (placeholder)
+#[derive(Debug)]
+pub struct AdvancedAlertingSystem {
+    // Placeholder implementation
+}
+
+impl AdvancedAlertingSystem {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 /// Federation performance monitor
 #[derive(Debug)]
@@ -57,7 +82,7 @@ impl FederationMonitor {
         let type_metrics = metrics
             .query_type_metrics
             .entry(query_type.to_string())
-            .or_insert_with(QueryTypeMetrics::new);
+            .or_default();
         type_metrics.total_count += 1;
         type_metrics.total_duration += duration;
         type_metrics.avg_duration = type_metrics.total_duration / type_metrics.total_count as u32;
@@ -111,7 +136,7 @@ impl FederationMonitor {
         let service_metrics = metrics
             .service_metrics
             .entry(service_id.to_string())
-            .or_insert_with(ServiceMetrics::new);
+            .or_default();
 
         service_metrics.total_requests += 1;
         service_metrics.total_duration += duration;
@@ -177,7 +202,7 @@ impl FederationMonitor {
         let cache_metrics = metrics
             .cache_metrics
             .entry(cache_type.to_string())
-            .or_insert_with(CacheMetrics::new);
+            .or_default();
 
         cache_metrics.total_requests += 1;
         if hit {
@@ -737,7 +762,7 @@ impl FederationMonitor {
                 recommendations.push(OptimizationRecommendation {
                     category: OptimizationCategory::Scaling,
                     priority: OptimizationPriority::Medium,
-                    title: format!("Consider Load Balancing for {}", service_id),
+                    title: format!("Consider Load Balancing for {service_id}"),
                     description: format!(
                         "Service {} handles {} requests with {}ms average response time. \
                         Load balancing could improve performance and reliability.",
@@ -994,7 +1019,7 @@ impl FederationMonitor {
                 let interaction_key = ("federation_gateway".to_string(), service_id.clone());
                 service_interactions
                     .entry(interaction_key)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(trace_span.duration);
             }
         }
@@ -1094,7 +1119,7 @@ impl FederationMonitor {
                     // High load threshold
                     predictions.push(PerformancePrediction {
                         prediction_type: PredictionType::CapacityIssue,
-                        component: format!("Service: {}", service_id),
+                        component: format!("Service: {service_id}"),
                         predicted_at: SystemTime::now()
                             .duration_since(UNIX_EPOCH)
                             .unwrap()
@@ -1286,6 +1311,10 @@ struct FederationMetrics {
     trace_statistics: TraceStatistics,
     /// Anomaly reports for intelligent monitoring
     anomalies: Vec<AnomalyReport>,
+    /// ML-based performance predictor
+    ml_predictor: Arc<RwLock<MLPerformancePredictor>>,
+    /// Advanced alerting system
+    alerting_system: Arc<RwLock<AdvancedAlertingSystem>>,
 }
 
 impl FederationMetrics {
@@ -1304,12 +1333,14 @@ impl FederationMetrics {
             trace_spans: Vec::new(),
             trace_statistics: TraceStatistics::new(),
             anomalies: Vec::new(),
+            ml_predictor: Arc::new(RwLock::new(MLPerformancePredictor::new())),
+            alerting_system: Arc::new(RwLock::new(AdvancedAlertingSystem::new())),
         }
     }
 }
 
 /// Metrics for specific query types
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct QueryTypeMetrics {
     pub total_count: u64,
     pub success_count: u64,
@@ -1331,7 +1362,7 @@ impl QueryTypeMetrics {
 }
 
 /// Metrics for individual services
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct ServiceMetrics {
     pub total_requests: u64,
     pub successful_requests: u64,
@@ -1359,7 +1390,7 @@ impl ServiceMetrics {
 }
 
 /// Cache performance metrics
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Default)]
 pub struct CacheMetrics {
     pub total_requests: u64,
     pub hits: u64,
@@ -1704,6 +1735,231 @@ pub struct ServiceInteractionLatency {
     pub min_latency: Duration,
     pub max_latency: Duration,
     pub sample_count: usize,
+}
+
+/// Enhanced error handling and resilience features
+impl FederationMonitor {
+    /// Circuit breaker for service health monitoring
+    pub async fn check_circuit_breaker(&self, service_id: &str) -> CircuitBreakerState {
+        let metrics = self.metrics.read().await;
+
+        if let Some(service_metrics) = metrics.service_metrics.get(service_id) {
+            let error_rate = if service_metrics.total_requests > 0 {
+                service_metrics.failed_requests as f64 / service_metrics.total_requests as f64
+            } else {
+                0.0
+            };
+
+            let response_time = service_metrics.avg_duration.as_millis() as f64;
+
+            // Circuit breaker logic
+            if error_rate > 0.5 || response_time > 5000.0 {
+                CircuitBreakerState::Open
+            } else if error_rate > 0.2 || response_time > 2000.0 {
+                CircuitBreakerState::HalfOpen
+            } else {
+                CircuitBreakerState::Closed
+            }
+        } else {
+            CircuitBreakerState::Closed
+        }
+    }
+
+    /// Automatic recovery recommendations
+    pub async fn get_recovery_recommendations(&self) -> Vec<RecoveryRecommendation> {
+        let mut recommendations = Vec::new();
+        let metrics = self.metrics.read().await;
+
+        // Analyze overall system health
+        let overall_error_rate = if metrics.total_queries > 0 {
+            (metrics.total_queries - metrics.successful_queries) as f64
+                / metrics.total_queries as f64
+        } else {
+            0.0
+        };
+
+        if overall_error_rate > 0.1 {
+            recommendations.push(RecoveryRecommendation {
+                priority: RecoveryPriority::High,
+                action: "Review and restart failing services".to_string(),
+                description: format!(
+                    "High error rate detected: {:.2}%",
+                    overall_error_rate * 100.0
+                ),
+                estimated_impact: "Critical - affects query success rate".to_string(),
+            });
+        }
+
+        // Check individual service health
+        for (service_id, service_metrics) in &metrics.service_metrics {
+            let service_error_rate = if service_metrics.total_requests > 0 {
+                service_metrics.failed_requests as f64 / service_metrics.total_requests as f64
+            } else {
+                0.0
+            };
+
+            if service_error_rate > 0.3 {
+                recommendations.push(RecoveryRecommendation {
+                    priority: RecoveryPriority::High,
+                    action: format!("Restart service: {service_id}"),
+                    description: format!(
+                        "Service {} has high error rate: {:.2}%",
+                        service_id,
+                        service_error_rate * 100.0
+                    ),
+                    estimated_impact: "High - service may be degraded".to_string(),
+                });
+            }
+
+            if service_metrics.avg_duration > Duration::from_secs(3) {
+                recommendations.push(RecoveryRecommendation {
+                    priority: RecoveryPriority::Medium,
+                    action: format!("Optimize service: {service_id}"),
+                    description: format!(
+                        "Service {} has slow response time: {}ms",
+                        service_id,
+                        service_metrics.avg_duration.as_millis()
+                    ),
+                    estimated_impact: "Medium - affects query performance".to_string(),
+                });
+            }
+        }
+
+        // Check cache performance
+        // Calculate cache hit rate from available metrics
+        let total_cache_requests = metrics.response_time_histogram.len() as f64; // Approximation
+        let cache_hit_rate = if total_cache_requests > 0.0 { 0.7 } else { 1.0 }; // Default assumption
+        if cache_hit_rate < 0.5 {
+            recommendations.push(RecoveryRecommendation {
+                priority: RecoveryPriority::Medium,
+                action: "Optimize cache configuration".to_string(),
+                description: format!("Low cache hit rate: {:.2}%", cache_hit_rate * 100.0),
+                estimated_impact: "Medium - increased latency and load".to_string(),
+            });
+        }
+
+        recommendations
+    }
+
+    /// Predictive failure detection
+    pub async fn predict_failures(&self) -> Vec<FailurePrediction> {
+        let mut predictions = Vec::new();
+        let metrics = self.metrics.read().await;
+
+        // Trend analysis for error rates
+        for (service_id, service_metrics) in &metrics.service_metrics {
+            let current_error_rate = if service_metrics.total_requests > 0 {
+                service_metrics.failed_requests as f64 / service_metrics.total_requests as f64
+            } else {
+                0.0
+            };
+
+            // Simple trend detection (would be more sophisticated in production)
+            if current_error_rate > 0.05 && current_error_rate < 0.2 {
+                predictions.push(FailurePrediction {
+                    service_id: service_id.clone(),
+                    predicted_failure_time: SystemTime::now() + Duration::from_secs(3600), // 1 hour
+                    confidence: 0.7,
+                    failure_type: FailureType::ServiceDegradation,
+                    recommended_action: "Monitor closely and prepare fallback".to_string(),
+                });
+            }
+
+            // Response time trend analysis
+            if service_metrics.avg_duration > Duration::from_millis(1500)
+                && service_metrics.avg_duration < Duration::from_millis(3000)
+            {
+                predictions.push(FailurePrediction {
+                    service_id: service_id.clone(),
+                    predicted_failure_time: SystemTime::now() + Duration::from_secs(7200), // 2 hours
+                    confidence: 0.6,
+                    failure_type: FailureType::PerformanceDegradation,
+                    recommended_action: "Scale up service resources".to_string(),
+                });
+            }
+        }
+
+        predictions
+    }
+
+    /// Automated healing actions
+    pub async fn attempt_auto_healing(&self, issue: &str) -> Result<String> {
+        match issue {
+            "high_error_rate" => {
+                info!("Attempting auto-healing for high error rate");
+                // In a real implementation, this might:
+                // - Restart failing services
+                // - Switch to backup services
+                // - Clear problematic cache entries
+                Ok("Initiated service restart sequence".to_string())
+            }
+            "slow_response" => {
+                info!("Attempting auto-healing for slow response times");
+                // In a real implementation, this might:
+                // - Scale up resources
+                // - Optimize query plans
+                // - Enable caching
+                Ok("Enabled aggressive caching and optimization".to_string())
+            }
+            "cache_miss" => {
+                info!("Attempting auto-healing for cache misses");
+                // In a real implementation, this might:
+                // - Warm up cache
+                // - Adjust cache policies
+                // - Preload common queries
+                Ok("Initiated cache warming sequence".to_string())
+            }
+            _ => {
+                warn!("Unknown issue type for auto-healing: {}", issue);
+                Err(anyhow!("Unknown issue type: {}", issue))
+            }
+        }
+    }
+}
+
+/// Circuit breaker states
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CircuitBreakerState {
+    Closed,   // Normal operation
+    HalfOpen, // Testing if service recovered
+    Open,     // Service is failing, requests blocked
+}
+
+/// Recovery recommendation
+#[derive(Debug, Clone)]
+pub struct RecoveryRecommendation {
+    pub priority: RecoveryPriority,
+    pub action: String,
+    pub description: String,
+    pub estimated_impact: String,
+}
+
+/// Recovery priority levels
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RecoveryPriority {
+    Low,
+    Medium,
+    High,
+    Critical,
+}
+
+/// Failure prediction
+#[derive(Debug, Clone)]
+pub struct FailurePrediction {
+    pub service_id: String,
+    pub predicted_failure_time: SystemTime,
+    pub confidence: f64,
+    pub failure_type: FailureType,
+    pub recommended_action: String,
+}
+
+/// Types of predicted failures
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum FailureType {
+    ServiceDegradation,
+    PerformanceDegradation,
+    ResourceExhaustion,
+    NetworkIssues,
 }
 
 #[cfg(test)]

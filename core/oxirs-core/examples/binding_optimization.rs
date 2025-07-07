@@ -62,23 +62,23 @@ fn type_constraint_example() -> Result<(), Box<dyn std::error::Error>> {
     let name = Term::Literal(Literal::new("Alice"));
     let age = Term::Literal(Literal::new("30"));
 
-    println!("Binding ?person = {}", person);
+    println!("Binding ?person = {person}");
     bindings.bind(var_person.clone(), person, BindingMetadata::default())?;
 
-    println!("Binding ?name = {}", name);
+    println!("Binding ?name = {name}");
     bindings.bind(var_name.clone(), name, BindingMetadata::default())?;
 
-    println!("Binding ?age = {}", age);
+    println!("Binding ?age = {age}");
     bindings.bind(var_age.clone(), age, BindingMetadata::default())?;
 
     println!("All bindings successful with type constraints!");
 
     // Try invalid binding
     let invalid_age = Term::Literal(Literal::new("thirty")); // Not numeric
-    println!("\nTrying invalid binding ?age = {}", invalid_age);
+    println!("\nTrying invalid binding ?age = {invalid_age}");
     match bindings.bind(var_age, invalid_age, BindingMetadata::default()) {
         Ok(_) => println!("Binding succeeded (unexpected)"),
-        Err(e) => println!("Binding failed as expected: {}", e),
+        Err(e) => println!("Binding failed as expected: {e}"),
     }
 
     Ok(())
@@ -275,7 +275,7 @@ fn relationship_constraint_example() -> Result<(), Box<dyn std::error::Error>> {
         }
         count += 1;
     }
-    println!("Total valid combinations: {}", count);
+    println!("Total valid combinations: {count}");
 
     Ok(())
 }
@@ -449,15 +449,15 @@ fn complex_query_example() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\nTesting bindings:");
     for (label, data) in test_data {
-        println!("\n{}:", label);
+        println!("\n{label}:");
         let mut test_bindings = bindings.clone();
         let mut all_valid = true;
 
         for (var, term) in data {
             match test_bindings.bind(var.clone(), term.clone(), BindingMetadata::default()) {
-                Ok(_) => println!("  ✓ ?{} = {}", var, term),
+                Ok(_) => println!("  ✓ ?{var} = {term}"),
                 Err(e) => {
-                    println!("  ✗ ?{} = {} ({})", var, term, e);
+                    println!("  ✗ ?{var} = {term} ({e})");
                     all_valid = false;
                 }
             }

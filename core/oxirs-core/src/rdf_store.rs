@@ -9,6 +9,14 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 use std::sync::{Arc, RwLock};
 
+/// Simple triple pattern for SPARQL queries
+#[derive(Debug, Clone)]
+struct SimpleTriplePattern {
+    subject: Option<String>,
+    predicate: Option<String>,
+    object: Option<String>,
+}
+
 /// SPARQL query results supporting different result types
 #[derive(Debug, Clone)]
 pub enum QueryResults {
@@ -56,7 +64,7 @@ impl QueryResults {
 }
 
 /// Variable binding for SELECT query results
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct VariableBinding {
     bindings: std::collections::HashMap<String, Term>,
 }
@@ -132,22 +140,22 @@ impl MemoryStorage {
             // Update indexes
             self.subject_index
                 .entry(quad.subject().clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(quad.clone());
 
             self.predicate_index
                 .entry(quad.predicate().clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(quad.clone());
 
             self.object_index
                 .entry(quad.object().clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(quad.clone());
 
             self.graph_index
                 .entry(quad.graph_name().clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .insert(quad.clone());
 
             // Add to named graphs if not default graph
@@ -209,7 +217,7 @@ impl MemoryStorage {
         self.quads.iter()
     }
 
-    fn query_quads(
+    fn query_quads_internal(
         &self,
         subject: Option<&Subject>,
         predicate: Option<&Predicate>,
@@ -491,7 +499,7 @@ impl Iterator for QueryResultsIterator {
 }
 
 /// Solution mapping for SPARQL query results
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SolutionMapping {
     bindings: std::collections::HashMap<String, Term>,
 }
@@ -518,10 +526,7 @@ impl RdfStore {
     /// Create a new ultra-high performance in-memory store
     pub fn new() -> Result<Self> {
         Ok(RdfStore {
-            backend: StorageBackend::UltraMemory(
-                Arc::new(UltraIndex::new()),
-                Arc::new(RdfArena::new()),
-            ),
+            backend: StorageBackend::Memory(Arc::new(RwLock::new(MemoryStorage::new()))),
         })
     }
 
@@ -565,9 +570,9 @@ impl RdfStore {
                 Ok(true) // New quad inserted
             }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let mut storage = storage.write().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-                })?;
+                let mut storage = storage
+                    .write()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 Ok(storage.insert_quad(quad))
             }
         }
@@ -617,9 +622,9 @@ impl RdfStore {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => Ok(index.remove_quad(quad)),
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let mut storage = storage.write().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-                })?;
+                let mut storage = storage
+                    .write()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 Ok(storage.remove_quad(quad))
             }
         }
@@ -629,9 +634,9 @@ impl RdfStore {
     pub fn contains_quad(&self, quad: &Quad) -> Result<bool> {
         match &self.backend {
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-                })?;
+                let storage = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
                 Ok(storage.contains_quad(quad))
             }
             StorageBackend::UltraMemory(index, _) => {
@@ -662,10 +667,10 @@ impl RdfStore {
                 Ok(results)
             }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-                })?;
-                Ok(storage.query_quads(subject, predicate, object, graph_name))
+                let storage = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
+                Ok(storage.query_quads_internal(subject, predicate, object, graph_name))
             }
         }
     }
@@ -697,9 +702,9 @@ impl RdfStore {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => Ok(index.len()),
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-                })?;
+                let storage = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
                 Ok(storage.len())
             }
         }
@@ -710,9 +715,9 @@ impl RdfStore {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => Ok(index.is_empty()),
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-                })?;
+                let storage = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
                 Ok(storage.is_empty())
             }
         }
@@ -740,11 +745,8 @@ impl RdfStore {
 
     /// Clear memory arena to reclaim memory (ultra-performance mode only)
     pub fn clear_arena(&self) {
-        match &self.backend {
-            StorageBackend::UltraMemory(index, _arena) => {
-                index.clear_arena();
-            }
-            _ => {}
+        if let StorageBackend::UltraMemory(index, _arena) = &self.backend {
+            index.clear_arena();
         }
     }
 
@@ -756,20 +758,310 @@ impl RdfStore {
                 Ok(())
             }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let mut storage = storage.write().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire write lock: {}", e))
-                })?;
+                let mut storage = storage
+                    .write()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire write lock: {e}")))?;
                 *storage = MemoryStorage::new();
                 Ok(())
             }
         }
     }
 
-    /// Query the store with SPARQL (placeholder for future implementation)
+    /// Query the store with SPARQL
     pub fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
-        // TODO: Implement SPARQL query execution using spargebra/spareval
-        let _sparql = sparql;
-        Ok(OxirsQueryResults::new())
+        // Basic SPARQL query processor for common patterns
+        let sparql = sparql.trim();
+        
+        if sparql.to_uppercase().starts_with("SELECT") {
+            self.execute_select_query(sparql)
+        } else if sparql.to_uppercase().starts_with("ASK") {
+            self.execute_ask_query(sparql)
+        } else if sparql.to_uppercase().starts_with("CONSTRUCT") {
+            self.execute_construct_query(sparql)
+        } else if sparql.to_uppercase().starts_with("DESCRIBE") {
+            self.execute_describe_query(sparql)
+        } else {
+            Err(OxirsError::Query(format!("Unsupported SPARQL query type: {}", sparql)))
+        }
+    }
+
+    /// Execute a SELECT query
+    fn execute_select_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        // Basic pattern matching for simple SELECT queries
+        // Pattern: SELECT ?var WHERE { ?s ?p ?o }
+        
+        if sparql.contains("WHERE") {
+            let variables = self.extract_select_variables(sparql)?;
+            let triple_patterns = self.extract_triple_patterns(sparql)?;
+            
+            let mut results = Vec::new();
+            
+            // Execute query based on the pattern
+            for pattern in triple_patterns {
+                let matching_quads = self.query_quads_by_pattern(&pattern)?;
+                
+                for quad in matching_quads {
+                    let mut binding = VariableBinding::new();
+                    
+                    // Bind variables based on the pattern
+                    if let Some(var) = &pattern.subject {
+                        if var.starts_with('?') {
+                            binding.bind(var[1..].to_string(), Term::from(quad.subject().clone()));
+                        }
+                    }
+                    
+                    if let Some(var) = &pattern.predicate {
+                        if var.starts_with('?') {
+                            binding.bind(var[1..].to_string(), Term::from(quad.predicate().clone()));
+                        }
+                    }
+                    
+                    if let Some(var) = &pattern.object {
+                        if var.starts_with('?') {
+                            binding.bind(var[1..].to_string(), Term::from(quad.object().clone()));
+                        }
+                    }
+                    
+                    results.push(binding);
+                }
+            }
+            
+            Ok(OxirsQueryResults::from_bindings(results, variables))
+        } else {
+            Ok(OxirsQueryResults::new())
+        }
+    }
+
+    /// Execute an ASK query
+    fn execute_ask_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        // Basic ASK query: check if any triples match the pattern
+        let triple_patterns = self.extract_triple_patterns(sparql)?;
+        
+        for pattern in triple_patterns {
+            let matching_quads = self.query_quads_by_pattern(&pattern)?;
+            if !matching_quads.is_empty() {
+                return Ok(OxirsQueryResults::from_boolean(true));
+            }
+        }
+        
+        Ok(OxirsQueryResults::from_boolean(false))
+    }
+
+    /// Execute a CONSTRUCT query
+    fn execute_construct_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        // Basic CONSTRUCT query: return matching triples
+        let triple_patterns = self.extract_triple_patterns(sparql)?;
+        let mut result_quads = Vec::new();
+        
+        for pattern in triple_patterns {
+            let matching_quads = self.query_quads_by_pattern(&pattern)?;
+            result_quads.extend(matching_quads);
+        }
+        
+        Ok(OxirsQueryResults::from_graph(result_quads))
+    }
+
+    /// Execute a DESCRIBE query
+    fn execute_describe_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
+        // Basic DESCRIBE query: return all triples about the specified resource
+        let resources = self.extract_describe_resources(sparql)?;
+        let mut result_quads = Vec::new();
+        
+        for resource in resources {
+            // Find all triples where the resource is subject or object
+            let subject_pattern = SimpleTriplePattern {
+                subject: Some(resource.clone()),
+                predicate: None,
+                object: None,
+            };
+            let object_pattern = SimpleTriplePattern {
+                subject: None,
+                predicate: None,
+                object: Some(resource),
+            };
+            
+            let subject_quads = self.query_quads(
+                subject_pattern.subject.as_ref().and_then(|s| Self::string_to_subject(s)).as_ref(),
+                subject_pattern.predicate.as_ref().and_then(|p| Self::string_to_predicate(p)).as_ref(),
+                subject_pattern.object.as_ref().and_then(|o| Self::string_to_object(o)).as_ref(),
+                None,
+            )?;
+            let object_quads = self.query_quads(
+                object_pattern.subject.as_ref().and_then(|s| Self::string_to_subject(s)).as_ref(),
+                object_pattern.predicate.as_ref().and_then(|p| Self::string_to_predicate(p)).as_ref(),
+                object_pattern.object.as_ref().and_then(|o| Self::string_to_object(o)).as_ref(),
+                None,
+            )?;
+            
+            result_quads.extend(subject_quads);
+            result_quads.extend(object_quads);
+        }
+        
+        Ok(OxirsQueryResults::from_graph(result_quads))
+    }
+
+    /// Extract variables from SELECT clause
+    fn extract_select_variables(&self, sparql: &str) -> Result<Vec<String>> {
+        let mut variables = Vec::new();
+        
+        if let Some(select_start) = sparql.to_uppercase().find("SELECT") {
+            if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
+                let select_clause = &sparql[select_start + 6..where_start];
+                
+                for token in select_clause.split_whitespace() {
+                    if token.starts_with('?') {
+                        variables.push(token[1..].to_string());
+                    }
+                }
+            }
+        }
+        
+        Ok(variables)
+    }
+
+    /// Extract triple patterns from WHERE clause
+    fn extract_triple_patterns(&self, sparql: &str) -> Result<Vec<SimpleTriplePattern>> {
+        let mut patterns = Vec::new();
+        
+        if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
+            let where_clause = &sparql[where_start + 5..];
+            
+            // Simple pattern extraction for { ?s ?p ?o }
+            if let Some(start_brace) = where_clause.find('{') {
+                if let Some(end_brace) = where_clause.find('}') {
+                    let pattern_text = &where_clause[start_brace + 1..end_brace];
+                    let tokens: Vec<&str> = pattern_text.split_whitespace().collect();
+                    
+                    if tokens.len() >= 3 {
+                        let subject = if tokens[0] == "." { None } else { Some(tokens[0].to_string()) };
+                        let predicate = if tokens[1] == "." { None } else { Some(tokens[1].to_string()) };
+                        let object = if tokens[2] == "." { None } else { Some(tokens[2].to_string()) };
+                        
+                        patterns.push(SimpleTriplePattern {
+                            subject,
+                            predicate,
+                            object,
+                        });
+                    }
+                }
+            }
+        }
+        
+        Ok(patterns)
+    }
+
+    /// Extract resources from DESCRIBE clause
+    fn extract_describe_resources(&self, sparql: &str) -> Result<Vec<String>> {
+        let mut resources = Vec::new();
+        
+        if let Some(describe_start) = sparql.to_uppercase().find("DESCRIBE") {
+            let describe_clause = &sparql[describe_start + 8..];
+            
+            for token in describe_clause.split_whitespace() {
+                if token.starts_with('<') && token.ends_with('>') {
+                    resources.push(token.to_string());
+                } else if token.starts_with('?') {
+                    // Variable - for now just treat as literal
+                    resources.push(token.to_string());
+                }
+                
+                if token.to_uppercase() == "WHERE" {
+                    break;
+                }
+            }
+        }
+        
+        Ok(resources)
+    }
+
+    /// Query quads by pattern (helper method for SPARQL execution)
+    fn query_quads_by_pattern(&self, pattern: &SimpleTriplePattern) -> Result<Vec<Quad>> {
+        match &self.backend {
+            StorageBackend::UltraMemory(index, arena) => {
+                let mut results = Vec::new();
+                
+                // Convert pattern to quad pattern
+                let subject_filter = pattern.subject.as_ref().map(|s| s.as_str());
+                let predicate_filter = pattern.predicate.as_ref().map(|p| p.as_str());
+                let object_filter = pattern.object.as_ref().map(|o| o.as_str());
+                
+                // Query the ultra index using find_quads method
+                // Convert string filters to proper types
+                let results_vec = index.find_quads(
+                    pattern.subject.as_ref().and_then(|s| Self::string_to_subject(s)).as_ref(),
+                    pattern.predicate.as_ref().and_then(|p| Self::string_to_predicate(p)).as_ref(),
+                    pattern.object.as_ref().and_then(|o| Self::string_to_object(o)).as_ref(),
+                    None // graph_name
+                );
+                results.extend(results_vec);
+                
+                Ok(results)
+            }
+            StorageBackend::Memory(storage) => {
+                let storage = storage.read().unwrap();
+                let mut results = Vec::new();
+                
+                for quad in &storage.quads {
+                    let mut matches = true;
+                    
+                    if let Some(s) = &pattern.subject {
+                        if !s.starts_with('?') && quad.subject().to_string() != *s {
+                            matches = false;
+                        }
+                    }
+                    
+                    if let Some(p) = &pattern.predicate {
+                        if !p.starts_with('?') && quad.predicate().to_string() != *p {
+                            matches = false;
+                        }
+                    }
+                    
+                    if let Some(o) = &pattern.object {
+                        if !o.starts_with('?') && quad.object().to_string() != *o {
+                            matches = false;
+                        }
+                    }
+                    
+                    if matches {
+                        results.push(quad.clone());
+                    }
+                }
+                
+                Ok(results)
+            }
+            StorageBackend::Persistent(storage, _) => {
+                let storage = storage.read().unwrap();
+                let mut results = Vec::new();
+                
+                for quad in &storage.quads {
+                    let mut matches = true;
+                    
+                    if let Some(s) = &pattern.subject {
+                        if !s.starts_with('?') && quad.subject().to_string() != *s {
+                            matches = false;
+                        }
+                    }
+                    
+                    if let Some(p) = &pattern.predicate {
+                        if !p.starts_with('?') && quad.predicate().to_string() != *p {
+                            matches = false;
+                        }
+                    }
+                    
+                    if let Some(o) = &pattern.object {
+                        if !o.starts_with('?') && quad.object().to_string() != *o {
+                            matches = false;
+                        }
+                    }
+                    
+                    if matches {
+                        results.push(quad.clone());
+                    }
+                }
+                
+                Ok(results)
+            }
+        }
     }
 
     /// Insert a quad (compatibility alias for insert_quad)
@@ -803,13 +1095,13 @@ impl RdfStore {
                 Ok(result)
             }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-                })?;
+                let storage = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
                 let mut result = Vec::new();
                 for graph in &storage.named_graphs {
                     let graph_name = GraphName::NamedNode(graph.clone());
-                    let quads = storage.query_quads(None, None, None, Some(&graph_name));
+                    let quads = storage.query_quads_internal(None, None, None, Some(&graph_name));
                     result.extend(quads);
                 }
                 Ok(result)
@@ -901,9 +1193,9 @@ impl RdfStore {
                 Ok(graphs.into_iter().collect())
             }
             StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
-                let storage = storage.read().map_err(|e| {
-                    OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-                })?;
+                let storage = storage
+                    .read()
+                    .map_err(|e| OxirsError::Store(format!("Failed to acquire read lock: {e}")))?;
                 Ok(storage.named_graphs.iter().cloned().collect())
             }
         }
@@ -915,7 +1207,7 @@ impl RdfStore {
             match &self.backend {
                 StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                     let mut storage = storage.write().map_err(|e| {
-                        OxirsError::Store(format!("Failed to acquire write lock: {}", e))
+                        OxirsError::Store(format!("Failed to acquire write lock: {e}"))
                     })?;
                     storage.named_graphs.insert(graph_name.clone());
                 }
@@ -936,7 +1228,7 @@ impl RdfStore {
             match &self.backend {
                 StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
                     let mut storage = storage.write().map_err(|e| {
-                        OxirsError::Store(format!("Failed to acquire write lock: {}", e))
+                        OxirsError::Store(format!("Failed to acquire write lock: {e}"))
                     })?;
                     storage.named_graphs.remove(graph_name);
                 }
@@ -954,9 +1246,46 @@ impl RdfStore {
         // TODO: Implement HTTP fetching and parsing
         // For now, return an error
         Err(OxirsError::Store(format!(
-            "Loading from URL not yet implemented: {}",
-            url
+            "Loading from URL not yet implemented: {url}"
         )))
+    }
+
+    /// Convert string to Subject term
+    fn string_to_subject(s: &str) -> Option<Subject> {
+        if s.starts_with('<') && s.ends_with('>') {
+            let iri = &s[1..s.len()-1];
+            NamedNode::new(iri).ok().map(Subject::NamedNode)
+        } else if s.starts_with("_:") {
+            BlankNode::new(&s[2..]).ok().map(Subject::BlankNode)
+        } else {
+            None
+        }
+    }
+
+    /// Convert string to Predicate term
+    fn string_to_predicate(p: &str) -> Option<Predicate> {
+        if p.starts_with('<') && p.ends_with('>') {
+            let iri = &p[1..p.len()-1];
+            NamedNode::new(iri).ok().map(Predicate::NamedNode)
+        } else {
+            None
+        }
+    }
+
+    /// Convert string to Object term
+    fn string_to_object(o: &str) -> Option<Object> {
+        if o.starts_with('<') && o.ends_with('>') {
+            let iri = &o[1..o.len()-1];
+            NamedNode::new(iri).ok().map(Object::NamedNode)
+        } else if o.starts_with("_:") {
+            BlankNode::new(&o[2..]).ok().map(Object::BlankNode)
+        } else if o.starts_with('"') {
+            // Simple literal parsing - more sophisticated parsing would be needed for real use
+            let literal_content = &o[1..o.len()-1];
+            Some(Object::Literal(Literal::new(literal_content)))
+        } else {
+            None
+        }
     }
 }
 
@@ -969,20 +1298,40 @@ impl Default for RdfStore {
 // Implement the Store trait for RdfStore
 #[async_trait]
 impl Store for RdfStore {
-    fn insert_quad(&self, _quad: Quad) -> Result<bool> {
-        // For RdfStore, we need mutable access, so this trait method should not be used
-        // Use ConcreteStore directly for mutations
-        Err(crate::OxirsError::Store(
-            "insert_quad requires mutable access - use RdfStore directly".to_string(),
-        ))
+    fn insert_quad(&self, quad: Quad) -> Result<bool> {
+        match &self.backend {
+            StorageBackend::UltraMemory(_index, _arena) => {
+                // TODO: Implement ultra-high performance insertion
+                // For now, we'll fall back to a simple implementation
+                Err(crate::OxirsError::Store(
+                    "UltraMemory backend not yet fully implemented for trait Store".to_string(),
+                ))
+            }
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                let mut storage = storage.write().map_err(|e| {
+                    crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                })?;
+                Ok(storage.insert_quad(quad))
+            }
+        }
     }
 
-    fn remove_quad(&self, _quad: &Quad) -> Result<bool> {
-        // For RdfStore, we need mutable access, so this trait method should not be used
-        // Use ConcreteStore directly for mutations
-        Err(crate::OxirsError::Store(
-            "remove_quad requires mutable access - use RdfStore directly".to_string(),
-        ))
+    fn remove_quad(&self, quad: &Quad) -> Result<bool> {
+        match &self.backend {
+            StorageBackend::UltraMemory(_index, _arena) => {
+                // TODO: Implement ultra-high performance removal
+                // For now, we'll fall back to a simple implementation
+                Err(crate::OxirsError::Store(
+                    "UltraMemory backend not yet fully implemented for trait Store".to_string(),
+                ))
+            }
+            StorageBackend::Memory(storage) | StorageBackend::Persistent(storage, _) => {
+                let mut storage = storage.write().map_err(|e| {
+                    crate::OxirsError::Store(format!("Failed to acquire write lock: {e}"))
+                })?;
+                Ok(storage.remove_quad(quad))
+            }
+        }
     }
 
     fn find_quads(

@@ -326,7 +326,7 @@ impl AsyncStreamingParser {
                             progress.errors_encountered += 1;
                             tracing::warn!("UTF-8 error: {}", e);
                         } else {
-                            return Err(OxirsError::Parse(format!("UTF-8 error: {}", e)));
+                            return Err(OxirsError::Parse(format!("UTF-8 error: {e}")));
                         }
                     }
                 }
@@ -355,7 +355,7 @@ impl AsyncStreamingParser {
                 }
                 Err(e) => {
                     if !config.ignore_errors {
-                        return Err(OxirsError::Parse(format!("UTF-8 error: {}", e)));
+                        return Err(OxirsError::Parse(format!("UTF-8 error: {e}")));
                     }
                 }
             }
@@ -416,7 +416,7 @@ impl AsyncStreamingParser {
 
         // Parse the complete document
         let document = String::from_utf8(buffer)
-            .map_err(|e| OxirsError::Parse(format!("UTF-8 error: {}", e)))?;
+            .map_err(|e| OxirsError::Parse(format!("UTF-8 error: {e}")))?;
 
         let parser_config = ParserConfig {
             base_iri: config.base_iri,
@@ -877,7 +877,7 @@ mod tests {
         let mut triples = Vec::new();
 
         for i in 0..10 {
-            let subject = NamedNode::new(&format!("http://example.org/item{}", i)).unwrap();
+            let subject = NamedNode::new(&format!("http://example.org/item{i}")).unwrap();
             let pred = NamedNode::new("http://example.org/value").unwrap();
             let obj = Literal::new(i.to_string());
             triples.push(Triple::new(subject, pred, obj));

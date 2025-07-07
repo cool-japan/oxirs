@@ -607,29 +607,29 @@ impl InputValidationFramework {
             validation_config: config,
         }
     }
-    
+
     /// Validate SPARQL query for security issues
     pub fn validate_sparql_query(&self, query: &str) -> Result<SecurityValidationResult> {
         info!("Validating SPARQL query for security issues");
-        
+
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
         let mut security_score = 100u8;
-        
+
         // Check query length
         if query.len() > self.sparql_validator.max_query_length {
             errors.push(SecurityValidationError {
                 error_type: SecurityErrorType::InputValidation,
-                message: format!("Query exceeds maximum length of {} characters", 
+                message: format!("Query exceeds maximum length of {} characters",
                                 self.sparql_validator.max_query_length),
                 severity: SecuritySeverity::High,
                 component: "SPARQL Parser".to_string(),
-                remediation: vec!["Reduce query complexity".to_string(), 
+                remediation: vec!["Reduce query complexity".to_string(),
                                 "Split into multiple queries".to_string()],
             });
             security_score -= 20;
         }
-        
+
         // Check for blocked patterns
         for pattern in &self.sparql_validator.blocked_patterns {
             if query.to_lowercase().contains(&pattern.to_lowercase()) {
@@ -644,19 +644,19 @@ impl InputValidationFramework {
                 security_score -= 30;
             }
         }
-        
+
         // Check query complexity
         let complexity = self.calculate_query_complexity(query);
         if complexity > self.sparql_validator.max_complexity {
             warnings.push(SecurityWarning {
-                message: format!("Query complexity ({}) exceeds recommended limit ({})", 
+                message: format!("Query complexity ({}) exceeds recommended limit ({})",
                                complexity, self.sparql_validator.max_complexity),
                 component: "SPARQL Parser".to_string(),
                 recommendation: "Consider simplifying the query structure".to_string(),
             });
             security_score -= 10;
         }
-        
+
         Ok(SecurityValidationResult {
             is_valid: errors.is_empty(),
             security_score,
@@ -665,15 +665,15 @@ impl InputValidationFramework {
             recommendations: self.generate_sparql_recommendations(),
         })
     }
-    
+
     /// Validate RDF data for security issues
     pub fn validate_rdf_data(&self, data: &str, format: RdfFormat) -> Result<SecurityValidationResult> {
         info!("Validating RDF data for security issues");
-        
+
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
         let mut security_score = 100u8;
-        
+
         // Check if format is allowed
         if !self.rdf_validator.allowed_formats.contains(&format) {
             errors.push(SecurityValidationError {
@@ -685,7 +685,7 @@ impl InputValidationFramework {
             });
             security_score -= 25;
         }
-        
+
         // Check data size
         if data.len() > (self.rdf_validator.max_triples_per_request * 1000) {
             errors.push(SecurityValidationError {
@@ -693,12 +693,12 @@ impl InputValidationFramework {
                 message: "RDF data exceeds maximum size limit".to_string(),
                 severity: SecuritySeverity::Medium,
                 component: "RDF Parser".to_string(),
-                remediation: vec!["Reduce data size".to_string(), 
+                remediation: vec!["Reduce data size".to_string(),
                                 "Split into multiple requests".to_string()],
             });
             security_score -= 15;
         }
-        
+
         // Check for malicious patterns
         if self.rdf_validator.content_rules.check_malicious_patterns {
             if self.contains_malicious_patterns(data) {
@@ -713,7 +713,7 @@ impl InputValidationFramework {
                 security_score -= 40;
             }
         }
-        
+
         Ok(SecurityValidationResult {
             is_valid: errors.is_empty(),
             security_score,
@@ -722,18 +722,18 @@ impl InputValidationFramework {
             recommendations: self.generate_rdf_recommendations(),
         })
     }
-    
+
     /// Validate IRI format for security issues
     pub fn validate_iri(&self, iri: &str) -> Result<SecurityValidationResult> {
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
         let mut security_score = 100u8;
-        
+
         // Check IRI length
         if iri.len() > self.iri_validator.max_iri_length {
             errors.push(SecurityValidationError {
                 error_type: SecurityErrorType::InputValidation,
-                message: format!("IRI exceeds maximum length of {} characters", 
+                message: format!("IRI exceeds maximum length of {} characters",
                                 self.iri_validator.max_iri_length),
                 severity: SecuritySeverity::Medium,
                 component: "IRI Validator".to_string(),
@@ -741,7 +741,7 @@ impl InputValidationFramework {
             });
             security_score -= 15;
         }
-        
+
         // Check scheme
         if let Some(scheme) = iri.split(':').next() {
             if !self.iri_validator.allowed_schemes.contains(scheme) {
@@ -755,7 +755,7 @@ impl InputValidationFramework {
                 security_score -= 25;
             }
         }
-        
+
         // Check for blocked domains
         for domain in &self.iri_validator.blocked_domains {
             if iri.contains(domain) {
@@ -769,7 +769,7 @@ impl InputValidationFramework {
                 security_score -= 40;
             }
         }
-        
+
         Ok(SecurityValidationResult {
             is_valid: errors.is_empty(),
             security_score,
@@ -778,12 +778,12 @@ impl InputValidationFramework {
             recommendations: vec![],
         })
     }
-    
+
     /// Calculate query complexity score
     fn calculate_query_complexity(&self, query: &str) -> usize {
         let mut complexity = 0;
         let query_lower = query.to_lowercase();
-        
+
         // Count joins and unions
         complexity += query_lower.matches("join").count() * 2;
         complexity += query_lower.matches("union").count() * 3;
@@ -792,13 +792,13 @@ impl InputValidationFramework {
         complexity += query_lower.matches("group by").count() * 2;
         complexity += query_lower.matches("order by").count();
         complexity += query_lower.matches("having").count() * 2;
-        
+
         // Count subqueries
         complexity += query_lower.matches("select").count().saturating_sub(1) * 5;
-        
+
         complexity
     }
-    
+
     /// Check for malicious patterns in data
     fn contains_malicious_patterns(&self, data: &str) -> bool {
         let malicious_patterns = [
@@ -813,11 +813,11 @@ impl InputValidationFramework {
             "setTimeout(",
             "setInterval(",
         ];
-        
+
         let data_lower = data.to_lowercase();
         malicious_patterns.iter().any(|pattern| data_lower.contains(pattern))
     }
-    
+
     /// Generate SPARQL security recommendations
     fn generate_sparql_recommendations(&self) -> Vec<SecurityRecommendation> {
         vec![
@@ -844,7 +844,7 @@ impl InputValidationFramework {
             },
         ]
     }
-    
+
     /// Generate RDF security recommendations
     fn generate_rdf_recommendations(&self) -> Vec<SecurityRecommendation> {
         vec![
@@ -955,15 +955,15 @@ impl SecureConfigurationManager {
             config_validator: ConfigurationValidator::new(),
         })
     }
-    
+
     /// Validate configuration security
     pub fn validate_configuration(&self, config_data: &str) -> Result<SecurityValidationResult> {
         info!("Validating configuration security");
-        
+
         let mut errors = Vec::new();
         let mut warnings = Vec::new();
         let mut security_score = 100u8;
-        
+
         // Check for hardcoded secrets
         if self.contains_hardcoded_secrets(config_data) {
             errors.push(SecurityValidationError {
@@ -979,7 +979,7 @@ impl SecureConfigurationManager {
             });
             security_score -= 50;
         }
-        
+
         // Check for default passwords
         if self.contains_default_passwords(config_data) {
             errors.push(SecurityValidationError {
@@ -995,7 +995,7 @@ impl SecureConfigurationManager {
             });
             security_score -= 30;
         }
-        
+
         // Check for insecure settings
         if self.has_insecure_settings(config_data) {
             warnings.push(SecurityWarning {
@@ -1005,7 +1005,7 @@ impl SecureConfigurationManager {
             });
             security_score -= 15;
         }
-        
+
         Ok(SecurityValidationResult {
             is_valid: errors.is_empty(),
             security_score,
@@ -1014,7 +1014,7 @@ impl SecureConfigurationManager {
             recommendations: self.generate_config_recommendations(),
         })
     }
-    
+
     /// Check for hardcoded secrets in configuration
     fn contains_hardcoded_secrets(&self, config: &str) -> bool {
         let secret_patterns = [
@@ -1023,7 +1023,7 @@ impl SecureConfigurationManager {
             r"key\s*=\s*['\"](?!%|\$|ENV)[^'\"]+['\"]",
             r"token\s*=\s*['\"](?!%|\$|ENV)[^'\"]+['\"]",
         ];
-        
+
         // Simple pattern matching (in production, use regex crate)
         secret_patterns.iter().any(|pattern| {
             config.to_lowercase().contains("password =") ||
@@ -1032,7 +1032,7 @@ impl SecureConfigurationManager {
             config.to_lowercase().contains("token =")
         })
     }
-    
+
     /// Check for default passwords
     fn contains_default_passwords(&self, config: &str) -> bool {
         let default_passwords = [
@@ -1043,11 +1043,11 @@ impl SecureConfigurationManager {
             "123456",
             "password123",
         ];
-        
+
         let config_lower = config.to_lowercase();
         default_passwords.iter().any(|pwd| config_lower.contains(&format!("\"{}\"", pwd)))
     }
-    
+
     /// Check for insecure settings
     fn has_insecure_settings(&self, config: &str) -> bool {
         let insecure_patterns = [
@@ -1057,11 +1057,11 @@ impl SecureConfigurationManager {
             "secure = false",
             "verify = false",
         ];
-        
+
         let config_lower = config.to_lowercase();
         insecure_patterns.iter().any(|pattern| config_lower.contains(pattern))
     }
-    
+
     /// Generate configuration security recommendations
     fn generate_config_recommendations(&self) -> Vec<SecurityRecommendation> {
         vec![
@@ -1187,7 +1187,7 @@ impl ConfigurationValidator {
                     name: "Log Level".to_string(),
                     key_pattern: "*log_level*".to_string(),
                     validator: ValidatorType::OneOf(vec![
-                        "trace".to_string(), "debug".to_string(), 
+                        "trace".to_string(), "debug".to_string(),
                         "info".to_string(), "warn".to_string(), "error".to_string()
                     ]),
                     error_message: "Invalid log level".to_string(),
@@ -1267,9 +1267,9 @@ impl ProductionErrorHandler {
                 },
                 destinations: vec![
                     AlertDestination::Email("security@example.com".to_string()),
-                    AlertDestination::Syslog { 
-                        server: "localhost:514".to_string(), 
-                        facility: "local0".to_string() 
+                    AlertDestination::Syslog {
+                        server: "localhost:514".to_string(),
+                        facility: "local0".to_string()
                     },
                 ],
                 frequency_limits: AlertFrequencyLimits {
@@ -1280,11 +1280,11 @@ impl ProductionErrorHandler {
             },
         }
     }
-    
+
     /// Sanitize error message for production use
     pub fn sanitize_error(&self, error_message: &str) -> String {
         let mut sanitized = error_message.to_string();
-        
+
         // Remove file paths
         if self.sanitization_rules.remove_file_paths {
             sanitized = sanitized.replace(
@@ -1292,7 +1292,7 @@ impl ProductionErrorHandler {
                 "[PROJECT_ROOT]"
             );
         }
-        
+
         // Apply sensitive pattern replacements
         for pattern in &self.sanitization_rules.sensitive_patterns {
             if pattern.is_regex {
@@ -1302,14 +1302,14 @@ impl ProductionErrorHandler {
                 sanitized = sanitized.replace(&pattern.pattern, &pattern.replacement);
             }
         }
-        
+
         // Use generic message if enabled
         if self.sanitization_rules.use_generic_messages {
             if sanitized.to_lowercase().contains("error") {
                 return "An internal error occurred. Please contact support.".to_string();
             }
         }
-        
+
         sanitized
     }
 }
@@ -1342,16 +1342,16 @@ impl fmt::Display for SecurityErrorType {
 /// Run comprehensive security validation across all OxiRS modules
 pub fn run_comprehensive_security_audit() -> Result<SecurityValidationResult> {
     info!("Starting comprehensive security audit of OxiRS modules");
-    
+
     let validation_framework = InputValidationFramework::new(ValidationConfig::default());
     let config_manager = SecureConfigurationManager::new()?;
     let error_handler = ProductionErrorHandler::new();
-    
+
     let mut all_errors = Vec::new();
     let mut all_warnings = Vec::new();
     let mut total_score = 0u8;
     let mut component_count = 0;
-    
+
     // Test SPARQL validation
     let test_query = "SELECT * WHERE { ?s ?p ?o } LIMIT 10";
     match validation_framework.validate_sparql_query(test_query) {
@@ -1365,7 +1365,7 @@ pub fn run_comprehensive_security_audit() -> Result<SecurityValidationResult> {
             error!("SPARQL validation failed: {}", e);
         }
     }
-    
+
     // Test RDF validation
     let test_rdf = "@prefix ex: <http://example.org/> . ex:subject ex:predicate \"literal\" .";
     match validation_framework.validate_rdf_data(test_rdf, RdfFormat::Turtle) {
@@ -1379,13 +1379,13 @@ pub fn run_comprehensive_security_audit() -> Result<SecurityValidationResult> {
             error!("RDF validation failed: {}", e);
         }
     }
-    
+
     // Test configuration validation
     let test_config = r#"
         [server]
         port = 8080
         host = "0.0.0.0"
-        
+
         [auth]
         password = "default_password"
     "#;
@@ -1400,9 +1400,9 @@ pub fn run_comprehensive_security_audit() -> Result<SecurityValidationResult> {
             error!("Configuration validation failed: {}", e);
         }
     }
-    
+
     let average_score = if component_count > 0 { total_score / component_count } else { 0 };
-    
+
     let recommendations = vec![
         SecurityRecommendation {
             title: "Implement Comprehensive Input Validation".to_string(),
@@ -1426,10 +1426,10 @@ pub fn run_comprehensive_security_audit() -> Result<SecurityValidationResult> {
             impact: SecurityImpact::Medium,
         },
     ];
-    
-    info!("Security audit completed with {} errors and {} warnings", 
+
+    info!("Security audit completed with {} errors and {} warnings",
           all_errors.len(), all_warnings.len());
-    
+
     Ok(SecurityValidationResult {
         is_valid: all_errors.is_empty(),
         security_score: average_score,
@@ -1442,66 +1442,66 @@ pub fn run_comprehensive_security_audit() -> Result<SecurityValidationResult> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_sparql_validation() {
         let framework = InputValidationFramework::new(ValidationConfig::default());
-        
+
         // Test valid query
         let valid_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10";
         let result = framework.validate_sparql_query(valid_query).unwrap();
         assert!(result.is_valid);
         assert!(result.security_score > 80);
-        
+
         // Test malicious query
         let malicious_query = "DROP ALL; SELECT * WHERE { ?s ?p ?o }";
         let result = framework.validate_sparql_query(malicious_query).unwrap();
         assert!(!result.is_valid);
         assert!(!result.errors.is_empty());
     }
-    
+
     #[test]
     fn test_rdf_validation() {
         let framework = InputValidationFramework::new(ValidationConfig::default());
-        
+
         // Test valid RDF
         let valid_rdf = "@prefix ex: <http://example.org/> . ex:s ex:p \"literal\" .";
         let result = framework.validate_rdf_data(valid_rdf, RdfFormat::Turtle).unwrap();
         assert!(result.is_valid);
-        
+
         // Test malicious RDF
         let malicious_rdf = r#"@prefix ex: <javascript:alert('xss')> . ex:s ex:p "literal" ."#;
         let result = framework.validate_rdf_data(malicious_rdf, RdfFormat::Turtle).unwrap();
         assert!(!result.is_valid);
     }
-    
+
     #[test]
     fn test_configuration_validation() {
         let config_manager = SecureConfigurationManager::new().unwrap();
-        
+
         // Test configuration with hardcoded secrets
         let bad_config = r#"password = "hardcoded_password""#;
         let result = config_manager.validate_configuration(bad_config).unwrap();
         assert!(!result.is_valid);
         assert!(!result.errors.is_empty());
-        
+
         // Test good configuration
         let good_config = r#"password = "${OXIRS_PASSWORD}""#;
         let result = config_manager.validate_configuration(good_config).unwrap();
         assert!(result.is_valid);
     }
-    
+
     #[test]
     fn test_error_sanitization() {
         let error_handler = ProductionErrorHandler::new();
-        
+
         let error_msg = "Database connection failed: password='secret123' at /Users/admin/project/src/db.rs:42";
         let sanitized = error_handler.sanitize_error(error_msg);
-        
+
         assert!(!sanitized.contains("secret123"));
         assert!(!sanitized.contains("/Users/admin"));
     }
-    
+
     #[test]
     fn test_comprehensive_audit() {
         let result = run_comprehensive_security_audit().unwrap();

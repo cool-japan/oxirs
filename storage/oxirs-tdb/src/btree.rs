@@ -5,8 +5,6 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::cmp::Ordering;
-use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
@@ -438,73 +436,74 @@ where
                 let child_id = children[child_idx];
                 let (split_key, new_child) = self.insert_recursive(child_id, key, value)?;
 
-                if let Some((key_to_insert, child_to_insert)) = split_key.zip(new_child) {
-                    // Child was split, need to insert new key and child
-                    let mut new_keys = keys;
-                    let mut new_children = children;
+                match split_key.zip(new_child) {
+                    Some((key_to_insert, child_to_insert)) => {
+                        // Child was split, need to insert new key and child
+                        let mut new_keys = keys;
+                        let mut new_children = children;
 
-                    let insert_pos = match new_keys.binary_search(&key_to_insert) {
-                        Ok(pos) => pos + 1,
-                        Err(pos) => pos,
-                    };
+                        let insert_pos = match new_keys.binary_search(&key_to_insert) {
+                            Ok(pos) => pos + 1,
+                            Err(pos) => pos,
+                        };
 
-                    new_keys.insert(insert_pos, key_to_insert);
-                    new_children.insert(insert_pos + 1, child_to_insert);
-                    self.set_parent(child_to_insert, Some(node_id))?;
+                        new_keys.insert(insert_pos, key_to_insert);
+                        new_children.insert(insert_pos + 1, child_to_insert);
+                        self.set_parent(child_to_insert, Some(node_id))?;
 
-                    // Check if internal node is full
-                    if new_keys.len() <= self.config.max_keys_per_node {
-                        self.set_node(
-                            node_id,
-                            BTreeNode::Internal {
-                                keys: new_keys,
-                                children: new_children,
-                                parent,
-                                level,
-                            },
-                        )?;
-                        Ok((None, None))
-                    } else {
-                        // Split internal node
-                        let mid = new_keys.len() / 2;
-                        let split_key = new_keys[mid].clone();
+                        // Check if internal node is full
+                        if new_keys.len() <= self.config.max_keys_per_node {
+                            self.set_node(
+                                node_id,
+                                BTreeNode::Internal {
+                                    keys: new_keys,
+                                    children: new_children,
+                                    parent,
+                                    level,
+                                },
+                            )?;
+                            Ok((None, None))
+                        } else {
+                            // Split internal node
+                            let mid = new_keys.len() / 2;
+                            let split_key = new_keys[mid].clone();
 
-                        let right_keys = new_keys.split_off(mid + 1);
-                        let right_children = new_children.split_off(mid + 1);
-                        new_keys.pop(); // Remove the split key from left node
+                            let right_keys = new_keys.split_off(mid + 1);
+                            let right_children = new_children.split_off(mid + 1);
+                            new_keys.pop(); // Remove the split key from left node
 
-                        // Update left node
-                        self.set_node(
-                            node_id,
-                            BTreeNode::Internal {
-                                keys: new_keys,
-                                children: new_children,
-                                parent,
-                                level,
-                            },
-                        )?;
+                            // Update left node
+                            self.set_node(
+                                node_id,
+                                BTreeNode::Internal {
+                                    keys: new_keys,
+                                    children: new_children,
+                                    parent,
+                                    level,
+                                },
+                            )?;
 
-                        // Create right node
-                        let right_id = self.create_internal_node()?;
-                        self.set_node(
-                            right_id,
-                            BTreeNode::Internal {
-                                keys: right_keys,
-                                children: right_children.clone(),
-                                parent,
-                                level,
-                            },
-                        )?;
+                            // Create right node
+                            let right_id = self.create_internal_node()?;
+                            self.set_node(
+                                right_id,
+                                BTreeNode::Internal {
+                                    keys: right_keys,
+                                    children: right_children.clone(),
+                                    parent,
+                                    level,
+                                },
+                            )?;
 
-                        // Update parent pointers for children in right node
-                        for child_id in &right_children {
-                            self.set_parent(*child_id, Some(right_id))?;
+                            // Update parent pointers for children in right node
+                            for child_id in &right_children {
+                                self.set_parent(*child_id, Some(right_id))?;
+                            }
+
+                            Ok((Some(split_key), Some(right_id)))
                         }
-
-                        Ok((Some(split_key), Some(right_id)))
                     }
-                } else {
-                    Ok((None, None))
+                    _ => Ok((None, None)),
                 }
             }
         }

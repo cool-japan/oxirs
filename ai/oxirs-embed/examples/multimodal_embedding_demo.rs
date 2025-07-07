@@ -71,7 +71,7 @@ async fn main() -> Result<()> {
 
     for (text, entity) in &alignments {
         model.add_text_kg_alignment(text, entity);
-        println!("  📝 \"{}\" ↔ {}", text, entity);
+        println!("  📝 \"{text}\" ↔ {entity}");
     }
 
     // Add entity descriptions
@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
 
     for (entity, description) in &descriptions {
         model.add_entity_description(entity, description);
-        println!("  🏷️  {} → \"{}\"", entity, description);
+        println!("  🏷️  {entity} → \"{description}\"");
     }
 
     // Add property-text mappings
@@ -115,7 +115,7 @@ async fn main() -> Result<()> {
 
     for (property, text) in &properties {
         model.add_property_text(property, text);
-        println!("  🔀 {} → \"{}\"", property, text);
+        println!("  🔀 {property} → \"{text}\"");
     }
 
     // Add multilingual mappings
@@ -149,7 +149,7 @@ async fn main() -> Result<()> {
 
     for (concept, translations) in &multilingual {
         model.add_multilingual_mapping(concept, translations.clone());
-        println!("  🗣️  {} → {:?}", concept, translations);
+        println!("  🗣️  {concept} → {translations:?}");
     }
 
     // Add cross-domain mappings
@@ -162,7 +162,7 @@ async fn main() -> Result<()> {
 
     for (source, target) in &cross_domain {
         model.add_cross_domain_mapping(source, target);
-        println!("  ↔️  {} ↔ {}", source, target);
+        println!("  ↔️  {source} ↔ {target}");
     }
 
     // Add some RDF triples for structured knowledge
@@ -197,7 +197,7 @@ async fn main() -> Result<()> {
             NamedNode::new(object)?,
         );
         model.add_triple(triple)?;
-        println!("  📦 {} --{}-> {}", subject, predicate, object);
+        println!("  📦 {subject} --{predicate}-> {object}");
     }
 
     println!("\n🧠 Training Multi-Modal Model...");
@@ -253,7 +253,7 @@ async fn main() -> Result<()> {
 
     for query in &queries {
         let predictions = model.zero_shot_prediction(query, &candidates).await?;
-        println!("\n  🔍 Query: \"{}\"", query);
+        println!("\n  🔍 Query: \"{query}\"");
         for (i, (entity, score)) in predictions.iter().take(3).enumerate() {
             println!("    {}. {} (score: {:.3})", i + 1, entity, score);
         }
@@ -264,9 +264,9 @@ async fn main() -> Result<()> {
     for (concept, _) in &multilingual {
         let alignments = model.multilingual_alignment(concept).await?;
         if !alignments.is_empty() {
-            println!("  🗣️  Concept: {}", concept);
+            println!("  🗣️  Concept: {concept}");
             for (translation, score) in alignments {
-                println!("    → {} (alignment: {:.3})", translation, score);
+                println!("    → {translation} (alignment: {score:.3})");
             }
         }
     }
@@ -277,14 +277,12 @@ async fn main() -> Result<()> {
         .cross_domain_transfer("scientific", "biomedical")
         .await?;
     println!(
-        "  🔄 Scientific → Biomedical transfer loss: {:.3}",
-        transfer_results
+        "  🔄 Scientific → Biomedical transfer loss: {transfer_results:.3}"
     );
 
     let transfer_results = model.cross_domain_transfer("general", "legal").await?;
     println!(
-        "  🔄 General → Legal transfer loss: {:.3}",
-        transfer_results
+        "  🔄 General → Legal transfer loss: {transfer_results:.3}"
     );
 
     // Show model statistics
@@ -335,7 +333,7 @@ async fn main() -> Result<()> {
                 )?;
                 println!("  🔮 Type predictions for Alice:");
                 for (entity, score) in predictions {
-                    println!("    → {} (confidence: {:.3})", entity, score);
+                    println!("    → {entity} (confidence: {score:.3})");
                 }
             }
         }

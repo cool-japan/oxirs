@@ -1,5 +1,5 @@
 //! PyO3 Python Bindings for OxiRS Star (RDF-star) Engine
-//! 
+//!
 //! This module provides comprehensive Python bindings for the OxiRS RDF-star engine,
 //! enabling seamless integration with Python RDF applications and knowledge graph workflows.
 
@@ -7,7 +7,7 @@ use crate::{
     model::{QuotedTriple, StarTerm, StarTriple, StarDataset},
     parser::{TurtleStarParser, NTriplesStarParser, TrigStarParser, NQuadsStarParser},
     serializer::{
-        TurtleStarSerializer, NTriplesStarSerializer, 
+        TurtleStarSerializer, NTriplesStarSerializer,
         TrigStarSerializer, NQuadsStarSerializer, SerializationConfig
     },
     store::{StarStore, StarGraph, StorageConfig, StoreStatistics},
@@ -46,19 +46,19 @@ impl PyRdfStarStore {
     #[pyo3(signature = (config = None, **kwargs))]
     fn new(config: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<Self> {
         let mut storage_config = StorageConfig::default();
-        
+
         // Parse configuration from Python dict
         if let Some(config_dict) = config {
             if let Some(in_memory) = config_dict.get_item("in_memory")? {
                 let mem: bool = in_memory.extract()?;
                 storage_config.in_memory = mem;
             }
-            
+
             if let Some(cache_size) = config_dict.get_item("cache_size")? {
                 let size: usize = cache_size.extract()?;
                 storage_config.cache_size = size;
             }
-            
+
             if let Some(enable_indexing) = config_dict.get_item("enable_indexing")? {
                 let indexing: bool = enable_indexing.extract()?;
                 storage_config.enable_indexing = indexing;
@@ -79,7 +79,7 @@ impl PyRdfStarStore {
     #[pyo3(signature = (data, format = "turtle-star", graph = None, **kwargs))]
     fn load_data(&self, data: &str, format: &str, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<usize> {
         let mut store = self.store.write().unwrap();
-        
+
         let triples_count = match format.to_lowercase().as_str() {
             "turtle-star" | "ttls" => {
                 let parser = TurtleStarParser::new();
@@ -122,7 +122,7 @@ impl PyRdfStarStore {
     #[pyo3(signature = (file_path, format = None, graph = None, **kwargs))]
     fn load_file(&self, file_path: &str, format: Option<&str>, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<usize> {
         let mut store = self.store.write().unwrap();
-        
+
         // Auto-detect format from file extension if not provided
         let detected_format = format.unwrap_or_else(|| {
             if file_path.ends_with(".ttls") || file_path.ends_with(".turtle-star") {
@@ -164,7 +164,7 @@ impl PyRdfStarStore {
         kwargs: Option<&PyDict>
     ) -> PyResult<()> {
         let mut store = self.store.write().unwrap();
-        
+
         // In a real implementation, we'd create and add the quoted triple
         store.add_quoted_triple(subject, predicate, object, quoted_triple_subject, quoted_triple_predicate, quoted_triple_object)
             .map_err(|e| PyErr::new::<RdfStarError, _>(e.to_string()))?;
@@ -184,7 +184,7 @@ impl PyRdfStarStore {
     fn query(&self, query: &str, kwargs: Option<&PyDict>) -> PyResult<PyStarQueryResult> {
         let store = self.store.read().unwrap();
         let executor = SparqlStarExecutor::new();
-        
+
         let result = executor.execute_query(&store, query)
             .map_err(|e| PyErr::new::<QueryError, _>(e.to_string()))?;
 
@@ -202,7 +202,7 @@ impl PyRdfStarStore {
     fn serialize(&self, format: &str, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<String> {
         let store = self.store.read().unwrap();
         let config = SerializationConfig::default();
-        
+
         let serialized = match format.to_lowercase().as_str() {
             "turtle-star" | "ttls" => {
                 let serializer = TurtleStarSerializer::new(config);
@@ -234,7 +234,7 @@ impl PyRdfStarStore {
     #[pyo3(signature = (file_path, format = None, graph = None, **kwargs))]
     fn export_file(&self, file_path: &str, format: Option<&str>, graph: Option<&str>, kwargs: Option<&PyDict>) -> PyResult<()> {
         let store = self.store.read().unwrap();
-        
+
         // Auto-detect format from file extension if not provided
         let detected_format = format.unwrap_or_else(|| {
             if file_path.ends_with(".ttls") || file_path.ends_with(".turtle-star") {
@@ -497,7 +497,7 @@ impl PyStarQueryResult {
     /// Convert to pandas-compatible format
     fn to_pandas_dict(&self) -> HashMap<String, Vec<String>> {
         let mut pandas_data = HashMap::new();
-        
+
         for variable in &self.result.variables {
             let column_data: Vec<String> = self.result.bindings
                 .iter()
@@ -505,7 +505,7 @@ impl PyStarQueryResult {
                 .collect();
             pandas_data.insert(variable.clone(), column_data);
         }
-        
+
         pandas_data
     }
 
@@ -595,7 +595,7 @@ fn parse_rdf_star(data: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult
         Some("ex:provenance"),
         Some("ex:timestamp")
     );
-    
+
     Ok(vec![quoted_triple])
 }
 
@@ -614,15 +614,15 @@ fn validate_rdf_star(data: &str, format: &str, kwargs: Option<&PyDict>) -> PyRes
     // In a real implementation, we'd validate the syntax
     let result = ValidationResult {
         is_valid: !data.trim().is_empty(),
-        errors: if data.trim().is_empty() { 
-            vec!["Empty RDF-star data".to_string()] 
-        } else { 
-            vec![] 
+        errors: if data.trim().is_empty() {
+            vec!["Empty RDF-star data".to_string()]
+        } else {
+            vec![]
         },
         warnings: vec![],
         format: format.to_string(),
     };
-    
+
     Ok(PyValidationResult { result })
 }
 
@@ -690,7 +690,7 @@ fn oxirs_star(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    
+
     // Add feature information
     m.add("__features__", vec![
         "rdf_star_core",
@@ -707,7 +707,7 @@ fn oxirs_star(py: Python<'_>, m: &PyModule) -> PyResult<()> {
     // Add supported formats
     m.add("SUPPORTED_FORMATS", vec![
         "turtle-star",
-        "ntriples-star", 
+        "ntriples-star",
         "trig-star",
         "nquads-star"
     ])?;
@@ -733,7 +733,7 @@ mod tests {
     fn test_quoted_triple_creation() {
         let qt = PyQuotedTriple::new(
             "ex:Alice",
-            "foaf:name", 
+            "foaf:name",
             "Alice",
             Some("ex:source"),
             Some("ex:provenance"),

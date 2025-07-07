@@ -115,7 +115,7 @@ fn benchmark_forward_chaining(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark backward chaining performance  
+/// Benchmark backward chaining performance
 fn benchmark_backward_chaining(c: &mut Criterion) {
     let mut group = c.benchmark_group("backward_chaining");
 

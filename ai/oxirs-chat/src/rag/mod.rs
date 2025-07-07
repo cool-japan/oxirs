@@ -17,10 +17,17 @@
 //! # Examples
 //!
 //! ```rust,no_run
-//! use oxirs_chat::rag::{RagEngine, RagConfig, SearchType};
+//! use oxirs_chat::rag::{RagEngine, RagConfig};
+//! use oxirs_core::ConcreteStore;
+//! use std::sync::Arc;
 //!
+//! # async fn example() -> anyhow::Result<()> {
 //! let config = RagConfig::default();
-//! let mut rag_engine = RagEngine::new(config);
+//! let store = Arc::new(ConcreteStore::new()?);
+//! let mut rag_engine = RagEngine::new(config, store as Arc<dyn oxirs_core::Store>);
+//! rag_engine.initialize().await?;
+//! # Ok(())
+//! # }
 //! ```
 
 pub mod advanced_reasoning;

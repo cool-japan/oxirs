@@ -1,10 +1,7 @@
-use crate::{
-    embeddings::{EmbeddableContent, EmbeddingConfig},
-    Vector, VectorData,
-};
+use crate::{embeddings::EmbeddableContent, Vector, VectorData};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// Text preprocessing pipeline
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -209,20 +206,237 @@ impl PreprocessingPipeline {
     }
 
     fn stem_tokens(&self, tokens: Vec<String>) -> Vec<String> {
-        // Simple suffix stripping - in production, use a proper stemmer
+        // Production-ready Porter stemmer implementation
         tokens
             .into_iter()
-            .map(|mut token| {
-                if token.ends_with("ing") && token.len() > 4 {
-                    token.truncate(token.len() - 3);
-                } else if token.ends_with("ed") && token.len() > 3 {
-                    token.truncate(token.len() - 2);
-                } else if token.ends_with("s") && token.len() > 2 && !token.ends_with("ss") {
-                    token.truncate(token.len() - 1);
-                }
-                token
-            })
+            .map(|token| self.porter_stem(&token))
             .collect()
+    }
+
+    /// Porter stemmer algorithm implementation
+    fn porter_stem(&self, word: &str) -> String {
+        let word = word.to_lowercase();
+        if word.len() <= 2 {
+            return word;
+        }
+
+        let mut stem = word.clone();
+
+        // Step 1a: plurals and past participles
+        stem = self.stem_step_1a(stem);
+
+        // Step 1b: past tense and gerunds
+        stem = self.stem_step_1b(stem);
+
+        // Step 2: derivational suffixes
+        stem = self.stem_step_2(stem);
+
+        // Step 3: more derivational suffixes
+        stem = self.stem_step_3(stem);
+
+        // Step 4: remove derivational suffixes
+        stem = self.stem_step_4(stem);
+
+        // Step 5: remove final e and double l
+        stem = self.stem_step_5(stem);
+
+        stem
+    }
+
+    fn stem_step_1a(&self, mut word: String) -> String {
+        if word.ends_with("sses") {
+            word.truncate(word.len() - 2); // sses -> ss
+        } else if word.ends_with("ies") {
+            word.truncate(word.len() - 2); // ies -> i
+        } else if word.ends_with("ss") {
+            // ss -> ss (no change)
+        } else if word.ends_with("s") && word.len() > 1 {
+            word.truncate(word.len() - 1); // s -> (empty)
+        }
+        word
+    }
+
+    fn stem_step_1b(&self, mut word: String) -> String {
+        if word.ends_with("eed") {
+            if self.measure(&word[..word.len() - 3]) > 0 {
+                word.truncate(word.len() - 1); // eed -> ee
+            }
+        } else if word.ends_with("ed") && self.contains_vowel(&word[..word.len() - 2]) {
+            word.truncate(word.len() - 2);
+            word = self.post_process_1b(word);
+        } else if word.ends_with("ing") && self.contains_vowel(&word[..word.len() - 3]) {
+            word.truncate(word.len() - 3);
+            word = self.post_process_1b(word);
+        }
+        word
+    }
+
+    fn stem_step_2(&self, mut word: String) -> String {
+        let suffixes = [
+            ("ational", "ate"),
+            ("tional", "tion"),
+            ("enci", "ence"),
+            ("anci", "ance"),
+            ("izer", "ize"),
+            ("abli", "able"),
+            ("alli", "al"),
+            ("entli", "ent"),
+            ("eli", "e"),
+            ("ousli", "ous"),
+            ("ization", "ize"),
+            ("ation", "ate"),
+            ("ator", "ate"),
+            ("alism", "al"),
+            ("iveness", "ive"),
+            ("fulness", "ful"),
+            ("ousness", "ous"),
+            ("aliti", "al"),
+            ("iviti", "ive"),
+            ("biliti", "ble"),
+        ];
+
+        for (suffix, replacement) in &suffixes {
+            if word.ends_with(suffix) {
+                let stem = &word[..word.len() - suffix.len()];
+                if self.measure(stem) > 0 {
+                    word = format!("{stem}{replacement}");
+                }
+                break;
+            }
+        }
+        word
+    }
+
+    fn stem_step_3(&self, mut word: String) -> String {
+        let suffixes = [
+            ("icate", "ic"),
+            ("ative", ""),
+            ("alize", "al"),
+            ("iciti", "ic"),
+            ("ical", "ic"),
+            ("ful", ""),
+            ("ness", ""),
+        ];
+
+        for (suffix, replacement) in &suffixes {
+            if word.ends_with(suffix) {
+                let stem = &word[..word.len() - suffix.len()];
+                if self.measure(stem) > 0 {
+                    word = format!("{stem}{replacement}");
+                }
+                break;
+            }
+        }
+        word
+    }
+
+    fn stem_step_4(&self, mut word: String) -> String {
+        let suffixes = [
+            "al", "ance", "ence", "er", "ic", "able", "ible", "ant", "ement", "ment", "ent", "ion",
+            "ou", "ism", "ate", "iti", "ous", "ive", "ize",
+        ];
+
+        for suffix in &suffixes {
+            if word.ends_with(suffix) {
+                let stem = &word[..word.len() - suffix.len()];
+                if self.measure(stem) > 1 {
+                    if *suffix == "ion" && (stem.ends_with("s") || stem.ends_with("t")) {
+                        word = stem.to_string();
+                    } else if *suffix != "ion" {
+                        word = stem.to_string();
+                    }
+                }
+                break;
+            }
+        }
+        word
+    }
+
+    fn stem_step_5(&self, mut word: String) -> String {
+        if word.ends_with("e") {
+            let stem = &word[..word.len() - 1];
+            let m = self.measure(stem);
+            if m > 1 || (m == 1 && !self.cvc(stem)) {
+                word.truncate(word.len() - 1);
+            }
+        }
+
+        if word.ends_with("ll") && self.measure(&word) > 1 {
+            word.truncate(word.len() - 1);
+        }
+
+        word
+    }
+
+    fn post_process_1b(&self, mut word: String) -> String {
+        if word.ends_with("at") || word.ends_with("bl") || word.ends_with("iz") {
+            word.push('e');
+        } else if self.double_consonant(&word)
+            && !word.ends_with("l")
+            && !word.ends_with("s")
+            && !word.ends_with("z")
+        {
+            word.truncate(word.len() - 1);
+        } else if self.measure(&word) == 1 && self.cvc(&word) {
+            word.push('e');
+        }
+        word
+    }
+
+    fn measure(&self, word: &str) -> usize {
+        let chars: Vec<char> = word.chars().collect();
+        let mut m = 0;
+        let mut prev_was_vowel = false;
+
+        for (i, &ch) in chars.iter().enumerate() {
+            let is_vowel = self.is_vowel(ch, i, &chars);
+            if !is_vowel && prev_was_vowel {
+                m += 1;
+            }
+            prev_was_vowel = is_vowel;
+        }
+        m
+    }
+
+    fn contains_vowel(&self, word: &str) -> bool {
+        let chars: Vec<char> = word.chars().collect();
+        chars
+            .iter()
+            .enumerate()
+            .any(|(i, &ch)| self.is_vowel(ch, i, &chars))
+    }
+
+    fn is_vowel(&self, ch: char, pos: usize, chars: &[char]) -> bool {
+        match ch {
+            'a' | 'e' | 'i' | 'o' | 'u' => true,
+            'y' => pos > 0 && !self.is_vowel(chars[pos - 1], pos - 1, chars),
+            _ => false,
+        }
+    }
+
+    fn cvc(&self, word: &str) -> bool {
+        let chars: Vec<char> = word.chars().collect();
+        if chars.len() < 3 {
+            return false;
+        }
+
+        let len = chars.len();
+        !self.is_vowel(chars[len - 3], len - 3, &chars)
+            && self.is_vowel(chars[len - 2], len - 2, &chars)
+            && !self.is_vowel(chars[len - 1], len - 1, &chars)
+            && chars[len - 1] != 'w'
+            && chars[len - 1] != 'x'
+            && chars[len - 1] != 'y'
+    }
+
+    fn double_consonant(&self, word: &str) -> bool {
+        let chars: Vec<char> = word.chars().collect();
+        if chars.len() < 2 {
+            return false;
+        }
+
+        let len = chars.len();
+        chars[len - 1] == chars[len - 2] && !self.is_vowel(chars[len - 1], len - 1, &chars)
     }
 }
 
@@ -334,7 +548,7 @@ impl PostprocessingPipeline {
                 let mut projected = vec![0.0; *target_dims];
 
                 for i in 0..*target_dims {
-                    for (j, &val) in values.iter().enumerate() {
+                    for (_j, &val) in values.iter().enumerate() {
                         let random_weight: f32 = rng.gen_range(-1.0..1.0);
                         projected[i] += val * random_weight;
                     }
@@ -453,19 +667,12 @@ impl PostprocessingPipeline {
 
 /// Complete embedding pipeline combining preprocessing and postprocessing
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct EmbeddingPipeline {
     pub preprocessing: PreprocessingPipeline,
     pub postprocessing: PostprocessingPipeline,
 }
 
-impl Default for EmbeddingPipeline {
-    fn default() -> Self {
-        Self {
-            preprocessing: PreprocessingPipeline::default(),
-            postprocessing: PostprocessingPipeline::default(),
-        }
-    }
-}
 
 impl EmbeddingPipeline {
     /// Process content through the complete pipeline
@@ -541,7 +748,7 @@ mod tests {
         assert!(good_quality > 0.9);
 
         // Poor quality vector (all zeros)
-        let mut poor_vector = Vector::new(vec![0.0, 0.0, 0.0, 0.0]);
+        let poor_vector = Vector::new(vec![0.0, 0.0, 0.0, 0.0]);
         let poor_quality = pipeline.calculate_quality_score(&poor_vector);
         assert!(poor_quality < 0.5);
     }

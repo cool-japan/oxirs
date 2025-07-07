@@ -155,25 +155,236 @@
 //! - **High Quality**: `min_confidence >= 0.9`, `min_support >= 0.3`
 //! - **Balanced**: `min_confidence >= 0.8`, `min_support >= 0.2` (default)
 //! - **High Speed**: `min_confidence >= 0.7`, `min_support >= 0.1`
+//!
+//! ## Production Deployment Guide
+//!
+//! ### Container Deployment
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{ShaclAiAssistant, DeploymentManager, ContainerConfig, DeploymentConfig};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Configure for production deployment
+//! let container_config = ContainerConfig {
+//!     image: "oxirs-shacl-ai:latest".to_string(),
+//!     cpu_cores: 4,
+//!     memory_gb: 8,
+//!     enable_gpu: false,
+//!     ..Default::default()
+//! };
+//!
+//! let deployment_config = DeploymentConfig {
+//!     environment: "production".to_string(),
+//!     replicas: 3,
+//!     container_config: container_config.clone(),
+//!     ..Default::default()
+//! };
+//!
+//! let deployment_manager = DeploymentManager::with_config(deployment_config);
+//! let deployment_result = deployment_manager.deploy_service()?;
+//! println!("Service deployed with ID: {}", deployment_result.service_id);
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Load Balancing and Auto-scaling
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{LoadBalancerConfig, AutoScalingConfig, LoadBalancingStrategy};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let load_balancer_config = LoadBalancerConfig {
+//!     strategy: LoadBalancingStrategy::WeightedRoundRobin,
+//!     health_check_interval: 30,
+//!     max_retries: 3,
+//!     timeout_seconds: 60,
+//!     ..Default::default()
+//! };
+//!
+//! let auto_scaling_config = AutoScalingConfig {
+//!     min_replicas: 2,
+//!     max_replicas: 10,
+//!     target_cpu_percentage: 70.0,
+//!     target_memory_percentage: 80.0,
+//!     scale_up_cooldown: 300,
+//!     scale_down_cooldown: 600,
+//!     ..Default::default()
+//! };
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Real-World Use Cases
+//!
+//! ### Enterprise Data Quality Assessment
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{ShaclAiAssistant, QualityAssessor, ValidationReport};
+//! use oxirs_core::Store;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Load enterprise dataset
+//! let store = Store::new()?;
+//! // store.load_from_file("enterprise-data.ttl")?;
+//!
+//! let mut assistant = ShaclAiAssistant::new();
+//!
+//! // 1. Learn shapes from existing data
+//! let shapes = assistant.learn_shapes(&store, None)?;
+//! println!("Discovered {} data patterns", shapes.len());
+//!
+//! // 2. Assess current data quality
+//! let quality_report = assistant.assess_quality(&store, &shapes)?;
+//! println!("Overall quality score: {:.2}%", quality_report.overall_score * 100.0);
+//!
+//! // 3. Generate improvement recommendations
+//! let insights = assistant.generate_insights(&store, &shapes, &[])?;
+//! for recommendation in &insights.recommendations {
+//!     println!("Recommendation: {}", recommendation.description);
+//! }
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Streaming Data Validation
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{StreamingAdaptationEngine, StreamingConfig, StreamType};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let streaming_config = StreamingConfig {
+//!     stream_type: StreamType::Kafka,
+//!     buffer_size: 10000,
+//!     batch_size: 1000,
+//!     adaptation_threshold: 0.1,
+//!     enable_online_learning: true,
+//!     ..Default::default()
+//! };
+//!
+//! let mut streaming_engine = StreamingAdaptationEngine::with_config(streaming_config);
+//!
+//! // Process streaming RDF data with adaptive validation
+//! // streaming_engine.start_processing("data-stream-topic")?;
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Multi-Modal Content Validation
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{MultiModalValidator, MultiModalConfig, ContentType};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let multimodal_config = MultiModalConfig {
+//!     enable_image_validation: true,
+//!     enable_audio_validation: true,
+//!     enable_video_validation: true,
+//!     enable_text_validation: true,
+//!     enable_document_validation: true,
+//!     quality_threshold: 0.8,
+//!     ..Default::default()
+//! };
+//!
+//! let validator = MultiModalValidator::with_config(multimodal_config);
+//!
+//! // Validate different content types
+//! // let image_result = validator.validate_content(ContentType::Image, &image_data)?;
+//! // let text_result = validator.validate_content(ContentType::Text, &text_data)?;
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Troubleshooting Guide
+//!
+//! ### Common Issues and Solutions
+//!
+//! #### High Memory Usage
+//! - Reduce `max_shapes` in LearningConfig
+//! - Increase `min_support` threshold to filter out rare patterns
+//! - Enable result caching with appropriate size limits
+//! - Use streaming processing for large datasets
+//!
+//! #### Slow Performance
+//! - Enable parallel processing: `global.enable_parallel_processing = true`
+//! - Reduce `min_confidence` for faster but less accurate results
+//! - Disable complex features like reinforcement learning for simple use cases
+//! - Use GPU acceleration when available
+//!
+//! #### Low Quality Results
+//! - Increase `min_confidence` and `min_support` thresholds
+//! - Enable model training with sufficient training data
+//! - Use ensemble methods in model selection
+//! - Validate training data quality before model training
+//!
+//! #### Training Failures
+//! - Check training data format and completeness
+//! - Verify sufficient training examples (>1000 recommended)
+//! - Adjust learning rates and batch sizes
+//! - Monitor memory usage during training
+//!
+//! ### Performance Monitoring
+//!
+//! ```rust
+//! use oxirs_shacl_ai::{SystemMonitor, MonitoringConfig, AlertThresholds};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let monitoring_config = MonitoringConfig {
+//!     enable_performance_tracking: true,
+//!     enable_memory_monitoring: true,
+//!     enable_quality_monitoring: true,
+//!     alert_thresholds: AlertThresholds {
+//!         memory_usage_threshold: 80.0,
+//!         cpu_usage_threshold: 85.0,
+//!         quality_score_threshold: 70.0,
+//!         response_time_threshold: 5.0,
+//!         ..Default::default()
+//!     },
+//!     ..Default::default()
+//! };
+//!
+//! let monitor = SystemMonitor::with_config(monitoring_config);
+//! // monitor.start_monitoring()?;
+//!
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## API Reference Summary
+//!
+//! ### Core Components
+//! - **ShaclAiAssistant**: Main entry point for AI-powered SHACL operations
+//! - **ShapeLearner**: Automated shape discovery and learning
+//! - **QualityAssessor**: Data quality analysis and reporting
+//! - **ValidationPredictor**: Validation outcome prediction
+//! - **OptimizationEngine**: Performance and strategy optimization
+//!
+//! ### Advanced Features
+//! - **AiOrchestrator**: Comprehensive AI-powered learning pipeline
+//! - **QuantumConsciousnessSynthesis**: Ultra-advanced consciousness-guided validation
+//! - **TemporalParadoxResolution**: Multi-timeline validation consistency
+//! - **MultiModalValidation**: Cross-modal content validation
+//! - **StreamingAdaptation**: Real-time adaptive validation for streaming data
+//!
+//! ### Configuration Classes
+//! - **ShaclAiConfig**: Global configuration for all AI operations
+//! - **LearningConfig**: Shape learning parameters and thresholds
+//! - **QualityConfig**: Quality assessment settings
+//! - **PredictionConfig**: Validation prediction configuration
+//! - **OptimizationConfig**: Performance optimization settings
 
-use std::collections::{HashMap, HashSet};
-use std::fmt;
-use std::sync::{Arc, Mutex};
-
-use anyhow::Result as AnyhowResult;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
 
-use oxirs_core::{
-    graph::Graph,
-    model::{BlankNode, Literal, NamedNode, Quad, Term, Triple},
-    OxirsError, Store,
-};
+use oxirs_core::{model::Term, OxirsError, Store};
 
-use oxirs_shacl::{
-    constraints::*, paths::*, targets::*, Constraint, ConstraintComponentId, PropertyPath,
-    Severity, Shape, ShapeId, ShapeType, Target, ValidationConfig, ValidationReport, Validator,
-};
+use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport};
 
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
@@ -287,12 +498,12 @@ pub use evolution_strategies::*;
 pub use forecasting_models::*;
 pub use insights::*;
 pub use integration_testing::{
-    AdvancedValidationResult, DataConfiguration, DependencyAnalysisResult, ErrorDetails,
-    ExecutionMetadata, IntegrationTestConfig, IntegrationTestFramework, IntegrationTestReport,
-    LatencyPercentiles, PerformanceTestMetrics, QualityMetrics as IntegrationQualityMetrics,
-    QualityThresholds, RecommendationPriority, RecommendationType, ResourceUtilization,
-    ScalabilityMetrics, TestComplexityLevel, TestRecommendation, TestResult, TestStatus,
-    TestSummary, TestType, ValidationTestResults,
+    DataConfiguration, DependencyAnalysisResult, ErrorDetails, ExecutionMetadata,
+    IntegrationTestConfig, IntegrationTestFramework, IntegrationTestReport, LatencyPercentiles,
+    PerformanceTestMetrics, QualityMetrics as IntegrationQualityMetrics, QualityThresholds,
+    RecommendationPriority, RecommendationType, ResourceUtilization, ScalabilityMetrics,
+    TestComplexityLevel, TestRecommendation, TestResult, TestStatus, TestSummary, TestType,
+    ValidationTestResults,
 };
 pub use learning::{
     LearningConfig, LearningPerformanceMetrics, LearningStatistics, PatternStatistics,
@@ -541,6 +752,9 @@ pub enum ShaclAiError {
     #[error("Optimization error: {0}")]
     Optimization(String),
 
+    #[error("Performance error: {0}")]
+    Performance(String),
+
     #[error("Analytics error: {0}")]
     Analytics(String),
 
@@ -592,6 +806,9 @@ pub enum ShaclAiError {
     #[error("Anyhow error: {0}")]
     Anyhow(#[from] anyhow::Error),
 
+    #[error("Join error: {0}")]
+    Join(#[from] tokio::task::JoinError),
+
     #[error("Model error: {0}")]
     Model(#[from] crate::ml::ModelError),
 
@@ -600,6 +817,15 @@ pub enum ShaclAiError {
 
     #[error("Array shape error: {0}")]
     Shape(String),
+
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    #[error("Integration testing error: {0}")]
+    Integration(String),
+
+    #[error("Benchmark error: {0}")]
+    Benchmark(String),
 }
 
 /// Result type alias for SHACL-AI operations
@@ -956,9 +1182,12 @@ impl ShaclAiAssistant {
             "Processing validation errors with intelligent analysis and repair suggestions"
         );
 
-        // TODO: Implement process_validation_errors method on IntelligentErrorHandler
-        // For now, return a default SmartErrorAnalysis
-        Ok(SmartErrorAnalysis::default())
+        self.error_handler
+            .lock()
+            .map_err(|e| {
+                ShaclAiError::ValidationPrediction(format!("Failed to lock error handler: {}", e))
+            })?
+            .process_validation_errors(validation_report, store, shapes)
     }
 
     /// Train models on validation data for improved predictions

@@ -77,9 +77,9 @@ fn main() {
         for j in 0..10 {
             for k in 0..10 {
                 test_triples.push(Triple::new(
-                    NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap(),
-                    NamedNode::new(&format!("http://example.org/predicate{}", j)).unwrap(),
-                    Literal::new(&format!("object{}_{}", i, k)),
+                    NamedNode::new(format!("http://example.org/subject{i}")).unwrap(),
+                    NamedNode::new(format!("http://example.org/predicate{j}")).unwrap(),
+                    Literal::new(format!("object{i}_{k}")),
                 ));
             }
         }

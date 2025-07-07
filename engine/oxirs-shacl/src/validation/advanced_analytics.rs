@@ -409,7 +409,7 @@ impl ValidationAnalytics {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        
+
         let period_hours = period_hours.unwrap_or(self.config.trend_window_hours);
         let period_start = now - (period_hours * 3600);
 
@@ -461,7 +461,7 @@ impl ValidationAnalytics {
         complexity_factors: &[f64],
     ) -> Result<ValidationPrediction> {
         let predictor = self.predictor.read().unwrap();
-        
+
         if predictor.training_data.len() < self.config.min_prediction_data {
             return Err(anyhow!("Insufficient training data for prediction"));
         }
@@ -503,19 +503,19 @@ impl ValidationAnalytics {
     /// Get current performance metrics
     pub fn get_current_metrics(&self) -> Result<HashMap<String, f64>> {
         let mut metrics = HashMap::new();
-        
+
         let history = self.history.read().unwrap();
         if let Some(latest) = history.back() {
-            metrics.insert("latest_validation_time_ms".to_string(), 
+            metrics.insert("latest_validation_time_ms".to_string(),
                           latest.validation_time.as_millis() as f64);
-            metrics.insert("latest_conformance_rate".to_string(), 
+            metrics.insert("latest_conformance_rate".to_string(),
                           latest.conformance_rate);
-            metrics.insert("latest_memory_usage_mb".to_string(), 
+            metrics.insert("latest_memory_usage_mb".to_string(),
                           latest.memory_used as f64 / 1024.0 / 1024.0);
         }
 
         let shape_metrics = self.shape_metrics.read().unwrap();
-        metrics.insert("total_shapes_tracked".to_string(), 
+        metrics.insert("total_shapes_tracked".to_string(),
                       shape_metrics.len() as f64);
 
         let avg_success_rate = shape_metrics.values()
@@ -532,19 +532,19 @@ impl ValidationAnalytics {
     fn update_history(&self, record: ValidationRecord) -> Result<()> {
         let mut history = self.history.write().unwrap();
         history.push_back(record);
-        
+
         // Keep only recent records
         while history.len() > self.config.max_history {
             history.pop_front();
         }
-        
+
         Ok(())
     }
 
     /// Update shape-specific metrics
     fn update_shape_metrics(&self, shapes: &[Shape], record: &ValidationRecord) -> Result<()> {
         let mut metrics = self.shape_metrics.write().unwrap();
-        
+
         for shape in shapes {
             let shape_id = shape.id().to_string();
             let entry = metrics.entry(shape_id.clone()).or_insert_with(|| {
@@ -564,7 +564,7 @@ impl ValidationAnalytics {
 
             entry.total_validations += 1;
             entry.last_updated = Instant::now();
-            
+
             // Update average validation time (simplified)
             let shape_time = record.validation_time / shapes.len() as u32;
             entry.average_validation_time = Duration::from_nanos(
@@ -582,7 +582,7 @@ impl ValidationAnalytics {
                 entry.trend_data.pop_front();
             }
         }
-        
+
         Ok(())
     }
 
@@ -590,26 +590,26 @@ impl ValidationAnalytics {
     fn update_quality_trends(&self, record: &ValidationRecord) -> Result<()> {
         let mut trends = self.quality_trends.write().unwrap();
         let now = Instant::now();
-        
+
         trends.conformance_trend.push_back((now, record.conformance_rate));
         trends.violation_trend.push_back((now, record.violation_count));
         trends.performance_trend.push_back((now, record.validation_time));
         trends.data_volume_trend.push_back((now, record.dataset_size));
-        
+
         let error_rate = record.error_count as f64 / record.dataset_size.max(1) as f64;
         trends.error_rate_trend.push_back((now, error_rate));
 
         // Keep only recent data points
         let cutoff = now - Duration::from_secs(self.config.trend_window_hours * 3600);
         trends.retain_recent_data(cutoff);
-        
+
         Ok(())
     }
 
     /// Update prediction model
     fn update_prediction_model(&self, record: &ValidationRecord) -> Result<()> {
         let mut predictor = self.predictor.write().unwrap();
-        
+
         let features = vec![
             record.dataset_size as f64,
             record.shapes_count as f64,
@@ -635,7 +635,7 @@ impl ValidationAnalytics {
         if predictor.training_data.len() >= self.config.min_prediction_data {
             predictor.retrain_models()?;
         }
-        
+
         Ok(())
     }
 
@@ -685,7 +685,7 @@ impl ValidationAnalytics {
 
     fn generate_quality_analysis(&self, records: &[ValidationRecord]) -> Result<QualityAnalysis> {
         let avg_conformance = records.iter().map(|r| r.conformance_rate).sum::<f64>() / records.len() as f64;
-        
+
         Ok(QualityAnalysis {
             conformance_distribution: HashMap::new(), // Would be populated with actual distribution
             violation_patterns: vec![], // Would be populated with pattern analysis
@@ -697,7 +697,7 @@ impl ValidationAnalytics {
 
     fn generate_shape_analysis(&self, _records: &[ValidationRecord]) -> Result<Vec<ShapeAnalysis>> {
         let shape_metrics = self.shape_metrics.read().unwrap();
-        
+
         Ok(shape_metrics.values().map(|metrics| {
             ShapeAnalysis {
                 shape_id: metrics.shape_id.clone(),
@@ -787,7 +787,7 @@ impl ValidationAnalytics {
         let time_accuracy = 1.0 - predictor.accuracy_metrics.time_mae / 1000.0; // Normalize to 0-1
         let memory_accuracy = 1.0 - predictor.accuracy_metrics.memory_mae / 100.0;
         let conformance_accuracy = 1.0 - predictor.accuracy_metrics.conformance_mae;
-        
+
         (time_accuracy + memory_accuracy + conformance_accuracy) / 3.0
     }
 
@@ -994,7 +994,7 @@ impl LinearModel {
         let ss_res: f64 = x.iter().zip(y.iter())
             .map(|(xi, yi)| (yi - (self.slope * xi + self.intercept)).powi(2))
             .sum();
-        
+
         self.r_squared = if ss_tot > 0.0 { 1.0 - (ss_res / ss_tot) } else { 0.0 };
         self.last_trained = Some(Instant::now());
 
@@ -1024,16 +1024,16 @@ mod tests {
     #[test]
     fn test_linear_model() {
         let mut model = LinearModel::new();
-        
+
         let features = vec![vec![1.0], vec![2.0], vec![3.0], vec![4.0]];
         let targets = vec![2.0, 4.0, 6.0, 8.0];
-        
+
         model.train(&features, &targets).unwrap();
-        
+
         assert!((model.slope - 2.0).abs() < 0.1);
         assert!(model.intercept.abs() < 0.1);
         assert!(model.r_squared > 0.9);
-        
+
         let prediction = model.predict(&[5.0]).unwrap();
         assert!((prediction - 10.0).abs() < 0.1);
     }
@@ -1041,7 +1041,7 @@ mod tests {
     #[test]
     fn test_analytics_recording() {
         let analytics = ValidationAnalytics::new();
-        
+
         let record = ValidationRecord {
             timestamp: 1234567890,
             dataset_size: 1000,
@@ -1054,9 +1054,9 @@ mod tests {
             shape_performance: HashMap::new(),
             constraint_violations: HashMap::new(),
         };
-        
+
         analytics.update_history(record).unwrap();
-        
+
         let history = analytics.history.read().unwrap();
         assert_eq!(history.len(), 1);
     }

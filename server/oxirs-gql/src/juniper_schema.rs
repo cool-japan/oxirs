@@ -6,15 +6,11 @@
 use crate::RdfStore;
 use anyhow::Result;
 use juniper::{
-    DefaultScalarValue, EmptyMutation, EmptySubscription, FieldResult, GraphQLEnum,
-    GraphQLInputObject, GraphQLObject, GraphQLScalar, GraphQLUnion, InputValue, ParseScalarResult,
-    ParseScalarValue, RootNode, ScalarToken, ScalarValue, Value, ID,
+    EmptyMutation, EmptySubscription, FieldResult, GraphQLInputObject, GraphQLObject, GraphQLUnion,
+    RootNode, ID,
 };
-use oxirs_core::model::{
-    BlankNode as OxiBlankNode, Literal as OxiLiteral, NamedNode as OxiNamedNode, Term, Variable,
-};
+use oxirs_core::model::{Term, Variable};
 use oxirs_core::query::QueryResults;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 /// Custom scalar type for RDF IRIs - for now just use String
@@ -289,21 +285,20 @@ impl Query {
         pattern: String,
         limit: Option<i32>,
     ) -> FieldResult<Vec<RdfNamedNode>> {
-        let limit_clause = limit.map(|l| format!(" LIMIT {}", l)).unwrap_or_default();
+        let limit_clause = limit.map(|l| format!(" LIMIT {l}")).unwrap_or_default();
 
         let query = format!(
             r#"
             SELECT DISTINCT ?resource WHERE {{
                 {{
                     ?resource ?p ?o .
-                    FILTER(CONTAINS(STR(?resource), "{}"))
+                    FILTER(CONTAINS(STR(?resource), "{pattern}"))
                 }} UNION {{
                     ?resource rdfs:label ?label .
-                    FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{}")))
+                    FILTER(CONTAINS(LCASE(STR(?label)), LCASE("{pattern}")))
                 }}
-            }}{}
-            "#,
-            pattern, pattern, limit_clause
+            }}{limit_clause}
+            "#
         );
 
         let results = context.store.query(&query)?;
@@ -312,14 +307,12 @@ impl Query {
                 let mut resources = Vec::new();
                 let resource_var = Variable::new("resource")?;
                 for solution in solutions {
-                    if let Some(resource) = solution.get(&resource_var) {
-                        if let Term::NamedNode(node) = resource {
-                            resources.push(RdfNamedNode {
-                                iri: node.to_string(),
-                                label: None,
-                                description: None,
-                            });
-                        }
+                    if let Some(Term::NamedNode(node)) = solution.get(&resource_var) {
+                        resources.push(RdfNamedNode {
+                            iri: node.to_string(),
+                            label: None,
+                            description: None,
+                        });
                     }
                 }
                 Ok(resources)
@@ -428,8 +421,8 @@ fn convert_term_to_rdf_term(term: Term) -> RdfTerm {
             })
         }
         Term::BlankNode(node) => RdfTerm::BlankNode(RdfBlankNode {
-            id: ID::new(format!("_:{}", node)),
-            label: format!("_:{}", node),
+            id: ID::new(format!("_:{node}")),
+            label: format!("_:{node}"),
         }),
         Term::QuotedTriple(_) => {
             // RDF-star support - for now, represent as a special named node
@@ -465,13 +458,13 @@ fn build_select_query(filter: &RdfQueryFilter) -> String {
     let mut conditions = Vec::new();
 
     if let Some(ref subject) = filter.subject {
-        conditions.push(format!("CONTAINS(STR(?s), \"{}\")", subject));
+        conditions.push(format!("CONTAINS(STR(?s), \"{subject}\")"));
     }
     if let Some(ref predicate) = filter.predicate {
-        conditions.push(format!("CONTAINS(STR(?p), \"{}\")", predicate));
+        conditions.push(format!("CONTAINS(STR(?p), \"{predicate}\")"));
     }
     if let Some(ref object) = filter.object {
-        conditions.push(format!("CONTAINS(STR(?o), \"{}\")", object));
+        conditions.push(format!("CONTAINS(STR(?o), \"{object}\")"));
     }
 
     let filter_clause = if !conditions.is_empty() {
@@ -482,15 +475,12 @@ fn build_select_query(filter: &RdfQueryFilter) -> String {
 
     let limit_clause = filter
         .limit
-        .map(|l| format!(" LIMIT {}", l))
+        .map(|l| format!(" LIMIT {l}"))
         .unwrap_or_default();
     let offset_clause = filter
         .offset
-        .map(|o| format!(" OFFSET {}", o))
+        .map(|o| format!(" OFFSET {o}"))
         .unwrap_or_default();
 
-    format!(
-        "SELECT ?s ?p ?o WHERE {{ ?s ?p ?o {} }}{}{}",
-        filter_clause, limit_clause, offset_clause
-    )
+    format!("SELECT ?s ?p ?o WHERE {{ ?s ?p ?o {filter_clause} }}{limit_clause}{offset_clause}")
 }

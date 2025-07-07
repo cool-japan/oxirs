@@ -6,12 +6,11 @@
 //! - Cross-modal attention mechanisms
 //! - Joint embedding spaces
 
-use crate::{embeddings::EmbeddableContent, Vector, VectorData, VectorPrecision};
+use crate::Vector;
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::Arc;
 
 /// Modality types supported by the cross-modal system
@@ -305,7 +304,7 @@ impl AttentionMechanism {
         let mut combined_output = vec![0.0f32; dim];
 
         // Simulate multi-head processing
-        for (head_idx, input) in inputs.iter().enumerate().take(self.num_heads) {
+        for (_head_idx, input) in inputs.iter().enumerate().take(self.num_heads) {
             let input_f32 = input.as_f32();
             let head_weight = 1.0 / self.num_heads as f32;
 

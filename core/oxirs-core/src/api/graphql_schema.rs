@@ -168,7 +168,7 @@ impl GraphQLSchemaGenerator {
             fields.push(GraphQLField {
                 name: field_name,
                 field_type,
-                description: Some(format!("Property mapped from {}", property)),
+                description: Some(format!("Property mapped from {property}")),
                 arguments: Vec::new(),
             });
         }
@@ -176,7 +176,7 @@ impl GraphQLSchemaGenerator {
         Ok(GraphQLTypeDefinition {
             name: type_name,
             fields,
-            description: Some(format!("Type generated from RDF class {}", type_uri)),
+            description: Some(format!("Type generated from RDF class {type_uri}")),
             interfaces: Vec::new(),
         })
     }
@@ -190,7 +190,7 @@ impl GraphQLSchemaGenerator {
             
             // Add single item query
             fields.push(GraphQLField {
-                name: format!("get{}", type_name),
+                name: format!("get{type_name}"),
                 field_type: GraphQLFieldType::Object(type_name.clone()),
                 description: Some(format!("Find a single {} by ID", type_name)),
                 arguments: vec![
@@ -205,9 +205,9 @@ impl GraphQLSchemaGenerator {
             
             // Add list query
             fields.push(GraphQLField {
-                name: format!("list{}", type_name),
+                name: format!("list{type_name}"),
                 field_type: GraphQLFieldType::List(Box::new(GraphQLFieldType::Object(type_name.clone()))),
-                description: Some(format!("List all instances of {}", type_name)),
+                description: Some(format!("List all instances of {type_name}")),
                 arguments: vec![
                     GraphQLArgument {
                         name: "limit".to_string(),

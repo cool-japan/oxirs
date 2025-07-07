@@ -109,12 +109,12 @@ fn main() -> Result<()> {
         );
 
     let matches = app.get_matches();
-    
+
     println!("🚀 OxiRS vs Apache Jena Performance Benchmark Suite");
     println!("===================================================");
 
     let start_time = Instant::now();
-    
+
     let result = match matches.get_one::<String>("mode").unwrap().as_str() {
         "full" => run_full_benchmarks(&matches),
         "quick" => run_quick_benchmarks(&matches),
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
             println!("📊 Total comparisons: {}", comparison_count);
             println!("⏱️  Total time: {:.2} seconds", total_time.as_secs_f64());
             println!("📁 Results saved to: {}", matches.get_one::<String>("output-dir").unwrap());
-            
+
             println!("\n📋 Next steps:");
             println!("   1. Review the generated HTML report: benchmark_report.html");
             println!("   2. Check the markdown summary: BENCHMARK_SUMMARY.md");
@@ -151,42 +151,42 @@ fn main() -> Result<()> {
 fn run_full_benchmarks(matches: &ArgMatches) -> Result<usize> {
     println!("🏃 Running comprehensive benchmark suite...");
     println!("⚠️  This may take 15-30 minutes depending on your system");
-    
+
     let config = build_config(matches)?;
     let mut suite = ComprehensiveBenchmarkSuite::new(config);
-    
+
     println!("📥 Loading standard test suite...");
     suite.load_standard_tests()
         .context("Failed to load standard tests")?;
-    
+
     println!("🎯 Running {} benchmark tests", suite.tests.len());
     let results = suite.run_all_benchmarks()
         .context("Failed to run benchmarks")?;
-    
+
     Ok(results.len())
 }
 
 fn run_quick_benchmarks(matches: &ArgMatches) -> Result<usize> {
     println!("⚡ Running quick benchmark suite...");
     println!("🕐 This should complete in 2-5 minutes");
-    
+
     let results = BenchmarkRunner::run_quick_benchmarks()
         .context("Failed to run quick benchmarks")?;
-    
+
     Ok(results.len())
 }
 
 fn run_category_benchmarks(matches: &ArgMatches) -> Result<usize> {
     let category_str = matches.get_one::<String>("category")
         .ok_or_else(|| anyhow::anyhow!("Category must be specified when mode=category"))?;
-    
+
     let category = parse_category(category_str)?;
-    
+
     println!("🎯 Running {:?} category benchmarks...", category);
-    
+
     let results = BenchmarkRunner::run_category_benchmarks(category)
         .context("Failed to run category benchmarks")?;
-    
+
     Ok(results.len())
 }
 
@@ -245,7 +245,7 @@ mod tests {
         assert!(matches!(parse_category("shacl").unwrap(), BenchmarkCategory::ShaclValidation));
         assert!(matches!(parse_category("vector").unwrap(), BenchmarkCategory::VectorSearch));
         assert!(matches!(parse_category("scalability").unwrap(), BenchmarkCategory::Scalability));
-        
+
         assert!(parse_category("invalid").is_err());
     }
 }

@@ -285,7 +285,7 @@ impl<Token> Parser<Token> {
     }
 
     /// Advance and return current token
-    pub fn next(&mut self) -> Option<&Token> {
+    pub fn next_token(&mut self) -> Option<&Token> {
         if self.position < self.tokens.len() {
             let token = &self.tokens[self.position];
             self.position += 1;
@@ -354,12 +354,12 @@ pub mod char_utils {
 
     /// Check if character is a digit
     pub fn is_digit(ch: char) -> bool {
-        matches!(ch, '0'..='9')
+        ch.is_ascii_digit()
     }
 
     /// Check if character is hexadecimal
     pub fn is_hex_digit(ch: char) -> bool {
-        matches!(ch, '0'..='9' | 'A'..='F' | 'a'..='f')
+        ch.is_ascii_hexdigit()
     }
 }
 
@@ -450,7 +450,7 @@ pub mod string_utils {
                     }
                     Some(other) => {
                         return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                            format!("Invalid escape sequence: \\{}", other),
+                            format!("Invalid escape sequence: \\{other}"),
                             *position,
                         )));
                     }

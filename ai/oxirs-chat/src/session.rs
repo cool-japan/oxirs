@@ -2,6 +2,7 @@
 //!
 //! This module handles chat sessions, context windows, and session persistence.
 
+use crate::context::ContextSummary;
 use crate::types::*;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -263,8 +264,25 @@ impl ChatSession {
 
         // Update context window if needed
         if self.context_window.should_summarize(self.messages.len()) {
-            // TODO: Implement context summarization
             debug!("Context summarization needed for session {}", self.id);
+
+            // Implement context summarization
+            match self.perform_context_summarization().await {
+                Ok(summary) => {
+                    info!(
+                        "Context summarization completed for session {}: {} key points identified",
+                        self.id,
+                        summary.key_points.len()
+                    );
+                    self.context_window.update_summary(summary.text);
+                }
+                Err(e) => {
+                    warn!(
+                        "Context summarization failed for session {}: {}",
+                        self.id, e
+                    );
+                }
+            }
         }
 
         self.update_activity();
@@ -385,6 +403,263 @@ impl ChatSession {
             current_topics_count: self.topic_tracker.current_topics.len(),
             topic_transitions: self.topic_tracker.topic_history.len(),
         }
+    }
+
+    /// Perform intelligent context summarization
+    async fn perform_context_summarization(&self) -> Result<ContextSummary> {
+        debug!("Starting context summarization for session {}", self.id);
+
+        // Get messages that need to be summarized
+        let messages_to_summarize = self.get_messages_for_summarization();
+
+        if messages_to_summarize.is_empty() {
+            return Err(anyhow::anyhow!("No messages available for summarization"));
+        }
+
+        // Extract key information from messages
+        let key_points = self.extract_key_points(&messages_to_summarize);
+        let entities_mentioned = self.extract_entities(&messages_to_summarize);
+        let topics_covered = self.extract_topics(&messages_to_summarize);
+
+        // Generate summary text
+        let summary_text = self.generate_summary_text(&key_points, &topics_covered);
+
+        let summary = ContextSummary {
+            text: summary_text,
+            key_points,
+            entities_mentioned,
+            topics_covered,
+            created_at: SystemTime::now(),
+        };
+
+        debug!(
+            "Context summarization completed: {} key points, {} entities, {} topics",
+            summary.key_points.len(),
+            summary.entities_mentioned.len(),
+            summary.topics_covered.len()
+        );
+
+        Ok(summary)
+    }
+
+    /// Get messages that should be summarized (older messages not in current window)
+    fn get_messages_for_summarization(&self) -> Vec<&Message> {
+        let window_size = self.config.sliding_window_size;
+        let total_messages = self.messages.len();
+
+        if total_messages <= window_size {
+            return Vec::new();
+        }
+
+        // Get older messages that aren't pinned
+        let cutoff_index = total_messages.saturating_sub(window_size);
+        self.messages[..cutoff_index]
+            .iter()
+            .filter(|msg| !self.context_window.pinned_messages.contains(&msg.id))
+            .collect()
+    }
+
+    /// Extract key points from messages using simple heuristics
+    fn extract_key_points(&self, messages: &[&Message]) -> Vec<String> {
+        let mut key_points = Vec::new();
+
+        for message in messages {
+            let content = message.content.to_text();
+
+            // Look for questions (potential important topics)
+            if content.contains('?') {
+                key_points.push(format!("Question: {}", Self::truncate_text(content, 100)));
+            }
+
+            // Look for statements with high importance indicators
+            if content.contains("important")
+                || content.contains("crucial")
+                || content.contains("key")
+            {
+                key_points.push(format!("Important: {}", Self::truncate_text(content, 100)));
+            }
+
+            // Look for conclusions or decisions
+            if content.contains("conclusion")
+                || content.contains("decided")
+                || content.contains("result")
+            {
+                key_points.push(format!("Decision: {}", Self::truncate_text(content, 100)));
+            }
+        }
+
+        // Limit to most recent key points
+        key_points.truncate(10);
+        key_points
+    }
+
+    /// Extract entities mentioned in messages
+    fn extract_entities(&self, messages: &[&Message]) -> Vec<String> {
+        let mut entities = std::collections::HashSet::new();
+
+        for message in messages {
+            let content = message.content.to_text();
+
+            // Simple entity extraction based on capitalization and common patterns
+            let words: Vec<&str> = content.split_whitespace().collect();
+            for window in words.windows(2) {
+                if let [first, second] = window {
+                    // Look for capitalized words that might be entities
+                    if first.chars().next().map_or(false, |c| c.is_uppercase())
+                        && first.len() > 2
+                        && !first.ends_with('.')
+                    {
+                        entities.insert(first.to_string());
+                    }
+
+                    // Look for two-word entities
+                    if first.chars().next().map_or(false, |c| c.is_uppercase())
+                        && second.chars().next().map_or(false, |c| c.is_uppercase())
+                    {
+                        entities.insert(format!("{} {}", first, second));
+                    }
+                }
+            }
+        }
+
+        entities.into_iter().take(20).collect()
+    }
+
+    /// Extract topics from messages
+    fn extract_topics(&self, messages: &[&Message]) -> Vec<String> {
+        let mut topic_words = std::collections::HashMap::new();
+
+        for message in messages {
+            let content = message.content.to_text().to_lowercase();
+
+            // Count significant words (exclude common words)
+            let words: Vec<&str> = content
+                .split_whitespace()
+                .filter(|w| w.len() > 4 && !Self::is_common_word(w))
+                .collect();
+
+            for word in words {
+                *topic_words.entry(word.to_string()).or_insert(0) += 1;
+            }
+        }
+
+        // Get most frequent topics
+        let mut topics: Vec<(String, usize)> = topic_words.into_iter().collect();
+        topics.sort_by(|a, b| b.1.cmp(&a.1));
+
+        topics.into_iter().take(8).map(|(word, _)| word).collect()
+    }
+
+    /// Generate summary text from key points and topics
+    fn generate_summary_text(&self, key_points: &[String], topics: &[String]) -> String {
+        let mut summary = String::new();
+
+        if !topics.is_empty() {
+            summary.push_str("Main topics discussed: ");
+            summary.push_str(&topics.join(", "));
+            summary.push_str(". ");
+        }
+
+        if !key_points.is_empty() {
+            summary.push_str("Key points: ");
+            for (i, point) in key_points.iter().enumerate() {
+                if i > 0 {
+                    summary.push_str("; ");
+                }
+                summary.push_str(point);
+            }
+            summary.push('.');
+        }
+
+        if summary.is_empty() {
+            summary = "General conversation with various topics discussed.".to_string();
+        }
+
+        summary
+    }
+
+    /// Helper function to truncate text
+    fn truncate_text(text: &str, max_length: usize) -> String {
+        if text.len() <= max_length {
+            text.to_string()
+        } else {
+            format!("{}...", &text[..max_length.saturating_sub(3)])
+        }
+    }
+
+    /// Check if a word is a common word that shouldn't be considered a topic
+    fn is_common_word(word: &str) -> bool {
+        matches!(
+            word,
+            "this"
+                | "that"
+                | "with"
+                | "from"
+                | "they"
+                | "were"
+                | "been"
+                | "have"
+                | "their"
+                | "said"
+                | "each"
+                | "which"
+                | "about"
+                | "would"
+                | "there"
+                | "could"
+                | "other"
+                | "after"
+                | "first"
+                | "well"
+                | "water"
+                | "very"
+                | "what"
+                | "know"
+                | "while"
+                | "here"
+                | "think"
+                | "also"
+                | "its"
+                | "now"
+                | "find"
+                | "any"
+                | "may"
+                | "say"
+                | "these"
+                | "some"
+                | "time"
+                | "people"
+                | "take"
+                | "year"
+                | "your"
+                | "good"
+                | "make"
+                | "way"
+                | "work"
+                | "life"
+                | "day"
+                | "get"
+                | "use"
+                | "man"
+                | "new"
+                | "write"
+                | "our"
+                | "out"
+                | "go"
+                | "come"
+                | "see"
+                | "than"
+                | "call"
+                | "who"
+                | "oil"
+                | "sit"
+                | "set"
+                | "run"
+                | "eat"
+                | "far"
+                | "sea"
+                | "eye"
+        )
     }
 }
 

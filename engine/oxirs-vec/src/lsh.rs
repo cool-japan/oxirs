@@ -8,13 +8,11 @@
 
 use crate::{Vector, VectorIndex};
 use anyhow::{anyhow, Result};
-use oxirs_core::parallel::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 /// Configuration for LSH index
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -135,9 +133,9 @@ impl MinHashFunction {
         let mut signature = vec![u64::MAX; self.a.len()];
 
         for &element in set_elements {
-            for i in 0..self.a.len() {
+            for (i, sig_val) in signature.iter_mut().enumerate().take(self.a.len()) {
                 let hash = (self.a[i] * element as u64 + self.b[i]) % self.prime;
-                signature[i] = signature[i].min(hash);
+                *sig_val = (*sig_val).min(hash);
             }
         }
 
@@ -152,7 +150,7 @@ impl HashFunction for MinHashFunction {
         let set_elements: Vec<u32> = vector
             .iter()
             .enumerate()
-            .filter(|(_, &v)| v > threshold)
+            .filter(|&(_, &v)| v > threshold)
             .map(|(i, _)| i as u32)
             .collect();
 
@@ -526,13 +524,13 @@ impl VectorIndex for LshIndex {
                             let set1: HashSet<usize> = query_f32
                                 .iter()
                                 .enumerate()
-                                .filter(|(_, &v)| v > threshold)
+                                .filter(|&(_, &v)| v > threshold)
                                 .map(|(i, _)| i)
                                 .collect();
                             let set2: HashSet<usize> = vec_f32
                                 .iter()
                                 .enumerate()
-                                .filter(|(_, &v)| v > threshold)
+                                .filter(|&(_, &v)| v > threshold)
                                 .map(|(i, _)| i)
                                 .collect();
 
@@ -604,13 +602,13 @@ impl VectorIndex for LshIndex {
                             let set1: HashSet<usize> = query_f32
                                 .iter()
                                 .enumerate()
-                                .filter(|(_, &v)| v > threshold_val)
+                                .filter(|&(_, &v)| v > threshold_val)
                                 .map(|(i, _)| i)
                                 .collect();
                             let set2: HashSet<usize> = vec_f32
                                 .iter()
                                 .enumerate()
-                                .filter(|(_, &v)| v > threshold_val)
+                                .filter(|&(_, &v)| v > threshold_val)
                                 .map(|(i, _)| i)
                                 .collect();
 
@@ -749,7 +747,7 @@ mod tests {
         let results = index.search_knn(&Vector::new(v1), 2).unwrap();
 
         // v1 should be first, v2 should be second (due to overlap)
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
         assert_eq!(results[0].0, "v1");
         if results.len() > 1 {
             assert_eq!(results[1].0, "v2");
@@ -773,7 +771,7 @@ mod tests {
         for i in 0..50 {
             let angle = i as f32 * std::f32::consts::PI / 25.0;
             let vec = Vector::new(vec![angle.cos(), angle.sin(), 0.0]);
-            index.insert(format!("v{}", i), vec).unwrap();
+            index.insert(format!("v{i}"), vec).unwrap();
         }
 
         // Search with multi-probe should find more candidates

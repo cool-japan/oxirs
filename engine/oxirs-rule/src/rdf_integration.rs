@@ -7,11 +7,11 @@
 use crate::{Rule, RuleAtom, Term as RuleTerm};
 use anyhow::{anyhow, Result};
 use oxirs_core::model::{
-    BlankNode, GraphName, GraphNameTerm, Literal, NamedNode, Object, Predicate, Quad,
-    RdfTerm as RdfTermTrait, Subject, Term, Triple, Variable,
+    BlankNode, GraphName, Literal, NamedNode, Object, Quad, Subject, Term,
+    Variable,
 };
-use oxirs_core::{OxirsError, Store};
-use std::collections::{HashMap, HashSet};
+use oxirs_core::Store;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Enhanced RDF-aware rule atom
@@ -175,6 +175,12 @@ impl NamespaceManager {
             }
         }
         iri.to_string()
+    }
+}
+
+impl Default for NamespaceManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

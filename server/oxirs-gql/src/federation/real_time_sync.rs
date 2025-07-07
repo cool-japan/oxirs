@@ -4,18 +4,16 @@
 //! federated services with conflict resolution and versioning support.
 
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::{mpsc, RwLock};
-use tokio::time::{interval, Instant};
-use tracing::{debug, error, info, warn};
+use tokio::time::interval;
+use tracing::{debug, info, warn};
 
 use super::schema_stitcher::SchemaStitcher;
 use super::service_discovery::{ServiceDiscovery, ServiceInfo};
-use crate::types::Schema;
 
 /// Schema synchronization configuration
 #[derive(Debug, Clone)]
@@ -560,7 +558,7 @@ impl RealTimeSchemaSynchronizer {
         // Simple conflict detection - type name collisions
         let mut type_names: HashMap<String, Vec<String>> = HashMap::new();
 
-        for (service_id, schema) in service_schemas {
+        for (service_id, _schema) in service_schemas {
             // In a real implementation, we'd parse the schema and extract type names
             // For now, we'll use a simplified approach
             let type_name = format!("{}Type", service_id);
@@ -705,7 +703,7 @@ impl RealTimeSchemaSynchronizer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::federation::service_discovery::{HealthStatus, ServiceDiscoveryConfig};
+    use crate::federation::service_discovery::ServiceDiscoveryConfig;
     use crate::types::Schema;
 
     #[tokio::test]

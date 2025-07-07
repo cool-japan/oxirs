@@ -5,15 +5,15 @@
 //! GraphQL query execution plans for maximum performance.
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::ast::{Document, Field, OperationDefinition, Selection, SelectionSet};
-use crate::types::{GraphQLType, Schema};
+use crate::types::Schema;
 
 /// Advanced query planner configuration
 #[derive(Debug, Clone)]
@@ -314,7 +314,7 @@ impl AdvancedQueryPlanner {
         for node in &mut graph.nodes.values_mut() {
             if let Some(cache_key) = &node.cache_key {
                 // Adjust cost based on cache benefit
-                node.estimated_cost *= (1.0 - self.config.cost_model_weights.cache_benefit);
+                node.estimated_cost *= 1.0 - self.config.cost_model_weights.cache_benefit;
                 debug!(
                     "Applied cache optimization to node {}: cache_key={}",
                     node.id, cache_key
@@ -338,9 +338,9 @@ impl AdvancedQueryPlanner {
                     if let Some(node) = graph.nodes.get_mut(&node_id) {
                         if node.can_parallelize {
                             // Apply parallelism benefit to cost
-                            node.estimated_cost *= (1.0
+                            node.estimated_cost *= 1.0
                                 - self.config.cost_model_weights.parallelism_benefit
-                                    / group_len as f64);
+                                    / group_len as f64;
                         }
                     }
                 }
@@ -374,7 +374,7 @@ impl AdvancedQueryPlanner {
     fn generate_execution_plan(
         &self,
         graph: ExecutionGraph,
-        analysis: &QueryAnalysis,
+        _analysis: &QueryAnalysis,
     ) -> Result<OptimizedExecutionPlan> {
         let execution_stages = if let Some(ref execution_order) = graph.execution_order {
             self.group_nodes_into_stages(&graph, execution_order)?
@@ -808,6 +808,12 @@ pub struct MLPredictionModel {
     historical_data: VecDeque<PerformanceDataPoint>,
 }
 
+impl Default for MLPredictionModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MLPredictionModel {
     pub fn new() -> Self {
         let mut feature_weights = HashMap::new();
@@ -884,6 +890,12 @@ pub struct ExecutionStatistics {
     cache_hit_rates: HashMap<String, f64>,
 }
 
+impl Default for ExecutionStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionStatistics {
     pub fn new() -> Self {
         Self {
@@ -896,14 +908,14 @@ impl ExecutionStatistics {
     pub fn record_query_execution(&mut self, query_hash: String, duration: Duration) {
         self.query_performance
             .entry(query_hash)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(duration);
     }
 
     pub fn record_field_execution(&mut self, field_name: String, duration: Duration) {
         self.field_performance
             .entry(field_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(duration);
     }
 
@@ -955,6 +967,12 @@ pub struct ExecutionGraph {
     pub execution_order: Option<Vec<String>>,
 }
 
+impl Default for ExecutionGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionGraph {
     pub fn new() -> Self {
         Self {
@@ -969,7 +987,7 @@ impl ExecutionGraph {
     }
 
     pub fn add_edge(&mut self, from: String, to: String) {
-        self.edges.entry(from).or_insert_with(Vec::new).push(to);
+        self.edges.entry(from).or_default().push(to);
     }
 }
 
@@ -1068,7 +1086,6 @@ pub struct PerformanceDataPoint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::BuiltinScalars;
 
     #[tokio::test]
     async fn test_query_planner_creation() {

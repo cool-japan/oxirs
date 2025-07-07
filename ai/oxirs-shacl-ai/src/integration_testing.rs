@@ -274,7 +274,7 @@ pub struct RunningTest {
 }
 
 /// Test execution status
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TestStatus {
     Queued,
     Running,
@@ -1008,8 +1008,8 @@ impl TestScenarioGenerator {
                 "Test scenario for {:?} with {:?} complexity and {} data points",
                 test_type, complexity, data_size
             ),
-            test_type,
-            complexity_level: complexity,
+            test_type: test_type.clone(),
+            complexity_level: complexity.clone(),
             data_configuration: DataConfiguration {
                 data_size,
                 shape_count: (data_size / 100).max(1),
@@ -1198,7 +1198,7 @@ pub struct ComplexityGenerator;
 #[derive(Debug)]
 pub struct ProfilingSession;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct PerformanceBaseline;
 
 #[derive(Debug)]

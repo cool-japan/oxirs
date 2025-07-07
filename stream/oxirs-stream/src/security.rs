@@ -8,13 +8,12 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use std::time::Instant;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 /// Security configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SecurityConfig {
     /// Authentication configuration
     pub authentication: AuthConfig,
@@ -34,22 +33,6 @@ pub struct SecurityConfig {
     pub rate_limiting: RateLimitConfig,
     /// Session management configuration
     pub session: SessionConfig,
-}
-
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            authentication: AuthConfig::default(),
-            authorization: AuthzConfig::default(),
-            encryption: EncryptionConfig::default(),
-            post_quantum: PostQuantumConfig::default(),
-            quantum_resistant_certs: QuantumResistantCerts::default(),
-            audit: AuditConfig::default(),
-            threat_detection: ThreatDetectionConfig::default(),
-            rate_limiting: RateLimitConfig::default(),
-            session: SessionConfig::default(),
-        }
-    }
 }
 
 /// Authentication configuration
@@ -354,7 +337,7 @@ pub enum AttributeType {
 }
 
 /// Encryption configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EncryptionConfig {
     /// Data at rest encryption
     pub at_rest: EncryptionAtRest,
@@ -362,16 +345,6 @@ pub struct EncryptionConfig {
     pub in_transit: EncryptionInTransit,
     /// Field-level encryption
     pub field_level: FieldLevelEncryption,
-}
-
-impl Default for EncryptionConfig {
-    fn default() -> Self {
-        Self {
-            at_rest: EncryptionAtRest::default(),
-            in_transit: EncryptionInTransit::default(),
-            field_level: FieldLevelEncryption::default(),
-        }
-    }
 }
 
 /// Data at rest encryption
@@ -458,13 +431,13 @@ pub enum EncryptionAlgorithm {
     Rainbow5,
 
     // Hash-based signatures with encryption
-    SPHINCS_Plus128s,
-    SPHINCS_Plus256s,
+    SphincsPlus128s,
+    SphincsPlus256s,
 
     // Isogeny-based encryption
-    SIKE_P434,
-    SIKE_P503,
-    SIKE_P751,
+    SikeP434,
+    SikeP503,
+    SikeP751,
 
     // Code-based encryption
     McEliece348864,
@@ -472,8 +445,8 @@ pub enum EncryptionAlgorithm {
     McEliece6688128,
 
     // Hybrid classical-quantum
-    HybridAES_Kyber768,
-    HybridChaCha20_NewHope,
+    HybridAesKyber768,
+    HybridChaCha20NewHope,
 }
 
 /// TLS versions
@@ -506,9 +479,9 @@ impl Default for KeyManagement {
 pub enum KeyProvider {
     Local,
     HSM,
-    AWS_KMS,
-    Azure_KeyVault,
-    HashiCorp_Vault,
+    AwsKms,
+    AzureKeyVault,
+    HashiCorpVault,
 }
 
 /// Key derivation functions
@@ -525,8 +498,8 @@ pub enum KeyDerivation {
     CodeBasedKDF,
 
     // Quantum-resistant hybrid approaches
-    HybridArgon2_Lattice,
-    HybridScrypt_Hash,
+    HybridArgon2Lattice,
+    HybridScryptHash,
 }
 
 /// Post-quantum signature algorithms
@@ -538,41 +511,41 @@ pub enum PostQuantumSignature {
     Dilithium5,
 
     // Hash-based signatures
-    SPHINCS_Plus_SHA2_128s,
-    SPHINCS_Plus_SHA2_128f,
-    SPHINCS_Plus_SHA2_192s,
-    SPHINCS_Plus_SHA2_192f,
-    SPHINCS_Plus_SHA2_256s,
-    SPHINCS_Plus_SHA2_256f,
-    SPHINCS_Plus_SHAKE_128s,
-    SPHINCS_Plus_SHAKE_128f,
-    SPHINCS_Plus_SHAKE_192s,
-    SPHINCS_Plus_SHAKE_192f,
-    SPHINCS_Plus_SHAKE_256s,
-    SPHINCS_Plus_SHAKE_256f,
+    SphincsPlusSha2128s,
+    SphincsPlusSha2128f,
+    SphincsPlusSha2192s,
+    SphincsPlusSha2192f,
+    SphincsPlusSha2256s,
+    SphincsPlusSha2256f,
+    SphincsPlusShake128s,
+    SphincsPlusShake128f,
+    SphincsPlusShake192s,
+    SphincsPlusShake192f,
+    SphincsPlusShake256s,
+    SphincsPlusShake256f,
 
     // Multivariate signatures
-    Rainbow_I_Classic,
-    Rainbow_I_Circumzenithal,
-    Rainbow_I_Compressed,
-    Rainbow_III_Classic,
-    Rainbow_III_Circumzenithal,
-    Rainbow_III_Compressed,
-    Rainbow_V_Classic,
-    Rainbow_V_Circumzenithal,
-    Rainbow_V_Compressed,
+    RainbowIClassic,
+    RainbowICircumzenithal,
+    RainbowICompressed,
+    RainbowIiiClassic,
+    RainbowIiiCircumzenithal,
+    RainbowIiiCompressed,
+    RainbowVClassic,
+    RainbowVCircumzenithal,
+    RainbowVCompressed,
 
     // Falcon signatures
-    Falcon_512,
-    Falcon_1024,
+    Falcon512,
+    Falcon1024,
 
     // PICNIC signatures
-    Picnic_L1_FS,
-    Picnic_L1_UR,
-    Picnic_L3_FS,
-    Picnic_L3_UR,
-    Picnic_L5_FS,
-    Picnic_L5_UR,
+    PicnicL1Fs,
+    PicnicL1Ur,
+    PicnicL3Fs,
+    PicnicL3Ur,
+    PicnicL5Fs,
+    PicnicL5Ur,
 }
 
 /// Post-quantum cryptography configuration
@@ -1087,7 +1060,7 @@ impl SecurityManager {
             user_id: context.user_id.clone(),
             ip_address: context.ip_address.clone(),
             success,
-            details: format!("Authorization check for {} on {}", action, resource),
+            details: format!("Authorization check for {action} on {resource}"),
         };
 
         let _ = self.audit_logger.log(audit_event).await;
@@ -1120,7 +1093,7 @@ impl SecurityManager {
             user_id: context.user_id.clone(),
             ip_address: context.ip_address.clone(),
             success: true,
-            details: format!("Data access: {} on {}", operation, resource),
+            details: format!("Data access: {operation} on {resource}"),
         };
 
         self.audit_logger.log(audit_event).await
@@ -1199,9 +1172,9 @@ pub enum Credentials {
 impl Credentials {
     pub fn identifier(&self) -> String {
         match self {
-            Credentials::ApiKey { key, .. } => format!("api_key:{}", key),
-            Credentials::JWT { token, .. } => format!("jwt:{}", token),
-            Credentials::UserPassword { username, .. } => format!("user:{}", username),
+            Credentials::ApiKey { key, .. } => format!("api_key:{key}"),
+            Credentials::JWT { token, .. } => format!("jwt:{token}"),
+            Credentials::UserPassword { username, .. } => format!("user:{username}"),
             Credentials::Certificate { .. } => "certificate".to_string(),
         }
     }
@@ -1314,11 +1287,11 @@ impl PostQuantumCryptoEngine {
             | PostQuantumSignature::Dilithium5 => {
                 self.generate_dilithium_keypair(algorithm).await?
             }
-            PostQuantumSignature::SPHINCS_Plus_SHA2_128s
-            | PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+            PostQuantumSignature::SphincsPlusSha2128s
+            | PostQuantumSignature::SphincsPlusSha2256s => {
                 self.generate_sphincs_keypair(algorithm).await?
             }
-            PostQuantumSignature::Falcon_512 | PostQuantumSignature::Falcon_1024 => {
+            PostQuantumSignature::Falcon512 | PostQuantumSignature::Falcon1024 => {
                 self.generate_falcon_keypair(algorithm).await?
             }
             _ => {
@@ -1357,10 +1330,10 @@ impl PostQuantumCryptoEngine {
             PostQuantumSignature::Dilithium3 => {
                 self.dilithium_sign(&keypair.private_key, data).await?
             }
-            PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+            PostQuantumSignature::SphincsPlusSha2256s => {
                 self.sphincs_sign(&keypair.private_key, data).await?
             }
-            PostQuantumSignature::Falcon_1024 => {
+            PostQuantumSignature::Falcon1024 => {
                 self.falcon_sign(&keypair.private_key, data).await?
             }
             _ => {
@@ -1396,10 +1369,10 @@ impl PostQuantumCryptoEngine {
             PostQuantumSignature::Dilithium3 => {
                 self.dilithium_verify(public_key, data, signature).await?
             }
-            PostQuantumSignature::SPHINCS_Plus_SHA2_256s => {
+            PostQuantumSignature::SphincsPlusSha2256s => {
                 self.sphincs_verify(public_key, data, signature).await?
             }
-            PostQuantumSignature::Falcon_1024 => {
+            PostQuantumSignature::Falcon1024 => {
                 self.falcon_verify(public_key, data, signature).await?
             }
             _ => {
@@ -1513,12 +1486,12 @@ impl PostQuantumCryptoEngine {
         _data: &[u8],
     ) -> Result<PostQuantumSignature> {
         // Placeholder - would implement actual SPHINCS+ signing
-        Ok(PostQuantumSignature::SPHINCS_Plus_SHA2_256s)
+        Ok(PostQuantumSignature::SphincsPlusSha2256s)
     }
 
     async fn falcon_sign(&self, _private_key: &[u8], _data: &[u8]) -> Result<PostQuantumSignature> {
         // Placeholder - would implement actual Falcon signing
-        Ok(PostQuantumSignature::Falcon_1024)
+        Ok(PostQuantumSignature::Falcon1024)
     }
 
     async fn dilithium_verify(

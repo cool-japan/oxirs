@@ -97,7 +97,7 @@ impl FunctionEvaluator {
         // Validate that the arguments can form a valid triple
         if !subject.can_be_subject() {
             return Err(StarError::QueryError {
-                message: format!("Invalid subject for TRIPLE function: {:?}", subject),
+                message: format!("Invalid subject for TRIPLE function: {subject:?}"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,
@@ -106,7 +106,7 @@ impl FunctionEvaluator {
 
         if !predicate.can_be_predicate() {
             return Err(StarError::QueryError {
-                message: format!("Invalid predicate for TRIPLE function: {:?}", predicate),
+                message: format!("Invalid predicate for TRIPLE function: {predicate:?}"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,
@@ -115,7 +115,7 @@ impl FunctionEvaluator {
 
         if !object.can_be_object() {
             return Err(StarError::QueryError {
-                message: format!("Invalid object for TRIPLE function: {:?}", object),
+                message: format!("Invalid object for TRIPLE function: {object:?}"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,
@@ -132,7 +132,7 @@ impl FunctionEvaluator {
         match term {
             StarTerm::QuotedTriple(triple) => Ok(triple.subject.clone()),
             _ => Err(StarError::QueryError {
-                message: format!("SUBJECT function expects a quoted triple, got: {:?}", term),
+                message: format!("SUBJECT function expects a quoted triple, got: {term:?}"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,
@@ -146,8 +146,7 @@ impl FunctionEvaluator {
             StarTerm::QuotedTriple(triple) => Ok(triple.predicate.clone()),
             _ => Err(StarError::QueryError {
                 message: format!(
-                    "PREDICATE function expects a quoted triple, got: {:?}",
-                    term
+                    "PREDICATE function expects a quoted triple, got: {term:?}"
                 ),
                 query_fragment: None,
                 position: None,
@@ -161,7 +160,7 @@ impl FunctionEvaluator {
         match term {
             StarTerm::QuotedTriple(triple) => Ok(triple.object.clone()),
             _ => Err(StarError::QueryError {
-                message: format!("OBJECT function expects a quoted triple, got: {:?}", term),
+                message: format!("OBJECT function expects a quoted triple, got: {term:?}"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,
@@ -250,7 +249,7 @@ impl ExpressionEvaluator {
                     .get(var)
                     .cloned()
                     .ok_or_else(|| StarError::QueryError {
-                        message: format!("Unbound variable: {}", var),
+                        message: format!("Unbound variable: {var}"),
                         query_fragment: None,
                         position: None,
                         suggestion: None,
@@ -301,7 +300,7 @@ impl ExpressionEvaluator {
             }
             // Other operators would require type checking and numeric comparisons
             _ => Err(StarError::QueryError {
-                message: format!("Binary operator {:?} not yet implemented", op),
+                message: format!("Binary operator {op:?} not yet implemented"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,

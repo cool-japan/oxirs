@@ -66,7 +66,7 @@ impl TurtleParser {
 
         // Convert to string for basic validation
         let content = std::str::from_utf8(slice)
-            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {}", e)))?;
+            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {e}")))?;
 
         self.parse_str(content)
     }
@@ -244,7 +244,7 @@ impl TurtleParser {
             let iri = &term_str[1..term_str.len() - 1];
             return Ok(Term::NamedNode(NamedNode::new(iri).map_err(|e| {
                 RdfParseError::syntax_at(
-                    &format!("Invalid IRI: {}", e),
+                    format!("Invalid IRI: {e}"),
                     TextPosition::new(line_number, 1, 0),
                 )
             })?));
@@ -256,10 +256,10 @@ impl TurtleParser {
             let local = &term_str[colon_pos + 1..];
 
             if let Some(namespace) = prefixes.get(prefix) {
-                let full_iri = format!("{}{}", namespace, local);
+                let full_iri = format!("{namespace}{local}");
                 return Ok(Term::NamedNode(NamedNode::new(&full_iri).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid prefixed IRI: {}", e),
+                        format!("Invalid prefixed IRI: {e}"),
                         TextPosition::new(line_number, 1, 0),
                     )
                 })?));
@@ -267,11 +267,10 @@ impl TurtleParser {
         }
 
         // Blank node
-        if term_str.starts_with("_:") {
-            let id = &term_str[2..];
+        if let Some(id) = term_str.strip_prefix("_:") {
             return Ok(Term::BlankNode(BlankNode::new(id).map_err(|e| {
                 RdfParseError::syntax_at(
-                    &format!("Invalid blank node: {}", e),
+                    format!("Invalid blank node: {e}"),
                     TextPosition::new(line_number, 1, 0),
                 )
             })?));
@@ -284,7 +283,7 @@ impl TurtleParser {
         }
 
         Err(RdfParseError::syntax_at(
-            &format!("Unrecognized term: {}", term_str),
+            format!("Unrecognized term: {term_str}"),
             TextPosition::new(line_number, 1, 0),
         ))
     }
@@ -444,17 +443,9 @@ impl<W: Write> WriterTurtleSerializer<W> {
 
         // Write the triple with proper formatting
         if self.config.pretty {
-            writeln!(
-                self.writer,
-                "{} {} {} .",
-                subject_str, predicate_str, object_str
-            )?;
+            writeln!(self.writer, "{subject_str} {predicate_str} {object_str} .")?;
         } else {
-            writeln!(
-                self.writer,
-                "{} {} {}.",
-                subject_str, predicate_str, object_str
-            )?;
+            writeln!(self.writer, "{subject_str} {predicate_str} {object_str}.")?;
         }
 
         Ok(())
@@ -466,8 +457,14 @@ impl<W: Write> WriterTurtleSerializer<W> {
 
         match subject {
             SubjectRef::NamedNode(node) => self.serialize_named_node(node.into()),
-            SubjectRef::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
-            SubjectRef::Variable(var) => Ok(format!("?{}", var.as_str())),
+            SubjectRef::BlankNode(node) => {
+                let node_str = node.as_str();
+                Ok(format!("_:{node_str}"))
+            }
+            SubjectRef::Variable(var) => {
+                let var_str = var.as_str();
+                Ok(format!("?{var_str}"))
+            }
         }
     }
 
@@ -487,7 +484,10 @@ impl<W: Write> WriterTurtleSerializer<W> {
                     self.serialize_named_node(node.into())
                 }
             }
-            PredicateRef::Variable(var) => Ok(format!("?{}", var.as_str())),
+            PredicateRef::Variable(var) => {
+                let var_str = var.as_str();
+                Ok(format!("?{var_str}"))
+            }
         }
     }
 
@@ -497,9 +497,15 @@ impl<W: Write> WriterTurtleSerializer<W> {
 
         match object {
             ObjectRef::NamedNode(node) => self.serialize_named_node(node.into()),
-            ObjectRef::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
+            ObjectRef::BlankNode(node) => {
+                let node_str = node.as_str();
+                Ok(format!("_:{node_str}"))
+            }
             ObjectRef::Literal(literal) => self.serialize_literal(literal),
-            ObjectRef::Variable(var) => Ok(format!("?{}", var.as_str())),
+            ObjectRef::Variable(var) => {
+                let var_str = var.as_str();
+                Ok(format!("?{var_str}"))
+            }
         }
     }
 
@@ -516,13 +522,13 @@ impl<W: Write> WriterTurtleSerializer<W> {
                 let local = &iri[namespace.len()..];
                 // Check if local part is valid for prefixed name
                 if is_valid_local_name(local) {
-                    return Ok(format!("{}:{}", prefix, local));
+                    return Ok(format!("{prefix}:{local}"));
                 }
             }
         }
 
         // Fall back to full IRI in angle brackets
-        Ok(format!("<{}>", iri))
+        Ok(format!("<{iri}>"))
     }
 
     /// Serialize a literal
@@ -534,18 +540,18 @@ impl<W: Write> WriterTurtleSerializer<W> {
 
         // Handle language tag
         if let Some(lang) = literal.language() {
-            return Ok(format!("\"{}\"@{}", escaped_value, lang));
+            return Ok(format!("\"{escaped_value}\"@{lang}"));
         }
 
         // Handle datatype
         let datatype = literal.datatype();
         if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
             // XSD string is the default, no need to specify
-            Ok(format!("\"{}\"", escaped_value))
+            Ok(format!("\"{escaped_value}\""))
         } else {
             // Serialize datatype as IRI
             let datatype_str = self.serialize_named_node(datatype)?;
-            Ok(format!("\"{}\"^^{}", escaped_value, datatype_str))
+            Ok(format!("\"{escaped_value}\"^^{datatype_str}"))
         }
     }
 
@@ -562,12 +568,12 @@ impl<W: Write> WriterTurtleSerializer<W> {
 
         // Write base directive
         if let Some(base) = &self.config.base_iri {
-            writeln!(self.writer, "@base <{}> .", base)?;
+            writeln!(self.writer, "@base <{base}> .")?;
         }
 
         // Write prefix directives
         for (prefix, iri) in &self.config.prefixes {
-            writeln!(self.writer, "@prefix {}: <{}> .", prefix, iri)?;
+            writeln!(self.writer, "@prefix {prefix}: <{iri}> .")?;
         }
 
         // Add blank line after headers if we wrote any
@@ -594,6 +600,80 @@ impl<W: Write> QuadSerializer<W> for WriterTurtleSerializer<W> {
     fn finish(self: Box<Self>) -> SerializeResult<W> {
         Ok(self.writer)
     }
+}
+
+/// Check if a string is a valid local name for Turtle prefixed names
+fn is_valid_local_name(local: &str) -> bool {
+    if local.is_empty() {
+        return true; // Empty local names are allowed
+    }
+
+    // First character must be a name start char or underscore
+    let first_char = local.chars().next().unwrap();
+    if !is_pn_chars_base(first_char) && first_char != '_' {
+        return false;
+    }
+
+    // Rest of characters must be name chars, underscore, dot, or hyphen
+    for ch in local.chars().skip(1) {
+        if !is_pn_chars(ch) && ch != '.' && ch != '-' {
+            return false;
+        }
+    }
+
+    // Cannot end with a dot
+    !local.ends_with('.')
+}
+
+/// Check if character is a PN_CHARS_BASE (per Turtle grammar)
+fn is_pn_chars_base(ch: char) -> bool {
+    ch.is_ascii_alphabetic()
+        || ('\u{00C0}'..='\u{00D6}').contains(&ch)
+        || ('\u{00D8}'..='\u{00F6}').contains(&ch)
+        || ('\u{00F8}'..='\u{02FF}').contains(&ch)
+        || ('\u{0370}'..='\u{037D}').contains(&ch)
+        || ('\u{037F}'..='\u{1FFF}').contains(&ch)
+        || ('\u{200C}'..='\u{200D}').contains(&ch)
+        || ('\u{2070}'..='\u{218F}').contains(&ch)
+        || ('\u{2C00}'..='\u{2FEF}').contains(&ch)
+        || ('\u{3001}'..='\u{D7FF}').contains(&ch)
+        || ('\u{F900}'..='\u{FDCF}').contains(&ch)
+        || ('\u{FDF0}'..='\u{FFFD}').contains(&ch)
+}
+
+/// Check if character is a PN_CHARS (per Turtle grammar)
+fn is_pn_chars(ch: char) -> bool {
+    is_pn_chars_base(ch)
+        || ch == '_'
+        || ch.is_ascii_digit()
+        || ch == '\u{00B7}'
+        || ('\u{0300}'..='\u{036F}').contains(&ch)
+        || ('\u{203F}'..='\u{2040}').contains(&ch)
+}
+
+/// Escape special characters in Turtle strings
+fn escape_turtle_string(input: &str) -> String {
+    let mut result = String::with_capacity(input.len());
+
+    for ch in input.chars() {
+        match ch {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            '\x08' => result.push_str("\\b"), // backspace
+            '\x0C' => result.push_str("\\f"), // form feed
+            c if c.is_control() => {
+                // Escape other control characters as Unicode escape sequences
+                let code = c as u32;
+                result.push_str(&format!("\\u{code:04X}"));
+            }
+            c => result.push(c),
+        }
+    }
+
+    result
 }
 
 #[cfg(test)]
@@ -684,77 +764,4 @@ mod tests {
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), Some("http://example.org/".to_string()));
     }
-}
-
-/// Check if a string is a valid local name for Turtle prefixed names
-fn is_valid_local_name(local: &str) -> bool {
-    if local.is_empty() {
-        return true; // Empty local names are allowed
-    }
-
-    // First character must be a name start char or underscore
-    let first_char = local.chars().next().unwrap();
-    if !is_pn_chars_base(first_char) && first_char != '_' {
-        return false;
-    }
-
-    // Rest of characters must be name chars, underscore, dot, or hyphen
-    for ch in local.chars().skip(1) {
-        if !is_pn_chars(ch) && ch != '.' && ch != '-' {
-            return false;
-        }
-    }
-
-    // Cannot end with a dot
-    !local.ends_with('.')
-}
-
-/// Check if character is a PN_CHARS_BASE (per Turtle grammar)
-fn is_pn_chars_base(ch: char) -> bool {
-    ch.is_ascii_alphabetic()
-        || (ch >= '\u{00C0}' && ch <= '\u{00D6}')
-        || (ch >= '\u{00D8}' && ch <= '\u{00F6}')
-        || (ch >= '\u{00F8}' && ch <= '\u{02FF}')
-        || (ch >= '\u{0370}' && ch <= '\u{037D}')
-        || (ch >= '\u{037F}' && ch <= '\u{1FFF}')
-        || (ch >= '\u{200C}' && ch <= '\u{200D}')
-        || (ch >= '\u{2070}' && ch <= '\u{218F}')
-        || (ch >= '\u{2C00}' && ch <= '\u{2FEF}')
-        || (ch >= '\u{3001}' && ch <= '\u{D7FF}')
-        || (ch >= '\u{F900}' && ch <= '\u{FDCF}')
-        || (ch >= '\u{FDF0}' && ch <= '\u{FFFD}')
-}
-
-/// Check if character is a PN_CHARS (per Turtle grammar)
-fn is_pn_chars(ch: char) -> bool {
-    is_pn_chars_base(ch)
-        || ch == '_'
-        || ch.is_ascii_digit()
-        || ch == '\u{00B7}'
-        || (ch >= '\u{0300}' && ch <= '\u{036F}')
-        || (ch >= '\u{203F}' && ch <= '\u{2040}')
-}
-
-/// Escape special characters in Turtle strings
-fn escape_turtle_string(input: &str) -> String {
-    let mut result = String::with_capacity(input.len());
-
-    for ch in input.chars() {
-        match ch {
-            '"' => result.push_str("\\\""),
-            '\\' => result.push_str("\\\\"),
-            '\n' => result.push_str("\\n"),
-            '\r' => result.push_str("\\r"),
-            '\t' => result.push_str("\\t"),
-            '\x08' => result.push_str("\\b"), // backspace
-            '\x0C' => result.push_str("\\f"), // form feed
-            c if c.is_control() => {
-                // Escape other control characters as Unicode escape sequences
-                result.push_str(&format!("\\u{:04X}", c as u32));
-            }
-            c => result.push(c),
-        }
-    }
-
-    result
 }

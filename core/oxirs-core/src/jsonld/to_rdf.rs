@@ -9,9 +9,9 @@ use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
 // use oxiri::{Iri, IriParseError};
 // use oxrdf::vocab::{rdf, xsd};
 // use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
-use crate::model::iri::{Iri, IriParseError};
 use crate::model::*;
 use crate::vocab::{rdf, xsd};
+use oxiri::{Iri, IriParseError};
 use std::error::Error;
 use std::fmt::Write;
 use std::io::Read;
@@ -481,9 +481,13 @@ impl<R: Read> ReaderJsonLdParser<R> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        let event = self.json_parser.parse_next().inspect_err(|_| {
-            self.inner.json_error = true;
-        })?;
+        let event = match self.json_parser.parse_next() {
+            Ok(event) => event,
+            Err(e) => {
+                self.inner.json_error = true;
+                return Err(e.into());
+            }
+        };
         self.inner
             .parse_event(event, &mut self.results, &mut self.errors);
         Ok(())
@@ -809,9 +813,13 @@ impl SliceJsonLdParser<'_> {
     }
 
     fn parse_step(&mut self) -> Result<(), JsonLdSyntaxError> {
-        let event = self.json_parser.parse_next().inspect_err(|_| {
-            self.inner.json_error = true;
-        })?;
+        let event = match self.json_parser.parse_next() {
+            Ok(event) => event,
+            Err(e) => {
+                self.inner.json_error = true;
+                return Err(e.into());
+            }
+        };
         self.inner
             .parse_event(event, &mut self.results, &mut self.errors);
         Ok(())

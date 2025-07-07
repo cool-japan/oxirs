@@ -3,7 +3,7 @@
 //! This module implements various graph-based data structures optimized for
 //! nearest neighbor search:
 //! - NSW: Navigable Small World
-//! - ONNG: Optimized Nearest Neighbor Graph  
+//! - ONNG: Optimized Nearest Neighbor Graph
 //! - PANNG: Pruned Approximate Nearest Neighbor Graph
 //! - Delaunay Graph: Approximation for high-dimensional space
 //! - RNG: Relative Neighborhood Graph
@@ -13,11 +13,9 @@ use anyhow::Result;
 use oxirs_core::parallel::*;
 use oxirs_core::simd::SimdOps;
 use petgraph::graph::{Graph, NodeIndex};
-use petgraph::Direction;
 use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock};
 
 /// Configuration for graph-based indices
 #[derive(Debug, Clone)]
@@ -79,7 +77,7 @@ impl DistanceMetric {
             DistanceMetric::Cosine => f32::cosine_distance(a, b),
             DistanceMetric::Angular => {
                 // Angular distance = arccos(cosine_similarity) / pi
-                let cos_sim = 1.0 - f32::cosine_distance(a, b);
+                let cos_sim: f32 = 1.0 - f32::cosine_distance(a, b);
                 cos_sim.clamp(-1.0, 1.0).acos() / std::f32::consts::PI
             }
         }
@@ -103,13 +101,13 @@ impl Eq for SearchResult {}
 
 impl PartialOrd for SearchResult {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.distance.partial_cmp(&other.distance)
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for SearchResult {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        self.distance.partial_cmp(&other.distance).unwrap_or(Ordering::Equal)
     }
 }
 
@@ -194,7 +192,7 @@ impl NSWGraph {
     }
 
     fn build_parallel(&mut self) -> Result<()> {
-        let chunk_size = (self.data.len() / num_threads()).max(100);
+        let _chunk_size = (self.data.len() / num_threads()).max(100);
 
         // Pre-compute all edges that need to be added
         let mut all_edges = Vec::new();
@@ -1148,7 +1146,7 @@ mod tests {
         // Insert test vectors
         for i in 0..50 {
             let vector = Vector::new(vec![i as f32, (i * 2) as f32, (i * 3) as f32]);
-            index.insert(format!("vec_{}", i), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector).unwrap();
         }
 
         index.build().unwrap();
@@ -1175,7 +1173,7 @@ mod tests {
         for i in 0..20 {
             let angle = (i as f32) * 2.0 * std::f32::consts::PI / 20.0;
             let vector = Vector::new(vec![angle.cos(), angle.sin()]);
-            index.insert(format!("vec_{}", i), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector).unwrap();
         }
 
         index.build().unwrap();
@@ -1201,7 +1199,7 @@ mod tests {
         // Insert test vectors
         for i in 0..30 {
             let vector = Vector::new(vec![(i as f32).sin(), (i as f32).cos(), (i as f32) / 10.0]);
-            index.insert(format!("vec_{}", i), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector).unwrap();
         }
 
         index.build().unwrap();

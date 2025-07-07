@@ -13,18 +13,14 @@
 use crate::{
     faiss_compatibility::{FaissIndexMetadata, FaissIndexType, FaissMetricType},
     faiss_integration::{FaissConfig, FaissSearchParams, FaissStatistics},
-    gpu::GpuConfig,
-    index::{IndexConfig, VectorIndex},
-    similarity::SimilarityMetric,
-    Vector, VectorPrecision,
+    index::VectorIndex,
 };
-use anyhow::{Context, Error as AnyhowError, Result};
+use anyhow::{Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
-use std::ffi::{CStr, CString};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{debug, info, span, Level};
 
 /// Native FAISS integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -476,13 +472,13 @@ impl NativeFaissIndex {
             crate::faiss_integration::FaissIndexType::FlatIP => "Flat".to_string(),
             crate::faiss_integration::FaissIndexType::IvfFlat => {
                 let clusters = config.num_clusters.unwrap_or(1024);
-                format!("IVF{},Flat", clusters)
+                format!("IVF{clusters},Flat")
             }
             crate::faiss_integration::FaissIndexType::IvfPq => {
                 let clusters = config.num_clusters.unwrap_or(1024);
                 let subq = config.num_subquantizers.unwrap_or(8);
                 let bits = config.bits_per_subquantizer.unwrap_or(8);
-                format!("IVF{},PQ{}x{}", clusters, subq, bits)
+                format!("IVF{clusters},PQ{subq}x{bits}")
             }
             crate::faiss_integration::FaissIndexType::HnswFlat => "HNSW32,Flat".to_string(),
             crate::faiss_integration::FaissIndexType::Lsh => "LSH".to_string(),
@@ -529,7 +525,7 @@ impl NativeFaissIndex {
     }
 
     /// Add a batch of vectors with memory pool optimization
-    fn add_vector_batch(&self, vectors: &[Vec<f32>], ids: &[String]) -> Result<()> {
+    fn add_vector_batch(&self, vectors: &[Vec<f32>], _ids: &[String]) -> Result<()> {
         // Allocate from memory pool
         let memory_needed = vectors.len() * vectors[0].len() * std::mem::size_of::<f32>();
         let _memory_block = self.allocate_from_pool(memory_needed)?;
@@ -610,7 +606,7 @@ impl NativeFaissIndex {
         for _query in query_vectors {
             let mut query_results = Vec::new();
             for i in 0..k {
-                query_results.push((format!("gpu_result_{}", i), 0.9 - (i as f32 * 0.1)));
+                query_results.push((format!("gpu_result_{i}"), 0.9 - (i as f32 * 0.1)));
             }
             results.push(query_results);
         }
@@ -644,7 +640,7 @@ impl NativeFaissIndex {
         for _query in query_vectors {
             let mut query_results = Vec::new();
             for i in 0..k {
-                query_results.push((format!("cpu_result_{}", i), 0.95 - (i as f32 * 0.1)));
+                query_results.push((format!("cpu_result_{i}"), 0.95 - (i as f32 * 0.1)));
             }
             results.push(query_results);
         }
@@ -723,8 +719,7 @@ impl NativeFaissIndex {
 
         if !input_path.exists() {
             return Err(AnyhowError::msg(format!(
-                "Input file does not exist: {:?}",
-                input_path
+                "Input file does not exist: {input_path:?}"
             )));
         }
 
@@ -971,9 +966,9 @@ impl FaissPerformanceComparison {
     /// Benchmark FAISS performance
     fn benchmark_faiss_performance(
         &self,
-        dataset: &BenchmarkDataset,
+        _dataset: &BenchmarkDataset,
     ) -> Result<PerformanceMetrics> {
-        let start_time = std::time::Instant::now();
+        let _start_time = std::time::Instant::now();
 
         // Simulate FAISS performance measurement
         let search_latency_us = 250.0; // Simulated
@@ -994,9 +989,9 @@ impl FaissPerformanceComparison {
     /// Benchmark Oxirs performance
     fn benchmark_oxirs_performance(
         &self,
-        dataset: &BenchmarkDataset,
+        _dataset: &BenchmarkDataset,
     ) -> Result<PerformanceMetrics> {
-        let start_time = std::time::Instant::now();
+        let _start_time = std::time::Instant::now();
 
         // Simulate Oxirs performance measurement
         let search_latency_us = 300.0; // Simulated (slightly slower)
@@ -1075,16 +1070,13 @@ impl FaissPerformanceComparison {
 
             report.push_str("## Summary\n\n");
             report.push_str(&format!(
-                "- Average Speed Ratio (Oxirs/FAISS): {:.2}\n",
-                avg_speed_ratio
+                "- Average Speed Ratio (Oxirs/FAISS): {avg_speed_ratio:.2}\n"
             ));
             report.push_str(&format!(
-                "- Average Memory Ratio (Oxirs/FAISS): {:.2}\n",
-                avg_memory_ratio
+                "- Average Memory Ratio (Oxirs/FAISS): {avg_memory_ratio:.2}\n"
             ));
             report.push_str(&format!(
-                "- Average Accuracy Ratio (Oxirs/FAISS): {:.2}\n\n",
-                avg_accuracy_ratio
+                "- Average Accuracy Ratio (Oxirs/FAISS): {avg_accuracy_ratio:.2}\n\n"
             ));
 
             let oxirs_wins = self
@@ -1170,6 +1162,7 @@ impl FaissPerformanceComparison {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Vector;
 
     #[test]
     fn test_native_faiss_index_creation() {

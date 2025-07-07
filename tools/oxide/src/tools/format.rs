@@ -406,11 +406,9 @@ impl FormatValidator {
     fn validate_json_ld(content: &str, result: &mut ValidationResult) {
         // Try to parse as JSON first
         match serde_json::from_str::<serde_json::Value>(content) {
-            Ok(_) => {
-                // TODO: Check for JSON-LD specific requirements
-                result
-                    .warnings
-                    .push("JSON-LD semantic validation not implemented".to_string());
+            Ok(value) => {
+                // Check for JSON-LD specific requirements
+                Self::validate_json_ld_semantics(&value, result);
             }
             Err(e) => {
                 result.errors.push(ValidationError {
@@ -419,6 +417,286 @@ impl FormatValidator {
                     message: format!("Invalid JSON: {}", e),
                 });
                 result.valid = false;
+            }
+        }
+    }
+
+    fn validate_json_ld_semantics(value: &serde_json::Value, result: &mut ValidationResult) {
+        match value {
+            serde_json::Value::Object(obj) => {
+                // Check if it's a valid JSON-LD document
+                let has_context = obj.contains_key("@context");
+                let has_graph = obj.contains_key("@graph");
+                let has_id = obj.contains_key("@id");
+                let has_type = obj.contains_key("@type");
+                let has_value = obj.contains_key("@value");
+
+                // A JSON-LD document should have at least one of these
+                if !has_context && !has_graph && !has_id && !has_type && !has_value {
+                    // Check if any keys start with @ (JSON-LD keywords)
+                    let has_jsonld_keywords = obj.keys().any(|k| k.starts_with('@'));
+                    if !has_jsonld_keywords {
+                        result.warnings.push(
+                            "Document appears to be plain JSON rather than JSON-LD (no @context, @graph, @id, @type, or other keywords found)".to_string()
+                        );
+                    }
+                }
+
+                // Validate @context if present
+                if let Some(context) = obj.get("@context") {
+                    Self::validate_context(context, result);
+                }
+
+                // Validate @type if present
+                if let Some(type_value) = obj.get("@type") {
+                    Self::validate_type_value(type_value, result);
+                }
+
+                // Validate @id if present
+                if let Some(id_value) = obj.get("@id") {
+                    Self::validate_id_value(id_value, result);
+                }
+
+                // Validate @value if present
+                if let Some(value_obj) = obj.get("@value") {
+                    Self::validate_value_object(obj, result);
+                }
+
+                // Check for invalid keyword combinations
+                if has_value && (has_id || has_type) {
+                    // @value objects cannot have @id or @type (except in specific cases)
+                    if !obj.contains_key("@type") || obj.len() > 3 {
+                        result.warnings.push(
+                            "@value objects should only contain @value, @type (for datatype), and @language".to_string()
+                        );
+                    }
+                }
+
+                // Recursively validate nested objects
+                for (key, nested_value) in obj {
+                    if !key.starts_with('@') {
+                        Self::validate_json_ld_semantics(nested_value, result);
+                    }
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                // Validate each item in the array
+                for item in arr {
+                    Self::validate_json_ld_semantics(item, result);
+                }
+            }
+            _ => {
+                // Primitive values are valid at the top level in some contexts
+            }
+        }
+    }
+
+    fn validate_context(context: &serde_json::Value, result: &mut ValidationResult) {
+        match context {
+            serde_json::Value::String(s) => {
+                // Should be a valid IRI
+                if !s.starts_with("http://") && !s.starts_with("https://") && !s.starts_with("file://") {
+                    if !s.contains(':') {
+                        result.warnings.push(
+                            format!("@context IRI '{}' may not be valid (no protocol specified)", s)
+                        );
+                    }
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                // Validate context object
+                for (key, value) in obj {
+                    if key.starts_with('@') && key != "@base" && key != "@vocab" && key != "@language" && key != "@version" {
+                        result.warnings.push(
+                            format!("Unknown keyword '{}' in @context", key)
+                        );
+                    }
+                    
+                    // Validate term definitions
+                    if !key.starts_with('@') {
+                        match value {
+                            serde_json::Value::String(_) => {
+                                // Simple term mapping - valid
+                            }
+                            serde_json::Value::Object(term_def) => {
+                                // Expanded term definition
+                                Self::validate_term_definition(key, term_def, result);
+                            }
+                            _ => {
+                                result.errors.push(ValidationError {
+                                    line: None,
+                                    column: None,
+                                    message: format!("Invalid term definition for '{}': must be string or object", key),
+                                });
+                                result.valid = false;
+                            }
+                        }
+                    }
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                // Array of contexts
+                for item in arr {
+                    Self::validate_context(item, result);
+                }
+            }
+            _ => {
+                result.errors.push(ValidationError {
+                    line: None,
+                    column: None,
+                    message: "@context must be a string, object, or array".to_string(),
+                });
+                result.valid = false;
+            }
+        }
+    }
+
+    fn validate_term_definition(term: &str, def: &serde_json::Map<String, serde_json::Value>, result: &mut ValidationResult) {
+        let valid_keys = ["@id", "@type", "@container", "@context", "@language", "@reverse", "@nest"];
+        
+        for key in def.keys() {
+            if !valid_keys.contains(&key.as_str()) {
+                result.warnings.push(
+                    format!("Unknown key '{}' in term definition for '{}'", key, term)
+                );
+            }
+        }
+
+        // Check for required @id in reverse properties
+        if def.contains_key("@reverse") && !def.contains_key("@id") {
+            result.warnings.push(
+                format!("Term '{}' has @reverse but no @id", term)
+            );
+        }
+
+        // Validate @container values
+        if let Some(container) = def.get("@container") {
+            match container {
+                serde_json::Value::String(s) => {
+                    let valid_containers = ["@list", "@set", "@index", "@language", "@id", "@type", "@graph"];
+                    if !valid_containers.contains(&s.as_str()) {
+                        result.warnings.push(
+                            format!("Unknown @container value '{}' for term '{}'", s, term)
+                        );
+                    }
+                }
+                serde_json::Value::Array(arr) => {
+                    for item in arr {
+                        if let serde_json::Value::String(s) = item {
+                            let valid_containers = ["@list", "@set", "@index", "@language", "@id", "@type", "@graph"];
+                            if !valid_containers.contains(&s.as_str()) {
+                                result.warnings.push(
+                                    format!("Unknown @container value '{}' for term '{}'", s, term)
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => {
+                    result.errors.push(ValidationError {
+                        line: None,
+                        column: None,
+                        message: format!("@container for term '{}' must be string or array", term),
+                    });
+                    result.valid = false;
+                }
+            }
+        }
+    }
+
+    fn validate_type_value(type_value: &serde_json::Value, result: &mut ValidationResult) {
+        match type_value {
+            serde_json::Value::String(_) => {
+                // Single type - valid
+            }
+            serde_json::Value::Array(arr) => {
+                if arr.is_empty() {
+                    result.warnings.push("@type array should not be empty".to_string());
+                }
+                for item in arr {
+                    if !item.is_string() {
+                        result.errors.push(ValidationError {
+                            line: None,
+                            column: None,
+                            message: "All @type values must be strings".to_string(),
+                        });
+                        result.valid = false;
+                    }
+                }
+            }
+            _ => {
+                result.errors.push(ValidationError {
+                    line: None,
+                    column: None,
+                    message: "@type must be a string or array of strings".to_string(),
+                });
+                result.valid = false;
+            }
+        }
+    }
+
+    fn validate_id_value(id_value: &serde_json::Value, result: &mut ValidationResult) {
+        match id_value {
+            serde_json::Value::String(s) => {
+                if s.is_empty() {
+                    result.warnings.push("@id should not be empty".to_string());
+                }
+                // Could add IRI validation here
+            }
+            _ => {
+                result.errors.push(ValidationError {
+                    line: None,
+                    column: None,
+                    message: "@id must be a string".to_string(),
+                });
+                result.valid = false;
+            }
+        }
+    }
+
+    fn validate_value_object(obj: &serde_json::Map<String, serde_json::Value>, result: &mut ValidationResult) {
+        let has_value = obj.contains_key("@value");
+        let has_language = obj.contains_key("@language");
+        let has_type = obj.contains_key("@type");
+        let has_index = obj.contains_key("@index");
+
+        if !has_value {
+            return; // Not a value object
+        }
+
+        // @language and @type are mutually exclusive
+        if has_language && has_type {
+            result.errors.push(ValidationError {
+                line: None,
+                column: None,
+                message: "@language and @type cannot both be present in a value object".to_string(),
+            });
+            result.valid = false;
+        }
+
+        // Check for invalid keys in value object
+        for key in obj.keys() {
+            if !["@value", "@type", "@language", "@index"].contains(&key.as_str()) {
+                result.warnings.push(
+                    format!("Unexpected key '{}' in @value object", key)
+                );
+            }
+        }
+
+        // Validate @language value
+        if let Some(lang) = obj.get("@language") {
+            if !lang.is_string() {
+                result.errors.push(ValidationError {
+                    line: None,
+                    column: None,
+                    message: "@language must be a string".to_string(),
+                });
+                result.valid = false;
+            } else if let Some(lang_str) = lang.as_str() {
+                if lang_str.is_empty() {
+                    result.warnings.push("@language should not be empty".to_string());
+                }
+                // Could add BCP 47 language tag validation here
             }
         }
     }

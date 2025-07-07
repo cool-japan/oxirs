@@ -4,15 +4,13 @@
 //! for high-performance vector similarity search and clustering. FAISS is particularly well-suited
 //! for large-scale vector databases with billions of vectors.
 
-use crate::gpu::GpuConfig;
-use crate::index::{IndexConfig, VectorIndex};
-use crate::similarity::SimilarityMetric;
+use crate::index::VectorIndex;
 use anyhow::{Context, Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use tracing::{debug, info, span, warn, Level};
+use tracing::{debug, info, span, Level};
 
 /// Configuration for FAISS integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -357,7 +355,7 @@ impl FaissIndex {
 
         // Validate index-specific parameters
         match &config.index_type {
-            FaissIndexType::IvfFlat | FaissIndexType::IvfPq | FaissIndexType::IvfSq => {
+            FaissIndexType::IvfFlat | FaissIndexType::IvfSq => {
                 if config.num_clusters.is_none() {
                     return Err(AnyhowError::msg(
                         "IVF indices require num_clusters to be set",
@@ -365,6 +363,11 @@ impl FaissIndex {
                 }
             }
             FaissIndexType::IvfPq => {
+                if config.num_clusters.is_none() {
+                    return Err(AnyhowError::msg(
+                        "IVF indices require num_clusters to be set",
+                    ));
+                }
                 if config.num_subquantizers.is_none() {
                     return Err(AnyhowError::msg(
                         "IVF-PQ requires num_subquantizers to be set",
@@ -414,10 +417,7 @@ impl FaissIndex {
 
     /// Check if the index type requires training
     fn requires_training(&self) -> bool {
-        match self.config.index_type {
-            FaissIndexType::FlatL2 | FaissIndexType::FlatIP => false,
-            _ => true,
-        }
+        !matches!(self.config.index_type, FaissIndexType::FlatL2 | FaissIndexType::FlatIP)
     }
 
     /// Generate FAISS index string
@@ -427,23 +427,23 @@ impl FaissIndex {
             FaissIndexType::FlatIP => "Flat".to_string(),
             FaissIndexType::IvfFlat => {
                 let clusters = self.config.num_clusters.unwrap_or(1024);
-                format!("IVF{},Flat", clusters)
+                format!("IVF{clusters},Flat")
             }
             FaissIndexType::IvfPq => {
                 let clusters = self.config.num_clusters.unwrap_or(1024);
                 let subq = self.config.num_subquantizers.unwrap_or(8);
                 let bits = self.config.bits_per_subquantizer.unwrap_or(8);
-                format!("IVF{},PQ{}x{}", clusters, subq, bits)
+                format!("IVF{clusters},PQ{subq}x{bits}")
             }
             FaissIndexType::IvfSq => {
                 let clusters = self.config.num_clusters.unwrap_or(1024);
-                format!("IVF{},SQ8", clusters)
+                format!("IVF{clusters},SQ8")
             }
             FaissIndexType::HnswFlat => {
-                format!("HNSW32,Flat")
+                "HNSW32,Flat".to_string()
             }
             FaissIndexType::Lsh => {
-                format!("LSH")
+                "LSH".to_string()
             }
             FaissIndexType::Auto => self.auto_select_index_type()?,
             FaissIndexType::Custom(s) => s.clone(),
@@ -472,9 +472,9 @@ impl FaissIndex {
             // Medium dataset: use IVF with appropriate clustering
             let clusters = (num_vectors as f32).sqrt() as usize;
             if dimension > 128 {
-                format!("IVF{},PQ16x8", clusters)
+                format!("IVF{clusters},PQ16x8")
             } else {
-                format!("IVF{},Flat", clusters)
+                format!("IVF{clusters},Flat")
             }
         } else {
             // Large dataset: use IVF-PQ with compression
@@ -772,7 +772,7 @@ impl FaissIndex {
         // Create directory if it doesn't exist
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)
-                .with_context(|| format!("Failed to create directory: {:?}", parent))?;
+                .with_context(|| format!("Failed to create directory: {parent:?}"))?;
         }
 
         // In real implementation, this would save the FAISS index
@@ -791,8 +791,7 @@ impl FaissIndex {
 
         if !path.exists() {
             return Err(AnyhowError::msg(format!(
-                "Index file does not exist: {:?}",
-                path
+                "Index file does not exist: {path:?}"
             )));
         }
 
@@ -877,7 +876,7 @@ impl VectorIndex for FaissIndex {
             .collect())
     }
 
-    fn get_vector(&self, uri: &str) -> Option<&crate::Vector> {
+    fn get_vector(&self, _uri: &str) -> Option<&crate::Vector> {
         // This would require storing vectors by URI, which is complex in FAISS
         // For now, return None - this can be implemented with an additional URI->vector map
         None

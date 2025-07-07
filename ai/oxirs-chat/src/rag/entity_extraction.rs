@@ -19,11 +19,12 @@ impl EntityExtractor {
         query: &str,
     ) -> Result<(Vec<ExtractedEntity>, Vec<ExtractedRelationship>)> {
         // Try LLM extraction first, fall back to rule-based if needed
-        if let Ok(result) = self.llm_extract_entities(query).await {
-            Ok(result)
-        } else {
-            warn!("LLM extraction failed, falling back to rule-based extraction");
-            self.rule_based_extraction(query).await
+        match self.llm_extract_entities(query).await {
+            Ok(result) => Ok(result),
+            _ => {
+                warn!("LLM extraction failed, falling back to rule-based extraction");
+                self.rule_based_extraction(query).await
+            }
         }
     }
 

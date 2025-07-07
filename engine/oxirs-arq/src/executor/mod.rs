@@ -26,6 +26,12 @@ pub struct FunctionRegistry {
     // Simplified for now
 }
 
+impl Default for FunctionRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FunctionRegistry {
     pub fn new() -> Self {
         Self {}
@@ -58,13 +64,19 @@ impl Default for ExecutionStrategy {
     }
 }
 
-/// Advanced Query executor with parallel and streaming capabilities  
+/// Advanced Query executor with parallel and streaming capabilities
 pub struct QueryExecutor {
     context: ExecutionContext,
     function_registry: FunctionRegistry,
     parallel_executor: Option<Arc<parallel::ParallelExecutor>>,
     result_cache: Arc<RwLock<HashMap<String, CachedResult>>>,
     execution_strategy: ExecutionStrategy,
+}
+
+impl Default for QueryExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryExecutor {
@@ -119,8 +131,8 @@ impl QueryExecutor {
     /// Execute algebra expression and return solutions for UPDATE operations
     pub fn execute_algebra_for_update(
         &mut self,
-        algebra: &Algebra,
-        context: &mut crate::algebra::EvaluationContext,
+        _algebra: &Algebra,
+        _context: &mut crate::algebra::EvaluationContext,
     ) -> Result<Vec<Vec<HashMap<String, crate::algebra::Term>>>> {
         // Simple implementation for UPDATE support
         // This would need proper integration with the full execution engine
@@ -357,7 +369,7 @@ impl QueryExecutor {
                 self.execute_algebra_streaming(right, dataset, streaming_solution)?;
                 Ok(())
             }
-            Algebra::Filter { pattern, condition } => {
+            Algebra::Filter { pattern, condition: _ } => {
                 // Execute the pattern first
                 self.execute_algebra_streaming(pattern, dataset, streaming_solution)?;
                 // Note: In a full implementation, filter would be applied during streaming
@@ -377,8 +389,8 @@ impl QueryExecutor {
     /// Extract join variables from algebra expressions (simplified)
     fn extract_join_variables(
         &self,
-        left: &Algebra,
-        right: &Algebra,
+        _left: &Algebra,
+        _right: &Algebra,
     ) -> Vec<crate::algebra::Variable> {
         // Simplified implementation - would need proper variable extraction logic
         vec![]
@@ -531,28 +543,27 @@ impl QueryExecutor {
     ) -> Result<Solution> {
         // This would normally use the dataset's index selection
         // For now, provide a more realistic implementation than the sample data
-        let mut solution = Solution::new();
 
         // Try to use the most selective access path
         let access_path = self.select_access_path(pattern);
-        match access_path {
+        let solution = match access_path {
             AccessPath::SubjectIndex => {
                 // Use subject index for lookup
-                solution = self.lookup_by_subject(pattern, dataset)?;
+                self.lookup_by_subject(pattern, dataset)?
             }
             AccessPath::PredicateIndex => {
                 // Use predicate index for lookup
-                solution = self.lookup_by_predicate(pattern, dataset)?;
+                self.lookup_by_predicate(pattern, dataset)?
             }
             AccessPath::ObjectIndex => {
                 // Use object index for lookup
-                solution = self.lookup_by_object(pattern, dataset)?;
+                self.lookup_by_object(pattern, dataset)?
             }
             AccessPath::FullScan => {
                 // Full table scan as last resort
-                solution = self.full_scan_pattern(pattern, dataset)?;
+                self.full_scan_pattern(pattern, dataset)?
             }
-        }
+        };
 
         Ok(solution)
     }
@@ -835,7 +846,7 @@ impl QueryExecutor {
                         let string_value = match value {
                             crate::algebra::Term::Literal(lit) => lit.value,
                             crate::algebra::Term::Iri(iri) => iri.to_string(),
-                            crate::algebra::Term::BlankNode(bn) => format!("_:{}", bn),
+                            crate::algebra::Term::BlankNode(bn) => format!("_:{bn}"),
                             _ => value.to_string(),
                         };
                         values.push(string_value);
@@ -1042,7 +1053,7 @@ impl QueryExecutor {
         expr: &crate::algebra::Expression,
         binding: &crate::algebra::Binding,
     ) -> Result<crate::algebra::Term> {
-        use crate::algebra::{BinaryOperator, Expression, UnaryOperator};
+        use crate::algebra::Expression;
 
         match expr {
             Expression::Variable(var) => {
@@ -1560,7 +1571,7 @@ impl QueryExecutor {
                     ) => iri_a.as_str().cmp(iri_b.as_str()),
                     (Some(a), Some(b)) => {
                         // Generic string comparison for other types
-                        format!("{}", a).cmp(&format!("{}", b))
+                        format!("{a}").cmp(&format!("{b}"))
                     }
                     (Some(_), None) => std::cmp::Ordering::Less,
                     (None, Some(_)) => std::cmp::Ordering::Greater,
@@ -1626,7 +1637,7 @@ impl QueryExecutor {
         self.execute_pattern_with_dataset(pattern, dataset)
     }
 
-    /// Lookup by predicate index  
+    /// Lookup by predicate index
     fn lookup_by_predicate(
         &self,
         pattern: &crate::algebra::TriplePattern,

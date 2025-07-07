@@ -197,7 +197,7 @@ impl JitCompiler {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", plan).hash(&mut hasher);
+        format!("{plan:?}").hash(&mut hasher);
         hasher.finish()
     }
 
@@ -244,7 +244,7 @@ impl JitCompiler {
         let start = Instant::now();
 
         // Scan triples
-        for (_idx, triple) in context.data.triples.iter().enumerate() {
+        for triple in context.data.triples.iter() {
             stats.triples_scanned += 1;
 
             if let Some(bindings) = self.match_triple(triple, pattern, &context.bindings) {

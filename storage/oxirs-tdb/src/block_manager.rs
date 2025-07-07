@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 use tracing::info;
 
@@ -175,7 +175,7 @@ impl FreeBlockTracker {
     /// Find best fit block for given size
     fn find_best_fit(&self, required_size: BlockSize) -> Option<BlockId> {
         // Find the smallest block that can accommodate the required size
-        for (&size, blocks) in self.blocks_by_size.range(required_size..) {
+        for (&_size, blocks) in self.blocks_by_size.range(required_size..) {
             if let Some(&id) = blocks.iter().next() {
                 return Some(id);
             }
@@ -661,7 +661,7 @@ impl BlockManager {
     pub fn deallocate_block(&self, block_id: BlockId) -> Result<()> {
         let mut all_blocks = self.all_blocks.write().unwrap();
 
-        if let Some(mut metadata) = all_blocks.get_mut(&block_id) {
+        if let Some(metadata) = all_blocks.get_mut(&block_id) {
             if metadata.status != BlockStatus::Allocated {
                 return Err(anyhow!("Block {} is not allocated", block_id));
             }
@@ -937,7 +937,7 @@ impl BlockManager {
     fn coalesce_free_blocks_internal(
         &self,
         free_blocks: &mut FreeBlockTracker,
-        all_blocks: &HashMap<BlockId, BlockMetadata>,
+        _all_blocks: &HashMap<BlockId, BlockMetadata>,
     ) {
         // Get all free block metadata sorted by offset
         let mut free_metadata: Vec<BlockMetadata> =
@@ -1115,7 +1115,7 @@ mod tests {
         let block1 = manager.allocate_block(1024).unwrap();
         manager.deallocate_block(block1).unwrap();
 
-        let block2 = manager.allocate_block(1024).unwrap();
+        let _block2 = manager.allocate_block(1024).unwrap();
 
         let stats = manager.get_stats();
         assert_eq!(stats.allocated_blocks, 1);

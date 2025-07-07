@@ -4,14 +4,14 @@
 //! execution strategies, and performance metrics to significantly improve federation
 //! query performance through intelligent plan reuse and adaptation.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::planner::planning::types::{ExecutionPlan, QueryInfo, QueryType};
 

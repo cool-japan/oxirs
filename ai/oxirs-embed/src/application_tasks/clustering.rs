@@ -167,7 +167,7 @@ impl ClusteringEvaluator {
         let mut centroids = Vec::new();
         let mut rng = rand::thread_rng();
         for _ in 0..k {
-            let idx = rng.gen::<usize>() % n;
+            let idx = rng.r#gen::<usize>() % n;
             centroids.push(embeddings[idx].clone());
         }
 

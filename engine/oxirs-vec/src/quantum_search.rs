@@ -6,7 +6,7 @@
 //! classical algorithms in specific scenarios, particularly for high-dimensional
 //! similarity search and complex optimization landscapes.
 
-use crate::{Vector, VectorError, VectorIndex};
+use crate::Vector;
 use anyhow::{anyhow, Result};
 use oxirs_core::parallel::*;
 use oxirs_core::simd::SimdOps;
@@ -199,6 +199,7 @@ impl QuantumState {
 
         let mut tunneling_states = Vec::new();
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..self.amplitudes.len() {
             let barrier_height = barrier_profile[i];
 
@@ -378,7 +379,7 @@ impl QuantumVectorSearch {
             return Ok(Vec::new());
         }
 
-        let query_id = self.generate_query_id(query_vector);
+        let _query_id = self.generate_query_id(query_vector);
         let query_f32 = query_vector.as_f32();
 
         // Use parallel processing for large datasets
@@ -519,9 +520,9 @@ impl QuantumVectorSearch {
 
         for &temperature in temperature_schedule {
             // Quantum fluctuations
-            for i in 0..current_state.len() {
+            for item in &mut current_state {
                 let quantum_fluctuation = self.generate_quantum_fluctuation(temperature);
-                current_state[i] += quantum_fluctuation;
+                *item += quantum_fluctuation;
             }
 
             let current_cost = cost_function(&current_state);
@@ -666,7 +667,7 @@ impl QuantumVectorSearch {
     fn generate_random(&self) -> f32 {
         // Use proper random number generator
         let mut rng = self.rng.write().unwrap();
-        rng.gen()
+        rng.r#gen()
     }
 }
 

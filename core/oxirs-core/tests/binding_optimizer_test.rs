@@ -1,9 +1,7 @@
 //! Tests for variable binding optimization
 
 use oxirs_core::model::*;
-use oxirs_core::query::binding_optimizer::{
-    BindingMetadata, RelationType, TermBinding, ValueConstraintType,
-};
+use oxirs_core::query::binding_optimizer::{BindingMetadata, RelationType, ValueConstraintType};
 use oxirs_core::query::{BindingIterator, BindingOptimizer, BindingSet, Constraint, TermType};
 use std::collections::{HashMap, HashSet};
 
@@ -95,8 +93,7 @@ fn test_numeric_range_constraint() {
             bindings
                 .bind(var.clone(), term, BindingMetadata::default())
                 .is_ok(),
-            "Age {} should be valid",
-            age
+            "Age {age} should be valid"
         );
     }
 
@@ -107,8 +104,7 @@ fn test_numeric_range_constraint() {
             bindings
                 .bind(var.clone(), term, BindingMetadata::default())
                 .is_err(),
-            "Age {} should be invalid",
-            age
+            "Age {age} should be invalid"
         );
     }
 }

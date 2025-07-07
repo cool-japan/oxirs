@@ -736,9 +736,15 @@ mod performance_compliance {
                 .await;
         }
 
+        // Perform some get operations to generate actual cache requests
+        for i in 0..100 {
+            let key = format!("test-key-{}", i);
+            let _result = cache.get_service_result(&key).await;
+        }
+
         // Cache should handle large number of items
         let stats = cache.get_stats().await;
-        // Check that cache operations were successful
+        // Check that cache operations were successful (get operations count as requests)
         assert!(stats.total_requests > 0);
     }
 

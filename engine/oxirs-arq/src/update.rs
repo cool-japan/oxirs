@@ -2,13 +2,14 @@
 //!
 //! This module implements SPARQL 1.1 UPDATE operations including:
 //! - INSERT DATA
-//! - DELETE DATA  
+//! - DELETE DATA
 //! - INSERT WHERE
 //! - DELETE WHERE
 //! - DELETE/INSERT WHERE (combined)
 //! - CLEAR, DROP, CREATE, COPY, MOVE, ADD
 
-use crate::algebra::{Algebra, EvaluationContext, Expression, Term, TriplePattern, Variable};
+#[allow(unused_imports)]
+use crate::algebra::{Algebra, EvaluationContext, Term, TriplePattern, Variable};
 use crate::executor::ExecutionContext;
 use oxirs_core::model::{BlankNode, GraphName, Literal as CoreLiteral, NamedNode, Quad};
 use oxirs_core::OxirsError;
@@ -806,7 +807,7 @@ impl<'a> UpdateExecutor<'a> {
 
         // Determine target graph
         let target_graph = match to {
-            GraphTarget::Graph(ref g) => Some(self.graph_ref_to_named_node(g)?),
+            GraphTarget::Graph(g) => Some(self.graph_ref_to_named_node(g)?),
             GraphTarget::Default => None,
             _ => {
                 return Err(OxirsError::Query(
@@ -1066,7 +1067,7 @@ impl<'a> UpdateExecutor<'a> {
             Term::Variable(var) => binding
                 .get(var.as_str())
                 .map(|t| self.core_term_to_arq_term(t))
-                .ok_or_else(|| OxirsError::Query(format!("Unbound variable: {}", var))),
+                .ok_or_else(|| OxirsError::Query(format!("Unbound variable: {var}"))),
             _ => Ok(term.clone()),
         }
     }
@@ -1185,7 +1186,7 @@ impl<'a> UpdateExecutor<'a> {
             Term::Variable(var) => binding
                 .get(var.as_str())
                 .cloned()
-                .ok_or_else(|| OxirsError::Query(format!("Unbound variable: {}", var))),
+                .ok_or_else(|| OxirsError::Query(format!("Unbound variable: {var}"))),
             _ => {
                 // Convert algebra term to arq term and then to core term
                 let arq_term = crate::term::Term::from_algebra_term(term);
@@ -1207,7 +1208,7 @@ impl<'a> UpdateExecutor<'a> {
         }
     }
 
-    /// Convert oxirs_core::model::Term to Predicate  
+    /// Convert oxirs_core::model::Term to Predicate
     fn core_term_to_predicate(
         &self,
         term: oxirs_core::model::Term,

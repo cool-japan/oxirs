@@ -3,22 +3,24 @@
 //! This module provides storage implementations that integrate with the MVCC system,
 //! including multi-version indices, efficient version lookup, and compaction strategies.
 
-use crate::mvcc::{HLCTimestamp, MVCCManager, TransactionSnapshot, Version};
+use crate::mvcc::{HLCTimestamp, MVCCManager, TransactionSnapshot};
 use crate::shard::ShardId;
 use crate::storage::StorageBackend;
 use crate::transaction::{IsolationLevel, TransactionId};
 use anyhow::Result;
 use async_trait::async_trait;
 use dashmap::DashMap;
+#[allow(unused_imports)]
 use oxirs_core::model::{
     BlankNode, Literal, NamedNode, Object, Predicate, QuotedTriple, Subject, Triple, Variable,
 };
+#[cfg(test)]
 use oxirs_core::vocab::xsd;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Index key type for efficient lookups
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]

@@ -60,15 +60,15 @@ impl EmbeddableContent {
                 let mut text_parts = vec![uri.clone()];
 
                 if let Some(label) = label {
-                    text_parts.push(format!("label: {}", label));
+                    text_parts.push(format!("label: {label}"));
                 }
 
                 if let Some(desc) = description {
-                    text_parts.push(format!("description: {}", desc));
+                    text_parts.push(format!("description: {desc}"));
                 }
 
                 for (prop, values) in properties {
-                    text_parts.push(format!("{}: {}", prop, values.join(", ")));
+                    text_parts.push(format!("{prop}: {}", values.join(", ")));
                 }
 
                 text_parts.join(" ")
@@ -277,7 +277,7 @@ impl TfIdfEmbeddingGenerator {
 
         // Calculate IDF scores
         let total_docs = documents.len() as f32;
-        for (word, _idx) in &self.vocabulary {
+        for word in self.vocabulary.keys() {
             let doc_freq = doc_counts.get(word).unwrap_or(&0);
             let idf = (total_docs / (*doc_freq as f32 + 1.0)).ln();
             self.idf_scores.insert(word.clone(), idf);
@@ -360,8 +360,10 @@ pub struct SentenceTransformerGenerator {
 
 /// Supported transformer model types
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TransformerModelType {
     /// Basic BERT-based model (already implemented)
+    #[default]
     BERT,
     /// RoBERTa model with improved training
     RoBERTa,
@@ -387,11 +389,6 @@ pub struct ModelDetails {
     pub typical_inference_time_ms: u64,
 }
 
-impl Default for TransformerModelType {
-    fn default() -> Self {
-        TransformerModelType::BERT
-    }
-}
 
 impl SentenceTransformerGenerator {
     pub fn new(config: EmbeddingConfig) -> Self {
@@ -549,7 +546,7 @@ impl SentenceTransformerGenerator {
                 model_size_mb: 670, // Larger due to multilingual vocabulary
                 typical_inference_time_ms: 70, // Slower due to larger vocabulary
             },
-            TransformerModelType::Custom(path) => ModelDetails {
+            TransformerModelType::Custom(_path) => ModelDetails {
                 vocab_size: 50000, // Default assumption
                 num_layers: 12,
                 num_attention_heads: 12,
@@ -565,14 +562,14 @@ impl SentenceTransformerGenerator {
 
     /// Generate embedding with model-specific processing
     fn generate_with_model(&self, text: &str) -> Result<Vector> {
-        let text_hash = {
+        let _text_hash = {
             use std::hash::{Hash, Hasher};
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             text.hash(&mut hasher);
             hasher.finish()
         };
 
-        let (dimensions, max_len, efficiency) = self.get_model_config();
+        let (dimensions, max_len, _efficiency) = self.get_model_config();
         let model_details = self.get_model_details();
 
         // Apply model-specific text preprocessing
@@ -619,7 +616,7 @@ impl SentenceTransformerGenerator {
                 } else {
                     text
                 };
-                format!("<s>{}</s>", truncated) // RoBERTa preserves case
+                format!("<s>{truncated}</s>") // RoBERTa preserves case
             }
             TransformerModelType::DistilBERT => {
                 // DistilBERT is similar to BERT but more aggressive truncation due to efficiency
@@ -638,9 +635,9 @@ impl SentenceTransformerGenerator {
                     text
                 };
                 // Detect if text contains non-Latin characters
-                let has_non_latin = text.chars().any(|c| !c.is_ascii());
+                let has_non_latin = !text.is_ascii();
                 if has_non_latin {
-                    format!("[CLS] {} [SEP]", truncated) // Preserve case for non-Latin
+                    format!("[CLS] {truncated} [SEP]") // Preserve case for non-Latin
                 } else {
                     format!("[CLS] {} [SEP]", truncated.to_lowercase()) // Lowercase for Latin
                 }
@@ -785,16 +782,16 @@ impl SentenceTransformerGenerator {
         &self,
         token_ids: &[u32],
         values: &mut [f32],
-        model_details: &ModelDetails,
+        _model_details: &ModelDetails,
     ) {
         for (i, &token_id) in token_ids.iter().enumerate() {
             let mut seed = token_id as u64;
-            for j in 0..values.len() {
+            for value in values.iter_mut() {
                 seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                 let normalized = (seed as f32) / (u64::MAX as f32);
                 let position_encoding =
                     ((i as f32 / 512.0) * 2.0 * std::f32::consts::PI).sin() * 0.1;
-                values[j] += ((normalized - 0.5) * 2.0) + position_encoding;
+                *value += ((normalized - 0.5) * 2.0) + position_encoding;
             }
         }
 
@@ -811,17 +808,17 @@ impl SentenceTransformerGenerator {
         &self,
         token_ids: &[u32],
         values: &mut [f32],
-        model_details: &ModelDetails,
+        _model_details: &ModelDetails,
     ) {
         for (i, &token_id) in token_ids.iter().enumerate() {
             let mut seed = token_id.wrapping_mul(31415927); // Different seed pattern
-            for j in 0..values.len() {
+            for value in values.iter_mut() {
                 seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
                 let normalized = (seed as f32) / (u64::MAX as f32);
                 // RoBERTa uses learned position embeddings starting from index 2
                 let position_encoding =
                     ((i as f32 + 2.0) / 514.0 * 2.0 * std::f32::consts::PI).cos() * 0.1;
-                values[j] += ((normalized - 0.5) * 2.0) + position_encoding;
+                *value += ((normalized - 0.5) * 2.0) + position_encoding;
             }
         }
 
@@ -837,17 +834,17 @@ impl SentenceTransformerGenerator {
         &self,
         token_ids: &[u32],
         values: &mut [f32],
-        model_details: &ModelDetails,
+        _model_details: &ModelDetails,
     ) {
         // DistilBERT has fewer layers and smaller hidden size
         for (i, &token_id) in token_ids.iter().enumerate() {
             let mut seed = token_id as u64;
-            for j in 0..values.len() {
+            for value in values.iter_mut() {
                 seed = seed.wrapping_mul(982451653).wrapping_add(12345); // Faster computation
                 let normalized = (seed as f32) / (u64::MAX as f32);
                 // Simpler position encoding
                 let position_encoding = (i as f32 / 512.0).sin() * 0.05;
-                values[j] += ((normalized - 0.5) * 1.5) + position_encoding; // Slightly different scale
+                *value += ((normalized - 0.5) * 1.5) + position_encoding; // Slightly different scale
             }
         }
 
@@ -863,7 +860,7 @@ impl SentenceTransformerGenerator {
         &self,
         token_ids: &[u32],
         values: &mut [f32],
-        model_details: &ModelDetails,
+        _model_details: &ModelDetails,
     ) {
         for (i, &token_id) in token_ids.iter().enumerate() {
             // Multilingual models have different patterns due to cross-lingual training
@@ -892,7 +889,7 @@ impl SentenceTransformerGenerator {
         &self,
         token_ids: &[u32],
         values: &mut [f32],
-        model_details: &ModelDetails,
+        _model_details: &ModelDetails,
     ) {
         // Simple approach for custom models
         for &token_id in token_ids {
@@ -1002,7 +999,7 @@ impl EmbeddingManager {
             }
             EmbeddingStrategy::Transformer(model_type) => {
                 let config = EmbeddingConfig {
-                    model_name: format!("{:?}", model_type),
+                    model_name: format!("{model_type:?}"),
                     dimensions: match model_type {
                         TransformerModelType::DistilBERT => 384, // DistilBERT is smaller
                         _ => 768,                                // Most BERT variants
@@ -1432,7 +1429,7 @@ impl OpenAIEmbeddingGenerator {
 
         let response = self
             .client
-            .post(&format!("{}/embeddings", self.openai_config.base_url))
+            .post(format!("{}/embeddings", self.openai_config.base_url))
             .header(
                 "Authorization",
                 format!("Bearer {}", self.openai_config.api_key),
@@ -1492,20 +1489,21 @@ impl OpenAIEmbeddingGenerator {
             let hash = content.content_hash();
 
             // Check if cached entry exists and is valid
-            let cached_vector = if let Ok(mut cache) = self.request_cache.lock() {
-                if let Some(cached) = cache.get(&hash) {
-                    let is_valid = cached.cached_at.elapsed().unwrap_or_default()
-                        < Duration::from_secs(self.openai_config.cache_ttl_seconds);
-                    if is_valid {
-                        Some(cached.vector.clone())
+            let cached_vector = match self.request_cache.lock() {
+                Ok(mut cache) => {
+                    if let Some(cached) = cache.get(&hash) {
+                        let is_valid = cached.cached_at.elapsed().unwrap_or_default()
+                            < Duration::from_secs(self.openai_config.cache_ttl_seconds);
+                        if is_valid {
+                            Some(cached.vector.clone())
+                        } else {
+                            None
+                        }
                     } else {
                         None
                     }
-                } else {
-                    None
                 }
-            } else {
-                None
+                _ => None,
             };
 
             if let Some(result) = cached_vector {
@@ -1622,19 +1620,17 @@ impl OpenAIEmbeddingGenerator {
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, Option<usize>) {
-        if let Ok(cache) = self.request_cache.lock() {
-            (cache.len(), Some(cache.cap().into()))
-        } else {
-            (0, None)
+        match self.request_cache.lock() {
+            Ok(cache) => (cache.len(), Some(cache.cap().into())),
+            _ => (0, None),
         }
     }
 
     /// Get total cache cost
     pub fn get_cache_cost(&self) -> f64 {
-        if let Ok(cache) = self.request_cache.lock() {
-            cache.iter().map(|(_, cached)| cached.cost_usd).sum()
-        } else {
-            0.0
+        match self.request_cache.lock() {
+            Ok(cache) => cache.iter().map(|(_, cached)| cached.cost_usd).sum(),
+            _ => 0.0,
         }
     }
 
@@ -1741,6 +1737,91 @@ impl AsAny for OpenAIEmbeddingGenerator {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+}
+
+/// Mock embedding generator for testing
+#[cfg(test)]
+pub struct MockEmbeddingGenerator {
+    config: EmbeddingConfig,
+}
+
+#[cfg(test)]
+impl Default for MockEmbeddingGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+impl MockEmbeddingGenerator {
+    pub fn new() -> Self {
+        Self {
+            config: EmbeddingConfig {
+                dimensions: 128,
+                ..Default::default()
+            },
+        }
+    }
+
+    pub fn with_dimensions(dimensions: usize) -> Self {
+        Self {
+            config: EmbeddingConfig {
+                dimensions,
+                ..Default::default()
+            },
+        }
+    }
+}
+
+#[cfg(test)]
+impl AsAny for MockEmbeddingGenerator {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+#[cfg(test)]
+impl EmbeddingGenerator for MockEmbeddingGenerator {
+    fn generate(&self, content: &EmbeddableContent) -> Result<crate::Vector> {
+        let text = content.to_text();
+
+        // Generate deterministic mock embedding based on content hash
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let mut embedding = Vec::with_capacity(self.config.dimensions);
+        let mut seed = hash;
+
+        for _ in 0..self.config.dimensions {
+            // Simple LCG for deterministic values
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let value = (seed as f64 / u64::MAX as f64) as f32;
+            embedding.push(value * 2.0 - 1.0); // Range [-1, 1]
+        }
+
+        // Normalize to unit vector
+        let magnitude: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if magnitude > 0.0 {
+            for value in &mut embedding {
+                *value /= magnitude;
+            }
+        }
+
+        Ok(crate::Vector::new(embedding))
+    }
+
+    fn dimensions(&self) -> usize {
+        self.config.dimensions
+    }
+
+    fn config(&self) -> &EmbeddingConfig {
+        &self.config
     }
 }
 
@@ -2044,83 +2125,5 @@ mod tests {
 
         // RoBERTa should be slightly larger than BERT due to larger vocabulary
         assert!(roberta_size > bert_size);
-    }
-}
-
-/// Mock embedding generator for testing
-#[cfg(test)]
-pub struct MockEmbeddingGenerator {
-    config: EmbeddingConfig,
-}
-
-#[cfg(test)]
-impl MockEmbeddingGenerator {
-    pub fn new() -> Self {
-        Self {
-            config: EmbeddingConfig {
-                dimensions: 128,
-                ..Default::default()
-            },
-        }
-    }
-
-    pub fn with_dimensions(dimensions: usize) -> Self {
-        Self {
-            config: EmbeddingConfig {
-                dimensions,
-                ..Default::default()
-            },
-        }
-    }
-}
-
-#[cfg(test)]
-impl AsAny for MockEmbeddingGenerator {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
-}
-
-#[cfg(test)]
-impl EmbeddingGenerator for MockEmbeddingGenerator {
-    fn generate(&self, content: &EmbeddableContent) -> Result<crate::Vector> {
-        let text = content.to_text();
-
-        // Generate deterministic mock embedding based on content hash
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        text.hash(&mut hasher);
-        let hash = hasher.finish();
-
-        let mut embedding = Vec::with_capacity(self.config.dimensions);
-        let mut seed = hash;
-
-        for _ in 0..self.config.dimensions {
-            // Simple LCG for deterministic values
-            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
-            let value = (seed as f64 / u64::MAX as f64) as f32;
-            embedding.push(value * 2.0 - 1.0); // Range [-1, 1]
-        }
-
-        // Normalize to unit vector
-        let magnitude: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
-        if magnitude > 0.0 {
-            for value in &mut embedding {
-                *value /= magnitude;
-            }
-        }
-
-        Ok(crate::Vector::new(embedding))
-    }
-
-    fn dimensions(&self) -> usize {
-        self.config.dimensions
-    }
-
-    fn config(&self) -> &EmbeddingConfig {
-        &self.config
     }
 }

@@ -115,6 +115,12 @@ pub struct QuantumCode {
     pub stabilizers: Vec<String>,
 }
 
+impl Default for QuantumConsciousnessState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumConsciousnessState {
     /// Create a new quantum consciousness state
     pub fn new() -> Self {
@@ -191,7 +197,7 @@ impl QuantumConsciousnessState {
         // Apply Schrödinger evolution
         for (_, phase) in self.consciousness_superposition.state_phases.iter_mut() {
             *phase += time_delta * fastrand::f64() * 0.1; // Simplified Hamiltonian evolution
-            *phase = *phase % (2.0 * PI);
+            *phase %= 2.0 * PI;
         }
 
         // Apply decoherence
@@ -308,7 +314,7 @@ impl QuantumConsciousnessState {
             .insert(pattern_a.to_string(), pattern_b.to_string());
         self.pattern_entanglement
             .entanglement_strength
-            .insert(pattern_a.to_string(), strength.max(0.0).min(1.0));
+            .insert(pattern_a.to_string(), strength.clamp(0.0, 1.0));
 
         // Calculate correlation coefficient
         let correlation = strength * (2.0 * fastrand::f64() - 1.0);
@@ -394,7 +400,7 @@ impl QuantumConsciousnessState {
             let deviation = (amplitude - expected_amplitude).abs();
 
             if deviation > 0.1 {
-                syndrome.push_str(&format!("{:?}_", state));
+                syndrome.push_str(&format!("{state:?}_"));
             }
         }
 

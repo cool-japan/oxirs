@@ -1,7 +1,7 @@
 //! GPU-accelerated vector index implementations
 
 use super::{GpuAccelerator, GpuConfig, GpuMemoryPool, GpuPerformanceStats};
-use crate::{similarity::SimilarityMetric, Vector, VectorData, VectorPrecision};
+use crate::{similarity::SimilarityMetric, Vector, VectorData};
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use std::collections::HashMap;
@@ -115,7 +115,6 @@ impl GpuVectorIndex {
         let mut results: Vec<(usize, f32)> = similarities
             .into_iter()
             .enumerate()
-            .map(|(idx, sim)| (idx, sim))
             .collect();
 
         // Sort by similarity (descending for similarity, ascending for distance)
@@ -195,7 +194,7 @@ impl crate::VectorIndex for GpuVectorIndex {
                 // Find URI by index (reverse lookup)
                 self.uri_map
                     .iter()
-                    .find(|(_, &idx)| idx == index)
+                    .find(|&(_, &idx)| idx == index)
                     .map(|(uri, _)| (uri.clone(), score))
             })
             .collect())
@@ -214,7 +213,7 @@ impl crate::VectorIndex for GpuVectorIndex {
             .filter_map(|(index, score)| {
                 self.uri_map
                     .iter()
-                    .find(|(_, &idx)| idx == index)
+                    .find(|&(_, &idx)| idx == index)
                     .map(|(uri, _)| (uri.clone(), score))
             })
             .collect())
@@ -289,7 +288,7 @@ impl AdvancedGpuVectorIndex {
             used_by_index: pool_stats.used_memory,
             vector_count: self.base_index.len(),
             dimension: self.base_index.dimension(),
-            memory_per_vector: if self.base_index.len() > 0 {
+            memory_per_vector: if !self.base_index.is_empty() {
                 pool_stats.used_memory / self.base_index.len()
             } else {
                 0

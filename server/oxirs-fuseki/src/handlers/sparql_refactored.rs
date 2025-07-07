@@ -27,22 +27,149 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tracing::{info, instrument};
 
-#[derive(Debug, Deserialize)]
-struct TestUpdateParams {
-    update: String,
+// Import the functions we need from the core module
+use crate::handlers::sparql::core::{
+    execute_sparql_query, execute_sparql_update, QueryContext, SparqlQueryParams,
+    SparqlUpdateParams,
+};
+
+/// Main SPARQL query endpoint for GET requests
+pub async fn query_handler_get(
+    Query(params): Query<SparqlQueryParams>,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    user: Option<AuthUser>,
+) -> impl IntoResponse {
+    // Delegate to the SPARQL query handler
+    crate::handlers::sparql::core::sparql_query(
+        Query(params),
+        State(state),
+        headers,
+        user,
+    )
+    .await
 }
 
-/// Main SPARQL query endpoint with enhanced features
-pub async fn query_handler(
-    Query(_params): Query<SparqlQueryParams>,
-    State(_state): State<AppState>,
+/// Main SPARQL query endpoint for POST requests
+pub async fn query_handler_post(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    user: Option<AuthUser>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    "Query endpoint works"
+    // Check content type and handle body accordingly
+    let content_type = headers
+        .get("content-type")
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or("");
+    
+    tracing::debug!("POST /sparql request with content-type: {}", content_type);
+
+    let params = if content_type.contains("application/x-www-form-urlencoded") {
+        // Parse form data manually from body
+        let body_str = String::from_utf8_lossy(&body);
+        let mut query = None;
+        let mut default_graph_uri = None;
+        let mut named_graph_uri = None;
+        
+        for part in body_str.split('&') {
+            if let Some((key, value)) = part.split_once('=') {
+                let decoded_value = urlencoding::decode(value).unwrap_or_default().to_string();
+                match key {
+                    "query" => query = Some(decoded_value),
+                    "default-graph-uri" => {
+                        default_graph_uri = Some(vec![decoded_value]);
+                    }
+                    "named-graph-uri" => {
+                        named_graph_uri = Some(vec![decoded_value]);
+                    }
+                    _ => {}
+                }
+            }
+        }
+        
+        SparqlQueryParams {
+            query,
+            default_graph_uri,
+            named_graph_uri,
+            timeout: None,
+            format: None,
+        }
+    } else if content_type.contains("application/sparql-query") {
+        // Direct SPARQL query in body
+        let query_string = String::from_utf8_lossy(&body).to_string();
+        SparqlQueryParams {
+            query: Some(query_string),
+            default_graph_uri: None,
+            named_graph_uri: None,
+            timeout: None,
+            format: None,
+        }
+    } else {
+        // Invalid content type - return error
+        tracing::debug!("Invalid content type detected: {}", content_type);
+        return FusekiError::bad_request(format!(
+            "Unsupported content type: {}. Expected 'application/sparql-query' or 'application/x-www-form-urlencoded'",
+            content_type
+        )).into_response();
+    };
+
+    // Delegate to the SPARQL query handler
+    crate::handlers::sparql::core::sparql_query(
+        Query(params),
+        State(state),
+        headers,
+        user,
+    )
+    .await
+    .into_response()
+}
+
+/// Main SPARQL query endpoint (backwards compatibility)
+pub async fn query_handler(
+    Query(params): Query<SparqlQueryParams>,
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+    user: Option<AuthUser>,
+) -> impl IntoResponse {
+    // For backwards compatibility, delegate directly to sparql_query
+    crate::handlers::sparql::core::sparql_query(
+        Query(params),
+        State(state),
+        headers,
+        user,
+    )
+    .await
 }
 
 /// Main SPARQL update endpoint with enhanced features
-pub async fn update_handler(State(_state): State<AppState>) -> impl IntoResponse {
-    "Update endpoint works"
+pub async fn update_handler(
+    State(state): State<Arc<AppState>>,
+    Form(params): Form<SparqlUpdateParams>,
+) -> impl IntoResponse {
+    use axum::Json;
+    use std::sync::Arc;
+
+    // Create query context
+    let context = QueryContext::default();
+
+    // Execute update
+    match execute_sparql_update(&params.update, context, &state).await {
+        Ok(result) => Json(serde_json::json!({
+            "success": true,
+            "message": "Update executed successfully",
+            "modified_count": result.affected_triples.unwrap_or(0)
+        }))
+        .into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({
+                "error": "update_execution_failed",
+                "message": e.to_string()
+            })),
+        )
+            .into_response(),
+    }
 }
 
 /// Enhanced SPARQL service with all advanced features
@@ -207,16 +334,68 @@ pub fn contains_aggregation_functions(query: &str) -> bool {
 
 pub fn contains_sparql_star_features(query: &str) -> bool {
     let upper = query.to_uppercase();
-    upper.contains("<<") && upper.contains(">>")
+    
+    // Check for quoted triple syntax
+    let has_quoted_triples = upper.contains("<<") && upper.contains(">>");
+    
+    // Check for SPARQL-star functions
+    let has_star_functions = upper.contains("SUBJECT(") 
+        || upper.contains("PREDICATE(")
+        || upper.contains("OBJECT(")
+        || upper.contains("ISTRIPLE(");
+    
+    // Check for annotation syntax
+    let has_annotations = query.contains("{|") && query.contains("|}");
+    
+    has_quoted_triples || has_star_functions || has_annotations
 }
 
 pub fn contains_property_paths(query: &str) -> bool {
-    let upper = query.to_uppercase();
-    upper.contains("/")
-        || upper.contains("|")
-        || upper.contains("*")
-        || upper.contains("+")
-        || upper.contains("?")
+    // Property path operators in SPARQL: / | + * ?
+    // We need to be careful not to match variables (starting with ?)
+    // Look for typical property path patterns
+
+    // Simple pattern detection without regex for performance
+    let chars: Vec<char> = query.chars().collect();
+    for i in 0..chars.len() {
+        match chars[i] {
+            // Property path sequence: prop1/prop2
+            '/' => {
+                // Check if it's not a URI scheme (like http://)
+                if i > 0
+                    && chars[i - 1].is_alphanumeric()
+                    && i + 1 < chars.len()
+                    && chars[i + 1].is_alphanumeric()
+                {
+                    return true;
+                }
+            }
+            // Property path alternative: prop1|prop2
+            '|' => {
+                if i > 0
+                    && chars[i - 1].is_alphanumeric()
+                    && i + 1 < chars.len()
+                    && chars[i + 1].is_alphanumeric()
+                {
+                    return true;
+                }
+            }
+            // One or more path: prop+
+            '+' => {
+                if i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == ':') {
+                    return true;
+                }
+            }
+            // Zero or more path: prop*
+            '*' => {
+                if i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == ':') {
+                    return true;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
 }
 
 pub fn contains_subqueries(query: &str) -> bool {

@@ -149,6 +149,12 @@ pub struct ShaclVocabulary {
     pub sparql_constraint_component: NamedNode,
 }
 
+impl Default for ShaclVocabulary {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShaclVocabulary {
     pub fn new() -> Self {
         Self {
@@ -320,7 +326,7 @@ impl ShaclVocabulary {
 
 /// Helper function to create a SHACL named node
 fn named_node(local_name: &str) -> NamedNode {
-    NamedNode::new(format!("{}{}", SHACL_NS, local_name)).expect("Invalid SHACL IRI")
+    NamedNode::new(format!("{SHACL_NS}{local_name}")).expect("Invalid SHACL IRI")
 }
 
 /// Standard SHACL prefixes for use in SPARQL queries
@@ -411,8 +417,7 @@ impl IriResolver {
         }
 
         Err(ShaclError::ShapeParsing(format!(
-            "Invalid IRI: '{}' - not absolute, not a valid prefixed name, and no base IRI set",
-            iri
+            "Invalid IRI: '{iri}' - not absolute, not a valid prefixed name, and no base IRI set"
         )))
     }
 
@@ -426,8 +431,7 @@ impl IriResolver {
         // Basic IRI validation - check for invalid characters
         if iri.contains(' ') || iri.contains('\t') || iri.contains('\n') || iri.contains('\r') {
             return Err(ShaclError::ShapeParsing(format!(
-                "Invalid IRI '{}': contains whitespace characters",
-                iri
+                "Invalid IRI '{iri}': contains whitespace characters"
             )));
         }
 
@@ -436,8 +440,7 @@ impl IriResolver {
         for invalid_char in &invalid_chars {
             if iri.contains(*invalid_char) {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Invalid IRI '{}': contains invalid character '{}'",
-                    iri, invalid_char
+                    "Invalid IRI '{iri}': contains invalid character '{invalid_char}'"
                 )));
             }
         }
@@ -454,24 +457,21 @@ impl IriResolver {
             // Check if prefix is known
             if !self.prefixes.contains_key(prefix) {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Unknown prefix '{}' in CURIE '{}'",
-                    prefix, curie
+                    "Unknown prefix '{prefix}' in CURIE '{curie}'"
                 )));
             }
 
             // Validate local part doesn't contain invalid characters
             if local_part.contains(' ') || local_part.contains('\t') || local_part.contains('\n') {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Invalid local part in CURIE '{}': contains whitespace",
-                    curie
+                    "Invalid local part in CURIE '{curie}': contains whitespace"
                 )));
             }
 
             Ok(())
         } else {
             Err(ShaclError::ShapeParsing(format!(
-                "Invalid CURIE format: '{}'",
-                curie
+                "Invalid CURIE format: '{curie}'"
             )))
         }
     }
@@ -481,8 +481,7 @@ impl IriResolver {
         // Basic validation for relative IRIs
         if iri.contains(' ') || iri.contains('\t') || iri.contains('\n') || iri.contains('\r') {
             return Err(ShaclError::ShapeParsing(format!(
-                "Invalid relative IRI '{}': contains whitespace characters",
-                iri
+                "Invalid relative IRI '{iri}': contains whitespace characters"
             )));
         }
         Ok(())
@@ -507,8 +506,7 @@ impl IriResolver {
         }
 
         Err(ShaclError::ShapeParsing(format!(
-            "Cannot expand IRI '{}': not absolute, not a valid prefixed name, and no base IRI set",
-            iri
+            "Cannot expand IRI '{iri}': not absolute, not a valid prefixed name, and no base IRI set"
         )))
     }
 
@@ -521,14 +519,13 @@ impl IriResolver {
             let local_part = &curie[colon_pos + 1..];
 
             if let Some(namespace) = self.prefixes.get(prefix) {
-                let expanded = format!("{}{}", namespace, local_part);
+                let expanded = format!("{namespace}{local_part}");
                 return Ok(expanded);
             }
         }
 
         Err(ShaclError::ShapeParsing(format!(
-            "Cannot expand prefixed name '{}'",
-            curie
+            "Cannot expand prefixed name '{curie}'"
         )))
     }
 
@@ -540,9 +537,9 @@ impl IriResolver {
         // Simple resolution - just concatenate for now
         // A full implementation would handle RFC 3986 resolution
         let resolved = if base_iri.ends_with('/') || base_iri.ends_with('#') {
-            format!("{}{}", base_iri, relative_iri)
+            format!("{base_iri}{relative_iri}")
         } else {
-            format!("{}/{}", base_iri, relative_iri)
+            format!("{base_iri}/{relative_iri}")
         };
 
         Ok(resolved)
@@ -562,10 +559,7 @@ impl IriResolver {
     pub fn create_named_node(&self, iri: &str) -> Result<NamedNode> {
         let expanded_iri = self.expand_iri(iri)?;
         NamedNode::new(expanded_iri).map_err(|e| {
-            ShaclError::ShapeParsing(format!(
-                "Failed to create NamedNode from IRI '{}': {}",
-                iri, e
-            ))
+            ShaclError::ShapeParsing(format!("Failed to create NamedNode from IRI '{iri}': {e}"))
         })
     }
 }

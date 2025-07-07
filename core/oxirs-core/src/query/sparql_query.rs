@@ -134,22 +134,10 @@ impl Query {
     pub fn with_base_iri(mut self, base_iri: impl Into<String>) -> Self {
         let base_iri = Some(base_iri.into());
         match &mut self {
-            Query::Select {
-                base_iri: ref mut iri,
-                ..
-            }
-            | Query::Construct {
-                base_iri: ref mut iri,
-                ..
-            }
-            | Query::Describe {
-                base_iri: ref mut iri,
-                ..
-            }
-            | Query::Ask {
-                base_iri: ref mut iri,
-                ..
-            } => *iri = base_iri,
+            Query::Select { base_iri: iri, .. }
+            | Query::Construct { base_iri: iri, .. }
+            | Query::Describe { base_iri: iri, .. }
+            | Query::Ask { base_iri: iri, .. } => *iri = base_iri,
         }
         self
     }
@@ -158,22 +146,10 @@ impl Query {
     pub fn with_dataset(mut self, dataset: QueryDataset) -> Self {
         let dataset = Some(dataset);
         match &mut self {
-            Query::Select {
-                dataset: ref mut ds,
-                ..
-            }
-            | Query::Construct {
-                dataset: ref mut ds,
-                ..
-            }
-            | Query::Describe {
-                dataset: ref mut ds,
-                ..
-            }
-            | Query::Ask {
-                dataset: ref mut ds,
-                ..
-            } => *ds = dataset,
+            Query::Select { dataset: ds, .. }
+            | Query::Construct { dataset: ds, .. }
+            | Query::Describe { dataset: ds, .. }
+            | Query::Ask { dataset: ds, .. } => *ds = dataset,
         }
         self
     }
@@ -322,7 +298,7 @@ impl fmt::Display for Query {
                 }
                 f.write_str("CONSTRUCT { ")?;
                 for triple in template {
-                    write!(f, "{} . ", triple)?;
+                    write!(f, "{triple} . ")?;
                 }
                 f.write_str("}")?;
                 if let Some(dataset) = dataset {

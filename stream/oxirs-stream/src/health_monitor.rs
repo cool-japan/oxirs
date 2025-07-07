@@ -372,7 +372,7 @@ impl<T: PooledConnection> HealthMonitor<T> {
                     HealthStatus::Dead => {
                         let _ = self.event_sender.send(HealthEvent::ConnectionDead {
                             connection_id: connection_id.to_string(),
-                            reason: format!("{} consecutive failures", consecutive_failures), // Use copied value
+                            reason: format!("{consecutive_failures} consecutive failures"), // Use copied value
                         });
                     }
                     HealthStatus::Healthy if old_status == HealthStatus::Unhealthy => {
@@ -724,8 +724,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_dead_connection_detection() {
-        let mut config = HealthCheckConfig::default();
-        config.failure_threshold = 2;
+        let config = HealthCheckConfig { failure_threshold: 2, ..Default::default() };
 
         let monitor = HealthMonitor::<TestConnection>::new(config);
         monitor

@@ -4,16 +4,19 @@
 //! data at any point in time, temporal analytics, and historical state reconstruction.
 
 use crate::event_sourcing::{EventStoreTrait, EventStream};
-use crate::{EventMetadata, StreamEvent};
+use crate::StreamEvent;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
+
+/// Type alias for custom filter functions to reduce complexity
+pub type CustomFilterFn = Box<dyn Fn(&StreamEvent) -> bool + Send + Sync>;
 
 /// Time-travel query configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,6 +88,12 @@ pub struct TemporalQuery {
     pub limit: Option<usize>,
 }
 
+impl Default for TemporalQuery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemporalQuery {
     /// Create a new temporal query
     pub fn new() -> Self {
@@ -137,12 +146,13 @@ impl TemporalQuery {
 }
 
 /// Temporal filter for events
+#[derive(Default)]
 pub struct TemporalFilter {
     pub event_types: Option<HashSet<String>>,
     pub aggregate_ids: Option<HashSet<String>>,
     pub user_ids: Option<HashSet<String>>,
     pub sources: Option<HashSet<String>>,
-    pub custom_filters: Vec<Box<dyn Fn(&StreamEvent) -> bool + Send + Sync>>,
+    pub custom_filters: Vec<CustomFilterFn>,
 }
 
 impl std::fmt::Debug for TemporalFilter {
@@ -168,18 +178,6 @@ impl Clone for TemporalFilter {
             user_ids: self.user_ids.clone(),
             sources: self.sources.clone(),
             custom_filters: Vec::new(), // Cannot clone function pointers
-        }
-    }
-}
-
-impl Default for TemporalFilter {
-    fn default() -> Self {
-        Self {
-            event_types: None,
-            aggregate_ids: None,
-            user_ids: None,
-            sources: None,
-            custom_filters: Vec::new(),
         }
     }
 }
@@ -320,14 +318,11 @@ impl TemporalIndex {
         let timestamp = metadata.timestamp;
         let event_id = uuid::Uuid::parse_str(&metadata.event_id).unwrap_or(uuid::Uuid::new_v4());
         let aggregate_id = metadata.context.clone().unwrap_or_default();
-        let event_type = format!("{:?}", event);
+        let event_type = format!("{event:?}");
         let version = metadata.version.parse::<u64>().unwrap_or(0);
 
         // Time index
-        self.time_index
-            .entry(timestamp)
-            .or_insert_with(Vec::new)
-            .push(event_id);
+        self.time_index.entry(timestamp).or_default().push(event_id);
 
         // Version index
         self.version_index.insert(
@@ -344,17 +339,17 @@ impl TemporalIndex {
         // Aggregate index
         self.aggregate_index
             .entry(aggregate_id)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(timestamp)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(event_id);
 
         // Type index
         self.type_index
             .entry(event_type)
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .entry(timestamp)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(event_id);
     }
 
@@ -414,7 +409,7 @@ impl TimeTravelEngine {
         event_store: Arc<dyn EventStoreTrait>,
         event_stream: Arc<dyn EventStream>,
     ) -> Self {
-        let engine = Self {
+        Self {
             query_semaphore: Arc::new(tokio::sync::Semaphore::new(config.max_concurrent_queries)),
             temporal_index: Arc::new(RwLock::new(TemporalIndex::new())),
             query_cache: Arc::new(RwLock::new(QueryCache::new(config.clone()))),
@@ -422,9 +417,7 @@ impl TimeTravelEngine {
             event_store,
             event_stream,
             metrics: Arc::new(RwLock::new(TimeTravelMetrics::default())),
-        };
-
-        engine
+        }
     }
 
     /// Start the time-travel engine
@@ -756,8 +749,8 @@ impl TimeTravelEngine {
     async fn find_events_without_index(
         &self,
         _query: &TemporalQuery,
-        start_time: DateTime<Utc>,
-        end_time: DateTime<Utc>,
+        _start_time: DateTime<Utc>,
+        _end_time: DateTime<Utc>,
     ) -> Result<Vec<Uuid>> {
         // This would scan all events in the time range
         // For now, return empty set as this requires event store iteration
@@ -766,7 +759,7 @@ impl TimeTravelEngine {
     }
 
     /// Load a specific event by ID
-    async fn load_event(&self, event_id: Uuid) -> Result<Option<StreamEvent>> {
+    async fn load_event(&self, _event_id: Uuid) -> Result<Option<StreamEvent>> {
         // This would load from event store by ID
         // For now, return None as this requires event store lookup by ID
         Ok(None)
@@ -775,7 +768,7 @@ impl TimeTravelEngine {
     /// Check if event matches filter
     fn matches_filter(&self, event: &StreamEvent, filter: &TemporalFilter) -> bool {
         let metadata = event.metadata();
-        let event_type_str = format!("{:?}", event);
+        let event_type_str = format!("{event:?}");
 
         if let Some(ref event_types) = filter.event_types {
             if !event_types.contains(&event_type_str) {
@@ -820,7 +813,7 @@ impl TimeTravelEngine {
     }
 
     /// Apply ordering to events
-    fn apply_ordering(&self, events: &mut Vec<StreamEvent>, ordering: &TemporalOrdering) {
+    fn apply_ordering(&self, events: &mut [StreamEvent], ordering: &TemporalOrdering) {
         match ordering {
             TemporalOrdering::TimeAscending => {
                 events.sort_by(|a, b| a.metadata().timestamp.cmp(&b.metadata().timestamp));
@@ -851,13 +844,8 @@ impl TimeTravelEngine {
             TemporalProjection::FullEvents => events,
             TemporalProjection::MetadataOnly => {
                 // Return events with only metadata (simplified data)
+                // For metadata-only projection, we keep the event but could filter data in a real implementation
                 events
-                    .into_iter()
-                    .map(|event| {
-                        // For metadata-only projection, we keep the event but could filter data in a real implementation
-                        event
-                    })
-                    .collect()
             }
             TemporalProjection::Fields(_fields) => {
                 // Field projection would be implemented here
@@ -875,8 +863,8 @@ impl TimeTravelEngine {
     fn generate_result_metadata(
         &self,
         events: &[StreamEvent],
-        start_time: DateTime<Utc>,
-        end_time: DateTime<Utc>,
+        _start_time: DateTime<Utc>,
+        _end_time: DateTime<Utc>,
     ) -> TemporalResultMetadata {
         let total_events = events.len();
 
@@ -940,7 +928,7 @@ impl TimeTravelEngine {
                 let mut count_by_type = HashMap::new();
                 for event in events {
                     if field == "event_type" {
-                        let event_type = format!("{:?}", event);
+                        let event_type = format!("{event:?}");
                         *count_by_type.entry(event_type).or_insert(0) += 1;
                     }
                     // Other fields would be handled here
@@ -995,7 +983,7 @@ impl TimeTravelEngine {
 
             let mut event_types = HashMap::new();
             for event in &events_in_window {
-                let event_type = format!("{:?}", event);
+                let event_type = format!("{event:?}");
                 *event_types.entry(event_type).or_insert(0) += 1;
             }
 
@@ -1042,7 +1030,7 @@ impl TimeTravelEngine {
         };
 
         // Calculate average event size
-        let total_size: usize = events.iter().map(|e| format!("{:?}", e).len()).sum();
+        let total_size: usize = events.iter().map(|e| format!("{e:?}").len()).sum();
         let average_event_size = if !events.is_empty() {
             total_size as f64 / events.len() as f64
         } else {
@@ -1207,8 +1195,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_temporal_filter() {
-        let mut filter = TemporalFilter::default();
-        filter.event_types = Some(std::iter::once("TestEvent".to_string()).collect());
+        let filter = TemporalFilter {
+            event_types: Some(std::iter::once("TestEvent".to_string()).collect()),
+            ..Default::default()
+        };
 
         assert!(filter.event_types.is_some());
         assert!(filter.event_types.as_ref().unwrap().contains("TestEvent"));

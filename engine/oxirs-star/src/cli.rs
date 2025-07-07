@@ -4,18 +4,17 @@
 //! including validation, conversion, analysis, and debugging tools.
 
 use std::fs;
-use std::io::{self, BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Instant;
 
 use anyhow::{anyhow, Context, Result};
 use chrono;
 use clap::{Arg, ArgMatches, Command};
 use serde_json;
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
-use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
-use crate::parser::{ParseError, StarFormat, StarParser};
+use crate::model::{StarTerm, StarTriple};
+use crate::parser::{StarFormat, StarParser};
 use crate::profiling::{ProfilingConfig, StarProfiler};
 use crate::serializer::{SerializationOptions, StarSerializer};
 use crate::store::StarStore;
@@ -25,12 +24,9 @@ use crate::troubleshooting::{
 };
 use crate::{StarConfig, StarError, StarResult};
 
-// Import query types from oxirs-core
-use oxirs_core::query::{QueryExecutor, QueryResults};
-
 /// CLI application for RDF-star tools
 pub struct StarCli {
-    config: StarConfig,
+    _config: StarConfig,
     verbose: bool,
     quiet: bool,
 }
@@ -39,7 +35,7 @@ impl StarCli {
     /// Create a new CLI application
     pub fn new() -> Self {
         Self {
-            config: StarConfig::default(),
+            _config: StarConfig::default(),
             verbose: false,
             quiet: false,
         }
@@ -417,7 +413,7 @@ impl StarCli {
         let duration = start_time.elapsed();
 
         if !self.quiet {
-            println!("Validation completed in {:?}", duration);
+            println!("Validation completed in {duration:?}");
             self.print_validation_result(&validation_result);
         }
 
@@ -447,7 +443,7 @@ impl StarCli {
         let duration = start_time.elapsed();
 
         if !self.quiet {
-            println!("Conversion completed in {:?}", duration);
+            println!("Conversion completed in {duration:?}");
         }
 
         Ok(())
@@ -466,7 +462,7 @@ impl StarCli {
         let duration = start_time.elapsed();
 
         if !self.quiet {
-            println!("Analysis completed in {:?}", duration);
+            println!("Analysis completed in {duration:?}");
         }
 
         if json_output {
@@ -474,15 +470,13 @@ impl StarCli {
             if let Some(output_path) = output_path {
                 fs::write(output_path, json_output)?;
             } else {
-                println!("{}", json_output);
+                println!("{json_output}");
             }
+        } else if let Some(output_path) = output_path {
+            let report = self.format_analysis_report(&analysis);
+            fs::write(output_path, report)?;
         } else {
-            if let Some(output_path) = output_path {
-                let report = self.format_analysis_report(&analysis);
-                fs::write(output_path, report)?;
-            } else {
-                self.print_analysis_result(&analysis);
-            }
+            self.print_analysis_result(&analysis);
         }
 
         Ok(())
@@ -550,11 +544,11 @@ impl StarCli {
         strict: bool,
     ) -> Result<ValidationResult> {
         let content =
-            fs::read_to_string(path).with_context(|| format!("Failed to read file: {}", path))?;
+            fs::read_to_string(path).with_context(|| format!("Failed to read file: {path}"))?;
 
         let detected_format = if let Some(fmt) = format {
             fmt.parse::<StarFormat>()
-                .map_err(|_| anyhow::anyhow!("Invalid format: {}", fmt))?
+                .map_err(|_| anyhow::anyhow!("Invalid format: {fmt}"))?
         } else {
             self.detect_format(path, &content)?
         };
@@ -565,7 +559,7 @@ impl StarCli {
         }
 
         let mut errors = Vec::new();
-        let mut warnings = Vec::new();
+        let warnings = Vec::new();
         let mut triple_count = 0;
         let mut quoted_triple_count = 0;
 
@@ -582,7 +576,7 @@ impl StarCli {
                 }
             }
             Err(e) => {
-                errors.push(format!("Parse error: {}", e));
+                errors.push(format!("Parse error: {e}"));
             }
         }
 
@@ -590,11 +584,11 @@ impl StarCli {
         let parse_errors = parser.get_errors();
         for error in parse_errors {
             match &error {
-                StarError::ParseError { message, line, .. } => {
-                    if let Some(line_num) = line {
-                        errors.push(format!("Line {}: {}", line_num, message));
+                StarError::ParseError(details) => {
+                    if let Some(line_num) = details.line {
+                        errors.push(format!("Line {line_num}: {}", details.message));
                     } else {
-                        errors.push(message.clone());
+                        errors.push(details.message.clone());
                     }
                 }
                 _ => {
@@ -633,11 +627,11 @@ impl StarCli {
         let to_format = to.parse::<StarFormat>()?;
 
         // Parse input
-        let mut parser = StarParser::new();
+        let parser = StarParser::new();
         let graph = parser.parse_str(&content, from_format)?;
 
         // Serialize output
-        let mut serializer = StarSerializer::new();
+        let serializer = StarSerializer::new();
         let mut options = SerializationOptions::default();
         if pretty {
             options.pretty_print = true;
@@ -654,7 +648,7 @@ impl StarCli {
         let content = fs::read_to_string(path)?;
         let format = self.detect_format(path, &content)?;
 
-        let mut parser = StarParser::new();
+        let parser = StarParser::new();
         let graph = parser.parse_str(&content, format)?;
 
         let mut analysis = AnalysisResult {
@@ -686,12 +680,12 @@ impl StarCli {
         let content = fs::read_to_string(path)?;
         let lines: Vec<&str> = content.lines().collect();
 
-        println!("Debugging file: {}", path);
+        println!("Debugging file: {path}");
         println!("Total lines: {}", lines.len());
         println!();
 
         let format = self.detect_format(path, &content)?;
-        println!("Detected format: {:?}", format);
+        println!("Detected format: {format:?}");
         println!();
 
         let mut parser = StarParser::new();
@@ -710,22 +704,17 @@ impl StarCli {
                 println!("Error {}:", i + 1);
 
                 match error {
-                    StarError::ParseError {
-                        message,
-                        line,
-                        column,
-                        ..
-                    } => {
-                        if let (Some(line), Some(column)) = (line, column) {
-                            println!("  Line {}, Column {}: {}", line, column, message);
+                    StarError::ParseError(details) => {
+                        if let (Some(line), Some(column)) = (details.line, details.column) {
+                            println!("  Line {line}, Column {column}: {}", details.message);
 
                             // Show context lines
                             let start_line = line.saturating_sub(context_lines + 1);
-                            let end_line = (*line + context_lines).min(lines.len());
+                            let end_line = (line + context_lines).min(lines.len());
 
                             println!("  Context lines:");
                             for line_num in start_line..end_line {
-                                let marker = if line_num + 1 == *line { ">>>" } else { "   " };
+                                let marker = if line_num + 1 == line { ">>>" } else { "   " };
                                 println!(
                                     "  {} {:4}: {}",
                                     marker,
@@ -734,11 +723,11 @@ impl StarCli {
                                 );
                             }
                         } else {
-                            println!("  {}", message);
+                            println!("  {}", details.message);
                         }
                     }
                     _ => {
-                        println!("  {}", error);
+                        println!("  {error}");
                     }
                 }
 
@@ -749,7 +738,7 @@ impl StarCli {
         // If target line specified, show analysis for that line
         if let Some(line_num) = target_line {
             if line_num > 0 && line_num <= lines.len() {
-                println!("Analysis for line {}:", line_num);
+                println!("Analysis for line {line_num}:");
                 println!("  Content: {}", lines[line_num - 1]);
                 // Additional line-specific analysis could be added here
             }
@@ -774,13 +763,12 @@ impl StarCli {
         let file_size = content.len();
 
         println!(
-            "Benchmarking {} ({} bytes, {} iterations + {} warmup)",
-            path, file_size, iterations, warmup
+            "Benchmarking {path} ({file_size} bytes, {iterations} iterations + {warmup} warmup)"
         );
 
         // Warmup runs
         for _ in 0..warmup {
-            let mut parser = StarParser::new();
+            let parser = StarParser::new();
             let _ = parser.parse_str(&content, format);
         }
 
@@ -791,14 +779,14 @@ impl StarCli {
         for _ in 0..iterations {
             // Parse benchmark
             let start = Instant::now();
-            let mut parser = StarParser::new();
+            let parser = StarParser::new();
             let graph = parser.parse_str(&content, format)?;
             let parse_duration = start.elapsed();
             parse_times.push(parse_duration);
 
             // Serialize benchmark
             let start = Instant::now();
-            let mut serializer = StarSerializer::new();
+            let serializer = StarSerializer::new();
             let _output =
                 serializer.serialize_graph(&graph, format, &SerializationOptions::default())?;
             let serialize_duration = start.elapsed();
@@ -814,17 +802,22 @@ impl StarCli {
     }
 
     /// Execute SPARQL-star query
-    fn execute_query(&self, data_path: &str, query_input: &str, output_format: &str) -> Result<()> {
+    fn execute_query(
+        &self,
+        data_path: &str,
+        query_input: &str,
+        _output_format: &str,
+    ) -> Result<()> {
         // Load data
         let content = fs::read_to_string(data_path)?;
         let format = self.detect_format(data_path, &content)?;
 
-        let mut parser = StarParser::new();
+        let parser = StarParser::new();
         let graph = parser.parse_str(&content, format)?;
 
-        let mut store = StarStore::new();
+        let store = StarStore::new();
         for triple in &graph {
-            store.insert(&triple)?;
+            store.insert(triple)?;
         }
 
         // Load query
@@ -844,10 +837,10 @@ impl StarCli {
         let duration = start_time.elapsed();
 
         if !self.quiet {
-            println!("Query executed in {:?}", duration);
+            println!("Query executed in {duration:?}");
         }
 
-        println!("Query: {}", query_text);
+        println!("Query: {query_text}");
         println!("Store contains {} triples", store.len());
 
         Ok(())
@@ -929,11 +922,7 @@ impl StarCli {
     }
 
     fn extract_namespace(&self, iri: &str) -> Option<String> {
-        if let Some(pos) = iri.rfind(['#', '/']) {
-            Some(iri[..=pos].to_string())
-        } else {
-            None
-        }
+        iri.rfind(['#', '/']).map(|pos| iri[..=pos].to_string())
     }
 
     fn print_validation_result(&self, result: &ValidationResult) {
@@ -950,14 +939,14 @@ impl StarCli {
         if !result.warnings.is_empty() {
             println!("\nWarnings:");
             for warning in &result.warnings {
-                println!("  ⚠ {}", warning);
+                println!("  ⚠ {warning}");
             }
         }
 
         if !result.errors.is_empty() {
             println!("\nErrors:");
             for error in &result.errors {
-                println!("  ✗ {}", error);
+                println!("  ✗ {error}");
             }
         }
     }
@@ -965,7 +954,7 @@ impl StarCli {
     fn write_validation_report(&self, result: &ValidationResult, path: &str) -> Result<()> {
         let report = serde_json::to_string_pretty(result)?;
         fs::write(path, report)?;
-        println!("Validation report written to: {}", path);
+        println!("Validation report written to: {path}");
         Ok(())
     }
 
@@ -984,7 +973,7 @@ impl StarCli {
         if !analysis.namespaces.is_empty() {
             println!("\nNamespaces found:");
             for ns in &analysis.namespaces {
-                println!("  {}", ns);
+                println!("  {ns}");
             }
         }
     }
@@ -1047,10 +1036,10 @@ impl StarCli {
         let error_input = matches.get_one::<String>("error").unwrap();
         let output_path = matches.get_one::<String>("output");
 
-        let guide = TroubleshootingGuide::new();
+        let _guide = TroubleshootingGuide::new();
         // Create a default StarConfig for diagnostics
         let config = crate::StarConfig::default();
-        let analyzer = DiagnosticAnalyzer::new(config);
+        let _analyzer = DiagnosticAnalyzer::new(config);
 
         info!("Analyzing error: {}", error_input);
 
@@ -1067,7 +1056,7 @@ impl StarCli {
         };
 
         // Simple recommendations placeholder
-        let recommendations = vec![
+        let recommendations = [
             "Check your input format".to_string(),
             "Verify the file syntax".to_string(),
             "Try a simpler query".to_string(),
@@ -1093,16 +1082,16 @@ impl StarCli {
             diagnosis.description,
             recommendations
                 .iter()
-                .map(|r| format!("• {}\n", r))
+                .map(|r| format!("• {r}\n"))
                 .collect::<String>(),
             health_report
         );
 
         if let Some(output) = output_path {
             fs::write(output, &report)?;
-            println!("Troubleshooting report written to: {}", output);
+            println!("Troubleshooting report written to: {output}");
         } else {
-            println!("{}", report);
+            println!("{report}");
         }
 
         Ok(())
@@ -1124,14 +1113,14 @@ impl StarCli {
             .map_err(|_| anyhow!("Unsupported source format: {}", source_format))?;
 
         let config = crate::StarConfig::default();
-        let mut assistant = MigrationAssistant::new(migration_format.clone(), config);
+        let assistant = MigrationAssistant::new(migration_format.clone(), config);
 
         // Analyze source data
         let analysis = assistant.analyze_source(source_file, migration_format.clone())?;
 
         if !self.quiet {
             println!("Source Analysis:");
-            println!("  Format: {:?}", migration_format);
+            println!("  Format: {migration_format:?}");
             println!("  Triples: {}", analysis.total_triples);
             println!(
                 "  Estimated quoted triples after migration: {}",
@@ -1149,7 +1138,7 @@ impl StarCli {
             for (i, step) in plan.steps.iter().enumerate() {
                 println!("{}. {}", i + 1, step.description);
                 if let Some(command) = &step.command {
-                    println!("   Command: {}", command);
+                    println!("   Command: {command}");
                 }
             }
             return Ok(());
@@ -1161,7 +1150,7 @@ impl StarCli {
         let duration = start_time.elapsed();
 
         if !self.quiet {
-            println!("Migration completed in {:?}", duration);
+            println!("Migration completed in {duration:?}");
             println!("Results:");
             println!("  Executed steps: {}", result.executed_steps.len());
             println!("  Output file: {}", result.output_file);
@@ -1171,7 +1160,7 @@ impl StarCli {
             if !result.warnings.is_empty() {
                 println!("\nWarnings:");
                 for warning in &result.warnings {
-                    println!("  ⚠ {}", warning);
+                    println!("  ⚠ {warning}");
                 }
             }
         }
@@ -1197,7 +1186,6 @@ impl StarCli {
         let diagnostic_result = analyzer.run_comprehensive_analysis(input_file)?;
         let duration = start_time.elapsed();
 
-        let mut issues_found = 0;
         let mut fixes_applied = 0;
 
         // System health check
@@ -1265,29 +1253,29 @@ impl StarCli {
             fixes_applied = fixes.len();
 
             if !self.quiet && fixes_applied > 0 {
-                println!("Applied {} automatic fixes:", fixes_applied);
+                println!("Applied {fixes_applied} automatic fixes:");
                 for fix in &fixes {
-                    println!("  ✓ {}", fix);
+                    println!("  ✓ {fix}");
                 }
             }
         }
 
-        issues_found = diagnostic_result.issues_found.len();
+        let issues_found = diagnostic_result.issues_found.len();
 
         if let Some(report_file) = report_path {
             fs::write(report_file, &report)?;
-            println!("Diagnostic report written to: {}", report_file);
+            println!("Diagnostic report written to: {report_file}");
         } else if !self.quiet {
-            println!("{}", report);
+            println!("{report}");
         }
 
         // Summary
         if !self.quiet {
             println!("\nDiagnostic Summary:");
             println!("===================");
-            println!("Issues found: {}", issues_found);
+            println!("Issues found: {issues_found}");
             if auto_fix {
-                println!("Fixes applied: {}", fixes_applied);
+                println!("Fixes applied: {fixes_applied}");
             }
             println!(
                 "Overall health: {}",
@@ -1307,6 +1295,7 @@ impl StarCli {
     }
 
     /// Run system diagnostics
+    #[allow(clippy::result_large_err)]
     fn run_system_diagnostics(&self) -> StarResult<SystemHealth> {
         Ok(SystemHealth {
             memory_available: true,
@@ -1318,9 +1307,10 @@ impl StarCli {
     }
 
     /// Run performance analysis on a file
+    #[allow(clippy::result_large_err)]
     fn run_performance_analysis(&self, input_file: &str) -> StarResult<PerformanceAnalysis> {
         let metadata = fs::metadata(input_file).map_err(|e| {
-            crate::StarError::parse_error(format!("Failed to read file metadata: {}", e))
+            crate::StarError::parse_error(format!("Failed to read file metadata: {e}"))
         })?;
 
         let file_size = metadata.len();
@@ -1361,7 +1351,7 @@ impl StarCli {
 
         // Read the input file
         let input_data = fs::read_to_string(input_path)
-            .with_context(|| format!("Failed to read input file: {}", input_path))?;
+            .with_context(|| format!("Failed to read input file: {input_path}"))?;
         let input_size = input_data.len();
 
         // Detect format
@@ -1372,7 +1362,7 @@ impl StarCli {
             for i in 0..iterations {
                 info!("Profiling parsing iteration {}/{}", i + 1, iterations);
                 profiler.profile_parsing(format, input_size, || {
-                    let mut parser = StarParser::new();
+                    let parser = StarParser::new();
                     let _ = parser.parse_str(&input_data, format);
                 });
             }
@@ -1381,7 +1371,7 @@ impl StarCli {
         // Profile serialization operations
         if operations == "all" || operations.contains("serialize") {
             // Parse once to get data for serialization
-            let mut parser = StarParser::new();
+            let parser = StarParser::new();
             if let Ok(graph) = parser.parse_str(&input_data, format) {
                 let triple_count = graph.len();
                 for i in 0..iterations {
@@ -1412,7 +1402,7 @@ impl StarCli {
         if let Some(report_path) = report_path {
             let report_json = serde_json::to_string_pretty(&report)?;
             fs::write(report_path, report_json)
-                .with_context(|| format!("Failed to write profiling report: {}", report_path))?;
+                .with_context(|| format!("Failed to write profiling report: {report_path}"))?;
             info!("Detailed profiling report saved to: {}", report_path);
         }
 
@@ -1429,7 +1419,7 @@ impl StarCli {
 
         // Load profiling data
         let data_content = fs::read_to_string(data_path)
-            .with_context(|| format!("Failed to read profiling data: {}", data_path))?;
+            .with_context(|| format!("Failed to read profiling data: {data_path}"))?;
 
         let mut profiler = StarProfiler::new();
         profiler
@@ -1443,30 +1433,30 @@ impl StarCli {
                 let report_json = serde_json::to_string_pretty(&report)?;
                 if let Some(output_path) = output_path {
                     fs::write(output_path, report_json)
-                        .with_context(|| format!("Failed to write JSON report: {}", output_path))?;
+                        .with_context(|| format!("Failed to write JSON report: {output_path}"))?;
                     info!("JSON report saved to: {}", output_path);
                 } else {
-                    println!("{}", report_json);
+                    println!("{report_json}");
                 }
             }
             "html" => {
                 let html_report = self.generate_html_report(&report)?;
                 if let Some(output_path) = output_path {
                     fs::write(output_path, html_report)
-                        .with_context(|| format!("Failed to write HTML report: {}", output_path))?;
+                        .with_context(|| format!("Failed to write HTML report: {output_path}"))?;
                     info!("HTML report saved to: {}", output_path);
                 } else {
-                    println!("{}", html_report);
+                    println!("{html_report}");
                 }
             }
-            "text" | _ => {
+            _ => {
                 let text_report = self.generate_text_report(&report)?;
                 if let Some(output_path) = output_path {
                     fs::write(output_path, text_report)
-                        .with_context(|| format!("Failed to write text report: {}", output_path))?;
+                        .with_context(|| format!("Failed to write text report: {output_path}"))?;
                     info!("Text report saved to: {}", output_path);
                 } else {
-                    println!("{}", text_report);
+                    println!("{text_report}");
                 }
             }
         }
@@ -1482,7 +1472,7 @@ impl StarCli {
 
         println!("\n=== Operation Statistics ===");
         for (operation, stats) in &report.operation_stats {
-            println!("{}:", operation);
+            println!("{operation}:");
             println!("  Count: {}", stats.count);
             println!("  Average: {:?}", stats.average_duration);
             println!("  Min: {:?}", stats.min_duration);
@@ -1501,7 +1491,7 @@ impl StarCli {
                     bottleneck.operation, bottleneck.time_percentage, bottleneck.description
                 );
                 for suggestion in &bottleneck.suggestions {
-                    println!("  → {}", suggestion);
+                    println!("  → {suggestion}");
                 }
             }
         }
@@ -1520,7 +1510,7 @@ impl StarCli {
             if !memory.potential_leaks.is_empty() {
                 println!("Potential Issues:");
                 for leak in &memory.potential_leaks {
-                    println!("  ⚠ {}", leak);
+                    println!("  ⚠ {leak}");
                 }
             }
         }
@@ -1571,7 +1561,7 @@ impl StarCli {
         text.push_str("Operation Statistics\n");
         text.push_str("-------------------\n");
         for (operation, stats) in &report.operation_stats {
-            text.push_str(&format!("{}:\n", operation));
+            text.push_str(&format!("{operation}:\n"));
             text.push_str(&format!("  Count: {}\n", stats.count));
             text.push_str(&format!("  Average: {:?}\n", stats.average_duration));
             text.push_str(&format!("  Min: {:?}\n", stats.min_duration));
@@ -1588,9 +1578,9 @@ impl StarCli {
                     bottleneck.operation, bottleneck.time_percentage, bottleneck.description
                 ));
                 for suggestion in &bottleneck.suggestions {
-                    text.push_str(&format!("  → {}\n", suggestion));
+                    text.push_str(&format!("  → {suggestion}\n"));
                 }
-                text.push_str("\n");
+                text.push('\n');
             }
         }
 

@@ -7,11 +7,10 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::consumer::{ConsumerConfig, ConsumerGroup};
-use crate::error::{StreamError, StreamResult};
-use crate::event::{StreamEvent, StreamEventType};
-use crate::producer::ProducerConfig;
-use crate::types::{EventMetadata, Offset, PartitionId, StreamPosition, TopicName};
+use crate::consumer::ConsumerGroup;
+use crate::error::StreamResult;
+use crate::event::StreamEvent;
+use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
 
 /// Common trait for all streaming backends
 #[async_trait]

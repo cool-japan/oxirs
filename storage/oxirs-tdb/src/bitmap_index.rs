@@ -731,12 +731,10 @@ where
 
     /// Remove a bitmap
     pub fn remove_bitmap(&mut self, key: &K) -> bool {
-        let mut removed = false;
-
-        {
+        let removed = {
             let mut bitmaps = self.bitmaps.write().unwrap();
-            removed = bitmaps.remove(key).is_some();
-        }
+            bitmaps.remove(key).is_some()
+        };
 
         {
             let mut cache = self.cache.write().unwrap();

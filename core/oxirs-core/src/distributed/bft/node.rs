@@ -368,17 +368,18 @@ impl BftNode {
 
         // Update prepare count
         let should_commit = {
-            if let Some(mut state) = self.states.get_mut(&(view, sequence)) {
-                if state.digest == digest {
-                    state.prepares.insert(node_id);
+            match self.states.get_mut(&(view, sequence)) {
+                Some(mut state) => {
+                    if state.digest == digest {
+                        state.prepares.insert(node_id);
 
-                    // Check if we have 2f prepares (including our own)
-                    state.prepares.len() >= 2 * self.config.fault_tolerance
-                } else {
-                    false
+                        // Check if we have 2f prepares (including our own)
+                        state.prepares.len() >= 2 * self.config.fault_tolerance
+                    } else {
+                        false
+                    }
                 }
-            } else {
-                false
+                _ => false,
             }
         };
 
@@ -430,17 +431,18 @@ impl BftNode {
 
         // Update commit count and execute if ready
         let should_execute = {
-            if let Some(mut state) = self.states.get_mut(&(view, sequence)) {
-                if state.digest == digest {
-                    state.commits.insert(node_id);
+            match self.states.get_mut(&(view, sequence)) {
+                Some(mut state) => {
+                    if state.digest == digest {
+                        state.commits.insert(node_id);
 
-                    // Check if we have 2f+1 commits (including our own)
-                    state.commits.len() > 2 * self.config.fault_tolerance
-                } else {
-                    false
+                        // Check if we have 2f+1 commits (including our own)
+                        state.commits.len() > 2 * self.config.fault_tolerance
+                    } else {
+                        false
+                    }
                 }
-            } else {
-                false
+                _ => false,
             }
         };
 
@@ -455,36 +457,34 @@ impl BftNode {
     /// Execute operation after consensus
     async fn execute_operation(&self, view: ViewNumber, sequence: SequenceNumber) -> Result<()> {
         if let Some(state) = self.states.get(&(view, sequence)) {
-            if let Some(request) = &state.request {
-                if let BftMessage::Request {
-                    operation,
-                    client_id,
-                    ..
-                } = request
-                {
-                    // Execute operation on state machine
-                    let result = {
-                        let mut sm = self.state_machine.write();
-                        sm.execute(operation.clone())?
-                    };
+            if let Some(BftMessage::Request {
+                operation,
+                client_id,
+                ..
+            }) = &state.request
+            {
+                // Execute operation on state machine
+                let result = {
+                    let mut sm = self.state_machine.write();
+                    sm.execute(operation.clone())?
+                };
 
-                    // Send reply to client
-                    let reply = BftMessage::Reply {
-                        view,
-                        sequence,
-                        client_id: client_id.clone(),
-                        result,
-                        timestamp: std::time::SystemTime::now(),
-                    };
+                // Send reply to client
+                let reply = BftMessage::Reply {
+                    view,
+                    sequence,
+                    client_id: client_id.clone(),
+                    result,
+                    timestamp: std::time::SystemTime::now(),
+                };
 
-                    // In a real implementation, we would send this to the client
-                    // For now, we'll just log it
-                    self.log_message(reply);
+                // In a real implementation, we would send this to the client
+                // For now, we'll just log it
+                self.log_message(reply);
 
-                    // Mark as replied
-                    if let Some(mut state) = self.states.get_mut(&(view, sequence)) {
-                        state.replied = true;
-                    }
+                // Mark as replied
+                if let Some(mut state) = self.states.get_mut(&(view, sequence)) {
+                    state.replied = true;
                 }
             }
         }

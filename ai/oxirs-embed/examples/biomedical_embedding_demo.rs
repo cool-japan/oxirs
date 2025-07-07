@@ -7,7 +7,7 @@
 use anyhow::Result;
 use oxirs_embed::{
     BiomedicalEmbedding, BiomedicalEmbeddingConfig, BiomedicalEntityType, BiomedicalRelationType,
-    EmbeddingModel, NamedNode, SpecializedTextEmbedding, SpecializedTextModel, Triple,
+    EmbeddingModel, NamedNode, SpecializedTextEmbedding, Triple,
 };
 
 #[tokio::main]
@@ -50,8 +50,7 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
     println!("🔬 Adding sample biomedical knowledge...");
 
     // Gene-disease associations
-    let gene_disease_triples = vec![
-        (
+    let gene_disease_triples = [(
             "http://bio.org/gene/BRCA1",
             "http://bio.org/causes",
             "http://bio.org/disease/breast_cancer",
@@ -70,8 +69,7 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
             "http://bio.org/gene/HTT",
             "http://bio.org/causes",
             "http://bio.org/disease/huntington",
-        ),
-    ];
+        )];
 
     // Drug-target interactions
     let drug_target_triples = vec![
@@ -209,7 +207,7 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
         for (disease, score) in predictions {
             println!(
                 "   {} → {:.3}",
-                disease.split('/').last().unwrap_or(&disease),
+                disease.split('/').next_back().unwrap_or(&disease),
                 score
             );
         }
@@ -221,7 +219,7 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
         for (target, score) in predictions {
             println!(
                 "   {} → {:.3}",
-                target.split('/').last().unwrap_or(&target),
+                target.split('/').next_back().unwrap_or(&target),
                 score
             );
         }
@@ -233,7 +231,7 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
         for (entity, score) in predictions {
             println!(
                 "   {} → {:.3}",
-                entity.split('/').last().unwrap_or(&entity),
+                entity.split('/').next_back().unwrap_or(&entity),
                 score
             );
         }
@@ -272,7 +270,7 @@ async fn demo_specialized_text_embeddings() -> Result<()> {
     ];
 
     for (model_name, mut model) in models {
-        println!("🤖 Testing {} Model:", model_name);
+        println!("🤖 Testing {model_name} Model:");
 
         for text in &test_texts {
             // Generate embedding for the text
@@ -435,8 +433,8 @@ async fn demo_drug_discovery() -> Result<()> {
     println!("\n💗 Cardiovascular Drug Targets:");
     if let Ok(targets) = discovery_model.predict_drug_targets("http://drugs.org/atorvastatin", 5) {
         for (target, score) in targets {
-            let protein_name = target.split('/').last().unwrap_or(&target);
-            println!("   {} → {:.3}", protein_name, score);
+            let protein_name = target.split('/').next_back().unwrap_or(&target);
+            println!("   {protein_name} → {score:.3}");
         }
     }
 
@@ -446,8 +444,8 @@ async fn demo_drug_discovery() -> Result<()> {
         discovery_model.predict_subjects("http://bio.org/targets", "http://proteins.org/HER2", 3)
     {
         for (drug, score) in drugs {
-            let drug_name = drug.split('/').last().unwrap_or(&drug);
-            println!("   {} → {:.3}", drug_name, score);
+            let drug_name = drug.split('/').next_back().unwrap_or(&drug);
+            println!("   {drug_name} → {score:.3}");
         }
     }
 
@@ -469,7 +467,7 @@ fn display_entity_info(entity_iri: &str) -> String {
     if let Some(entity_type) = BiomedicalEntityType::from_iri(entity_iri) {
         format!(
             "{} ({})",
-            entity_iri.split('/').last().unwrap_or(entity_iri),
+            entity_iri.split('/').next_back().unwrap_or(entity_iri),
             match entity_type {
                 BiomedicalEntityType::Gene => "Gene",
                 BiomedicalEntityType::Protein => "Protein",
@@ -483,7 +481,7 @@ fn display_entity_info(entity_iri: &str) -> String {
     } else {
         entity_iri
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or(entity_iri)
             .to_string()
     }
@@ -494,7 +492,7 @@ fn display_relation_info(relation_iri: &str) -> String {
     if let Some(relation_type) = BiomedicalRelationType::from_iri(relation_iri) {
         format!(
             "{} ({})",
-            relation_iri.split('/').last().unwrap_or(relation_iri),
+            relation_iri.split('/').next_back().unwrap_or(relation_iri),
             match relation_type {
                 BiomedicalRelationType::CausesDisease => "Causes Disease",
                 BiomedicalRelationType::TargetsProtein => "Targets Protein",
@@ -506,7 +504,7 @@ fn display_relation_info(relation_iri: &str) -> String {
     } else {
         relation_iri
             .split('/')
-            .last()
+            .next_back()
             .unwrap_or(relation_iri)
             .to_string()
     }

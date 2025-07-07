@@ -7,7 +7,7 @@
 //! - Scalability testing
 //! - Comparative benchmarks
 
-use crate::{similarity::SimilarityMetric, Vector, VectorIndex, VectorStore};
+use crate::{Vector, VectorIndex};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -281,7 +281,7 @@ impl PerformanceProfiler {
         {
             use std::process::Command;
             if let Ok(output) = Command::new("ps")
-                .args(&["-o", "rss=", "-p"])
+                .args(["-o", "rss=", "-p"])
                 .arg(std::process::id().to_string())
                 .output()
             {
@@ -362,8 +362,7 @@ impl BenchmarkSuite {
         let dataset = BenchmarkDataset {
             name: name.to_string(),
             description: format!(
-                "Random dataset with {} vectors of {} dimensions",
-                size, dimensions
+                "Random dataset with {size} vectors of {dimensions} dimensions"
             ),
             train_vectors,
             query_vectors,
@@ -438,8 +437,7 @@ impl BenchmarkSuite {
         let dataset = BenchmarkDataset {
             name: name.to_string(),
             description: format!(
-                "Clustered dataset with {} vectors in {} clusters of {} dimensions",
-                size, num_clusters, dimensions
+                "Clustered dataset with {size} vectors in {num_clusters} clusters of {dimensions} dimensions"
             ),
             train_vectors,
             query_vectors,
@@ -500,8 +498,7 @@ impl BenchmarkSuite {
         let dataset = BenchmarkDataset {
             name: name.to_string(),
             description: format!(
-                "Uniform dataset with {} vectors of {} dimensions",
-                size, dimensions
+                "Uniform dataset with {size} vectors of {dimensions} dimensions"
             ),
             train_vectors,
             query_vectors,
@@ -540,10 +537,10 @@ impl BenchmarkSuite {
         for dataset in &self.datasets {
             for (alg_idx, algorithm) in self.algorithms.iter().enumerate() {
                 let test_case = BenchmarkTestCase {
-                    name: format!("{}_{}", dataset.name, alg_idx),
-                    description: format!("Benchmark {} on {}", alg_idx, dataset.name),
+                    name: format!("{}_{alg_idx}", dataset.name),
+                    description: format!("Benchmark {alg_idx} on {}", dataset.name),
                     dataset: dataset.name.clone(),
-                    algorithm: format!("algorithm_{}", alg_idx),
+                    algorithm: format!("algorithm_{alg_idx}"),
                     parameters: HashMap::new(),
                     query_count: dataset.query_vectors.len(),
                     k: 10,
@@ -575,7 +572,7 @@ impl BenchmarkSuite {
         let mut index = self.create_index_copy(algorithm)?;
 
         for (i, vector) in dataset.train_vectors.iter().enumerate() {
-            index.insert(format!("vec_{}", i), vector.clone())?;
+            index.insert(format!("vec_{i}"), vector.clone())?;
         }
         profiler.checkpoint("index_build_end");
 
@@ -829,7 +826,7 @@ impl BenchmarkSuite {
         {
             use std::process::Command;
             if let Ok(output) = Command::new("sysctl")
-                .args(&["-n", "machdep.cpu.brand_string"])
+                .args(["-n", "machdep.cpu.brand_string"])
                 .output()
             {
                 if let Ok(cpu_name) = String::from_utf8(output.stdout) {
@@ -860,7 +857,7 @@ impl BenchmarkSuite {
         #[cfg(target_os = "macos")]
         {
             use std::process::Command;
-            if let Ok(output) = Command::new("sysctl").args(&["-n", "hw.memsize"]).output() {
+            if let Ok(output) = Command::new("sysctl").args(["-n", "hw.memsize"]).output() {
                 if let Ok(mem_str) = String::from_utf8(output.stdout) {
                     if let Ok(bytes) = mem_str.trim().parse::<u64>() {
                         return bytes as f64 / 1024.0 / 1024.0 / 1024.0; // Convert bytes to GB
@@ -1059,7 +1056,7 @@ impl BenchmarkSuite {
             let mut index = Box::new(crate::MemoryVectorIndex::new());
 
             for (i, vector) in subset_vectors.iter().enumerate() {
-                index.insert(format!("vec_{}", i), vector.clone())?;
+                index.insert(format!("vec_{i}"), vector.clone())?;
             }
             let build_time = build_start.elapsed();
 
@@ -1229,7 +1226,7 @@ mod tests {
         let mut suite = BenchmarkSuite::new(config);
 
         suite.generate_synthetic_datasets().unwrap();
-        assert!(suite.datasets.len() > 0);
+        assert!(!suite.datasets.is_empty());
 
         for dataset in &suite.datasets {
             assert!(!dataset.train_vectors.is_empty());

@@ -8,7 +8,7 @@
 
 use crate::{
     processing::{Watermark, WindowType},
-    EventMetadata, StreamEvent,
+    StreamEvent,
 };
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
@@ -17,7 +17,6 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, warn};
-use uuid::Uuid;
 
 /// Type of join operation
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
@@ -554,7 +553,7 @@ pub mod patterns {
                 for (k, v) in right_event.metadata().properties.iter() {
                     metadata
                         .properties
-                        .insert(format!("right_{}", k), v.clone());
+                        .insert(format!("right_{k}"), v.clone());
                 }
                 metadata
                     .properties
@@ -589,8 +588,7 @@ pub mod patterns {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::StreamEvent;
-    use std::sync::Arc;
+    use crate::{event::EventMetadata, StreamEvent};
 
     fn create_test_event(subject: &str, timestamp: DateTime<Utc>) -> StreamEvent {
         StreamEvent::TripleAdded {

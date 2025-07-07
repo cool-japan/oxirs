@@ -706,10 +706,10 @@ impl NeuralPatternLearner {
 
             for mut row in predictions.rows_mut() {
                 for elem in row.iter_mut() {
-                    if rng.gen::<f64>() < dropout_rate {
+                    if rng.r#gen::<f64>() < dropout_rate {
                         *elem = 0.0;
                     } else {
-                        *elem = rng.gen::<f64>() / (1.0 - dropout_rate); // Scale to maintain expected value
+                        *elem = rng.r#gen::<f64>() / (1.0 - dropout_rate); // Scale to maintain expected value
                     }
                 }
             }

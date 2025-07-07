@@ -4,9 +4,13 @@
 //! and adaptive reoptimization based on execution metrics.
 
 use anyhow::Result;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::collections::VecDeque;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use super::query_analysis::{QueryComplexity, QueryInfo};
@@ -17,6 +21,9 @@ use super::types::*;
 pub struct PerformanceOptimizer {
     historical_performance: HistoricalPerformance,
     optimization_config: OptimizationConfig,
+    query_frequency_tracker: Arc<RwLock<QueryFrequencyTracker>>,
+    predictive_analytics: PredictiveAnalytics,
+    pattern_extractor: QueryPatternExtractor,
 }
 
 impl PerformanceOptimizer {
@@ -30,6 +37,9 @@ impl PerformanceOptimizer {
                 avg_response_times: HashMap::new(),
             },
             optimization_config: OptimizationConfig::default(),
+            query_frequency_tracker: Arc::new(RwLock::new(QueryFrequencyTracker::new())),
+            predictive_analytics: PredictiveAnalytics::new(),
+            pattern_extractor: QueryPatternExtractor::new(),
         }
     }
 
@@ -43,6 +53,9 @@ impl PerformanceOptimizer {
                 avg_response_times: HashMap::new(),
             },
             optimization_config: config,
+            query_frequency_tracker: Arc::new(RwLock::new(QueryFrequencyTracker::new())),
+            predictive_analytics: PredictiveAnalytics::new(),
+            pattern_extractor: QueryPatternExtractor::new(),
         }
     }
 
@@ -103,8 +116,7 @@ impl PerformanceOptimizer {
 
     /// Extract query pattern for performance tracking
     fn extract_query_pattern(&self, context: &ExecutionContext) -> String {
-        // Simplified pattern extraction - in reality, would normalize query structure
-        format!("query_{}", context.query_id.len() % 10)
+        self.pattern_extractor.extract_pattern(&context.query_id)
     }
 
     /// Generate optimization suggestions based on metrics
@@ -119,7 +131,7 @@ impl PerformanceOptimizer {
         let slowest_service = metrics
             .service_times
             .iter()
-            .max_by_key(|(_, &time)| time.as_millis());
+            .max_by_key(|&(_, &time)| time.as_millis());
 
         if let Some((service_id, time)) = slowest_service {
             if time.as_millis() > self.optimization_config.slow_service_threshold_ms {
@@ -223,13 +235,22 @@ impl PerformanceOptimizer {
     }
 
     /// Update historical performance data
-    pub fn update_performance_history(
+    pub async fn update_performance_history(
         &mut self,
         metrics: &ExecutionMetrics,
         context: &ExecutionContext,
     ) {
         let query_pattern = self.extract_query_pattern(context);
         let execution_time = metrics.total_execution_time.as_millis() as f64;
+
+        // Update query frequency tracker
+        if let Ok(mut tracker) = self.query_frequency_tracker.try_write() {
+            tracker.record_query(&query_pattern);
+        }
+
+        // Update predictive analytics
+        self.predictive_analytics
+            .add_data_point(execution_time, metrics);
 
         // Update query pattern performance
         let current_avg = self
@@ -278,10 +299,22 @@ impl PerformanceOptimizer {
             memory_limit_mb: None,
         };
 
+        // Use predictive analytics to get performance predictions
+        let predicted_execution_time = self.predictive_analytics.predict_execution_time(
+            query_info.complexity.estimated_cost,
+            query_info.complexity.field_count as f64,
+        );
+
         // Recommend parallel execution for complex queries
-        if query_info.complexity.field_count > 5 {
+        if query_info.complexity.field_count > 5 || predicted_execution_time > 5000.0 {
             recommendations.preferred_execution_strategy = ExecutionStrategy::Parallel;
-            recommendations.suggested_timeout = Duration::from_secs(60);
+            recommendations.suggested_timeout =
+                Duration::from_millis(predicted_execution_time as u64 + 10000);
+        }
+
+        // Use adaptive strategy for medium complexity queries
+        if query_info.complexity.field_count > 2 && query_info.complexity.estimated_cost > 50.0 {
+            recommendations.preferred_execution_strategy = ExecutionStrategy::Adaptive;
         }
 
         // Recommend caching for frequently accessed queries
@@ -295,13 +328,25 @@ impl PerformanceOptimizer {
             recommendations.batch_size_limit = Some(1000);
         }
 
+        // Adjust recommendations based on predicted performance
+        if predicted_execution_time > 10000.0 {
+            recommendations.memory_limit_mb = Some(1024);
+            recommendations.batch_size_limit = Some(500);
+        }
+
         recommendations
     }
 
     /// Check if query is frequently accessed
-    fn is_frequently_accessed_query(&self, _query_info: &QueryInfo) -> bool {
-        // Simplified check - in reality, would track query frequency
-        false
+    fn is_frequently_accessed_query(&self, query_info: &QueryInfo) -> bool {
+        // Use operation type as a proxy for query pattern since query_text is not available
+        let pattern = format!("{:?}_operation", query_info.operation_type);
+
+        // Check if this pattern appears frequently in our tracker
+        match self.query_frequency_tracker.try_read() {
+            Ok(tracker) => tracker.is_frequent_pattern(&pattern),
+            _ => false,
+        }
     }
 
     /// Analyze join performance
@@ -461,6 +506,18 @@ impl Default for PerformanceOptimizer {
     }
 }
 
+impl Default for QueryFrequencyTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for PredictiveAnalytics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Configuration for performance optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptimizationConfig {
@@ -554,4 +611,303 @@ pub struct OptimizationReport {
     pub bottlenecks: Vec<String>,
     pub recommendations: Vec<String>,
     pub historical_comparison: String,
+}
+
+/// Query frequency tracker for caching decisions
+#[derive(Debug)]
+pub struct QueryFrequencyTracker {
+    pattern_counts: HashMap<String, usize>,
+    recent_queries: VecDeque<String>,
+    max_recent_queries: usize,
+    frequency_threshold: usize,
+}
+
+impl QueryFrequencyTracker {
+    pub fn new() -> Self {
+        Self {
+            pattern_counts: HashMap::new(),
+            recent_queries: VecDeque::new(),
+            max_recent_queries: 1000,
+            frequency_threshold: 5,
+        }
+    }
+
+    pub fn record_query(&mut self, pattern: &str) {
+        // Update pattern count
+        *self.pattern_counts.entry(pattern.to_string()).or_insert(0) += 1;
+
+        // Add to recent queries
+        self.recent_queries.push_back(pattern.to_string());
+        if self.recent_queries.len() > self.max_recent_queries {
+            if let Some(old_pattern) = self.recent_queries.pop_front() {
+                if let Some(count) = self.pattern_counts.get_mut(&old_pattern) {
+                    *count -= 1;
+                    if *count == 0 {
+                        self.pattern_counts.remove(&old_pattern);
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn is_frequent_pattern(&self, pattern: &str) -> bool {
+        self.pattern_counts
+            .get(pattern)
+            .map_or(false, |&count| count >= self.frequency_threshold)
+    }
+
+    pub fn get_pattern_frequency(&self, pattern: &str) -> usize {
+        self.pattern_counts.get(pattern).copied().unwrap_or(0)
+    }
+}
+
+/// Predictive analytics for performance forecasting
+#[derive(Debug)]
+pub struct PredictiveAnalytics {
+    data_points: Vec<PerformanceDataPoint>,
+    max_data_points: usize,
+    linear_model: Option<LinearRegressionModel>,
+}
+
+impl PredictiveAnalytics {
+    pub fn new() -> Self {
+        Self {
+            data_points: Vec::new(),
+            max_data_points: 1000,
+            linear_model: None,
+        }
+    }
+
+    pub fn add_data_point(&mut self, execution_time: f64, metrics: &ExecutionMetrics) {
+        let data_point = PerformanceDataPoint {
+            execution_time,
+            service_count: metrics.service_times.len() as f64,
+            parallel_steps: metrics.parallel_steps_count as f64,
+            result_size: metrics.total_result_size as f64,
+            memory_usage: metrics.peak_memory_usage as f64,
+        };
+
+        self.data_points.push(data_point);
+        if self.data_points.len() > self.max_data_points {
+            self.data_points.remove(0);
+        }
+
+        // Update linear model if we have enough data
+        if self.data_points.len() >= 10 {
+            self.update_linear_model();
+        }
+    }
+
+    pub fn predict_execution_time(&self, estimated_cost: f64, field_count: f64) -> f64 {
+        if let Some(ref model) = self.linear_model {
+            model.predict(estimated_cost, field_count)
+        } else {
+            // Fallback to simple heuristic
+            estimated_cost * 10.0 + field_count * 100.0
+        }
+    }
+
+    fn update_linear_model(&mut self) {
+        // Simple linear regression: execution_time = a * service_count + b * parallel_steps + c
+        let mut model = LinearRegressionModel::new();
+
+        for point in &self.data_points {
+            model.add_training_data(
+                vec![point.service_count, point.parallel_steps],
+                point.execution_time,
+            );
+        }
+
+        model.train();
+        self.linear_model = Some(model);
+    }
+}
+
+/// Performance data point for analytics
+#[derive(Debug, Clone)]
+pub struct PerformanceDataPoint {
+    pub execution_time: f64,
+    pub service_count: f64,
+    pub parallel_steps: f64,
+    pub result_size: f64,
+    pub memory_usage: f64,
+}
+
+/// Simple linear regression model for performance prediction
+#[derive(Debug, Clone)]
+pub struct LinearRegressionModel {
+    coefficients: Vec<f64>,
+    intercept: f64,
+    training_data: Vec<(Vec<f64>, f64)>,
+    is_trained: bool,
+}
+
+impl LinearRegressionModel {
+    pub fn new() -> Self {
+        Self {
+            coefficients: Vec::new(),
+            intercept: 0.0,
+            training_data: Vec::new(),
+            is_trained: false,
+        }
+    }
+
+    pub fn add_training_data(&mut self, features: Vec<f64>, target: f64) {
+        self.training_data.push((features, target));
+    }
+
+    pub fn train(&mut self) {
+        if self.training_data.is_empty() {
+            return;
+        }
+
+        let n = self.training_data.len();
+        let feature_count = self.training_data[0].0.len();
+
+        // Simple least squares regression
+        let mut sum_y = 0.0;
+        let mut sum_x = vec![0.0; feature_count];
+        let mut sum_xx = vec![0.0; feature_count];
+        let mut sum_xy = vec![0.0; feature_count];
+
+        for (features, target) in &self.training_data {
+            sum_y += target;
+            for (i, &feature) in features.iter().enumerate() {
+                sum_x[i] += feature;
+                sum_xx[i] += feature * feature;
+                sum_xy[i] += feature * target;
+            }
+        }
+
+        let n_f = n as f64;
+        self.coefficients = Vec::with_capacity(feature_count);
+
+        for i in 0..feature_count {
+            let coefficient = if sum_xx[i] * n_f - sum_x[i] * sum_x[i] != 0.0 {
+                (sum_xy[i] * n_f - sum_x[i] * sum_y) / (sum_xx[i] * n_f - sum_x[i] * sum_x[i])
+            } else {
+                0.0
+            };
+            self.coefficients.push(coefficient);
+        }
+
+        self.intercept = (sum_y
+            - self
+                .coefficients
+                .iter()
+                .zip(sum_x.iter())
+                .map(|(a, b)| a * b)
+                .sum::<f64>())
+            / n_f;
+        self.is_trained = true;
+    }
+
+    pub fn predict(&self, estimated_cost: f64, field_count: f64) -> f64 {
+        if !self.is_trained || self.coefficients.len() < 2 {
+            return estimated_cost * 10.0 + field_count * 100.0;
+        }
+
+        let features = vec![estimated_cost, field_count];
+        let mut prediction = self.intercept;
+
+        for (i, &coef) in self.coefficients.iter().enumerate() {
+            if i < features.len() {
+                prediction += coef * features[i];
+            }
+        }
+
+        prediction.max(0.0)
+    }
+}
+
+/// Advanced query pattern extractor
+#[derive(Debug)]
+pub struct QueryPatternExtractor {
+    select_regex: Regex,
+    join_regex: Regex,
+    filter_regex: Regex,
+    function_regex: Regex,
+}
+
+impl QueryPatternExtractor {
+    pub fn new() -> Self {
+        Self {
+            select_regex: Regex::new(r"SELECT\s+([^\s]+(?:\s+[^\s]+)*?)\s+WHERE").unwrap(),
+            join_regex: Regex::new(r"\{[^}]*\}\s*\{[^}]*\}").unwrap(),
+            filter_regex: Regex::new(r"FILTER\s*\([^)]+\)").unwrap(),
+            function_regex: Regex::new(r"\b(COUNT|SUM|AVG|MIN|MAX|GROUP_CONCAT)\s*\(").unwrap(),
+        }
+    }
+
+    pub fn extract_pattern(&self, query: &str) -> String {
+        let mut pattern_parts = Vec::new();
+
+        // Normalize query (remove extra whitespace, convert to uppercase)
+        let normalized = query.trim().to_uppercase();
+
+        // Extract query type
+        if normalized.contains("SELECT") {
+            pattern_parts.push("SELECT");
+        } else if normalized.contains("INSERT") {
+            pattern_parts.push("INSERT");
+        } else if normalized.contains("DELETE") {
+            pattern_parts.push("DELETE");
+        } else if normalized.contains("UPDATE") {
+            pattern_parts.push("UPDATE");
+        } else {
+            pattern_parts.push("UNKNOWN");
+        }
+
+        // Check for aggregation functions
+        if self.function_regex.is_match(&normalized) {
+            pattern_parts.push("AGGREGATE");
+        }
+
+        // Check for filters
+        if self.filter_regex.is_match(&normalized) {
+            pattern_parts.push("FILTER");
+        }
+
+        // Check for joins (multiple graph patterns)
+        if self.join_regex.is_match(&normalized) {
+            pattern_parts.push("JOIN");
+        }
+
+        // Check for optional patterns
+        if normalized.contains("OPTIONAL") {
+            pattern_parts.push("OPTIONAL");
+        }
+
+        // Check for union
+        if normalized.contains("UNION") {
+            pattern_parts.push("UNION");
+        }
+
+        // Check for subqueries
+        if normalized.matches("SELECT").count() > 1 {
+            pattern_parts.push("SUBQUERY");
+        }
+
+        // Check for specific predicates that indicate query complexity
+        if normalized.contains("GEO:") || normalized.contains("WGS84:") {
+            pattern_parts.push("GEOSPATIAL");
+        }
+
+        if normalized.contains("TEXT:") || normalized.contains("LUCENE:") {
+            pattern_parts.push("FULLTEXT");
+        }
+
+        // Estimate complexity based on query length and patterns
+        let complexity = if normalized.len() < 100 {
+            "SIMPLE"
+        } else if normalized.len() < 500 {
+            "MEDIUM"
+        } else {
+            "COMPLEX"
+        };
+
+        pattern_parts.push(complexity);
+
+        pattern_parts.join("_")
+    }
 }

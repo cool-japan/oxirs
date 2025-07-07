@@ -1,8 +1,8 @@
-use crate::model::iri::{Iri, IriParseError};
 use crate::model::*;
 use crate::model::{NamedOrBlankNode, NamedOrBlankNodeRef};
 use crate::rdfxml::utils::*;
 use crate::vocab::{rdf, xsd};
+use oxiri::{Iri, IriParseError};
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 use quick_xml::Writer;
 use std::borrow::Cow;

@@ -1,7 +1,7 @@
 //! Index construction algorithms for HNSW
 
 use crate::hnsw::{HnswIndex, Node};
-use crate::{Vector, VectorIndex};
+use crate::Vector;
 use anyhow::Result;
 use std::collections::HashSet;
 
@@ -52,10 +52,9 @@ impl HnswIndex {
         let node2 = nodes.get(node2_id)?;
 
         // Use cosine distance (1 - cosine_similarity) for similarity calculations
-        if let Ok(similarity) = node1.vector.cosine_similarity(&node2.vector) {
-            Some(1.0 - similarity)
-        } else {
-            None
+        match node1.vector.cosine_similarity(&node2.vector) {
+            Ok(similarity) => Some(1.0 - similarity),
+            _ => None,
         }
     }
 

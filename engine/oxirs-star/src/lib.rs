@@ -52,7 +52,7 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let turtle_star = r#"
 //!     @prefix ex: <http://example.org/> .
-//!     
+//!
 //!     << ex:alice ex:age 30 >> ex:certainty 0.9 .
 //!     << ex:alice ex:name "Alice" >> ex:source ex:census2020 .
 //! "#;
@@ -210,6 +210,18 @@ pub use model::*;
 pub use store::StarStore;
 pub use troubleshooting::{DiagnosticAnalyzer, MigrationAssistant, TroubleshootingGuide};
 
+/// Parse error details for RDF-star format
+#[derive(Debug, Error)]
+#[error("Parse error: {message}")]
+pub struct ParseErrorDetails {
+    pub message: String,
+    pub line: Option<usize>,
+    pub column: Option<usize>,
+    pub input_fragment: Option<String>,
+    pub expected: Option<String>,
+    pub suggestion: Option<String>,
+}
+
 /// RDF-star specific error types
 #[derive(Debug, Error)]
 pub enum StarError {
@@ -219,15 +231,8 @@ pub enum StarError {
         context: Option<String>,
         suggestion: Option<String>,
     },
-    #[error("Parse error in RDF-star format: {message}")]
-    ParseError {
-        message: String,
-        line: Option<usize>,
-        column: Option<usize>,
-        input_fragment: Option<String>,
-        expected: Option<String>,
-        suggestion: Option<String>,
-    },
+    #[error("Parse error in RDF-star format: {0}")]
+    ParseError(#[from] Box<ParseErrorDetails>),
     #[error("Serialization error: {message}")]
     SerializationError {
         message: String,
@@ -290,14 +295,14 @@ impl StarError {
 
     /// Create a simple parse error (backward compatibility)
     pub fn parse_error(message: impl Into<String>) -> Self {
-        Self::ParseError {
+        Self::ParseError(Box::new(ParseErrorDetails {
             message: message.into(),
             line: None,
             column: None,
             input_fragment: None,
             expected: None,
             suggestion: None,
-        }
+        }))
     }
 
     /// Create a simple serialization error (backward compatibility)
@@ -366,8 +371,7 @@ impl StarError {
         match self {
             Self::NestingDepthExceeded { max_depth, .. } => {
                 suggestions.push(format!(
-                    "Consider increasing max_nesting_depth beyond {}",
-                    max_depth
+                    "Consider increasing max_nesting_depth beyond {max_depth}"
                 ));
                 suggestions.push("Check for circular references in quoted triples".to_string());
             }
@@ -379,11 +383,10 @@ impl StarError {
                     available_formats.join(", ")
                 ));
             }
-            Self::ConfigurationError { valid_range, .. } => {
-                if let Some(range) = valid_range {
-                    suggestions.push(format!("Valid range: {}", range));
-                }
+            Self::ConfigurationError { valid_range: Some(range), .. } => {
+                suggestions.push(format!("Valid range: {range}"));
             }
+            Self::ConfigurationError { valid_range: None, .. } => {}
             _ => {}
         }
 
@@ -500,8 +503,7 @@ pub fn validate_nesting_depth(term: &StarTerm, max_depth: usize) -> StarResult<(
                 if current_depth >= max_depth {
                     return Err(StarError::InvalidQuotedTriple {
                         message: format!(
-                            "Nesting depth {} exceeds maximum {}",
-                            current_depth, max_depth
+                            "Nesting depth {current_depth} exceeds maximum {max_depth}"
                         ),
                         context: None,
                         suggestion: None,
@@ -696,8 +698,8 @@ pub mod dev_tools {
     }
 
     fn find_max_nesting_depth(content: &str) -> usize {
-        let mut max_depth = 0;
-        let mut current_depth = 0;
+        let mut max_depth: usize = 0;
+        let mut current_depth: i32 = 0;
 
         for ch in content.chars() {
             match ch {
@@ -706,13 +708,11 @@ pub mod dev_tools {
                     current_depth += 1;
                 }
                 '>' => {
-                    if current_depth > 0 {
-                        current_depth -= 1;
-                    }
+                    current_depth = current_depth.saturating_sub(1);
                 }
                 _ => {}
             }
-            max_depth = max_depth.max(current_depth / 2); // Divide by 2 since we count both < and >
+            max_depth = max_depth.max((current_depth / 2).max(0) as usize); // Divide by 2 since we count both < and >
         }
 
         max_depth
@@ -738,25 +738,21 @@ pub mod dev_tools {
                 result.line_errors.insert(
                     line_num,
                     format!(
-                        "Unmatched quoted triple brackets: {} << vs {} >>",
-                        open_count, close_count
+                        "Unmatched quoted triple brackets: {open_count} << vs {close_count} >>"
                     ),
                 );
             }
 
             // Check for missing periods in N-Triples/N-Quads style
-            if result.detected_format == DetectedFormat::NTriplesStar
-                || result.detected_format == DetectedFormat::NQuadsStar
+            if (result.detected_format == DetectedFormat::NTriplesStar
+                || result.detected_format == DetectedFormat::NQuadsStar)
+                && !trimmed.ends_with('.')
+                && !trimmed.starts_with('@')
+                && !trimmed.starts_with("PREFIX")
             {
-                if !trimmed.ends_with('.')
-                    && !trimmed.starts_with('@')
-                    && !trimmed.starts_with("PREFIX")
-                {
-                    result.warnings.push(format!(
-                        "Line {}: Missing period at end of statement",
-                        line_num
-                    ));
-                }
+                result.warnings.push(format!(
+                    "Line {line_num}: Missing period at end of statement"
+                ));
             }
         }
     }
@@ -795,6 +791,12 @@ pub mod dev_tools {
         }
     }
 
+    impl Default for StarProfiler {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     /// Generate a diagnostic report for RDF-star content
     pub fn generate_diagnostic_report(content: &str, config: &StarConfig) -> String {
         let validation = validate_content(content, config);
@@ -830,7 +832,7 @@ pub mod dev_tools {
             sorted_lines.sort_by_key(|(line, _)| *line);
 
             for (line, error) in sorted_lines {
-                report.push_str(&format!("  Line {}: {}\n", line, error));
+                report.push_str(&format!("  Line {line}: {error}\n"));
             }
         }
 

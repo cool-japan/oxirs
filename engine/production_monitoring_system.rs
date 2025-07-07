@@ -1408,7 +1408,7 @@ impl ProductionMonitoringSystem {
     /// Create a new production monitoring system
     pub fn new(config: MonitoringConfig) -> Self {
         let (event_sender, _) = broadcast::channel(10000);
-        
+
         Self {
             config: config.clone(),
             metrics_aggregator: Arc::new(MetricsAggregator::new(MetricsAggregatorConfig::default())),
@@ -1427,21 +1427,21 @@ impl ProductionMonitoringSystem {
         if self.config.enable_realtime_monitoring {
             self.start_metrics_collection().await?;
         }
-        
+
         self.start_alert_monitoring().await?;
         self.start_health_monitoring().await?;
-        
+
         if self.config.enable_sla_monitoring {
             self.start_sla_monitoring().await?;
         }
-        
+
         if self.config.enable_distributed_tracing {
             self.start_distributed_tracing().await?;
         }
-        
+
         self.start_analytics_engine().await?;
         self.start_dashboard_coordinator().await?;
-        
+
         Ok(())
     }
 
@@ -1641,7 +1641,7 @@ mod tests {
     async fn test_monitoring_system_creation() {
         let config = MonitoringConfig::default();
         let monitoring_system = ProductionMonitoringSystem::new(config);
-        
+
         let status = monitoring_system.get_system_status();
         assert!(status.metrics_collection_active);
     }
@@ -1665,7 +1665,7 @@ mod tests {
             auto_recovery_actions: vec![],
             enabled: true,
         };
-        
+
         assert_eq!(rule.rule_id, "test_rule");
         assert!(rule.enabled);
     }
@@ -1687,7 +1687,7 @@ mod tests {
             report_frequency: Duration::from_secs(7 * 24 * 3600),
             stakeholders: vec!["admin".to_string()],
         };
-        
+
         assert_eq!(sla.objectives.len(), 1);
         assert!(sla.objectives[0].critical);
     }

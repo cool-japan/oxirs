@@ -233,7 +233,9 @@ impl TermInterner {
         let subjects = self.subjects.read().unwrap();
         subjects.get_by_left(&id).map(|term| match term {
             SubjectTerm::NamedNode(iri) => Subject::NamedNode(NamedNode::new(iri).unwrap()),
-            SubjectTerm::BlankNode(id) => Subject::BlankNode(BlankNode::new(id).unwrap()),
+            SubjectTerm::BlankNode(blank_id) => {
+                Subject::BlankNode(BlankNode::new(blank_id).unwrap())
+            }
         })
     }
 

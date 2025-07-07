@@ -183,7 +183,7 @@ impl EmbeddingModel for SimpleTransE {
             loss_history.push(epoch_loss);
 
             if epoch % 10 == 0 {
-                println!("Epoch {}: loss = {:.6}", epoch, epoch_loss);
+                println!("Epoch {epoch}: loss = {epoch_loss:.6}");
             }
 
             if epoch > 10 && epoch_loss < 1e-6 {
@@ -478,9 +478,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let score2 = model.score_triple("alice", "knows", "charlie")?;
     let score3 = model.score_triple("bob", "likes", "alice")?;
 
-    println!("📈 Score(alice, knows, bob): {:.4}", score1);
-    println!("📈 Score(alice, knows, charlie): {:.4}", score2);
-    println!("📈 Score(bob, likes, alice): {:.4}", score3);
+    println!("📈 Score(alice, knows, bob): {score1:.4}");
+    println!("📈 Score(alice, knows, charlie): {score2:.4}");
+    println!("📈 Score(bob, likes, alice): {score3:.4}");
 
     // Similarity test
     let similarity = alice_emb
@@ -489,7 +489,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .zip(&bob_emb.values)
         .map(|(a, b)| a * b)
         .sum::<f32>();
-    println!("🔗 Alice-Bob similarity: {:.4}", similarity);
+    println!("🔗 Alice-Bob similarity: {similarity:.4}");
 
     println!("\n🎉 Example completed successfully!");
     println!(

@@ -40,32 +40,26 @@
 //! ## Quick Start Example
 //!
 //! ```rust,no_run
-//! use oxirs_chat::{ChatSession, ChatMessage, MessageType, RagEngine};
-//! use oxirs_core::store::ConcreteStore;
+//! use oxirs_chat::{ChatSession, Message, MessageRole, OxiRSChat, ChatConfig};
+//! use oxirs_core::ConcreteStore;
 //! use std::sync::Arc;
 //!
 //! # async fn example() -> anyhow::Result<()> {
-//! // Initialize the RAG engine with vector search
-//! let store = Arc::new(ConcreteStore::new());
-//! let rag_engine = RagEngine::new(store.clone()).await?;
+//! // Initialize the store and chat system
+//! let store = Arc::new(ConcreteStore::new()?);
+//! let config = ChatConfig::default();
+//! let chat_system = OxiRSChat::new(config, store as Arc<dyn oxirs_core::Store>).await?;
 //!
 //! // Create a chat session
-//! let mut session = ChatSession::new("user123".to_string());
+//! let session = chat_system.create_session("user123".to_string()).await?;
 //!
-//! // Send a message
-//! let message = ChatMessage::new(
-//!     MessageType::User,
+//! // Process with integrated RAG  
+//! let response = chat_system.process_message(
+//!     "user123",
 //!     "What genes are associated with breast cancer?".to_string()
-//! );
-//! session.add_message(message);
-//!
-//! // Process with RAG
-//! let response = rag_engine.process_message(
-//!     "What genes are associated with breast cancer?",
-//!     &session
 //! ).await?;
 //!
-//! println!("Response: {}", response);
+//! println!("Response: {:?}", response);
 //! # Ok(())
 //! # }
 //! ```
@@ -73,18 +67,28 @@
 //! ## Streaming Response Example
 //!
 //! ```rust,no_run
-//! use oxirs_chat::{RagEngine, StreamResponseChunk, ProcessingStage};
-//! use tokio_stream::StreamExt;
+//! use oxirs_chat::{OxiRSChat, ChatConfig};
+//! use oxirs_core::ConcreteStore;
+//! use std::sync::Arc;
 //!
 //! # async fn streaming_example() -> anyhow::Result<()> {
-//! # let rag_engine = todo!(); // Initialize RAG engine
-//! # let session = todo!(); // Initialize session
-//! // Process message with streaming
-//! let mut stream = rag_engine.process_message_stream(
-//!     "Explain the relationship between BRCA1 and cancer",
-//!     &session
+//! # let store = Arc::new(ConcreteStore::new()?);
+//! # let config = ChatConfig::default();
+//! # let chat_system = OxiRSChat::new(config, store as Arc<dyn oxirs_core::Store>).await?;
+//! # let _session = chat_system.create_session("user123".to_string()).await?;
+//! // Process message with streaming (feature under development)
+//! let response = chat_system.process_message(
+//!     "user123",
+//!     "Explain the relationship between BRCA1 and cancer".to_string()
 //! ).await?;
 //!
+//! println!("Response: {:?}", response);
+//! // Note: Streaming API is available through internal components
+//! // Future versions will expose streaming API directly
+//! # Ok(())
+//! # }
+//! // Original streaming code for reference:
+//! /*
 //! while let Some(chunk) = stream.next().await {
 //!     match chunk? {
 //!         StreamResponseChunk::Status { stage, progress } => {
@@ -103,30 +107,29 @@
 //!         _ => {}
 //!     }
 //! }
-//! # Ok(())
-//! # }
+//! */
 //! ```
 //!
 //! ## Self-Healing System Example
 //!
 //! ```rust,no_run
-//! use oxirs_chat::{HealthMonitor, HealingAction, ComponentStatus};
+//! use oxirs_chat::health_monitoring::{HealthMonitor, HealthMonitoringConfig, HealthStatus};
 //!
 //! # async fn healing_example() -> anyhow::Result<()> {
-//! let mut health_monitor = HealthMonitor::new();
+//! let config = HealthMonitoringConfig::default();
+//! let health_monitor = HealthMonitor::new(config);
 //!
-//! // Perform health analysis
-//! let health_report = health_monitor.analyze_system_health().await?;
+//! // Generate health report
+//! let health_report = health_monitor.generate_health_report().await?;
 //!
-//! if health_report.needs_healing() {
-//!     println!("System issues detected: {:?}", health_report.issues);
-//!     
-//!     // Trigger automated healing
-//!     for action in health_report.recommended_actions {
-//!         let result = health_monitor.perform_healing_action(action).await?;
-//!         println!("Healing action result: {:?}", result);
-//!     }
+//! match health_report.overall_status {
+//!     HealthStatus::Healthy => println!("System is healthy"),
+//!     HealthStatus::Degraded => println!("System performance is degraded"),
+//!     HealthStatus::Unhealthy => println!("System has health issues"),
+//!     HealthStatus::Critical => println!("System is in critical state"),
 //! }
+//!
+//! println!("System uptime: {:?}", health_report.uptime);
 //! # Ok(())
 //! # }
 //! ```
@@ -134,27 +137,27 @@
 //! ## Advanced Configuration
 //!
 //! ```rust,no_run
-//! use oxirs_chat::{RagConfig, VectorSearchConfig, ChatConfig};
+//! use oxirs_chat::{ChatConfig};
 //! use std::time::Duration;
 //!
 //! # async fn config_example() -> anyhow::Result<()> {
-//! let rag_config = RagConfig {
-//!     max_context_length: 4000,
-//!     context_overlap: 200,
-//!     vector_search: VectorSearchConfig {
-//!         similarity_threshold: 0.7,
-//!         max_results: 10,
-//!     },
-//!     ..Default::default()
+//! let chat_config = ChatConfig {
+//!     max_context_tokens: 16000,
+//!     sliding_window_size: 50,
+//!     enable_context_compression: true,
+//!     temperature: 0.8,
+//!     max_tokens: 4000,
+//!     timeout_seconds: 60,
+//!     enable_topic_tracking: true,
+//!     enable_sentiment_analysis: true,
+//!     enable_intent_detection: true,
 //! };
 //!
-//! let chat_config = ChatConfig {
-//!     session_timeout: Duration::from_secs(3600),
-//!     max_messages_per_session: 100,
-//!     enable_consciousness: true,
-//!     enable_streaming: true,
-//!     ..Default::default()
-//! };
+//! // Use the configuration to create a chat system
+//! // let store = Arc::new(ConcreteStore::new());
+//! // let chat_system = OxiRSChat::new(chat_config, store).await?;
+//!
+//! println!("Chat system configured with advanced features");
 //! # Ok(())
 //! # }
 //! ```
@@ -232,6 +235,15 @@ pub struct OxiRSChat {
 impl OxiRSChat {
     /// Create a new OxiRS Chat instance with advanced AI capabilities
     pub async fn new(config: ChatConfig, store: Arc<dyn oxirs_core::Store>) -> Result<Self> {
+        Self::new_with_llm_config(config, store, None).await
+    }
+
+    /// Create a new OxiRS Chat instance with custom LLM configuration
+    pub async fn new_with_llm_config(
+        config: ChatConfig,
+        store: Arc<dyn oxirs_core::Store>,
+        llm_config: Option<llm::LLMConfig>,
+    ) -> Result<Self> {
         // Initialize RAG engine with advanced features
         let rag_config = rag::RagConfig {
             retrieval: rag::RetrievalConfig {
@@ -257,8 +269,8 @@ impl OxiRSChat {
             .await
             .context("Failed to initialize RAG engine")?;
 
-        // Initialize LLM manager
-        let llm_config = llm::LLMConfig::default();
+        // Initialize LLM manager with provided config or default
+        let llm_config = llm_config.unwrap_or_else(|| llm::LLMConfig::default());
         let llm_manager = llm::LLMManager::new(llm_config)?;
 
         // Initialize NL2SPARQL engine
@@ -334,6 +346,120 @@ impl OxiRSChat {
     pub async fn session_count(&self) -> usize {
         let sessions = self.sessions.read().await;
         sessions.len()
+    }
+
+    /// Save all active sessions to disk
+    pub async fn save_sessions<P: AsRef<std::path::Path>>(
+        &self,
+        persistence_path: P,
+    ) -> Result<usize> {
+        use crate::session_manager::SessionData;
+        use std::fs;
+
+        let sessions = self.sessions.read().await;
+        let mut saved_count = 0;
+
+        // Create persistence directory if it doesn't exist
+        let persistence_dir = persistence_path.as_ref();
+        if !persistence_dir.exists() {
+            fs::create_dir_all(persistence_dir)
+                .context("Failed to create persistence directory")?;
+        }
+
+        info!(
+            "Saving {} active sessions to {:?}",
+            sessions.len(),
+            persistence_dir
+        );
+
+        for (session_id, session_arc) in sessions.iter() {
+            match session_arc.try_lock() {
+                Ok(session) => {
+                    let session_data = session.to_data();
+                    let session_file = persistence_dir.join(format!("{}.json", session_id));
+
+                    match serde_json::to_string_pretty(&session_data) {
+                        Ok(json_data) => {
+                            if let Err(e) = fs::write(&session_file, json_data) {
+                                error!("Failed to save session {}: {}", session_id, e);
+                            } else {
+                                debug!("Saved session {} to {:?}", session_id, session_file);
+                                saved_count += 1;
+                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to serialize session {}: {}", session_id, e);
+                        }
+                    }
+                }
+                Err(_) => {
+                    warn!("Session {} is locked, skipping save", session_id);
+                }
+            }
+        }
+
+        info!(
+            "Successfully saved {} out of {} sessions",
+            saved_count,
+            sessions.len()
+        );
+        Ok(saved_count)
+    }
+
+    /// Load sessions from disk
+    pub async fn load_sessions<P: AsRef<std::path::Path>>(
+        &self,
+        persistence_path: P,
+    ) -> Result<usize> {
+        use crate::chat_session::ChatSession;
+        use crate::session_manager::SessionData;
+        use std::fs;
+
+        let persistence_dir = persistence_path.as_ref();
+        if !persistence_dir.exists() {
+            info!(
+                "Persistence directory {:?} does not exist, no sessions to load",
+                persistence_dir
+            );
+            return Ok(0);
+        }
+
+        let mut loaded_count = 0;
+        let mut sessions = self.sessions.write().await;
+
+        info!("Loading sessions from {:?}", persistence_dir);
+
+        for entry in fs::read_dir(persistence_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.extension().and_then(|s| s.to_str()) == Some("json") {
+                let session_id = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("unknown");
+
+                match fs::read_to_string(&path) {
+                    Ok(json_data) => match serde_json::from_str::<SessionData>(&json_data) {
+                        Ok(session_data) => {
+                            let session = ChatSession::from_data(session_data, self.store.clone());
+                            sessions.insert(session_id.to_string(), Arc::new(Mutex::new(session)));
+                            loaded_count += 1;
+                            debug!("Loaded session {} from {:?}", session_id, path);
+                        }
+                        Err(e) => {
+                            error!("Failed to deserialize session from {:?}: {}", path, e);
+                        }
+                    },
+                    Err(e) => {
+                        error!("Failed to read session file {:?}: {}", path, e);
+                    }
+                }
+            }
+        }
+
+        info!("Successfully loaded {} sessions", loaded_count);
+        Ok(loaded_count)
     }
 
     /// Process a chat message with advanced AI capabilities (Quantum RAG, Consciousness, Reasoning)
@@ -887,8 +1013,9 @@ impl OxiRSChat {
             // Send initial status
             let _ = tx
                 .send(StreamResponseChunk::Status {
-                    stage: "initializing".to_string(),
+                    stage: ProcessingStage::Initializing,
                     progress: 0.0,
+                    message: Some("Starting message processing".to_string()),
                 })
                 .await;
 
@@ -915,7 +1042,15 @@ impl OxiRSChat {
                 if let Err(e) = session_guard.add_message(user_msg) {
                     let _ = tx
                         .send(StreamResponseChunk::Error {
-                            message: format!("Failed to store user message: {}", e),
+                            error: StructuredError {
+                                error_type: ErrorType::InternalError,
+                                message: format!("Failed to store user message: {}", e),
+                                error_code: Some("MSG_STORE_FAILED".to_string()),
+                                component: "ChatSession".to_string(),
+                                timestamp: chrono::Utc::now(),
+                                context: std::collections::HashMap::new(),
+                            },
+                            recoverable: false,
                         })
                         .await;
                     return;
@@ -925,8 +1060,9 @@ impl OxiRSChat {
             // Stage 1: RAG Retrieval
             let _ = tx
                 .send(StreamResponseChunk::Status {
-                    stage: "rag_retrieval".to_string(),
+                    stage: ProcessingStage::RetrievingContext,
                     progress: 0.1,
+                    message: Some("Retrieving relevant context from knowledge graph".to_string()),
                 })
                 .await;
 
@@ -937,7 +1073,15 @@ impl OxiRSChat {
                     Err(e) => {
                         let _ = tx
                             .send(StreamResponseChunk::Error {
-                                message: format!("RAG retrieval failed: {}", e),
+                                error: StructuredError {
+                                    error_type: ErrorType::RagRetrievalError,
+                                    message: format!("RAG retrieval failed: {}", e),
+                                    error_code: Some("RAG_RETRIEVAL_FAILED".to_string()),
+                                    component: "RagEngine".to_string(),
+                                    timestamp: chrono::Utc::now(),
+                                    context: std::collections::HashMap::new(),
+                                },
+                                recoverable: true,
                             })
                             .await;
                         return;
@@ -947,19 +1091,33 @@ impl OxiRSChat {
 
             let _ = tx
                 .send(StreamResponseChunk::Status {
-                    stage: "rag_complete".to_string(),
+                    stage: ProcessingStage::QuantumProcessing,
                     progress: 0.3,
+                    message: Some("Context retrieval complete".to_string()),
                 })
                 .await;
 
             // Send context information as early chunks
             if !assembled_context.semantic_results.is_empty() {
+                let facts: Vec<String> = assembled_context
+                    .semantic_results
+                    .iter()
+                    .take(5)
+                    .map(|result| result.triple.to_string())
+                    .collect();
+
+                let entities: Vec<String> = assembled_context
+                    .extracted_entities
+                    .iter()
+                    .take(10)
+                    .map(|entity| entity.text.clone())
+                    .collect();
+
                 let _ = tx
                     .send(StreamResponseChunk::Context {
-                        content: format!(
-                            "Found {} relevant knowledge graph facts",
-                            assembled_context.semantic_results.len()
-                        ),
+                        facts,
+                        sparql_results: None,
+                        entities,
                     })
                     .await;
             }
@@ -970,8 +1128,9 @@ impl OxiRSChat {
             {
                 let _ = tx
                     .send(StreamResponseChunk::Status {
-                        stage: "sparql_processing".to_string(),
+                        stage: ProcessingStage::GeneratingSparql,
                         progress: 0.5,
+                        message: Some("Generating SPARQL query".to_string()),
                     })
                     .await;
 
@@ -988,7 +1147,9 @@ impl OxiRSChat {
                     Ok(sparql) => {
                         let _ = tx
                             .send(StreamResponseChunk::Context {
-                                content: "Generated SPARQL query".to_string(),
+                                facts: vec!["Generated SPARQL query".to_string()],
+                                sparql_results: None,
+                                entities: vec![],
                             })
                             .await;
 
@@ -1000,10 +1161,12 @@ impl OxiRSChat {
                                     let result_count = results.count();
                                     let _ = tx
                                         .send(StreamResponseChunk::Context {
-                                            content: format!(
+                                            facts: vec![format!(
                                                 "SPARQL query returned {} results",
                                                 result_count
-                                            ),
+                                            )],
+                                            sparql_results: None,
+                                            entities: vec![],
                                         })
                                         .await;
                                     (Some(sparql), Some(Vec::<String>::new())) // Simplified for streaming
@@ -1022,8 +1185,9 @@ impl OxiRSChat {
             // Stage 3: Response Generation
             let _ = tx
                 .send(StreamResponseChunk::Status {
-                    stage: "response_generation".to_string(),
+                    stage: ProcessingStage::GeneratingResponse,
                     progress: 0.7,
+                    message: Some("Generating AI response".to_string()),
                 })
                 .await;
 
@@ -1071,7 +1235,15 @@ impl OxiRSChat {
                     Err(e) => {
                         let _ = tx
                             .send(StreamResponseChunk::Error {
-                                message: format!("LLM generation failed: {}", e),
+                                error: StructuredError {
+                                    error_type: ErrorType::LlmGenerationError,
+                                    message: format!("LLM generation failed: {}", e),
+                                    error_code: Some("LLM_GENERATION_FAILED".to_string()),
+                                    component: "LLMManager".to_string(),
+                                    timestamp: chrono::Utc::now(),
+                                    context: std::collections::HashMap::new(),
+                                },
+                                recoverable: true,
                             })
                             .await;
                         return;
@@ -1087,8 +1259,8 @@ impl OxiRSChat {
                 let progress = 0.8 + (0.2 * i as f32 / (words.len() / chunk_size) as f32);
                 let _ = tx
                     .send(StreamResponseChunk::Content {
-                        content: chunk.join(" ") + " ",
-                        is_final: false,
+                        text: chunk.join(" ") + " ",
+                        is_complete: false,
                     })
                     .await;
 
@@ -1128,8 +1300,9 @@ impl OxiRSChat {
             // Send completion
             let _ = tx
                 .send(StreamResponseChunk::Complete {
-                    message: response,
                     total_time: processing_start.elapsed(),
+                    token_count: response_text.len() / 4, // Rough estimate
+                    final_message: Some("Response generation complete".to_string()),
                 })
                 .await;
         });

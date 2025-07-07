@@ -3,13 +3,13 @@
 //! Comprehensive monitoring, metrics collection, and observability features
 //! for the OxiRS streaming platform.
 
-use crate::backend_optimizer::ResourceUsage;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use sysinfo::{Pid, System};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
@@ -32,6 +32,7 @@ pub struct MetricsCollector {
     metrics: Arc<RwLock<StreamingMetrics>>,
     health_checker: Arc<HealthChecker>,
     profiler: Option<Profiler>,
+    system: Arc<RwLock<System>>,
 }
 
 /// Comprehensive streaming metrics
@@ -254,6 +255,27 @@ pub struct PerformanceTrace {
     pub call_stack: Vec<String>,
 }
 
+/// Load average information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LoadAverage {
+    pub one: f64,
+    pub five: f64,
+    pub fifteen: f64,
+}
+
+/// System information for detailed monitoring
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemInfo {
+    pub total_memory: u64,
+    pub used_memory: u64,
+    pub total_swap: u64,
+    pub used_swap: u64,
+    pub cpu_count: usize,
+    pub load_average: LoadAverage,
+    pub boot_time: u64,
+    pub uptime: u64,
+}
+
 /// Component health checker trait
 pub trait ComponentHealthChecker: Send + Sync {
     fn component_name(&self) -> &str;
@@ -271,12 +293,15 @@ impl MetricsCollector {
         } else {
             None
         };
+        let mut sys = System::new_all();
+        sys.refresh_all();
 
         Self {
             config,
             metrics: Arc::new(RwLock::new(StreamingMetrics::default())),
             health_checker,
             profiler,
+            system: Arc::new(RwLock::new(sys)),
         }
     }
 
@@ -426,46 +451,88 @@ impl MetricsCollector {
     /// Start system metrics collection
     async fn start_system_metrics_collection(&self) {
         let metrics = self.metrics.clone();
+        let system = self.system.clone();
 
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
+            let mut previous_network_in = 0u64;
+            let mut previous_network_out = 0u64;
 
             loop {
                 interval.tick().await;
 
-                let mut current_metrics = metrics.write().await;
+                // Refresh system information
+                {
+                    let mut sys = system.write().await;
+                    sys.refresh_cpu_all();
+                    sys.refresh_memory();
+                    // Network refresh is handled separately if available
+                    sys.refresh_processes_specifics(
+                        sysinfo::ProcessesToUpdate::All,
+                        false,
+                        sysinfo::ProcessRefreshKind::everything(),
+                    );
+                }
 
-                // Collect system metrics (simplified - would use actual system APIs)
-                current_metrics.system_memory_usage_bytes = Self::get_memory_usage();
-                current_metrics.system_cpu_usage_percent = Self::get_cpu_usage();
-                current_metrics.system_network_bytes_in += Self::get_network_bytes_in();
-                current_metrics.system_network_bytes_out += Self::get_network_bytes_out();
+                let mut current_metrics = metrics.write().await;
+                let sys = system.read().await;
+
+                // Real system metrics collection
+                current_metrics.system_memory_usage_bytes = sys.used_memory();
+                current_metrics.system_cpu_usage_percent = sys.global_cpu_usage() as f64;
+
+                // Network metrics (cumulative)
+                let (network_in, network_out) = Self::get_network_metrics(&sys);
+                current_metrics.system_network_bytes_in = previous_network_in + network_in;
+                current_metrics.system_network_bytes_out = previous_network_out + network_out;
+                previous_network_in = current_metrics.system_network_bytes_in;
+                previous_network_out = current_metrics.system_network_bytes_out;
+
+                // Process-specific metrics
+                if let Some(process) = sys.process(Pid::from_u32(std::process::id())) {
+                    // Add process-specific metrics here if needed
+                    debug!("Process memory: {} bytes", process.memory());
+                }
             }
         });
     }
 
-    /// Get system memory usage (simplified)
-    fn get_memory_usage() -> u64 {
-        // Would use actual system APIs like sysinfo crate
-        1024 * 1024 * 512 // 512MB placeholder
+    /// Get network metrics from system information
+    fn get_network_metrics(_sys: &System) -> (u64, u64) {
+        // Basic network metrics implementation
+        // In sysinfo 0.32, network API access is different and may require
+        // a separate Networks struct. For now, we provide a placeholder
+        // that can be enhanced with proper implementation later.
+
+        // Future improvement: Use std::fs to read /proc/net/dev on Linux
+        // or implement platform-specific network metric collection
+
+        // Return placeholder values for now to ensure compilation
+        // This maintains functionality while allowing for future enhancement
+        (0, 0)
     }
 
-    /// Get CPU usage (simplified)
-    fn get_cpu_usage() -> f64 {
-        // Would use actual system APIs
-        25.0 // 25% placeholder
-    }
+    /// Get detailed system information for health assessment
+    pub async fn get_system_info(&self) -> SystemInfo {
+        let sys = self.system.read().await;
 
-    /// Get network bytes in (simplified)
-    fn get_network_bytes_in() -> u64 {
-        // Would use actual network statistics
-        1024 // 1KB placeholder
-    }
-
-    /// Get network bytes out (simplified)
-    fn get_network_bytes_out() -> u64 {
-        // Would use actual network statistics
-        1024 // 1KB placeholder
+        SystemInfo {
+            total_memory: sys.total_memory(),
+            used_memory: sys.used_memory(),
+            total_swap: sys.total_swap(),
+            used_swap: sys.used_swap(),
+            cpu_count: sys.cpus().len(),
+            load_average: {
+                let load_avg = System::load_average();
+                LoadAverage {
+                    one: load_avg.one,
+                    five: load_avg.five,
+                    fifteen: load_avg.fifteen,
+                }
+            },
+            boot_time: System::boot_time(),
+            uptime: System::uptime(),
+        }
     }
 
     /// Export metrics in Prometheus format
@@ -586,39 +653,127 @@ impl HealthChecker {
         self.health_status.read().await.clone()
     }
 
-    /// Assess system health based on current metrics trends
-    async fn assess_system_health(&self, metrics: &StreamingMetrics) {
+    /// Assess system health based on current metrics trends and system resources
+    pub async fn assess_system_health(
+        &self,
+        metrics: &StreamingMetrics,
+        system_info: &SystemInfo,
+    ) -> Result<()> {
         let mut health_alerts = Vec::new();
         let now = Utc::now();
         let mut alert_id = 1;
 
+        // Memory health assessment
+        let memory_usage_percent =
+            (system_info.used_memory as f64 / system_info.total_memory as f64) * 100.0;
+        if memory_usage_percent > 90.0 {
+            health_alerts.push(HealthAlert {
+                id: format!("memory_critical_{alert_id}"),
+                component: "system".to_string(),
+                severity: AlertSeverity::Critical,
+                message: format!("Critical memory usage: {memory_usage_percent:.1}%"),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
+        } else if memory_usage_percent > 80.0 {
+            health_alerts.push(HealthAlert {
+                id: format!("memory_warning_{alert_id}"),
+                component: "system".to_string(),
+                severity: AlertSeverity::Warning,
+                message: format!("High memory usage: {memory_usage_percent:.1}%"),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
+        }
+
+        // CPU health assessment
+        if metrics.system_cpu_usage_percent > 95.0 {
+            health_alerts.push(HealthAlert {
+                id: format!("cpu_critical_{alert_id}"),
+                component: "system".to_string(),
+                severity: AlertSeverity::Critical,
+                message: format!(
+                    "Critical CPU usage: {:.1}%",
+                    metrics.system_cpu_usage_percent
+                ),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
+        } else if metrics.system_cpu_usage_percent > 85.0 {
+            health_alerts.push(HealthAlert {
+                id: format!("cpu_warning_{alert_id}"),
+                component: "system".to_string(),
+                severity: AlertSeverity::Warning,
+                message: format!("High CPU usage: {:.1}%", metrics.system_cpu_usage_percent),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
+        }
+
         // Producer health assessment
         if metrics.producer_events_failed > 0 {
-            let failure_rate = metrics.producer_events_failed as f64
-                / (metrics.producer_events_published + metrics.producer_events_failed) as f64;
-            if failure_rate > 0.05 {
-                health_alerts.push(HealthAlert {
-                    id: format!("producer_failure_{}", alert_id),
-                    component: "producer".to_string(),
-                    severity: AlertSeverity::Warning,
-                    message: format!("High producer failure rate: {:.2}%", failure_rate * 100.0),
-                    timestamp: now,
-                    resolved: false,
-                });
-                alert_id += 1;
+            let total_producer_events =
+                metrics.producer_events_published + metrics.producer_events_failed;
+            if total_producer_events > 0 {
+                let failure_rate =
+                    metrics.producer_events_failed as f64 / total_producer_events as f64;
+                if failure_rate > 0.10 {
+                    health_alerts.push(HealthAlert {
+                        id: format!("producer_failure_{alert_id}"),
+                        component: "producer".to_string(),
+                        severity: AlertSeverity::Critical,
+                        message: format!(
+                            "High producer failure rate: {:.2}%",
+                            failure_rate * 100.0
+                        ),
+                        timestamp: now,
+                        resolved: false,
+                    });
+                    alert_id += 1;
+                } else if failure_rate > 0.05 {
+                    health_alerts.push(HealthAlert {
+                        id: format!("producer_failure_{alert_id}"),
+                        component: "producer".to_string(),
+                        severity: AlertSeverity::Warning,
+                        message: format!(
+                            "Elevated producer failure rate: {:.2}%",
+                            failure_rate * 100.0
+                        ),
+                        timestamp: now,
+                        resolved: false,
+                    });
+                    alert_id += 1;
+                }
             }
         }
 
         // Consumer health assessment
-        if metrics.consumer_events_failed > 0 {
+        if metrics.consumer_events_consumed > 0 && metrics.consumer_events_failed > 0 {
             let failure_rate =
                 metrics.consumer_events_failed as f64 / metrics.consumer_events_consumed as f64;
-            if failure_rate > 0.05 {
+            if failure_rate > 0.10 {
                 health_alerts.push(HealthAlert {
-                    id: format!("consumer_failure_{}", alert_id),
+                    id: format!("consumer_failure_{alert_id}"),
+                    component: "consumer".to_string(),
+                    severity: AlertSeverity::Critical,
+                    message: format!("High consumer failure rate: {:.2}%", failure_rate * 100.0),
+                    timestamp: now,
+                    resolved: false,
+                });
+                alert_id += 1;
+            } else if failure_rate > 0.05 {
+                health_alerts.push(HealthAlert {
+                    id: format!("consumer_failure_{alert_id}"),
                     component: "consumer".to_string(),
                     severity: AlertSeverity::Warning,
-                    message: format!("High consumer failure rate: {:.2}%", failure_rate * 100.0),
+                    message: format!(
+                        "Elevated consumer failure rate: {:.2}%",
+                        failure_rate * 100.0
+                    ),
                     timestamp: now,
                     resolved: false,
                 });
@@ -627,11 +782,24 @@ impl HealthChecker {
         }
 
         // Performance health assessment
-        if metrics.producer_average_latency_ms > 1000.0 {
+        if metrics.producer_average_latency_ms > 2000.0 {
             health_alerts.push(HealthAlert {
-                id: format!("producer_latency_{}", alert_id),
+                id: format!("producer_latency_{alert_id}"),
                 component: "producer".to_string(),
                 severity: AlertSeverity::Critical,
+                message: format!(
+                    "Critical producer latency: {:.2}ms",
+                    metrics.producer_average_latency_ms
+                ),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
+        } else if metrics.producer_average_latency_ms > 1000.0 {
+            health_alerts.push(HealthAlert {
+                id: format!("producer_latency_{alert_id}"),
+                component: "producer".to_string(),
+                severity: AlertSeverity::Warning,
                 message: format!(
                     "High producer latency: {:.2}ms",
                     metrics.producer_average_latency_ms
@@ -642,11 +810,24 @@ impl HealthChecker {
             alert_id += 1;
         }
 
-        if metrics.consumer_average_processing_time_ms > 500.0 {
+        if metrics.consumer_average_processing_time_ms > 1000.0 {
             health_alerts.push(HealthAlert {
-                id: format!("consumer_processing_{}", alert_id),
+                id: format!("consumer_processing_{alert_id}"),
                 component: "consumer".to_string(),
                 severity: AlertSeverity::Critical,
+                message: format!(
+                    "Critical consumer processing time: {:.2}ms",
+                    metrics.consumer_average_processing_time_ms
+                ),
+                timestamp: now,
+                resolved: false,
+            });
+            alert_id += 1;
+        } else if metrics.consumer_average_processing_time_ms > 500.0 {
+            health_alerts.push(HealthAlert {
+                id: format!("consumer_processing_{alert_id}"),
+                component: "consumer".to_string(),
+                severity: AlertSeverity::Warning,
                 message: format!(
                     "High consumer processing time: {:.2}ms",
                     metrics.consumer_average_processing_time_ms
@@ -654,31 +835,66 @@ impl HealthChecker {
                 timestamp: now,
                 resolved: false,
             });
+            alert_id += 1;
+        }
+
+        // Connection health assessment
+        if metrics.backend_connection_errors > 0 {
+            let total_connections =
+                metrics.backend_connections_active + metrics.backend_connections_idle;
+            if total_connections > 0 {
+                let error_rate =
+                    metrics.backend_connection_errors as f64 / total_connections as f64;
+                if error_rate > 0.20 {
+                    health_alerts.push(HealthAlert {
+                        id: format!("connection_errors_{alert_id}"),
+                        component: "backend".to_string(),
+                        severity: AlertSeverity::Critical,
+                        message: format!("High connection error rate: {:.2}%", error_rate * 100.0),
+                        timestamp: now,
+                        resolved: false,
+                    });
+                }
+            }
         }
 
         // Update health status based on assessments
         let health_status = if health_alerts.is_empty() {
             HealthStatus::Healthy
-        } else if health_alerts.len() <= 2 {
-            HealthStatus::Warning
         } else {
-            HealthStatus::Critical
+            let critical_alerts = health_alerts
+                .iter()
+                .filter(|a| matches!(a.severity, AlertSeverity::Critical))
+                .count();
+            if critical_alerts > 0 {
+                HealthStatus::Critical
+            } else {
+                HealthStatus::Warning
+            }
         };
 
         if !health_alerts.is_empty() {
-            warn!("System health alerts: {:?}", health_alerts);
+            warn!(
+                "System health alerts detected: {} total, {} critical",
+                health_alerts.len(),
+                health_alerts
+                    .iter()
+                    .filter(|a| matches!(a.severity, AlertSeverity::Critical))
+                    .count()
+            );
         }
 
-        // Update health status
+        // Update health status with system uptime
         let system_health = SystemHealth {
             overall_status: health_status,
             component_health: HashMap::new(),
             last_check: now,
-            uptime: Duration::from_secs(0), // Default uptime
+            uptime: Duration::from_secs(system_info.uptime),
             alerts: health_alerts,
         };
 
         *self.health_status.write().await = system_health;
+        Ok(())
     }
 }
 

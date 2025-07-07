@@ -33,7 +33,7 @@ async fn test_oauth2_service_creation() {
         .unwrap();
 
     assert!(auth_url.contains("response_type=code"));
-    assert!(auth_url.contains("client_id=test_client_id"));
+    assert!(auth_url.contains("client_id=test%5Fclient%5Fid")); // URL-encoded test_client_id
     assert!(auth_url.contains("code_challenge")); // PKCE enabled
     assert!(!state.is_empty());
 }
@@ -60,8 +60,8 @@ async fn test_auth_service_oauth2_integration() {
     let auth_url = auth_service.get_oauth2_auth_url("test_state").unwrap();
 
     assert!(auth_url.contains("https://provider.example.com/auth"));
-    assert!(auth_url.contains("test_client_id"));
-    assert!(auth_url.contains("test_state")); // State should be included
+    assert!(auth_url.contains("test%5Fclient%5Fid")); // URL-encoded test_client_id
+    assert!(auth_url.contains("test%5Fstate")); // URL-encoded test_state
 }
 
 #[tokio::test]

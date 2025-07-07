@@ -3,13 +3,13 @@
 //! This module implements intelligent sharding that partitions RDF data
 //! based on semantic relationships rather than simple hash-based distribution.
 
-use crate::{ClusterError, Result};
-use oxirs_core::model::{NamedNode, Triple};
+use crate::Result;
+use oxirs_core::model::Triple;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 /// Shard identifier
 pub type ShardId = u32;
@@ -271,19 +271,40 @@ impl ShardRouter {
         iri: &str,
         namespace_mapping: &HashMap<String, ShardId>,
     ) -> Result<ShardId> {
-        // Extract namespace from IRI
-        let namespace = if let Some(pos) = iri.rfind('#') {
-            &iri[..=pos]
-        } else if let Some(pos) = iri.rfind('/') {
-            &iri[..=pos]
+        // Strip angle brackets if present (N-Triples/Turtle format)
+        let clean_iri = if iri.starts_with('<') && iri.ends_with('>') {
+            &iri[1..iri.len() - 1]
         } else {
             iri
         };
 
-        Ok(namespace_mapping
-            .get(namespace)
-            .copied()
-            .unwrap_or_else(|| self.hash_route(namespace, namespace_mapping.len() as u32)))
+        // Extract namespace from IRI
+        let namespace = if let Some(pos) = clean_iri.rfind('#') {
+            &clean_iri[..=pos]
+        } else if let Some(pos) = clean_iri.rfind('/') {
+            &clean_iri[..=pos]
+        } else {
+            clean_iri
+        };
+
+        // Try exact match first
+        if let Some(&shard_id) = namespace_mapping.get(namespace) {
+            return Ok(shard_id);
+        }
+
+        // Try prefix matching for more flexible namespace routing
+        // Sort by length descending to find the most specific match first
+        let mut prefixes: Vec<_> = namespace_mapping.iter().collect();
+        prefixes.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+        for (prefix, &shard_id) in prefixes {
+            if clean_iri.starts_with(prefix) {
+                return Ok(shard_id);
+            }
+        }
+
+        // Fallback to hash routing
+        Ok(self.hash_route(namespace, namespace_mapping.len() as u32))
     }
 
     /// Semantic routing based on concept similarity
@@ -451,13 +472,20 @@ impl ConceptSimilarity for DefaultConceptSimilarity {
     }
 
     fn find_cluster(&self, concept: &str, clusters: &[ConceptCluster]) -> Option<ShardId> {
+        // Strip angle brackets if present (N-Triples/Turtle format)
+        let clean_concept = if concept.starts_with('<') && concept.ends_with('>') {
+            &concept[1..concept.len() - 1]
+        } else {
+            concept
+        };
+
         let mut best_cluster = None;
         let mut best_score = 0.0;
 
         for cluster in clusters {
             // Check if concept matches any core concepts
             for core_concept in &cluster.core_concepts {
-                let similarity = self.similarity(concept, core_concept);
+                let similarity = self.similarity(clean_concept, core_concept);
                 let weighted_score = similarity * cluster.weight;
 
                 if weighted_score > best_score {
@@ -468,7 +496,7 @@ impl ConceptSimilarity for DefaultConceptSimilarity {
 
             // Check namespace patterns
             for pattern in &cluster.namespace_patterns {
-                if concept.starts_with(pattern) {
+                if clean_concept.starts_with(pattern) {
                     return Some(cluster.cluster_id);
                 }
             }
@@ -566,7 +594,7 @@ mod tests {
         let triple = Triple::new(
             NamedNode::new("http://schema.org/Person/123").unwrap(),
             NamedNode::new("http://schema.org/name").unwrap(),
-            NamedNode::new("John Doe").unwrap(),
+            oxirs_core::model::Literal::new_simple_literal("John Doe"),
         );
 
         let shard_id = router.route_triple(&triple).await.unwrap();

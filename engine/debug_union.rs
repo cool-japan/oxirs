@@ -13,7 +13,7 @@ fn main() {
 
     println!("Testing tokenization...");
     let mut parser = QueryParser::new();
-    
+
     match parser.tokenize(query_str) {
         Ok(_) => {
             println!("Tokenization successful!");

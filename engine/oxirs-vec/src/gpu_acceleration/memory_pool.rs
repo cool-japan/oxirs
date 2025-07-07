@@ -45,7 +45,7 @@ impl GpuMemoryPool {
 
         // Allocate new buffer
         let buffer = GpuBuffer::new(size, self.device_id)?;
-        
+
         // Update statistics
         {
             let mut total = self.total_allocated.lock().unwrap();
@@ -84,10 +84,10 @@ impl GpuMemoryPool {
     pub fn clear(&mut self) {
         let mut buffers = self.available_buffers.lock().unwrap();
         buffers.clear();
-        
+
         let mut total = self.total_allocated.lock().unwrap();
         *total = 0;
-        
+
         self.current_usage = 0;
     }
 }

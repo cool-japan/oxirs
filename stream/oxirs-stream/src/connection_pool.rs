@@ -6,8 +6,8 @@
 
 use crate::{
     circuit_breaker::{
-        new_shared_circuit_breaker, CircuitBreaker, CircuitBreakerConfig, FailureType,
-        SharedCircuitBreaker, SharedCircuitBreakerExt,
+        new_shared_circuit_breaker, CircuitBreakerConfig, FailureType, SharedCircuitBreaker,
+        SharedCircuitBreakerExt,
     },
     failover::{ConnectionEndpoint, FailoverConfig, FailoverManager},
     health_monitor::{HealthCheckConfig, HealthMonitor, HealthStatus},
@@ -19,19 +19,16 @@ use fastrand;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
-use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::{
-    atomic::{AtomicU64, AtomicUsize, Ordering},
+    atomic::{AtomicUsize, Ordering},
     Arc,
 };
 
-use chrono::{DateTime, Utc};
 #[cfg(test)]
 use futures_util;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, Mutex, RwLock, Semaphore};
-use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -294,7 +291,7 @@ pub trait ConnectionFactory<T: PooledConnection + Clone>: Send + Sync {
 
 /// Pool statistics with enhanced metrics
 #[derive(Debug, Default, Clone)]
-struct PoolStats {
+pub struct PoolStats {
     total_created: u64,
     total_destroyed: u64,
     total_borrowed: u64,
@@ -377,7 +374,7 @@ impl Default for AdaptiveController {
 impl AdaptiveController {
     fn should_scale_up(
         &self,
-        current_size: usize,
+        _current_size: usize,
         avg_response_time: Duration,
         utilization: f64,
     ) -> bool {
@@ -430,11 +427,12 @@ impl<T: PooledConnection + Clone> ConnectionPool<T> {
         };
 
         // Initialize adaptive controller
-        let mut adaptive_controller = AdaptiveController::default();
-        adaptive_controller.enabled = config.adaptive_sizing;
-        adaptive_controller.target_response_time =
-            Duration::from_millis(config.target_response_time_ms);
-        adaptive_controller.current_target_size = config.min_connections;
+        let adaptive_controller = AdaptiveController {
+            enabled: config.adaptive_sizing,
+            target_response_time: Duration::from_millis(config.target_response_time_ms),
+            current_target_size: config.min_connections,
+            ..Default::default()
+        };
 
         // Initialize health monitor
         let health_check_config = HealthCheckConfig {
@@ -518,7 +516,7 @@ impl<T: PooledConnection + Clone> ConnectionPool<T> {
         }
 
         // Acquire permit with timeout
-        let permit = tokio::time::timeout(self.config.acquire_timeout, self.semaphore.acquire())
+        let _permit = tokio::time::timeout(self.config.acquire_timeout, self.semaphore.acquire())
             .await
             .map_err(|_| anyhow!("Timeout acquiring connection from pool"))?
             .map_err(|_| anyhow!("Failed to acquire semaphore permit"))?;
@@ -1138,7 +1136,7 @@ impl<T: PooledConnection> Drop for PooledConnectionHandle<T> {
             let pool_connections = self.pool_connections.clone();
             let active_count = self.active_count.clone();
             let stats = self.stats.clone();
-            let metrics = self.metrics.clone();
+            let _metrics = self.metrics.clone();
             let adaptive_controller = self.adaptive_controller.clone();
 
             // Calculate metrics for this connection usage

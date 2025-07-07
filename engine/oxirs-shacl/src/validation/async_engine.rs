@@ -5,11 +5,7 @@
 //! with async I/O systems.
 
 #[cfg(feature = "async")]
-use std::collections::HashMap;
-#[cfg(feature = "async")]
 use std::future::Future;
-#[cfg(feature = "async")]
-use std::pin::Pin;
 #[cfg(feature = "async")]
 use std::sync::Arc;
 #[cfg(feature = "async")]
@@ -31,8 +27,7 @@ use oxirs_core::{model::Term, Store};
 use crate::{
     builders::{EnhancedValidatorBuilder, ValidationConfigBuilder},
     validation::{ValidationEngine, ValidationStats},
-    ConstraintComponentId, Result, ShaclError, Shape, ShapeId, ValidationConfig, ValidationReport,
-    ValidationViolation,
+    Result, ShaclError, Shape, ShapeId, ValidationConfig, ValidationReport, ValidationViolation,
 };
 
 /// Async validation engine for concurrent and I/O-bound operations
@@ -380,7 +375,7 @@ impl AsyncValidationEngine {
     /// Validate specific shapes asynchronously
     pub async fn validate_shapes(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         shape_ids: &[ShapeId],
     ) -> Result<AsyncValidationResult> {
         let start_time = tokio::time::Instant::now();
@@ -471,7 +466,7 @@ impl AsyncValidationEngine {
         events.push(ValidationEvent::Completed {
             report: final_report.clone(),
             total_duration: stats.total_duration,
-            statistics: statistics,
+            statistics,
         });
 
         Ok(AsyncValidationResult {
@@ -498,7 +493,7 @@ impl AsyncValidationEngine {
         let validation_future = async move {
             let start_time = tokio::time::Instant::now();
             let mut stats = AsyncValidationStats::default();
-            let mut events = Vec::new();
+            let events = Vec::new();
 
             // TODO: Replace with public API when available
             // Private field access commented out for compilation
@@ -521,7 +516,7 @@ impl AsyncValidationEngine {
                     .map(|(shape_id, shape)| {
                         let engine = Arc::clone(&engine);
                         let shape_id = (*shape_id).clone();
-                        let shape = (*shape).clone();
+                        let _shape = (*shape).clone();
                         let semaphore = Arc::clone(&semaphore);
                         let tx = tx.clone();
 
@@ -608,7 +603,7 @@ impl AsyncValidationEngine {
             let _ = tx.send(ValidationEvent::Completed {
                 report: final_report.clone(),
                 total_duration: stats.total_duration,
-                statistics: statistics,
+                statistics,
             });
 
             Ok(AsyncValidationResult {
@@ -625,7 +620,7 @@ impl AsyncValidationEngine {
     async fn validate_store_internal(
         &self,
         store: &dyn Store,
-        events: &mut Vec<ValidationEvent>,
+        _events: &mut Vec<ValidationEvent>,
         stats: &mut AsyncValidationStats,
     ) -> Result<ValidationReport> {
         let mut engine = self.engine.write().await;
@@ -654,7 +649,7 @@ impl AsyncValidationEngine {
 
             match result {
                 Ok(report) => return Ok(report),
-                Err(e) if attempts < self.async_config.retry_config.max_retries => {
+                Err(_e) if attempts < self.async_config.retry_config.max_retries => {
                     attempts += 1;
 
                     // Wait before retry
@@ -678,11 +673,11 @@ impl AsyncValidationEngine {
     /// Validate specific nodes asynchronously
     async fn validate_nodes_async(
         &self,
-        store: &dyn Store,
-        shape_id: &ShapeId,
-        nodes: &[Term],
+        _store: &dyn Store,
+        _shape_id: &ShapeId,
+        _nodes: &[Term],
     ) -> Result<ValidationReport> {
-        let mut engine = self.engine.write().await;
+        let _engine = self.engine.write().await;
 
         // TODO: Replace with public API to get shape
         // For now, return a validation error since we can't access private shapes field
@@ -726,7 +721,7 @@ pub mod utils {
         builder: EnhancedValidatorBuilder,
         async_config: AsyncValidationConfig,
     ) -> Result<AsyncValidationEngine> {
-        let validator = builder.build()?;
+        let _validator = builder.build()?;
 
         // Extract shapes from validator (this would need to be implemented in the validator)
         // For now, create empty shapes
@@ -774,7 +769,6 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use oxirs_core::Store;
 
     #[tokio::test]
     async fn test_async_validation_engine_builder() {

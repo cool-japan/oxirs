@@ -219,7 +219,7 @@ impl AssociationRuleLearner {
         // Filter by minimum support
         let frequent_items: HashSet<usize> = item_counts
             .iter()
-            .filter(|(_, &count)| count >= min_support_count)
+            .filter(|&(_, &count)| count >= min_support_count)
             .map(|(&item, _)| item)
             .collect();
 

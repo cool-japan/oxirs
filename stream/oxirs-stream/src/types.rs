@@ -148,7 +148,7 @@ impl From<EventMetadata> for event::EventMetadata {
             user: metadata.user,
             context: metadata.operation_context.map(|ctx| ctx.operation_type),
             caused_by: metadata.causality_token,
-            version: metadata.version.unwrap_or_else(|| metadata.schema_version),
+            version: metadata.version.unwrap_or(metadata.schema_version),
             properties: HashMap::new(), // Could be populated from custom fields
             checksum: metadata.checksum,
         }
@@ -433,19 +433,21 @@ pub mod serialization {
         format: SerializationFormat,
     ) -> Result<Vec<u8>> {
         match format {
-            SerializationFormat::Json => serde_json::to_vec(metadata)
-                .map_err(|e| anyhow!("JSON serialization failed: {}", e)),
+            SerializationFormat::Json => {
+                serde_json::to_vec(metadata).map_err(|e| anyhow!("JSON serialization failed: {e}"))
+            }
             SerializationFormat::MessagePack => rmp_serde::to_vec(metadata)
-                .map_err(|e| anyhow!("MessagePack serialization failed: {}", e)),
-            SerializationFormat::Cbor => serde_cbor::to_vec(metadata)
-                .map_err(|e| anyhow!("CBOR serialization failed: {}", e)),
+                .map_err(|e| anyhow!("MessagePack serialization failed: {e}")),
+            SerializationFormat::Cbor => {
+                serde_cbor::to_vec(metadata).map_err(|e| anyhow!("CBOR serialization failed: {e}"))
+            }
             SerializationFormat::Bincode => bincode::serialize(metadata)
-                .map_err(|e| anyhow!("Bincode serialization failed: {}", e)),
+                .map_err(|e| anyhow!("Bincode serialization failed: {e}")),
             SerializationFormat::Protobuf | SerializationFormat::Avro => {
                 // These would require schema generation and external dependencies
                 // For now, fallback to JSON
                 serde_json::to_vec(metadata)
-                    .map_err(|e| anyhow!("Protobuf/Avro serialization fallback failed: {}", e))
+                    .map_err(|e| anyhow!("Protobuf/Avro serialization fallback failed: {e}"))
             }
         }
     }
@@ -454,18 +456,18 @@ pub mod serialization {
     pub fn deserialize_metadata(data: &[u8], format: SerializationFormat) -> Result<EventMetadata> {
         match format {
             SerializationFormat::Json => serde_json::from_slice(data)
-                .map_err(|e| anyhow!("JSON deserialization failed: {}", e)),
+                .map_err(|e| anyhow!("JSON deserialization failed: {e}")),
             SerializationFormat::MessagePack => rmp_serde::from_slice(data)
-                .map_err(|e| anyhow!("MessagePack deserialization failed: {}", e)),
+                .map_err(|e| anyhow!("MessagePack deserialization failed: {e}")),
             SerializationFormat::Cbor => serde_cbor::from_slice(data)
-                .map_err(|e| anyhow!("CBOR deserialization failed: {}", e)),
+                .map_err(|e| anyhow!("CBOR deserialization failed: {e}")),
             SerializationFormat::Bincode => bincode::deserialize(data)
-                .map_err(|e| anyhow!("Bincode deserialization failed: {}", e)),
+                .map_err(|e| anyhow!("Bincode deserialization failed: {e}")),
             SerializationFormat::Protobuf | SerializationFormat::Avro => {
                 // These would require schema generation and external dependencies
                 // For now, fallback to JSON
                 serde_json::from_slice(data)
-                    .map_err(|e| anyhow!("Protobuf/Avro deserialization fallback failed: {}", e))
+                    .map_err(|e| anyhow!("Protobuf/Avro deserialization fallback failed: {e}"))
             }
         }
     }
@@ -483,21 +485,20 @@ pub mod serialization {
                 encoder.write_all(data)?;
                 Ok(encoder.finish()?)
             }
-            CompressionType::Lz4 => {
-                // Would use lz4_flex or similar crate
-                Ok(data.to_vec()) // Placeholder
-            }
+            CompressionType::Lz4 => Ok(lz4_flex::compress_prepend_size(data)),
             CompressionType::Zstd => {
-                // Would use zstd crate
-                Ok(data.to_vec()) // Placeholder
+                zstd::bulk::compress(data, 0).map_err(|e| anyhow!("Zstd compression failed: {e}"))
             }
-            CompressionType::Snappy => {
-                // Would use snap crate
-                Ok(data.to_vec()) // Placeholder
-            }
+            CompressionType::Snappy => Ok(snap::raw::Encoder::new().compress_vec(data)?),
             CompressionType::Brotli => {
-                // Would use brotli crate
-                Ok(data.to_vec()) // Placeholder
+                use brotli::CompressorWriter;
+                use std::io::Write;
+                let mut compressed = Vec::new();
+                {
+                    let mut compressor = CompressorWriter::new(&mut compressed, 4096, 6, 22);
+                    compressor.write_all(data)?;
+                } // Compressor is dropped here, flushing data to compressed
+                Ok(compressed)
             }
         }
     }
@@ -515,21 +516,21 @@ pub mod serialization {
                 decoder.read_to_end(&mut decompressed)?;
                 Ok(decompressed)
             }
-            CompressionType::Lz4 => {
-                // Would use lz4_flex or similar crate
-                Ok(data.to_vec()) // Placeholder
-            }
+            CompressionType::Lz4 => lz4_flex::decompress_size_prepended(data)
+                .map_err(|e| anyhow!("LZ4 decompression failed: {e}")),
             CompressionType::Zstd => {
-                // Would use zstd crate
-                Ok(data.to_vec()) // Placeholder
+                zstd::bulk::decompress(data, 1024 * 1024) // 1MB max decompressed size
+                    .map_err(|e| anyhow!("Zstd decompression failed: {e}"))
             }
-            CompressionType::Snappy => {
-                // Would use snap crate
-                Ok(data.to_vec()) // Placeholder
-            }
+            CompressionType::Snappy => snap::raw::Decoder::new()
+                .decompress_vec(data)
+                .map_err(|e| anyhow!("Snappy decompression failed: {e}")),
             CompressionType::Brotli => {
-                // Would use brotli crate
-                Ok(data.to_vec()) // Placeholder
+                use std::io::Read;
+                let mut decompressed = Vec::new();
+                let mut decompressor = brotli::Decompressor::new(data, 4096);
+                decompressor.read_to_end(&mut decompressed)?;
+                Ok(decompressed)
             }
         }
     }
@@ -546,6 +547,12 @@ pub mod processing {
         pub batch_buffer: Vec<(crate::event::StreamEvent, EventMetadata)>,
         pub last_flush: Instant,
         pub flush_interval: Duration,
+    }
+
+    impl Default for EventProcessor {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl EventProcessor {
@@ -671,30 +678,14 @@ pub mod processing {
         ) -> anyhow::Result<()> {
             let event_metadata = event::EventMetadata::from(metadata);
             match event {
-                crate::event::StreamEvent::TripleAdded {
-                    metadata: ref mut m,
-                    ..
-                } => *m = event_metadata,
-                crate::event::StreamEvent::TripleRemoved {
-                    metadata: ref mut m,
-                    ..
-                } => *m = event_metadata,
-                crate::event::StreamEvent::GraphCreated {
-                    metadata: ref mut m,
-                    ..
-                } => *m = event_metadata,
-                crate::event::StreamEvent::SparqlUpdate {
-                    metadata: ref mut m,
-                    ..
-                } => *m = event_metadata,
-                crate::event::StreamEvent::TransactionBegin {
-                    metadata: ref mut m,
-                    ..
-                } => *m = event_metadata,
-                crate::event::StreamEvent::Heartbeat {
-                    metadata: ref mut m,
-                    ..
-                } => *m = event_metadata,
+                crate::event::StreamEvent::TripleAdded { metadata: m, .. } => *m = event_metadata,
+                crate::event::StreamEvent::TripleRemoved { metadata: m, .. } => *m = event_metadata,
+                crate::event::StreamEvent::GraphCreated { metadata: m, .. } => *m = event_metadata,
+                crate::event::StreamEvent::SparqlUpdate { metadata: m, .. } => *m = event_metadata,
+                crate::event::StreamEvent::TransactionBegin { metadata: m, .. } => {
+                    *m = event_metadata
+                }
+                crate::event::StreamEvent::Heartbeat { metadata: m, .. } => *m = event_metadata,
                 _ => {}
             }
             Ok(())
@@ -717,6 +708,125 @@ pub mod processing {
 
         fn should_flush_batch(&self) -> bool {
             self.batch_buffer.len() >= 100 || self.last_flush.elapsed() >= self.flush_interval
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        use crate::types::serialization::{compress_data, decompress_data};
+
+        #[test]
+        fn test_compression_round_trip() {
+            let test_data = b"Hello, World! This is a test message for compression.";
+            let compression_types = vec![
+                CompressionType::None,
+                CompressionType::Gzip,
+                CompressionType::Lz4,
+                CompressionType::Zstd,
+                CompressionType::Snappy,
+                CompressionType::Brotli,
+            ];
+
+            for compression in compression_types {
+                let compressed = compress_data(test_data, compression).unwrap();
+                let decompressed = decompress_data(&compressed, compression).unwrap();
+                assert_eq!(
+                    test_data,
+                    decompressed.as_slice(),
+                    "Failed round-trip for {compression:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_compression_effectiveness() {
+            let test_data = b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"; // Repetitive data
+            let compression_types = vec![
+                CompressionType::Gzip,
+                CompressionType::Lz4,
+                CompressionType::Zstd,
+                CompressionType::Snappy,
+                CompressionType::Brotli,
+            ];
+
+            for compression in compression_types {
+                let compressed = compress_data(test_data, compression).unwrap();
+                // Compressed data should be smaller than original for repetitive data
+                assert!(
+                    compressed.len() < test_data.len(),
+                    "Compression {compression:?} did not reduce size"
+                );
+            }
+        }
+
+        #[test]
+        fn test_empty_data_compression() {
+            let test_data = b"";
+            let compression_types = vec![
+                CompressionType::None,
+                CompressionType::Gzip,
+                CompressionType::Lz4,
+                CompressionType::Zstd,
+                CompressionType::Snappy,
+                CompressionType::Brotli,
+            ];
+
+            for compression in compression_types {
+                let compressed = compress_data(test_data, compression).unwrap();
+                let decompressed = decompress_data(&compressed, compression).unwrap();
+                assert_eq!(
+                    test_data,
+                    decompressed.as_slice(),
+                    "Failed empty data round-trip for {compression:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_large_data_compression() {
+            let test_data = vec![42u8; 10000]; // 10KB of data
+            let compression_types = vec![
+                CompressionType::None,
+                CompressionType::Gzip,
+                CompressionType::Lz4,
+                CompressionType::Zstd,
+                CompressionType::Snappy,
+                CompressionType::Brotli,
+            ];
+
+            for compression in compression_types {
+                let compressed = compress_data(&test_data, compression).unwrap();
+                let decompressed = decompress_data(&compressed, compression).unwrap();
+                assert_eq!(
+                    test_data, decompressed,
+                    "Failed large data round-trip for {compression:?}"
+                );
+            }
+        }
+
+        #[test]
+        fn test_random_data_compression() {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let test_data: Vec<u8> = (0..1000).map(|_| rng.gen()).collect();
+            let compression_types = vec![
+                CompressionType::None,
+                CompressionType::Gzip,
+                CompressionType::Lz4,
+                CompressionType::Zstd,
+                CompressionType::Snappy,
+                CompressionType::Brotli,
+            ];
+
+            for compression in compression_types {
+                let compressed = compress_data(&test_data, compression).unwrap();
+                let decompressed = decompress_data(&compressed, compression).unwrap();
+                assert_eq!(
+                    test_data, decompressed,
+                    "Failed random data round-trip for {compression:?}"
+                );
+            }
         }
     }
 }

@@ -207,6 +207,12 @@ pub struct VectorClock {
     pub entries: HashMap<String, u64>,
 }
 
+impl Default for VectorClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VectorClock {
     /// Create new vector clock
     pub fn new() -> Self {
@@ -419,7 +425,7 @@ enum NetworkMessage {
     /// Incoming operation
     IncomingOp {
         _from_region: String,
-        _op: ReplicationOp,
+        _op: Box<ReplicationOp>,
     },
     /// Connection event
     ConnectionEvent {
@@ -675,7 +681,7 @@ impl ReplicationManager {
                         drop(stats);
 
                         // Resolve conflict
-                        let winner = self.resolver.resolve_conflict(existing, &versioned).await?;
+                        let winner = self.resolver.resolve_conflict(existing, versioned).await?;
                         storage.triples.insert(versioned.triple.clone(), winner);
 
                         // Store conflict for later analysis
@@ -780,7 +786,7 @@ impl ReplicationManager {
                         tokio::spawn(async move {
                             if let Err(e) = Self::handle_incoming_op_static(
                                 _from_region,
-                                _op,
+                                *_op,
                                 storage,
                                 state,
                                 resolver,
@@ -843,7 +849,7 @@ impl ReplicationManager {
                         drop(stats_guard);
 
                         // Resolve conflict
-                        let winner = resolver.resolve_conflict(existing, &versioned).await?;
+                        let winner = resolver.resolve_conflict(existing, versioned).await?;
                         storage_guard
                             .triples
                             .insert(versioned.triple.clone(), winner);

@@ -4,13 +4,9 @@
 //! in real-time as it arrives, without buffering the entire dataset in memory.
 
 #[cfg(feature = "async")]
-use std::collections::{HashMap, VecDeque};
-#[cfg(feature = "async")]
-use std::pin::Pin;
+use std::collections::HashMap;
 #[cfg(feature = "async")]
 use std::sync::{Arc, Mutex, RwLock};
-#[cfg(feature = "async")]
-use std::task::{Context, Poll};
 #[cfg(feature = "async")]
 use std::time::{Duration, Instant};
 
@@ -29,21 +25,15 @@ use tokio_stream;
 
 #[cfg(feature = "async")]
 use oxirs_core::{
-    model::{GraphName, NamedNode, Object, Predicate, Quad, Subject, Term, Triple},
+    model::{Term, Triple},
     rdf_store::{OxirsQueryResults, PreparedQuery},
     Result as OxirsResult, Store,
 };
 
 #[cfg(feature = "async")]
 use crate::{
-    constraints::*,
-    paths::*,
-    report::*,
-    targets::*,
-    validation::{
-        ConstraintEvaluationResult, ValidationEngine, ValidationStats, ValidationViolation,
-    },
-    Result as ShaclResult, Shape, ShapeId, ValidationConfig, ValidationReport,
+    validation::{ValidationEngine, ValidationViolation},
+    Shape, ShapeId, ValidationConfig, ValidationReport,
 };
 
 /// Configuration for streaming validation
@@ -98,7 +88,7 @@ impl Default for StreamingValidationConfig {
 pub enum StreamEvent {
     /// Triple addition
     Addition(Triple),
-    /// Triple removal  
+    /// Triple removal
     Removal(Triple),
     /// Batch boundary marker
     BatchEnd,
@@ -286,13 +276,13 @@ impl StreamingValidationEngine {
     /// Process a stream of RDF events with validation
     pub async fn validate_stream<S>(
         &mut self,
-        mut stream: S,
-    ) -> Result<impl Stream<Item = Result<StreamingValidationResult>>>
+        stream: S,
+    ) -> Result<impl Stream<Item = Result<StreamingValidationResult>> + use<S>>
     where
         S: Stream<Item = StreamEvent> + Unpin + Send + 'static,
     {
         let (result_sender, result_receiver) = mpsc::unbounded_channel();
-        let (event_sender, mut event_receiver) = mpsc::channel(self.config.buffer_size);
+        let (event_sender, _event_receiver) = mpsc::channel(self.config.buffer_size);
 
         // Spawn stream processor task
         let config = self.config.clone();
@@ -334,7 +324,7 @@ impl StreamingValidationEngine {
     /// Internal stream processing logic
     async fn process_stream_events<S>(
         mut stream: S,
-        event_sender: mpsc::Sender<StreamEvent>,
+        _event_sender: mpsc::Sender<StreamEvent>,
         config: StreamingValidationConfig,
         shapes: Arc<RwLock<IndexMap<ShapeId, Shape>>>,
         buffer_store: Arc<Mutex<dyn Store>>,
@@ -496,7 +486,7 @@ impl StreamingValidationEngine {
         batch: &[StreamEvent],
         buffer_store: &Arc<Mutex<dyn Store>>,
     ) -> usize {
-        let mut store = buffer_store.lock().unwrap();
+        let store = buffer_store.lock().unwrap();
         let mut count = 0;
 
         for event in batch {
@@ -742,6 +732,8 @@ impl Store for PlaceholderStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "async")]
+    use oxirs_core::model::NamedNode;
     #[cfg(feature = "async")]
     use tokio_stream::{self as stream, StreamExt};
 

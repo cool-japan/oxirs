@@ -7,14 +7,13 @@
 //! - Intelligent cache warming and prefetching
 //! - Cache statistics and monitoring
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-use crate::{Rule, RuleAtom, Term};
+use crate::{Rule, RuleAtom};
 
 /// Cache key for rule execution results
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -200,12 +199,13 @@ where
 
     /// Remove entry from cache
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        if let Some(entry) = self.entries.remove(key) {
-            self.remove_from_access_order(key);
-            self.update_memory_usage();
-            Some(entry.value)
-        } else {
-            None
+        match self.entries.remove(key) {
+            Some(entry) => {
+                self.remove_from_access_order(key);
+                self.update_memory_usage();
+                Some(entry.value)
+            }
+            _ => None,
         }
     }
 
@@ -410,10 +410,9 @@ impl RuleCache {
             input_facts: input_facts.to_vec(),
         };
 
-        if let Ok(mut cache) = self.rule_results.write() {
-            cache.get(&key)
-        } else {
-            None
+        match self.rule_results.write() {
+            Ok(mut cache) => cache.get(&key),
+            _ => None,
         }
     }
 
@@ -444,10 +443,9 @@ impl RuleCache {
             context_facts: context.to_vec(),
         };
 
-        if let Ok(mut cache) = self.derivation_results.write() {
-            cache.get(&key)
-        } else {
-            None
+        match self.derivation_results.write() {
+            Ok(mut cache) => cache.get(&key),
+            _ => None,
         }
     }
 
@@ -468,10 +466,9 @@ impl RuleCache {
             return None;
         }
 
-        if let Ok(mut cache) = self.unification_cache.write() {
-            cache.get(&pattern.to_string())
-        } else {
-            None
+        match self.unification_cache.write() {
+            Ok(mut cache) => cache.get(&pattern.to_string()),
+            _ => None,
         }
     }
 
@@ -492,10 +489,9 @@ impl RuleCache {
             return None;
         }
 
-        if let Ok(mut cache) = self.pattern_cache.write() {
-            cache.get(&pattern.to_string())
-        } else {
-            None
+        match self.pattern_cache.write() {
+            Ok(mut cache) => cache.get(&pattern.to_string()),
+            _ => None,
         }
     }
 
@@ -533,28 +529,24 @@ impl RuleCache {
 
     /// Get combined cache statistics
     pub fn get_statistics(&self) -> CachingStatistics {
-        let rule_stats = if let Ok(cache) = self.rule_results.read() {
-            cache.stats().clone()
-        } else {
-            CacheStatistics::default()
+        let rule_stats = match self.rule_results.read() {
+            Ok(cache) => cache.stats().clone(),
+            _ => CacheStatistics::default(),
         };
 
-        let derivation_stats = if let Ok(cache) = self.derivation_results.read() {
-            cache.stats().clone()
-        } else {
-            CacheStatistics::default()
+        let derivation_stats = match self.derivation_results.read() {
+            Ok(cache) => cache.stats().clone(),
+            _ => CacheStatistics::default(),
         };
 
-        let unification_stats = if let Ok(cache) = self.unification_cache.read() {
-            cache.stats().clone()
-        } else {
-            CacheStatistics::default()
+        let unification_stats = match self.unification_cache.read() {
+            Ok(cache) => cache.stats().clone(),
+            _ => CacheStatistics::default(),
         };
 
-        let pattern_stats = if let Ok(cache) = self.pattern_cache.read() {
-            cache.stats().clone()
-        } else {
-            CacheStatistics::default()
+        let pattern_stats = match self.pattern_cache.read() {
+            Ok(cache) => cache.stats().clone(),
+            _ => CacheStatistics::default(),
         };
 
         CachingStatistics {
@@ -575,14 +567,14 @@ impl RuleCache {
         // Pre-populate pattern cache with rule patterns
         for rule in rules {
             for atom in &rule.body {
-                let pattern = format!("{:?}", atom);
+                let pattern = format!("{atom:?}");
                 self.cache_pattern(&pattern, vec![atom.clone()]);
             }
         }
 
         // Pre-populate with common fact patterns
         for fact in common_facts {
-            let pattern = format!("{:?}", fact);
+            let pattern = format!("{fact:?}");
             self.cache_pattern(&pattern, vec![fact.clone()]);
         }
     }
@@ -623,6 +615,7 @@ impl Default for RuleCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Term;
 
     #[test]
     fn test_smart_cache_basic_operations() {

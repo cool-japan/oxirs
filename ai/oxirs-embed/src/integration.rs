@@ -809,7 +809,7 @@ impl MultilingualSupport {
         // Find language with highest score
         let detected_lang = scores
             .iter()
-            .max_by_key(|(_, &score)| score)
+            .max_by_key(|&(_, &score)| score)
             .map(|(lang, _)| *lang)
             .unwrap_or("en");
 

@@ -4,11 +4,7 @@
 
 use oxirs_core::model::{Literal, NamedNode, Variable};
 use oxirs_core::query::{
-    algebra::{
-        AlgebraTriplePattern as TriplePattern, Expression as AlgebraExpression,
-        GraphPattern as AlgebraGraphPattern, Query as AlgebraQuery,
-        TermPattern as AlgebraTermPattern,
-    },
+    algebra::{AlgebraTriplePattern as TriplePattern, TermPattern as AlgebraTermPattern},
     sparql_algebra::{
         AggregateExpression, BuiltInFunction, Expression, FunctionExpression, GraphPattern,
         OrderExpression, PropertyPathExpression, TermPattern,
@@ -28,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let object = AlgebraTermPattern::Variable(Variable::new("name")?);
 
     let triple = TriplePattern::new(subject, predicate, object);
-    println!("   Created triple pattern: {}", triple);
+    println!("   Created triple pattern: {triple}");
 
     // Test basic graph pattern (BGP) - using SPARQL algebra patterns
     println!("\n✅ Basic Graph Pattern:");
@@ -41,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bgp = GraphPattern::Bgp {
         patterns: vec![sparql_triple],
     };
-    println!("   BGP: {}", bgp);
+    println!("   BGP: {bgp}");
 
     // Test property path expression
     println!("\n✅ Property Path Expression:");
@@ -52,26 +48,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(PropertyPathExpression::NamedNode(prop1)),
         Box::new(PropertyPathExpression::NamedNode(prop2)),
     );
-    println!("   Property path: {}", path);
+    println!("   Property path: {path}");
 
     // Test complex expression
     println!("\n✅ SPARQL Expression:");
     let var1 = Expression::Variable(Variable::new("x")?);
     let var2 = Expression::Variable(Variable::new("y")?);
     let addition = Expression::Add(Box::new(var1), Box::new(var2));
-    println!("   Expression: {}", addition);
+    println!("   Expression: {addition}");
 
     // Test function call
     println!("\n✅ Function Call:");
     let str_func = FunctionExpression::BuiltIn(BuiltInFunction::Str);
     let name_var = Expression::Variable(Variable::new("name")?);
     let func_call = Expression::FunctionCall(str_func, vec![name_var]);
-    println!("   Function call: {}", func_call);
+    println!("   Function call: {func_call}");
 
     // Test FILTER pattern
     println!("\n✅ Filter Pattern:");
     let age_var = Expression::Variable(Variable::new("age")?);
-    let eighteen = Expression::Literal(Literal::new("18").into());
+    let eighteen = Expression::Literal(Literal::new("18"));
     let condition = Expression::Greater(Box::new(age_var), Box::new(eighteen));
 
     let simple_bgp = GraphPattern::Bgp {
@@ -86,7 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         expr: condition,
         inner: Box::new(simple_bgp),
     };
-    println!("   Filter pattern: {}", filter_pattern);
+    println!("   Filter pattern: {filter_pattern}");
 
     // Test UNION pattern
     println!("\n✅ Union Pattern:");
@@ -110,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         left: Box::new(left_pattern),
         right: Box::new(right_pattern),
     };
-    println!("   Union pattern: {}", union_pattern);
+    println!("   Union pattern: {union_pattern}");
 
     // Test complete SELECT query
     println!("\n✅ Complete SELECT Query:");
@@ -120,7 +116,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let query = Query::select(select_pattern);
-    println!("   Query: {}", query);
+    println!("   Query: {query}");
 
     // Test S-Expression formatting
     println!("\n✅ S-Expression Format:");
@@ -133,7 +129,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dataset.add_named_graph(NamedNode::new("http://example.org/named")?);
 
     let query_with_dataset = query.with_dataset(dataset);
-    println!("   Query with dataset: {}", query_with_dataset);
+    println!("   Query with dataset: {query_with_dataset}");
 
     // Test aggregate expression
     println!("\n✅ Aggregate Expression:");
@@ -141,12 +137,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         expr: Some(Box::new(Expression::Variable(Variable::new("person")?))),
         distinct: true,
     };
-    println!("   Aggregate: {}", count_agg);
+    println!("   Aggregate: {count_agg}");
 
     // Test order expression
     println!("\n✅ Order Expression:");
     let order_expr = OrderExpression::Desc(Expression::Variable(Variable::new("age")?));
-    println!("   Order by: {}", order_expr);
+    println!("   Order by: {order_expr}");
 
     println!("\n🎉 Phase 2 SPARQL Algebra Extraction Complete!");
     println!("   ✓ Enhanced PropertyPathExpression with all operators");

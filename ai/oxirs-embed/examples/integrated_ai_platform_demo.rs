@@ -9,7 +9,7 @@ use anyhow::Result;
 use oxirs_embed::{
     caching::EvictionPolicy,
     // Evaluation and benchmarking
-    evaluation::{AdvancedEvaluator, QueryAnsweringEvaluator},
+    evaluation::AdvancedEvaluator,
 
     models::gnn::AggregationType,
 
@@ -19,9 +19,6 @@ use oxirs_embed::{
     // Caching and optimization
     CacheConfig,
     CacheManager,
-    ComplEx,
-    // Core embedding infrastructure
-    EmbeddingModel,
     GNNConfig,
     GNNEmbedding,
     GNNType,
@@ -30,18 +27,14 @@ use oxirs_embed::{
     GpuAccelerationManager,
 
     ModelConfig,
-    NamedNode,
-    RotatE,
 
     SpecializedTextEmbedding,
-    SpecializedTextModel,
 
     // Traditional embedding models
     TransE,
     TransformerConfig,
     // Advanced models
     TransformerEmbedding,
-    Triple,
 };
 use std::collections::HashMap;
 use std::time::Instant;
@@ -227,8 +220,7 @@ impl AIPlatform {
         println!("   ✅ Intelligent caching initialized (1GB, LRU + compression)");
 
         // Initialize evaluation infrastructure
-        let test_triples = vec![
-            (
+        let test_triples = [(
                 "gene:BRCA1".to_string(),
                 "causes".to_string(),
                 "disease:breast_cancer".to_string(),
@@ -237,10 +229,8 @@ impl AIPlatform {
                 "drug:imatinib".to_string(),
                 "inhibits".to_string(),
                 "protein:BCR_ABL".to_string(),
-            ),
-        ];
-        let validation_triples = vec![
-            (
+            )];
+        let validation_triples = [(
                 "gene:TP53".to_string(),
                 "tumor_suppressor".to_string(),
                 "pathway:apoptosis".to_string(),
@@ -249,8 +239,7 @@ impl AIPlatform {
                 "drug:trastuzumab".to_string(),
                 "targets".to_string(),
                 "protein:HER2".to_string(),
-            ),
-        ];
+            )];
         let evaluation_suite =
             AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
         let benchmark_suite = HashMap::new();
@@ -296,7 +285,7 @@ impl AIPlatform {
         ];
 
         for (s, p, o) in &biomedical_triples {
-            println!("   {} --[{}]--> {}", s, p, o);
+            println!("   {s} --[{p}]--> {o}");
         }
 
         // Chemical knowledge
@@ -313,7 +302,7 @@ impl AIPlatform {
         ];
 
         for (s, p, o) in &chemical_triples {
-            println!("   {} --[{}]--> {}", s, p, o);
+            println!("   {s} --[{p}]--> {o}");
         }
 
         // Clinical knowledge
@@ -326,17 +315,15 @@ impl AIPlatform {
         ];
 
         for (s, p, o) in &clinical_triples {
-            println!("   {} --[{}]--> {}", s, p, o);
+            println!("   {s} --[{p}]--> {o}");
         }
 
         // Research literature knowledge
         println!("\n📖 4. Literature Knowledge Extraction:");
-        let literature_texts = vec![
-            "BRCA1 mutations significantly increase the risk of hereditary breast and ovarian cancer.",
+        let literature_texts = ["BRCA1 mutations significantly increase the risk of hereditary breast and ovarian cancer.",
             "Imatinib therapy shows remarkable efficacy in chronic myeloid leukemia treatment.",
             "The p53 pathway acts as a critical tumor suppressor mechanism in cancer prevention.",
-            "Personalized medicine approaches utilize genetic biomarkers for treatment optimization.",
-        ];
+            "Personalized medicine approaches utilize genetic biomarkers for treatment optimization."];
 
         for (i, text) in literature_texts.iter().enumerate() {
             println!("   Paper {}: \"{}...\"", i + 1, &text[..60]);
@@ -440,8 +427,7 @@ impl AIPlatform {
 
         for (drug, confidence, mechanism) in drug_candidates {
             println!(
-                "   🏆 {}: {:.2} confidence ({})",
-                drug, confidence, mechanism
+                "   🏆 {drug}: {confidence:.2} confidence ({mechanism})"
             );
         }
 
@@ -483,13 +469,11 @@ impl AIPlatform {
         // Real-time query processing
         println!("\n🔄 Real-time query processing:");
 
-        let queries = vec![
-            "What are the side effects of ibuprofen?",
+        let queries = ["What are the side effects of ibuprofen?",
             "Find genes associated with Alzheimer's disease",
             "Predict drug interactions for warfarin",
             "Identify biomarkers for pancreatic cancer",
-            "What pathways are involved in diabetes?",
-        ];
+            "What pathways are involved in diabetes?"];
 
         for (i, query) in queries.iter().enumerate() {
             let start = Instant::now();
@@ -499,22 +483,22 @@ impl AIPlatform {
 
             // Stage 1: Query analysis
             let analysis_time = 12; // ms
-            println!("      ⚡ Query analysis: {}ms", analysis_time);
+            println!("      ⚡ Query analysis: {analysis_time}ms");
 
             // Stage 2: Model ensemble
             let ensemble_time = 89; // ms
-            println!("      🤖 Model ensemble: {}ms", ensemble_time);
+            println!("      🤖 Model ensemble: {ensemble_time}ms");
 
             // Stage 3: Result aggregation
             let aggregation_time = 23; // ms
-            println!("      🔗 Result aggregation: {}ms", aggregation_time);
+            println!("      🔗 Result aggregation: {aggregation_time}ms");
 
             // Stage 4: Response formatting
             let formatting_time = 8; // ms
-            println!("      📋 Response formatting: {}ms", formatting_time);
+            println!("      📋 Response formatting: {formatting_time}ms");
 
             let total_time = analysis_time + ensemble_time + aggregation_time + formatting_time;
-            println!("      ✅ Total latency: {}ms", total_time);
+            println!("      ✅ Total latency: {total_time}ms");
 
             // Cache status
             let cache_hit = i > 0 && i % 3 == 0;
@@ -586,8 +570,7 @@ impl AIPlatform {
 
         for (fold, precision, recall, f1) in cv_results {
             println!(
-                "      {}: P={:.1}%, R={:.1}%, F1={:.1}%",
-                fold, precision, recall, f1
+                "      {fold}: P={precision:.1}%, R={recall:.1}%, F1={f1:.1}%"
             );
         }
 

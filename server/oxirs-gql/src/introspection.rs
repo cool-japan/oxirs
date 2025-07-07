@@ -5,13 +5,10 @@
 
 use crate::ast::Value;
 use crate::execution::{ExecutionContext, FieldResolver};
-use crate::types::{
-    ArgumentType, EnumType, EnumValue, FieldType, GraphQLType, InputObjectType, InterfaceType,
-    ObjectType, ScalarType, Schema, UnionType,
-};
+use crate::types::{ArgumentType, EnumValue, FieldType, GraphQLType, ScalarType, Schema};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use serde_json::Value as JsonValue;
+// serde_json::Value as JsonValue removed - unused import
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -177,7 +174,7 @@ impl TypeIntrospection {
     }
 
     /// Get fields (for Object and Interface types)
-    pub fn fields(&self, include_deprecated: bool) -> Option<Vec<FieldIntrospection>> {
+    pub fn fields(&self, _include_deprecated: bool) -> Option<Vec<FieldIntrospection>> {
         match &self.gql_type {
             GraphQLType::Object(obj) => {
                 let mut fields: Vec<FieldIntrospection> = obj
@@ -728,7 +725,7 @@ impl FieldResolver for IntrospectionResolver {
         &self,
         field_name: &str,
         args: &HashMap<String, Value>,
-        context: &ExecutionContext,
+        _context: &ExecutionContext,
     ) -> Result<Value> {
         match field_name {
             "__schema" => Ok(self.resolve_schema().await?),
@@ -755,7 +752,7 @@ impl FieldResolver for IntrospectionResolver {
 
 impl IntrospectionResolver {
     async fn resolve_schema(&self) -> Result<Value> {
-        let schema_introspection = SchemaIntrospection::new(Arc::clone(&self.schema));
+        let _schema_introspection = SchemaIntrospection::new(Arc::clone(&self.schema));
 
         // This would be a complex object with all schema information
         // For now, return a simplified representation
@@ -1181,6 +1178,7 @@ impl IntrospectionQuery {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::ObjectType;
     use crate::types::BuiltinScalars;
 
     fn create_test_schema() -> Schema {

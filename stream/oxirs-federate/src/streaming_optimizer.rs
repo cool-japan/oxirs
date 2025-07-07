@@ -495,7 +495,7 @@ impl StreamingOptimizer {
         query: &str,
         initial_page_size: Option<usize>,
         service_registry: &ServiceRegistry,
-    ) -> Result<impl Stream<Item = Result<StreamChunk>>> {
+    ) -> Result<impl Stream<Item = Result<StreamChunk>> + use<>> {
         // Create initial cursor
         let cursor = self.create_cursor(service_id, query, None).await?;
 

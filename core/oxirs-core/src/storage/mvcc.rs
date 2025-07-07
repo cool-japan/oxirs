@@ -61,6 +61,8 @@ impl Default for MvccConfig {
 pub enum ConflictDetection {
     /// Optimistic concurrency control
     Optimistic,
+    /// Optimistic two-phase locking
+    OptimisticTwoPhase,
     /// Pessimistic locking
     Pessimistic,
     /// Multi-version timestamp ordering
@@ -153,15 +155,8 @@ impl VersionChain {
         }
 
         // Remove old deleted versions
-        self.versions.retain(|v| {
-            if v.deleted && v.timestamp < min_timestamp {
-                false // Remove old deleted versions
-            } else if !v.deleted {
-                true // Always keep non-deleted versions
-            } else {
-                true // Keep recent deleted versions
-            }
-        });
+        self.versions
+            .retain(|v| !(v.deleted && v.timestamp < min_timestamp));
 
         // Limit number of versions
         if self.versions.len() > max_versions {
@@ -257,6 +252,8 @@ pub enum IsolationLevel {
     Serializable,
     /// Snapshot isolation
     Snapshot,
+    /// Snapshot isolation (alias for Snapshot)
+    SnapshotIsolation,
 }
 
 /// Snapshot information
@@ -572,6 +569,33 @@ impl MvccStore {
                     }
                 }
             }
+            ConflictDetection::OptimisticTwoPhase => {
+                // Two-phase optimistic validation
+                // Phase 1: Read validation (similar to optimistic)
+                for key in &tx.read_set {
+                    if let Some(version_chain) = self.versions.get(key) {
+                        if let Some(latest) = version_chain.versions.first() {
+                            if latest.timestamp > tx.start_timestamp {
+                                return Err(anyhow!("Read conflict detected in phase 1"));
+                            }
+                        }
+                    }
+                }
+                
+                // Phase 2: Write validation 
+                for key in tx.write_set.keys() {
+                    if let Some(version_chain) = self.versions.get(key) {
+                        for version in &version_chain.versions {
+                            if version.transaction_id != tx.id
+                                && version.timestamp > tx.start_timestamp
+                                && version.commit_timestamp.is_some()
+                            {
+                                return Err(anyhow!("Write conflict detected in phase 2"));
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -778,6 +802,13 @@ impl MvccStore {
             .unwrap_or(self.get_current_timestamp());
 
         min_active.min(min_snapshot)
+    }
+
+    /// Run garbage collection manually
+    pub fn garbage_collect(&self) -> Result<()> {
+        let min_timestamp = self.calculate_min_timestamp();
+        Self::run_gc_internal(self.versions.clone(), self.config.clone(), min_timestamp);
+        Ok(())
     }
 
     /// Get store statistics

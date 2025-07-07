@@ -31,6 +31,7 @@ const VERSION: u32 = 1;
 const PAGE_SIZE: usize = 4096;
 
 /// Maximum size for a single memory map (1GB)
+#[allow(dead_code)]
 const MAX_MMAP_SIZE: usize = 1 << 30;
 
 /// Header size (must be page-aligned)
@@ -128,6 +129,7 @@ impl MmapStore {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&data_path)
             .context("Failed to open data file")?;
 
@@ -221,7 +223,7 @@ impl MmapStore {
                 }
                 Err(e) => {
                     // Log error but continue with empty interner
-                    eprintln!("Warning: Failed to load term interner: {}", e);
+                    eprintln!("Warning: Failed to load term interner: {e}");
                 }
             }
         }
@@ -551,7 +553,7 @@ impl MmapStore {
         match (subject_id, predicate_id, object_id, graph_id) {
             (Some(s), Some(p), Some(o), g) => {
                 // Use SPO index for exact match
-                let key = format!("{:016x}{:016x}{:016x}", s, p, o);
+                let key = format!("{s:016x}{p:016x}{o:016x}");
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&key)?;
                     for (_, entry) in results {
@@ -564,7 +566,7 @@ impl MmapStore {
             }
             (Some(s), Some(p), None, g) => {
                 // Use SPO index with prefix
-                let prefix = format!("{:016x}{:016x}", s, p);
+                let prefix = format!("{s:016x}{p:016x}");
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
@@ -576,7 +578,7 @@ impl MmapStore {
             }
             (Some(s), None, None, g) => {
                 // Use SPO index with subject prefix
-                let prefix = format!("{:016x}", s);
+                let prefix = format!("{s:016x}");
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
@@ -588,7 +590,7 @@ impl MmapStore {
             }
             (None, Some(p), Some(o), g) => {
                 // Use POS index
-                let key = format!("{:016x}{:016x}", p, o);
+                let key = format!("{p:016x}{o:016x}");
                 if let Some(pos_index) = self.indexes.read().get("pos") {
                     let results = pos_index.search_prefix(&key)?;
                     for (_, entry) in results {
@@ -600,7 +602,7 @@ impl MmapStore {
             }
             (None, None, Some(o), g) => {
                 // Use OSP index
-                let prefix = format!("{:016x}", o);
+                let prefix = format!("{o:016x}");
                 if let Some(osp_index) = self.indexes.read().get("osp") {
                     let results = osp_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
@@ -612,7 +614,7 @@ impl MmapStore {
             }
             (None, None, None, Some(g)) => {
                 // Use GSPO index
-                let prefix = format!("{:016x}", g);
+                let prefix = format!("{g:016x}");
                 if let Some(gspo_index) = self.indexes.read().get("gspo") {
                     let results = gspo_index.search_prefix(&prefix)?;
                     for (_, entry) in results {
@@ -742,7 +744,7 @@ impl MmapStore {
     ) -> Result<()> {
         // Sort entries by key for better index performance
         let mut sorted_entries = entries.to_vec();
-        sorted_entries.sort_by(|a, b| a.0.cmp(&b.0));
+        sorted_entries.sort_by_key(|x| x.0);
 
         for (key_bytes, entry) in sorted_entries {
             let key = String::from_utf8_lossy(&key_bytes).to_string();
@@ -759,7 +761,7 @@ impl MmapStore {
     ) -> Result<()> {
         // Sort entries by key for better index performance
         let mut sorted_entries = entries.to_vec();
-        sorted_entries.sort_by(|a, b| a.0.cmp(&b.0));
+        sorted_entries.sort_by_key(|x| x.0);
 
         for (key_bytes, entry) in sorted_entries {
             let key = String::from_utf8_lossy(&key_bytes).to_string();
@@ -931,10 +933,12 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let path = temp_dir.path();
 
-        // Create store and add data
+        // Create store and add data using batch processing for better performance
         {
             let store = MmapStore::new(path)?;
 
+            // Collect all quads first
+            let mut quads = Vec::new();
             for i in 0..100 {
                 let quad = Quad::new(
                     Subject::NamedNode(NamedNode::new(format!("http://example.org/s{i}"))?),
@@ -942,8 +946,11 @@ mod tests {
                     Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
                     GraphName::DefaultGraph,
                 );
-                store.add(&quad)?;
+                quads.push(quad);
             }
+
+            // Add all quads in batch for better performance
+            store.add_batch(&quads)?;
 
             store.flush()?;
             assert_eq!(store.len(), 100);
@@ -963,11 +970,13 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let store = MmapStore::new(temp_dir.path())?;
 
-        // Add test data with different patterns
+        // Add test data with different patterns using batch processing for better performance
         let subjects = vec!["s1", "s2", "s3"];
         let predicates = vec!["p1", "p2"];
         let objects = vec!["o1", "o2", "o3", "o4"];
 
+        // Collect all quads first
+        let mut quads = Vec::new();
         for s in &subjects {
             for p in &predicates {
                 for o in &objects {
@@ -977,10 +986,13 @@ mod tests {
                         Object::NamedNode(NamedNode::new(format!("http://example.org/{o}"))?),
                         GraphName::DefaultGraph,
                     );
-                    store.add(&quad)?;
+                    quads.push(quad);
                 }
             }
         }
+
+        // Add all quads in batch for better performance
+        store.add_batch(&quads)?;
 
         store.flush()?;
         assert_eq!(store.len(), 24); // 3 * 2 * 4
@@ -1124,7 +1136,8 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let store = MmapStore::new(temp_dir.path())?;
 
-        // Add 10,000 quads
+        // Add 10,000 quads using batch processing for much better performance
+        let mut quads = Vec::with_capacity(10_000);
         for i in 0..10_000 {
             let quad = Quad::new(
                 Subject::NamedNode(NamedNode::new(format!(
@@ -1138,8 +1151,11 @@ mod tests {
                 Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
                 GraphName::DefaultGraph,
             );
-            store.add(&quad)?;
+            quads.push(quad);
         }
+
+        // Add all quads in batch for dramatically better performance
+        store.add_batch(&quads)?;
 
         store.flush()?;
         assert_eq!(store.len(), 10_000);
@@ -1164,34 +1180,38 @@ mod tests {
         let temp_dir = TempDir::new()?;
         let store = MmapStore::new(temp_dir.path())?;
 
-        // Test blank nodes in all positions
+        // Test blank nodes in all positions using batch processing for better performance
         let b1 = BlankNode::new("b1")?;
         let b2 = BlankNode::new("b2")?;
         let p = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
 
-        // Blank node as subject
-        store.add(&Quad::new(
-            Subject::BlankNode(b1.clone()),
-            p.clone(),
-            Object::Literal(Literal::new_simple_literal("value1")),
-            GraphName::DefaultGraph,
-        ))?;
+        // Collect all quads first
+        let quads = vec![
+            // Blank node as subject
+            Quad::new(
+                Subject::BlankNode(b1.clone()),
+                p.clone(),
+                Object::Literal(Literal::new_simple_literal("value1")),
+                GraphName::DefaultGraph,
+            ),
+            // Blank node as object
+            Quad::new(
+                Subject::NamedNode(NamedNode::new("http://example.org/s")?),
+                p.clone(),
+                Object::BlankNode(b2.clone()),
+                GraphName::DefaultGraph,
+            ),
+            // Blank node as graph
+            Quad::new(
+                Subject::NamedNode(NamedNode::new("http://example.org/s2")?),
+                p.clone(),
+                Object::Literal(Literal::new_simple_literal("value2")),
+                GraphName::BlankNode(b1.clone()),
+            ),
+        ];
 
-        // Blank node as object
-        store.add(&Quad::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/s")?),
-            p.clone(),
-            Object::BlankNode(b2.clone()),
-            GraphName::DefaultGraph,
-        ))?;
-
-        // Blank node as graph
-        store.add(&Quad::new(
-            Subject::NamedNode(NamedNode::new("http://example.org/s2")?),
-            p.clone(),
-            Object::Literal(Literal::new_simple_literal("value2")),
-            GraphName::BlankNode(b1.clone()),
-        ))?;
+        // Add all quads in batch for better performance
+        store.add_batch(&quads)?;
 
         store.flush()?;
         assert_eq!(store.len(), 3);

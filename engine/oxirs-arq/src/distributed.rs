@@ -3,7 +3,7 @@
 //! Provides distributed SPARQL query execution across multiple nodes with
 //! intelligent query decomposition, workload distribution, and result aggregation.
 
-use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
+use crate::algebra::{Algebra, Term, TriplePattern, Variable};
 use crate::optimizer::{IndexType, Statistics};
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -424,7 +424,11 @@ impl DistributedQueryProcessor {
     }
 
     /// Select optimal nodes for executing a query
-    async fn select_nodes_for_query(&self, algebra: &Algebra, count: usize) -> Result<Vec<NodeId>> {
+    async fn select_nodes_for_query(
+        &self,
+        _algebra: &Algebra,
+        count: usize,
+    ) -> Result<Vec<NodeId>> {
         let nodes = self.nodes.read().await;
 
         if nodes.is_empty() {
@@ -510,7 +514,7 @@ impl DistributedQueryProcessor {
     /// Execute a single subquery
     async fn execute_subquery(
         &self,
-        query_id: Uuid,
+        _query_id: Uuid,
         subquery: SubqueryPlan,
     ) -> Result<SubqueryResult> {
         let start_time = Instant::now();
@@ -632,7 +636,7 @@ impl DistributedQueryProcessor {
     ) -> Result<Vec<HashMap<Variable, Term>>> {
         match func {
             AggregationFunction::Count => {
-                let total_count: usize = results.iter().map(|r| r.bindings.len()).sum();
+                let _total_count: usize = results.iter().map(|r| r.bindings.len()).sum();
                 // Return single binding with count
                 Ok(vec![HashMap::new()]) // Simplified implementation
             }
@@ -665,7 +669,7 @@ impl DistributedQueryProcessor {
     fn determine_aggregation_strategy(
         &self,
         algebra: &Algebra,
-        subqueries: &[SubqueryPlan],
+        _subqueries: &[SubqueryPlan],
     ) -> AggregationStrategy {
         match algebra {
             Algebra::Join { left, right } => {
@@ -746,7 +750,7 @@ impl LoadBalancer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Variable};
+    use crate::algebra::Variable;
     use oxirs_core::model::NamedNode;
 
     #[tokio::test]

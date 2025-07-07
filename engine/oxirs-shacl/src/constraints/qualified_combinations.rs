@@ -6,7 +6,7 @@
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
 use super::shape_constraints::QualifiedValueShapeConstraint;
-use crate::{validation::ValidationEngine, Result, ShaclError, ShapeId, ValidationConfig};
+use crate::{Result, ShaclError, ShapeId};
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -71,8 +71,7 @@ impl ComplexQualifiedShapeCombination {
         if let (Some(min), Some(max)) = (self.global_min_count, self.global_max_count) {
             if min > max {
                 return Err(ShaclError::ConstraintValidation(format!(
-                    "Global minimum count ({}) cannot be greater than maximum count ({})",
-                    min, max
+                    "Global minimum count ({min}) cannot be greater than maximum count ({max})"
                 )));
             }
         }
@@ -130,8 +129,7 @@ impl ComplexQualifiedShapeCombination {
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
                     Some(format!(
-                        "Global qualified combination expected at least {} conforming values, but found {}",
-                        min_count, total_count
+                        "Global qualified combination expected at least {min_count} conforming values, but found {total_count}"
                     )),
                 ));
             }
@@ -143,8 +141,7 @@ impl ComplexQualifiedShapeCombination {
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
                     Some(format!(
-                        "Global qualified combination expected at most {} conforming values, but found {}",
-                        max_count, total_count
+                        "Global qualified combination expected at most {max_count} conforming values, but found {total_count}"
                     )),
                 ));
             }
@@ -637,7 +634,7 @@ impl ExactlyOneQualifiedCombination {
                 // Early termination if more than one is satisfied
                 if satisfied_count > 1 {
                     return Ok(QualifiedCombinationResult::violated(
-                        format!("ExactlyOne combination failed: {} sub-combinations were satisfied, expected exactly 1", satisfied_count),
+                        format!("ExactlyOne combination failed: {satisfied_count} sub-combinations were satisfied, expected exactly 1"),
                         None,
                         total_conforming_count,
                     ));
@@ -652,7 +649,7 @@ impl ExactlyOneQualifiedCombination {
             ))
         } else {
             Ok(QualifiedCombinationResult::violated(
-                format!("ExactlyOne combination failed: {} sub-combinations were satisfied, expected exactly 1", satisfied_count),
+                format!("ExactlyOne combination failed: {satisfied_count} sub-combinations were satisfied, expected exactly 1"),
                 None,
                 total_conforming_count,
             ))
@@ -1119,12 +1116,7 @@ pub enum OptimizationLevel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        constraints::{
-            constraint_context::ConstraintContext, shape_constraints::QualifiedValueShapeConstraint,
-        },
-        ShapeId,
-    };
+    use crate::{constraints::shape_constraints::QualifiedValueShapeConstraint, ShapeId};
     use oxirs_core::model::{NamedNode, Term};
 
     #[test]

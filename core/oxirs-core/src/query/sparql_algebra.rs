@@ -233,35 +233,35 @@ impl fmt::Display for Expression {
             Self::NamedNode(node) => node.fmt(f),
             Self::Literal(literal) => literal.fmt(f),
             Self::Variable(var) => var.fmt(f),
-            Self::Or(left, right) => write!(f, "({} || {})", left, right),
-            Self::And(left, right) => write!(f, "({} && {})", left, right),
-            Self::Equal(left, right) => write!(f, "({} = {})", left, right),
-            Self::SameTerm(left, right) => write!(f, "sameTerm({}, {})", left, right),
-            Self::Greater(left, right) => write!(f, "({} > {})", left, right),
-            Self::GreaterOrEqual(left, right) => write!(f, "({} >= {})", left, right),
-            Self::Less(left, right) => write!(f, "({} < {})", left, right),
-            Self::LessOrEqual(left, right) => write!(f, "({} <= {})", left, right),
+            Self::Or(left, right) => write!(f, "({left} || {right})"),
+            Self::And(left, right) => write!(f, "({left} && {right})"),
+            Self::Equal(left, right) => write!(f, "({left} = {right})"),
+            Self::SameTerm(left, right) => write!(f, "sameTerm({left}, {right})"),
+            Self::Greater(left, right) => write!(f, "({left} > {right})"),
+            Self::GreaterOrEqual(left, right) => write!(f, "({left} >= {right})"),
+            Self::Less(left, right) => write!(f, "({left} < {right})"),
+            Self::LessOrEqual(left, right) => write!(f, "({left} <= {right})"),
             Self::In(expr, list) => {
-                write!(f, "({} IN (", expr)?;
+                write!(f, "({expr} IN (")?;
                 for (i, item) in list.iter().enumerate() {
                     if i > 0 {
                         f.write_str(", ")?;
                     }
-                    write!(f, "{}", item)?;
+                    write!(f, "{item}")?;
                 }
                 f.write_str("))")
             }
-            Self::Add(left, right) => write!(f, "({} + {})", left, right),
-            Self::Subtract(left, right) => write!(f, "({} - {})", left, right),
-            Self::Multiply(left, right) => write!(f, "({} * {})", left, right),
-            Self::Divide(left, right) => write!(f, "({} / {})", left, right),
-            Self::UnaryPlus(expr) => write!(f, "(+{})", expr),
-            Self::UnaryMinus(expr) => write!(f, "(-{})", expr),
-            Self::Not(expr) => write!(f, "(!{})", expr),
-            Self::Exists(pattern) => write!(f, "EXISTS {{ {} }}", pattern),
-            Self::Bound(var) => write!(f, "BOUND({})", var),
+            Self::Add(left, right) => write!(f, "({left} + {right})"),
+            Self::Subtract(left, right) => write!(f, "({left} - {right})"),
+            Self::Multiply(left, right) => write!(f, "({left} * {right})"),
+            Self::Divide(left, right) => write!(f, "({left} / {right})"),
+            Self::UnaryPlus(expr) => write!(f, "(+{expr})"),
+            Self::UnaryMinus(expr) => write!(f, "(-{expr})"),
+            Self::Not(expr) => write!(f, "(!{expr})"),
+            Self::Exists(pattern) => write!(f, "EXISTS {{ {pattern} }}"),
+            Self::Bound(var) => write!(f, "BOUND({var})"),
             Self::If(condition, then_expr, else_expr) => {
-                write!(f, "IF({}, {}, {})", condition, then_expr, else_expr)
+                write!(f, "IF({condition}, {then_expr}, {else_expr})")
             }
             Self::Coalesce(exprs) => {
                 f.write_str("COALESCE(")?;
@@ -269,17 +269,17 @@ impl fmt::Display for Expression {
                     if i > 0 {
                         f.write_str(", ")?;
                     }
-                    write!(f, "{}", expr)?;
+                    write!(f, "{expr}")?;
                 }
                 f.write_str(")")
             }
             Self::FunctionCall(func, args) => {
-                write!(f, "{}(", func)?;
+                write!(f, "{func}(")?;
                 for (i, arg) in args.iter().enumerate() {
                     if i > 0 {
                         f.write_str(", ")?;
                     }
-                    write!(f, "{}", arg)?;
+                    write!(f, "{arg}")?;
                 }
                 f.write_str(")")
             }
@@ -574,7 +574,7 @@ impl fmt::Display for GraphPattern {
                     if i > 0 {
                         f.write_str(" . ")?;
                     }
-                    write!(f, "{}", pattern)?;
+                    write!(f, "{pattern}")?;
                 }
                 Ok(())
             }
@@ -583,40 +583,40 @@ impl fmt::Display for GraphPattern {
                 path,
                 object,
             } => {
-                write!(f, "{} {} {}", subject, path, object)
+                write!(f, "{subject} {path} {object}")
             }
             Self::Join { left, right } => {
-                write!(f, "{} . {}", left, right)
+                write!(f, "{left} . {right}")
             }
             Self::LeftJoin {
                 left,
                 right,
                 expression,
             } => {
-                write!(f, "{} OPTIONAL {{ {}", left, right)?;
+                write!(f, "{left} OPTIONAL {{ {right}")?;
                 if let Some(expr) = expression {
-                    write!(f, " FILTER ({})", expr)?;
+                    write!(f, " FILTER ({expr})")?;
                 }
                 f.write_str(" }")
             }
             Self::Filter { expr, inner } => {
-                write!(f, "{} FILTER ({})", inner, expr)
+                write!(f, "{inner} FILTER ({expr})")
             }
             Self::Union { left, right } => {
-                write!(f, "{{ {} }} UNION {{ {} }}", left, right)
+                write!(f, "{{ {left} }} UNION {{ {right} }}")
             }
             Self::Graph { name, inner } => {
-                write!(f, "GRAPH {} {{ {} }}", name, inner)
+                write!(f, "GRAPH {name} {{ {inner} }}")
             }
             Self::Extend {
                 inner,
                 variable,
                 expression,
             } => {
-                write!(f, "{} BIND ({} AS {})", inner, expression, variable)
+                write!(f, "{inner} BIND ({expression} AS {variable})")
             }
             Self::Minus { left, right } => {
-                write!(f, "{} MINUS {{ {} }}", left, right)
+                write!(f, "{left} MINUS {{ {right} }}")
             }
             Self::Values {
                 variables,
@@ -631,7 +631,7 @@ impl fmt::Display for GraphPattern {
                         if i > 0 {
                             f.write_str(" ")?;
                         }
-                        write!(f, "{}", var)?;
+                        write!(f, "{var}")?;
                     }
                     f.write_str(")")?;
                 }
@@ -642,7 +642,7 @@ impl fmt::Display for GraphPattern {
                     }
                     if variables.len() == 1 {
                         if let Some(term) = &binding[0] {
-                            write!(f, "{}", term)?;
+                            write!(f, "{term}")?;
                         } else {
                             f.write_str("UNDEF")?;
                         }
@@ -653,7 +653,7 @@ impl fmt::Display for GraphPattern {
                                 f.write_str(" ")?;
                             }
                             if let Some(term) = value {
-                                write!(f, "{}", term)?;
+                                write!(f, "{term}")?;
                             } else {
                                 f.write_str("UNDEF")?;
                             }
@@ -664,9 +664,9 @@ impl fmt::Display for GraphPattern {
                 f.write_str(" }")
             }
             Self::OrderBy { inner, expression } => {
-                write!(f, "{} ORDER BY", inner)?;
+                write!(f, "{inner} ORDER BY")?;
                 for expr in expression {
-                    write!(f, " {}", expr)?;
+                    write!(f, " {expr}")?;
                 }
                 Ok(())
             }
@@ -676,24 +676,24 @@ impl fmt::Display for GraphPattern {
                     if i > 0 {
                         f.write_str(" ")?;
                     }
-                    write!(f, "{}", var)?;
+                    write!(f, "{var}")?;
                 }
-                write!(f, " WHERE {{ {} }}", inner)
+                write!(f, " WHERE {{ {inner} }}")
             }
             Self::Distinct { inner } => {
-                write!(f, "SELECT DISTINCT * WHERE {{ {} }}", inner)
+                write!(f, "SELECT DISTINCT * WHERE {{ {inner} }}")
             }
             Self::Reduced { inner } => {
-                write!(f, "SELECT REDUCED * WHERE {{ {} }}", inner)
+                write!(f, "SELECT REDUCED * WHERE {{ {inner} }}")
             }
             Self::Slice {
                 inner,
                 start,
                 length,
             } => {
-                write!(f, "{} OFFSET {}", inner, start)?;
+                write!(f, "{inner} OFFSET {start}")?;
                 if let Some(length) = length {
-                    write!(f, " LIMIT {}", length)?;
+                    write!(f, " LIMIT {length}")?;
                 }
                 Ok(())
             }
@@ -702,14 +702,14 @@ impl fmt::Display for GraphPattern {
                 variables,
                 aggregates,
             } => {
-                write!(f, "{} GROUP BY", inner)?;
+                write!(f, "{inner} GROUP BY")?;
                 for var in variables {
-                    write!(f, " {}", var)?;
+                    write!(f, " {var}")?;
                 }
                 if !aggregates.is_empty() {
                     f.write_str(" HAVING")?;
                     for (var, agg) in aggregates {
-                        write!(f, " ({} AS {})", agg, var)?;
+                        write!(f, " ({agg} AS {var})")?;
                     }
                 }
                 Ok(())
@@ -720,9 +720,9 @@ impl fmt::Display for GraphPattern {
                 silent,
             } => {
                 if *silent {
-                    write!(f, "SERVICE SILENT {} {{ {} }}", name, inner)
+                    write!(f, "SERVICE SILENT {name} {{ {inner} }}")
                 } else {
-                    write!(f, "SERVICE {} {{ {} }}", name, inner)
+                    write!(f, "SERVICE {name} {{ {inner} }}")
                 }
             }
         }
@@ -1465,9 +1465,9 @@ impl fmt::Display for AggregateExpression {
                 distinct,
             } => {
                 if *distinct {
-                    write!(f, "{}(DISTINCT ", name)?;
+                    write!(f, "{name}(DISTINCT ")?;
                 } else {
-                    write!(f, "{}(", name)?;
+                    write!(f, "{name}(")?;
                 }
                 expr.fmt(f)?;
                 f.write_str(")")

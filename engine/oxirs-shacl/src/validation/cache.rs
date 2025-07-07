@@ -4,8 +4,7 @@ use indexmap::IndexMap;
 use std::cell::RefCell;
 use std::collections::HashMap;
 
-use crate::{Constraint, ConstraintComponentId, PropertyPath, ShapeId};
-use oxirs_core::model::Term;
+use crate::{Constraint, ConstraintComponentId, ShapeId};
 
 use super::{ConstraintCacheKey, ConstraintEvaluationResult};
 

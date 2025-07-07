@@ -10,8 +10,13 @@ use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, SystemTime};
-use tracing::{debug, info, warn};
+use std::time::SystemTime;
+use tracing::info;
+
+#[cfg(target_os = "linux")]
+use libc::{cpu_set_t, sched_getaffinity, sched_setaffinity, CPU_ISSET, CPU_SET, CPU_ZERO};
+#[cfg(target_os = "linux")]
+use std::ffi::CString;
 
 /// Standard page size for TDB (8KB)
 pub const PAGE_SIZE: usize = 8192;
@@ -318,6 +323,120 @@ impl Page {
     }
 }
 
+/// NUMA topology information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NumaTopology {
+    /// Number of NUMA nodes
+    pub numa_nodes: usize,
+    /// CPU cores per NUMA node
+    pub cores_per_node: Vec<Vec<usize>>,
+    /// Memory per NUMA node in bytes
+    pub memory_per_node: Vec<usize>,
+    /// Current NUMA node
+    pub current_node: usize,
+    /// NUMA distance matrix
+    pub distance_matrix: Vec<Vec<u8>>,
+}
+
+impl Default for NumaTopology {
+    fn default() -> Self {
+        Self {
+            numa_nodes: 1,
+            cores_per_node: vec![vec![0]],
+            memory_per_node: vec![0],
+            current_node: 0,
+            distance_matrix: vec![vec![10]], // Self distance is typically 10
+        }
+    }
+}
+
+/// NUMA allocation strategy
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NumaAllocationStrategy {
+    /// Allocate on current NUMA node
+    Local,
+    /// Interleave allocation across all NUMA nodes
+    Interleave,
+    /// Round-robin allocation across NUMA nodes
+    RoundRobin,
+    /// Allocate on preferred NUMA node
+    Preferred(usize),
+    /// Bind allocation to specific NUMA node
+    Bind(usize),
+}
+
+impl Default for NumaAllocationStrategy {
+    fn default() -> Self {
+        NumaAllocationStrategy::Local
+    }
+}
+
+/// NUMA memory pool configuration
+#[derive(Debug, Clone)]
+pub struct NumaMemoryPool {
+    /// NUMA node ID
+    pub node_id: usize,
+    /// Pool size in bytes
+    pub pool_size: usize,
+    /// Available memory in bytes
+    pub available_memory: usize,
+    /// Allocated pages count
+    pub allocated_pages: usize,
+    /// Maximum pages per pool
+    pub max_pages: usize,
+    /// Page allocation bitmap
+    pub page_bitmap: Vec<bool>,
+}
+
+impl NumaMemoryPool {
+    pub fn new(node_id: usize, pool_size: usize, max_pages: usize) -> Self {
+        Self {
+            node_id,
+            pool_size,
+            available_memory: pool_size,
+            allocated_pages: 0,
+            max_pages,
+            page_bitmap: vec![false; max_pages],
+        }
+    }
+
+    pub fn can_allocate(&self) -> bool {
+        self.allocated_pages < self.max_pages && self.available_memory >= PAGE_SIZE
+    }
+
+    pub fn allocate_page(&mut self) -> Option<usize> {
+        if !self.can_allocate() {
+            return None;
+        }
+
+        for (i, &allocated) in self.page_bitmap.iter().enumerate() {
+            if !allocated {
+                self.page_bitmap[i] = true;
+                self.allocated_pages += 1;
+                self.available_memory = self.available_memory.saturating_sub(PAGE_SIZE);
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    pub fn deallocate_page(&mut self, page_index: usize) {
+        if page_index < self.page_bitmap.len() && self.page_bitmap[page_index] {
+            self.page_bitmap[page_index] = false;
+            self.allocated_pages = self.allocated_pages.saturating_sub(1);
+            self.available_memory += PAGE_SIZE;
+        }
+    }
+
+    pub fn utilization(&self) -> f64 {
+        if self.max_pages == 0 {
+            0.0
+        } else {
+            self.allocated_pages as f64 / self.max_pages as f64
+        }
+    }
+}
+
 /// Buffer pool configuration
 #[derive(Debug, Clone)]
 pub struct BufferPoolConfig {
@@ -331,6 +450,16 @@ pub struct BufferPoolConfig {
     pub sync_frequency_seconds: u64,
     /// Enable page compression
     pub enable_compression: bool,
+    /// Enable NUMA-aware allocation
+    pub enable_numa: bool,
+    /// NUMA allocation strategy
+    pub numa_strategy: NumaAllocationStrategy,
+    /// NUMA topology detection
+    pub auto_detect_numa: bool,
+    /// Memory pools per NUMA node
+    pub memory_pools_per_node: usize,
+    /// NUMA memory binding
+    pub numa_memory_binding: bool,
 }
 
 impl Default for BufferPoolConfig {
@@ -341,6 +470,11 @@ impl Default for BufferPoolConfig {
             write_behind_delay_ms: 5000, // 5 seconds
             sync_frequency_seconds: 30,
             enable_compression: false,
+            enable_numa: true,
+            numa_strategy: NumaAllocationStrategy::default(),
+            auto_detect_numa: true,
+            memory_pools_per_node: 4,
+            numa_memory_binding: true,
         }
     }
 }
@@ -366,6 +500,14 @@ pub struct BufferPoolStats {
     pub evicted_pages: u64,
     /// Average access time
     pub avg_access_time_ms: f64,
+    /// NUMA allocation statistics
+    pub numa_allocations_per_node: HashMap<usize, u64>,
+    /// NUMA memory utilization per node
+    pub numa_memory_utilization: HashMap<usize, f64>,
+    /// NUMA page migrations
+    pub numa_page_migrations: u64,
+    /// NUMA allocation failures
+    pub numa_allocation_failures: u64,
 }
 
 impl BufferPoolStats {
@@ -409,6 +551,14 @@ pub struct BufferPool {
     file_path: PathBuf,
     /// Next page ID counter
     next_page_id: Arc<Mutex<PageId>>,
+    /// NUMA topology
+    numa_topology: Arc<RwLock<NumaTopology>>,
+    /// NUMA memory pools
+    numa_memory_pools: Arc<RwLock<HashMap<usize, NumaMemoryPool>>>,
+    /// Page to NUMA node mapping
+    page_numa_mapping: Arc<RwLock<HashMap<PageId, usize>>>,
+    /// Current NUMA allocation node (for round-robin)
+    current_numa_node: Arc<Mutex<usize>>,
 }
 
 impl BufferPool {
@@ -429,6 +579,14 @@ impl BufferPool {
             .open(&file_path)
             .map_err(|e| anyhow!("Failed to open page file: {}", e))?;
 
+        let numa_topology = if config.enable_numa && config.auto_detect_numa {
+            Self::detect_numa_topology()
+        } else {
+            NumaTopology::default()
+        };
+
+        let numa_memory_pools = Self::initialize_numa_memory_pools(&numa_topology, &config);
+
         Ok(Self {
             config,
             pages: Arc::new(RwLock::new(HashMap::new())),
@@ -440,6 +598,10 @@ impl BufferPool {
             page_file: Arc::new(Mutex::new(page_file)),
             file_path,
             next_page_id: Arc::new(Mutex::new(0)),
+            numa_topology: Arc::new(RwLock::new(numa_topology)),
+            numa_memory_pools: Arc::new(RwLock::new(numa_memory_pools)),
+            page_numa_mapping: Arc::new(RwLock::new(HashMap::new())),
+            current_numa_node: Arc::new(Mutex::new(0)),
         })
     }
 
@@ -513,7 +675,7 @@ impl BufferPool {
         }
 
         // Sync file to disk
-        let mut file = self
+        let file = self
             .page_file
             .lock()
             .map_err(|_| anyhow!("Failed to lock page file"))?;
@@ -740,7 +902,7 @@ impl BufferPool {
 
     fn update_lru(&self, page_id: PageId) -> Result<()> {
         // Move to head if not already there
-        let mut head = self
+        let head = self
             .lru_head
             .lock()
             .map_err(|_| anyhow!("Failed to lock LRU head"))?;
@@ -852,6 +1014,140 @@ impl BufferPool {
             stats.evicted_pages += 1;
         }
     }
+
+    /// Detect NUMA topology of the current system
+    fn detect_numa_topology() -> NumaTopology {
+        #[cfg(target_os = "linux")]
+        {
+            // Try to detect actual NUMA topology on Linux
+            use std::fs;
+
+            if let Ok(entries) = fs::read_dir("/sys/devices/system/node") {
+                let mut numa_nodes = 0;
+                let mut cores_per_node = Vec::new();
+                let mut memory_per_node = Vec::new();
+
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if let Some(name) = path.file_name() {
+                        if let Some(name_str) = name.to_str() {
+                            if name_str.starts_with("node") {
+                                if let Ok(node_id) = name_str[4..].parse::<usize>() {
+                                    numa_nodes = numa_nodes.max(node_id + 1);
+
+                                    // Read CPU list for this node
+                                    let cpulist_path = path.join("cpulist");
+                                    if let Ok(cpulist) = fs::read_to_string(cpulist_path) {
+                                        let cores = Self::parse_cpu_list(&cpulist.trim());
+                                        while cores_per_node.len() <= node_id {
+                                            cores_per_node.push(Vec::new());
+                                        }
+                                        cores_per_node[node_id] = cores;
+                                    }
+
+                                    // Read memory info for this node
+                                    let meminfo_path = path.join("meminfo");
+                                    if let Ok(meminfo) = fs::read_to_string(meminfo_path) {
+                                        let memory = Self::parse_memory_info(&meminfo);
+                                        while memory_per_node.len() <= node_id {
+                                            memory_per_node.push(0);
+                                        }
+                                        memory_per_node[node_id] = memory;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if numa_nodes > 0 {
+                    // Create a simple distance matrix (real implementation would read from /sys)
+                    let mut distance_matrix = vec![vec![255u8; numa_nodes]; numa_nodes];
+                    for i in 0..numa_nodes {
+                        for j in 0..numa_nodes {
+                            distance_matrix[i][j] = if i == j { 10 } else { 20 };
+                        }
+                    }
+
+                    return NumaTopology {
+                        numa_nodes,
+                        cores_per_node,
+                        memory_per_node,
+                        current_node: 0, // Would detect current node in real implementation
+                        distance_matrix,
+                    };
+                }
+            }
+        }
+
+        // Fallback to default topology for non-Linux or detection failure
+        NumaTopology::default()
+    }
+
+    /// Parse CPU list string (e.g., "0-3,8-11")
+    fn parse_cpu_list(cpulist: &str) -> Vec<usize> {
+        let mut cores = Vec::new();
+        for range in cpulist.split(',') {
+            if range.contains('-') {
+                let parts: Vec<&str> = range.split('-').collect();
+                if parts.len() == 2 {
+                    if let (Ok(start), Ok(end)) =
+                        (parts[0].parse::<usize>(), parts[1].parse::<usize>())
+                    {
+                        for cpu in start..=end {
+                            cores.push(cpu);
+                        }
+                    }
+                }
+            } else if let Ok(cpu) = range.parse::<usize>() {
+                cores.push(cpu);
+            }
+        }
+        cores
+    }
+
+    /// Parse memory info from NUMA node meminfo
+    fn parse_memory_info(meminfo: &str) -> usize {
+        for line in meminfo.lines() {
+            if line.starts_with("Node") && line.contains("MemTotal:") {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 4 {
+                    if let Ok(kb) = parts[3].parse::<usize>() {
+                        return kb * 1024; // Convert KB to bytes
+                    }
+                }
+            }
+        }
+        0
+    }
+
+    /// Initialize NUMA memory pools based on topology
+    fn initialize_numa_memory_pools(
+        numa_topology: &NumaTopology,
+        config: &BufferPoolConfig,
+    ) -> HashMap<usize, NumaMemoryPool> {
+        let mut pools = HashMap::new();
+
+        for node_id in 0..numa_topology.numa_nodes {
+            let pool_size = if node_id < numa_topology.memory_per_node.len() {
+                numa_topology.memory_per_node[node_id]
+            } else {
+                1024 * 1024 * 1024 // 1GB default
+            };
+
+            let max_pages = config.max_pages / numa_topology.numa_nodes.max(1);
+            let pool = NumaMemoryPool::new(node_id, pool_size, max_pages);
+            pools.insert(node_id, pool);
+        }
+
+        // If no NUMA nodes detected, create a default pool
+        if pools.is_empty() {
+            let pool = NumaMemoryPool::new(0, 1024 * 1024 * 1024, config.max_pages);
+            pools.insert(0, pool);
+        }
+
+        pools
+    }
 }
 
 #[cfg(test)]
@@ -910,15 +1206,15 @@ mod tests {
         let buffer_pool = BufferPool::with_config(temp_file.path(), config).unwrap();
 
         // Create pages up to capacity
-        let (page1_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
-        let (page2_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
+        let (_page1_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
+        let (_page2_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
 
         // Check initial stats
         let initial_stats = buffer_pool.get_stats().unwrap();
         assert_eq!(initial_stats.evicted_pages, 0);
 
         // Creating a third page should trigger automatic eviction
-        let (page3_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
+        let (_page3_id, _) = buffer_pool.create_page(PageType::Data).unwrap();
 
         // Check that eviction occurred during page creation
         let stats = buffer_pool.get_stats().unwrap();

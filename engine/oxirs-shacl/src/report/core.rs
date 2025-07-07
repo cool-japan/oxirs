@@ -5,7 +5,7 @@ use std::fmt;
 
 use crate::{validation::ValidationViolation, Result, Severity, ShapeId};
 
-use super::{ReportConfig, ReportFormat, ReportMetadata, ValidationSummary};
+use super::{ReportConfig, ReportMetadata, ValidationSummary};
 
 /// SHACL validation report according to W3C specification
 ///
@@ -31,7 +31,7 @@ use super::{ReportConfig, ReportFormat, ReportMetadata, ValidationSummary};
 ///     println\!("✅ Data is valid\!");
 /// } else {
 ///     println\!("❌ Found {} violations", report.violation_count());
-///     
+///
 ///     // Print violations
 ///     for violation in report.violations() {
 ///         println\!("Violation at {}: {}",
@@ -198,7 +198,7 @@ impl ValidationReport {
     where
         F: Fn(&ValidationViolation) -> bool,
     {
-        self.violations.iter().filter(|v| predicate(*v)).collect()
+        self.violations.iter().filter(|v| predicate(v)).collect()
     }
 
     /// Clear all violations
@@ -288,11 +288,11 @@ impl ValidationReport {
         let filtered_report = self.apply_config(config)?;
         if config.pretty_print {
             serde_json::to_string_pretty(&filtered_report).map_err(|e| {
-                crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e))
+                crate::ShaclError::ReportError(format!("JSON serialization failed: {e}"))
             })
         } else {
             serde_json::to_string(&filtered_report).map_err(|e| {
-                crate::ShaclError::ReportError(format!("JSON serialization failed: {}", e))
+                crate::ShaclError::ReportError(format!("JSON serialization failed: {e}"))
             })
         }
     }
@@ -329,7 +329,7 @@ impl ValidationReport {
 
     /// Export to plain text format
     pub fn to_text(&self) -> Result<String> {
-        Ok(format!("{}", self))
+        Ok(format!("{self}"))
     }
 
     /// Export to YAML format
@@ -340,9 +340,8 @@ impl ValidationReport {
     /// Export to YAML with custom configuration
     pub fn to_yaml_with_config(&self, config: &ReportConfig) -> Result<String> {
         let filtered_report = self.apply_config(config)?;
-        serde_yaml::to_string(&filtered_report).map_err(|e| {
-            crate::ShaclError::ReportError(format!("YAML serialization failed: {}", e))
-        })
+        serde_yaml::to_string(&filtered_report)
+            .map_err(|e| crate::ShaclError::ReportError(format!("YAML serialization failed: {e}")))
     }
 
     /// Apply configuration filters to create a filtered report
@@ -436,7 +435,7 @@ impl ValidationReport {
                 rdf_output.push_str("@prefix sh: <http://www.w3.org/ns/shacl#> .\n");
                 rdf_output
                     .push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n\n");
-                rdf_output.push_str(&format!("<{}> a sh:ValidationReport ;\n", report_iri));
+                rdf_output.push_str(&format!("<{report_iri}> a sh:ValidationReport ;\n"));
                 rdf_output.push_str(&format!("    sh:conforms {} ;\n", self.conforms));
 
                 if !self.violations.is_empty() {
@@ -445,7 +444,7 @@ impl ValidationReport {
                         if i > 0 {
                             rdf_output.push_str(", ");
                         }
-                        rdf_output.push_str(&format!("[\n        a sh:ValidationResult ;\n"));
+                        rdf_output.push_str("[\n        a sh:ValidationResult ;\n");
                         rdf_output.push_str(&format!(
                             "        sh:focusNode <{}> ;\n",
                             violation.focus_node
@@ -472,13 +471,12 @@ impl ValidationReport {
                 }
             }
             "nt" | "ntriples" => {
-                rdf_output.push_str(&format!("<{}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .\n", report_iri));
+                rdf_output.push_str(&format!("<{report_iri}> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationReport> .\n"));
                 rdf_output.push_str(&format!("<{}> <http://www.w3.org/ns/shacl#conforms> \"{}\"^^<http://www.w3.org/2001/XMLSchema#boolean> .\n", report_iri, self.conforms));
             }
             _ => {
                 return Err(crate::ShaclError::ValidationEngine(format!(
-                    "Unsupported RDF format: {}",
-                    format
+                    "Unsupported RDF format: {format}"
                 )));
             }
         }
@@ -513,7 +511,7 @@ impl fmt::Display for ValidationReport {
                     violation.source_shape
                 )?;
                 if let Some(message) = &violation.result_message {
-                    writeln!(f, "     {}", message)?;
+                    writeln!(f, "     {message}")?;
                 }
             }
         }

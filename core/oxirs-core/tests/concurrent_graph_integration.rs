@@ -1,6 +1,6 @@
 //! Integration tests for concurrent graph operations
 
-use oxirs_core::concurrent::{pin, ConcurrentGraph};
+use oxirs_core::concurrent::ConcurrentGraph;
 use oxirs_core::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Triple};
 use std::sync::{Arc, Barrier};
 use std::thread;
@@ -16,7 +16,7 @@ fn create_triple_with_literal(s: &str, p: &str, value: &str) -> Triple {
 
 fn create_triple_with_blank(id: usize, p: &str, o: &str) -> Triple {
     Triple::new(
-        Subject::BlankNode(BlankNode::new(&format!("b{}", id)).unwrap()),
+        Subject::BlankNode(BlankNode::new(format!("b{id}")).unwrap()),
         Predicate::NamedNode(NamedNode::new(p).unwrap()),
         Object::NamedNode(NamedNode::new(o).unwrap()),
     )
@@ -39,16 +39,16 @@ fn test_concurrent_readers_writers() {
                 barrier.wait();
                 for i in 0..ops_per_thread {
                     let triple = create_triple_with_literal(
-                        &format!("http://writer{}/subject{}", writer_id, i),
+                        &format!("http://writer{writer_id}/subject{i}"),
                         "http://predicate",
-                        &format!("value_{}", i),
+                        &format!("value_{i}"),
                     );
                     graph.insert(triple).unwrap();
 
                     // Occasionally remove some triples
                     if i % 10 == 0 && i > 0 {
                         let old_triple = create_triple_with_literal(
-                            &format!("http://writer{}/subject{}", writer_id, i - 10),
+                            &format!("http://writer{writer_id}/subject{}", i - 10),
                             "http://predicate",
                             &format!("value_{}", i - 10),
                         );
@@ -146,12 +146,12 @@ fn test_stress_with_mixed_types() {
                             // Named nodes
                             let triple = Triple::new(
                                 Subject::NamedNode(
-                                    NamedNode::new(&format!("http://thread{}/s{}", thread_id, i))
+                                    NamedNode::new(format!("http://thread{thread_id}/s{i}"))
                                         .unwrap(),
                                 ),
                                 Predicate::NamedNode(NamedNode::new("http://pred").unwrap()),
                                 Object::NamedNode(
-                                    NamedNode::new(&format!("http://obj{}", i)).unwrap(),
+                                    NamedNode::new(format!("http://obj{i}")).unwrap(),
                                 ),
                             );
                             graph.insert(triple).unwrap();
@@ -161,7 +161,7 @@ fn test_stress_with_mixed_types() {
                             let triple = create_triple_with_blank(
                                 thread_id * 100 + i,
                                 "http://blank-pred",
-                                &format!("http://blank-obj{}", i),
+                                &format!("http://blank-obj{i}"),
                             );
                             graph.insert(triple).unwrap();
                         }
@@ -170,7 +170,7 @@ fn test_stress_with_mixed_types() {
                             let triple = create_triple_with_literal(
                                 &format!("http://lit-subject{}", thread_id * 100 + i),
                                 "http://has-value",
-                                &format!("String value {}", i),
+                                &format!("String value {i}"),
                             );
                             graph.insert(triple).unwrap();
                         }
@@ -222,9 +222,9 @@ fn test_memory_safety_under_pressure() {
                     for i in 0..10 {
                         let id = thread_id * 1000000 + local_ops * 10 + i;
                         let triple = Triple::new(
-                            Subject::NamedNode(NamedNode::new(&format!("http://s{}", id)).unwrap()),
+                            Subject::NamedNode(NamedNode::new(format!("http://s{id}")).unwrap()),
                             Predicate::NamedNode(NamedNode::new("http://p").unwrap()),
-                            Object::Literal(Literal::new_simple_literal(&format!("{}", id))),
+                            Object::Literal(Literal::new_simple_literal(format!("{id}"))),
                         );
 
                         // Rapid insert/remove cycles
@@ -267,9 +267,9 @@ fn test_epoch_based_cleanup() {
     let triples: Vec<_> = (0..1000)
         .map(|i| {
             Triple::new(
-                Subject::NamedNode(NamedNode::new(&format!("http://s{}", i)).unwrap()),
+                Subject::NamedNode(NamedNode::new(format!("http://s{i}")).unwrap()),
                 Predicate::NamedNode(NamedNode::new("http://ephemeral").unwrap()),
-                Object::Literal(Literal::new_simple_literal(&format!("temp_{}", i))),
+                Object::Literal(Literal::new_simple_literal(format!("temp_{i}"))),
             )
         })
         .collect();
@@ -321,11 +321,11 @@ fn test_concurrent_batch_operations() {
                         .map(|i| {
                             Triple::new(
                                 Subject::NamedNode(
-                                    NamedNode::new(&format!("http://batch/s{}", base_id + i))
+                                    NamedNode::new(format!("http://batch/s{}", base_id + i))
                                         .unwrap(),
                                 ),
                                 Predicate::NamedNode(NamedNode::new("http://batch/pred").unwrap()),
-                                Object::Literal(Literal::new_simple_literal(&format!(
+                                Object::Literal(Literal::new_simple_literal(format!(
                                     "batch_{}",
                                     base_id + i
                                 ))),
@@ -353,8 +353,8 @@ fn test_concurrent_batch_operations() {
     let total_removed: usize = results.iter().map(|(_, r)| r).sum();
 
     println!("Batch operations test:");
-    println!("  Total inserted: {}", total_inserted);
-    println!("  Total removed: {}", total_removed);
+    println!("  Total inserted: {total_inserted}");
+    println!("  Total removed: {total_removed}");
     println!("  Final size: {}", graph.len());
 
     assert_eq!(graph.len(), total_inserted - total_removed);

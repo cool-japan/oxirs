@@ -46,7 +46,7 @@ impl NTriplesParser {
     /// Parse N-Triples from a byte slice
     pub fn parse_slice(&self, slice: &[u8]) -> ParseResult<Vec<Triple>> {
         let content = std::str::from_utf8(slice)
-            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {}", e)))?;
+            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {e}")))?;
         self.parse_str(content)
     }
 
@@ -70,7 +70,7 @@ impl NTriplesParser {
                 Ok(None) => {} // Valid but empty line
                 Err(e) if self.lenient => {
                     // Skip invalid lines in lenient mode
-                    eprintln!("Warning: Skipping invalid line {}: {}", line_number, e);
+                    eprintln!("Warning: Skipping invalid line {line_number}: {e}");
                 }
                 Err(e) => return Err(e),
             }
@@ -262,10 +262,10 @@ impl NTriplesParser {
         // Check for language tag or datatype
         let remaining = &input[end_quote + 1..];
 
-        if remaining.starts_with('@') {
+        if let Some(stripped) = remaining.strip_prefix('@') {
             // Language tag
             let mut lang_end = 1;
-            for (i, c) in remaining[1..].char_indices() {
+            for (i, c) in stripped.char_indices() {
                 if c.is_whitespace() {
                     lang_end = 1 + i;
                     break;
@@ -279,9 +279,9 @@ impl NTriplesParser {
                 NTriplesTerm::LanguageLiteral(literal_value, language),
                 pos_after_quote,
             ))
-        } else if remaining.starts_with("^^") {
+        } else if let Some(stripped) = remaining.strip_prefix("^^") {
             // Datatype
-            if remaining.len() < 3 || !remaining[2..].starts_with('<') {
+            if remaining.len() < 3 || !stripped.starts_with('<') {
                 return Err(RdfParseError::syntax_at(
                     "Invalid datatype format - expected ^^<datatype>",
                     TextPosition::new(line_number, pos_after_quote, 0),
@@ -372,7 +372,7 @@ impl NTriplesParser {
             NTriplesTerm::Iri(iri) => {
                 let named_node = NamedNode::new(iri).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid object IRI: {}", e),
+                        format!("Invalid object IRI: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;
@@ -394,7 +394,7 @@ impl NTriplesParser {
             NTriplesTerm::LanguageLiteral(value, lang) => {
                 let literal = Literal::new_language_tagged_literal(value, lang).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid language tag: {}", e),
+                        format!("Invalid language tag: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;
@@ -403,7 +403,7 @@ impl NTriplesParser {
             NTriplesTerm::TypedLiteral(value, datatype_iri) => {
                 let datatype = NamedNode::new(datatype_iri).map_err(|e| {
                     RdfParseError::syntax_at(
-                        &format!("Invalid datatype IRI: {}", e),
+                        format!("Invalid datatype IRI: {e}"),
                         TextPosition::new(line_number, 0, 0),
                     )
                 })?;
@@ -509,13 +509,16 @@ impl<W: Write> WriterNTriplesSerializer<W> {
         use crate::model::triple::SubjectRef;
         match subject {
             SubjectRef::NamedNode(node) => {
-                write!(self.writer, "<{}>", self.escape_iri(node.as_str()))?;
+                let escaped_iri = self.escape_iri(node.as_str());
+                write!(self.writer, "<{escaped_iri}>")?;
             }
             SubjectRef::BlankNode(node) => {
-                write!(self.writer, "_:{}", node.as_str())?;
+                let node_str = node.as_str();
+                write!(self.writer, "_:{node_str}")?;
             }
             SubjectRef::Variable(var) => {
-                write!(self.writer, "?{}", var.as_str())?;
+                let var_str = var.as_str();
+                write!(self.writer, "?{var_str}")?;
             }
         }
         Ok(())
@@ -529,10 +532,12 @@ impl<W: Write> WriterNTriplesSerializer<W> {
         use crate::model::triple::PredicateRef;
         match predicate {
             PredicateRef::NamedNode(node) => {
-                write!(self.writer, "<{}>", self.escape_iri(node.as_str()))?;
+                let escaped_iri = self.escape_iri(node.as_str());
+                write!(self.writer, "<{escaped_iri}>")?;
             }
             PredicateRef::Variable(var) => {
-                write!(self.writer, "?{}", var.as_str())?;
+                let var_str = var.as_str();
+                write!(self.writer, "?{var_str}")?;
             }
         }
         Ok(())
@@ -546,16 +551,19 @@ impl<W: Write> WriterNTriplesSerializer<W> {
         use crate::model::triple::ObjectRef;
         match object {
             ObjectRef::NamedNode(node) => {
-                write!(self.writer, "<{}>", self.escape_iri(node.as_str()))?;
+                let escaped_iri = self.escape_iri(node.as_str());
+                write!(self.writer, "<{escaped_iri}>")?;
             }
             ObjectRef::BlankNode(node) => {
-                write!(self.writer, "_:{}", node.as_str())?;
+                let node_str = node.as_str();
+                write!(self.writer, "_:{node_str}")?;
             }
             ObjectRef::Literal(literal) => {
                 self.serialize_literal(literal)?;
             }
             ObjectRef::Variable(var) => {
-                write!(self.writer, "?{}", var.as_str())?;
+                let var_str = var.as_str();
+                write!(self.writer, "?{var_str}")?;
             }
         }
         Ok(())
@@ -564,17 +572,15 @@ impl<W: Write> WriterNTriplesSerializer<W> {
     /// Serialize a literal
     fn serialize_literal(&mut self, literal: &Literal) -> SerializeResult<()> {
         // Write the literal value with proper escaping
-        write!(self.writer, "\"{}\"", self.escape_literal(literal.value()))?;
+        let escaped_value = self.escape_literal(literal.value());
+        write!(self.writer, "\"{escaped_value}\"")?;
 
         // Add language tag or datatype if present
         if let Some(language) = literal.language() {
-            write!(self.writer, "@{}", language)?;
+            write!(self.writer, "@{language}")?;
         } else if literal.datatype().as_str() != crate::vocab::xsd::STRING.as_str() {
-            write!(
-                self.writer,
-                "^^<{}>",
-                self.escape_iri(literal.datatype().as_str())
-            )?;
+            let escaped_datatype = self.escape_iri(literal.datatype().as_str());
+            write!(self.writer, "^^<{escaped_datatype}>")?;
         }
 
         Ok(())

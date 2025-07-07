@@ -13,9 +13,9 @@ use std::sync::Arc;
 
 fn create_test_triple(id: usize) -> Triple {
     Triple::new(
-        Subject::NamedNode(NamedNode::new(&format!("http://s/{}", id)).unwrap()),
-        Predicate::NamedNode(NamedNode::new(&format!("http://p/{}", id % 100)).unwrap()),
-        Object::NamedNode(NamedNode::new(&format!("http://o/{}", id)).unwrap()),
+        Subject::NamedNode(NamedNode::new(format!("http://s/{id}")).unwrap()),
+        Predicate::NamedNode(NamedNode::new(format!("http://p/{}", id % 100)).unwrap()),
+        Object::NamedNode(NamedNode::new(format!("http://o/{id}")).unwrap()),
     )
 }
 

@@ -2,15 +2,11 @@
 //!
 //! This module contains the actual validation logic for different types of SHACL constraints.
 
-use std::cmp::Ordering;
 use std::collections::HashSet;
 
-use oxirs_core::{
-    model::{Literal, NamedNode, Term},
-    ConcreteStore, Store,
-};
+use oxirs_core::{model::Term, Store};
 
-use crate::{constraints::*, PropertyPath, Result, ShaclError};
+use crate::{constraints::*, Result};
 
 use super::{utils::format_term_for_message, ConstraintEvaluationResult};
 
@@ -192,7 +188,7 @@ impl ConstraintValidator for StringLengthConstraintValidator {
                 if length > 1000 {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
-                        Some(format!("String too long: {} characters", length)),
+                        Some(format!("String too long: {length} characters")),
                     ));
                 }
             } else {
@@ -232,8 +228,7 @@ impl ConstraintValidator for PatternConstraintValidator {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
                         Some(format!(
-                            "Pattern constraint violation: '{}' contains invalid characters",
-                            str_value
+                            "Pattern constraint violation: '{str_value}' contains invalid characters"
                         )),
                     ));
                 }
@@ -274,8 +269,7 @@ impl ConstraintValidator for InConstraintValidator {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
                     Some(format!(
-                        "Value {} is not in the allowed enumeration",
-                        value_str
+                        "Value {value_str} is not in the allowed enumeration"
                     )),
                 ));
             }
@@ -328,7 +322,10 @@ impl ConstraintValidator for DefaultConstraintValidator {
 mod tests {
     use super::*;
     use crate::{constraints::ConstraintContext, ShapeId};
-    use oxirs_core::model::{Literal, NamedNode, Term};
+    use oxirs_core::{
+        model::{Literal, NamedNode, Term},
+        ConcreteStore,
+    };
 
     #[test]
     fn test_node_kind_validator() {

@@ -12,7 +12,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock, Semaphore};
 use tracing::{debug, error, info, instrument, warn};
 
-use crate::ast::{Document, Field, OperationType, Selection, SelectionSet, Value};
+use crate::ast::OperationType;
 use crate::performance::{OperationMetrics, PerformanceTracker};
 
 /// Configuration for the intelligent federation gateway
@@ -452,7 +452,7 @@ impl IntelligentFederationGateway {
         query: &str,
         query_id: &str,
     ) -> Result<QueryExecutionPlan> {
-        let planner = self.query_planner.lock().await;
+        let _planner = self.query_planner.lock().await;
 
         // Parse query to understand structure
         let complexity = self.calculate_query_complexity(query).await?;
@@ -603,7 +603,7 @@ impl IntelligentFederationGateway {
     /// Execute a single service fragment
     async fn execute_service_fragment(
         &self,
-        fragment_id: &str,
+        _fragment_id: &str,
         fragment: &ServiceQueryFragment,
     ) -> Result<serde_json::Value> {
         // Check circuit breaker
@@ -729,7 +729,6 @@ impl IntelligentFederationGateway {
 
     /// Additional helper methods would continue here...
     /// (Implementations for cache management, health checking, load balancing, etc.)
-
     /// Create a copy for async operations
     async fn clone_for_async(&self) -> Self {
         // This is a simplified clone - in practice, you'd want to share the Arc'd data
@@ -861,7 +860,7 @@ impl IntelligentFederationGateway {
         // Find nodes with no incoming edges
         let mut queue: VecDeque<String> = in_degree
             .iter()
-            .filter(|(_, &degree)| degree == 0)
+            .filter(|&(_, &degree)| degree == 0)
             .map(|(node, _)| node.clone())
             .collect();
 

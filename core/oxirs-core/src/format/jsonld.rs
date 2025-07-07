@@ -279,7 +279,7 @@ impl<W: Write> WriterJsonLdSerializer<W> {
             }))?
         };
 
-        write!(self.writer, "{}", json_output)?;
+        write!(self.writer, "{json_output}")?;
         self.finished = true;
 
         Ok(self.writer)

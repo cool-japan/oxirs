@@ -18,4 +18,4 @@ pub use sparql12_features::{
 };
 
 // Re-export handlers from sparql_refactored for server routing
-pub use crate::handlers::sparql_refactored::{query_handler, update_handler};
+pub use crate::handlers::sparql_refactored::{query_handler, query_handler_get, query_handler_post, update_handler};

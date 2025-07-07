@@ -119,3 +119,18 @@ pub enum RepairType {
     PatternFix,
     Custom(String),
 }
+
+impl std::fmt::Display for RepairType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RepairType::DataCorrection => write!(f, "DataCorrection"),
+            RepairType::SchemaModification => write!(f, "SchemaModification"),
+            RepairType::ConstraintRelaxation => write!(f, "ConstraintRelaxation"),
+            RepairType::ValidationRuleUpdate => write!(f, "ValidationRuleUpdate"),
+            RepairType::DataTypeConversion => write!(f, "DataTypeConversion"),
+            RepairType::CardinalityAdjustment => write!(f, "CardinalityAdjustment"),
+            RepairType::PatternFix => write!(f, "PatternFix"),
+            RepairType::Custom(s) => write!(f, "Custom({})", s),
+        }
+    }
+}

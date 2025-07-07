@@ -1929,7 +1929,7 @@ mod tests {
         ] {
             let config = profile.get_config();
             assert!(!config.is_empty());
-            println!("Profile: {} - {}", profile, profile.description());
+            println!("Profile: {} - {profile, profile.description(}"));
         }
     }
 

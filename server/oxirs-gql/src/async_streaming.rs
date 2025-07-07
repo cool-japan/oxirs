@@ -14,12 +14,10 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{broadcast, mpsc, Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio::time::{interval, sleep, Interval};
-use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
-use crate::ast::{Document, Value};
-use crate::federation::query_planner::QueryPlan;
+use crate::ast::Value;
 
 /// Streaming configuration for real-time federation
 #[derive(Debug, Clone)]
@@ -351,7 +349,7 @@ impl AsyncStreamingManager {
 
             // Compress data if enabled
             let compressed_data = if handle.metadata.read().await.compression_enabled {
-                let mut compression_manager = self.compression_manager.lock().await;
+                let compression_manager = self.compression_manager.lock().await;
                 compression_manager.compress_data(&data).await?
             } else {
                 data
@@ -732,7 +730,7 @@ impl BackpressureController {
 
     pub async fn monitor_stream(
         &mut self,
-        stream_id: &str,
+        _stream_id: &str,
         handle: &StreamHandle,
         config: &StreamingConfig,
     ) -> Result<()> {

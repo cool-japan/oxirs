@@ -703,7 +703,7 @@ impl IntegrationManager {
         }
 
         let start_time = Instant::now();
-        
+
         // Profile the operation
         if let Ok(mut profiler) = self.profiler.lock() {
             profiler.start_operation("federated_query");
@@ -795,7 +795,7 @@ impl EndpointConnector {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(config.timeout))
             .build()?;
-        
+
         let connection_pool = Arc::new(Mutex::new(ConnectionPool {
             max_size: config.pool_size,
             active_connections: 0,

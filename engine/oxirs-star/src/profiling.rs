@@ -7,12 +7,9 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, span, Level};
+use tracing::debug;
 
-use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
-use crate::parser::{StarFormat, StarParser};
-use crate::serializer::{SerializationOptions, StarSerializer};
-use crate::{StarConfig, StarError, StarResult};
+use crate::parser::StarFormat;
 
 /// Profiling configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,11 +229,11 @@ impl StarProfiler {
     where
         F: FnOnce() -> R,
     {
-        let operation = format!("parse_{:?}", format);
+        let operation = format!("parse_{format:?}");
 
         let mut metadata = HashMap::new();
         metadata.insert("input_size".to_string(), input_size.to_string());
-        metadata.insert("format".to_string(), format!("{:?}", format));
+        metadata.insert("format".to_string(), format!("{format:?}"));
 
         self.start_operation(&operation);
         let result = f();
@@ -255,11 +252,11 @@ impl StarProfiler {
     where
         F: FnOnce() -> R,
     {
-        let operation = format!("serialize_{:?}", format);
+        let operation = format!("serialize_{format:?}");
 
         let mut metadata = HashMap::new();
         metadata.insert("input_triples".to_string(), input_triples.to_string());
-        metadata.insert("format".to_string(), format!("{:?}", format));
+        metadata.insert("format".to_string(), format!("{format:?}"));
 
         self.start_operation(&operation);
         let result = f();
@@ -273,7 +270,7 @@ impl StarProfiler {
     where
         F: FnOnce() -> R,
     {
-        let operation = format!("query_{}", query_type);
+        let operation = format!("query_{query_type}");
 
         let mut metadata = HashMap::new();
         metadata.insert("query_type".to_string(), query_type.to_string());
@@ -562,10 +559,7 @@ impl StarProfiler {
                 bottlenecks.push(PerformanceBottleneck {
                     operation: operation.clone(),
                     severity,
-                    description: format!(
-                        "Operation consumes {:.1}% of total execution time",
-                        time_percentage
-                    ),
+                    description: format!("Operation consumes {time_percentage:.1}% of total execution time"),
                     suggestions,
                     time_percentage,
                 });
@@ -588,7 +582,7 @@ impl Default for StarProfiler {
 /// Convenience macro for profiling operations
 #[macro_export]
 macro_rules! profile_operation {
-    ($profiler:expr, $operation:expr, $code:block) => {{
+    ($profiler:expr_2021, $operation:expr_2021, $code:block) => {{
         $profiler.start_operation($operation);
         let result = $code;
         $profiler.end_operation();

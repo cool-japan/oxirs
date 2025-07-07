@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use oxirs_core::{
-    model::{BlankNode, NamedNode, RdfTerm, Term, Triple},
+    model::{NamedNode, RdfTerm, Term},
     OxirsError, Store,
 };
 
@@ -157,13 +157,22 @@ impl PropertyPath {
 #[derive(Debug)]
 pub struct PropertyPathEvaluator {
     /// Cache for path evaluation results
-    cache: HashMap<String, Vec<Term>>,
+    cache: HashMap<String, CachedPathResult>,
+
+    /// Query plan cache for optimized SPARQL path queries
+    query_plan_cache: HashMap<String, PathQueryPlan>,
 
     /// Maximum recursion depth for cyclic paths
     max_depth: usize,
 
     /// Maximum number of intermediate results to track
     max_intermediate_results: usize,
+
+    /// Path evaluation statistics
+    stats: PathEvaluationStats,
+
+    /// Cache configuration
+    cache_config: PathCacheConfig,
 }
 
 impl PropertyPathEvaluator {
@@ -171,8 +180,11 @@ impl PropertyPathEvaluator {
     pub fn new() -> Self {
         Self {
             cache: HashMap::new(),
+            query_plan_cache: HashMap::new(),
             max_depth: 50,
             max_intermediate_results: 10000,
+            stats: PathEvaluationStats::default(),
+            cache_config: PathCacheConfig::default(),
         }
     }
 
@@ -180,8 +192,23 @@ impl PropertyPathEvaluator {
     pub fn with_limits(max_depth: usize, max_intermediate_results: usize) -> Self {
         Self {
             cache: HashMap::new(),
+            query_plan_cache: HashMap::new(),
             max_depth,
             max_intermediate_results,
+            stats: PathEvaluationStats::default(),
+            cache_config: PathCacheConfig::default(),
+        }
+    }
+
+    /// Create a new evaluator with custom cache configuration
+    pub fn with_cache_config(cache_config: PathCacheConfig) -> Self {
+        Self {
+            cache: HashMap::new(),
+            query_plan_cache: HashMap::new(),
+            max_depth: 50,
+            max_intermediate_results: 10000,
+            stats: PathEvaluationStats::default(),
+            cache_config,
         }
     }
 
@@ -195,10 +222,19 @@ impl PropertyPathEvaluator {
     ) -> Result<Vec<Term>> {
         let cache_key = self.create_cache_key(start_node, path, graph_name);
 
-        // Check cache first
-        if let Some(cached_result) = self.cache.get(&cache_key) {
-            return Ok(cached_result.clone());
+        // Check cache first with intelligent cache management
+        if let Some(cached_result) = self.cache.get_mut(&cache_key) {
+            if cached_result.is_fresh(self.cache_config.max_cache_age) {
+                cached_result.access(); // Update access statistics
+                self.stats.cache_hits += 1;
+                return Ok(cached_result.values.clone());
+            } else {
+                // Remove stale entry
+                self.cache.remove(&cache_key);
+            }
         }
+
+        self.stats.cache_misses += 1;
 
         // Try to use optimized SPARQL property path query first
         let result = if path.can_use_sparql_path() {
@@ -216,8 +252,19 @@ impl PropertyPathEvaluator {
             self.evaluate_path_impl(store, start_node, path, graph_name, 0)?
         };
 
-        // Cache the result
-        self.cache.insert(cache_key, result.clone());
+        // Cache the result with intelligent caching logic
+        if self.should_cache_result(&result) {
+            let cached_result = CachedPathResult::new(result.clone());
+            self.manage_cache_size(cache_key, cached_result);
+        }
+
+        // Update evaluation statistics
+        self.stats.total_evaluations += 1;
+        self.stats.total_values_found += result.len();
+        if self.stats.total_evaluations > 0 {
+            self.stats.avg_values_per_evaluation =
+                self.stats.total_values_found as f64 / self.stats.total_evaluations as f64;
+        }
 
         Ok(result)
     }
@@ -296,8 +343,7 @@ impl PropertyPathEvaluator {
             }
             Err(e) => {
                 return Err(ShaclError::PropertyPath(format!(
-                    "SPARQL property path query failed: {}",
-                    e
+                    "SPARQL property path query failed: {e}"
                 )));
             }
         }
@@ -530,13 +576,12 @@ impl PropertyPathEvaluator {
             format!(
                 r#"
                 SELECT DISTINCT ?candidate WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?candidate ?p ?o .
                     }}
                 }}
                 LIMIT 1000
-            "#,
-                graph
+            "#
             )
         } else {
             "SELECT DISTINCT ?candidate WHERE { ?candidate ?p ?o . } LIMIT 1000".to_string()
@@ -791,11 +836,11 @@ impl PropertyPathEvaluator {
         let parser = oxirs_core::query::parser::SparqlParser::new();
         let parsed_query = parser
             .parse(query)
-            .map_err(|e| ShaclError::PropertyPath(format!("Query parsing failed: {}", e)))?;
+            .map_err(|e| ShaclError::PropertyPath(format!("Query parsing failed: {e}")))?;
 
         let result = query_engine
             .execute_query(&parsed_query, store)
-            .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {}", e)))?;
+            .map_err(|e| ShaclError::PropertyPath(format!("Path query execution failed: {e}")))?;
 
         Ok(result)
     }
@@ -808,7 +853,7 @@ impl PropertyPathEvaluator {
         predicate: &NamedNode,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
-        use oxirs_core::model::{GraphName, Object, Predicate, Subject};
+        use oxirs_core::model::{GraphName, Predicate, Subject};
 
         let subject = match start_node {
             Term::NamedNode(node) => Subject::NamedNode(node.clone()),
@@ -838,7 +883,7 @@ impl PropertyPathEvaluator {
                 None, // Any object
                 graph_filter.as_ref(),
             )
-            .map_err(|e| ShaclError::Core(e))?;
+            .map_err(ShaclError::Core)?;
 
         let values: Vec<Term> = quads
             .into_iter()
@@ -860,7 +905,7 @@ impl PropertyPathEvaluator {
         predicate: &NamedNode,
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
-        use oxirs_core::model::{GraphName, Object, Predicate, Subject};
+        use oxirs_core::model::{GraphName, Object, Predicate};
 
         let object = match start_node {
             Term::NamedNode(node) => Object::NamedNode(node.clone()),
@@ -891,7 +936,7 @@ impl PropertyPathEvaluator {
                 Some(&object),
                 graph_filter.as_ref(),
             )
-            .map_err(|e| ShaclError::Core(e))?;
+            .map_err(ShaclError::Core)?;
 
         let values: Vec<Term> = quads
             .into_iter()
@@ -932,7 +977,7 @@ impl PropertyPathEvaluator {
                 None, // Any object
                 graph_filter.as_ref(),
             )
-            .map_err(|e| ShaclError::Core(e))?;
+            .map_err(ShaclError::Core)?;
 
         // Collect unique subjects, limited to prevent memory explosion
         for quad in quads.into_iter().take(1000) {
@@ -967,13 +1012,87 @@ impl PropertyPathEvaluator {
     /// Clear the evaluation cache
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.query_plan_cache.clear();
+    }
+
+    /// Check if a result should be cached
+    fn should_cache_result(&self, result: &[Term]) -> bool {
+        // Don't cache very large results
+        if result.len() > 10000 {
+            return false;
+        }
+
+        // Don't cache empty results unless configured to do so
+        if result.is_empty() && !self.cache_config.cache_negative_results {
+            return false;
+        }
+
+        // Cache results that are likely to be reused
+        true
+    }
+
+    /// Manage cache size with intelligent eviction
+    fn manage_cache_size(&mut self, cache_key: String, cached_result: CachedPathResult) {
+        // If cache is full, use intelligent eviction
+        if self.cache.len() >= self.cache_config.max_cache_entries {
+            if self.cache_config.intelligent_eviction {
+                self.intelligent_cache_eviction();
+            } else {
+                // Simple LRU eviction - remove oldest entry
+                if let Some((oldest_key, _)) = self
+                    .cache
+                    .iter()
+                    .min_by_key(|(_, result)| result.last_accessed)
+                {
+                    let oldest_key = oldest_key.clone();
+                    self.cache.remove(&oldest_key);
+                }
+            }
+        }
+
+        self.cache.insert(cache_key, cached_result);
+    }
+
+    /// Intelligent cache eviction based on access patterns and freshness
+    fn intelligent_cache_eviction(&mut self) {
+        if self.cache.is_empty() {
+            return;
+        }
+
+        // Score each cache entry for eviction (higher score = more likely to evict)
+        let mut eviction_candidates: Vec<(String, f64)> = self
+            .cache
+            .iter()
+            .map(|(key, result)| {
+                let age_factor = result.cached_at.elapsed().as_secs() as f64 / 3600.0; // Hours
+                let access_factor = 1.0 / (result.access_count as f64 + 1.0);
+                let size_factor = result.estimated_size_bytes as f64 / 1024.0; // KB
+                let freshness_penalty = 1.0 - result.freshness_score;
+
+                let eviction_score = age_factor * 0.3
+                    + access_factor * 0.4
+                    + size_factor * 0.1
+                    + freshness_penalty * 0.2;
+
+                (key.clone(), eviction_score)
+            })
+            .collect();
+
+        // Sort by eviction score (highest first)
+        eviction_candidates
+            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Remove the top candidate
+        if let Some((key_to_remove, _)) = eviction_candidates.first() {
+            self.cache.remove(key_to_remove);
+        }
     }
 
     /// Get cache statistics
     pub fn get_cache_stats(&self) -> PathCacheStats {
         PathCacheStats {
             entries: self.cache.len(),
-            total_values: self.cache.values().map(|v| v.len()).sum(),
+            total_values: self.cache.values().map(|v| v.values.len()).sum(),
         }
     }
 
@@ -1075,11 +1194,10 @@ impl PropertyPathEvaluator {
             let sparql_path = path.to_sparql_path()?;
             if let Some(graph) = graph_name {
                 format!(
-                    "WHERE {{\n  GRAPH <{}> {{\n    {} {} ?value .\n  }}\n}}",
-                    graph, start_term, sparql_path
+                    "WHERE {{\n  GRAPH <{graph}> {{\n    {start_term} {sparql_path} ?value .\n  }}\n}}"
                 )
             } else {
-                format!("WHERE {{\n  {} {} ?value .\n}}", start_term, sparql_path)
+                format!("WHERE {{\n  {start_term} {sparql_path} ?value .\n}}")
             }
         };
         query_parts.push(where_clause);
@@ -1117,14 +1235,11 @@ impl PropertyPathEvaluator {
             for alternative_path in paths {
                 let path_sparql = alternative_path.to_sparql_path()?;
                 let triple_pattern = if let Some(graph) = graph_name {
-                    format!(
-                        "    GRAPH <{}> {{ {} {} ?value . }}",
-                        graph, start_term, path_sparql
-                    )
+                    format!("    GRAPH <{graph}> {{ {start_term} {path_sparql} ?value . }}")
                 } else {
-                    format!("    {} {} ?value .", start_term, path_sparql)
+                    format!("    {start_term} {path_sparql} ?value .")
                 };
-                union_parts.push(format!("  {{\n{}\n  }}", triple_pattern));
+                union_parts.push(format!("  {{\n{triple_pattern}\n  }}"));
             }
 
             Ok(format!("WHERE {{\n{}\n}}", union_parts.join("\n  UNION\n")))
@@ -1198,13 +1313,13 @@ impl PropertyPathEvaluator {
         // Generate intermediate variables
         let mut variables = vec!["?start".to_string()];
         for i in 1..paths.len() {
-            variables.push(format!("?inter{}", i));
+            variables.push(format!("?inter{i}"));
         }
         variables.push("?value".to_string());
 
         // Build WHERE clause with sequence
         let mut where_parts = Vec::new();
-        where_parts.push(format!("BIND({} AS ?start)", start_term));
+        where_parts.push(format!("BIND({start_term} AS ?start)"));
 
         for (i, path) in paths.iter().enumerate() {
             let from_var = &variables[i];
@@ -1212,12 +1327,9 @@ impl PropertyPathEvaluator {
             let sparql_path = path.to_sparql_path()?;
 
             let triple_pattern = if let Some(graph) = graph_name {
-                format!(
-                    "GRAPH <{}> {{ {} {} {} . }}",
-                    graph, from_var, sparql_path, to_var
-                )
+                format!("GRAPH <{graph}> {{ {from_var} {sparql_path} {to_var} . }}")
             } else {
-                format!("{} {} {} .", from_var, sparql_path, to_var)
+                format!("{from_var} {sparql_path} {to_var} .")
             };
 
             where_parts.push(triple_pattern);
@@ -1265,12 +1377,9 @@ impl PropertyPathEvaluator {
         for path in paths {
             let sparql_path = path.to_sparql_path()?;
             let union_part = if let Some(graph) = graph_name {
-                format!(
-                    "{{ GRAPH <{}> {{ {} {} ?value . }} }}",
-                    graph, start_term, sparql_path
-                )
+                format!("{{ GRAPH <{graph}> {{ {start_term} {sparql_path} ?value . }} }}")
             } else {
-                format!("{{ {} {} ?value . }}", start_term, sparql_path)
+                format!("{{ {start_term} {sparql_path} ?value . }}")
             };
             union_parts.push(union_part);
         }
@@ -1321,13 +1430,11 @@ impl PropertyPathEvaluator {
 
                 if let Some(graph) = graph_name {
                     format!(
-                        "WHERE {{\n  {{\n    BIND({} AS ?value)\n  }}\n  UNION\n  {{\n    GRAPH <{}> {{\n      {} {}+ ?value .\n    }}\n  }}\n}}",
-                        start_term, graph, start_term, inner_sparql
+                        "WHERE {{\n  {{\n    BIND({start_term} AS ?value)\n  }}\n  UNION\n  {{\n    GRAPH <{graph}> {{\n      {start_term} {inner_sparql}+ ?value .\n    }}\n  }}\n}}"
                     )
                 } else {
                     format!(
-                        "WHERE {{\n  {{\n    BIND({} AS ?value)\n  }}\n  UNION\n  {{\n    {} {}+ ?value .\n  }}\n}}",
-                        start_term, start_term, inner_sparql
+                        "WHERE {{\n  {{\n    BIND({start_term} AS ?value)\n  }}\n  UNION\n  {{\n    {start_term} {inner_sparql}+ ?value .\n  }}\n}}"
                     )
                 }
             }
@@ -1336,11 +1443,10 @@ impl PropertyPathEvaluator {
 
                 if let Some(graph) = graph_name {
                     format!(
-                        "WHERE {{\n  GRAPH <{}> {{\n    {} {}+ ?value .\n  }}\n}}",
-                        graph, start_term, inner_sparql
+                        "WHERE {{\n  GRAPH <{graph}> {{\n    {start_term} {inner_sparql}+ ?value .\n  }}\n}}"
                     )
                 } else {
-                    format!("WHERE {{\n  {} {}+ ?value .\n}}", start_term, inner_sparql)
+                    format!("WHERE {{\n  {start_term} {inner_sparql}+ ?value .\n}}")
                 }
             }
             _ => {
@@ -1362,7 +1468,7 @@ impl PropertyPathEvaluator {
 
         // Limit results for recursive queries to prevent explosion
         let recursive_limit = optimization_hints.max_intermediate_results.min(1000);
-        query_parts.push(format!("LIMIT {}", recursive_limit));
+        query_parts.push(format!("LIMIT {recursive_limit}"));
 
         Ok(query_parts.join("\n"))
     }
@@ -1380,13 +1486,11 @@ impl PropertyPathEvaluator {
 
         let query = if let Some(graph) = graph_name {
             format!(
-                "# Fallback query for complex path evaluation\nSELECT DISTINCT ?candidate WHERE {{\n  GRAPH <{}> {{\n    {} ?p ?candidate .\n  }}\n}}\nLIMIT 100",
-                graph, start_term
+                "# Fallback query for complex path evaluation\nSELECT DISTINCT ?candidate WHERE {{\n  GRAPH <{graph}> {{\n    {start_term} ?p ?candidate .\n  }}\n}}\nLIMIT 100"
             )
         } else {
             format!(
-                "# Fallback query for complex path evaluation\nSELECT DISTINCT ?candidate WHERE {{\n  {} ?p ?candidate .\n}}\nLIMIT 100",
-                start_term
+                "# Fallback query for complex path evaluation\nSELECT DISTINCT ?candidate WHERE {{\n  {start_term} ?p ?candidate .\n}}\nLIMIT 100"
             )
         };
 
@@ -1440,8 +1544,7 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#
         let complexity = path.complexity();
         if complexity > 100 {
             warnings.push(format!(
-                "High complexity path ({}), consider simplification",
-                complexity
+                "High complexity path ({complexity}), consider simplification"
             ));
         }
 
@@ -1546,7 +1649,7 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#
     pub fn get_performance_stats(&self) -> PropertyPathStats {
         PropertyPathStats {
             cache_entries: self.cache.len(),
-            total_cached_results: self.cache.values().map(|v| v.len()).sum(),
+            total_cached_results: self.cache.values().map(|v| v.values.len()).sum(),
         }
     }
 }
@@ -1663,6 +1766,60 @@ pub struct PathEvaluationStats {
     pub total_values_found: usize,
     pub avg_values_per_evaluation: f64,
     pub max_recursion_depth_reached: usize,
+    pub query_plan_cache_hits: usize,
+    pub query_plan_cache_misses: usize,
+    pub average_query_execution_time: std::time::Duration,
+    pub total_query_execution_time: std::time::Duration,
+}
+
+/// Cached path evaluation result with metadata
+#[derive(Debug, Clone)]
+pub struct CachedPathResult {
+    /// The cached result values
+    pub values: Vec<Term>,
+    /// When this result was cached
+    pub cached_at: std::time::Instant,
+    /// How many times this result has been accessed
+    pub access_count: usize,
+    /// Last access time
+    pub last_accessed: std::time::Instant,
+    /// Estimated freshness of the result
+    pub freshness_score: f64,
+    /// Size estimate for memory management
+    pub estimated_size_bytes: usize,
+}
+
+/// Configuration for path result caching
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PathCacheConfig {
+    /// Maximum number of cached results
+    pub max_cache_entries: usize,
+    /// Maximum time to keep results in cache
+    pub max_cache_age: std::time::Duration,
+    /// Whether to enable intelligent cache eviction
+    pub intelligent_eviction: bool,
+    /// Minimum access count to keep in cache during pressure
+    pub min_access_threshold: usize,
+    /// Whether to cache negative results (empty results)
+    pub cache_negative_results: bool,
+}
+
+/// Query plan for path evaluation with caching
+#[derive(Debug, Clone)]
+pub struct PathQueryPlan {
+    /// The optimized query
+    pub query: String,
+    /// Estimated execution cost
+    pub estimated_cost: f64,
+    /// When this plan was created (skip serialization for Instant)
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub created_at: std::time::Instant,
+    /// How many times this plan has been used
+    pub usage_count: usize,
+    /// Average execution time in nanoseconds
+    pub average_execution_time_nanos: u64,
+    /// Whether this plan uses SPARQL property paths
+    pub uses_native_sparql: bool,
 }
 
 /// Execution strategy for property path evaluation
@@ -1734,6 +1891,94 @@ impl PathEvaluationStats {
             0.0
         } else {
             self.cache_hits as f64 / self.total_evaluations as f64
+        }
+    }
+}
+
+/// Format a term for use in SPARQL queries
+fn format_term_for_sparql(term: &Term) -> Result<String> {
+    match term {
+        Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
+        Term::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
+        Term::Literal(literal) => {
+            // Format literal with proper escaping and datatype/language tags
+            let value = literal.value().replace('\\', "\\\\").replace('"', "\\\"");
+
+            let datatype = literal.datatype();
+            if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
+                // Simple string literals don't need datatype annotation
+                Ok(format!("\"{value}\""))
+            } else {
+                Ok(format!("\"{}\"^^<{}>", value, datatype.as_str()))
+            }
+        }
+        Term::Variable(var) => Ok(format!("?{}", var.name())),
+        Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
+            "Quoted triples not supported in property path queries".to_string(),
+        )),
+    }
+}
+
+impl Default for PathCacheConfig {
+    fn default() -> Self {
+        Self {
+            max_cache_entries: 5000,
+            max_cache_age: std::time::Duration::from_secs(3600), // 1 hour
+            intelligent_eviction: true,
+            min_access_threshold: 2,
+            cache_negative_results: false,
+        }
+    }
+}
+
+impl CachedPathResult {
+    pub fn new(values: Vec<Term>) -> Self {
+        let now = std::time::Instant::now();
+        let estimated_size = values.len() * 64; // Rough estimate
+
+        Self {
+            values,
+            cached_at: now,
+            access_count: 1,
+            last_accessed: now,
+            freshness_score: 1.0,
+            estimated_size_bytes: estimated_size,
+        }
+    }
+
+    pub fn access(&mut self) {
+        self.access_count += 1;
+        self.last_accessed = std::time::Instant::now();
+
+        // Update freshness score based on access pattern
+        let age_seconds = self.cached_at.elapsed().as_secs() as f64;
+        let recency_factor = 1.0 / (1.0 + age_seconds / 3600.0); // Decay over hours
+        let popularity_factor = (self.access_count as f64).ln() / 10.0; // Log scale popularity
+
+        self.freshness_score = recency_factor * 0.7 + popularity_factor.min(1.0) * 0.3;
+    }
+
+    pub fn is_fresh(&self, max_age: std::time::Duration) -> bool {
+        self.cached_at.elapsed() < max_age
+    }
+}
+
+impl std::fmt::Display for PropertyPath {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PropertyPath::Predicate(pred) => write!(f, "{}", pred.as_str()),
+            PropertyPath::Inverse(path) => write!(f, "^{path}"),
+            PropertyPath::Sequence(paths) => {
+                let path_strs: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
+                write!(f, "{}", path_strs.join("/"))
+            }
+            PropertyPath::Alternative(paths) => {
+                let path_strs: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
+                write!(f, "({})", path_strs.join("|"))
+            }
+            PropertyPath::ZeroOrMore(path) => write!(f, "{path}*"),
+            PropertyPath::OneOrMore(path) => write!(f, "{path}+"),
+            PropertyPath::ZeroOrOne(path) => write!(f, "{path}?"),
         }
     }
 }
@@ -1986,49 +2231,5 @@ mod tests {
         assert_eq!(plan.execution_strategy, PathExecutionStrategy::DirectSparql);
         assert!(plan.estimated_cost > 0.0);
         assert!(!plan.cache_key.is_empty());
-    }
-}
-
-/// Format a term for use in SPARQL queries
-fn format_term_for_sparql(term: &Term) -> Result<String> {
-    match term {
-        Term::NamedNode(node) => Ok(format!("<{}>", node.as_str())),
-        Term::BlankNode(node) => Ok(format!("_:{}", node.as_str())),
-        Term::Literal(literal) => {
-            // Format literal with proper escaping and datatype/language tags
-            let value = literal.value().replace('\\', "\\\\").replace('"', "\\\"");
-
-            let datatype = literal.datatype();
-            if datatype.as_str() == "http://www.w3.org/2001/XMLSchema#string" {
-                // Simple string literals don't need datatype annotation
-                Ok(format!("\"{}\"", value))
-            } else {
-                Ok(format!("\"{}\"^^<{}>", value, datatype.as_str()))
-            }
-        }
-        Term::Variable(var) => Ok(format!("?{}", var.name())),
-        Term::QuotedTriple(_) => Err(ShaclError::PropertyPath(
-            "Quoted triples not supported in property path queries".to_string(),
-        )),
-    }
-}
-
-impl std::fmt::Display for PropertyPath {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PropertyPath::Predicate(pred) => write!(f, "{}", pred.as_str()),
-            PropertyPath::Inverse(path) => write!(f, "^{}", path),
-            PropertyPath::Sequence(paths) => {
-                let path_strs: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
-                write!(f, "{}", path_strs.join("/"))
-            }
-            PropertyPath::Alternative(paths) => {
-                let path_strs: Vec<String> = paths.iter().map(|p| p.to_string()).collect();
-                write!(f, "({})", path_strs.join("|"))
-            }
-            PropertyPath::ZeroOrMore(path) => write!(f, "{}*", path),
-            PropertyPath::OneOrMore(path) => write!(f, "{}+", path),
-            PropertyPath::ZeroOrOne(path) => write!(f, "{}?", path),
-        }
     }
 }

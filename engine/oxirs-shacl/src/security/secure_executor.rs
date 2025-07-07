@@ -4,7 +4,6 @@
 //! all security features including analysis, rewriting, sandboxing, and policy enforcement.
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -15,12 +14,12 @@ use crate::{
     constraints::ConstraintContext,
     security::{
         advanced::{
-            SecurityPolicyManager, SecurityContext, ExecutionConstraints, SecureExecutionResult,
-            Permission, SecurityConstraints,
+            ExecutionConstraints, Permission, SecureExecutionResult, SecurityConstraints,
+            SecurityPolicyManager,
         },
-        SecurityConfig, SparqlSecurityAnalyzer, QueryExecutionSandbox,
+        QueryExecutionSandbox, SecurityConfig, SparqlSecurityAnalyzer,
     },
-    sparql::{SparqlConstraint, EnhancedSparqlExecutor},
+    sparql::{EnhancedSparqlExecutor, SparqlConstraint},
     Result, ShaclError,
 };
 
@@ -29,16 +28,16 @@ use crate::{
 pub struct SecureSparqlExecutor {
     /// Advanced security policy manager
     policy_manager: SecurityPolicyManager,
-    
+
     /// Basic security analyzer (legacy compatibility)
     security_analyzer: SparqlSecurityAnalyzer,
-    
+
     /// Enhanced SPARQL executor for function support
     sparql_executor: EnhancedSparqlExecutor,
-    
+
     /// Execution statistics
     execution_stats: ExecutionStatistics,
-    
+
     /// Security configuration
     security_config: SecurityConfig,
 }
@@ -81,16 +80,13 @@ impl SecureSparqlExecutor {
         )?;
 
         // 3. Convert to constraint evaluation result
-        let constraint_result = self.convert_to_constraint_result(
-            &execution_result,
-            constraint,
-            context,
-            store,
-        )?;
+        let constraint_result =
+            self.convert_to_constraint_result(&execution_result, constraint, context, store)?;
 
         // 4. Update execution statistics
         let total_time = start_time.elapsed();
-        self.execution_stats.record_execution(total_time, execution_result.success);
+        self.execution_stats
+            .record_execution(total_time, execution_result.success);
 
         let exec_time = constraint_result.execution_time;
         Ok(SecureConstraintResult {
@@ -121,15 +117,14 @@ impl SecureSparqlExecutor {
         )?;
 
         // Execute with security
-        let execution_result = self.policy_manager.execute_secure_sparql(
-            query,
-            &context_id,
-            execution_constraints,
-        )?;
+        let execution_result =
+            self.policy_manager
+                .execute_secure_sparql(query, &context_id, execution_constraints)?;
 
         // Update statistics
         let total_time = start_time.elapsed();
-        self.execution_stats.record_execution(total_time, execution_result.success);
+        self.execution_stats
+            .record_execution(total_time, execution_result.success);
 
         Ok(SecureQueryResult {
             success: execution_result.success,
@@ -153,7 +148,7 @@ impl SecureSparqlExecutor {
     ) -> Result<LegacyConstraintResult> {
         // Basic security analysis
         let analysis = self.security_analyzer.analyze_query(&constraint.query)?;
-        
+
         if !analysis.is_safe {
             return Err(ShaclError::SecurityViolation(format!(
                 "Query failed basic security analysis: {} violations",
@@ -166,15 +161,13 @@ impl SecureSparqlExecutor {
         sandbox.start_execution()?;
 
         // Execute constraint using enhanced executor
-        let result = self.sparql_executor.execute_constraint_enhanced(
-            constraint,
-            context,
-            store,
-        )?;
+        let result = self
+            .sparql_executor
+            .execute_constraint_enhanced(constraint, context, store)?;
 
         // Check sandbox limits
         sandbox.check_execution_limits()?;
-        
+
         // Stop sandbox and get stats
         let execution_stats = sandbox.stop_execution()?;
 
@@ -193,7 +186,7 @@ impl SecureSparqlExecutor {
         let total_queries = execution_metrics.total_executions;
         let avg_overhead = execution_metrics.average_security_overhead;
         let success_rate = execution_metrics.success_rate;
-        
+
         ComprehensiveSecurityMetrics {
             policy_metrics,
             execution_metrics,
@@ -236,14 +229,15 @@ impl SecureSparqlExecutor {
     ) -> Result<ConstraintEvaluationResult> {
         // In a full implementation, this would interpret the SPARQL results
         // and convert them to constraint evaluation results
-        
+
         if execution_result.success {
             Ok(ConstraintEvaluationResult {
                 satisfied: true,
                 violations: Vec::new(),
                 execution_time: execution_result.execution_time,
                 memory_used: execution_result.result_data.memory_used,
-                query_rewritten: execution_result.original_query != execution_result.rewritten_query,
+                query_rewritten: execution_result.original_query
+                    != execution_result.rewritten_query,
             })
         } else {
             Ok(ConstraintEvaluationResult {
@@ -286,7 +280,7 @@ impl ExecutionStatistics {
     fn record_execution(&mut self, execution_time: Duration, success: bool) {
         self.total_executions += 1;
         self.total_time += execution_time;
-        
+
         if success {
             self.successful_executions += 1;
         }
@@ -408,10 +402,12 @@ impl SecureExecutorFactory {
         config.enable_injection_detection = true;
         config.enable_sandboxing = true;
         config.enable_security_logging = true;
-        
+
         // Remove potentially dangerous functions
-        config.allowed_functions.retain(|f| !["RAND", "NOW"].contains(&f.as_str()));
-        
+        config
+            .allowed_functions
+            .retain(|f| !["RAND", "NOW"].contains(&f.as_str()));
+
         SecureSparqlExecutor::new(config)
     }
 
@@ -424,7 +420,7 @@ impl SecureExecutorFactory {
         config.max_complexity_score = 500.0;
         config.enable_injection_detection = true; // Keep injection detection
         config.enable_sandboxing = false;
-        
+
         SecureSparqlExecutor::new(config)
     }
 
@@ -443,11 +439,8 @@ pub mod utils {
         executor: &mut SecureSparqlExecutor,
         user_id: &str,
     ) -> Result<String> {
-        let permissions = vec![
-            Permission::ReadData,
-            Permission::ExecuteQueries,
-        ];
-        
+        let permissions = vec![Permission::ReadData, Permission::ExecuteQueries];
+
         let constraints = SecurityConstraints {
             max_execution_time: Duration::from_secs(30),
             max_memory_usage: 10 * 1024 * 1024, // 10MB
@@ -455,7 +448,9 @@ pub mod utils {
             ..Default::default()
         };
 
-        executor.policy_manager.create_security_context(user_id, permissions, constraints)
+        executor
+            .policy_manager
+            .create_security_context(user_id, permissions, constraints)
     }
 
     /// Create an admin security context with elevated permissions
@@ -475,12 +470,14 @@ pub mod utils {
 
         let constraints = SecurityConstraints {
             max_execution_time: Duration::from_secs(300), // 5 minutes
-            max_memory_usage: 100 * 1024 * 1024, // 100MB
+            max_memory_usage: 100 * 1024 * 1024,          // 100MB
             max_result_count: 50000,
             ..Default::default()
         };
 
-        executor.policy_manager.create_security_context(user_id, permissions, constraints)
+        executor
+            .policy_manager
+            .create_security_context(user_id, permissions, constraints)
     }
 
     /// Validate a SPARQL query for basic safety (quick check)
@@ -502,7 +499,6 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::security::advanced::Permission;
 
     #[test]
     fn test_secure_executor_creation() {
@@ -517,15 +513,24 @@ mod tests {
         let relaxed_exec = SecureExecutorFactory::create_relaxed().unwrap();
 
         // Basic validation that different configurations were created
-        assert_eq!(default_exec.security_config.max_execution_time, Duration::from_secs(30));
-        assert_eq!(strict_exec.security_config.max_execution_time, Duration::from_secs(10));
-        assert_eq!(relaxed_exec.security_config.max_execution_time, Duration::from_secs(60));
+        assert_eq!(
+            default_exec.security_config.max_execution_time,
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            strict_exec.security_config.max_execution_time,
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            relaxed_exec.security_config.max_execution_time,
+            Duration::from_secs(60)
+        );
     }
 
     #[test]
     fn test_context_creation_utils() {
         let mut executor = SecureExecutorFactory::create_default().unwrap();
-        
+
         let user_context = utils::create_standard_user_context(&mut executor, "test_user");
         assert!(user_context.is_ok());
 
@@ -562,7 +567,7 @@ mod tests {
     #[test]
     fn test_execution_statistics() {
         let mut stats = ExecutionStatistics::new();
-        
+
         stats.record_execution(Duration::from_millis(100), true);
         stats.record_execution(Duration::from_millis(200), false);
         stats.record_execution(Duration::from_millis(150), true);

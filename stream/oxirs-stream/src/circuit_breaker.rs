@@ -4,14 +4,13 @@
 //! in distributed streaming systems with adaptive thresholds, failure classification,
 //! metrics integration, and advanced recovery strategies.
 
-use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// Enhanced circuit breaker configuration
@@ -300,7 +299,7 @@ impl RecoveryHandler {
 
 /// Circuit breaker metrics
 #[derive(Debug, Clone, Default)]
-struct CircuitBreakerMetrics {
+pub struct CircuitBreakerMetrics {
     total_requests: u64,
     successful_requests: u64,
     failed_requests: u64,
@@ -565,7 +564,7 @@ impl CircuitBreaker {
                 let duration = start.elapsed();
                 let failure_type = self.classify_error(&error);
                 self.record_failure_with_details(failure_type, duration);
-                Err(CircuitBreakerError::OperationFailed(format!("{:?}", error)))
+                Err(CircuitBreakerError::OperationFailed(format!("{error:?}")))
             }
         }
     }
@@ -598,14 +597,14 @@ impl CircuitBreaker {
                 let duration = start.elapsed();
                 let failure_type = self.classify_error(&error);
                 self.record_failure_with_details(failure_type, duration);
-                Err(CircuitBreakerError::OperationFailed(format!("{:?}", error)))
+                Err(CircuitBreakerError::OperationFailed(format!("{error:?}")))
             }
         }
     }
 
     /// Classify error type for failure handling
     fn classify_error<E: std::fmt::Debug>(&self, error: &E) -> FailureType {
-        let error_str = format!("{:?}", error).to_lowercase();
+        let error_str = format!("{error:?}").to_lowercase();
 
         if error_str.contains("timeout") || error_str.contains("timed out") {
             FailureType::Timeout
@@ -851,18 +850,17 @@ impl std::fmt::Display for CircuitBreakerError {
             } => {
                 write!(
                     f,
-                    "Circuit breaker is {:?}, last failure: {:?}",
-                    state, last_failure
+                    "Circuit breaker is {state:?}, last failure: {last_failure:?}"
                 )
             }
             CircuitBreakerError::OperationFailed(msg) => {
-                write!(f, "Operation failed: {}", msg)
+                write!(f, "Operation failed: {msg}")
             }
             CircuitBreakerError::Timeout => {
                 write!(f, "Operation timed out")
             }
             CircuitBreakerError::ConfigurationError(msg) => {
-                write!(f, "Configuration error: {}", msg)
+                write!(f, "Configuration error: {msg}")
             }
         }
     }

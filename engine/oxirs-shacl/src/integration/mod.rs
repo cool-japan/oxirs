@@ -96,7 +96,7 @@ impl IntegrationManager {
         context: IntegrationContext,
     ) -> Result<IntegratedValidationReport> {
         let validation_report = self.validator.validate_store(store, None)?;
-        
+
         Ok(IntegratedValidationReport {
             base_report: validation_report,
             context,
@@ -243,7 +243,7 @@ impl IntegratedValidationReport {
             }
             IntegrationContext::Fuseki { .. } => {
                 // Export as SPARQL result format
-                Ok(format!("# SHACL Validation Report\n# Conforms: {}\n# Violations: {}", 
+                Ok(format!("# SHACL Validation Report\n# Conforms: {}\n# Violations: {}",
                     self.conforms(), self.violations().len()))
             }
             _ => {
@@ -270,22 +270,22 @@ pub struct IntegrationMetadata {
 pub enum IntegrationError {
     #[error("GraphQL integration error: {0}")]
     GraphQL(String),
-    
+
     #[error("Fuseki integration error: {0}")]
     Fuseki(String),
-    
+
     #[error("Stream integration error: {0}")]
     Stream(String),
-    
+
     #[error("AI integration error: {0}")]
     AI(String),
-    
+
     #[error("Custom integration error: {0}")]
     Custom(String),
-    
+
     #[error("SHACL validation error: {0}")]
     Validation(#[from] ShaclError),
-    
+
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
 }

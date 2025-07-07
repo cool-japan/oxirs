@@ -315,12 +315,11 @@ impl PerformanceMonitor {
 
     /// Get current system performance metrics
     pub fn get_current_metrics(&self) -> Result<PerformanceMetrics, CliError> {
-        if let Ok(metrics) = self.metrics.lock() {
-            Ok(metrics.clone())
-        } else {
-            Err(CliError::profile_error(
+        match self.metrics.lock() {
+            Ok(metrics) => Ok(metrics.clone()),
+            _ => Err(CliError::profile_error(
                 "Failed to access performance metrics".to_string(),
-            ))
+            )),
         }
     }
 
@@ -391,49 +390,47 @@ impl PerformanceMonitor {
 
     /// Increment a performance counter
     pub fn increment_counter(&self, counter_name: &str, value: u64) -> Result<(), CliError> {
-        if let Ok(mut counters) = self.counters.lock() {
-            counters
-                .entry(counter_name.to_string())
-                .or_insert_with(|| AtomicU64::new(0))
-                .fetch_add(value, Ordering::Relaxed);
-            Ok(())
-        } else {
-            Err(CliError::profile_error(
+        match self.counters.lock() {
+            Ok(mut counters) => {
+                counters
+                    .entry(counter_name.to_string())
+                    .or_insert_with(|| AtomicU64::new(0))
+                    .fetch_add(value, Ordering::Relaxed);
+                Ok(())
+            }
+            _ => Err(CliError::profile_error(
                 "Failed to access performance counters".to_string(),
-            ))
+            )),
         }
     }
 
     /// Get performance counter value
     pub fn get_counter(&self, counter_name: &str) -> Result<u64, CliError> {
-        if let Ok(counters) = self.counters.lock() {
-            Ok(counters
+        match self.counters.lock() {
+            Ok(counters) => Ok(counters
                 .get(counter_name)
                 .map(|counter| counter.load(Ordering::Relaxed))
-                .unwrap_or(0))
-        } else {
-            Err(CliError::profile_error(
+                .unwrap_or(0)),
+            _ => Err(CliError::profile_error(
                 "Failed to access performance counters".to_string(),
-            ))
+            )),
         }
     }
 
     /// Generate comprehensive performance report
     pub fn generate_performance_report(&self) -> Result<PerformanceReport, CliError> {
         let current_metrics = self.get_current_metrics()?;
-        let active_sessions = if let Ok(sessions) = self.active_sessions.lock() {
-            sessions.len()
-        } else {
-            0
+        let active_sessions = match self.active_sessions.lock() {
+            Ok(sessions) => sessions.len(),
+            _ => 0,
         };
 
-        let counters_snapshot = if let Ok(counters) = self.counters.lock() {
-            counters
+        let counters_snapshot = match self.counters.lock() {
+            Ok(counters) => counters
                 .iter()
                 .map(|(name, counter)| (name.clone(), counter.load(Ordering::Relaxed)))
-                .collect()
-        } else {
-            HashMap::new()
+                .collect(),
+            _ => HashMap::new(),
         };
 
         Ok(PerformanceReport {

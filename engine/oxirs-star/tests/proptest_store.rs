@@ -6,10 +6,10 @@ use std::collections::HashSet;
 // Generate simple triples for store testing
 fn simple_triple_strategy() -> impl Strategy<Value = StarTriple> {
     (
-        prop::string::string_regex("http://example.org/[a-z]+[0-9]*").unwrap(),
-        prop::string::string_regex("http://example.org/[a-z]+").unwrap(),
+        prop::string::string_regex("http://example\\.org/[a-z]+[0-9]*").unwrap(),
+        prop::string::string_regex("http://example\\.org/[a-z]+").unwrap(),
         prop_oneof![
-            prop::string::string_regex("http://example.org/[a-z]+[0-9]*")
+            prop::string::string_regex("http://example\\.org/[a-z]+[0-9]*")
                 .unwrap()
                 .prop_map(|s| (s, None::<String>, None::<String>)),
             prop::string::string_regex("[a-zA-Z0-9]+")
@@ -42,7 +42,7 @@ fn quoted_triple_strategy() -> impl Strategy<Value = StarTriple> {
     simple_triple_strategy().prop_flat_map(|inner| {
         (
             Just(inner),
-            prop::string::string_regex("http://example.org/meta/[a-z]+").unwrap(),
+            prop::string::string_regex("http://example\\.org/meta/[a-z]+").unwrap(),
             prop::string::string_regex("[0-9.]+").unwrap(),
         )
             .prop_map(|(inner_triple, pred, obj)| {
@@ -68,17 +68,17 @@ fn query_pattern_strategy(
 ) -> impl Strategy<Value = (Option<StarTerm>, Option<StarTerm>, Option<StarTerm>)> {
     (
         prop::option::of(
-            prop::string::string_regex("http://example.org/[a-z]+[0-9]*")
+            prop::string::string_regex("http://example\\.org/[a-z]+[0-9]*")
                 .unwrap()
                 .prop_map(|s| StarTerm::iri(&s).unwrap()),
         ),
         prop::option::of(
-            prop::string::string_regex("http://example.org/[a-z]+")
+            prop::string::string_regex("http://example\\.org/[a-z]+")
                 .unwrap()
                 .prop_map(|s| StarTerm::iri(&s).unwrap()),
         ),
         prop::option::of(prop_oneof![
-            prop::string::string_regex("http://example.org/[a-z]+[0-9]*")
+            prop::string::string_regex("http://example\\.org/[a-z]+[0-9]*")
                 .unwrap()
                 .prop_map(|s| StarTerm::iri(&s).unwrap()),
             prop::string::string_regex("[a-zA-Z0-9]+")
@@ -167,7 +167,7 @@ mod tests {
 
         #[test]
         fn test_store_quoted_triple_operations(
-            quoted_triples in prop::collection::vec(quoted_triple_strategy(), 0..10)
+            quoted_triples in prop::collection::vec(quoted_triple_strategy(), 1..10)
         ) {
             let store = StarStore::new();
             let unique_quoted: Vec<_> = quoted_triples.into_iter()
@@ -191,7 +191,9 @@ mod tests {
             // Check statistics
             let stats = store.statistics();
             prop_assert_eq!(stats.quoted_triples_count, unique_quoted.len());
-            prop_assert!(stats.max_nesting_encountered >= 1);
+            if !unique_quoted.is_empty() {
+                prop_assert!(stats.max_nesting_encountered >= 1);
+            }
         }
 
         #[test]

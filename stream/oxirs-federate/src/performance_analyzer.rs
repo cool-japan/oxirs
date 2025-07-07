@@ -351,7 +351,7 @@ impl PerformanceAnalyzer {
         let service_history = history
             .service_metrics
             .entry(metrics.service_id.clone())
-            .or_insert_with(VecDeque::new);
+            .or_default();
 
         service_history.push_back(metrics.clone());
 

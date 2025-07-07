@@ -3,7 +3,7 @@
 //! This module provides advanced similarity computation that takes into account
 //! ontological hierarchies, concept relationships, and contextual similarities.
 
-use crate::{similarity::SimilarityMetric, Vector, VectorStore};
+use crate::VectorStore;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -50,6 +50,7 @@ impl Default for HierarchicalSimilarityConfig {
 
 /// Concept hierarchy for ontology-based similarity
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ConceptHierarchy {
     /// Parent-child relationships (child -> parent)
     pub child_to_parent: HashMap<String, String>,
@@ -63,17 +64,6 @@ pub struct ConceptHierarchy {
     pub concept_weights: HashMap<String, f32>,
 }
 
-impl Default for ConceptHierarchy {
-    fn default() -> Self {
-        Self {
-            child_to_parent: HashMap::new(),
-            parent_to_children: HashMap::new(),
-            concept_levels: HashMap::new(),
-            concept_types: HashMap::new(),
-            concept_weights: HashMap::new(),
-        }
-    }
-}
 
 impl ConceptHierarchy {
     /// Add a parent-child relationship to the hierarchy
@@ -81,7 +71,7 @@ impl ConceptHierarchy {
         self.child_to_parent.insert(child.clone(), parent.clone());
         self.parent_to_children
             .entry(parent)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(child);
 
         // Recompute levels
@@ -99,8 +89,7 @@ impl ConceptHierarchy {
         // Find the one with the highest level (closest to concepts)
         common_ancestors
             .into_iter()
-            .max_by_key(|ancestor| self.concept_levels.get(*ancestor).unwrap_or(&0))
-            .map(|s| s.clone())
+            .max_by_key(|ancestor| self.concept_levels.get(*ancestor).unwrap_or(&0)).cloned()
     }
 
     /// Get all ancestors of a concept
@@ -385,11 +374,12 @@ impl HierarchicalSimilarity {
 
     /// Add a concept hierarchy relationship
     pub fn add_concept_relationship(&self, parent: &str, child: &str) -> Result<()> {
-        if let Ok(mut hierarchy) = self.concept_hierarchy.write() {
-            hierarchy.add_relationship(parent.to_string(), child.to_string());
-            Ok(())
-        } else {
-            Err(anyhow!("Failed to acquire write lock on concept hierarchy"))
+        match self.concept_hierarchy.write() {
+            Ok(mut hierarchy) => {
+                hierarchy.add_relationship(parent.to_string(), child.to_string());
+                Ok(())
+            }
+            _ => Err(anyhow!("Failed to acquire write lock on concept hierarchy")),
         }
     }
 
@@ -399,13 +389,14 @@ impl HierarchicalSimilarity {
         resource: &str,
         concepts: Vec<String>,
     ) -> Result<()> {
-        if let Ok(mut mapping) = self.concept_to_resource.write() {
-            mapping.insert(resource.to_string(), concepts);
-            Ok(())
-        } else {
-            Err(anyhow!(
+        match self.concept_to_resource.write() {
+            Ok(mut mapping) => {
+                mapping.insert(resource.to_string(), concepts);
+                Ok(())
+            }
+            _ => Err(anyhow!(
                 "Failed to acquire write lock on concept-resource mapping"
-            ))
+            )),
         }
     }
 
@@ -414,7 +405,7 @@ impl HierarchicalSimilarity {
         &self,
         resource1: &str,
         resource2: &str,
-        context: &SimilarityContext,
+        _context: &SimilarityContext,
     ) -> Result<f32> {
         let concepts1 = self.get_concepts_for_resource(resource1);
         let concepts2 = self.get_concepts_for_resource(resource2);
@@ -452,8 +443,8 @@ impl HierarchicalSimilarity {
     /// Compute contextual similarity
     fn compute_contextual_similarity(
         &self,
-        resource1: &str,
-        resource2: &str,
+        _resource1: &str,
+        _resource2: &str,
         context: &SimilarityContext,
     ) -> Result<f32> {
         let mut contextual_score = 0.0f32;
@@ -492,7 +483,7 @@ impl HierarchicalSimilarity {
     }
 
     /// Get adaptive weights based on context and learning
-    fn get_adaptive_weights(&self, context: &SimilarityContext) -> (f32, f32, f32) {
+    fn get_adaptive_weights(&self, _context: &SimilarityContext) -> (f32, f32, f32) {
         // For now, return default weights
         // In a full implementation, this would use machine learning to adapt weights
         (
@@ -504,10 +495,9 @@ impl HierarchicalSimilarity {
 
     /// Get concepts associated with a resource
     fn get_concepts_for_resource(&self, resource: &str) -> Vec<String> {
-        if let Ok(mapping) = self.concept_to_resource.read() {
-            mapping.get(resource).cloned().unwrap_or_default()
-        } else {
-            Vec::new()
+        match self.concept_to_resource.read() {
+            Ok(mapping) => mapping.get(resource).cloned().unwrap_or_default(),
+            _ => Vec::new(),
         }
     }
 
@@ -609,7 +599,6 @@ pub struct HierarchicalSimilarityStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Vector, VectorStore};
 
     #[test]
     fn test_concept_hierarchy() {

@@ -945,10 +945,11 @@ impl QuantumEnhancedPatternOptimizer {
         let mut bound_vars = HashSet::new();
 
         // Get optimal index choices from quantum annealer
-        let optimal_indices = if let Ok(annealer) = self.quantum_annealer.lock() {
-            annealer.get_best_solution()
-        } else {
-            vec![IndexType::SPO; patterns.len()]
+        let optimal_indices = match self.quantum_annealer.lock() {
+            Ok(annealer) => annealer.get_best_solution(),
+            _ => {
+                vec![IndexType::SPO; patterns.len()]
+            }
         };
 
         for (pattern, &optimal_index) in patterns.iter().zip(optimal_indices.iter()) {
@@ -980,10 +981,9 @@ impl QuantumEnhancedPatternOptimizer {
         let classical_cost = 100.0; // Simplified
 
         // Quantum enhancement factor based on coherence
-        let coherence_factor = if let Ok(states) = self.superposition_states.lock() {
-            states.coherence_measures.mean().unwrap_or(1.0)
-        } else {
-            1.0
+        let coherence_factor = match self.superposition_states.lock() {
+            Ok(states) => states.coherence_measures.mean().unwrap_or(1.0),
+            _ => 1.0,
         };
 
         // Apply quantum optimization

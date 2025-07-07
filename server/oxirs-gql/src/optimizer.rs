@@ -4,7 +4,7 @@
 //! enhancements for GraphQL execution over RDF data.
 
 use crate::ast::{Document, Field, Selection, SelectionSet, Value};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};

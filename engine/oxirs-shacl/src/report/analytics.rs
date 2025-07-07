@@ -9,12 +9,9 @@ use std::time::{Duration, SystemTime};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use oxirs_core::model::Term;
-
 use crate::{
     report::{ReportFormat, ValidationReport},
-    validation::ValidationViolation,
-    ConstraintComponentId, PropertyPath, Result, Severity, ShaclError, ShapeId,
+    ConstraintComponentId, Result, Severity, ShaclError, ShapeId,
 };
 
 /// Comprehensive analytics engine for validation reports
@@ -676,8 +673,7 @@ impl ValidationReportAnalytics {
             ReportFormat::Html => self.export_to_html(&analytics),
             ReportFormat::Text => self.export_to_text(&analytics),
             _ => Err(ShaclError::ReportGeneration(format!(
-                "Export format {:?} not supported for analytics",
-                format
+                "Export format {format:?} not supported for analytics"
             ))),
         }
     }
@@ -695,7 +691,7 @@ impl ValidationReportAnalytics {
         for violation in &report.violations {
             // Count by severity
             *violations_by_severity
-                .entry(violation.result_severity.clone())
+                .entry(violation.result_severity)
                 .or_insert(0) += 1;
 
             // Count by shape
@@ -710,7 +706,7 @@ impl ValidationReportAnalytics {
 
             // Count by property path
             if let Some(path) = &violation.result_path {
-                let path_str = format!("{:?}", path); // Simple string representation
+                let path_str = format!("{path:?}"); // Simple string representation
                 *violations_by_path.entry(path_str).or_insert(0) += 1;
             }
 
@@ -770,7 +766,7 @@ impl ValidationReportAnalytics {
                 // Threshold for "recurring"
                 patterns.push(ViolationPattern {
                     pattern_type: PatternType::RecurringShapeViolation,
-                    description: format!("Shape {} has {} violations", shape_id, count),
+                    description: format!("Shape {shape_id} has {count} violations"),
                     frequency: *count,
                     confidence: 0.9,
                     affected_shapes: vec![shape_id.clone()],
@@ -793,8 +789,7 @@ impl ValidationReportAnalytics {
             patterns.push(ViolationPattern {
                 pattern_type: PatternType::MissingRequiredProperties,
                 description: format!(
-                    "{} missing required property violations",
-                    missing_prop_violations
+                    "{missing_prop_violations} missing required property violations"
                 ),
                 frequency: missing_prop_violations,
                 confidence: 0.8,
@@ -816,7 +811,7 @@ impl ValidationReportAnalytics {
         if datatype_violations > 0 {
             patterns.push(ViolationPattern {
                 pattern_type: PatternType::DatatypeInconsistencies,
-                description: format!("{} datatype violation(s)", datatype_violations),
+                description: format!("{datatype_violations} datatype violation(s)"),
                 frequency: datatype_violations,
                 confidence: 0.85,
                 affected_shapes: metrics.violations_by_shape.keys().cloned().collect(),
@@ -1101,7 +1096,7 @@ impl ValidationReportAnalytics {
         if missing_data_count > 0 {
             issues.push(QualityIssue {
                 issue_type: QualityIssueType::MissingData,
-                description: format!("{} instances of missing required data", missing_data_count),
+                description: format!("{missing_data_count} instances of missing required data"),
                 severity: if missing_data_count > 100 {
                     Severity::Violation
                 } else {
@@ -1115,7 +1110,7 @@ impl ValidationReportAnalytics {
         if invalid_values_count > 0 {
             issues.push(QualityIssue {
                 issue_type: QualityIssueType::InvalidValues,
-                description: format!("{} instances of invalid data values", invalid_values_count),
+                description: format!("{invalid_values_count} instances of invalid data values"),
                 severity: if invalid_values_count > 50 {
                     Severity::Violation
                 } else {
@@ -1256,7 +1251,7 @@ impl ValidationReportAnalytics {
         csv.push_str("\nTop Violation Types\n");
         csv.push_str("Component,Count\n");
         for (component, count) in &analytics.summary.top_violation_types {
-            csv.push_str(&format!("{},{}\n", component, count));
+            csv.push_str(&format!("{component},{count}\n"));
         }
 
         Ok(csv)
@@ -1273,7 +1268,7 @@ impl ValidationReportAnalytics {
         // Summary section
         html.push_str("<h2>Summary</h2>");
         html.push_str("<table>");
-        html.push_str(&format!("<tr><th>Metric</th><th>Value</th></tr>"));
+        html.push_str("<tr><th>Metric</th><th>Value</th></tr>");
         html.push_str(&format!(
             "<tr><td>Total Reports</td><td>{}</td></tr>",
             analytics.summary.total_reports
@@ -1407,7 +1402,6 @@ pub struct ShapeStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::validation::ValidationViolation;
 
     #[test]
     fn test_analytics_config_default() {
@@ -1429,9 +1423,9 @@ mod tests {
 
         // This would be tested with actual quality assessment logic
         assert!(excellent_score >= 90.0); // Would be Excellent
-        assert!(good_score >= 70.0 && good_score < 90.0); // Would be Good
-        assert!(fair_score >= 50.0 && fair_score < 70.0); // Would be Fair
-        assert!(poor_score >= 30.0 && poor_score < 50.0); // Would be Poor
+        assert!((70.0..90.0).contains(&good_score)); // Would be Good
+        assert!((50.0..70.0).contains(&fair_score)); // Would be Fair
+        assert!((30.0..50.0).contains(&poor_score)); // Would be Poor
         assert!(critical_score < 30.0); // Would be Critical
     }
 
@@ -1446,7 +1440,7 @@ mod tests {
 
     #[test]
     fn test_report_filtering() {
-        let mut analytics = ValidationReportAnalytics::new(AnalyticsConfig::default());
+        let analytics = ValidationReportAnalytics::new(AnalyticsConfig::default());
 
         // This would test filtering functionality with actual reports
         let filtered = analytics.filter_reports(|_| true);

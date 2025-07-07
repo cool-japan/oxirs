@@ -10,12 +10,12 @@ use std::path::Path;
 
 /// Generate shell completion scripts
 pub fn generate_completion<G: Generator>(
-    gen: G,
+    r#gen: G,
     app: &mut Command,
     name: &str,
     out: &mut dyn io::Write,
 ) {
-    generate(gen, app, name, out);
+    generate(r#gen, app, name, out);
 }
 
 /// Print completions for specified shell
@@ -510,15 +510,43 @@ fn complete_directories(prefix: &str) -> Vec<CompletionItem> {
 
 /// Complete dataset names
 fn complete_datasets(prefix: &str) -> Vec<CompletionItem> {
-    // TODO: This should look for actual datasets in the workspace
-    let datasets = vec!["mykg", "test-db", "production"];
+    // Try to load configuration and get actual dataset names
+    let datasets = if let Ok(mut config_manager) = crate::config::ConfigManager::new() {
+        if let Ok(_) = config_manager.load_profile("default") {
+            if let Ok(config) = config_manager.get_config() {
+                // Get dataset names from configuration
+                config.datasets.keys().cloned().collect::<Vec<_>>()
+            } else {
+                // Fallback to default examples if config fails to load
+                vec![
+                    "mykg".to_string(),
+                    "test-db".to_string(),
+                    "production".to_string(),
+                ]
+            }
+        } else {
+            // Fallback to default examples if config fails to load
+            vec![
+                "mykg".to_string(),
+                "test-db".to_string(),
+                "production".to_string(),
+            ]
+        }
+    } else {
+        // Fallback to default examples if config manager fails to create
+        vec![
+            "mykg".to_string(),
+            "test-db".to_string(),
+            "production".to_string(),
+        ]
+    };
 
     datasets
         .into_iter()
         .filter(|d| d.starts_with(prefix))
         .map(|d| CompletionItem {
-            replacement: d.to_string(),
-            display: d.to_string(),
+            replacement: d.clone(),
+            display: d.clone(),
             description: Some("Dataset".to_string()),
             completion_type: CompletionType::Value,
         })

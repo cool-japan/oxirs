@@ -28,7 +28,7 @@ pub mod vocabulary {
 pub struct RdfsContext {
     /// Class hierarchy (subclass relationships)
     pub class_hierarchy: HashMap<String, HashSet<String>>,
-    /// Property hierarchy (subproperty relationships)  
+    /// Property hierarchy (subproperty relationships)
     pub property_hierarchy: HashMap<String, HashSet<String>>,
     /// Property domains
     pub property_domains: HashMap<String, HashSet<String>>,

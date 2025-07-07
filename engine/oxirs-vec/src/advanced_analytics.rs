@@ -2,7 +2,7 @@
 //!
 //! This module provides comprehensive analytics and insights for vector search operations:
 //! - Search pattern analysis and optimization recommendations
-//! - Vector distribution analysis and cluster insights  
+//! - Vector distribution analysis and cluster insights
 //! - Performance trend analysis and predictive modeling
 //! - Query optimization suggestions based on usage patterns
 //! - Anomaly detection in search behavior
@@ -11,9 +11,7 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-
-use crate::similarity::SimilarityMetric;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 /// Search query analytics and patterns
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -609,7 +607,7 @@ impl VectorAnalyticsEngine {
     }
 
     fn predict_peak_hours(&self) -> Vec<u8> {
-        let mut hour_volumes = vec![0; 24];
+        let mut hour_volumes = [0; 24];
 
         for query in &self.query_history {
             let hour = ((query.timestamp % 86400) / 3600) as usize;
@@ -623,7 +621,7 @@ impl VectorAnalyticsEngine {
         hour_volumes
             .iter()
             .enumerate()
-            .filter(|(_, &volume)| volume as f32 > avg_volume * 1.5)
+            .filter(|&(_, &volume)| volume as f32 > avg_volume * 1.5)
             .map(|(hour, _)| hour as u8)
             .collect()
     }
@@ -724,7 +722,7 @@ impl VectorAnalyticsEngine {
                     } else {
                         Priority::Medium
                     },
-                    description: format!("Optimize {} index performance", index_type),
+                    description: format!("Optimize {index_type} index performance"),
                     expected_improvement: (avg_time * 0.3).min(0.8),
                     implementation_effort: ImplementationEffort::Medium,
                     affected_queries: vec![], // Would populate with actual query IDs
@@ -781,7 +779,7 @@ impl VectorAnalyticsEngine {
                 recommendations.push(OptimizationRecommendation {
                     recommendation_type: RecommendationType::SimilarityMetric,
                     priority: Priority::Low,
-                    description: format!("Consider alternative to {} similarity metric", metric),
+                    description: format!("Consider alternative to {metric} similarity metric"),
                     expected_improvement: 0.15,
                     implementation_effort: ImplementationEffort::Low,
                     affected_queries: vec![],
@@ -919,7 +917,7 @@ impl VectorAnalyticsEngine {
         let low_quality_dims = dimension_quality
             .iter()
             .enumerate()
-            .filter(|(_, &score)| score < 0.5)
+            .filter(|&(_, &score)| score < 0.5)
             .count();
 
         if low_quality_dims > dimension_quality.len() / 4 {
@@ -992,8 +990,7 @@ impl AnomalyDetector {
                     anomaly_type: AnomalyType::UnusualLatency,
                     severity_score: response_time_ratio,
                     description: format!(
-                        "Query response time {}x higher than baseline",
-                        response_time_ratio
+                        "Query response time {response_time_ratio}x higher than baseline"
                     ),
                     suggested_action: "Investigate query complexity or system load".to_string(),
                 });
@@ -1128,7 +1125,7 @@ mod tests {
         // Add some test queries
         for i in 0..10 {
             let query = QueryAnalytics {
-                query_id: format!("query_{}", i),
+                query_id: format!("query_{i}"),
                 timestamp: 1640995200 + i * 60,
                 query_vector: vec![0.1 * i as f32, 0.2 * i as f32],
                 similarity_metric: "cosine".to_string(),

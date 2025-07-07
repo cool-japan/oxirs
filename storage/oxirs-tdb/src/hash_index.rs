@@ -3,9 +3,8 @@
 //! High-performance hash index implementation using linear hashing for dynamic
 //! table growth and excellent performance characteristics for equality queries.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
@@ -300,7 +299,7 @@ where
 
     /// Calculate bucket index using linear hashing algorithm
     fn bucket_index(&self, hash: u64) -> usize {
-        let buckets = self.buckets.read().unwrap();
+        let _buckets = self.buckets.read().unwrap();
         let initial_size = self.config.initial_buckets * (1 << self.round);
         let index = (hash as usize) % initial_size;
 

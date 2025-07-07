@@ -4,13 +4,12 @@
 //! replay capabilities, snapshots, and temporal queries. This forms the foundation
 //! for CQRS patterns and enables advanced temporal analytics.
 
-use crate::multi_region_replication::VectorClock;
 use crate::{EventMetadata, StreamEvent};
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock, Semaphore};
@@ -404,7 +403,7 @@ pub struct PersistenceManager {
 #[derive(Debug, Clone)]
 pub enum PersistenceOperation {
     /// Store event
-    StoreEvent(StoredEvent),
+    StoreEvent(Box<StoredEvent>),
     /// Store snapshot
     StoreSnapshot(EventSnapshot),
     /// Archive events
@@ -470,7 +469,7 @@ impl EventStore {
                 checksum,
                 compressed_size: None,
                 original_size,
-                storage_location: format!("memory:{}", sequence_number),
+                storage_location: format!("memory:{sequence_number}"),
                 persistence_status: PersistenceStatus::InMemory,
             },
         };
@@ -500,7 +499,7 @@ impl EventStore {
         // Queue for persistence if enabled
         if self.config.enable_persistence {
             self.persistence_manager
-                .queue_operation(PersistenceOperation::StoreEvent(stored_event.clone()))
+                .queue_operation(PersistenceOperation::StoreEvent(Box::new(stored_event.clone())))
                 .await?;
         }
 
@@ -752,7 +751,7 @@ impl EventStore {
     }
 
     /// Sort results based on query order
-    fn sort_results(&self, results: &mut Vec<StoredEvent>, order: &QueryOrder) {
+    fn sort_results(&self, results: &mut [StoredEvent], order: &QueryOrder) {
         match order {
             QueryOrder::SequenceAsc => {
                 results.sort_by_key(|e| e.sequence_number);
@@ -897,7 +896,7 @@ impl EventStoreTrait for EventStore {
         &self,
         aggregate_id: &str,
         events: &[StreamEvent],
-        expected_version: Option<u64>,
+        _expected_version: Option<u64>,
     ) -> Result<u64> {
         let mut last_version = 0u64;
         for event in events {
@@ -907,6 +906,12 @@ impl EventStoreTrait for EventStore {
             last_version = stored_event.stream_version;
         }
         Ok(last_version)
+    }
+}
+
+impl Default for EventIndexes {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1125,9 +1130,9 @@ impl EventMetadataAccessor for StreamEvent {
             StreamEvent::ErrorOccurred { metadata, .. } => metadata,
             _ => {
                 // For unmatched event types, return a static reference
-                use std::sync::LazyLock;
-                static DEFAULT_METADATA: LazyLock<EventMetadata> =
-                    LazyLock::new(|| EventMetadata::default());
+                use once_cell::sync::Lazy;
+                static DEFAULT_METADATA: Lazy<EventMetadata> =
+                    Lazy::new(EventMetadata::default);
                 &DEFAULT_METADATA
             }
         }
@@ -1137,6 +1142,7 @@ impl EventMetadataAccessor for StreamEvent {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::VectorClock;
     use std::collections::HashMap;
 
     fn create_test_event() -> StreamEvent {
@@ -1258,7 +1264,7 @@ mod tests {
         for i in 0..3 {
             let event = create_test_event();
             store
-                .store_event(format!("stream_{}", i), event)
+                .store_event(format!("stream_{i}"), event)
                 .await
                 .unwrap();
         }
@@ -1296,7 +1302,7 @@ mod tests {
         };
 
         manager
-            .queue_operation(PersistenceOperation::StoreEvent(stored_event))
+            .queue_operation(PersistenceOperation::StoreEvent(Box::new(stored_event)))
             .await
             .unwrap();
         manager.process_pending_operations().await.unwrap();

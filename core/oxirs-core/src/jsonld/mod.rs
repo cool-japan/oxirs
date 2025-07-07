@@ -10,7 +10,7 @@ mod expansion;
 mod from_rdf;
 mod profile;
 mod streaming;
-mod to_rdf;
+pub mod to_rdf;
 
 pub use context::{JsonLdLoadDocumentOptions, JsonLdRemoteDocument};
 pub use error::{JsonLdErrorCode, JsonLdParseError, JsonLdSyntaxError, TextPosition};

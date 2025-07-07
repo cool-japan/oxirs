@@ -7,13 +7,13 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tracing::{debug, info, warn};
 
-use crate::ast::{Document, Field, OperationType, Selection, SelectionSet, Value};
-use crate::ml_optimizer::{MLOptimizerConfig, QueryFeatures};
-use crate::performance::{OperationMetrics, PerformanceTracker};
+use crate::ast::Document;
+use crate::ml_optimizer::QueryFeatures;
+use crate::performance::OperationMetrics;
 
 /// Advanced AI predictor configuration
 #[derive(Debug, Clone)]
@@ -1182,7 +1182,7 @@ impl AIQueryPredictor {
         }
 
         // Weighted ensemble based on model confidence
-        let weights = vec![0.3, 0.25, 0.2, 0.15, 0.1]; // Neural, RL, Transformer, GNN, TimeSeries
+        let weights = [0.3, 0.25, 0.2, 0.15, 0.1]; // Neural, RL, Transformer, GNN, TimeSeries
 
         let mut ensemble_time = Duration::from_millis(0);
         let mut ensemble_memory = 0u64;

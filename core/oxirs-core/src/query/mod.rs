@@ -80,6 +80,7 @@ pub enum QueryResult {
 }
 
 /// Simplified QueryEngine for SHACL compatibility
+#[derive(Default)]
 pub struct QueryEngine {
     /// Query parser for converting SPARQL strings to Query objects
     parser: parser::SparqlParser,
@@ -380,8 +381,7 @@ impl QueryEngine {
             _ => {
                 // For unsupported patterns, return an error for now
                 Err(OxirsError::Query(format!(
-                    "Unsupported graph pattern type: {:?}",
-                    pattern
+                    "Unsupported graph pattern type: {pattern:?}"
                 )))
             }
         }
@@ -463,6 +463,7 @@ impl QueryEngine {
     }
 
     /// Convert sparql_algebra::Expression to algebra::Expression
+    #[allow(clippy::only_used_in_recursion)]
     fn convert_expression(
         &self,
         expr: sparql_algebra::Expression,
@@ -536,8 +537,7 @@ impl QueryEngine {
             _ => {
                 // For expressions not yet supported, create a placeholder
                 Err(OxirsError::Query(format!(
-                    "Expression type not yet supported in conversion: {:?}",
-                    expr
+                    "Expression type not yet supported in conversion: {expr:?}"
                 )))
             }
         }
@@ -621,7 +621,7 @@ impl QueryEngine {
 
         let subject = match &pattern.subject {
             SparqlTermPattern::Variable(v) => {
-                if let Some(term) = solution.get(&v) {
+                if let Some(term) = solution.get(v) {
                     match term {
                         Term::NamedNode(n) => Subject::NamedNode(n.clone()),
                         Term::BlankNode(b) => Subject::BlankNode(b.clone()),
@@ -638,7 +638,7 @@ impl QueryEngine {
 
         let predicate = match &pattern.predicate {
             SparqlTermPattern::Variable(v) => {
-                if let Some(Term::NamedNode(n)) = solution.get(&v) {
+                if let Some(Term::NamedNode(n)) = solution.get(v) {
                     Predicate::NamedNode(n.clone())
                 } else {
                     return Ok(None); // Unbound or invalid predicate
@@ -650,7 +650,7 @@ impl QueryEngine {
 
         let object = match &pattern.object {
             SparqlTermPattern::Variable(v) => {
-                if let Some(term) = solution.get(&v) {
+                if let Some(term) = solution.get(v) {
                     match term {
                         Term::NamedNode(n) => Object::NamedNode(n.clone()),
                         Term::BlankNode(b) => Object::BlankNode(b.clone()),

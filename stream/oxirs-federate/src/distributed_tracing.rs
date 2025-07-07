@@ -622,7 +622,7 @@ impl DistributedTracingManager {
     fn should_sample(&self) -> bool {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        rng.gen::<f64>() < self.config.sampling_rate
+        rng.r#gen::<f64>() < self.config.sampling_rate
     }
 
     async fn update_service_latency_stats(&self, service_name: &str, duration: Duration) {

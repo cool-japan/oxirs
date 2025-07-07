@@ -6,7 +6,8 @@
 use crate::bft::{BftConfig, BftConsensus, BftMessage};
 use crate::network::{NetworkService, RpcMessage};
 use crate::{ClusterError, Result};
-use ed25519_dalek::{Keypair, PublicKey};
+use ed25519_dalek::{Keypair, PublicKey, Signature};
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,6 +48,8 @@ pub struct BftNetworkService {
     tx: mpsc::Sender<AuthenticatedMessage>,
     /// Message channel receiver
     rx: Arc<RwLock<mpsc::Receiver<AuthenticatedMessage>>>,
+    /// Node's Ed25519 keypair for signing
+    keypair: Keypair,
 }
 
 /// Message cache for duplicate detection and ordering
@@ -111,11 +114,37 @@ impl MessageCache {
 }
 
 impl BftNetworkService {
-    /// Create a new BFT network service
+    /// Create a new BFT network service with generated keypair
     pub fn new(
         node_id: String,
         consensus: Arc<BftConsensus>,
         network: Arc<NetworkService>,
+    ) -> Self {
+        let (tx, rx) = mpsc::channel(1000);
+
+        // Generate a new Ed25519 keypair for this node
+        let mut csprng = rand::rngs::OsRng {};
+        let keypair = Keypair::generate(&mut csprng);
+
+        BftNetworkService {
+            node_id,
+            consensus,
+            network,
+            sequence_counter: Arc::new(RwLock::new(0)),
+            message_cache: Arc::new(RwLock::new(MessageCache::new(10000))),
+            peer_keys: Arc::new(RwLock::new(HashMap::new())),
+            tx,
+            rx: Arc::new(RwLock::new(rx)),
+            keypair,
+        }
+    }
+
+    /// Create a new BFT network service with provided keypair
+    pub fn with_keypair(
+        node_id: String,
+        consensus: Arc<BftConsensus>,
+        network: Arc<NetworkService>,
+        keypair: Keypair,
     ) -> Self {
         let (tx, rx) = mpsc::channel(1000);
 
@@ -128,7 +157,18 @@ impl BftNetworkService {
             peer_keys: Arc::new(RwLock::new(HashMap::new())),
             tx,
             rx: Arc::new(RwLock::new(rx)),
+            keypair,
         }
+    }
+
+    /// Get the node's public key
+    pub fn public_key(&self) -> PublicKey {
+        self.keypair.public
+    }
+
+    /// Get the node's public key as bytes
+    pub fn public_key_bytes(&self) -> [u8; 32] {
+        self.keypair.public.to_bytes()
     }
 
     /// Register a peer's public key
@@ -272,18 +312,61 @@ impl BftNetworkService {
         let msg_bytes = serde_json::to_vec(&auth_msg)
             .map_err(|e| ClusterError::Network(format!("Serialization error: {}", e)))?;
 
-        // Get signature from consensus engine (which has the keypair)
-        // For now, use empty signature - in production, sign with node's private key
-        auth_msg.signature = vec![]; // TODO: Implement actual signing
+        // Sign the message with node's private key
+        let signature = self.keypair.sign(&msg_bytes);
+        auth_msg.signature = signature.to_bytes().to_vec();
 
         Ok(auth_msg)
     }
 
     /// Verify message signature
     async fn verify_message_signature(&self, auth_msg: &AuthenticatedMessage) -> Result<bool> {
-        // TODO: Implement actual signature verification
-        // For now, accept all messages
-        Ok(true)
+        // Get sender's public key
+        let peer_keys = self.peer_keys.read().await;
+        let public_key = match peer_keys.get(&auth_msg.sender) {
+            Some(key) => key,
+            None => {
+                warn!("No public key found for peer: {}", auth_msg.sender);
+                return Ok(false);
+            }
+        };
+
+        // Create message without signature for verification
+        let mut msg_for_verification = auth_msg.clone();
+        msg_for_verification.signature = vec![];
+
+        // Serialize message for verification
+        let msg_bytes = match serde_json::to_vec(&msg_for_verification) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                error!("Failed to serialize message for verification: {}", e);
+                return Ok(false);
+            }
+        };
+
+        // Convert signature bytes to signature
+        let signature = match ed25519_dalek::Signature::from_bytes(&auth_msg.signature) {
+            Ok(sig) => sig,
+            Err(e) => {
+                warn!("Invalid signature format from {}: {}", auth_msg.sender, e);
+                return Ok(false);
+            }
+        };
+
+        // Verify the signature
+        match public_key.verify(&msg_bytes, &signature) {
+            Ok(_) => {
+                debug!("Signature verification successful for {}", auth_msg.sender);
+                Ok(true)
+            }
+            Err(e) => {
+                warn!(
+                    "Signature verification failed for {}: {}",
+                    auth_msg.sender, e
+                );
+                Ok(false)
+            }
+        }
     }
 
     /// Send periodic heartbeats
@@ -371,6 +454,51 @@ impl BftNetworkService {
             .map_err(|e| ClusterError::Network(format!("Channel send error: {}", e)))?;
 
         Ok(())
+    }
+
+    /// Remove a peer's public key (e.g., when a node is detected as Byzantine)
+    pub async fn remove_peer(&self, peer_id: &str) -> Result<()> {
+        let mut keys = self.peer_keys.write().await;
+        keys.remove(peer_id);
+
+        info!("Removed public key for peer: {}", peer_id);
+        Ok(())
+    }
+
+    /// Get list of trusted peers
+    pub async fn get_trusted_peers(&self) -> Vec<String> {
+        let keys = self.peer_keys.read().await;
+        keys.keys().cloned().collect()
+    }
+
+    /// Verify a standalone signature (for external verification)
+    pub fn verify_signature(
+        &self,
+        message: &[u8],
+        signature: &[u8],
+        public_key: &PublicKey,
+    ) -> Result<bool> {
+        let signature = match Signature::from_bytes(signature) {
+            Ok(sig) => sig,
+            Err(_) => return Ok(false),
+        };
+
+        match public_key.verify(message, &signature) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false),
+        }
+    }
+
+    /// Sign a message with the node's private key
+    pub fn sign_message(&self, message: &[u8]) -> Vec<u8> {
+        let signature = self.keypair.sign(message);
+        signature.to_bytes().to_vec()
+    }
+
+    /// Check if a peer is trusted (has a registered public key)
+    pub async fn is_peer_trusted(&self, peer_id: &str) -> bool {
+        let keys = self.peer_keys.read().await;
+        keys.contains_key(peer_id)
     }
 }
 

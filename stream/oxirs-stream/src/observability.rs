@@ -3,14 +3,14 @@
 //! Comprehensive monitoring, metrics collection, distributed tracing, and
 //! observability features for production deployment of OxiRS streaming systems.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{debug, error, warn};
 use uuid::Uuid;
 
 // OpenTelemetry imports for enhanced observability (simplified for now)
@@ -425,15 +425,12 @@ impl StreamObservability {
             business_metrics.total_events_processed += 1;
 
             // Classify business events based on event type
-            match event {
-                StreamEvent::TripleAdded { subject, .. } => {
-                    if subject.contains("customer") {
-                        business_metrics.customer_events_count += 1;
-                    } else if subject.contains("revenue") || subject.contains("order") {
-                        business_metrics.revenue_events_count += 1;
-                    }
+            if let StreamEvent::TripleAdded { subject, .. } = event {
+                if subject.contains("customer") {
+                    business_metrics.customer_events_count += 1;
+                } else if subject.contains("revenue") || subject.contains("order") {
+                    business_metrics.revenue_events_count += 1;
                 }
-                _ => {}
             }
         }
 
@@ -524,7 +521,7 @@ impl StreamObservability {
         }
 
         let metrics = self.streaming_metrics.read().await;
-        let now = Utc::now();
+        let _now = Utc::now();
 
         // Check latency threshold
         if metrics.avg_latency_ms > self.alert_config.latency_threshold_ms {
@@ -599,7 +596,7 @@ impl StreamObservability {
         metric_value: f64,
         threshold: f64,
     ) -> Result<()> {
-        let alert_key = format!("{:?}", alert_type);
+        let alert_key = format!("{alert_type:?}");
         let now = Utc::now();
 
         // Check cooldown period
@@ -823,8 +820,7 @@ mod tests {
     #[tokio::test]
     async fn test_alert_system() {
         let config = TelemetryConfig::default();
-        let mut alert_config = AlertConfig::default();
-        alert_config.latency_threshold_ms = 10.0; // Very low threshold for testing
+        let alert_config = AlertConfig { latency_threshold_ms: 10.0, ..Default::default() }; // Very low threshold for testing
 
         let observability = StreamObservability::new(config, alert_config);
         let mut alert_receiver = observability.subscribe_to_alerts();

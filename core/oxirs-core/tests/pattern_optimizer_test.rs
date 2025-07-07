@@ -3,7 +3,7 @@
 use oxirs_core::model::*;
 use oxirs_core::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use oxirs_core::query::pattern_optimizer::IndexStats;
-use oxirs_core::query::{IndexType, OptimizedPatternPlan, PatternExecutor, PatternOptimizer};
+use oxirs_core::query::{IndexType, PatternExecutor, PatternOptimizer};
 use oxirs_core::store::IndexedGraph;
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -226,7 +226,7 @@ fn test_pattern_optimization_performance() {
 
     // Add a larger dataset
     for i in 0..1000 {
-        let subject = NamedNode::new(&format!("http://example.org/person{}", i)).unwrap();
+        let subject = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
         let type_pred = NamedNode::new("http://example.org/type").unwrap();
         let name_pred = NamedNode::new("http://example.org/name").unwrap();
         let age_pred = NamedNode::new("http://example.org/age").unwrap();
@@ -236,7 +236,7 @@ fn test_pattern_optimization_performance() {
         graph.insert(&Triple::new(
             subject.clone(),
             name_pred,
-            Literal::new(format!("Person {}", i)),
+            Literal::new(format!("Person {i}")),
         ));
         graph.insert(&Triple::new(
             subject,
@@ -292,12 +292,12 @@ fn test_pattern_optimization_performance() {
     let results = executor.execute_plan(&plan).unwrap();
     let execution_time = start.elapsed();
 
-    println!("Optimization time: {:?}", optimization_time);
-    println!("Execution time: {:?}", execution_time);
+    println!("Optimization time: {optimization_time:?}");
+    println!("Execution time: {execution_time:?}");
     println!("Results found: {}", results.len());
 
     // Verify results
-    assert!(results.len() > 0);
+    assert!(!results.is_empty());
     for result in &results {
         assert_eq!(result.len(), 3); // Should have 3 variables bound
     }

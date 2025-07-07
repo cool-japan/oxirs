@@ -20,7 +20,10 @@ pub async fn score_triple(
 
     // Get model version
     let model_version = if let Some(version) = request.model_version {
-        version
+        match version.parse::<uuid::Uuid>() {
+            Ok(uuid) => uuid,
+            Err(_) => return Err(StatusCode::BAD_REQUEST),
+        }
     } else {
         match get_production_model_version(&state).await {
             Ok(version) => version,
@@ -35,19 +38,13 @@ pub async fn score_triple(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    let cached_model =
-        CachedEmbeddingModel::new(Box::new(model.as_ref()), Arc::clone(&state.cache_manager));
-
-    // Score triple
+    // Score triple with caching
     let use_cache = request.use_cache.unwrap_or(true);
     let (score, from_cache) = if use_cache {
-        match cached_model.score_triple_cached(
-            &request.subject,
-            &request.predicate,
-            &request.object,
-        ) {
-            Ok(score) => (score, true), // Simplified - would need to check if actually from cache
-            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        // For now, use direct model scoring (can be enhanced with triple scoring cache later)
+        match model.score_triple(&request.subject, &request.predicate, &request.object) {
+            Ok(score) => (score, false),
+            Err(_) => return Err(StatusCode::NOT_FOUND),
         }
     } else {
         match model.score_triple(&request.subject, &request.predicate, &request.object) {
@@ -59,10 +56,15 @@ pub async fn score_triple(
     let scoring_time = start_time.elapsed().as_millis() as f64;
 
     let response = TripleScoreResponse {
+        subject: request.subject.clone(),
+        predicate: request.predicate.clone(),
+        object: request.object.clone(),
         triple: (request.subject, request.predicate, request.object),
         score,
-        model_version,
+        model_id: request.model_id.unwrap_or(model_version),
+        model_version: model_version.to_string(),
         from_cache,
+        computation_time_ms: scoring_time,
         scoring_time_ms: scoring_time,
     };
 

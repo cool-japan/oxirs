@@ -671,7 +671,7 @@ pub fn apply_activation(x: &Array2<f32>, activation: &ActivationFunction) -> Arr
             x.mapv(|v| if v > 0.0 { v } else { alpha * (v.exp() - 1.0) })
         }
         ActivationFunction::GELU => {
-            x.mapv(|v| 0.5 * v * (1.0 + (v * 0.7978845608 * (1.0 + 0.044715 * v * v)).tanh()))
+            x.mapv(|v| 0.5 * v * (1.0 + (v * 0.797_884_6 * (1.0 + 0.044715 * v * v)).tanh()))
         }
         ActivationFunction::Swish => x.mapv(|v| v * (1.0 / (1.0 + (-v).exp()))),
         ActivationFunction::Tanh => x.mapv(|v| v.tanh()),

@@ -283,18 +283,23 @@ mod tests {
         #[test]
         fn test_literal_formatting(
             value in literal_value_strategy(),
-            lang in prop::option::of(language_tag_strategy()),
-            datatype in prop::option::of(iri_strategy())
+            literal_type in prop_oneof![
+                Just("simple".to_string()),
+                language_tag_strategy().prop_map(|l| format!("lang:{}", l)),
+                iri_strategy().prop_map(|dt| format!("datatype:{}", dt))
+            ]
         ) {
-            let has_lang = lang.is_some();
-            let has_datatype = datatype.is_some();
+            // Skip empty values as they might not be valid
+            prop_assume!(!value.is_empty());
 
-            let literal = if let Some(l) = lang {
-                StarTerm::literal_with_language(&value, &l).unwrap()
-            } else if let Some(dt) = datatype {
-                StarTerm::literal_with_datatype(&value, &dt).unwrap()
+            let (literal, has_lang, has_datatype) = if literal_type == "simple" {
+                (StarTerm::literal(&value).unwrap(), false, false)
+            } else if let Some(lang) = literal_type.strip_prefix("lang:") {
+                (StarTerm::literal_with_language(&value, lang).unwrap(), true, false)
+            } else if let Some(dt) = literal_type.strip_prefix("datatype:") {
+                (StarTerm::literal_with_datatype(&value, dt).unwrap(), false, true)
             } else {
-                StarTerm::literal(&value).unwrap()
+                unreachable!()
             };
 
             let display = format!("{}", literal);

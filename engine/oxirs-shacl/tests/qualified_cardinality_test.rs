@@ -8,14 +8,14 @@ fn try_insert_quad(store: &mut ConcreteStore, quad: Quad) -> bool {
     match store.insert_quad(quad) {
         Ok(_) => true,
         Err(e) => {
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             if error_msg.contains("not yet implemented")
                 || error_msg.contains("not implemented")
                 || error_msg.contains("mutable access")
             {
                 false // Store insertion not available
             } else {
-                panic!("Unexpected error: {}", e);
+                panic!("Unexpected error: {e}");
             }
         }
     }

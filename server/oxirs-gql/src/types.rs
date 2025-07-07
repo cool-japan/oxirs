@@ -3,9 +3,8 @@
 //! This module provides the GraphQL type system including scalar types,
 //! object types, interfaces, unions, and enums.
 
-use crate::ast::{Type as AstType, Value};
+use crate::ast::Value;
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 

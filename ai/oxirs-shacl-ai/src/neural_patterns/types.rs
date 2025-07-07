@@ -207,7 +207,7 @@ pub struct CorrelationAnalysisStats {
 }
 
 /// Result of correlation analysis
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CorrelationAnalysisResult {
     pub discovered_correlations: Vec<PatternCorrelation>,
     pub correlation_clusters: Vec<CorrelationCluster>,
@@ -271,7 +271,7 @@ pub struct TemporalContext {
 }
 
 /// Result of attention analysis
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AttentionAnalysisResult {
     pub attention_weights: HashMap<String, Array2<f64>>,
     pub attention_patterns: Vec<AttentionPattern>,
@@ -279,7 +279,7 @@ pub struct AttentionAnalysisResult {
 }
 
 /// Discovered attention pattern
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AttentionPattern {
     pub pattern_id: String,
     pub attention_distribution: Array1<f64>,
@@ -287,7 +287,7 @@ pub struct AttentionPattern {
 }
 
 /// Region of focused attention
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AttentionFocus {
     pub focus_type: AttentionFocusType,
     pub intensity: f64,
@@ -295,7 +295,7 @@ pub struct AttentionFocus {
 }
 
 /// Types of attention focus
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum AttentionFocusType {
     Local,
     Global,
@@ -304,7 +304,7 @@ pub enum AttentionFocusType {
 }
 
 /// Cross-pattern influence detected by attention
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CrossPatternInfluence {
     pub source_pattern: String,
     pub target_pattern: String,
@@ -313,7 +313,7 @@ pub struct CrossPatternInfluence {
 }
 
 /// Types of cross-pattern influence
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InfluenceType {
     Excitatory,
     Inhibitory,
@@ -322,7 +322,7 @@ pub enum InfluenceType {
 }
 
 /// Metadata about correlation analysis
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CorrelationAnalysisMetadata {
     pub analysis_timestamp: chrono::DateTime<chrono::Utc>,
     pub analysis_duration: Duration,
@@ -356,6 +356,7 @@ pub struct NeuralPatternConfig {
     pub enable_batch_norm: bool,
     pub enable_residual_connections: bool,
     pub activation_function: ActivationFunction,
+    pub cache_ttl_seconds: Option<u64>,
 }
 
 impl Default for NeuralPatternConfig {
@@ -371,6 +372,7 @@ impl Default for NeuralPatternConfig {
             enable_batch_norm: true,
             enable_residual_connections: true,
             activation_function: ActivationFunction::ReLU,
+            cache_ttl_seconds: Some(3600), // Default 1 hour cache TTL
         }
     }
 }

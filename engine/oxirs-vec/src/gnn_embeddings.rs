@@ -70,7 +70,7 @@ impl GCN {
         self.entities = entities.into_iter().collect();
         self.relations = relations.into_iter().collect();
 
-        let num_entities = self.entities.len();
+        let _num_entities = self.entities.len();
 
         // Initialize entity embeddings
         let mut rng = if let Some(seed) = self.config.random_seed {
@@ -200,7 +200,7 @@ impl GCN {
     }
 
     /// Train the GCN model
-    fn train_gcn(&mut self, triples: &[Triple]) -> Result<()> {
+    fn train_gcn(&mut self, _triples: &[Triple]) -> Result<()> {
         // Create feature matrix from current embeddings
         let num_entities = self.entities.len();
         let mut features = DMatrix::zeros(num_entities, self.config.dimensions);
@@ -449,12 +449,12 @@ impl GraphSAGE {
         for triple in triples {
             self.graph
                 .entry(triple.subject.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(triple.object.clone());
 
             self.graph
                 .entry(triple.object.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(triple.subject.clone());
         }
     }

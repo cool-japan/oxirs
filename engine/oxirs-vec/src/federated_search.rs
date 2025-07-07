@@ -6,20 +6,18 @@
 //! organizations, and trust domains while maintaining security and privacy.
 
 use crate::{
-    distributed_vector_search::{DistributedNodeConfig, DistributedVectorSearch, NodeHealthStatus},
-    quantum_search::{QuantumSearchResult, QuantumVectorSearch},
+    distributed_vector_search::{DistributedVectorSearch, NodeHealthStatus},
+    quantum_search::QuantumVectorSearch,
     similarity::{SimilarityMetric, SimilarityResult},
-    Vector, VectorError,
+    Vector,
 };
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{mpsc, Mutex};
-use tracing::{debug, error, info, span, warn, Level};
-use uuid::Uuid;
+use std::time::{Duration, Instant, SystemTime};
+use tracing::{debug, info, span, Level};
 
 /// Federated search configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -710,9 +708,7 @@ impl FederatedVectorSearch {
     /// Get federation health status
     pub fn get_federation_health(&self) -> HashMap<String, NodeHealthStatus> {
         let federations = self.federations.read().unwrap();
-        federations
-            .iter()
-            .map(|(id, endpoint)| {
+        federations.keys().map(|id| {
                 // Determine health based on trust scores and recent performance
                 let trust_manager = self.trust_manager.read().unwrap();
                 let trust_score = trust_manager.get_trust_score(id).unwrap_or(0.0);
@@ -828,7 +824,7 @@ impl FederatedVectorSearch {
             if let Some(endpoint) = self.federations.read().unwrap().get(federation_id) {
                 // Simulate query execution with some example results
                 let similarity_result = SimilarityResult {
-                    uri: format!("result_from_{}", federation_id),
+                    uri: format!("result_from_{federation_id}"),
                     similarity: 0.85,
                     metrics: std::collections::HashMap::new(),
                     metadata: None,

@@ -57,7 +57,7 @@ impl SparqlFunctionLibrary {
         self.validate_function_metadata(function.metadata())?;
 
         // Set security policy
-        let policy = security_policy.unwrap_or_else(|| FunctionSecurityPolicy::default());
+        let policy = security_policy.unwrap_or_default();
         self.validate_security_policy(&policy)?;
 
         // Register function
@@ -72,7 +72,7 @@ impl SparqlFunctionLibrary {
             policies.insert(function_name.clone(), policy);
         }
 
-        println!("Registered custom SPARQL function: {}", function_name);
+        println!("Registered custom SPARQL function: {function_name}");
         Ok(())
     }
 
@@ -88,7 +88,7 @@ impl SparqlFunctionLibrary {
             policies.remove(function_name);
         }
 
-        println!("Unregistered custom SPARQL function: {}", function_name);
+        println!("Unregistered custom SPARQL function: {function_name}");
         Ok(())
     }
 
@@ -109,14 +109,14 @@ impl SparqlFunctionLibrary {
             let function = functions
                 .get(function_name)
                 .ok_or_else(|| {
-                    ShaclError::ValidationEngine(format!("Function not found: {}", function_name))
+                    ShaclError::ValidationEngine(format!("Function not found: {function_name}"))
                 })?
                 .clone();
 
             let policy = policies
                 .get(function_name)
                 .cloned()
-                .unwrap_or_else(|| FunctionSecurityPolicy::default());
+                .unwrap_or_else(FunctionSecurityPolicy::default);
 
             (function, policy)
         };
@@ -174,7 +174,7 @@ impl SparqlFunctionLibrary {
             libraries
                 .get(library_name)
                 .ok_or_else(|| {
-                    ShaclError::ValidationEngine(format!("Library not found: {}", library_name))
+                    ShaclError::ValidationEngine(format!("Library not found: {library_name}"))
                 })?
                 .clone()
         };
@@ -531,8 +531,7 @@ impl FunctionSandbox {
         for permission in required_permissions {
             if !context.permissions.contains(permission) {
                 return Err(ShaclError::ValidationEngine(format!(
-                    "Missing required permission: {:?}",
-                    permission
+                    "Missing required permission: {permission:?}"
                 )));
             }
         }
@@ -611,7 +610,7 @@ impl ExecutionMonitor {
 
         self.executions
             .entry(function_name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(record);
 
         self.total_executions += 1;

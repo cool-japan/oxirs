@@ -13,18 +13,15 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use crate::checkpoint::{CheckpointMetadata, CheckpointType};
 use crate::compression::{AdaptiveCompressor, CompressedData, CompressionAlgorithm};
 use crate::mvcc::TransactionId;
-use crate::timestamp_ordering::{HybridLogicalClock, TimestampBundle};
 
 /// Backup type enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -881,6 +878,7 @@ impl BackupRestoreManager {
         use std::collections::hash_map::DefaultHasher;
         use std::hash::{Hash, Hasher};
         use std::sync::atomic::{AtomicU64, Ordering};
+        use std::time::UNIX_EPOCH;
 
         // Static counter to ensure uniqueness even within the same nanosecond
         static COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -1071,7 +1069,7 @@ mod tests {
             ..Default::default()
         };
 
-        let manager = BackupRestoreManager::new(config).unwrap();
+        let _manager = BackupRestoreManager::new(config).unwrap();
         assert!(temp_dir.path().exists());
     }
 

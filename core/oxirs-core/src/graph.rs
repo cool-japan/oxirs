@@ -502,9 +502,9 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", id)).unwrap()),
-            Object::NamedNode(NamedNode::new(&format!("http://object/{}", id)).unwrap()),
+            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
+            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
+            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
         )
     }
 
@@ -521,7 +521,7 @@ mod tests {
         let inserted = graph.par_insert_batch(triples.clone()).unwrap();
         let duration = start.elapsed();
 
-        println!("Parallel insert of 10000 triples took: {:?}", duration);
+        println!("Parallel insert of 10000 triples took: {duration:?}");
         assert_eq!(inserted, 10000);
         assert_eq!(graph.len(), 10000);
 
@@ -558,7 +558,7 @@ mod tests {
         let removed = graph.par_remove_batch(to_remove.clone()).unwrap();
         let duration = start.elapsed();
 
-        println!("Parallel remove of 5000 triples took: {:?}", duration);
+        println!("Parallel remove of 5000 triples took: {duration:?}");
         assert_eq!(removed, 5000);
         assert_eq!(graph.len(), 5000);
 
@@ -583,7 +583,7 @@ mod tests {
             .map(|i| {
                 (
                     Some(Subject::NamedNode(
-                        NamedNode::new(&format!("http://subject/{}", i)).unwrap(),
+                        NamedNode::new(format!("http://subject/{i}")).unwrap(),
                     )),
                     None,
                     None,
@@ -595,7 +595,7 @@ mod tests {
         let results = graph.par_query_batch(queries).unwrap();
         let duration = start.elapsed();
 
-        println!("Parallel query of 100 patterns took: {:?}", duration);
+        println!("Parallel query of 100 patterns took: {duration:?}");
         assert_eq!(results.len(), 100);
 
         // Each query should match exactly one triple
@@ -643,8 +643,8 @@ mod tests {
         let (transformed, removed) = graph.par_transform(transform_fn).unwrap();
         let duration = start.elapsed();
 
-        println!("Parallel transform took: {:?}", duration);
-        println!("Transformed: {}, Removed: {}", transformed, removed);
+        println!("Parallel transform took: {duration:?}");
+        println!("Transformed: {transformed}, Removed: {removed}");
 
         // Verify transformations
         let transformed_predicate =
@@ -663,12 +663,10 @@ mod tests {
         for i in 0..100 {
             for j in 0..10 {
                 let triple = Triple::new(
-                    Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", i)).unwrap()),
-                    Predicate::NamedNode(
-                        NamedNode::new(&format!("http://predicate/{}", j)).unwrap(),
-                    ),
+                    Subject::NamedNode(NamedNode::new(format!("http://subject/{i}")).unwrap()),
+                    Predicate::NamedNode(NamedNode::new(format!("http://predicate/{j}")).unwrap()),
                     Object::NamedNode(
-                        NamedNode::new(&format!("http://object/{}", i * 10 + j)).unwrap(),
+                        NamedNode::new(format!("http://object/{}", i * 10 + j)).unwrap(),
                     ),
                 );
                 graph.add_triple(triple);
@@ -681,7 +679,7 @@ mod tests {
                 (
                     None,
                     Some(Predicate::NamedNode(
-                        NamedNode::new(&format!("http://predicate/{}", i)).unwrap(),
+                        NamedNode::new(format!("http://predicate/{i}")).unwrap(),
                     )),
                     None,
                 )
@@ -706,7 +704,7 @@ mod tests {
         let (subjects, predicates, objects) = graph.par_unique_terms();
         let duration = start.elapsed();
 
-        println!("Parallel unique terms extraction took: {:?}", duration);
+        println!("Parallel unique terms extraction took: {duration:?}");
 
         assert_eq!(subjects.len(), 1000);
         assert_eq!(predicates.len(), 1000);
@@ -758,9 +756,9 @@ mod tests {
         graph2.par_insert_batch(triples.clone()).unwrap();
         let par_duration = start.elapsed();
 
-        println!("Performance comparison for {} triples:", triple_count);
-        println!("  Sequential insert: {:?}", seq_duration);
-        println!("  Parallel insert: {:?}", par_duration);
+        println!("Performance comparison for {triple_count} triples:");
+        println!("  Sequential insert: {seq_duration:?}");
+        println!("  Parallel insert: {par_duration:?}");
         println!(
             "  Speedup: {:.2}x",
             seq_duration.as_secs_f64() / par_duration.as_secs_f64()
@@ -905,7 +903,7 @@ impl ConcurrentGraph {
         F: FnOnce(&Graph) -> R,
     {
         let graph = self.inner.read();
-        f(&*graph)
+        f(&graph)
     }
 
     /// Execute a write operation with access to the underlying graph
@@ -914,7 +912,7 @@ impl ConcurrentGraph {
         F: FnOnce(&mut Graph) -> R,
     {
         let mut graph = self.inner.write();
-        f(&mut *graph)
+        f(&mut graph)
     }
 
     /// Parallel batch insert (thread-safe)
@@ -975,7 +973,7 @@ impl GraphThreadPool {
         {
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(num_cpus::get())
-                .thread_name(|index| format!("oxirs-graph-{}", index))
+                .thread_name(|index| format!("oxirs-graph-{index}"))
                 .build()
                 .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
 
@@ -998,7 +996,7 @@ impl GraphThreadPool {
         {
             let pool = rayon::ThreadPoolBuilder::new()
                 .num_threads(num_threads)
-                .thread_name(|index| format!("oxirs-graph-{}", index))
+                .thread_name(|index| format!("oxirs-graph-{index}"))
                 .build()
                 .map_err(|e| crate::OxirsError::ConcurrencyError(e.to_string()))?;
 
@@ -1130,9 +1128,9 @@ mod concurrent_tests {
             handles.push(thread::spawn(move || {
                 for j in 0..100 {
                     let triple = Triple::new(
-                        NamedNode::new(&format!("http://example.org/s{}", i * 100 + j)).unwrap(),
+                        NamedNode::new(format!("http://example.org/s{}", i * 100 + j)).unwrap(),
                         NamedNode::new("http://example.org/p").unwrap(),
-                        Literal::new(&format!("value{}", j)),
+                        Literal::new(format!("value{j}")),
                     );
 
                     if g.add_triple(triple) {
@@ -1163,16 +1161,16 @@ mod concurrent_tests {
         // Add different triples to each graph
         for i in 0..100 {
             let triple1 = Triple::new(
-                NamedNode::new(&format!("http://example.org/s1_{}", i)).unwrap(),
+                NamedNode::new(format!("http://example.org/s1_{i}")).unwrap(),
                 NamedNode::new("http://example.org/p").unwrap(),
-                Literal::new(&format!("value{}", i)),
+                Literal::new(format!("value{i}")),
             );
             graph1.add_triple(triple1);
 
             let triple2 = Triple::new(
-                NamedNode::new(&format!("http://example.org/s2_{}", i)).unwrap(),
+                NamedNode::new(format!("http://example.org/s2_{i}")).unwrap(),
                 NamedNode::new("http://example.org/p").unwrap(),
-                Literal::new(&format!("value{}", i)),
+                Literal::new(format!("value{i}")),
             );
             graph2.add_triple(triple2);
         }
@@ -1192,9 +1190,9 @@ mod concurrent_tests {
         let triples: Vec<Triple> = (0..1000)
             .map(|i| {
                 Triple::new(
-                    NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
                     NamedNode::new("http://example.org/p").unwrap(),
-                    Literal::new(&format!("value{}", i)),
+                    Literal::new(format!("value{i}")),
                 )
             })
             .collect();
@@ -1221,9 +1219,9 @@ mod concurrent_tests {
         graph.with_write(|g| {
             for i in 0..10 {
                 let triple = Triple::new(
-                    NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
                     NamedNode::new("http://example.org/p").unwrap(),
-                    Literal::new(&format!("value{}", i)),
+                    Literal::new(format!("value{i}")),
                 );
                 g.add_triple(triple);
             }

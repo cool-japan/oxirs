@@ -4,8 +4,7 @@
 //! capabilities for SHACL validation reports, including SPARQL-based queries and
 //! customizable report templates.
 
-use std::collections::{HashMap, HashSet};
-use std::str::FromStr;
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -15,7 +14,7 @@ use oxirs_core::model::Term;
 use crate::{
     report::{ReportFormat, ValidationReport},
     validation::ValidationViolation,
-    ConstraintComponentId, PropertyPath, Result, Severity, ShaclError, ShapeId,
+    ConstraintComponentId, Result, Severity, ShaclError, ShapeId,
 };
 
 /// Advanced filtering engine for validation reports
@@ -433,7 +432,7 @@ impl ReportFilterEngine {
             }
             FilterFunction::RegexPattern { field, pattern } => {
                 let regex = regex::Regex::new(pattern).map_err(|e| {
-                    ShaclError::ReportGeneration(format!("Invalid regex pattern: {}", e))
+                    ShaclError::ReportGeneration(format!("Invalid regex pattern: {e}"))
                 })?;
 
                 Ok(violations
@@ -478,7 +477,7 @@ impl ReportFilterEngine {
                 .or_insert(0) += 1;
 
             *filtered_severities
-                .entry(violation.result_severity.clone())
+                .entry(violation.result_severity)
                 .or_insert(0) += 1;
         }
 
@@ -534,7 +533,7 @@ impl ReportFilterEngine {
         template_name: &str,
     ) -> Result<String> {
         let template = self.templates.get(template_name).ok_or_else(|| {
-            ShaclError::ReportGeneration(format!("Template '{}' not found", template_name))
+            ShaclError::ReportGeneration(format!("Template '{template_name}' not found"))
         })?;
 
         self.apply_template(report, template)
@@ -567,7 +566,7 @@ impl ReportFilterEngine {
 
         // Add custom CSS if provided
         if let Some(css) = &template.template_content.css {
-            html.push_str(&format!("<style>{}</style>\n", css));
+            html.push_str(&format!("<style>{css}</style>\n"));
         }
 
         // Add header if provided
@@ -587,7 +586,7 @@ impl ReportFilterEngine {
 
         // Add custom JavaScript if provided
         if let Some(js) = &template.template_content.javascript {
-            html.push_str(&format!("<script>{}</script>\n", js));
+            html.push_str(&format!("<script>{js}</script>\n"));
         }
 
         Ok(html)
@@ -601,7 +600,7 @@ impl ReportFilterEngine {
     ) -> Result<String> {
         // For JSON templates, we can use the existing JSON serialization with filters
         serde_json::to_string_pretty(report).map_err(|e| {
-            ShaclError::ReportGeneration(format!("JSON template generation failed: {}", e))
+            ShaclError::ReportGeneration(format!("JSON template generation failed: {e}"))
         })
     }
 
@@ -676,7 +675,7 @@ impl ReportFilterEngine {
                     violation.source_shape
                 ));
                 if let Some(message) = &violation.result_message {
-                    violation_details.push_str(&format!("   {}\n", message));
+                    violation_details.push_str(&format!("   {message}\n"));
                 }
             }
             result = result.replace("{{VIOLATION_DETAILS}}", &violation_details);

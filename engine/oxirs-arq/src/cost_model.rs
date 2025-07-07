@@ -3,7 +3,7 @@
 //! Provides comprehensive cost modeling for query optimization including
 //! I/O cost modeling, CPU cost estimation, and memory usage prediction.
 
-use crate::algebra::{Algebra, Expression, TriplePattern, Variable};
+use crate::algebra::{Algebra, Expression, TriplePattern};
 use crate::statistics_collector::StatisticsCollector;
 use anyhow::Result;
 use std::collections::HashMap;
@@ -861,7 +861,7 @@ impl CostModel {
 
         if predicted.total_cost > 0.0 {
             let cost_ratio = actual_cost / predicted.total_cost;
-            let cardinality_ratio = actual_cardinality as f64 / predicted.cardinality as f64;
+            let _cardinality_ratio = actual_cardinality as f64 / predicted.cardinality as f64;
 
             // Adjust calibration factors (simple approach)
             self.config.calibration.cpu_scale =

@@ -1,13 +1,10 @@
 //! Tests for streaming result sets
 
-use crossbeam::channel;
 use oxirs_core::model::*;
 use oxirs_core::query::{
-    ConstructResults, SelectResults, SolutionMetadata, StreamingConfig, StreamingProgress,
-    StreamingQueryResults, StreamingResultBuilder, StreamingSolution,
+    SolutionMetadata, StreamingQueryResults, StreamingResultBuilder, StreamingSolution,
 };
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -23,7 +20,7 @@ fn test_basic_streaming() {
         let mut bindings = HashMap::new();
         bindings.insert(
             variables[0].clone(),
-            Some(Term::Literal(Literal::new(&i.to_string()))),
+            Some(Term::Literal(Literal::new(i.to_string()))),
         );
         sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
     }
@@ -49,7 +46,7 @@ fn test_streaming_with_thread() {
             let mut bindings = HashMap::new();
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::Literal(Literal::new(&i.to_string()))),
+                Some(Term::Literal(Literal::new(i.to_string()))),
             );
             sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
         }
@@ -76,7 +73,7 @@ fn test_batch_operations() {
         let mut bindings = HashMap::new();
         bindings.insert(
             variables[0].clone(),
-            Some(Term::Literal(Literal::new(&i.to_string()))),
+            Some(Term::Literal(Literal::new(i.to_string()))),
         );
         sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
     }
@@ -107,7 +104,7 @@ fn test_cancellation() {
             let mut bindings = HashMap::new();
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::Literal(Literal::new(&i.to_string()))),
+                Some(Term::Literal(Literal::new(i.to_string()))),
             );
             if sender.send(Ok(StreamingSolution::new(bindings))).is_err() {
                 break;
@@ -144,7 +141,7 @@ fn test_progress_tracking() {
         let mut bindings = HashMap::new();
         bindings.insert(
             variables[0].clone(),
-            Some(Term::Literal(Literal::new(&i.to_string()))),
+            Some(Term::Literal(Literal::new(i.to_string()))),
         );
         sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
     }
@@ -169,9 +166,9 @@ fn test_construct_streaming() {
 
     for i in 0..20 {
         let triple = Triple::new(
-            NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
-            Literal::new(&format!("Object {}", i)),
+            Literal::new(format!("Object {i}")),
         );
         sender.send(Ok(triple)).unwrap();
     }

@@ -164,7 +164,7 @@ pub struct TextPosition {
 }
 
 /// Temporal context information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TemporalContext {
     pub start_time: Option<DateTime<Utc>>,
     pub end_time: Option<DateTime<Utc>>,
@@ -713,11 +713,379 @@ impl KnowledgeExtractionEngine {
             .filter(|r| r.confidence >= self.config.confidence_threshold)
             .collect();
 
-        // Check for contradictions
-        // TODO: Implement sophisticated fact validation logic
+        // Check for contradictions and validate facts
+        let mut contradictions_found = 0;
+        let mut validated_triples = Vec::new();
+
+        // Create relationship maps for efficient lookup
+        let mut subject_predicates: HashMap<String, Vec<&ExtractedRelationship>> = HashMap::new();
+        let mut predicate_pairs: HashMap<String, Vec<(&str, &str)>> = HashMap::new();
+
+        for relationship in &valid_relationships {
+            subject_predicates
+                .entry(relationship.subject_entity.clone())
+                .or_default()
+                .push(relationship);
+
+            predicate_pairs
+                .entry(relationship.predicate.clone())
+                .or_default()
+                .push((&relationship.subject_entity, &relationship.object_entity));
+        }
+
+        // Check for direct contradictions (same subject-predicate with different objects)
+        for (subject, relationships) in &subject_predicates {
+            let mut predicate_values: HashMap<String, Vec<&str>> = HashMap::new();
+
+            for rel in relationships {
+                predicate_values
+                    .entry(rel.predicate.clone())
+                    .or_default()
+                    .push(&rel.object_entity);
+            }
+
+            for (predicate, values) in predicate_values {
+                if values.len() > 1 {
+                    // Check if multiple values for the same predicate indicate contradiction
+                    let unique_values: std::collections::HashSet<_> = values.into_iter().collect();
+                    if unique_values.len() > 1 && self.is_contradictory_predicate(&predicate) {
+                        warn!(
+                            "Contradiction detected for {}: {} has multiple {} values: {:?}",
+                            subject, subject, predicate, unique_values
+                        );
+                        contradictions_found += 1;
+
+                        // Keep only the highest confidence relationship for this predicate
+                        if let Some(best_rel) = relationships
+                            .iter()
+                            .filter(|r| r.predicate == predicate)
+                            .max_by(|a, b| {
+                                a.confidence
+                                    .partial_cmp(&b.confidence)
+                                    .unwrap_or(std::cmp::Ordering::Equal)
+                            })
+                        {
+                            if let Ok(triple) = self.relationship_to_triple(best_rel) {
+                                validated_triples.push(triple);
+                            }
+                        }
+                        continue;
+                    }
+                }
+            }
+        }
+
+        // Check temporal consistency
+        for relationship in &valid_relationships {
+            if let Some(temporal_context) = &relationship.temporal_context {
+                if !self.validate_temporal_consistency(temporal_context, &valid_relationships) {
+                    warn!(
+                        "Temporal inconsistency detected for relationship: {} {} {}",
+                        relationship.subject_entity,
+                        relationship.predicate,
+                        relationship.object_entity
+                    );
+                    contradictions_found += 1;
+                    continue;
+                }
+            }
+
+            // Add valid relationship as triple
+            if let Ok(triple) = self.relationship_to_triple(relationship) {
+                validated_triples.push(triple);
+            }
+        }
+
+        // Check logical consistency (e.g., transitive relationships)
+        self.validate_logical_consistency(&valid_relationships, &mut contradictions_found)?;
+
+        // Update triples with validated ones
+        triples.clear();
+        triples.extend(validated_triples);
+
+        if contradictions_found > 0 {
+            warn!(
+                "Found {} contradictions during fact validation",
+                contradictions_found
+            );
+        }
 
         debug!("Validated {} relationships", valid_relationships.len());
         Ok(())
+    }
+
+    /// Check if a predicate type indicates contradictory values are not allowed
+    fn is_contradictory_predicate(&self, predicate: &str) -> bool {
+        // Define predicates that should have unique values (functional properties)
+        let functional_predicates = [
+            "birthDate",
+            "deathDate",
+            "age",
+            "height",
+            "weight",
+            "hasGender",
+            "isA",
+            "type",
+            "hasCapital",
+            "hasPopulation",
+            "hasArea",
+            "founded",
+            "established",
+            "created",
+            "died",
+            "born",
+        ];
+
+        functional_predicates.iter().any(|&fp| {
+            predicate.to_lowercase().contains(&fp.to_lowercase()) || predicate.ends_with(&fp)
+        })
+    }
+
+    /// Validate temporal consistency of relationships
+    fn validate_temporal_consistency(
+        &self,
+        temporal_context: &TemporalContext,
+        all_relationships: &[&ExtractedRelationship],
+    ) -> bool {
+        // Check if temporal context makes sense
+        if let (Some(start), Some(end)) = (&temporal_context.start_time, &temporal_context.end_time)
+        {
+            if start >= end {
+                return false; // Start time cannot be after end time
+            }
+        }
+
+        // Check for temporal conflicts with other relationships
+        for other_rel in all_relationships {
+            if let Some(other_temporal) = &other_rel.temporal_context {
+                // If same entities with conflicting time periods
+                if temporal_context != other_temporal {
+                    // Check for overlapping time periods that might indicate conflicts
+                    if self.temporal_periods_conflict(temporal_context, other_temporal) {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        true
+    }
+
+    /// Check if two temporal periods conflict
+    fn temporal_periods_conflict(
+        &self,
+        context1: &TemporalContext,
+        context2: &TemporalContext,
+    ) -> bool {
+        // Simple check - in real implementation, this would be more sophisticated
+        // Check if both have explicit time ranges that don't overlap
+        match (
+            (&context1.start_time, &context1.end_time),
+            (&context2.start_time, &context2.end_time),
+        ) {
+            ((Some(start1), Some(end1)), (Some(start2), Some(end2))) => {
+                // If periods don't overlap, they might be conflicting for certain relationships
+                end1 < start2 || end2 < start1
+            }
+            _ => false, // If we don't have full temporal information, assume no conflict
+        }
+    }
+
+    /// Validate logical consistency across relationships
+    fn validate_logical_consistency(
+        &self,
+        relationships: &[&ExtractedRelationship],
+        contradictions_found: &mut usize,
+    ) -> Result<()> {
+        // Check transitive relationships
+        let mut is_a_relationships: HashMap<String, String> = HashMap::new();
+        let mut part_of_relationships: HashMap<String, String> = HashMap::new();
+
+        // Collect hierarchical relationships
+        for rel in relationships {
+            let pred_lower = rel.predicate.to_lowercase();
+            if pred_lower.contains("isa")
+                || pred_lower.contains("instanceof")
+                || pred_lower.contains("type")
+            {
+                is_a_relationships.insert(rel.subject_entity.clone(), rel.object_entity.clone());
+            } else if pred_lower.contains("partof")
+                || pred_lower.contains("contains")
+                || pred_lower.contains("within")
+            {
+                part_of_relationships.insert(rel.subject_entity.clone(), rel.object_entity.clone());
+            }
+        }
+
+        // Check for cycles in is-a relationships (which would be logical contradictions)
+        for (subject, object) in &is_a_relationships {
+            if self.has_cycle_in_hierarchy(subject, object, &is_a_relationships) {
+                warn!(
+                    "Logical contradiction: Cycle detected in is-a relationship for {}",
+                    subject
+                );
+                *contradictions_found += 1;
+            }
+        }
+
+        // Check for cycles in part-of relationships
+        for (subject, object) in &part_of_relationships {
+            if self.has_cycle_in_hierarchy(subject, object, &part_of_relationships) {
+                warn!(
+                    "Logical contradiction: Cycle detected in part-of relationship for {}",
+                    subject
+                );
+                *contradictions_found += 1;
+            }
+        }
+
+        // Check domain/range constraints
+        self.validate_domain_range_constraints(relationships, contradictions_found)?;
+
+        Ok(())
+    }
+
+    /// Check for cycles in hierarchical relationships
+    fn has_cycle_in_hierarchy(
+        &self,
+        start: &str,
+        current: &str,
+        hierarchy: &HashMap<String, String>,
+    ) -> bool {
+        if start == current {
+            return true; // Direct cycle
+        }
+
+        // Follow the chain to detect cycles
+        let mut visited = std::collections::HashSet::new();
+        let mut current_node = current;
+
+        while let Some(parent) = hierarchy.get(current_node) {
+            if visited.contains(current_node) || current_node == start {
+                return true; // Cycle detected
+            }
+            visited.insert(current_node.to_string());
+            current_node = parent;
+        }
+
+        false
+    }
+
+    /// Validate domain and range constraints for relationships
+    fn validate_domain_range_constraints(
+        &self,
+        relationships: &[&ExtractedRelationship],
+        contradictions_found: &mut usize,
+    ) -> Result<()> {
+        // Define some basic domain/range constraints
+        let constraints = [
+            ("age", "Person", "Number"),
+            ("birthDate", "Person", "Date"),
+            ("hasCapital", "Country", "City"),
+            ("hasPopulation", "Place", "Number"),
+            ("authorOf", "Person", "Book"),
+            ("marriedTo", "Person", "Person"),
+        ];
+
+        for rel in relationships {
+            for (predicate, expected_domain, expected_range) in &constraints {
+                if rel
+                    .predicate
+                    .to_lowercase()
+                    .contains(&predicate.to_lowercase())
+                {
+                    // Check if subject matches expected domain type
+                    if !self.entity_matches_type(
+                        &rel.subject_entity,
+                        expected_domain,
+                        relationships,
+                    ) {
+                        warn!(
+                            "Domain constraint violation: {} should be of type {} for predicate {}",
+                            rel.subject_entity, expected_domain, rel.predicate
+                        );
+                        *contradictions_found += 1;
+                    }
+
+                    // Check if object matches expected range type
+                    if !self.entity_matches_type(&rel.object_entity, expected_range, relationships)
+                    {
+                        warn!(
+                            "Range constraint violation: {} should be of type {} for predicate {}",
+                            rel.object_entity, expected_range, rel.predicate
+                        );
+                        *contradictions_found += 1;
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check if an entity matches a given type based on other relationships
+    fn entity_matches_type(
+        &self,
+        entity: &str,
+        expected_type: &str,
+        relationships: &[&ExtractedRelationship],
+    ) -> bool {
+        // Simple heuristic-based type checking
+        let entity_lower = entity.to_lowercase();
+        let type_lower = expected_type.to_lowercase();
+
+        // Check if entity name suggests the type
+        match type_lower.as_str() {
+            "person" => {
+                entity_lower.contains("person") || 
+                entity_lower.contains("author") ||
+                entity_lower.contains("writer") ||
+                entity_lower.contains("scientist") ||
+                // Common person name patterns
+                entity.chars().next().map_or(false, |c| c.is_uppercase())
+            }
+            "number" => {
+                entity.parse::<f64>().is_ok()
+                    || entity_lower.contains("million")
+                    || entity_lower.contains("thousand")
+                    || entity_lower.contains("year")
+            }
+            "date" => {
+                entity_lower.contains("19") || entity_lower.contains("20") || // Years
+                entity_lower.contains("january") || entity_lower.contains("february") ||
+                entity_lower.contains("march") || entity_lower.contains("april") ||
+                entity_lower.contains("may") || entity_lower.contains("june") ||
+                entity_lower.contains("july") || entity_lower.contains("august") ||
+                entity_lower.contains("september") || entity_lower.contains("october") ||
+                entity_lower.contains("november") || entity_lower.contains("december")
+            }
+            "country" => {
+                entity_lower.contains("country") ||
+                entity_lower.contains("nation") ||
+                // Check if explicitly typed as country in relationships
+                relationships.iter().any(|r| r.subject_entity == entity &&
+                    r.predicate.to_lowercase().contains("type") && 
+                    r.object_entity.to_lowercase().contains("country"))
+            }
+            "city" => {
+                entity_lower.contains("city") ||
+                entity_lower.contains("town") ||
+                // Check if explicitly typed as city in relationships
+                relationships.iter().any(|r| r.subject_entity == entity &&
+                    r.predicate.to_lowercase().contains("type") && 
+                    r.object_entity.to_lowercase().contains("city"))
+            }
+            "book" => {
+                entity_lower.contains("book") ||
+                entity_lower.contains("novel") ||
+                entity_lower.contains("publication") ||
+                // Check if explicitly typed as book in relationships
+                relationships.iter().any(|r| r.subject_entity == entity &&
+                    r.predicate.to_lowercase().contains("type") && 
+                    r.object_entity.to_lowercase().contains("book"))
+            }
+            _ => true, // Unknown type, assume valid
+        }
     }
 
     /// Convert relationship to RDF triple

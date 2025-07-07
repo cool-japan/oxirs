@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::sync::{Mutex, RwLock};
 
-use super::types::{LLMRequest, LLMResponse, Usage};
+use super::types::{LLMRequest, LLMResponse, Priority, Usage, UseCase};
 
 /// Real-time adaptation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -786,8 +786,8 @@ mod tests {
                 system_prompt: None,
                 temperature: 0.7,
                 max_tokens: Some(100),
-                use_case: super::types::UseCase::SimpleQuery,
-                priority: super::types::Priority::Normal,
+                use_case: UseCase::SimpleQuery,
+                priority: Priority::Normal,
                 timeout: None,
             },
             response: LLMResponse {

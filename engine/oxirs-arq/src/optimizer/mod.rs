@@ -16,7 +16,7 @@ pub use statistics::*;
 use crate::algebra::{Algebra, Expression, TriplePattern, Variable};
 use anyhow::Result;
 use std::collections::hash_map::DefaultHasher;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
 /// Main query optimizer
@@ -295,17 +295,13 @@ impl Optimizer {
                 let optimized_right = self.apply_dead_code_elimination(*right)?;
 
                 match (&optimized_left, &optimized_right) {
-                    (Algebra::Bgp(ref left_patterns), Algebra::Bgp(ref right_patterns))
+                    (Algebra::Bgp(left_patterns), Algebra::Bgp(right_patterns))
                         if left_patterns.is_empty() || right_patterns.is_empty() =>
                     {
                         Ok(Algebra::Bgp(vec![]))
                     }
-                    (Algebra::Bgp(ref patterns), _) if patterns.is_empty() => {
-                        Ok(Algebra::Bgp(vec![]))
-                    }
-                    (_, Algebra::Bgp(ref patterns)) if patterns.is_empty() => {
-                        Ok(Algebra::Bgp(vec![]))
-                    }
+                    (Algebra::Bgp(patterns), _) if patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
+                    (_, Algebra::Bgp(patterns)) if patterns.is_empty() => Ok(Algebra::Bgp(vec![])),
                     _ => Ok(Algebra::Join {
                         left: Box::new(optimized_left),
                         right: Box::new(optimized_right),
@@ -322,21 +318,19 @@ impl Optimizer {
         match algebra {
             Algebra::Bgp(patterns) => {
                 for pattern in patterns {
-                    if let TriplePattern {
+                    let TriplePattern {
                         subject,
                         predicate,
                         object,
-                    } = pattern
-                    {
-                        if let crate::algebra::Term::Variable(v) = subject {
-                            vars.insert(v.clone());
-                        }
-                        if let crate::algebra::Term::Variable(v) = predicate {
-                            vars.insert(v.clone());
-                        }
-                        if let crate::algebra::Term::Variable(v) = object {
-                            vars.insert(v.clone());
-                        }
+                    } = pattern;
+                    if let crate::algebra::Term::Variable(v) = subject {
+                        vars.insert(v.clone());
+                    }
+                    if let crate::algebra::Term::Variable(v) = predicate {
+                        vars.insert(v.clone());
+                    }
+                    if let crate::algebra::Term::Variable(v) = object {
+                        vars.insert(v.clone());
                     }
                 }
             }

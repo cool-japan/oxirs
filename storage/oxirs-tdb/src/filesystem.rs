@@ -7,7 +7,7 @@
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -482,7 +482,7 @@ impl TdbFileSystem {
     }
 
     /// Initialize all required files
-    fn initialize_files(&self, config: &FileSystemConfig) -> Result<()> {
+    fn initialize_files(&self, _config: &FileSystemConfig) -> Result<()> {
         // List of all file types that should exist
         let file_types = vec![
             FileType::NodesData,
@@ -1473,6 +1473,7 @@ impl Drop for TdbFileSystem {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::{Read, Seek, SeekFrom};
     use tempfile::TempDir;
 
     #[test]

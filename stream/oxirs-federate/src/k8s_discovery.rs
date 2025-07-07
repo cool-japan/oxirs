@@ -155,7 +155,7 @@ impl K8sServiceDiscovery {
             let selector = config
                 .label_selectors
                 .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect::<Vec<_>>()
                 .join(",");
             list_params = list_params.labels(&selector);
@@ -339,7 +339,7 @@ impl K8sServiceDiscovery {
                 // Add labels as metadata
                 if let Some(labels) = &service.metadata.labels {
                     for (key, value) in labels {
-                        metadata.insert(format!("label.{}", key), value.clone());
+                        metadata.insert(format!("label.{key}"), value.clone());
                     }
                 }
 
@@ -438,7 +438,7 @@ impl K8sServiceDiscovery {
                 .config
                 .label_selectors
                 .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
+                .map(|(k, v)| format!("{k}={v}"))
                 .collect::<Vec<_>>()
                 .join(",");
             list_params = list_params.labels(&selector);
@@ -464,7 +464,7 @@ impl K8sServiceDiscovery {
                         {
                             // Enhance with Kubernetes metadata
                             for (key, value) in endpoint.metadata {
-                                service.metadata.tags.push(format!("{}:{}", key, value));
+                                service.metadata.tags.push(format!("{key}:{value}"));
                             }
                             federated_services.push(service);
                         }

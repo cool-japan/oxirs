@@ -1,7 +1,7 @@
 use super::error::{JsonLdErrorCode, JsonLdSyntaxError};
 use super::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
-use crate::model::iri::Iri;
 use json_event_parser::{JsonEvent, JsonSyntaxError, SliceJsonParser};
+use oxiri::Iri;
 use std::borrow::Cow;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
@@ -18,6 +18,9 @@ type LoadDocumentCallback = dyn Fn(
     + Sync
     + UnwindSafe
     + RefUnwindSafe;
+
+// Type alias for the complex remote context cache type
+type RemoteContextCache = Arc<Mutex<HashMap<String, (Option<Iri<String>>, JsonNode)>>>;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum JsonNode {
@@ -75,7 +78,7 @@ pub struct JsonLdContextProcessor {
     pub processing_mode: JsonLdProcessingMode,
     pub lenient: bool, // Custom option to ignore invalid base IRIs
     pub max_context_recursion: usize,
-    pub remote_context_cache: Arc<Mutex<HashMap<String, (Option<Iri<String>>, JsonNode)>>>,
+    pub remote_context_cache: RemoteContextCache,
     pub load_document_callback: Option<Arc<LoadDocumentCallback>>,
 }
 
@@ -95,6 +98,7 @@ pub struct JsonLdRemoteDocument {
 
 impl JsonLdContextProcessor {
     /// [Context Processing Algorithm](https://www.w3.org/TR/json-ld-api/#algorithm)
+    #[allow(clippy::too_many_arguments)]
     pub fn process_context(
         &self,
         active_context: &JsonLdContext,
@@ -316,7 +320,9 @@ impl JsonLdContextProcessor {
                         JsonNode::String(value) => {
                             if self.lenient {
                                 result.base_iri = Some(if let Some(base_iri) = &result.base_iri {
-                                    Iri::parse_unchecked(base_iri.resolve_unchecked(&value))
+                                    Iri::parse_unchecked(
+                                        base_iri.resolve_unchecked(&value).to_string(),
+                                    )
                                 } else {
                                     Iri::parse_unchecked(value.clone())
                                 })
@@ -475,6 +481,7 @@ impl JsonLdContextProcessor {
     }
 
     /// [Create Term Definition](https://www.w3.org/TR/json-ld-api/#create-term-definition)
+    #[allow(clippy::too_many_arguments)]
     fn create_term_definition(
         &self,
         active_context: &mut JsonLdContext,
@@ -1267,6 +1274,7 @@ impl JsonLdContextProcessor {
     }
 
     /// [IRI Expansion](https://www.w3.org/TR/json-ld-api/#iri-expansion)
+    #[allow(clippy::too_many_arguments)]
     pub fn expand_iri<'a>(
         &self,
         active_context: &mut JsonLdContext,
@@ -1357,7 +1365,7 @@ impl JsonLdContextProcessor {
         if document_relative {
             if let Some(base_iri) = &active_context.base_iri {
                 if self.lenient {
-                    return Some(base_iri.resolve_unchecked(&value).into());
+                    return Some(base_iri.resolve_unchecked(&value).into_inner().into());
                 } else if let Ok(value) = base_iri.resolve(&value) {
                     return Some(value.into_inner().into());
                 }

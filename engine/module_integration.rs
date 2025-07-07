@@ -197,29 +197,29 @@ pub enum EngineEvent {
     ModuleStarted { module_id: ModuleId },
     ModuleStopped { module_id: ModuleId },
     ModuleError { module_id: ModuleId, error: String },
-    
+
     /// Query events
     QueryStarted { query_id: Uuid, module_id: ModuleId, query_type: String },
     QueryCompleted { query_id: Uuid, module_id: ModuleId, duration: Duration },
     QueryFailed { query_id: Uuid, module_id: ModuleId, error: String },
-    
+
     /// Validation events
     ValidationStarted { validation_id: Uuid, module_id: ModuleId },
     ValidationCompleted { validation_id: Uuid, module_id: ModuleId, violations: usize },
-    
+
     /// Vector operations
     VectorIndexUpdated { index_id: String, size: usize },
     VectorSearchCompleted { search_id: Uuid, results: usize, duration: Duration },
-    
+
     /// Cache events
     CacheHit { module_id: ModuleId, cache_type: String },
     CacheMiss { module_id: ModuleId, cache_type: String },
     CacheEviction { module_id: ModuleId, evicted_count: usize },
-    
+
     /// Performance events
     PerformanceAlert { module_id: ModuleId, alert_type: String, severity: AlertSeverity },
     MemoryPressure { module_id: ModuleId, usage_mb: f64, threshold_mb: f64 },
-    
+
     /// Integration events
     CrossModuleCall { source: ModuleId, target: ModuleId, operation: String },
     ServiceDiscovered { service_endpoint: ServiceEndpoint },
@@ -441,7 +441,7 @@ impl EngineIntegrationHub {
     /// Create new integration hub
     pub fn new(config: IntegrationConfig) -> Self {
         let (event_sender, _) = broadcast::channel(config.max_event_queue_size);
-        
+
         Self {
             modules: Arc::new(RwLock::new(HashMap::new())),
             event_broadcaster: event_sender,
@@ -497,13 +497,13 @@ impl EngineIntegrationHub {
     /// Broadcast an event
     pub fn broadcast_event(&self, event: EngineEvent) -> Result<()> {
         self.event_broadcaster.send(event).map_err(|e| anyhow!("Failed to broadcast event: {}", e))?;
-        
+
         // Update statistics
         {
             let mut stats = self.stats.write().unwrap();
             stats.events_processed += 1;
         }
-        
+
         Ok(())
     }
 
@@ -533,16 +533,16 @@ impl EngineIntegrationHub {
 
         // Analyze performance metrics
         let metrics = self.performance_monitor.analyze_performance().await?;
-        
+
         // Apply optimizations based on analysis
         self.apply_optimizations(metrics).await?;
-        
+
         // Update statistics
         {
             let mut stats = self.stats.write().unwrap();
             stats.optimizations_applied += 1;
         }
-        
+
         Ok(())
     }
 
@@ -550,7 +550,7 @@ impl EngineIntegrationHub {
     pub async fn health_check_all_modules(&self) -> HashMap<ModuleId, HealthStatus> {
         let modules = self.modules.read().unwrap();
         let mut health_status = HashMap::new();
-        
+
         for (module_id, metadata) in modules.iter() {
             let status = if metadata.last_heartbeat.elapsed() > Duration::from_secs(60) {
                 HealthStatus::Unhealthy
@@ -563,7 +563,7 @@ impl EngineIntegrationHub {
             };
             health_status.insert(*module_id, status);
         }
-        
+
         health_status
     }
 
@@ -572,14 +572,14 @@ impl EngineIntegrationHub {
         if self.config.enable_event_coordination {
             self.start_event_processing().await?;
         }
-        
+
         if self.config.enable_shared_caching {
             self.start_cache_coordination().await?;
         }
-        
+
         self.start_performance_monitoring().await?;
         self.start_service_discovery().await?;
-        
+
         Ok(())
     }
 
@@ -622,7 +622,7 @@ impl ServiceRegistry {
             .entry(endpoint.service_type.clone())
             .or_insert_with(Vec::new)
             .push(endpoint.clone());
-        
+
         self.discovery_cache.insert(endpoint.name.clone(), endpoint);
         Ok(())
     }
@@ -669,7 +669,7 @@ mod tests {
     fn test_integration_hub_creation() {
         let config = IntegrationConfig::default();
         let hub = EngineIntegrationHub::new(config);
-        
+
         let stats = hub.get_statistics();
         assert_eq!(stats.events_processed, 0);
     }
@@ -678,7 +678,7 @@ mod tests {
     async fn test_module_registration() {
         let config = IntegrationConfig::default();
         let hub = EngineIntegrationHub::new(config);
-        
+
         let metadata = ModuleMetadata {
             id: ModuleId::Arq,
             version: "1.0.0".to_string(),
@@ -688,7 +688,7 @@ mod tests {
             status: ModuleStatus::Running,
             last_heartbeat: Instant::now(),
         };
-        
+
         assert!(hub.register_module(metadata).is_ok());
     }
 }

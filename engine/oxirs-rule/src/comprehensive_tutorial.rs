@@ -3,9 +3,8 @@
 //! This module provides an extensive tutorial covering advanced features, real-world applications,
 //! and comprehensive API documentation for the OxiRS Rule Engine.
 
-use anyhow::{anyhow, Result};
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use anyhow::Result;
+use std::time::Instant;
 
 use crate::cache::RuleCache;
 use crate::debug::DebuggableRuleEngine;
@@ -15,7 +14,6 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 ///
 /// This section demonstrates sophisticated features of the OxiRS Rule Engine including
 /// complex reasoning patterns, optimization techniques, and integration scenarios.
-
 pub struct AdvancedFeatures;
 
 impl AdvancedFeatures {
@@ -335,7 +333,6 @@ impl AdvancedFeatures {
 ///
 /// This section provides comprehensive examples of applying the rule engine
 /// to real-world scenarios and business problems.
-
 pub struct RealWorldApplications;
 
 impl RealWorldApplications {
@@ -874,7 +871,6 @@ impl RealWorldApplications {
 ///
 /// This section provides comprehensive guidance on optimizing rule engine performance
 /// for production deployments.
-
 pub struct PerformanceOptimization;
 
 impl PerformanceOptimization {
@@ -898,7 +894,7 @@ impl PerformanceOptimization {
         // Analyze performance
         let metrics = debug_engine.get_metrics();
         println!("Performance Analysis:");
-        println!("Total execution time: {:?}", duration);
+        println!("Total execution time: {duration:?}");
         println!("Facts processed: {}", metrics.facts_processed);
         println!("Facts derived: {}", metrics.facts_derived);
         println!(
@@ -962,8 +958,8 @@ impl PerformanceOptimization {
         let without_cache = start.elapsed();
 
         println!("Cache Performance Analysis:");
-        println!("With cache: {:?}", with_cache);
-        println!("Without cache: {:?}", without_cache);
+        println!("With cache: {with_cache:?}");
+        println!("Without cache: {without_cache:?}");
         println!(
             "Performance improvement: {:.2}x",
             without_cache.as_nanos() as f64 / with_cache.as_nanos() as f64
@@ -1062,7 +1058,7 @@ impl PerformanceOptimization {
         for i in 0..size {
             if i < size - 1 {
                 facts.push(RuleAtom::Triple {
-                    subject: Term::Constant(format!("node{}", i)),
+                    subject: Term::Constant(format!("node{i}")),
                     predicate: Term::Constant("connected".to_string()),
                     object: Term::Constant(format!("node{}", i + 1)),
                 });
@@ -1071,7 +1067,7 @@ impl PerformanceOptimization {
             // Add properties
             if i % 3 == 0 {
                 facts.push(RuleAtom::Triple {
-                    subject: Term::Constant(format!("node{}", i)),
+                    subject: Term::Constant(format!("node{i}")),
                     predicate: Term::Constant("property1".to_string()),
                     object: Term::Constant("value1".to_string()),
                 });
@@ -1079,7 +1075,7 @@ impl PerformanceOptimization {
 
             if i % 5 == 0 {
                 facts.push(RuleAtom::Triple {
-                    subject: Term::Constant(format!("node{}", i)),
+                    subject: Term::Constant(format!("node{i}")),
                     predicate: Term::Constant("property2".to_string()),
                     object: Term::Constant("value2".to_string()),
                 });

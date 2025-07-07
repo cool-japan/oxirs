@@ -57,9 +57,7 @@ impl Dataset {
         if name.is_default_graph() {
             &mut self.default_graph
         } else {
-            self.named_graphs
-                .entry(name.clone())
-                .or_insert_with(Graph::new)
+            self.named_graphs.entry(name.clone()).or_default()
         }
     }
 

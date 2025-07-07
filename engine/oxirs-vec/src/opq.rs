@@ -10,8 +10,6 @@ use crate::{
 };
 use anyhow::{anyhow, Result};
 use nalgebra::{DMatrix, DVector, SVD};
-use oxirs_core::parallel::*;
-use std::collections::HashMap;
 
 /// Configuration for Optimized Product Quantization
 #[derive(Debug, Clone)]
@@ -111,7 +109,7 @@ impl OPQIndex {
 
             // Compute reconstruction error for monitoring
             let error = self.compute_reconstruction_error(&data_matrix, &rotation)?;
-            println!("Reconstruction error: {}", error);
+            println!("Reconstruction error: {error}");
         }
 
         self.rotation_matrix = Some(rotation);
@@ -390,7 +388,7 @@ mod tests {
 
         // Add vectors to index
         for (i, vec) in vectors.iter().enumerate() {
-            opq.pq_index.insert(format!("vec_{}", i), vec.clone())?;
+            opq.pq_index.insert(format!("vec_{i}"), vec.clone())?;
         }
 
         // Search

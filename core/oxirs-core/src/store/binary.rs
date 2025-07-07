@@ -27,6 +27,7 @@ const TYPE_SMALL_SMALL_TYPED_LITERAL: u8 = 24;
 const TYPE_SMALL_BIG_TYPED_LITERAL: u8 = 25;
 const TYPE_BIG_SMALL_TYPED_LITERAL: u8 = 26;
 const TYPE_BIG_BIG_TYPED_LITERAL: u8 = 27;
+const TYPE_QUOTED_TRIPLE: u8 = 30;
 
 /// Quad encoding variations for different sort orders
 #[derive(Clone, Copy, Debug)]
@@ -148,6 +149,16 @@ pub fn encode_term(term: &EncodedTerm, buffer: &mut Vec<u8>) -> Result<(), Oxirs
             buffer.extend_from_slice(&value_id.to_be_bytes());
             buffer.extend_from_slice(&datatype_id.to_be_bytes());
         }
+        EncodedTerm::QuotedTriple {
+            subject,
+            predicate,
+            object,
+        } => {
+            buffer.push(TYPE_QUOTED_TRIPLE);
+            encode_term(subject, buffer)?;
+            encode_term(predicate, buffer)?;
+            encode_term(object, buffer)?;
+        }
     }
     Ok(())
 }
@@ -234,9 +245,18 @@ pub fn decode_term(buffer: &mut Cursor<&[u8]>) -> Result<EncodedTerm, OxirsError
                 datatype_id,
             })
         }
+        TYPE_QUOTED_TRIPLE => {
+            let subject = Box::new(decode_term(buffer)?);
+            let predicate = Box::new(decode_term(buffer)?);
+            let object = Box::new(decode_term(buffer)?);
+            Ok(EncodedTerm::QuotedTriple {
+                subject,
+                predicate,
+                object,
+            })
+        }
         type_byte => Err(OxirsError::Store(format!(
-            "Unknown encoded term type: {}",
-            type_byte
+            "Unknown encoded term type: {type_byte}"
         ))),
     }
 }
@@ -257,8 +277,7 @@ fn decode_small_string(buffer: &mut Cursor<&[u8]>) -> Result<SmallString, OxirsE
     let len = len_byte[0] as usize;
     if len > 15 {
         return Err(OxirsError::Store(format!(
-            "SmallString length {} exceeds maximum of 15",
-            len
+            "SmallString length {len} exceeds maximum of 15"
         )));
     }
 

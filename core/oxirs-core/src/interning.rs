@@ -644,7 +644,7 @@ mod tests {
     #[test]
     fn test_interned_string_display() {
         let s = InternedString::new("http://example.org/test");
-        assert_eq!(format!("{}", s), "http://example.org/test");
+        assert_eq!(format!("{s}"), "http://example.org/test");
     }
 
     #[test]

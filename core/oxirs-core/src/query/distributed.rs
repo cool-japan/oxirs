@@ -89,6 +89,10 @@ pub struct QueryRouter {
     pattern_cache: Arc<RwLock<PatternCache>>,
 }
 
+/// Custom routing function type
+pub type RoutingFunction =
+    Arc<dyn Fn(&Query, &[FederatedEndpoint]) -> Vec<QueryRoute> + Send + Sync>;
+
 /// Routing policy for distributed queries
 #[derive(Clone)]
 pub enum RoutingPolicy {
@@ -101,7 +105,7 @@ pub enum RoutingPolicy {
     /// Minimize network transfers
     MinimizeTransfers,
     /// Custom routing function
-    Custom(Arc<dyn Fn(&Query, &[FederatedEndpoint]) -> Vec<QueryRoute> + Send + Sync>),
+    Custom(RoutingFunction),
 }
 
 impl std::fmt::Debug for RoutingPolicy {
@@ -889,11 +893,8 @@ impl QueryRouter {
     fn extract_variables(&self, query: &Query) -> Result<HashSet<Variable>, OxirsError> {
         let mut vars = HashSet::new();
 
-        match &query.form {
-            QueryForm::Select { where_clause, .. } => {
-                self.collect_variables_from_pattern(where_clause, &mut vars)?;
-            }
-            _ => {}
+        if let QueryForm::Select { where_clause, .. } = &query.form {
+            self.collect_variables_from_pattern(where_clause, &mut vars)?;
         }
 
         Ok(vars)
@@ -905,21 +906,18 @@ impl QueryRouter {
         pattern: &GraphPattern,
         vars: &mut HashSet<Variable>,
     ) -> Result<(), OxirsError> {
-        match pattern {
-            GraphPattern::Bgp(patterns) => {
-                for tp in patterns {
-                    if let TermPattern::Variable(v) = &tp.subject {
-                        vars.insert(v.clone());
-                    }
-                    if let TermPattern::Variable(v) = &tp.predicate {
-                        vars.insert(v.clone());
-                    }
-                    if let TermPattern::Variable(v) = &tp.object {
-                        vars.insert(v.clone());
-                    }
+        if let GraphPattern::Bgp(patterns) = pattern {
+            for tp in patterns {
+                if let TermPattern::Variable(v) = &tp.subject {
+                    vars.insert(v.clone());
+                }
+                if let TermPattern::Variable(v) = &tp.predicate {
+                    vars.insert(v.clone());
+                }
+                if let TermPattern::Variable(v) = &tp.object {
+                    vars.insert(v.clone());
                 }
             }
-            _ => {}
         }
 
         Ok(())
@@ -937,6 +935,12 @@ impl QueryRouter {
     }
 }
 
+impl Default for NetworkStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkStatistics {
     /// Create new network statistics
     pub fn new() -> Self {
@@ -950,10 +954,7 @@ impl NetworkStatistics {
 
     /// Update endpoint latency
     pub fn update_latency(&mut self, endpoint: String, latency: Duration) {
-        self.latencies
-            .entry(endpoint)
-            .or_insert_with(Vec::new)
-            .push(latency);
+        self.latencies.entry(endpoint).or_default().push(latency);
         self.last_update = Instant::now();
     }
 
@@ -963,6 +964,12 @@ impl NetworkStatistics {
             let sum: Duration = samples.iter().sum();
             sum / samples.len() as u32
         })
+    }
+}
+
+impl Default for DataLocalityMap {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -984,6 +991,12 @@ impl DataLocalityMap {
     /// Get endpoints for dataset
     pub fn get_dataset_endpoints(&self, dataset: &str) -> Option<&Vec<String>> {
         self.dataset_locations.get(dataset)
+    }
+}
+
+impl Default for PatternCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
-use super::config::{FederationConfig, RemoteEndpoint};
+use super::config::FederationConfig;
 use super::schema_stitcher::SchemaStitcher;
 use crate::ast::{Document, Field, OperationDefinition, Selection, SelectionSet};
 use crate::types::Schema;
@@ -52,7 +52,6 @@ impl QueryPlanner {
     /// Plan execution for a federated query
     pub async fn plan_query(&self, query: &Document, merged_schema: &Schema) -> Result<QueryPlan> {
         let mut steps = Vec::new();
-        let mut estimated_cost = 0.0;
 
         // Analyze the query to identify which services need to be involved
         for definition in &query.definitions {
@@ -66,7 +65,7 @@ impl QueryPlanner {
         self.optimize_step_order(&mut steps);
 
         // Calculate estimated cost
-        estimated_cost = self.calculate_execution_cost(&steps);
+        let estimated_cost = self.calculate_execution_cost(&steps);
 
         // Determine if parallel execution is possible
         let can_execute_parallel = self.can_parallelize(&steps);
@@ -163,7 +162,7 @@ impl QueryPlanner {
     }
 
     /// Determine which service owns a particular field
-    async fn determine_field_service(&self, field: &Field, schema: &Schema) -> Result<String> {
+    async fn determine_field_service(&self, field: &Field, _schema: &Schema) -> Result<String> {
         // This is a simplified implementation
         // In practice, you'd need to analyze the field's type and ownership
 

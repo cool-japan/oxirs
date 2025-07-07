@@ -229,7 +229,7 @@ impl GraphQLFederation {
                 let entity_ref = graph
                     .nodes
                     .iter()
-                    .find(|(_, &idx)| idx == node)
+                    .find(|&(_, &idx)| idx == node)
                     .map(|(entity_ref, _)| entity_ref.clone())
                     .ok_or_else(|| anyhow!("Node index not found in graph"))?;
 

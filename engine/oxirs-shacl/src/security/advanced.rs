@@ -13,7 +13,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    security::{SecurityConfig, SecurityAnalysisResult, SparqlSecurityAnalyzer},
+    security::{SecurityAnalysisResult, SecurityConfig, SparqlSecurityAnalyzer},
     Result, ShaclError,
 };
 
@@ -22,22 +22,22 @@ use crate::{
 pub struct SecurityPolicyManager {
     /// Active security policies
     policies: Arc<RwLock<HashMap<String, SecurityPolicy>>>,
-    
+
     /// Security context registry
     contexts: Arc<RwLock<HashMap<String, SecurityContext>>>,
-    
+
     /// Audit logger
     pub audit_logger: AuditLogger,
-    
+
     /// Rate limiter
     rate_limiter: RateLimiter,
-    
+
     /// Query rewriter for security
     query_rewriter: QuerySecurityRewriter,
-    
+
     /// Advanced injection detector
     injection_detector: AdvancedInjectionDetector,
-    
+
     /// Security event monitor
     event_monitor: SecurityEventMonitor,
 }
@@ -64,7 +64,7 @@ impl SecurityPolicyManager {
         constraints: SecurityConstraints,
     ) -> Result<String> {
         let context_id = uuid::Uuid::new_v4().to_string();
-        
+
         let context = SecurityContext {
             id: context_id.clone(),
             user_id: user_id.to_string(),
@@ -107,7 +107,8 @@ impl SecurityPolicyManager {
         let context = self.validate_security_context(context_id)?;
 
         // 2. Check rate limits
-        self.rate_limiter.check_rate_limit(&context.user_id, &context.id)?;
+        self.rate_limiter
+            .check_rate_limit(&context.user_id, &context.id)?;
 
         // 3. Advanced injection detection
         let injection_result = self.injection_detector.analyze_query(query)?;
@@ -130,9 +131,10 @@ impl SecurityPolicyManager {
                 &context,
                 &policy_result.denial_reason,
             )?;
-            return Err(ShaclError::SecurityViolation(
-                format!("Query blocked by policy: {}", policy_result.denial_reason),
-            ));
+            return Err(ShaclError::SecurityViolation(format!(
+                "Query blocked by policy: {}",
+                policy_result.denial_reason
+            )));
         }
 
         // 5. Query rewriting for security
@@ -150,7 +152,10 @@ impl SecurityPolicyManager {
             self.handle_security_violation(
                 SecurityViolationType::SecurityAnalysisFailed,
                 &context,
-                &format!("Security analysis failed: {} violations", analysis.violations.len()),
+                &format!(
+                    "Security analysis failed: {} violations",
+                    analysis.violations.len()
+                ),
             )?;
             return Err(ShaclError::SecurityViolation(
                 "Query failed security analysis".to_string(),
@@ -162,7 +167,7 @@ impl SecurityPolicyManager {
 
         // 8. Update context and log execution
         self.update_context_stats(context_id, start_time.elapsed())?;
-        
+
         self.audit_logger.log_event(SecurityEvent {
             event_type: SecurityEventType::QueryExecuted,
             context_id: Some(context_id.to_string()),
@@ -173,8 +178,14 @@ impl SecurityPolicyManager {
             details: {
                 let mut details = HashMap::new();
                 details.insert("original_query_length".to_string(), query.len().to_string());
-                details.insert("rewritten_query_length".to_string(), rewritten_query.len().to_string());
-                details.insert("execution_time_ms".to_string(), start_time.elapsed().as_millis().to_string());
+                details.insert(
+                    "rewritten_query_length".to_string(),
+                    rewritten_query.len().to_string(),
+                );
+                details.insert(
+                    "execution_time_ms".to_string(),
+                    start_time.elapsed().as_millis().to_string(),
+                );
                 details
             },
         })?;
@@ -194,9 +205,9 @@ impl SecurityPolicyManager {
     /// Validate security context and check permissions
     fn validate_security_context(&self, context_id: &str) -> Result<SecurityContext> {
         let contexts = self.contexts.read().unwrap();
-        let context = contexts.get(context_id).ok_or_else(|| {
-            ShaclError::SecurityViolation("Invalid security context".to_string())
-        })?;
+        let context = contexts
+            .get(context_id)
+            .ok_or_else(|| ShaclError::SecurityViolation("Invalid security context".to_string()))?;
 
         // Check if context is still valid (not expired)
         let max_age = Duration::from_secs(24 * 3600); // 24 hour sessions
@@ -210,9 +221,13 @@ impl SecurityPolicyManager {
     }
 
     /// Check query against security policies
-    fn check_query_policy(&self, query: &str, context: &SecurityContext) -> Result<PolicyAuthorizationResult> {
+    fn check_query_policy(
+        &self,
+        query: &str,
+        context: &SecurityContext,
+    ) -> Result<PolicyAuthorizationResult> {
         let policies = self.policies.read().unwrap();
-        
+
         // Check if user has any policies applied
         let applicable_policies: Vec<_> = policies
             .values()
@@ -249,7 +264,7 @@ impl SecurityPolicyManager {
     fn execute_query_safely(&self, query: &str, context: &SecurityContext) -> Result<QueryResult> {
         // Placeholder implementation - in practice would integrate with actual SPARQL engine
         // with sandboxing, resource limits, and monitoring
-        
+
         // Simulate execution
         Ok(QueryResult {
             bindings: Vec::new(),
@@ -276,13 +291,14 @@ impl SecurityPolicyManager {
             severity: SecurityEventSeverity::Warning,
             details: {
                 let mut details = HashMap::new();
-                details.insert("violation_type".to_string(), format!("{:?}", violation_type));
+                details.insert("violation_type".to_string(), format!("{violation_type:?}"));
                 details
             },
         })?;
 
         // Update security event monitor
-        self.event_monitor.record_violation(&context.user_id, violation_type);
+        self.event_monitor
+            .record_violation(&context.user_id, violation_type);
 
         // Check if user should be blocked
         if self.event_monitor.should_block_user(&context.user_id) {
@@ -314,7 +330,7 @@ impl SecurityPolicyManager {
     /// Install a security policy
     pub fn install_policy(&mut self, policy: SecurityPolicy) -> Result<()> {
         let policy_id = policy.id.clone();
-        
+
         {
             let mut policies = self.policies.write().unwrap();
             policies.insert(policy_id.clone(), policy);
@@ -324,7 +340,7 @@ impl SecurityPolicyManager {
             event_type: SecurityEventType::PolicyInstalled,
             context_id: None,
             user_id: None,
-            message: format!("Security policy installed: {}", policy_id),
+            message: format!("Security policy installed: {policy_id}"),
             timestamp: Utc::now(),
             severity: SecurityEventSeverity::Info,
             details: HashMap::new(),
@@ -481,7 +497,7 @@ impl QueryRule {
             QueryRuleType::PatternMatch => {
                 let regex = Regex::new(&self.condition)?;
                 let matches = regex.is_match(query);
-                
+
                 match self.action {
                     PolicyAction::Allow => Ok(matches),
                     PolicyAction::Deny => Ok(!matches),
@@ -495,7 +511,7 @@ impl QueryRule {
                 // Simplified complexity check
                 let complexity = query.len() as f64 / 100.0;
                 let limit: f64 = self.condition.parse().unwrap_or(10.0);
-                
+
                 match self.action {
                     PolicyAction::Allow => Ok(complexity <= limit),
                     PolicyAction::Deny => Ok(complexity > limit),
@@ -507,7 +523,7 @@ impl QueryRule {
                 let contains_forbidden = forbidden_functions
                     .iter()
                     .any(|func| query.to_uppercase().contains(&func.to_uppercase()));
-                
+
                 match self.action {
                     PolicyAction::Allow => Ok(!contains_forbidden),
                     PolicyAction::Deny => Ok(contains_forbidden),
@@ -559,32 +575,22 @@ pub struct ExecutionConstraints {
     pub custom_limits: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ExecutionPriority {
     Low,
+    #[default]
     Normal,
     High,
     Critical,
 }
 
-impl Default for ExecutionPriority {
-    fn default() -> Self {
-        ExecutionPriority::Normal
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum IsolationLevel {
     None,
+    #[default]
     Basic,
     Process,
     Container,
-}
-
-impl Default for IsolationLevel {
-    fn default() -> Self {
-        IsolationLevel::Basic
-    }
 }
 
 /// Audit logger for security events
@@ -610,7 +616,11 @@ impl AuditLogger {
     pub fn get_events(&self, filter: Option<SecurityEventFilter>) -> Vec<SecurityEvent> {
         let events = self.events.read().unwrap();
         if let Some(filter) = filter {
-            events.iter().filter(|e| filter.matches(e)).cloned().collect()
+            events
+                .iter()
+                .filter(|e| filter.matches(e))
+                .cloned()
+                .collect()
         } else {
             events.clone()
         }
@@ -662,7 +672,10 @@ pub struct SecurityEventFilter {
 impl SecurityEventFilter {
     fn matches(&self, event: &SecurityEvent) -> bool {
         if let Some(types) = &self.event_types {
-            if !types.iter().any(|t| std::mem::discriminant(t) == std::mem::discriminant(&event.event_type)) {
+            if !types
+                .iter()
+                .any(|t| std::mem::discriminant(t) == std::mem::discriminant(&event.event_type))
+            {
                 return false;
             }
         }
@@ -774,7 +787,7 @@ impl TokenBucket {
 
     fn try_consume(&mut self, tokens: u32) -> bool {
         self.refill();
-        
+
         if self.tokens >= tokens {
             self.tokens -= tokens;
             true
@@ -829,13 +842,13 @@ impl QuerySecurityRewriter {
         // Add result limits if not present
         if !rewritten.to_uppercase().contains("LIMIT") {
             let limit = context.constraints.max_result_count.min(10000);
-            rewritten = format!("{} LIMIT {}", rewritten, limit);
+            rewritten = format!("{rewritten} LIMIT {limit}");
         }
 
         // Add timeout hints
         if let Some(timeout) = constraints.timeout_override {
             // In practice, would add query hints for timeout
-            rewritten = format!("# TIMEOUT: {:?}\n{}", timeout, rewritten);
+            rewritten = format!("# TIMEOUT: {timeout:?}\n{rewritten}");
         }
 
         // Apply rewrite rules
@@ -843,7 +856,10 @@ impl QuerySecurityRewriter {
             if rule.name == "limit_results" {
                 continue; // Already handled above
             }
-            rewritten = rule.pattern.replace_all(&rewritten, &rule.replacement).to_string();
+            rewritten = rule
+                .pattern
+                .replace_all(&rewritten, &rule.replacement)
+                .to_string();
         }
 
         Ok(rewritten)
@@ -908,7 +924,7 @@ impl AdvancedInjectionDetector {
                     confidence: 0.8,
                     location: pattern.pattern.find(query).map(|m| m.start()),
                 });
-                
+
                 confidence_score *= 0.7; // Reduce confidence for each threat
             }
         }
@@ -981,7 +997,9 @@ impl SecurityEventMonitor {
 
     fn record_violation(&self, user_id: &str, violation_type: SecurityViolationType) {
         let mut violations = self.user_violations.write().unwrap();
-        let tracker = violations.entry(user_id.to_string()).or_insert_with(ViolationTracker::new);
+        let tracker = violations
+            .entry(user_id.to_string())
+            .or_insert_with(ViolationTracker::new);
         tracker.record_violation(violation_type);
     }
 
@@ -1103,12 +1121,14 @@ mod tests {
     #[test]
     fn test_security_context_creation() {
         let mut manager = SecurityPolicyManager::new().unwrap();
-        
-        let context_id = manager.create_security_context(
-            "test_user",
-            vec![Permission::ReadData, Permission::ExecuteQueries],
-            SecurityConstraints::default(),
-        ).unwrap();
+
+        let context_id = manager
+            .create_security_context(
+                "test_user",
+                vec![Permission::ReadData, Permission::ExecuteQueries],
+                SecurityConstraints::default(),
+            )
+            .unwrap();
 
         assert!(!context_id.is_empty());
     }
@@ -1116,7 +1136,7 @@ mod tests {
     #[test]
     fn test_rate_limiter() {
         let rate_limiter = RateLimiter::new();
-        
+
         // Should allow initial requests
         assert!(rate_limiter.check_rate_limit("user1", "context1").is_ok());
     }
@@ -1124,7 +1144,7 @@ mod tests {
     #[test]
     fn test_injection_detector() {
         let detector = AdvancedInjectionDetector::new().unwrap();
-        
+
         let safe_query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
         let result = detector.analyze_query(safe_query).unwrap();
         assert!(result.is_safe);
@@ -1149,11 +1169,9 @@ mod tests {
         };
 
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-        let rewritten = rewriter.rewrite_for_security(
-            query,
-            &context,
-            &ExecutionConstraints::default(),
-        ).unwrap();
+        let rewritten = rewriter
+            .rewrite_for_security(query, &context, &ExecutionConstraints::default())
+            .unwrap();
 
         assert!(rewritten.contains("LIMIT"));
     }
@@ -1167,13 +1185,11 @@ mod tests {
             version: "1.0".to_string(),
             enabled: true,
             applicable_users: PolicyScope::AllUsers,
-            query_rules: vec![
-                QueryRule {
-                    rule_type: QueryRuleType::PatternMatch,
-                    condition: r"(?i)delete".to_string(),
-                    action: PolicyAction::Deny,
-                }
-            ],
+            query_rules: vec![QueryRule {
+                rule_type: QueryRuleType::PatternMatch,
+                condition: r"(?i)delete".to_string(),
+                action: PolicyAction::Deny,
+            }],
             execution_limits: ExecutionLimits {
                 max_execution_time: Duration::from_secs(30),
                 max_memory_usage: 10 * 1024 * 1024,

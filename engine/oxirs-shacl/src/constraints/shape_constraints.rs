@@ -1,10 +1,7 @@
 //! Shape-based constraint implementations
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
-use crate::{
-    paths::PropertyPath, validation::ValidationEngine, ConstraintComponentId, Result, Severity,
-    ShaclError, ShapeId, ValidationConfig, Validator,
-};
+use crate::{validation::ValidationEngine, Result, ShaclError, ShapeId, ValidationConfig};
 use oxirs_core::{model::Term, Object, Predicate, Store, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -100,8 +97,7 @@ impl QualifiedValueShapeConstraint {
         if let (Some(min), Some(max)) = (self.qualified_min_count, self.qualified_max_count) {
             if min > max {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Qualified minimum count ({}) cannot be greater than maximum count ({})",
-                    min, max
+                    "Qualified minimum count ({min}) cannot be greater than maximum count ({max})"
                 )));
             }
         }
@@ -124,10 +120,26 @@ impl QualifiedValueShapeConstraint {
         // Get values from context
         let values = &context.values;
 
+        eprintln!(
+            "DEBUG QualifiedValueShape: focus_node={:?}, values={:?}",
+            context.focus_node, values
+        );
+        eprintln!(
+            "DEBUG QualifiedValueShape: shape={}, min_count={:?}, max_count={:?}",
+            self.shape.as_str(),
+            self.qualified_min_count,
+            self.qualified_max_count
+        );
+
         if values.is_empty() {
             // No values to validate
+            eprintln!("DEBUG QualifiedValueShape: No values to validate");
             if let Some(min_count) = self.qualified_min_count {
                 if min_count > 0 {
+                    eprintln!(
+                        "DEBUG QualifiedValueShape: VIOLATION - no values but min_count={}",
+                        min_count
+                    );
                     return Ok(ConstraintEvaluationResult::violated(
                         None,
                         Some(format!(
@@ -142,10 +154,20 @@ impl QualifiedValueShapeConstraint {
 
         // Count how many values conform to the qualified shape
         let conforming_count = self.count_conforming_values(values, store, context)?;
+        eprintln!(
+            "DEBUG QualifiedValueShape: conforming_count={} out of {} values",
+            conforming_count,
+            values.len()
+        );
 
         // Check min count constraint
         if let Some(min_count) = self.qualified_min_count {
+            eprintln!(
+                "DEBUG QualifiedValueShape: Checking min_count={}, conforming_count={}",
+                min_count, conforming_count
+            );
             if conforming_count < min_count {
+                eprintln!("DEBUG QualifiedValueShape: VIOLATION - conforming_count < min_count");
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
                     Some(format!(
@@ -158,7 +180,12 @@ impl QualifiedValueShapeConstraint {
 
         // Check max count constraint
         if let Some(max_count) = self.qualified_max_count {
+            eprintln!(
+                "DEBUG QualifiedValueShape: Checking max_count={}, conforming_count={}",
+                max_count, conforming_count
+            );
             if conforming_count > max_count {
+                eprintln!("DEBUG QualifiedValueShape: VIOLATION - conforming_count > max_count");
                 return Ok(ConstraintEvaluationResult::violated(
                     None,
                     Some(format!(
@@ -169,6 +196,7 @@ impl QualifiedValueShapeConstraint {
             }
         }
 
+        eprintln!("DEBUG QualifiedValueShape: SATISFIED");
         Ok(ConstraintEvaluationResult::satisfied())
     }
 
@@ -180,14 +208,31 @@ impl QualifiedValueShapeConstraint {
         context: &ConstraintContext,
     ) -> Result<u32> {
         let mut conforming_count = 0;
+        eprintln!(
+            "DEBUG count_conforming_values: checking {} values",
+            values.len()
+        );
 
         // For each value, check if it conforms to the qualified shape
-        for value in values {
-            if self.value_conforms_to_shape(value, store, context)? {
+        for (i, value) in values.iter().enumerate() {
+            eprintln!(
+                "DEBUG count_conforming_values: checking value[{}] = {:?}",
+                i, value
+            );
+            let conforms = self.value_conforms_to_shape(value, store, context)?;
+            eprintln!(
+                "DEBUG count_conforming_values: value[{}] conforms = {}",
+                i, conforms
+            );
+            if conforms {
                 conforming_count += 1;
             }
         }
 
+        eprintln!(
+            "DEBUG count_conforming_values: total conforming_count = {}",
+            conforming_count
+        );
         Ok(conforming_count)
     }
 
@@ -198,10 +243,28 @@ impl QualifiedValueShapeConstraint {
         store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<bool> {
+        eprintln!(
+            "DEBUG value_conforms_to_shape: checking value={:?} against shape={}",
+            value,
+            self.shape.as_str()
+        );
+        eprintln!(
+            "DEBUG value_conforms_to_shape: shapes_registry available = {}",
+            context.shapes_registry.is_some()
+        );
+
         // Get the shape definition from the validation context
         // We need access to the full shapes collection to validate properly
         if let Some(shapes_registry) = &context.shapes_registry {
+            eprintln!(
+                "DEBUG value_conforms_to_shape: shapes_registry has {} shapes",
+                shapes_registry.len()
+            );
             if let Some(shape_def) = shapes_registry.get(&self.shape) {
+                eprintln!(
+                    "DEBUG value_conforms_to_shape: found shape definition for {}",
+                    self.shape.as_str()
+                );
                 // Create a temporary validation engine for this shape validation
                 let config = ValidationConfig::default();
                 let mut temp_shapes = indexmap::IndexMap::new();
@@ -213,21 +276,29 @@ impl QualifiedValueShapeConstraint {
                 match validator.validate_node_against_shape(store, shape_def, value, None) {
                     Ok(report) => {
                         // Check if validation passed (no violations)
-                        Ok(report.conforms())
+                        let conforms = report.conforms();
+                        eprintln!("DEBUG value_conforms_to_shape: validation report conforms={}, violations={}", conforms, report.violation_count());
+                        Ok(conforms)
                     }
-                    Err(_) => {
+                    Err(e) => {
                         // If validation failed due to error, consider it non-conforming
+                        eprintln!("DEBUG value_conforms_to_shape: validation error: {}", e);
                         Ok(false)
                     }
                 }
             } else {
                 // Shape not found - cannot validate
+                eprintln!(
+                    "DEBUG value_conforms_to_shape: shape {} not found in registry",
+                    self.shape.as_str()
+                );
                 Err(ShaclError::ShapeParsing(format!(
                     "Qualified shape '{}' not found in shapes collection",
                     self.shape.as_str()
                 )))
             }
         } else {
+            eprintln!("DEBUG value_conforms_to_shape: no shapes_registry, using fallback");
             // Fallback to basic type checking for backward compatibility
             // This handles the case where full shape context is not available
             self.basic_type_conformance_check(value, store)

@@ -59,9 +59,9 @@ impl std::fmt::Debug for RetentionPolicy {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RetentionPolicy::Forever => write!(f, "Forever"),
-            RetentionPolicy::Days(n) => write!(f, "Days({})", n),
-            RetentionPolicy::Months(n) => write!(f, "Months({})", n),
-            RetentionPolicy::Versions(n) => write!(f, "Versions({})", n),
+            RetentionPolicy::Days(n) => write!(f, "Days({n})"),
+            RetentionPolicy::Months(n) => write!(f, "Months({n})"),
+            RetentionPolicy::Versions(n) => write!(f, "Versions({n})"),
             RetentionPolicy::Custom(_) => write!(f, "Custom(<function>)"),
         }
     }
@@ -188,6 +188,7 @@ pub struct EntityHistory {
     /// Chronological list of states
     states: BTreeMap<DateTime<Utc>, EntityState>,
     /// Change events
+    #[allow(dead_code)]
     changes: Vec<ChangeEvent>,
 }
 
@@ -204,14 +205,18 @@ struct EntityState {
 #[derive(Debug, Clone)]
 pub struct ChangeEvent {
     /// Time of change
+    #[allow(dead_code)]
     timestamp: DateTime<Utc>,
     /// Type of change
+    #[allow(dead_code)]
     change_type: ChangeType,
     /// Changed property/relationship
     property: String,
     /// Old value
+    #[allow(dead_code)]
     old_value: Option<Term>,
     /// New value
+    #[allow(dead_code)]
     new_value: Option<Term>,
 }
 
@@ -219,7 +224,9 @@ pub struct ChangeEvent {
 #[derive(Debug, Clone)]
 enum ChangeType {
     Insert,
+    #[allow(dead_code)]
     Update,
+    #[allow(dead_code)]
     Delete,
 }
 
@@ -237,8 +244,11 @@ struct TemporalStats {
     total_triples: u64,
     active_triples: u64,
     historical_triples: u64,
+    #[allow(dead_code)]
     total_buckets: u64,
+    #[allow(dead_code)]
     compression_ratio: f64,
+    #[allow(dead_code)]
     avg_query_time_ms: f64,
 }
 
@@ -292,7 +302,7 @@ impl TemporalStorage {
             valid_from,
             valid_to,
             transaction_time: Utc::now(),
-            metadata: metadata.unwrap_or_else(|| TemporalMetadata {
+            metadata: metadata.unwrap_or(TemporalMetadata {
                 certainty: None,
                 provenance: None,
                 predicted: false,
@@ -606,8 +616,8 @@ impl TemporalStorage {
 pub enum TemporalQuery {
     /// Allen interval relation query
     AllenRelation {
-        triple1: TemporalTriple,
-        triple2: TemporalTriple,
+        triple1: Box<TemporalTriple>,
+        triple2: Box<TemporalTriple>,
         relation: AllenRelation,
     },
     /// Temporal path query

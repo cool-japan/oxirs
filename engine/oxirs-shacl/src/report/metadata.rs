@@ -75,7 +75,7 @@ impl ReportMetadata {
             SystemTime::UNIX_EPOCH.checked_add(Duration::from_secs(self.timestamp))
         {
             // In a real implementation, you'd use chrono or similar for proper formatting
-            format!("{:?}", datetime)
+            format!("{datetime:?}")
         } else {
             "Invalid timestamp".to_string()
         }
@@ -84,7 +84,7 @@ impl ReportMetadata {
     /// Get validation duration in human-readable format
     pub fn formatted_duration(&self) -> String {
         match self.validation_duration {
-            Some(duration) => format!("{:.2?}", duration),
+            Some(duration) => format!("{duration:.2?}"),
             None => "Unknown".to_string(),
         }
     }
@@ -94,20 +94,20 @@ impl ReportMetadata {
         let mut summary = Vec::new();
 
         if let Some(duration) = self.validation_duration {
-            summary.push(format!("Duration: {:.2?}", duration));
+            summary.push(format!("Duration: {duration:.2?}"));
         }
 
         if let Some(shapes) = self.shapes_count {
-            summary.push(format!("Shapes: {}", shapes));
+            summary.push(format!("Shapes: {shapes}"));
         }
 
         if let Some(size) = self.data_graph_size {
-            summary.push(format!("Triples: {}", size));
+            summary.push(format!("Triples: {size}"));
         }
 
         if let (Some(duration), Some(size)) = (self.validation_duration, self.data_graph_size) {
             let rate = size as f64 / duration.as_secs_f64();
-            summary.push(format!("Rate: {:.0} triples/sec", rate));
+            summary.push(format!("Rate: {rate:.0} triples/sec"));
         }
 
         summary.join(", ")
@@ -195,12 +195,7 @@ impl EfficiencyMetrics {
     /// Get a performance rating (0.0 to 1.0)
     pub fn performance_rating(&self) -> Option<f64> {
         // Simple rating based on throughput
-        if let Some(tps) = self.triples_per_second {
-            // Consider >10k triples/sec as good performance
-            Some((tps / 10000.0).min(1.0))
-        } else {
-            None
-        }
+        self.triples_per_second.map(|tps| (tps / 10000.0).min(1.0))
     }
 
     /// Format metrics for display
@@ -208,15 +203,15 @@ impl EfficiencyMetrics {
         let mut parts = Vec::new();
 
         if let Some(tps) = self.triples_per_second {
-            parts.push(format!("{:.0} triples/sec", tps));
+            parts.push(format!("{tps:.0} triples/sec"));
         }
 
         if let Some(sps) = self.shapes_per_second {
-            parts.push(format!("{:.1} shapes/sec", sps));
+            parts.push(format!("{sps:.1} shapes/sec"));
         }
 
         if let Some(eff) = self.memory_efficiency {
-            parts.push(format!("{:.1} triples/shape", eff));
+            parts.push(format!("{eff:.1} triples/shape"));
         }
 
         if parts.is_empty() {

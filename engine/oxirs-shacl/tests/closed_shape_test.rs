@@ -2,11 +2,11 @@
 
 use oxirs_core::{
     model::{NamedNode, Term},
-    ConcreteStore, Store,
+    ConcreteStore,
 };
 use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
-    ShapeType, ValidationConfig, Validator,
+    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Shape, ShapeId, ShapeType,
+    Validator,
 };
 
 #[test]
@@ -56,11 +56,10 @@ fn test_closed_shape_validation() {
         }
         Err(e) => {
             // Expected if Store iteration is not implemented
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             assert!(
                 error_msg.contains("not yet implemented") || error_msg.contains("not implemented"),
-                "Unexpected error: {}",
-                e
+                "Unexpected error: {e}"
             );
         }
     }
@@ -118,11 +117,10 @@ fn test_closed_shape_with_property_shapes() {
         }
         Err(e) => {
             // Expected if Store iteration is not implemented
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             assert!(
                 error_msg.contains("not yet implemented") || error_msg.contains("not implemented"),
-                "Unexpected error: {}",
-                e
+                "Unexpected error: {e}"
             );
         }
     }
@@ -161,11 +159,10 @@ fn test_open_shape() {
         }
         Err(e) => {
             // Expected if Store iteration is not implemented
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             assert!(
                 error_msg.contains("not yet implemented") || error_msg.contains("not implemented"),
-                "Unexpected error: {}",
-                e
+                "Unexpected error: {e}"
             );
         }
     }

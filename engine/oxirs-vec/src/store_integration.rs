@@ -10,13 +10,13 @@
 //! - Multi-tenant support
 
 use crate::{
-    embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
+    embeddings::{EmbeddableContent, EmbeddingStrategy},
     rdf_integration::{RdfVectorConfig, RdfVectorIntegration},
     sparql_integration::SparqlVectorService,
-    Vector, VectorId, VectorIndex, VectorStore, VectorStoreTrait,
+    Vector, VectorId, VectorStore, VectorStoreTrait,
 };
 use anyhow::{anyhow, Result};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{
@@ -612,7 +612,7 @@ impl VectorStoreTrait for VectorStoreWrapper {
     fn get_vector(&self, id: &VectorId) -> Result<Option<Vector>> {
         let store = self.store.read();
         let result = store.get_vector(id);
-        Ok(result.map(|v| v.clone()))
+        Ok(result.cloned())
     }
 
     fn get_all_vector_ids(&self) -> Result<Vec<VectorId>> {
@@ -1230,6 +1230,12 @@ impl TransactionManager {
     }
 }
 
+impl Default for WriteAheadLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WriteAheadLog {
     pub fn new() -> Self {
         Self {
@@ -1282,6 +1288,12 @@ impl WriteAheadLog {
     }
 }
 
+impl Default for LockManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LockManager {
     pub fn new() -> Self {
         Self {
@@ -1307,7 +1319,7 @@ impl LockManager {
             });
 
         // Check if lock can be granted
-        if self.can_grant_lock(&lock_info, lock_type) {
+        if self.can_grant_lock(lock_info, lock_type) {
             lock_info.holders.insert(transaction_id);
             lock_info.lock_type = lock_type;
             lock_info.granted_time = SystemTime::now();
@@ -1348,10 +1360,16 @@ impl LockManager {
             return true;
         }
 
-        match (lock_info.lock_type, requested_type) {
-            (LockType::Shared, LockType::Shared) => true,
-            _ => false,
-        }
+        matches!(
+            (lock_info.lock_type, requested_type),
+            (LockType::Shared, LockType::Shared)
+        )
+    }
+}
+
+impl Default for DeadlockDetector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1398,6 +1416,12 @@ impl StreamingEngine {
 
     pub fn get_metrics(&self) -> &StreamingMetrics {
         &self.stream_metrics
+    }
+}
+
+impl Default for BackpressureController {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1501,6 +1525,12 @@ impl ReplicationManager {
     }
 }
 
+impl Default for HealthChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HealthChecker {
     pub fn new() -> Self {
         Self {
@@ -1522,12 +1552,24 @@ impl ConsistencyManager {
     }
 }
 
+impl Default for ConflictResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConflictResolver {
     pub fn new() -> Self {
         Self {
             strategy: ConflictResolution::LastWriteWins,
             custom_resolvers: HashMap::new(),
         }
+    }
+}
+
+impl Default for CausalOrderTracker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

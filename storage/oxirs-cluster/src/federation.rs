@@ -3,7 +3,6 @@
 //! This module implements advanced federation capabilities for cross-cluster
 //! communication, intelligent load balancing, and adaptive query routing.
 
-use crate::raft::OxirsNodeId;
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Cross-cluster federation manager
 #[derive(Debug)]

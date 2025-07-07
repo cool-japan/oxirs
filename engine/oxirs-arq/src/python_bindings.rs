@@ -1,5 +1,5 @@
 //! PyO3 Python Bindings for OxiRS ARQ SPARQL Engine
-//! 
+//!
 //! This module provides comprehensive Python bindings for the OxiRS ARQ SPARQL query processing engine,
 //! enabling seamless integration with Python applications and ML pipelines.
 
@@ -59,19 +59,19 @@ impl PySparqlQueryExecutor {
     #[pyo3(signature = (config = None, **kwargs))]
     fn new(config: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<Self> {
         let mut executor_config = QueryContext::default();
-        
+
         // Parse configuration from Python dict
         if let Some(config_dict) = config {
             if let Some(timeout) = config_dict.get_item("timeout")? {
                 let timeout_ms: u64 = timeout.extract()?;
                 executor_config.timeout = Some(Duration::from_millis(timeout_ms));
             }
-            
+
             if let Some(parallel) = config_dict.get_item("enable_parallel")? {
                 let enable: bool = parallel.extract()?;
                 executor_config.enable_parallel = enable;
             }
-            
+
             if let Some(cache_size) = config_dict.get_item("cache_size")? {
                 let size: usize = cache_size.extract()?;
                 executor_config.cache_size = size;
@@ -91,7 +91,7 @@ impl PySparqlQueryExecutor {
     #[pyo3(signature = (query, bindings = None, **kwargs))]
     fn execute_select(&self, query: &str, bindings: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<PyQueryResult> {
         let start_time = Instant::now();
-        
+
         // Parse optional bindings
         let mut query_bindings = HashMap::new();
         if let Some(bindings_dict) = bindings {
@@ -124,7 +124,7 @@ impl PySparqlQueryExecutor {
     #[pyo3(signature = (query, bindings = None, **kwargs))]
     fn execute_construct(&self, query: &str, bindings: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<PyGraphResult> {
         let start_time = Instant::now();
-        
+
         let executor = self.executor.read().unwrap();
         let result = executor.execute_query(query)
             .map_err(|e| PyErr::new::<QueryExecutionError, _>(e.to_string()))?;
@@ -146,7 +146,7 @@ impl PySparqlQueryExecutor {
     #[pyo3(signature = (query, bindings = None, **kwargs))]
     fn execute_ask(&self, query: &str, bindings: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<bool> {
         let start_time = Instant::now();
-        
+
         let executor = self.executor.read().unwrap();
         let result = executor.execute_query(query)
             .map_err(|e| PyErr::new::<QueryExecutionError, _>(e.to_string()))?;
@@ -169,7 +169,7 @@ impl PySparqlQueryExecutor {
     #[pyo3(signature = (query, **kwargs))]
     fn explain_query(&self, query: &str, kwargs: Option<&PyDict>) -> PyResult<PyQueryPlan> {
         let executor = self.executor.read().unwrap();
-        
+
         // In a real implementation, we'd generate the actual execution plan
         let plan = QueryPlan {
             query: query.to_string(),
@@ -177,7 +177,7 @@ impl PySparqlQueryExecutor {
             estimated_rows: 1000,
             operations: vec![
                 "Scan".to_string(),
-                "Filter".to_string(), 
+                "Filter".to_string(),
                 "Join".to_string(),
                 "Project".to_string(),
             ],
@@ -268,7 +268,7 @@ impl PyQueryResult {
     /// Convert results to pandas-compatible format
     fn to_pandas_dict(&self) -> HashMap<String, Vec<String>> {
         let mut pandas_data = HashMap::new();
-        
+
         for column in &self.result.columns {
             let column_data: Vec<String> = self.result.rows
                 .iter()
@@ -276,7 +276,7 @@ impl PyQueryResult {
                 .collect();
             pandas_data.insert(column.clone(), column_data);
         }
-        
+
         pandas_data
     }
 
@@ -308,7 +308,7 @@ impl PyQueryResult {
             result: QueryResult {
                 columns: vec!["subject".to_string(), "predicate".to_string(), "object".to_string()],
                 rows: vec![
-                    [("subject".to_string(), "ex:Alice".to_string()), 
+                    [("subject".to_string(), "ex:Alice".to_string()),
                      ("predicate".to_string(), "foaf:name".to_string()),
                      ("object".to_string(), "Alice".to_string())].iter().cloned().collect(),
                 ],
@@ -709,7 +709,7 @@ fn oxirs_arq(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    
+
     // Add feature information
     m.add("__features__", vec![
         "sparql_1_1_compliance",

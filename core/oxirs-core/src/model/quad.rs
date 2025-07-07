@@ -28,9 +28,9 @@ impl GraphName {
 impl fmt::Display for GraphName {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphName::NamedNode(n) => write!(f, "{}", n),
-            GraphName::BlankNode(b) => write!(f, "{}", b),
-            GraphName::Variable(v) => write!(f, "{}", v),
+            GraphName::NamedNode(n) => write!(f, "{n}"),
+            GraphName::BlankNode(b) => write!(f, "{b}"),
+            GraphName::Variable(v) => write!(f, "{v}"),
             GraphName::DefaultGraph => write!(f, "DEFAULT"),
         }
     }
@@ -327,9 +327,9 @@ impl<'a> GraphNameRef<'a> {
 impl<'a> fmt::Display for GraphNameRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GraphNameRef::NamedNode(n) => write!(f, "{}", n),
-            GraphNameRef::BlankNode(b) => write!(f, "{}", b),
-            GraphNameRef::Variable(v) => write!(f, "{}", v),
+            GraphNameRef::NamedNode(n) => write!(f, "{n}"),
+            GraphNameRef::BlankNode(b) => write!(f, "{b}"),
+            GraphNameRef::Variable(v) => write!(f, "{v}"),
             GraphNameRef::DefaultGraph => write!(f, "DEFAULT"),
         }
     }

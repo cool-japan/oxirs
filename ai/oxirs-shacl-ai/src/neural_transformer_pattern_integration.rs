@@ -962,34 +962,33 @@ impl NeuralTransformerPatternIntegration {
 
     /// Embed patterns using pattern embedder
     fn embed_patterns(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<Array2<f64>> {
-        if let Ok(mut embedder) = self.pattern_embedder.lock() {
-            embedder.embed_pattern_sequence(patterns)
-        } else {
-            Err(ShaclAiError::DataProcessing("Failed to lock pattern embedder".to_string()).into())
+        match self.pattern_embedder.lock() {
+            Ok(mut embedder) => embedder.embed_pattern_sequence(patterns),
+            _ => Err(
+                ShaclAiError::DataProcessing("Failed to lock pattern embedder".to_string()).into(),
+            ),
         }
     }
 
     /// Apply positional encoding
     fn apply_positional_encoding(&self, embeddings: &Array2<f64>) -> Result<Array2<f64>> {
-        if let Ok(encoder) = self.positional_encoder.lock() {
-            encoder.encode(embeddings)
-        } else {
-            Err(
+        match self.positional_encoder.lock() {
+            Ok(encoder) => encoder.encode(embeddings),
+            _ => Err(
                 ShaclAiError::DataProcessing("Failed to lock positional encoder".to_string())
                     .into(),
-            )
+            ),
         }
     }
 
     /// Transform embeddings using transformer encoder
     fn transformer_encode(&mut self, embeddings: &Array2<f64>) -> Result<Array2<f64>> {
-        if let Ok(mut encoder) = self.transformer_encoder.lock() {
-            encoder.forward(embeddings, None)
-        } else {
-            Err(
-                ShaclAiError::DataProcessing("Failed to lock transformer encoder".to_string())
-                    .into(),
+        match self.transformer_encoder.lock() {
+            Ok(mut encoder) => encoder.forward(embeddings, None),
+            _ => Err(ShaclAiError::DataProcessing(
+                "Failed to lock transformer encoder".to_string(),
             )
+            .into()),
         }
     }
 
@@ -1001,26 +1000,29 @@ impl NeuralTransformerPatternIntegration {
     ) -> Result<Vec<f64>> {
         let mut costs = Vec::new();
 
-        if let Ok(predictor) = self.attention_cost_predictor.lock() {
-            for i in 0..patterns.len() {
-                let pattern_emb = embeddings.slice(s![i, ..]).to_owned();
+        match self.attention_cost_predictor.lock() {
+            Ok(predictor) => {
+                for i in 0..patterns.len() {
+                    let pattern_emb = embeddings.slice(s![i, ..]).to_owned();
 
-                // Use other patterns as context
-                let context_embeddings: Vec<Array1<f64>> = (0..patterns.len())
-                    .filter(|&j| j != i)
-                    .map(|j| embeddings.slice(s![j, ..]).to_owned())
-                    .collect();
+                    // Use other patterns as context
+                    let context_embeddings: Vec<Array1<f64>> = (0..patterns.len())
+                        .filter(|&j| j != i)
+                        .map(|j| embeddings.slice(s![j, ..]).to_owned())
+                        .collect();
 
-                let cost = predictor.predict_cost(&pattern_emb, &context_embeddings)?;
-                costs.push(cost);
+                    let cost = predictor.predict_cost(&pattern_emb, &context_embeddings)?;
+                    costs.push(cost);
+                }
+
+                self.stats.cost_predictions += patterns.len();
             }
-
-            self.stats.cost_predictions += patterns.len();
-        } else {
-            return Err(ShaclAiError::DataProcessing(
-                "Failed to lock attention cost predictor".to_string(),
-            )
-            .into());
+            _ => {
+                return Err(ShaclAiError::DataProcessing(
+                    "Failed to lock attention cost predictor".to_string(),
+                )
+                .into());
+            }
         }
 
         Ok(costs)

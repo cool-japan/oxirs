@@ -7,7 +7,7 @@ use crate::{Vector, VectorId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
 
 /// Advanced performance insights analyzer
@@ -127,7 +127,7 @@ pub enum QueryComplexity {
     Simple,
     Moderate,
     Complex,
-    Highly_Complex,
+    HighlyComplex,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -387,8 +387,10 @@ impl PerformanceInsightsAnalyzer {
     ) -> Result<VectorStatistics> {
         info!("Analyzing vector dataset with {} vectors", vectors.len());
 
-        let mut stats = VectorStatistics::default();
-        stats.total_vectors = vectors.len() as u64;
+        let mut stats = VectorStatistics {
+            total_vectors: vectors.len() as u64,
+            ..Default::default()
+        };
 
         if vectors.is_empty() {
             return Ok(stats);
@@ -838,6 +840,12 @@ pub enum ReportFormat {
     Prometheus,
 }
 
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsCollector {
     pub fn new() -> Self {
         Self {
@@ -862,6 +870,12 @@ impl MetricsCollector {
                 .entry("query_error".to_string())
                 .or_insert(0) += 1;
         }
+    }
+}
+
+impl Default for AlertingSystem {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

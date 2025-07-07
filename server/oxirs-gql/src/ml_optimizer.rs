@@ -5,13 +5,13 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
-use crate::ast::{Document, Field, OperationType, Selection, SelectionSet};
+use crate::ast::{Document, OperationType, Selection, SelectionSet};
 use crate::optimizer::{QueryComplexity, QueryOptimizer};
 use crate::performance::{OperationMetrics, PerformanceTracker};
 

@@ -309,6 +309,12 @@ pub struct FlatIndex {
     stats: IndexStats,
 }
 
+impl Default for FlatIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FlatIndex {
     pub fn new() -> Self {
         Self {
@@ -510,7 +516,7 @@ impl VectorIndex for HNSWIndex {
             }
 
             // Explore neighbors (simplified)
-            if let Some(neighbors) = self.layers.get(0).and_then(|layer| layer.get(&item.id)) {
+            if let Some(neighbors) = self.layers.first().and_then(|layer| layer.get(&item.id)) {
                 for neighbor in neighbors {
                     if !visited.contains(neighbor) {
                         visited.insert(neighbor.clone());
@@ -567,7 +573,7 @@ impl HNSWIndex {
     fn get_random_layer(&self) -> usize {
         // Simplified layer assignment
         let mut layer = 0;
-        while rand::thread_rng().gen::<f32>() < 0.5 && layer < 16 {
+        while rand::thread_rng().r#gen::<f32>() < 0.5 && layer < 16 {
             layer += 1;
         }
         layer

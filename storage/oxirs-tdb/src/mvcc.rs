@@ -13,7 +13,6 @@
 
 use crate::transactions::IsolationLevel;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
@@ -260,7 +259,7 @@ where
             .write()
             .map_err(|_| anyhow!("Failed to acquire active transactions lock"))?;
 
-        let transaction = active_txs
+        let _transaction = active_txs
             .remove(&tx_id)
             .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
 
@@ -1268,8 +1267,8 @@ where
     V: Clone + Default,
 {
     /// Create new MVCC storage with optimistic concurrency control
-    pub fn with_optimistic_control(node_id: u64) -> Self {
-        let mut storage = Self::new();
+    pub fn with_optimistic_control(_node_id: u64) -> Self {
+        let storage = Self::new();
         // Initialize optimistic concurrency control (this would be integrated more deeply in a real implementation)
         storage
     }

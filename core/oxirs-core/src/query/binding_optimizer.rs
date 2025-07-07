@@ -206,8 +206,7 @@ impl BindingSet {
                 } => {
                     if variable == var && !self.check_type_constraint(term, allowed_types) {
                         return Err(OxirsError::Query(format!(
-                            "Type constraint violation for variable {}",
-                            var
+                            "Type constraint violation for variable {var}"
                         )));
                     }
                 }
@@ -217,8 +216,7 @@ impl BindingSet {
                 } => {
                     if variable == var && !self.check_value_constraint(term, constraint) {
                         return Err(OxirsError::Query(format!(
-                            "Value constraint violation for variable {}",
-                            var
+                            "Value constraint violation for variable {var}"
                         )));
                     }
                 }
@@ -415,7 +413,7 @@ impl BindingOptimizer {
     fn create_cache_key(&self, variables: &[Variable], constraints: &[Constraint]) -> String {
         let mut key = String::new();
         for var in variables {
-            key.push_str(&var.as_str());
+            key.push_str(var.as_str());
             key.push(',');
         }
         key.push('|');
@@ -435,18 +433,12 @@ impl BindingOptimizer {
                 | Constraint::ValueConstraint { variable, .. } => {
                     constraint_graph
                         .entry(variable.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(idx);
                 }
                 Constraint::RelationshipConstraint { left, right, .. } => {
-                    constraint_graph
-                        .entry(left.clone())
-                        .or_insert_with(Vec::new)
-                        .push(idx);
-                    constraint_graph
-                        .entry(right.clone())
-                        .or_insert_with(Vec::new)
-                        .push(idx);
+                    constraint_graph.entry(left.clone()).or_default().push(idx);
+                    constraint_graph.entry(right.clone()).or_default().push(idx);
                 }
                 _ => {}
             }
@@ -612,22 +604,19 @@ impl BindingIterator {
     /// Validate a binding against constraints
     fn validate_binding(&self, binding: &HashMap<Variable, Term>) -> bool {
         for constraint in &self.constraints {
-            match constraint {
-                Constraint::RelationshipConstraint {
-                    left,
-                    right,
-                    relation,
-                } => {
-                    if let (Some(left_val), Some(right_val)) =
-                        (binding.get(left), binding.get(right))
-                    {
-                        if !self.check_relation(left_val, right_val, *relation) {
-                            return false;
-                        }
+            if let Constraint::RelationshipConstraint {
+                left,
+                right,
+                relation,
+            } = constraint
+            {
+                if let (Some(left_val), Some(right_val)) = (binding.get(left), binding.get(right)) {
+                    if !self.check_relation(left_val, right_val, *relation) {
+                        return false;
                     }
                 }
-                _ => {} // Other constraints checked during binding
             }
+            // Other constraints checked during binding
         }
         true
     }

@@ -1,18 +1,12 @@
 //! Logical constraint implementations with performance optimizations for negation and deep nesting
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
-use super::constraint_types::Constraint;
 use super::shape_constraints::EvaluationComplexity;
-use crate::{
-    optimization::NegationOptimizer, ConstraintComponentId, Result, Severity, ShaclError, ShapeId,
-    ValidationConfig, Validator,
-};
+use crate::{optimization::NegationOptimizer, Result, ShaclError, ShapeId};
 use oxirs_core::{model::Term, Store};
 use oxirs_core::{Object, Predicate, Subject};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 /// Not constraint
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -395,8 +389,7 @@ impl AndConstraint {
         // Check for maximum recursion depth
         if current_depth >= max_depth {
             return Err(ShaclError::ValidationEngine(format!(
-                "Maximum recursion depth ({}) exceeded while evaluating AND constraint",
-                max_depth
+                "Maximum recursion depth ({max_depth}) exceeded while evaluating AND constraint"
             )));
         }
 
@@ -684,8 +677,7 @@ impl OrConstraint {
         // Check for maximum recursion depth
         if current_depth >= max_depth {
             return Err(ShaclError::ValidationEngine(format!(
-                "Maximum recursion depth ({}) exceeded while evaluating OR constraint",
-                max_depth
+                "Maximum recursion depth ({max_depth}) exceeded while evaluating OR constraint"
             )));
         }
 
@@ -1019,8 +1011,7 @@ impl XoneConstraint {
         // Check for maximum recursion depth
         if current_depth >= max_depth {
             return Err(ShaclError::ValidationEngine(format!(
-                "Maximum recursion depth ({}) exceeded while evaluating XONE constraint",
-                max_depth
+                "Maximum recursion depth ({max_depth}) exceeded while evaluating XONE constraint"
             )));
         }
 

@@ -4,8 +4,7 @@
 //! including basic graph patterns, joins, unions, filters, and other operations.
 
 use oxirs_core::model::{
-    BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode, Object, Predicate,
-    Quad as CoreQuad, Subject, Triple as CoreTriple, Variable as CoreVariable,
+    BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode, Object, Predicate, Subject,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -543,18 +542,8 @@ pub enum ParallelismType {
     Hybrid,
 }
 
-/// Index types for optimization
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum IndexType {
-    SubjectIndex,
-    PredicateIndex,
-    ObjectIndex,
-    SubjectPredicateIndex,
-    PredicateObjectIndex,
-    SubjectObjectIndex,
-    FullIndex,
-    CustomIndex(String),
-}
+/// Re-export IndexType from optimizer module
+pub use crate::optimizer::index_types::IndexType;
 
 /// Statistics for cost-based optimization
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -1016,38 +1005,38 @@ impl Aggregate {
 /// Convenience macros for building algebra expressions
 #[macro_export]
 macro_rules! triple {
-    ($s:expr, $p:expr, $o:expr) => {
+    ($s:expr_2021, $p:expr_2021, $o:expr_2021) => {
         TriplePattern::new($s, $p, $o)
     };
 }
 
 #[macro_export]
 macro_rules! var {
-    ($name:expr) => {
+    ($name:expr_2021) => {
         Term::Variable($name.to_string())
     };
 }
 
 #[macro_export]
 macro_rules! iri {
-    ($iri:expr) => {
+    ($iri:expr_2021) => {
         Term::Iri(NamedNode::new($iri).unwrap())
     };
 }
 
 #[macro_export]
 macro_rules! literal {
-    ($value:expr) => {
+    ($value:expr_2021) => {
         Term::Literal(Literal::new($value.to_string(), None, None))
     };
-    ($value:expr, lang: $lang:expr) => {
+    ($value:expr_2021, lang: $lang:expr_2021) => {
         Term::Literal(Literal::new(
             $value.to_string(),
             Some($lang.to_string()),
             None,
         ))
     };
-    ($value:expr, datatype: $dt:expr) => {
+    ($value:expr_2021, datatype: $dt:expr_2021) => {
         Term::Literal(Literal::new(
             $value.to_string(),
             None,
@@ -1427,11 +1416,11 @@ impl AnnotatedAlgebra {
     pub fn new(algebra: Algebra) -> Self {
         let hints = match &algebra {
             Algebra::Bgp(patterns) => OptimizationHints::for_bgp(patterns),
-            Algebra::Join { left, right } => {
+            Algebra::Join { left: _, right: _ } => {
                 // For now, use default hints - in practice, we'd analyze the children
                 OptimizationHints::default()
             }
-            Algebra::Filter { condition, .. } => OptimizationHints::default(),
+            Algebra::Filter { .. } => OptimizationHints::default(),
             _ => OptimizationHints::default(),
         };
 

@@ -14,15 +14,12 @@ use serde_json;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock};
-use tokio::time::{interval, sleep};
+use tokio::sync::{broadcast, RwLock};
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::{
-    store_integration::{ChangeNotification, UpdateNotification},
-    EventMetadata, StreamEvent,
-};
+use crate::StreamEvent;
 
 /// Webhook manager for handling HTTP notifications
 pub struct WebhookManager {
@@ -100,7 +97,7 @@ pub struct EventFilter {
 
 /// Webhook security configuration
 #[derive(Debug, Clone)]
-struct WebhookSecurity {
+pub struct WebhookSecurity {
     /// HMAC secret for signing
     hmac_secret: Option<String>,
     /// Authentication headers
@@ -176,7 +173,7 @@ pub struct WebhookMetadata {
 
 /// Webhook statistics
 #[derive(Debug, Clone, Default)]
-struct WebhookStatistics {
+pub struct WebhookStatistics {
     /// Total delivery attempts
     pub total_attempts: u64,
     /// Successful deliveries
@@ -340,6 +337,19 @@ struct TokenBucket {
     last_refill: Instant,
 }
 
+/// Webhook registration parameters
+#[allow(clippy::too_many_arguments)]
+pub struct WebhookRegistration {
+    pub url: String,
+    pub method: HttpMethod,
+    pub headers: HashMap<String, String>,
+    pub filters: Vec<EventFilter>,
+    pub security: WebhookSecurity,
+    pub retry_config: RetryConfig,
+    pub rate_limit: RateLimit,
+    pub metadata: WebhookMetadata,
+}
+
 impl WebhookManager {
     /// Create a new webhook manager
     pub async fn new(config: WebhookConfig) -> Result<Self> {
@@ -378,17 +388,17 @@ impl WebhookManager {
     }
 
     /// Register a webhook
-    pub async fn register_webhook(
-        &self,
-        url: String,
-        method: HttpMethod,
-        headers: HashMap<String, String>,
-        filters: Vec<EventFilter>,
-        security: WebhookSecurity,
-        retry_config: RetryConfig,
-        rate_limit: RateLimit,
-        metadata: WebhookMetadata,
-    ) -> Result<String> {
+    pub async fn register_webhook(&self, registration: WebhookRegistration) -> Result<String> {
+        let WebhookRegistration {
+            url,
+            method,
+            headers,
+            filters,
+            security,
+            retry_config,
+            rate_limit,
+            metadata,
+        } = registration;
         // Check limits
         let webhooks = self.webhooks.read().await;
         if webhooks.len() >= self.config.max_webhooks {
@@ -449,7 +459,7 @@ impl WebhookManager {
                 url,
             });
 
-        info!("Registered webhook: {}", webhook_id);
+        info!("Registered webhook: {webhook_id}");
         Ok(webhook_id)
     }
 
@@ -466,7 +476,7 @@ impl WebhookManager {
         // Update statistics
         self.stats.write().await.active_webhooks = webhooks.len();
 
-        info!("Unregistered webhook: {}", webhook_id);
+        info!("Unregistered webhook: {webhook_id}");
         Ok(())
     }
 
@@ -743,8 +753,8 @@ impl WebhookManager {
                                     .await;
 
                                 error!(
-                                    "Webhook delivery failed: {} -> {}: {}",
-                                    event.id, webhook.id, e
+                                    "Webhook delivery failed: {} -> {}: {e}",
+                                    event.id, webhook.id
                                 );
 
                                 // Check if we should retry
@@ -761,7 +771,7 @@ impl WebhookManager {
                                     // Put back in queue
                                     queue.write().await.push_back(event.clone());
 
-                                    debug!("Scheduling retry for {} in {:?}", event.id, delay);
+                                    debug!("Scheduling retry for {} in {delay:?}", event.id);
                                 } else {
                                     // Max retries reached
                                     stats.write().await.events_failed += 1;
@@ -792,7 +802,7 @@ impl WebhookManager {
             }
         });
 
-        debug!("Started webhook queue processor {}", worker_id);
+        debug!("Started webhook queue processor {worker_id}");
     }
 
     /// Deliver webhook
@@ -847,7 +857,7 @@ impl WebhookManager {
         let response = request
             .send()
             .await
-            .map_err(|e| anyhow!("Request failed: {}", e))?;
+            .map_err(|e| anyhow!("Request failed: {e}"))?;
 
         let status = response.status();
 
@@ -860,14 +870,12 @@ impl WebhookManager {
                     response.text().await.unwrap_or_default()
                 ));
             }
-        } else {
-            if !webhook
-                .security
-                .allowed_response_codes
-                .contains(&status.as_u16())
-            {
-                return Err(anyhow!("Unexpected response code: {}", status.as_u16()));
-            }
+        } else if !webhook
+            .security
+            .allowed_response_codes
+            .contains(&status.as_u16())
+        {
+            return Err(anyhow!("Unexpected response code: {}", status.as_u16()));
         }
 
         Ok(start_time.elapsed())
@@ -900,7 +908,7 @@ impl WebhookManager {
         if config.enable_jitter {
             // Add random jitter (±10%)
             let jitter =
-                (delay.as_millis() as f64 * 0.1 * (rand::thread_rng().gen::<f64>() - 0.5)) as u64;
+                (delay.as_millis() as f64 * 0.1 * (rand::thread_rng().r#gen::<f64>() - 0.5)) as u64;
             delay + Duration::from_millis(jitter)
         } else {
             delay
@@ -962,10 +970,7 @@ impl WebhookManager {
                     reason,
                 });
 
-                warn!(
-                    "Disabled webhook {} due to consecutive failures",
-                    webhook_id
-                );
+                warn!("Disabled webhook {webhook_id} due to consecutive failures");
             }
         }
     }
@@ -1119,33 +1124,35 @@ impl TokenBucket {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::EventMetadata;
+    use std::collections::HashMap;
 
     #[tokio::test]
     async fn test_webhook_registration() {
         let manager = WebhookManager::new(WebhookConfig::default()).await.unwrap();
 
         let webhook_id = manager
-            .register_webhook(
-                "https://example.com/webhook".to_string(),
-                HttpMethod::Post,
-                HashMap::new(),
-                vec![],
-                WebhookSecurity {
+            .register_webhook(WebhookRegistration {
+                url: "https://example.com/webhook".to_string(),
+                method: HttpMethod::Post,
+                headers: HashMap::new(),
+                filters: vec![],
+                security: WebhookSecurity {
                     hmac_secret: None,
                     auth_headers: HashMap::new(),
                     verify_ssl: true,
                     allowed_response_codes: vec![],
                 },
-                RetryConfig::default(),
-                RateLimit::default(),
-                WebhookMetadata {
-                    name: Some("Test Webhook".to_string()),
-                    description: None,
+                retry_config: RetryConfig::default(),
+                rate_limit: RateLimit::default(),
+                metadata: WebhookMetadata {
+                    name: Some("test_webhook".to_string()),
+                    description: Some("Test webhook".to_string()),
                     owner: None,
                     tags: vec![],
                     properties: HashMap::new(),
                 },
-            )
+            })
             .await
             .unwrap();
 

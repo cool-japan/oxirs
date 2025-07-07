@@ -41,7 +41,7 @@ impl ReportGenerator {
     pub fn generate_to_file(&self, report: &ValidationReport, path: &str) -> Result<()> {
         let content = self.generate(report)?;
         std::fs::write(path, content)
-            .map_err(|e| ShaclError::ReportError(format!("Failed to write file: {}", e)))?;
+            .map_err(|e| ShaclError::ReportError(format!("Failed to write file: {e}")))?;
         Ok(())
     }
 
@@ -93,7 +93,7 @@ impl ReportGenerator {
 
         // Parse and add @context
         let mut json_value: serde_json::Value = serde_json::from_str(&json_content)
-            .map_err(|e| ShaclError::ReportError(format!("JSON parsing failed: {}", e)))?;
+            .map_err(|e| ShaclError::ReportError(format!("JSON parsing failed: {e}")))?;
 
         if let serde_json::Value::Object(ref mut obj) = json_value {
             obj.insert(
@@ -112,7 +112,7 @@ impl ReportGenerator {
         } else {
             serde_json::to_string(&json_value)
         }
-        .map_err(|e| ShaclError::ReportError(format!("JSON-LD serialization failed: {}", e)))
+        .map_err(|e| ShaclError::ReportError(format!("JSON-LD serialization failed: {e}")))
     }
 
     fn generate_rdfxml(&self, report: &ValidationReport) -> Result<String> {
@@ -147,10 +147,9 @@ impl ReportGenerator {
 
         // Add violation triples (simplified)
         for (i, violation) in report.violations.iter().enumerate() {
-            let violation_uri = format!("<urn:violation{}>", i);
+            let violation_uri = format!("<urn:violation{i}>");
             ntriples.push(format!(
-                "{} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationResult> .",
-                violation_uri
+                "{violation_uri} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/ns/shacl#ValidationResult> ."
             ));
             ntriples.push(format!(
                 "{} <http://www.w3.org/ns/shacl#focusNode> <{}> .",
@@ -237,8 +236,6 @@ pub fn generate_detailed_report(validation_report: &ValidationReport) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::validation::ValidationViolation;
-    use oxirs_core::model::*;
 
     #[test]
     fn test_basic_report_generation() {

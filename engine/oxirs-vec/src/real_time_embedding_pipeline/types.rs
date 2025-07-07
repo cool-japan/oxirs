@@ -1,8 +1,8 @@
 //! Common types and data structures for the real-time embedding pipeline
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::AtomicU64;
 use std::time::{Duration, Instant, SystemTime};
 use uuid::Uuid;
 

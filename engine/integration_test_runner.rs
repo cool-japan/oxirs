@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Run all tests
     let report = suite.run_all_tests()?;
-    
+
     println!("\n📊 Integration Test Report");
     println!("==========================");
     println!("Total Tests: {}", report.summary.total_tests);
@@ -37,9 +37,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("\n📈 Module Results:");
     for (module, results) in &report.module_results {
-        println!("  {}: {}/{} tests passed ({:.1}% success, {:.1} avg score)", 
-            module, 
-            results.passed_tests, 
+        println!("  {}: {}/{} tests passed ({:.1}% success, {:.1} avg score)",
+            module,
+            results.passed_tests,
             results.total_tests,
             (results.passed_tests as f64 / results.total_tests as f64) * 100.0,
             results.average_performance_score
@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if !report.recommendations.is_empty() {
         println!("\n💡 Recommendations:");
         for rec in &report.recommendations {
-            println!("  {} [{}]: {}", 
+            println!("  {} [{}]: {}",
                 match rec.priority {
                     RecommendationPriority::Critical => "🔴",
                     RecommendationPriority::High => "🟠",

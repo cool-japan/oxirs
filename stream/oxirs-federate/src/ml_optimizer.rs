@@ -599,7 +599,7 @@ impl LinearRegressionModel {
         if mean_actual <= 0.0 {
             return 0.0;
         }
-        
+
         let relative_error = mean_absolute_error / mean_actual;
         // Use exponential decay for accuracy to provide more realistic scores
         (1.0 - relative_error).max(0.0).min(1.0)
@@ -713,6 +713,21 @@ impl MLOptimizer {
             (linear_prediction + neural_prediction) / 2.0
         };
 
+        // Provide fallback prediction if models haven't been trained or return 0.0
+        let final_prediction = if ensemble_prediction <= 0.0 {
+            // Fallback: estimate based on query features using heuristics
+            let base_time = 50.0; // Base execution time in ms
+            let pattern_complexity = features.pattern_count as f64 * 20.0;
+            let join_complexity = features.join_count as f64 * 100.0;
+            let filter_complexity = features.filter_count as f64 * 10.0;
+            let service_latency =
+                features.avg_service_latency * (features.service_count as f64).max(1.0);
+
+            base_time + pattern_complexity + join_complexity + filter_complexity + service_latency
+        } else {
+            ensemble_prediction
+        };
+
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
@@ -720,10 +735,10 @@ impl MLOptimizer {
             stats.model_accuracy = (linear_accuracy + neural_accuracy) / 2.0;
         }
 
-        debug!("Performance prediction: {:.2}ms (linear: {:.2}, neural: {:.2}) for query with {} patterns", 
-               ensemble_prediction, linear_prediction, neural_prediction, features.pattern_count);
+        debug!("Performance prediction: {:.2}ms (linear: {:.2}, neural: {:.2}, final: {:.2}) for query with {} patterns", 
+               ensemble_prediction, linear_prediction, neural_prediction, final_prediction, features.pattern_count);
 
-        Ok(ensemble_prediction)
+        Ok(final_prediction)
     }
 
     /// Recommend source selection
@@ -759,7 +774,7 @@ impl MLOptimizer {
         // Select top services above confidence threshold
         let mut recommended: Vec<_> = service_scores
             .iter()
-            .filter(|(_, &score)| score > self.config.confidence_threshold)
+            .filter(|&(_, &score)| score > self.config.confidence_threshold)
             .map(|(service, &score)| (service.clone(), score))
             .collect();
 
@@ -812,7 +827,7 @@ impl MLOptimizer {
     ) -> Result<JoinOrderOptimization> {
         if !self.config.enable_join_order_optimization || join_patterns.is_empty() {
             return Ok(JoinOrderOptimization {
-                recommended_order: join_patterns.to_vec(),
+                recommended_order: (0..join_patterns.len()).map(|i| i.to_string()).collect(),
                 expected_cost: 1.0,
                 alternatives: vec![],
                 confidence: 0.5,
@@ -843,20 +858,46 @@ impl MLOptimizer {
             .map(|(order, cost)| (order.clone(), *cost))
             .unwrap_or_else(|| (join_patterns.to_vec(), 1.0));
 
+        // Convert pattern strings back to indices
+        let pattern_to_index: std::collections::HashMap<String, usize> = join_patterns
+            .iter()
+            .enumerate()
+            .map(|(i, pattern)| (pattern.clone(), i))
+            .collect();
+
+        let recommended_indices: Vec<String> = best_order
+            .0
+            .iter()
+            .map(|pattern| {
+                pattern_to_index
+                    .get(pattern)
+                    .map(|&i| i.to_string())
+                    .unwrap_or_else(|| "0".to_string())
+            })
+            .collect();
+
         // Generate alternatives
         let alternatives: Vec<JoinOrderAlternative> = order_scores
             .iter()
             .skip(1)
             .take(3)
             .map(|(order, cost)| JoinOrderAlternative {
-                order: order.clone(),
+                order: order
+                    .iter()
+                    .map(|pattern| {
+                        pattern_to_index
+                            .get(pattern)
+                            .map(|&i| i.to_string())
+                            .unwrap_or_else(|| "0".to_string())
+                    })
+                    .collect(),
                 cost: *cost,
                 risk: self.calculate_risk_score(*cost, best_order.1),
             })
             .collect();
 
         Ok(JoinOrderOptimization {
-            recommended_order: best_order.0,
+            recommended_order: recommended_indices,
             expected_cost: best_order.1,
             alternatives,
             confidence: self.calculate_join_confidence(&order_scores),
@@ -1196,10 +1237,10 @@ impl MLOptimizer {
         // Position-based cost (later joins are more expensive)
         for (i, pattern) in order.iter().enumerate() {
             let position_cost = (i + 1) as f64 * 0.2;
-            
+
             // Check if model has specific cost for this pattern
             let pattern_specific_cost = model.get(pattern).unwrap_or(&1.0);
-            
+
             cost += position_cost * pattern_specific_cost * selectivity_factor;
         }
 

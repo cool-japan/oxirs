@@ -4,15 +4,13 @@
 //! and diagnostic tools to help developers identify and resolve issues with
 //! RDF-star data and operations.
 
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::path::Path;
-
-use serde::{Deserialize, Serialize};
 
 use crate::dev_tools::{detect_format, DetectedFormat};
-use crate::parser::{StarFormat, StarParser};
-use crate::{StarConfig, StarError, StarResult, StarTerm, StarTriple};
+use crate::parser::StarFormat;
+use crate::{StarConfig, StarError, StarResult};
 
 /// Comprehensive troubleshooting guide with solutions
 #[derive(Debug, Clone)]
@@ -148,7 +146,9 @@ pub struct DataQualityMetrics {
 #[derive(Debug)]
 pub struct MigrationAssistant {
     source_format: MigrationSourceFormat,
+    #[allow(dead_code)]
     target_config: StarConfig,
+    #[allow(dead_code)]
     transformation_rules: Vec<TransformationRule>,
 }
 
@@ -299,7 +299,7 @@ impl TroubleshootingGuide {
         let mut report = String::new();
 
         report.push_str("# RDF-star Troubleshooting Report\n\n");
-        report.push_str(&format!("**Error:** {}\n\n", error));
+        report.push_str(&format!("**Error:** {error}\n\n"));
 
         // Find relevant issues
         let relevant_issues = self.find_relevant_issues(error);
@@ -322,15 +322,15 @@ impl TroubleshootingGuide {
 
                         if !solution.steps.is_empty() {
                             for step in &solution.steps {
-                                report.push_str(&format!("   - {}\n", step));
+                                report.push_str(&format!("   - {step}\n"));
                             }
                         }
 
                         if let Some(code) = &solution.code_example {
-                            report.push_str(&format!("   ```rust\n   {}\n   ```\n", code));
+                            report.push_str(&format!("   ```rust\n   {code}\n   ```\n"));
                         }
 
-                        report.push_str("\n");
+                        report.push('\n');
                     }
                 }
             }
@@ -341,7 +341,7 @@ impl TroubleshootingGuide {
         if !suggestions.is_empty() {
             report.push_str("## Additional Recovery Suggestions\n\n");
             for suggestion in suggestions {
-                report.push_str(&format!("- {}\n", suggestion));
+                report.push_str(&format!("- {suggestion}\n"));
             }
         }
 
@@ -661,7 +661,7 @@ oxirs-star convert input.dat output.ttls --from ntriples-star --to turtle-star
         for (id, issue) in &self.issues {
             self.categories
                 .entry(issue.category.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(id.clone());
         }
     }
@@ -825,7 +825,7 @@ impl MigrationAssistant {
         use std::fs;
 
         let content = fs::read_to_string(source_file).map_err(|e| {
-            crate::StarError::parse_error(format!("Failed to read source file: {}", e))
+            crate::StarError::parse_error(format!("Failed to read source file: {e}"))
         })?;
 
         let mut issues = Vec::new();
@@ -845,7 +845,7 @@ impl MigrationAssistant {
         }
 
         Ok(SourceAnalysis {
-            format: format,
+            format,
             total_triples: self.count_triples(&content),
             reified_statements: self.count_reified_statements(&content),
             namespaces: self.extract_namespaces(&content),
@@ -906,14 +906,14 @@ impl MigrationAssistant {
 
         // For now, do a basic conversion
         let content = fs::read_to_string(source_file).map_err(|e| {
-            crate::StarError::parse_error(format!("Failed to read source file: {}", e))
+            crate::StarError::parse_error(format!("Failed to read source file: {e}"))
         })?;
 
         // Basic conversion logic (placeholder)
         let converted_content = self.perform_basic_conversion(&content)?;
 
         fs::write(output_file, converted_content).map_err(|e| {
-            crate::StarError::serialization_error(format!("Failed to write output file: {}", e))
+            crate::StarError::serialization_error(format!("Failed to write output file: {e}"))
         })?;
 
         let elapsed = start_time.elapsed();
@@ -1007,6 +1007,7 @@ impl MigrationAssistant {
 
 /// Comprehensive diagnostic analyzer
 pub struct DiagnosticAnalyzer {
+    #[allow(dead_code)]
     config: StarConfig,
 }
 
@@ -1028,7 +1029,7 @@ impl DiagnosticAnalyzer {
         let mut data_quality = DataQualityMetrics::default();
 
         // Detect format if not specified
-        let detected_format = if let Some(fmt) = format {
+        let _detected_format = if let Some(fmt) = format {
             fmt
         } else {
             self.detect_format_from_content(content)?
@@ -1084,7 +1085,7 @@ impl DiagnosticAnalyzer {
 
         // Check for common structural issues
         let mut empty_lines = 0;
-        let mut comment_lines = 0;
+        let mut _comment_lines = 0;
         let mut quoted_triple_count = 0;
 
         for (line_num, line) in lines.iter().enumerate() {
@@ -1096,7 +1097,7 @@ impl DiagnosticAnalyzer {
             }
 
             if trimmed.starts_with('#') {
-                comment_lines += 1;
+                _comment_lines += 1;
                 continue;
             }
 
@@ -1114,8 +1115,7 @@ impl DiagnosticAnalyzer {
                     severity: IssueSeverity::Error,
                     category: IssueCategory::Parsing,
                     message: format!(
-                        "Unmatched quoted triple brackets: {} << vs {} >>",
-                        open_count, close_count
+                        "Unmatched quoted triple brackets: {open_count} << vs {close_count} >>"
                     ),
                     location: Some(format!("Line {}", line_num + 1)),
                     suggested_fixes: vec![
@@ -1139,8 +1139,7 @@ impl DiagnosticAnalyzer {
                 severity: IssueSeverity::Warning,
                 category: IssueCategory::Performance,
                 message: format!(
-                    "High number of quoted triples detected: {}",
-                    quoted_triple_count
+                    "High number of quoted triples detected: {quoted_triple_count}"
                 ),
                 location: None,
                 suggested_fixes: vec![
@@ -1157,7 +1156,7 @@ impl DiagnosticAnalyzer {
         &self,
         content: &str,
         metrics: &mut PerformanceMetrics,
-        recommendations: &mut Vec<String>,
+        _recommendations: &mut [String],
     ) -> StarResult<()> {
         let content_size = content.len();
         let quoted_triple_count = content.matches("<<").count();
@@ -1198,15 +1197,13 @@ impl DiagnosticAnalyzer {
 
     fn estimate_max_nesting_depth(&self, content: &str) -> usize {
         let mut max_depth = 0;
-        let mut current_depth = 0;
+        let mut current_depth: usize = 0;
 
         for ch in content.chars() {
             match ch {
                 '<' => current_depth += 1,
                 '>' => {
-                    if current_depth > 0 {
-                        current_depth -= 1;
-                    }
+                    current_depth = current_depth.saturating_sub(1usize);
                 }
                 _ => {}
             }
@@ -1271,7 +1268,7 @@ impl DiagnosticAnalyzer {
         use std::fs;
 
         let content = fs::read_to_string(input_file).map_err(|e| {
-            crate::StarError::parse_error(format!("Failed to read input file: {}", e))
+            crate::StarError::parse_error(format!("Failed to read input file: {e}"))
         })?;
 
         self.analyze_content(&content, None)

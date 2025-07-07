@@ -808,10 +808,85 @@ impl EnhancedValuesProcessor {
 
     fn parse_values_clause(&self, text: &str) -> FusekiResult<ValuesClause> {
         // Parse VALUES clause structure
-        // This is a simplified parser
+        let mut variables = Vec::new();
+        let mut rows = Vec::new();
 
-        let variables = Vec::new();
-        let rows = Vec::new();
+        // Find the variable list
+        if let Some(var_start) = text.find('(') {
+            if let Some(var_end) = text[var_start..].find(')') {
+                let var_text = &text[var_start + 1..var_start + var_end];
+                
+                // Extract variable names
+                for var in var_text.split_whitespace() {
+                    if var.starts_with('?') || var.starts_with('$') {
+                        variables.push(var.to_string());
+                    }
+                }
+            }
+        }
+
+        // Find the values block
+        if let Some(block_start) = text.find('{') {
+            if let Some(block_end) = text.rfind('}') {
+                let block_text = &text[block_start + 1..block_end];
+                
+                // Parse rows - each row is in parentheses
+                let mut current_row = Vec::new();
+                let mut in_parens = false;
+                let mut current_value = String::new();
+                let mut in_quotes = false;
+                
+                for ch in block_text.chars() {
+                    match ch {
+                        '"' => {
+                            in_quotes = !in_quotes;
+                            current_value.push(ch);
+                        }
+                        '(' if !in_quotes => {
+                            in_parens = true;
+                            current_row.clear();
+                        }
+                        ')' if !in_quotes => {
+                            if !current_value.trim().is_empty() {
+                                current_row.push(current_value.trim().to_string());
+                                current_value.clear();
+                            }
+                            if !current_row.is_empty() {
+                                // Convert strings to JSON values
+                                let json_row: Vec<serde_json::Value> = current_row
+                                    .iter()
+                                    .map(|s| {
+                                        if s.starts_with('"') && s.ends_with('"') {
+                                            // String literal
+                                            serde_json::Value::String(s[1..s.len()-1].to_string())
+                                        } else if s.starts_with(':') {
+                                            // IRI/namespace
+                                            serde_json::Value::String(s.to_string())
+                                        } else {
+                                            // Try parsing as other types
+                                            serde_json::from_str(s).unwrap_or_else(|_| serde_json::Value::String(s.to_string()))
+                                        }
+                                    })
+                                    .collect();
+                                rows.push(json_row);
+                            }
+                            in_parens = false;
+                        }
+                        c if in_parens => {
+                            if c.is_whitespace() && !in_quotes {
+                                if !current_value.trim().is_empty() {
+                                    current_row.push(current_value.trim().to_string());
+                                    current_value.clear();
+                                }
+                            } else {
+                                current_value.push(c);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
 
         Ok(ValuesClause {
             variables,

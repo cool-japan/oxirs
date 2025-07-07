@@ -1,13 +1,12 @@
 //! Tests for zero-copy serialization
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use oxirs_core::io::{
     MmapReader, MmapWriter, ZeroCopyDeserialize, ZeroCopySerialize, ZeroCopyStr, ZeroCopyTerm,
     ZeroCopyTriple,
 };
 use oxirs_core::model::*;
 use std::fs;
-use std::path::PathBuf;
 use tempfile::TempDir;
 
 #[test]

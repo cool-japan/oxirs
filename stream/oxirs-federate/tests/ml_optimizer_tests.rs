@@ -486,7 +486,8 @@ async fn test_caching_strategy_learning() {
         caching_recommendation.expected_hit_rate >= 0.0
             && caching_recommendation.expected_hit_rate <= 1.0
     );
-    assert!(caching_recommendation.memory_requirements >= 0);
+    // Memory requirements should be non-negative (always true for unsigned types)
+    let _ = caching_recommendation.memory_requirements;
     assert!(
         !caching_recommendation.cache_items.is_empty()
             || caching_recommendation.cache_items.is_empty()
@@ -798,7 +799,7 @@ async fn test_cross_validation() {
     // Create diverse training data for cross-validation
     let mut training_data = Vec::new();
 
-    for i in 0..50 {
+    for i in 0..105 {
         let data = PerformanceOutcome {
             execution_time_ms: (50 + (i * 20)) as f64, // Correlated with complexity
             memory_usage_bytes: (1024 * 1024) + (i as u64 * 100000),
@@ -844,7 +845,7 @@ async fn test_cross_validation() {
     let statistics = optimizer.get_statistics().await;
 
     // Should have processed all training data
-    assert!(statistics.training_samples_count >= 50); // We added 50 samples
+    assert!(statistics.training_samples_count >= 105); // We added 105 samples
     assert!(statistics.model_accuracy >= 0.0 && statistics.model_accuracy <= 1.0);
     assert!(statistics.last_training.is_some());
 

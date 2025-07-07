@@ -391,37 +391,34 @@ impl ResultStreamingManager {
                 Ok(encoder.finish()?)
             }
             CompressionAlgorithm::Brotli => {
-                // Placeholder for brotli compression
-                // In a real implementation, you'd use the brotli crate
-                warn!("Brotli compression not implemented, falling back to gzip");
-                let mut encoder = GzEncoder::new(
-                    Vec::new(),
-                    GzCompression::new(self.config.compression_level),
-                );
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                use brotli::enc::BrotliEncoderParams;
+                use std::io::Cursor;
+                
+                let mut input = Cursor::new(data);
+                let mut output = Vec::new();
+                let params = BrotliEncoderParams {
+                    quality: self.config.compression_level.min(11) as i32,
+                    ..Default::default()
+                };
+                
+                brotli::BrotliCompress(&mut input, &mut output, &params)
+                    .map_err(|e| anyhow!("Brotli compression failed: {}", e))?;
+                    
+                Ok(output)
             }
             CompressionAlgorithm::Lz4 => {
-                // Placeholder for LZ4 compression
-                // In a real implementation, you'd use the lz4 crate
-                warn!("LZ4 compression not implemented, falling back to gzip");
-                let mut encoder = GzEncoder::new(
-                    Vec::new(),
-                    GzCompression::new(self.config.compression_level),
-                );
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                use lz4_flex::compress_prepend_size;
+                
+                let compressed = compress_prepend_size(data);
+                Ok(compressed)
             }
             CompressionAlgorithm::Zstd => {
-                // Placeholder for Zstandard compression
-                // In a real implementation, you'd use the zstd crate
-                warn!("Zstd compression not implemented, falling back to gzip");
-                let mut encoder = GzEncoder::new(
-                    Vec::new(),
-                    GzCompression::new(self.config.compression_level),
-                );
-                encoder.write_all(data)?;
-                Ok(encoder.finish()?)
+                use zstd::stream::encode_all;
+                
+                let compressed = encode_all(data, self.config.compression_level as i32)
+                    .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
+                    
+                Ok(compressed)
             }
         }
     }
@@ -451,18 +448,34 @@ impl ResultStreamingManager {
                 decoder.read_to_end(&mut decompressed)?;
                 Ok(decompressed)
             }
-            _ => {
-                // For unsupported algorithms, try gzip as fallback
-                warn!(
-                    "Decompression algorithm {:?} not fully implemented, trying gzip",
-                    algorithm
-                );
-                use flate2::read::GzDecoder;
+            CompressionAlgorithm::Brotli => {
+                use brotli::Decompressor;
+                use std::io::Cursor;
+                
+                let mut input = Cursor::new(data);
+                let mut output = Vec::new();
+                let mut decompressor = Decompressor::new(&mut input, 4096);
+                
                 use std::io::Read;
-
-                let mut decoder = GzDecoder::new(data);
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
+                decompressor.read_to_end(&mut output)
+                    .map_err(|e| anyhow!("Brotli decompression failed: {}", e))?;
+                    
+                Ok(output)
+            }
+            CompressionAlgorithm::Lz4 => {
+                use lz4_flex::decompress_size_prepended;
+                
+                let decompressed = decompress_size_prepended(data)
+                    .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
+                    
+                Ok(decompressed)
+            }
+            CompressionAlgorithm::Zstd => {
+                use zstd::stream::decode_all;
+                
+                let decompressed = decode_all(data)
+                    .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
+                    
                 Ok(decompressed)
             }
         }
@@ -478,9 +491,9 @@ impl ResultStreamingManager {
                 serde_json::to_vec(result).map_err(|e| anyhow!("JSON serialization failed: {}", e))
             }
             ResultFormat::MessagePack => {
-                // Placeholder for MessagePack serialization
-                warn!("MessagePack serialization not implemented, falling back to JSON");
-                serde_json::to_vec(result).map_err(|e| anyhow!("JSON serialization failed: {}", e))
+                use rmp_serde::to_vec;
+                
+                to_vec(result).map_err(|e| anyhow!("MessagePack serialization failed: {}", e))
             }
             ResultFormat::Csv => {
                 // Simple CSV conversion for SPARQL results
@@ -495,12 +508,42 @@ impl ResultStreamingManager {
                     }
                 }
             }
-            _ => {
-                warn!(
-                    "Serialization format {:?} not implemented, falling back to JSON",
-                    format
+            ResultFormat::Xml => {
+                // Simple XML conversion for query results
+                match result {
+                    QueryResult::Sparql(sparql_results) => {
+                        self.sparql_to_xml(sparql_results).await
+                    }
+                    QueryResult::GraphQL(graphql_result) => {
+                        self.graphql_to_xml(graphql_result).await
+                    }
+                }
+            }
+            ResultFormat::Avro => {
+                // For now, use JSON serialization and wrap in Avro-like structure
+                warn!("Avro format not fully implemented, using JSON serialization");
+                let json_data = serde_json::to_vec(result)
+                    .map_err(|e| anyhow!("JSON serialization failed: {}", e))?;
+                
+                // Create a simple Avro-like wrapper
+                let avro_wrapped = format!(
+                    r#"{{"type":"record","name":"QueryResult","fields":[{{"name":"data","type":"string"}}],"data":"{}"}}"#,
+                    String::from_utf8_lossy(&json_data).replace('"', "\\\"")
                 );
-                serde_json::to_vec(result).map_err(|e| anyhow!("JSON serialization failed: {}", e))
+                Ok(avro_wrapped.into_bytes())
+            }
+            ResultFormat::Protobuf => {
+                // For now, use JSON serialization with protobuf-like metadata
+                warn!("Protobuf format not fully implemented, using JSON with metadata");
+                let json_data = serde_json::to_vec(result)
+                    .map_err(|e| anyhow!("JSON serialization failed: {}", e))?;
+                
+                // Create a simple protobuf-like wrapper with length prefix
+                let mut protobuf_data = Vec::new();
+                let length = json_data.len() as u32;
+                protobuf_data.extend_from_slice(&length.to_le_bytes());
+                protobuf_data.extend_from_slice(&json_data);
+                Ok(protobuf_data)
             }
         }
     }
@@ -569,6 +612,70 @@ impl ResultStreamingManager {
         }
 
         Ok(csv_data)
+    }
+
+    async fn sparql_to_xml(&self, results: &Vec<HashMap<String, oxirs_core::Term>>) -> Result<Vec<u8>> {
+        let mut xml_data = String::new();
+        
+        // XML header
+        xml_data.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        xml_data.push_str("<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n");
+        
+        // Head section with variables (collect unique variable names)
+        let mut variables: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for binding in results {
+            for var in binding.keys() {
+                variables.insert(var.clone());
+            }
+        }
+        xml_data.push_str("  <head>\n");
+        for var in &variables {
+            xml_data.push_str(&format!("    <variable name=\"{var}\"/>\n"));
+        }
+        xml_data.push_str("  </head>\n");
+        
+        // Results section
+        xml_data.push_str("  <results>\n");
+        for binding in results {
+            xml_data.push_str("    <result>\n");
+            for (var, value) in binding {
+                let escaped_value = format!("{}", value)
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;")
+                    .replace('"', "&quot;")
+                    .replace('\'', "&apos;");
+                xml_data.push_str(&format!("      <binding name=\"{var}\">\n"));
+                xml_data.push_str(&format!("        <literal>{escaped_value}</literal>\n"));
+                xml_data.push_str("      </binding>\n");
+            }
+            xml_data.push_str("    </result>\n");
+        }
+        xml_data.push_str("  </results>\n");
+        xml_data.push_str("</sparql>\n");
+        
+        Ok(xml_data.into_bytes())
+    }
+
+    async fn graphql_to_xml(&self, result: &serde_json::Value) -> Result<Vec<u8>> {
+        let mut xml_data = String::new();
+        
+        // XML header
+        xml_data.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
+        xml_data.push_str("<graphql>\n");
+        
+        // Convert JSON data to simple XML structure
+        xml_data.push_str("  <data>\n");
+        let json_str = serde_json::to_string_pretty(result)
+            .map_err(|e| anyhow!("Failed to serialize GraphQL data: {}", e))?
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;");
+        xml_data.push_str(&format!("    <json>{json_str}</json>\n"));
+        xml_data.push_str("  </data>\n");
+        xml_data.push_str("</graphql>\n");
+        
+        Ok(xml_data.into_bytes())
     }
 
     async fn create_chunk_stream(
@@ -1105,7 +1212,7 @@ impl PaginationManager {
             .unwrap()
             .as_secs();
 
-        let position_state = base64::encode(format!("{}:{}", offset, page_size));
+        let position_state = base64::encode(format!("{offset}:{page_size}"));
 
         let cursor = PaginationCursor {
             cursor_id,

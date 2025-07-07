@@ -699,7 +699,7 @@ impl DreamProcessor {
             working_memory
                 .recent_experiences
                 .make_contiguous()
-                .sort_by(|a, b| a.last_access.cmp(&b.last_access));
+                .sort_by_key(|x| x.last_access);
 
             // Create temporal associations
             for i in 0..working_memory.recent_experiences.len().saturating_sub(1) {
@@ -835,10 +835,9 @@ impl DreamProcessor {
 
     /// Count memories consolidated
     fn count_memories_consolidated(&self) -> usize {
-        if let Ok(working_memory) = self.memory_consolidator.working_memory.read() {
-            working_memory.recent_experiences.len()
-        } else {
-            0
+        match self.memory_consolidator.working_memory.read() {
+            Ok(working_memory) => working_memory.recent_experiences.len(),
+            _ => 0,
         }
     }
 
@@ -1231,6 +1230,12 @@ impl SemanticNetwork {
             activation_spreader: ActivationSpreader,
             network_metrics: NetworkMetrics,
         }
+    }
+}
+
+impl Default for DreamProcessor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

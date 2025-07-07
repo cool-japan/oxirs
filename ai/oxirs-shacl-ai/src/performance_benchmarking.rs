@@ -354,7 +354,7 @@ pub struct RunningBenchmark {
 }
 
 /// Benchmark execution status
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum BenchmarkStatus {
     Queued,
     Warmup,
@@ -562,9 +562,9 @@ impl PerformanceBenchmarkFramework {
         let performance_analyzer = Arc::new(PerformanceAnalyzer::new());
         let scalability_tester = Arc::new(ScalabilityTester::new());
         let regression_detector = Arc::new(RegressionDetector::new());
-        let memory_profiler = Arc::new(MemoryProfiler::new(config.enable_memory_profiling));
-        let cpu_profiler = Arc::new(CpuProfiler::new(config.enable_cpu_profiling));
-        let io_profiler = Arc::new(IoProfiler::new(config.enable_io_profiling));
+        let memory_profiler = Arc::new(MemoryProfiler::new());
+        let cpu_profiler = Arc::new(CpuProfiler::new());
+        let io_profiler = Arc::new(IoProfiler::new());
         let result_collector = Arc::new(Mutex::new(BenchmarkResultCollector::new()));
         let baseline_manager = Arc::new(BaselineManager::new());
 

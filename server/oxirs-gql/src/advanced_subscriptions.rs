@@ -5,16 +5,15 @@
 //! high-performance streaming capabilities for GraphQL subscriptions.
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{broadcast, mpsc, Mutex as AsyncMutex, RwLock};
-use tokio::time::interval;
-use tokio_stream::{Stream, StreamExt};
-use tracing::{debug, error, info, span, warn, Level};
+use tokio_stream::StreamExt;
+use tracing::{error, info, warn};
 
-use crate::ast::{Document, Field, Selection, Value};
+use crate::ast::{Document, Value};
 use crate::performance::ClientInfo;
 
 /// Advanced subscription system configuration
@@ -525,6 +524,12 @@ pub struct DataTransformer {
     transform_cache: Arc<RwLock<HashMap<String, TransformationResult>>>,
 }
 
+impl Default for DataTransformer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataTransformer {
     pub fn new() -> Self {
         Self {
@@ -628,7 +633,7 @@ impl StreamProcessor {
         })
     }
 
-    fn evaluate_filter(&self, event: &RealTimeEvent, filter: &SubscriptionFilter) -> bool {
+    fn evaluate_filter(&self, _event: &RealTimeEvent, filter: &SubscriptionFilter) -> bool {
         // Simplified filter evaluation
         match &filter.operator {
             FilterOperator::Equals => {
@@ -650,6 +655,12 @@ pub struct PriorityQueue {
     high_priority: VecDeque<String>,
     normal_priority: VecDeque<String>,
     low_priority: VecDeque<String>,
+}
+
+impl Default for PriorityQueue {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PriorityQueue {
@@ -842,6 +853,12 @@ pub struct SubscriptionIndex {
     by_event_type: HashMap<String, HashSet<String>>,
 }
 
+impl Default for SubscriptionIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SubscriptionIndex {
     pub fn new() -> Self {
         Self {
@@ -856,20 +873,20 @@ impl SubscriptionIndex {
         for entity in &session.analysis.data_requirements.entities {
             self.by_entity
                 .entry(entity.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(session.id.clone());
         }
 
         // Index by priority
         self.by_priority
             .entry(session.priority)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(session.id.clone());
 
         // Index by event types (simplified)
         self.by_event_type
             .entry("data_change".to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(session.id.clone());
     }
 
@@ -911,6 +928,12 @@ pub struct MultiplexerStatistics {
     pub efficiency_ratio: f64,
 }
 
+impl Default for MultiplexerStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiplexerStatistics {
     pub fn new() -> Self {
         Self {
@@ -932,6 +955,12 @@ pub struct SubscriptionMetrics {
     pub total_messages_sent: u64,
     pub total_processing_time: Duration,
     pub last_event_time: Option<Instant>,
+}
+
+impl Default for SubscriptionMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SubscriptionMetrics {

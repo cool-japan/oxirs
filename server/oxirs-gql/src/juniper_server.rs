@@ -5,14 +5,12 @@
 
 use crate::juniper_schema::{create_schema, GraphQLContext, Schema};
 use crate::RdfStore;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono;
-use hyper::body::Bytes;
 use hyper::service::service_fn;
 use hyper::{body::Incoming, Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
-use juniper::{execute, EmptyMutation, EmptySubscription};
 use juniper_hyper::playground;
 use juniper_hyper::{graphiql, graphql};
 use serde_json;
@@ -454,8 +452,6 @@ pub async fn start_graphql_server_with_config(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::{IpAddr, Ipv4Addr};
-    use tokio::time::{sleep, Duration};
 
     #[tokio::test]
     async fn test_server_creation() {

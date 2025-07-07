@@ -1,10 +1,10 @@
 //! RDF to GraphQL mapping utilities
 
-use crate::ast::{Directive, Document, Field, OperationDefinition, Selection, SelectionSet, Value};
-use crate::optimizer::{OptimizationConfig, QueryOptimizer, QueryPlan};
-use crate::schema::{PropertyType, RdfClass, RdfProperty, RdfVocabulary};
+use crate::ast::{Document, Field, OperationDefinition, Selection, SelectionSet, Value};
+use crate::optimizer::QueryOptimizer;
+use crate::schema::{PropertyType, RdfVocabulary};
 use anyhow::{anyhow, Result};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::sync::Arc;
 
@@ -554,8 +554,8 @@ impl RdfGraphQLMapper {
         &self,
         field: &Field,
         builder: &mut SparqlQueryBuilder,
-        context: &QueryContext,
-        vocabulary: &RdfVocabulary,
+        _context: &QueryContext,
+        _vocabulary: &RdfVocabulary,
     ) -> Result<()> {
         // Default property field translation
         let var_name = format!("?{}", field.name);
@@ -661,7 +661,7 @@ impl RdfGraphQLMapper {
                             where_patterns.push("?s ?p ?o".to_string());
 
                             // Handle limit argument
-                            if let Some(limit) = self.extract_limit_from_field(field) {
+                            if let Some(_limit) = self.extract_limit_from_field(field) {
                                 // Limit will be added later
                             }
                         }

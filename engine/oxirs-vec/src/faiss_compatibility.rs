@@ -8,7 +8,7 @@ use crate::{
     hnsw::{HnswConfig, HnswIndex},
     ivf::{IvfConfig, IvfIndex},
     similarity::SimilarityMetric,
-    Vector, VectorIndex, VectorPrecision,
+    Vector, VectorIndex,
 };
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -322,7 +322,7 @@ impl FaissCompatibility {
         Ok(Box::new(index))
     }
 
-    /// Import IVF index from FAISS format  
+    /// Import IVF index from FAISS format
     fn import_ivf_index(
         &self,
         input_path: &Path,
@@ -371,7 +371,7 @@ impl FaissCompatibility {
         for i in 0..metadata.num_vectors {
             let vector = self.read_vector(&mut reader, metadata.dimension)?;
             vectors.push(vector);
-            uris.push(format!("faiss_vector_{}", i));
+            uris.push(format!("faiss_vector_{i}"));
         }
 
         // Create a simple flat index implementation
@@ -816,12 +816,10 @@ pub mod utils {
         memory_constraint: Option<usize>,
         accuracy_requirement: f32,
     ) -> FaissIndexType {
-        if num_vectors < 1000 {
-            FaissIndexType::IndexFlatL2
-        } else if accuracy_requirement > 0.99 {
+        if num_vectors < 1000 || accuracy_requirement > 0.99 {
             FaissIndexType::IndexFlatL2
         } else if dimension > 1000
-            || memory_constraint.map_or(false, |mem| mem < 1024 * 1024 * 1024)
+            || memory_constraint.is_some_and(|mem| mem < 1024 * 1024 * 1024)
         {
             FaissIndexType::IndexIVFPQ
         } else if num_vectors > 100000 {
@@ -853,12 +851,11 @@ pub mod utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
 
     #[test]
     fn test_faiss_compatibility_creation() {
         let faiss_compat = FaissCompatibility::new();
-        assert!(faiss_compat.supported_formats.len() > 0);
+        assert!(!faiss_compat.supported_formats.is_empty());
     }
 
     #[test]

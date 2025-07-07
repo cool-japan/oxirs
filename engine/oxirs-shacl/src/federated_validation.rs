@@ -4,16 +4,12 @@
 //! allowing validation across multiple distributed datasets and remote shape resolution.
 
 use crate::report::ValidationReport;
-use crate::validation::engine::ValidationEngine;
-use crate::validation::ValidationViolation;
-use crate::{Shape, ShapeType};
-use anyhow::{Context, Error as AnyhowError, Result};
+use crate::Shape;
+use anyhow::{Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-#[cfg(feature = "async")]
-use tokio::time::timeout;
 use url::Url;
 
 /// Configuration for federated validation
@@ -544,7 +540,7 @@ impl FederatedValidationEngine {
         let start_time = Instant::now();
 
         // Resolve remote shapes if needed
-        let shapes = self.resolve_remote_shapes(&request.remote_shapes).await?;
+        let _shapes = self.resolve_remote_shapes(&request.remote_shapes).await?;
 
         // Select optimal endpoints for validation
         let selected_endpoints = self.select_endpoints(&request).await?;
@@ -618,7 +614,7 @@ impl FederatedValidationEngine {
     }
 
     /// Fetch shape from remote endpoint
-    async fn fetch_remote_shape(&self, url: &Url) -> Result<Shape> {
+    async fn fetch_remote_shape(&self, _url: &Url) -> Result<Shape> {
         // TODO: Implement HTTP client to fetch shape from remote endpoint
         // This is a placeholder implementation
         Err(AnyhowError::msg(
@@ -702,8 +698,8 @@ impl FederatedValidationEngine {
     /// Validate with coordination across multiple endpoints
     async fn validate_with_coordination(
         &self,
-        request: &FederatedValidationRequest,
-        endpoints: &[Url],
+        _request: &FederatedValidationRequest,
+        _endpoints: &[Url],
     ) -> Result<HashMap<Url, ValidationReport>> {
         // TODO: Implement coordinated validation
         Err(AnyhowError::msg(
@@ -729,7 +725,7 @@ impl FederatedValidationEngine {
                         return Err(e);
                     }
                     // Log error and continue with other endpoints
-                    eprintln!("Validation failed at endpoint {}: {}", endpoint, e);
+                    eprintln!("Validation failed at endpoint {endpoint}: {e}");
                 }
             }
         }
@@ -744,8 +740,8 @@ impl FederatedValidationEngine {
     /// Validate at a specific endpoint
     async fn validate_at_endpoint(
         &self,
-        request: &FederatedValidationRequest,
-        endpoint: &Url,
+        _request: &FederatedValidationRequest,
+        _endpoint: &Url,
     ) -> Result<ValidationReport> {
         // TODO: Implement HTTP client to send validation request to endpoint
         // This is a placeholder implementation
@@ -884,7 +880,7 @@ impl HealthMonitor {
     }
 
     /// Perform health check for an endpoint
-    async fn check_endpoint_health(&mut self, endpoint: &Url) -> Result<EndpointHealth> {
+    async fn check_endpoint_health(&mut self, _endpoint: &Url) -> Result<EndpointHealth> {
         // TODO: Implement actual health check HTTP request
         Ok(EndpointHealth::default())
     }

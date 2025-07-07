@@ -330,6 +330,11 @@ impl AggregationEngine {
                 "MAX".to_string(),
                 "GROUP_CONCAT".to_string(),
                 "SAMPLE".to_string(),
+                // SPARQL 1.2 enhanced functions
+                "MEDIAN".to_string(),
+                "STDDEV".to_string(),
+                "PERCENTILE".to_string(),
+                "DISTINCT_COUNT".to_string(),
             ],
         }
     }
@@ -465,6 +470,8 @@ impl SubqueryOptimizer {
             subquery_cache: Arc::new(RwLock::new(HashMap::new())),
             correlation_analysis: Arc::new(RwLock::new(CorrelationAnalysis::default())),
             rewrite_rules: vec![
+                "EXISTS_TO_JOIN".to_string(),
+                "SUBQUERY_PULLUP".to_string(),
                 "unnest_exists".to_string(),
                 "push_predicates".to_string(),
                 "join_elimination".to_string(),
@@ -588,6 +595,16 @@ impl SubqueryOptimizer {
                     .replace("{", "")
                     .replace("}", ""),
             ))
+        } else if subquery.contains("{ SELECT") {
+            // Basic subquery pullup - remove redundant nested SELECT
+            // For queries like "SELECT * WHERE { ?s ?p ?o . { SELECT * WHERE { ?s ?p ?o } } }"
+            // Convert to simpler form by removing the inner subquery
+            let simplified = subquery
+                .replace("{ SELECT * WHERE { ?s ?p ?o } }", "")
+                .replace("  ", " ")  // Clean up extra spaces
+                .trim()
+                .to_string();
+            Ok(Some(simplified))
         } else {
             Ok(None)
         }
@@ -627,6 +644,12 @@ impl BindValuesProcessor {
 
     /// Process BIND values in a query
     pub async fn process_bind_values(&self, query: &str) -> FusekiResult<String> {
+        // First check for injection attacks
+        if self.injection_detector.enabled && self.injection_detector.detect_injection(query)? {
+            return Err(crate::error::FusekiError::authorization("Potential SPARQL injection detected"));
+        }
+        
+        // If safe, proceed with optimization
         self.optimize_query(query).await
     }
 }

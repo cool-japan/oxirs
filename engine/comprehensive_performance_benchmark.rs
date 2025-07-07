@@ -23,7 +23,7 @@ pub struct ComprehensiveBenchmarkConfig {
     pub max_duration_secs: u64,
     /// Enable memory profiling
     pub profile_memory: bool,
-    /// Enable CPU profiling  
+    /// Enable CPU profiling
     pub profile_cpu: bool,
     /// Enable I/O profiling
     pub profile_io: bool,
@@ -225,11 +225,11 @@ impl PerformanceMonitor {
 
     pub fn sample_metrics(&mut self) {
         let current_time = Instant::now();
-        
+
         if let Some(memory_mb) = self.get_memory_usage_mb() {
             self.memory_samples.push((current_time, memory_mb));
         }
-        
+
         if let Some(cpu_percent) = self.get_cpu_usage_percent() {
             self.cpu_samples.push((current_time, cpu_percent));
         }
@@ -238,7 +238,7 @@ impl PerformanceMonitor {
     pub fn get_execution_stats(&self) -> ExecutionTimeStats {
         let total_duration = self.start_time.elapsed();
         let total_ms = total_duration.as_millis() as f64;
-        
+
         ExecutionTimeStats {
             mean_ms: total_ms,
             median_ms: total_ms,
@@ -651,7 +651,7 @@ impl ComprehensiveBenchmarkSuite {
     /// Run all benchmarks
     pub fn run_all_benchmarks(&mut self) -> Result<Vec<BenchmarkComparison>> {
         println!("Starting comprehensive benchmark suite...");
-        
+
         // Ensure output directory exists
         fs::create_dir_all(&self.config.output_dir)
             .context("Failed to create output directory")?;
@@ -666,7 +666,7 @@ impl ComprehensiveBenchmarkSuite {
 
         for test in &self.tests {
             println!("Running benchmark: {} - {}", test.id, test.name);
-            
+
             let comparison = self.run_single_benchmark(test)?;
             comparisons.push(comparison.clone());
             self.results.push(comparison);
@@ -689,7 +689,7 @@ impl ComprehensiveBenchmarkSuite {
         let oxirs_results = self.run_oxirs_benchmark(test)
             .map_err(|e| anyhow!("OxiRS benchmark failed: {}", e))?;
 
-        // Run Jena benchmark  
+        // Run Jena benchmark
         let jena_results = self.run_jena_benchmark(test)
             .map_err(|e| anyhow!("Jena benchmark failed: {}", e))?;
 
@@ -930,7 +930,7 @@ impl ComprehensiveBenchmarkSuite {
     /// Verify Jena installation
     fn verify_jena_installation(&self) -> Result<()> {
         let jena_query_path = self.config.jena_path.join("bin").join("sparql");
-        
+
         if !jena_query_path.exists() {
             return Err(anyhow!(
                 "Jena installation not found at {:?}. Please check jena_path in config.",
@@ -968,21 +968,21 @@ impl ComprehensiveBenchmarkSuite {
         // Generate LUBM-style academic data
         self.generate_lubm_dataset(1000, "lubm_1000.ttl")?;
         self.generate_lubm_dataset(10000, "lubm_10000.ttl")?;
-        
+
         // Generate other synthetic datasets
         self.generate_foaf_network("foaf_network.ttl", 500)?;
         self.generate_statistics_data("statistics_data.ttl", 200)?;
-        
+
         // Generate validation datasets
         self.generate_validation_data("validation_data.ttl", "basic_shapes.ttl")?;
-        
+
         Ok(())
     }
 
     /// Generate LUBM-style university benchmark data
     fn generate_lubm_dataset(&self, size: usize, filename: &str) -> Result<()> {
         let file_path = self.config.datasets_path.join(filename);
-        
+
         if file_path.exists() {
             return Ok(()); // Already exists
         }
@@ -1005,7 +1005,7 @@ impl ComprehensiveBenchmarkSuite {
                 "ub:Student{} ub:email \"student{}@university.edu\" .\n",
                 i, i
             ));
-            
+
             if i % 10 == 0 {
                 content.push_str(&format!(
                     "ub:Professor{} rdf:type ub:Professor .\n",
@@ -1020,7 +1020,7 @@ impl ComprehensiveBenchmarkSuite {
 
         fs::write(&file_path, content)
             .context("Failed to write LUBM dataset")?;
-        
+
         println!("Generated {} with {} entities", filename, size);
         Ok(())
     }
@@ -1028,7 +1028,7 @@ impl ComprehensiveBenchmarkSuite {
     /// Generate FOAF social network data
     fn generate_foaf_network(&self, filename: &str, size: usize) -> Result<()> {
         let file_path = self.config.datasets_path.join(filename);
-        
+
         if file_path.exists() {
             return Ok(());
         }
@@ -1046,7 +1046,7 @@ impl ComprehensiveBenchmarkSuite {
                 "foaf:Person{} foaf:name \"Person {}\" .\n",
                 i, i
             ));
-            
+
             // Add some friendships
             if i > 0 {
                 content.push_str(&format!(
@@ -1058,14 +1058,14 @@ impl ComprehensiveBenchmarkSuite {
 
         fs::write(&file_path, content)
             .context("Failed to write FOAF dataset")?;
-        
+
         Ok(())
     }
 
     /// Generate statistical data for aggregation queries
     fn generate_statistics_data(&self, filename: &str, size: usize) -> Result<()> {
         let file_path = self.config.datasets_path.join(filename);
-        
+
         if file_path.exists() {
             return Ok(());
         }
@@ -1087,7 +1087,7 @@ impl ComprehensiveBenchmarkSuite {
 
         fs::write(&file_path, content)
             .context("Failed to write statistics dataset")?;
-        
+
         Ok(())
     }
 
@@ -1095,7 +1095,7 @@ impl ComprehensiveBenchmarkSuite {
     fn generate_validation_data(&self, data_filename: &str, shapes_filename: &str) -> Result<()> {
         let data_path = self.config.datasets_path.join(data_filename);
         let shapes_path = self.config.datasets_path.join(shapes_filename);
-        
+
         if data_path.exists() && shapes_path.exists() {
             return Ok(());
         }
@@ -1140,7 +1140,7 @@ ex:PersonShape
 
         fs::write(&shapes_path, shapes_content)
             .context("Failed to write SHACL shapes")?;
-        
+
         Ok(())
     }
 
@@ -1183,7 +1183,7 @@ ex:PersonShape
     /// Jena benchmark implementations using command line tools
     fn run_jena_sparql_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         let sparql_cmd = self.config.jena_path.join("bin").join("sparql");
-        
+
         let data_file = test.dataset_file.as_ref()
             .ok_or_else(|| anyhow!("No dataset file specified"))?;
         let query_file = test.query_file.as_ref()
@@ -1212,7 +1212,7 @@ ex:PersonShape
     fn run_jena_parsing_benchmark(&self, test: &BenchmarkTest) -> Result<()> {
         // Use riot for parsing
         let riot_cmd = self.config.jena_path.join("bin").join("riot");
-        
+
         let data_file = test.dataset_file.as_ref()
             .ok_or_else(|| anyhow!("No dataset file specified"))?;
         let data_path = self.config.datasets_path.join(data_file);
@@ -1346,7 +1346,7 @@ ex:PersonShape
     /// Save intermediate results
     fn save_intermediate_results(&self, test_id: &str) -> Result<()> {
         let results_file = self.config.output_dir.join(format!("{}_results.json", test_id));
-        
+
         if let Some(result) = self.results.iter().find(|r| r.test.id == test_id) {
             let json = serde_json::to_string_pretty(result)
                 .context("Failed to serialize benchmark result")?;
@@ -1363,16 +1363,16 @@ ex:PersonShape
 
         // Generate summary statistics
         let summary = self.generate_summary_statistics()?;
-        
+
         // Generate detailed HTML report
         self.generate_html_report(&summary)?;
-        
+
         // Generate CSV export
         self.generate_csv_export()?;
-        
+
         // Generate JSON export
         self.generate_json_export()?;
-        
+
         // Generate markdown summary
         self.generate_markdown_summary(&summary)?;
 
@@ -1393,7 +1393,7 @@ ex:PersonShape
             } else {
                 jena_wins += 1;
             }
-            
+
             total_speed_ratio += result.comparison_metrics.speed_ratio;
             total_memory_ratio += result.comparison_metrics.memory_ratio;
 
@@ -1405,7 +1405,7 @@ ex:PersonShape
                 avg_memory_ratio: 0.0,
                 test_count: 0,
             });
-            
+
             if result.comparison_metrics.winner == "OxiRS" {
                 entry.oxirs_wins += 1;
             } else {
@@ -1434,17 +1434,17 @@ ex:PersonShape
 
     fn generate_html_report(&self, summary: &BenchmarkSummary) -> Result<()> {
         let report_path = self.config.output_dir.join("benchmark_report.html");
-        
+
         let mut html = String::new();
         html.push_str("<!DOCTYPE html>\n<html>\n<head>\n");
         html.push_str("<title>OxiRS vs Apache Jena Performance Benchmark</title>\n");
         html.push_str("<style>\n");
         html.push_str(include_str!("../oxirs-shacl/src/html_report_style.css"));
         html.push_str("</style>\n</head>\n<body>\n");
-        
+
         html.push_str("<h1>OxiRS vs Apache Jena Performance Benchmark Report</h1>\n");
         html.push_str(&format!("<p>Generated on: {:?}</p>\n", SystemTime::now()));
-        
+
         // Summary section
         html.push_str("<h2>Executive Summary</h2>\n");
         html.push_str("<table class='summary-table'>\n");
@@ -1460,7 +1460,7 @@ ex:PersonShape
         html.push_str("<h2>Detailed Results</h2>\n");
         html.push_str("<table class='results-table'>\n");
         html.push_str("<tr><th>Test</th><th>Category</th><th>Winner</th><th>Speed Ratio</th><th>Memory Ratio</th><th>Performance Score</th></tr>\n");
-        
+
         for result in &self.results {
             html.push_str(&format!(
                 "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{:.2}</td><td>{:.2}</td><td>{:.2}</td></tr>\n",
@@ -1472,22 +1472,22 @@ ex:PersonShape
                 result.comparison_metrics.performance_score
             ));
         }
-        
+
         html.push_str("</table>\n");
         html.push_str("</body>\n</html>");
 
         fs::write(&report_path, html)
             .context("Failed to write HTML report")?;
-        
+
         Ok(())
     }
 
     fn generate_csv_export(&self) -> Result<()> {
         let csv_path = self.config.output_dir.join("benchmark_results.csv");
-        
+
         let mut csv = String::new();
         csv.push_str("test_id,test_name,category,winner,oxirs_time_ms,jena_time_ms,speed_ratio,memory_ratio,performance_score\n");
-        
+
         for result in &self.results {
             csv.push_str(&format!(
                 "{},{},{:?},{},{:.2},{:.2},{:.2},{:.2},{:.2}\n",
@@ -1505,36 +1505,36 @@ ex:PersonShape
 
         fs::write(&csv_path, csv)
             .context("Failed to write CSV export")?;
-        
+
         Ok(())
     }
 
     fn generate_json_export(&self) -> Result<()> {
         let json_path = self.config.output_dir.join("benchmark_results.json");
-        
+
         let json = serde_json::to_string_pretty(&self.results)
             .context("Failed to serialize results to JSON")?;
-        
+
         fs::write(&json_path, json)
             .context("Failed to write JSON export")?;
-        
+
         Ok(())
     }
 
     fn generate_markdown_summary(&self, summary: &BenchmarkSummary) -> Result<()> {
         let md_path = self.config.output_dir.join("BENCHMARK_SUMMARY.md");
-        
+
         let mut md = String::new();
         md.push_str("# OxiRS vs Apache Jena Performance Benchmark Summary\n\n");
         md.push_str(&format!("**Report Generated:** {:?}\n\n", SystemTime::now()));
-        
+
         md.push_str("## Executive Summary\n\n");
         md.push_str(&format!("- **Total Tests:** {}\n", summary.total_tests));
         md.push_str(&format!("- **OxiRS Wins:** {}\n", summary.oxirs_wins));
         md.push_str(&format!("- **Jena Wins:** {}\n", summary.jena_wins));
         md.push_str(&format!("- **Overall Speed Ratio:** {:.2}x\n", summary.overall_speed_ratio));
         md.push_str(&format!("- **Overall Memory Ratio:** {:.2}x\n\n", summary.overall_memory_ratio));
-        
+
         md.push_str("## Category Breakdown\n\n");
         for (category, stats) in &summary.category_stats {
             md.push_str(&format!("### {}\n", category));
@@ -1560,7 +1560,7 @@ ex:PersonShape
 
         fs::write(&md_path, md)
             .context("Failed to write markdown summary")?;
-        
+
         Ok(())
     }
 }
@@ -1605,9 +1605,9 @@ impl BenchmarkRunner {
             max_duration_secs: 60,
             ..ComprehensiveBenchmarkConfig::default()
         };
-        
+
         let mut suite = ComprehensiveBenchmarkSuite::new(config);
-        
+
         // Load only essential tests for quick run
         suite.tests = vec![
             BenchmarkTest {
@@ -1623,7 +1623,7 @@ impl BenchmarkRunner {
                 parameters: HashMap::new(),
             }
         ];
-        
+
         suite.run_all_benchmarks()
     }
 
@@ -1632,12 +1632,12 @@ impl BenchmarkRunner {
         let config = ComprehensiveBenchmarkConfig::default();
         let mut suite = ComprehensiveBenchmarkSuite::new(config);
         suite.load_standard_tests()?;
-        
+
         // Filter tests by category
         suite.tests.retain(|test| match (&test.category, &category) {
             (a, b) => std::mem::discriminant(a) == std::mem::discriminant(b)
         });
-        
+
         suite.run_all_benchmarks()
     }
 }
@@ -1658,7 +1658,7 @@ mod tests {
     fn test_execution_stats_calculation() {
         let config = ComprehensiveBenchmarkConfig::default();
         let suite = ComprehensiveBenchmarkSuite::new(config);
-        
+
         let times = vec![
             Duration::from_millis(10),
             Duration::from_millis(20),
@@ -1666,7 +1666,7 @@ mod tests {
             Duration::from_millis(25),
             Duration::from_millis(12),
         ];
-        
+
         let stats = suite.calculate_execution_stats(&times).unwrap();
         assert!(stats.mean_ms > 0.0);
         assert!(stats.min_ms <= stats.median_ms);
@@ -1677,7 +1677,7 @@ mod tests {
     fn test_comparison_metrics_calculation() {
         let config = ComprehensiveBenchmarkConfig::default();
         let suite = ComprehensiveBenchmarkSuite::new(config);
-        
+
         let oxirs_metrics = PerformanceMetrics {
             execution_time: ExecutionTimeStats {
                 mean_ms: 10.0,
@@ -1720,7 +1720,7 @@ mod tests {
                 correctness_score: Some(1.0),
             },
         };
-        
+
         let jena_metrics = PerformanceMetrics {
             execution_time: ExecutionTimeStats {
                 mean_ms: 20.0,
@@ -1763,9 +1763,9 @@ mod tests {
                 correctness_score: Some(1.0),
             },
         };
-        
+
         let comparison = suite.calculate_comparison_metrics(&oxirs_metrics, &jena_metrics).unwrap();
-        
+
         assert_eq!(comparison.speed_ratio, 2.0); // Jena 20ms / OxiRS 10ms
         assert_eq!(comparison.memory_ratio, 2.0); // Jena 160MB / OxiRS 80MB
         assert_eq!(comparison.throughput_ratio, 2.0); // OxiRS 100 QPS / Jena 50 QPS
@@ -1776,13 +1776,13 @@ mod tests {
     #[test]
     fn test_performance_monitor() {
         let mut monitor = PerformanceMonitor::new(None);
-        
+
         monitor.checkpoint("start");
         std::thread::sleep(Duration::from_millis(10));
         monitor.checkpoint("middle");
         std::thread::sleep(Duration::from_millis(10));
         monitor.checkpoint("end");
-        
+
         let stats = monitor.get_execution_stats();
         assert!(stats.mean_ms > 15.0); // Should be at least 20ms total
     }

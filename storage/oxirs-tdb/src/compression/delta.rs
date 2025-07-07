@@ -25,9 +25,9 @@ impl DeltaEncoder {
         // Store deltas
         for i in 1..values.len() {
             let delta = if values[i] >= values[i - 1] {
-                ((values[i] - values[i - 1]) << 1) // Positive delta
+                (values[i] - values[i - 1]) << 1 // Positive delta
             } else {
-                (((values[i - 1] - values[i]) << 1) | 1) // Negative delta with flag
+                ((values[i - 1] - values[i]) << 1) | 1 // Negative delta with flag
             };
             encoded.extend_from_slice(&delta.to_le_bytes());
         }

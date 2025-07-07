@@ -517,7 +517,7 @@ impl EnhancedConsciousnessCoordinator {
         let mut best_pattern = None;
         let mut best_score = 0.0;
 
-        for (_, pattern) in &self.integration_patterns {
+        for pattern in self.integration_patterns.values() {
             let score = self.calculate_pattern_score(pattern, analysis);
             if score > best_score {
                 best_score = score;
@@ -695,15 +695,16 @@ impl EnhancedConsciousnessCoordinator {
 
     /// Calculate current coherence level
     fn calculate_current_coherence(&self) -> Result<f64, OxirsError> {
-        if let Ok(consciousness) = self.consciousness.read() {
-            let quantum_coherence = consciousness
-                .quantum_consciousness
-                .get_quantum_metrics()
-                .coherence_quality;
-            let integration_coherence = consciousness.integration_level;
-            Ok((quantum_coherence + integration_coherence) / 2.0)
-        } else {
-            Ok(0.5)
+        match self.consciousness.read() {
+            Ok(consciousness) => {
+                let quantum_coherence = consciousness
+                    .quantum_consciousness
+                    .get_quantum_metrics()
+                    .coherence_quality;
+                let integration_coherence = consciousness.integration_level;
+                Ok((quantum_coherence + integration_coherence) / 2.0)
+            }
+            _ => Ok(0.5),
         }
     }
 
@@ -773,6 +774,12 @@ impl SynchronizationMonitor {
 #[derive(Debug)]
 pub struct QuantumCoherenceOptimizer;
 
+impl Default for QuantumCoherenceOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumCoherenceOptimizer {
     pub fn new() -> Self {
         Self
@@ -810,6 +817,12 @@ impl ConsciousnessOptimizer for QuantumCoherenceOptimizer {
 /// Emotional balance optimizer
 #[derive(Debug)]
 pub struct EmotionalBalanceOptimizer;
+
+impl Default for EmotionalBalanceOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl EmotionalBalanceOptimizer {
     pub fn new() -> Self {
@@ -853,6 +866,12 @@ impl ConsciousnessOptimizer for EmotionalBalanceOptimizer {
 #[derive(Debug)]
 pub struct IntegrationDepthOptimizer;
 
+impl Default for IntegrationDepthOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IntegrationDepthOptimizer {
     pub fn new() -> Self {
         Self
@@ -888,6 +907,12 @@ impl ConsciousnessOptimizer for IntegrationDepthOptimizer {
 /// Pattern memory optimizer
 #[derive(Debug)]
 pub struct PatternMemoryOptimizer;
+
+impl Default for PatternMemoryOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl PatternMemoryOptimizer {
     pub fn new() -> Self {
@@ -955,7 +980,7 @@ mod tests {
 
         let analysis = analysis.unwrap();
         assert_eq!(analysis.complexity_score, 0.0);
-        assert!(analysis.recommended_components.len() >= 1);
+        assert!(!analysis.recommended_components.is_empty());
     }
 
     #[test]

@@ -8,9 +8,8 @@ use chrono::{DateTime, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 use crate::event::StreamEvent;
 
@@ -276,7 +275,7 @@ impl QuantumCommSystem {
 
         // Create entangled qubits in Bell state |Φ⁺⟩
         let qubit_a = Qubit {
-            id: format!("{}_A", pair_id),
+            id: format!("{pair_id}_A"),
             state: QuantumState {
                 alpha: Complex64 {
                     real: 1.0 / 2.0_f64.sqrt(),
@@ -290,7 +289,7 @@ impl QuantumCommSystem {
                 purity: 1.0,
                 fidelity: 1.0,
             },
-            entanglement_partner: Some(format!("{}_B", pair_id)),
+            entanglement_partner: Some(format!("{pair_id}_B")),
             coherence_time_remaining_ms: self.config.decoherence_timeout_ms,
             measurement_history: Vec::new(),
             created_at: timestamp,
@@ -298,7 +297,7 @@ impl QuantumCommSystem {
         };
 
         let qubit_b = Qubit {
-            id: format!("{}_B", pair_id),
+            id: format!("{pair_id}_B"),
             state: QuantumState {
                 alpha: Complex64 {
                     real: 1.0 / 2.0_f64.sqrt(),
@@ -312,7 +311,7 @@ impl QuantumCommSystem {
                 purity: 1.0,
                 fidelity: 1.0,
             },
-            entanglement_partner: Some(format!("{}_A", pair_id)),
+            entanglement_partner: Some(format!("{pair_id}_A")),
             coherence_time_remaining_ms: self.config.decoherence_timeout_ms,
             measurement_history: Vec::new(),
             created_at: timestamp,
@@ -441,7 +440,7 @@ impl QuantumCommSystem {
     async fn perform_bell_measurement(
         &self,
         source_qubit_id: &str,
-        entangled_pair_id: &str,
+        _entangled_pair_id: &str,
     ) -> Result<Vec<u8>> {
         // Simplified Bell measurement simulation
         let mut classical_bits = Vec::new();
@@ -454,7 +453,7 @@ impl QuantumCommSystem {
 
         // Simulate measurement outcomes based on quantum state
         let prob_00 = source_qubit.state.alpha.real.powi(2) + source_qubit.state.alpha.imag.powi(2);
-        let random_value = rand::thread_rng().gen::<f64>();
+        let random_value = rand::thread_rng().r#gen::<f64>();
 
         if random_value < prob_00 {
             classical_bits.push(0);
@@ -480,7 +479,7 @@ impl QuantumCommSystem {
         let base_fidelity = 0.95; // Ideal case
         let error_rate = classical_bits.iter().map(|&b| b as f64).sum::<f64>() * 0.02; // Error per bit
 
-        (base_fidelity - error_rate).max(0.0).min(1.0)
+        (base_fidelity - error_rate).clamp(0.0, 1.0)
     }
 
     /// Perform quantum error correction
@@ -526,7 +525,7 @@ impl QuantumCommSystem {
     }
 
     /// Measure error syndrome
-    async fn measure_syndrome(&self, qubit_id: &str) -> Result<SyndromeMeasurement> {
+    async fn measure_syndrome(&self, _qubit_id: &str) -> Result<SyndromeMeasurement> {
         // Simplified syndrome measurement
         let syndrome = SyndromeMeasurement {
             timestamp: Utc::now(),
@@ -588,7 +587,7 @@ impl QuantumCommSystem {
             error_rate: 0.01,
             channel_capacity: 1.0, // 1 qubit per use
             quantum_protocol: QuantumSecurityProtocol::BB84,
-            classical_channel: Some(format!("classical_{}", channel_id)),
+            classical_channel: Some(format!("classical_{channel_id}")),
         };
 
         self.quantum_channels
@@ -629,18 +628,18 @@ impl QuantumCommSystem {
     }
 
     /// BB84 quantum key distribution and encryption
-    async fn bb84_encrypt(&self, data: &[u8], channel: &QuantumChannel) -> Result<Vec<u8>> {
+    async fn bb84_encrypt(&self, data: &[u8], _channel: &QuantumChannel) -> Result<Vec<u8>> {
         // Simplified BB84 implementation
         let mut encrypted = Vec::new();
 
         for &byte in data {
             // Generate random basis and bit
-            let basis = if rand::thread_rng().gen::<bool>() {
+            let _basis = if rand::thread_rng().r#gen::<bool>() {
                 MeasurementBasis::Computational
             } else {
                 MeasurementBasis::Diagonal
             };
-            let key_bit = rand::thread_rng().gen::<u8>() & 1;
+            let key_bit = rand::thread_rng().r#gen::<u8>() & 1;
 
             // XOR encrypt with quantum key
             let encrypted_byte = byte ^ key_bit;

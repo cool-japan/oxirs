@@ -458,10 +458,13 @@ impl ServiceConnectionPool {
         let mut permits = Vec::new();
 
         for _ in 0..target_connections {
-            if let Ok(permit) = self.semaphore.try_acquire() {
-                permits.push(permit);
-            } else {
-                break;
+            match self.semaphore.try_acquire() {
+                Ok(permit) => {
+                    permits.push(permit);
+                }
+                _ => {
+                    break;
+                }
             }
         }
 

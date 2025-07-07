@@ -7,8 +7,8 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
 use regex::{Regex, RegexBuilder};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use tracing::{debug, info, trace, warn};
+use std::collections::HashMap;
+use tracing::{debug, info, warn};
 
 /// SWRL vocabulary constants
 pub mod vocabulary {
@@ -143,21 +143,12 @@ pub struct BuiltinFunction {
 }
 
 /// SWRL execution context
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SwrlContext {
     /// Variable bindings
     pub bindings: HashMap<String, SwrlArgument>,
     /// Execution trace
     pub trace: Vec<String>,
-}
-
-impl Default for SwrlContext {
-    fn default() -> Self {
-        Self {
-            bindings: HashMap::new(),
-            trace: Vec::new(),
-        }
-    }
 }
 
 /// SWRL rule engine
@@ -665,8 +656,7 @@ impl SwrlEngine {
         // Validate namespace
         if !namespace.starts_with("http://") && !namespace.starts_with("https://") {
             return Err(format!(
-                "Invalid namespace '{}': must be a valid IRI",
-                namespace
+                "Invalid namespace '{namespace}': must be a valid IRI"
             ));
         }
 
@@ -674,8 +664,7 @@ impl SwrlEngine {
         if let Some(max) = max_args {
             if min_args > max {
                 return Err(format!(
-                    "Invalid argument constraints: min_args ({}) > max_args ({})",
-                    min_args, max
+                    "Invalid argument constraints: min_args ({min_args}) > max_args ({max})"
                 ));
             }
         }
@@ -1072,7 +1061,7 @@ impl SwrlEngine {
                 let arg_strs: Vec<String> = args
                     .iter()
                     .map(|arg| match arg {
-                        Term::Variable(v) => format!("?{}", v),
+                        Term::Variable(v) => format!("?{v}"),
                         Term::Constant(c) => c.clone(),
                         Term::Literal(l) => l.clone(),
                         Term::Function {
@@ -1503,12 +1492,10 @@ fn builtin_substring(args: &[SwrlArgument]) -> Result<bool> {
             let end = std::cmp::min(start + length, input.len());
             input.chars().skip(start).take(end - start).collect()
         }
+    } else if start > input.len() {
+        String::new()
     } else {
-        if start > input.len() {
-            String::new()
-        } else {
-            input.chars().skip(start).collect()
-        }
+        input.chars().skip(start).collect()
     };
 
     Ok(extracted == result)
@@ -1556,7 +1543,7 @@ fn builtin_asin(args: &[SwrlArgument]) -> Result<bool> {
     let x = extract_numeric_value(&args[0])?;
     let result = extract_numeric_value(&args[1])?;
 
-    if x < -1.0 || x > 1.0 {
+    if !(-1.0..=1.0).contains(&x) {
         return Ok(false);
     }
 
@@ -1571,7 +1558,7 @@ fn builtin_acos(args: &[SwrlArgument]) -> Result<bool> {
     let x = extract_numeric_value(&args[0])?;
     let result = extract_numeric_value(&args[1])?;
 
-    if x < -1.0 || x > 1.0 {
+    if !(-1.0..=1.0).contains(&x) {
         return Ok(false);
     }
 
@@ -1803,7 +1790,7 @@ fn builtin_temporal_meets(args: &[SwrlArgument]) -> Result<bool> {
         ));
     }
 
-    let start1 = extract_numeric_value(&args[0])?;
+    let _start1 = extract_numeric_value(&args[0])?;
     let end1 = extract_numeric_value(&args[1])?;
     let start2 = extract_numeric_value(&args[2])?;
     let _end2 = extract_numeric_value(&args[3])?;
@@ -1944,7 +1931,7 @@ fn builtin_list_append(args: &[SwrlArgument]) -> Result<bool> {
     let result = if list_str.is_empty() {
         item
     } else {
-        format!("{},{}", list_str, item)
+        format!("{list_str},{item}")
     };
     Ok(result == expected)
 }
@@ -2121,10 +2108,13 @@ impl TemporalInterval {
     }
 }
 
+/// Type alias for built-in function implementations
+type BuiltinFunctionImpl = Box<dyn Fn(&[SwrlArgument]) -> Result<bool> + Send + Sync>;
+
 /// Custom built-in registry for user-defined functions
 pub struct CustomBuiltinRegistry {
     /// Registry of custom built-in functions
-    functions: HashMap<String, Box<dyn Fn(&[SwrlArgument]) -> Result<bool> + Send + Sync>>,
+    functions: HashMap<String, BuiltinFunctionImpl>,
     /// Metadata about registered functions
     metadata: HashMap<String, BuiltinMetadata>,
 }

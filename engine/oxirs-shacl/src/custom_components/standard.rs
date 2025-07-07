@@ -20,6 +20,12 @@ pub struct RegexConstraintComponent {
     metadata: ComponentMetadata,
 }
 
+impl Default for RegexConstraintComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RegexConstraintComponent {
     pub fn new() -> Self {
         let component_id = ConstraintComponentId("ex:RegexConstraintComponent".to_string());
@@ -125,6 +131,12 @@ pub struct RangeConstraintComponent {
     metadata: ComponentMetadata,
 }
 
+impl Default for RangeConstraintComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RangeConstraintComponent {
     pub fn new() -> Self {
         let component_id = ConstraintComponentId("ex:RangeConstraintComponent".to_string());
@@ -217,6 +229,12 @@ pub struct UrlValidationComponent {
     metadata: ComponentMetadata,
 }
 
+impl Default for UrlValidationComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UrlValidationComponent {
     pub fn new() -> Self {
         let component_id = ConstraintComponentId("ex:UrlValidationComponent".to_string());
@@ -273,6 +291,12 @@ impl CustomConstraintComponent for UrlValidationComponent {
 pub struct EmailValidationComponent {
     component_id: ConstraintComponentId,
     metadata: ComponentMetadata,
+}
+
+impl Default for EmailValidationComponent {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EmailValidationComponent {
@@ -333,6 +357,12 @@ impl CustomConstraintComponent for EmailValidationComponent {
 pub struct SparqlConstraintComponent {
     component_id: ConstraintComponentId,
     metadata: ComponentMetadata,
+}
+
+impl Default for SparqlConstraintComponent {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SparqlConstraintComponent {
@@ -429,7 +459,7 @@ impl CustomConstraintComponent for SparqlConstraintComponent {
         });
 
         let sparql_query = if let Some(prefixes) = prefixes {
-            format!("{}\n{}", prefixes, query)
+            format!("{prefixes}\n{query}")
         } else {
             query
         };

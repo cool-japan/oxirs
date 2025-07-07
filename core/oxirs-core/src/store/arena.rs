@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 thread_local! {
-    static THREAD_ARENA: RefCell<Option<Bump>> = RefCell::new(None);
+    static THREAD_ARENA: RefCell<Option<Bump>> = const { RefCell::new(None) };
 }
 
 /// Arena-allocated string slice with lifetime tied to the arena
@@ -53,6 +53,12 @@ pub struct ArenaTriple<'arena> {
 pub struct LocalArena {
     bump: RefCell<Bump>,
     allocated_bytes: RefCell<usize>,
+}
+
+impl Default for LocalArena {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LocalArena {
@@ -206,6 +212,12 @@ pub struct GraphArena<'arena> {
     local_arena: LocalArena,
     term_cache: RefCell<HashMap<Term, ArenaTerm<'arena>>>,
     _phantom: PhantomData<&'arena ()>,
+}
+
+impl<'arena> Default for GraphArena<'arena> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<'arena> GraphArena<'arena> {

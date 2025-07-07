@@ -578,7 +578,7 @@ async fn generate_backup_codes(
 
 fn generate_totp_secret() -> String {
     let mut rng = rand::thread_rng();
-    let secret: Vec<u8> = (0..20).map(|_| rng.gen()).collect();
+    let secret: Vec<u8> = (0..20).map(|_| rng.r#gen()).collect();
     base32::encode(Alphabet::Rfc4648 { padding: false }, &secret)
 }
 
@@ -780,7 +780,7 @@ fn generate_email_verification_code() -> String {
 
 fn generate_webauthn_challenge() -> String {
     let mut rng = rand::thread_rng();
-    let challenge: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+    let challenge: Vec<u8> = (0..32).map(|_| rng.r#gen()).collect();
     general_purpose::URL_SAFE_NO_PAD.encode(challenge)
 }
 
@@ -846,7 +846,36 @@ fn is_valid_phone_number(phone: &str) -> bool {
 }
 
 fn is_valid_email(email: &str) -> bool {
-    email.contains('@') && email.contains('.')
+    if email.is_empty() {
+        return false;
+    }
+
+    // Check for basic format: must contain @ and . but not start/end with them
+    if !email.contains('@') || !email.contains('.') {
+        return false;
+    }
+
+    // Must not start or end with @
+    if email.starts_with('@') || email.ends_with('@') {
+        return false;
+    }
+
+    // Must not start or end with .
+    if email.starts_with('.') || email.ends_with('.') {
+        return false;
+    }
+
+    // Split by @ to check local and domain parts
+    let parts: Vec<&str> = email.split('@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+
+    let local = parts[0];
+    let domain = parts[1];
+
+    // Local part must not be empty and domain must contain a dot
+    !local.is_empty() && !domain.is_empty() && domain.contains('.')
 }
 
 fn mask_phone_number(phone: &str) -> String {

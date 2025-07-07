@@ -9,9 +9,36 @@ use std::hash::Hash;
 /// An RDF Triple
 ///
 /// Represents an RDF statement with subject, predicate, and object.
-/// This is the fundamental unit of RDF data.
+/// This is the fundamental unit of RDF data, expressing a single fact
+/// about a resource in the form "subject predicate object".
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_core::model::{Triple, NamedNode, Literal};
+///
+/// // Create a simple triple: <http://example.org/alice> <http://example.org/name> "Alice"
+/// let triple = Triple::new(
+///     NamedNode::new("http://example.org/alice").unwrap(),
+///     NamedNode::new("http://example.org/name").unwrap(),
+///     Literal::new("Alice"),
+/// );
+///
+/// // Access components
+/// println!("Subject: {}", triple.subject());
+/// println!("Predicate: {}", triple.predicate());
+/// println!("Object: {}", triple.object());
+/// ```
+///
+/// # RDF Specification
+///
+/// According to RDF 1.2:
+/// - The **subject** can be a Named Node (IRI), Blank Node, or Variable
+/// - The **predicate** must be a Named Node (IRI) or Variable  
+/// - The **object** can be a Named Node (IRI), Blank Node, Literal, or Variable
 ///
 /// Implements ordering for use in BTree indexes for efficient storage and retrieval.
+/// Triples are ordered lexicographically by subject, then predicate, then object.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Triple {
     subject: Subject,
@@ -20,7 +47,40 @@ pub struct Triple {
 }
 
 impl Triple {
-    /// Creates a new triple
+    /// Creates a new RDF triple with the given subject, predicate, and object
+    ///
+    /// # Arguments
+    ///
+    /// * `subject` - The subject of the triple (Named Node, Blank Node, or Variable)
+    /// * `predicate` - The predicate of the triple (Named Node or Variable)
+    /// * `object` - The object of the triple (Named Node, Blank Node, Literal, or Variable)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Triple, NamedNode, BlankNode, Literal};
+    ///
+    /// // Triple with all Named Nodes
+    /// let triple1 = Triple::new(
+    ///     NamedNode::new("http://example.org/alice").unwrap(),
+    ///     NamedNode::new("http://example.org/knows").unwrap(),
+    ///     NamedNode::new("http://example.org/bob").unwrap(),
+    /// );
+    ///
+    /// // Triple with a literal object
+    /// let triple2 = Triple::new(
+    ///     NamedNode::new("http://example.org/alice").unwrap(),
+    ///     NamedNode::new("http://example.org/name").unwrap(),
+    ///     Literal::new("Alice"),
+    /// );
+    ///
+    /// // Triple with a blank node subject
+    /// let triple3 = Triple::new(
+    ///     BlankNode::new("b1").unwrap(),
+    ///     NamedNode::new("http://example.org/type").unwrap(),
+    ///     NamedNode::new("http://example.org/Person").unwrap(),
+    /// );
+    /// ```
     pub fn new(
         subject: impl Into<Subject>,
         predicate: impl Into<Predicate>,
@@ -179,10 +239,10 @@ impl fmt::Display for Triple {
 impl fmt::Display for Subject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Subject::NamedNode(n) => write!(f, "{}", n),
-            Subject::BlankNode(b) => write!(f, "{}", b),
-            Subject::Variable(v) => write!(f, "{}", v),
-            Subject::QuotedTriple(qt) => write!(f, "{}", qt),
+            Subject::NamedNode(n) => write!(f, "{n}"),
+            Subject::BlankNode(b) => write!(f, "{b}"),
+            Subject::Variable(v) => write!(f, "{v}"),
+            Subject::QuotedTriple(qt) => write!(f, "{qt}"),
         }
     }
 }
@@ -190,8 +250,8 @@ impl fmt::Display for Subject {
 impl fmt::Display for Predicate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Predicate::NamedNode(n) => write!(f, "{}", n),
-            Predicate::Variable(v) => write!(f, "{}", v),
+            Predicate::NamedNode(n) => write!(f, "{n}"),
+            Predicate::Variable(v) => write!(f, "{v}"),
         }
     }
 }
@@ -199,11 +259,11 @@ impl fmt::Display for Predicate {
 impl fmt::Display for Object {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Object::NamedNode(n) => write!(f, "{}", n),
-            Object::BlankNode(b) => write!(f, "{}", b),
-            Object::Literal(l) => write!(f, "{}", l),
-            Object::Variable(v) => write!(f, "{}", v),
-            Object::QuotedTriple(qt) => write!(f, "{}", qt),
+            Object::NamedNode(n) => write!(f, "{n}"),
+            Object::BlankNode(b) => write!(f, "{b}"),
+            Object::Literal(l) => write!(f, "{l}"),
+            Object::Variable(v) => write!(f, "{v}"),
+            Object::QuotedTriple(qt) => write!(f, "{qt}"),
         }
     }
 }
@@ -300,9 +360,9 @@ impl<'a> SubjectRef<'a> {
 impl<'a> fmt::Display for SubjectRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            SubjectRef::NamedNode(n) => write!(f, "{}", n),
-            SubjectRef::BlankNode(b) => write!(f, "{}", b),
-            SubjectRef::Variable(v) => write!(f, "{}", v),
+            SubjectRef::NamedNode(n) => write!(f, "{n}"),
+            SubjectRef::BlankNode(b) => write!(f, "{b}"),
+            SubjectRef::Variable(v) => write!(f, "{v}"),
         }
     }
 }
@@ -327,8 +387,8 @@ impl<'a> PredicateRef<'a> {
 impl<'a> fmt::Display for PredicateRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PredicateRef::NamedNode(n) => write!(f, "{}", n),
-            PredicateRef::Variable(v) => write!(f, "{}", v),
+            PredicateRef::NamedNode(n) => write!(f, "{n}"),
+            PredicateRef::Variable(v) => write!(f, "{v}"),
         }
     }
 }
@@ -357,10 +417,10 @@ impl<'a> ObjectRef<'a> {
 impl<'a> fmt::Display for ObjectRef<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ObjectRef::NamedNode(n) => write!(f, "{}", n),
-            ObjectRef::BlankNode(b) => write!(f, "{}", b),
-            ObjectRef::Literal(l) => write!(f, "{}", l),
-            ObjectRef::Variable(v) => write!(f, "{}", v),
+            ObjectRef::NamedNode(n) => write!(f, "{n}"),
+            ObjectRef::BlankNode(b) => write!(f, "{b}"),
+            ObjectRef::Literal(l) => write!(f, "{l}"),
+            ObjectRef::Variable(v) => write!(f, "{v}"),
         }
     }
 }
@@ -450,7 +510,7 @@ mod tests {
         let object = Literal::new("o");
 
         let triple = Triple::new(subject, predicate, object);
-        let display_str = format!("{}", triple);
+        let display_str = format!("{triple}");
 
         assert!(display_str.contains("http://example.org/s"));
         assert!(display_str.contains("http://example.org/p"));

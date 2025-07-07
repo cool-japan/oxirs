@@ -3,12 +3,10 @@
 //! This module provides comprehensive documentation generation capabilities
 //! for the OxiRS GraphQL system, including API docs, guides, and examples.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::path::Path;
 use tokio::fs;
-use tracing::{info, warn};
+use tracing::info;
 
 /// Documentation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -906,27 +904,27 @@ For questions, issues, and contributions:
     /// Generate API documentation in HTML format
     async fn generate_api_html(&self) -> Result<()> {
         let mut html = String::new();
-        html.push_str(&format!(r#"
+        html.push_str(r#"
 <!DOCTYPE html>
 <html>
 <head>
     <title>OxiRS GraphQL API Reference</title>
     <style>
-        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; }}
-        .api-doc {{ margin-bottom: 40px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }}
-        .module {{ color: #666; font-size: 14px; }}
-        .name {{ font-size: 24px; font-weight: bold; margin: 10px 0; }}
-        .description {{ margin: 15px 0; line-height: 1.6; }}
-        .section {{ margin: 20px 0; }}
-        .section-title {{ font-weight: bold; color: #333; margin-bottom: 10px; }}
-        .parameter {{ margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }}
-        .code {{ background: #f8f8f8; padding: 15px; border-radius: 4px; font-family: monospace; }}
-        .example {{ margin: 15px 0; }}
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; }
+        .api-doc { margin-bottom: 40px; border: 1px solid #ddd; padding: 20px; border-radius: 8px; }
+        .module { color: #666; font-size: 14px; }
+        .name { font-size: 24px; font-weight: bold; margin: 10px 0; }
+        .description { margin: 15px 0; line-height: 1.6; }
+        .section { margin: 20px 0; }
+        .section-title { font-weight: bold; color: #333; margin-bottom: 10px; }
+        .parameter { margin: 10px 0; padding: 10px; background: #f5f5f5; border-radius: 4px; }
+        .code { background: #f8f8f8; padding: 15px; border-radius: 4px; font-family: monospace; }
+        .example { margin: 15px 0; }
     </style>
 </head>
 <body>
     <h1>OxiRS GraphQL API Reference</h1>
-"#));
+"#);
 
         for doc in &self.api_docs {
             html.push_str(&format!(
@@ -1015,7 +1013,7 @@ For questions, issues, and contributions:
                         param.description
                     ));
                 }
-                markdown.push_str("\n");
+                markdown.push('\n');
             }
 
             if !doc.examples.is_empty() {
@@ -1071,9 +1069,9 @@ For questions, issues, and contributions:
                 if !section.tips.is_empty() {
                     markdown.push_str("**Tips:**\n\n");
                     for tip in &section.tips {
-                        markdown.push_str(&format!("- {}\n", tip));
+                        markdown.push_str(&format!("- {tip}\n"));
                     }
-                    markdown.push_str("\n");
+                    markdown.push('\n');
                 }
             }
         }
@@ -1107,7 +1105,7 @@ For questions, issues, and contributions:
             ));
 
             if let Some(output) = &example.expected_output {
-                markdown.push_str(&format!("**Expected Output:**\n```\n{}\n```\n\n", output));
+                markdown.push_str(&format!("**Expected Output:**\n```\n{output}\n```\n\n"));
             }
 
             markdown.push_str("---\n\n");

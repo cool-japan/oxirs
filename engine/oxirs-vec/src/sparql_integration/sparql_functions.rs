@@ -438,15 +438,13 @@ impl SparqlVectorFunctions {
             }
 
             Some(doc)
-        } else if let Some(custom_func) = self.custom_functions.get(name) {
-            Some(format!(
+        } else { 
+            self.custom_functions.get(name).map(|custom_func| format!(
                 "Custom Function: {}\nDescription: {}\nArity: {}",
                 name,
                 custom_func.description(),
                 custom_func.arity()
             ))
-        } else {
-            None
         }
     }
 
@@ -456,7 +454,7 @@ impl SparqlVectorFunctions {
         definitions.push_str("# OxiRS Vector SPARQL Functions\n\n");
 
         for (name, func) in &self.function_registry {
-            definitions.push_str(&format!("## vec:{}\n\n", name));
+            definitions.push_str(&format!("## vec:{name}\n\n"));
             definitions.push_str(&format!("**Description:** {}\n\n", func.description));
 
             if func.arity > 0 {
@@ -512,7 +510,7 @@ impl SparqlVectorFunctions {
                     definitions.push_str("}\n");
                 }
                 _ => {
-                    definitions.push_str(&format!("# Example usage for vec:{}\n", name));
+                    definitions.push_str(&format!("# Example usage for vec:{name}\n"));
                 }
             }
             definitions.push_str("```\n\n");

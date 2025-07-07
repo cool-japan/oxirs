@@ -7,16 +7,15 @@ use oxirs_core::concurrent::{
 use oxirs_core::model::{NamedNode, Object, Predicate, Subject, Triple};
 use oxirs_core::store::IndexedGraph;
 use oxirs_core::OxirsError;
-use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 fn create_test_triple(id: usize) -> Triple {
     Triple::new(
-        Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", id)).unwrap()),
-        Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", id)).unwrap()),
-        Object::NamedNode(NamedNode::new(&format!("http://object/{}", id)).unwrap()),
+        Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
+        Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
+        Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
     )
 }
 
@@ -35,22 +34,20 @@ fn test_parallel_insert_performance() {
         graph.insert(triple);
     }
     let sequential_time = start.elapsed();
-    println!("Sequential insert (1000 triples): {:?}", sequential_time);
+    println!("Sequential insert (1000 triples): {sequential_time:?}");
 
     // Parallel insert
     let start = Instant::now();
     let results = graph.par_insert_batch(dataset[1000..2000].to_vec());
     let parallel_time = start.elapsed();
-    println!("Parallel insert (1000 triples): {:?}", parallel_time);
+    println!("Parallel insert (1000 triples): {parallel_time:?}");
 
     assert_eq!(results.len(), 1000);
     assert!(results.iter().all(|&r| r));
 
     // Parallel should be faster for large datasets
-    println!(
-        "Speedup: {:.2}x",
-        sequential_time.as_secs_f64() / parallel_time.as_secs_f64()
-    );
+    let speedup = sequential_time.as_secs_f64() / parallel_time.as_secs_f64();
+    println!("Speedup: {speedup:.2}x");
 }
 
 #[test]
@@ -141,9 +138,9 @@ fn test_parallel_query_patterns() {
     for i in 0..100 {
         for j in 0..10 {
             let triple = Triple::new(
-                Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", i)).unwrap()),
-                Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", j)).unwrap()),
-                Object::NamedNode(NamedNode::new(&format!("http://object/{}-{}", i, j)).unwrap()),
+                Subject::NamedNode(NamedNode::new(format!("http://subject/{i}")).unwrap()),
+                Predicate::NamedNode(NamedNode::new(format!("http://predicate/{j}")).unwrap()),
+                Object::NamedNode(NamedNode::new(format!("http://object/{i}-{j}")).unwrap()),
             );
             graph.insert(&triple);
         }
@@ -154,7 +151,7 @@ fn test_parallel_query_patterns() {
         .map(|i| {
             (
                 Some(Subject::NamedNode(
-                    NamedNode::new(&format!("http://subject/{}", i)).unwrap(),
+                    NamedNode::new(format!("http://subject/{i}")).unwrap(),
                 )),
                 None,
                 None,
@@ -167,7 +164,7 @@ fn test_parallel_query_patterns() {
     let results = graph.par_query_batch(patterns);
     let query_time = start.elapsed();
 
-    println!("Parallel query (100 patterns): {:?}", query_time);
+    println!("Parallel query (100 patterns): {query_time:?}");
 
     assert_eq!(results.len(), 100);
     for result in &results {
@@ -239,13 +236,11 @@ fn test_work_stealing_balance() {
     let total_work: usize = work_map.values().sum();
     let avg_work = total_work / work_map.len();
 
-    println!("Work distribution across {} threads:", work_map.len());
+    let thread_count = work_map.len();
+    println!("Work distribution across {thread_count} threads:");
     for (thread_id, work) in work_map.iter() {
         let deviation = (*work as f64 - avg_work as f64).abs() / avg_work as f64 * 100.0;
-        println!(
-            "  Thread {:?}: {} items ({:.1}% deviation)",
-            thread_id, work, deviation
-        );
+        println!("  Thread {thread_id:?}: {work} items ({deviation:.1}% deviation)");
     }
 
     // Work should be reasonably balanced (within 50% of average)
@@ -364,7 +359,7 @@ fn test_parallel_fold_aggregation() {
         let triple = Triple::new(
             Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", i)).unwrap()),
             Predicate::NamedNode(NamedNode::new("http://value").unwrap()),
-            Object::NamedNode(NamedNode::new(&format!("http://object/{}", i)).unwrap()),
+            Object::NamedNode(NamedNode::new(format!("http://object/{i}")).unwrap()),
         );
         graph.insert(&triple);
     }

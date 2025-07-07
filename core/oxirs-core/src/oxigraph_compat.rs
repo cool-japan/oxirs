@@ -284,17 +284,16 @@ impl Store {
         });
 
         // Query the inner store
-        let quads = if let Ok(store) = self.inner.read() {
-            store
+        let quads = match self.inner.read() {
+            Ok(store) => store
                 .query_quads(
                     subject.as_ref(),
                     predicate.as_ref(),
                     object.as_ref(),
                     graph_name.as_ref(),
                 )
-                .unwrap_or_default()
-        } else {
-            Vec::new()
+                .unwrap_or_default(),
+            _ => Vec::new(),
         };
 
         QuadIter { quads, index: 0 }
@@ -592,6 +591,7 @@ impl Iterator for GraphNameIter {
 
 /// Oxigraph-compatible query results
 pub struct QueryResults {
+    #[allow(dead_code)]
     inner: OxirsQueryResults,
 }
 
@@ -627,11 +627,14 @@ pub struct Transaction {
 }
 
 enum TransactionOp {
+    #[allow(dead_code)]
     Insert(Quad),
+    #[allow(dead_code)]
     Remove(Quad),
 }
 
 impl Transaction {
+    #[allow(dead_code)]
     fn new() -> Self {
         Transaction {
             operations: Vec::new(),

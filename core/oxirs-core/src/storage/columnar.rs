@@ -349,10 +349,10 @@ impl ColumnarStorage {
 
                 // Reconstruct triple
                 let subject_uri = dict.get_uri(subject_id).ok_or_else(|| {
-                    OxirsError::Query(format!("Unknown subject ID: {}", subject_id))
+                    OxirsError::Query(format!("Unknown subject ID: {subject_id}"))
                 })?;
                 let predicate_uri = dict.get_uri(predicate_id).ok_or_else(|| {
-                    OxirsError::Query(format!("Unknown predicate ID: {}", predicate_id))
+                    OxirsError::Query(format!("Unknown predicate ID: {predicate_id}"))
                 })?;
 
                 // Construct subject
@@ -558,7 +558,7 @@ impl ColumnarStorage {
             PartitionStrategy::ByTimeRange { bucket_hours } => {
                 let now = chrono::Utc::now();
                 let bucket = now.timestamp() / (*bucket_hours as i64 * 3600);
-                format!("time_bucket_{}", bucket)
+                format!("time_bucket_{bucket}")
             }
             PartitionStrategy::Custom(name) => name.clone(),
         }
@@ -614,11 +614,11 @@ impl ColumnarStorage {
         if !triple_tables.is_empty() {
             let union_query = triple_tables
                 .iter()
-                .map(|t| format!("SELECT * FROM {}", t))
+                .map(|t| format!("SELECT * FROM {t}"))
                 .collect::<Vec<_>>()
                 .join(" UNION ALL ");
 
-            let create_view_sql = format!("CREATE OR REPLACE VIEW triples AS {}", union_query);
+            let create_view_sql = format!("CREATE OR REPLACE VIEW triples AS {union_query}");
             ctx.sql(&create_view_sql).await?;
         }
 
@@ -779,9 +779,9 @@ mod tests {
         let predicates = ["p1", "p1", "p2", "p1", "p3"];
         for (i, pred) in predicates.iter().enumerate() {
             let triple = Triple::new(
-                NamedNode::new(format!("http://example.org/s{}", i)).unwrap(),
-                NamedNode::new(format!("http://example.org/{}", pred)).unwrap(),
-                crate::model::Object::Literal(Literal::new(format!("value{}", i))),
+                NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
+                NamedNode::new(format!("http://example.org/{pred}")).unwrap(),
+                crate::model::Object::Literal(Literal::new(format!("value{i}"))),
             );
             storage.store_triple(&triple).await.unwrap();
         }

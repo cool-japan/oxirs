@@ -378,11 +378,11 @@ impl IntegrationDemo {
     fn create_large_event_batch(&self, size: usize) -> Vec<StreamEvent> {
         (0..size).map(|i| {
             StreamEvent::TripleAdded {
-                subject: format!("<http://example.org/bench/{}>", i),
+                subject: format!("<http://example.org/bench/{i}>"),
                 predicate: "<http://xmlns.com/foaf/0.1/name>".to_string(),
                 object: format!("\"Benchmark Triple {}\"", i),
                 graph: None,
-                metadata: self.create_event_metadata(&format!("bench_{}", i)),
+                metadata: self.create_event_metadata(&format!("bench_{i}")),
             }
         }).collect()
     }
@@ -406,7 +406,7 @@ impl IntegrationDemo {
     async fn create_sparql_service(&self, id: &str, endpoint: &str) -> Result<FederatedService> {
         Ok(FederatedService {
             id: id.to_string(),
-            name: format!("{} SPARQL Endpoint", id),
+            name: format!("{id} SPARQL Endpoint"),
             service_type: ServiceType::Sparql,
             endpoint: endpoint.to_string(),
             capabilities: vec![
@@ -428,7 +428,7 @@ impl IntegrationDemo {
     async fn create_local_service(&self, id: &str, endpoint: &str) -> Result<FederatedService> {
         Ok(FederatedService {
             id: id.to_string(),
-            name: format!("{} Local Endpoint", id),
+            name: format!("{id} Local Endpoint"),
             service_type: ServiceType::Sparql,
             endpoint: endpoint.to_string(),
             capabilities: vec![
@@ -451,7 +451,7 @@ impl IntegrationDemo {
     async fn create_graphql_service(&self, id: &str, endpoint: &str) -> Result<FederatedService> {
         Ok(FederatedService {
             id: id.to_string(),
-            name: format!("{} GraphQL API", id),
+            name: format!("{id} GraphQL API"),
             service_type: ServiceType::GraphQL,
             endpoint: endpoint.to_string(),
             capabilities: vec![

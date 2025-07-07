@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// Cache configuration
 #[derive(Debug, Clone)]
@@ -158,15 +158,15 @@ impl QueryContext {
         ];
 
         for service_id in &self.service_ids {
-            tags.push(format!("service:{}", service_id));
+            tags.push(format!("service:{service_id}"));
         }
 
         for field in &self.requested_fields {
-            tags.push(format!("field:{}", field));
+            tags.push(format!("field:{field}"));
         }
 
         if let Some(user_id) = &self.user_id {
-            tags.push(format!("user:{}", user_id));
+            tags.push(format!("user:{user_id}"));
         }
 
         tags
@@ -306,7 +306,7 @@ impl RedisDistributedCache {
         F: FnOnce(&mut CacheStats),
     {
         let mut stats = self.stats.write().await;
-        update_fn(&mut *stats);
+        update_fn(&mut stats);
     }
 }
 
@@ -455,7 +455,7 @@ impl DistributedCache for RedisDistributedCache {
 
         cmd("DEL")
             .arg(key)
-            .query_async(&mut connection)
+            .query_async::<()>(&mut connection)
             .await
             .map_err(|e| anyhow!("Redis DEL failed: {}", e))?;
 
@@ -503,7 +503,7 @@ impl DistributedCache for RedisDistributedCache {
 
         for tag in tags {
             // Create a pattern to match keys with this tag
-            let pattern = format!("*{}*", tag);
+            let pattern = format!("*{tag}*");
 
             let clients = self.redis_pool.read().await;
             for client in clients.iter() {
@@ -557,7 +557,7 @@ impl DistributedCache for RedisDistributedCache {
         let clients = self.redis_pool.read().await;
         for client in clients.iter() {
             let mut connection = client.get_multiplexed_async_connection().await?;
-            cmd("FLUSHDB").query_async(&mut connection).await?;
+            cmd("FLUSHDB").query_async::<()>(&mut connection).await?;
         }
 
         // Reset stats
@@ -579,6 +579,12 @@ pub trait CompressionStrategy: Send + Sync {
 
 /// Gzip compression strategy
 pub struct GzipCompressionStrategy;
+
+impl Default for GzipCompressionStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GzipCompressionStrategy {
     pub fn new() -> Self {
@@ -617,6 +623,12 @@ pub trait EncryptionStrategy: Send + Sync {
 
 /// AES encryption strategy (stub implementation)
 pub struct AesEncryptionStrategy;
+
+impl Default for AesEncryptionStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl AesEncryptionStrategy {
     pub fn new() -> Self {
@@ -694,7 +706,7 @@ impl GraphQLQueryCache {
     pub async fn invalidate_for_services(&self, service_ids: &[String]) -> Result<u64> {
         let tags: Vec<String> = service_ids
             .iter()
-            .map(|id| format!("service:{}", id))
+            .map(|id| format!("service:{id}"))
             .collect();
         self.cache.invalidate_by_tags(&tags).await
     }

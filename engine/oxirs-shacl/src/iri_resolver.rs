@@ -133,7 +133,7 @@ impl IriResolver {
             let local_name = &prefixed_name[colon_pos + 1..];
 
             if let Some(namespace) = self.get_namespace(prefix) {
-                Ok(format!("{}{}", namespace, local_name))
+                Ok(format!("{namespace}{local_name}"))
             } else {
                 Err(IriResolutionError::UnknownPrefix(prefix.to_string()))
             }
@@ -143,8 +143,7 @@ impl IriResolver {
                 self.resolve_relative_iri(prefixed_name, base)
             } else {
                 Err(IriResolutionError::InvalidIri(format!(
-                    "No prefix found and no base IRI set: {}",
-                    prefixed_name
+                    "No prefix found and no base IRI set: {prefixed_name}"
                 )))
             }
         }
@@ -181,8 +180,7 @@ impl IriResolver {
             self.resolve_relative_iri(iri, base)
         } else {
             Err(IriResolutionError::InvalidRelativeIri(format!(
-                "No base IRI available for relative IRI: {}",
-                iri
+                "No base IRI available for relative IRI: {iri}"
             )))
         }
     }
@@ -195,7 +193,7 @@ impl IriResolver {
                 let iri_str = named_node.as_str();
                 let resolved_iri = self.resolve_iri(iri_str)?;
                 Ok(Some(NamedNode::new(resolved_iri).map_err(|e| {
-                    IriResolutionError::InvalidIri(format!("Failed to create named node: {}", e))
+                    IriResolutionError::InvalidIri(format!("Failed to create named node: {e}"))
                 })?))
             }
             _ => Ok(None),
@@ -237,7 +235,7 @@ impl IriResolver {
                 let local_name = &iri[namespace.len()..];
                 // Check if local name is valid (no spaces, special characters)
                 if self.is_valid_local_name(local_name) {
-                    return format!("{}:{}", prefix, local_name);
+                    return format!("{prefix}:{local_name}");
                 }
             }
         }
@@ -263,10 +261,8 @@ impl IriResolver {
         }
 
         // Check for percent-encoded sequences
-        if local_name.contains('%') {
-            if !self.is_valid_percent_encoding(local_name) {
-                return false;
-            }
+        if local_name.contains('%') && !self.is_valid_percent_encoding(local_name) {
+            return false;
         }
 
         true
@@ -305,7 +301,7 @@ impl IriResolver {
     pub fn create_named_node(&self, iri: &str) -> Result<NamedNode, IriResolutionError> {
         let resolved_iri = self.resolve_iri(iri)?;
         NamedNode::new(resolved_iri).map_err(|e| {
-            IriResolutionError::InvalidIri(format!("Failed to create named node: {}", e))
+            IriResolutionError::InvalidIri(format!("Failed to create named node: {e}"))
         })
     }
 
@@ -393,9 +389,9 @@ impl IriResolver {
         // Reconstruct path
         let result = normalized.join("/");
         if path.starts_with('/') && !result.starts_with('/') {
-            format!("/{}", result)
+            format!("/{result}")
         } else if path.ends_with('/') && !result.ends_with('/') && !result.is_empty() {
-            format!("{}/", result)
+            format!("{result}/")
         } else {
             result
         }
@@ -412,8 +408,7 @@ impl IriResolver {
         // Check for valid XML NCName
         if !self.is_valid_ncname(prefix) {
             return Err(IriResolutionError::InvalidIri(format!(
-                "Invalid prefix '{}': must be a valid XML NCName",
-                prefix
+                "Invalid prefix '{prefix}': must be a valid XML NCName"
             )));
         }
 
@@ -513,15 +508,14 @@ impl IriResolver {
         for (prefix, namespace) in mappings {
             // Validate prefix
             if let Err(e) = self.validate_prefix(prefix) {
-                warnings.push(format!("Skipping invalid prefix '{}': {}", prefix, e));
+                warnings.push(format!("Skipping invalid prefix '{prefix}': {e}"));
                 continue;
             }
 
             // Validate namespace
             if let Err(e) = Url::parse(namespace) {
                 warnings.push(format!(
-                    "Skipping invalid namespace '{}' for prefix '{}': {}",
-                    namespace, prefix, e
+                    "Skipping invalid namespace '{namespace}' for prefix '{prefix}': {e}"
                 ));
                 continue;
             }
@@ -530,8 +524,7 @@ impl IriResolver {
             if let Some(existing_ns) = self.default_namespaces.get(prefix) {
                 if existing_ns != namespace {
                     warnings.push(format!(
-                        "Overriding default namespace for prefix '{}': '{}' -> '{}'",
-                        prefix, existing_ns, namespace
+                        "Overriding default namespace for prefix '{prefix}': '{existing_ns}' -> '{namespace}'"
                     ));
                 }
             }

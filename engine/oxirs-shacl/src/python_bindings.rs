@@ -1,5 +1,5 @@
 //! PyO3 Python Bindings for OxiRS SHACL Validation Engine
-//! 
+//!
 //! This module provides comprehensive Python bindings for the OxiRS SHACL validation engine,
 //! enabling seamless integration with Python data validation pipelines and ML workflows.
 
@@ -49,19 +49,19 @@ impl PyShaclValidator {
     #[pyo3(signature = (config = None, **kwargs))]
     fn new(config: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<Self> {
         let mut validation_config = ValidationConfig::default();
-        
+
         // Parse configuration from Python dict
         if let Some(config_dict) = config {
             if let Some(timeout) = config_dict.get_item("timeout")? {
                 let timeout_ms: u64 = timeout.extract()?;
                 validation_config.timeout = Some(Duration::from_millis(timeout_ms));
             }
-            
+
             if let Some(parallel) = config_dict.get_item("enable_parallel")? {
                 let enable: bool = parallel.extract()?;
                 validation_config.enable_parallel = enable;
             }
-            
+
             if let Some(max_violations) = config_dict.get_item("max_violations")? {
                 let max: usize = max.extract()?;
                 validation_config.max_violations = Some(max);
@@ -93,7 +93,7 @@ impl PyShaclValidator {
     #[pyo3(signature = (shapes_graph, format = "turtle", **kwargs))]
     fn load_shapes(&self, shapes_graph: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
         let mut engine = self.engine.write().unwrap();
-        
+
         // In a real implementation, we'd parse the shapes graph
         engine.load_shapes_from_graph(shapes_graph)
             .map_err(|e| PyErr::new::<ShapeParsingError, _>(e.to_string()))?;
@@ -105,7 +105,7 @@ impl PyShaclValidator {
     #[pyo3(signature = (file_path, format = "turtle", **kwargs))]
     fn load_shapes_from_file(&self, file_path: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
         let mut engine = self.engine.write().unwrap();
-        
+
         engine.load_shapes_from_file(file_path)
             .map_err(|e| PyErr::new::<ShapeParsingError, _>(e.to_string()))?;
 
@@ -116,7 +116,7 @@ impl PyShaclValidator {
     #[pyo3(signature = (data_graph, format = "turtle", **kwargs))]
     fn validate(&self, data_graph: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<PyValidationReport> {
         let start_time = Instant::now();
-        
+
         let engine = self.engine.read().unwrap();
         let result = engine.validate_graph(data_graph)
             .map_err(|e| PyErr::new::<ValidationError, _>(e.to_string()))?;
@@ -140,7 +140,7 @@ impl PyShaclValidator {
     #[pyo3(signature = (data_file, format = "turtle", **kwargs))]
     fn validate_file(&self, data_file: &str, format: &str, kwargs: Option<&PyDict>) -> PyResult<PyValidationReport> {
         let start_time = Instant::now();
-        
+
         let engine = self.engine.read().unwrap();
         let result = engine.validate_file(data_file)
             .map_err(|e| PyErr::new::<ValidationError, _>(e.to_string()))?;
@@ -209,7 +209,7 @@ impl PyShaclValidator {
         let shape_id: String = shape_definition.get_item("id")?
             .ok_or_else(|| PyErr::new::<ShapeParsingError, _>("Shape ID is required"))?
             .extract()?;
-        
+
         let shape_type: String = shape_definition.get_item("type")?
             .unwrap_or_else(|| "NodeShape".into())
             .extract()?;
@@ -245,7 +245,7 @@ pub struct ValidationReport {
     pub nodes_validated: usize,
 }
 
-/// Violation data structure  
+/// Violation data structure
 #[derive(Debug, Clone)]
 pub struct Violation {
     pub focus_node: String,
@@ -685,7 +685,7 @@ fn oxirs_shacl(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    
+
     // Add feature information
     m.add("__features__", vec![
         "shacl_core_compliance",
@@ -724,7 +724,7 @@ mod tests {
         let mut shape_def = HashMap::new();
         shape_def.insert("id", "ex:PersonShape");
         shape_def.insert("type", "NodeShape");
-        
+
         // In a real test, we'd create a PyDict from this HashMap
         // let shape = validator.create_shape(&shape_def, None).unwrap();
         // assert_eq!(shape.id(), "ex:PersonShape");
@@ -741,7 +741,7 @@ mod tests {
             shapes_validated: 1,
             nodes_validated: 5,
         };
-        
+
         let py_report = PyValidationReport { report };
         assert!(py_report.conforms());
         assert_eq!(py_report.violation_count(), 0);

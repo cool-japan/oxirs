@@ -34,7 +34,6 @@
 
 use anyhow::Result;
 use std::collections::HashMap;
-use uuid;
 
 pub mod adaptive_compression;
 pub mod adaptive_intelligent_caching;
@@ -67,6 +66,7 @@ pub mod gpu;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hierarchical_similarity;
+pub mod huggingface;
 pub mod hnsw;
 pub mod index;
 pub mod ivf;
@@ -291,6 +291,9 @@ pub use word2vec::{
 /// Vector identifier type
 pub type VectorId = String;
 
+/// Batch search result type
+pub type BatchSearchResult = Vec<Result<Vec<(String, f32)>>>;
+
 /// Trait for vector store implementations
 pub trait VectorStoreTrait: Send + Sync {
     /// Insert a vector with metadata
@@ -444,7 +447,7 @@ impl Vector {
         let f16_exp = if exp == 0 {
             0
         } else {
-            ((exp - 127 + 15).max(0).min(31)) as u16
+            (exp - 127 + 15).clamp(0, 31) as u16
         };
 
         let f16_mantissa = (mantissa >> 13) as u16;
@@ -962,9 +965,9 @@ impl VectorStore {
             let vector = embedding_manager.get_embedding(&embeddable_content)?;
             self.index.insert(uri, vector)
         } else {
-            return Err(anyhow::anyhow!(
+            Err(anyhow::anyhow!(
                 "Embedding manager required for RDF resource indexing"
-            ));
+            ))
         }
     }
 
@@ -1183,7 +1186,7 @@ impl DocumentBatchProcessor {
         store: &VectorStore,
         queries: &[String],
         limit: usize,
-    ) -> Result<Vec<Result<Vec<(String, f32)>>>> {
+    ) -> Result<BatchSearchResult> {
         let mut results = Vec::new();
 
         for query in queries {
@@ -1384,9 +1387,9 @@ mod tests {
         let manhattan_sim = SimilarityMetric::Manhattan.similarity(&a, &b).unwrap();
 
         // All similarities should be between 0 and 1
-        assert!(cosine_sim >= 0.0 && cosine_sim <= 1.0);
-        assert!(euclidean_sim >= 0.0 && euclidean_sim <= 1.0);
-        assert!(manhattan_sim >= 0.0 && manhattan_sim <= 1.0);
+        assert!((0.0..=1.0).contains(&cosine_sim));
+        assert!((0.0..=1.0).contains(&euclidean_sim));
+        assert!((0.0..=1.0).contains(&manhattan_sim));
     }
 
     #[test]
@@ -1396,7 +1399,7 @@ mod tests {
 
         // Check that quantized values are in the expected range
         for &q in &quantized {
-            assert!(q >= -127 && q <= 127);
+            assert!((-127..=127).contains(&q));
         }
     }
 
@@ -1433,7 +1436,7 @@ mod tests {
 
         // Test threshold search
         let results = index.search_threshold(&v1, 0.5).unwrap();
-        assert!(results.len() >= 1);
+        assert!(!results.is_empty());
     }
 
     #[test]

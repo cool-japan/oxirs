@@ -178,7 +178,7 @@ impl ReinforcementLearner {
         match &self.policy {
             Policy::EpsilonGreedy(epsilon) => {
                 let mut rng = rand::thread_rng();
-                if rng.gen::<f64>() < *epsilon {
+                if rng.r#gen::<f64>() < *epsilon {
                     // Explore: random action
                     available_actions[rng.gen_range(0..available_actions.len())].clone()
                 } else {
@@ -229,7 +229,7 @@ impl ReinforcementLearner {
 
         // Sample action based on probabilities
         let mut cumsum = 0.0;
-        let sample = rng.gen::<f64>();
+        let sample = rng.r#gen::<f64>();
 
         for (i, &prob) in probabilities.iter().enumerate() {
             cumsum += prob;

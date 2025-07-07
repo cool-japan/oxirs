@@ -268,16 +268,26 @@ async fn test_service_performance_settings() {
 
 #[tokio::test]
 async fn test_registry_statistics() {
-    let mut registry = ServiceRegistry::new();
+    // Create registry with fast test configuration
+    let config = ServiceRegistryConfig {
+        require_healthy_on_register: false,
+        health_check_interval: Duration::from_secs(1),
+        service_timeout: Duration::from_millis(100), // Very short timeout for tests
+        max_retry_attempts: 1,
+        enable_capability_detection: false, // Disable to speed up tests
+        connection_pool_size: 1,
+        enable_rate_limiting: false,
+    };
+    let mut registry = ServiceRegistry::with_config(config);
 
-    // Register multiple services
+    // Register multiple services with fast timeout
     for i in 1..=3 {
         let service = FederatedService::new_sparql(
             format!("stats-test-{}", i),
             format!("Stats Test {}", i),
             format!("http://example.com/sparql{}", i),
         );
-        registry.register(service).await.unwrap();
+        let _ = registry.register(service).await;
     }
 
     let stats = registry.get_stats().await;

@@ -144,7 +144,7 @@ impl FieldResolver for RdfResolver {
         }
 
         // Cache successful results
-        if let (Ok(ref value), Some(ref cache)) = (&result, &self.cache) {
+        if let (Ok(value), Some(cache)) = (&result, &self.cache) {
             if let Ok(json_value) = serde_json::to_value(value) {
                 // Create dependencies for cache invalidation
                 let mut dependencies = HashSet::new();
@@ -441,8 +441,8 @@ impl RdfResolver {
                 let mut result_rows = Vec::new();
 
                 // Collect all solutions synchronously
-                for solution in solutions {
-                    let mut row = HashMap::new();
+                for _solution in solutions {
+                    let row = HashMap::new();
 
                     // TODO: Solution doesn't have iter() method
                     // For now, we'll return empty rows until we can properly iterate
@@ -547,7 +547,7 @@ impl QueryResolvers {
         }
     }
 
-    pub fn new_with_mock(store: Arc<crate::MockStore>) -> Self {
+    pub fn new_with_mock(_store: Arc<crate::MockStore>) -> Self {
         // For backward compatibility during transition
         let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));
         Self {
@@ -607,7 +607,7 @@ impl ResolverRegistry {
         );
     }
 
-    pub fn setup_default_resolvers_with_mock(&mut self, store: Arc<crate::MockStore>) {
+    pub fn setup_default_resolvers_with_mock(&mut self, _store: Arc<crate::MockStore>) {
         // For backward compatibility during transition
         let rdf_store = Arc::new(RdfStore::new().expect("Failed to create RDF store"));
         self.setup_default_resolvers(rdf_store);

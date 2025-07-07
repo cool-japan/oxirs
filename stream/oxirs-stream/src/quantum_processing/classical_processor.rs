@@ -15,6 +15,12 @@ pub struct ClassicalProcessor {
     postprocessing_pipelines: Vec<PostprocessingPipeline>,
 }
 
+impl Default for ClassicalProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClassicalProcessor {
     pub fn new() -> Self {
         Self {

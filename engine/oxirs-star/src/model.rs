@@ -5,15 +5,9 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::str::FromStr;
-use std::sync::Arc;
+use std::hash::Hash;
 
-use oxirs_core::model::{
-    BlankNode as CoreBlankNode, Literal as CoreLiteral, NamedNode as CoreNamedNode,
-};
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 
 use crate::{StarError, StarResult};
 
@@ -376,7 +370,7 @@ impl fmt::Display for StarTerm {
             StarTerm::Literal(literal) => {
                 write!(f, "\"{}\"", literal.value)?;
                 if let Some(ref lang) = literal.language {
-                    write!(f, "@{}", lang)?;
+                    write!(f, "@{lang}")?;
                 }
                 if let Some(ref datatype) = literal.datatype {
                     write!(f, "^^<{}>", datatype.iri)?;
@@ -403,7 +397,7 @@ impl fmt::Display for StarQuad {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}", self.subject, self.predicate, self.object)?;
         if let Some(ref graph) = self.graph {
-            write!(f, " {}", graph)?;
+            write!(f, " {graph}")?;
         }
         write!(f, " .")
     }
@@ -451,11 +445,14 @@ pub struct StarGraph {
 impl StarGraph {
     /// Create a new empty graph
     pub fn new() -> Self {
+        let mut statistics = HashMap::new();
+        statistics.insert("triples".to_string(), 0);
+
         Self {
             triples: Vec::new(),
             named_graphs: HashMap::new(),
             quads: Vec::new(),
-            statistics: HashMap::new(),
+            statistics,
         }
     }
 
@@ -496,11 +493,11 @@ impl StarGraph {
 
             self.named_graphs
                 .entry(graph_key.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(triple);
             *self
                 .statistics
-                .entry(format!("graph_{}", graph_key))
+                .entry(format!("graph_{graph_key}"))
                 .or_insert(0) += 1;
         } else {
             // Default graph
@@ -671,7 +668,7 @@ impl StarGraph {
                 }
             });
 
-            self.statistics.remove(&format!("graph_{}", graph_name));
+            self.statistics.remove(&format!("graph_{graph_name}"));
             if let Some(count) = self.statistics.get_mut("quads") {
                 *count = count.saturating_sub(triples.len());
             }
@@ -883,12 +880,12 @@ mod tests {
             StarTerm::literal("25").unwrap(),
         );
 
-        let display_str = format!("{}", triple);
+        let display_str = format!("{triple}");
         assert!(display_str.contains("<http://example.org/alice>"));
         assert!(display_str.contains("\"25\""));
 
         let quoted = StarTerm::quoted_triple(triple.clone());
-        let quoted_str = format!("{}", quoted);
+        let quoted_str = format!("{quoted}");
         assert!(quoted_str.starts_with("<<"));
         assert!(quoted_str.ends_with(">>"));
     }

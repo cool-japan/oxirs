@@ -430,23 +430,299 @@ impl AdvancedSubqueryOptimizer {
     }
 
     fn extract_exists_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
-        // Implementation would parse EXISTS patterns
-        None
+        let mut subqueries = Vec::new();
+        let query_upper = query.to_uppercase();
+        
+        // Find EXISTS patterns
+        let exists_positions: Vec<_> = query_upper.match_indices("EXISTS").collect();
+        for (pos, _) in exists_positions {
+            // Check if this is "NOT EXISTS" or just "EXISTS"
+            let is_not_exists = pos >= 4 && query_upper[..pos].ends_with("NOT ");
+            let subquery_type = if is_not_exists {
+                SubqueryType::NotExists
+            } else {
+                SubqueryType::Exists
+            };
+            
+            // Find the opening brace after EXISTS
+            if let Some(brace_start) = query[pos..].find('{') {
+                let abs_brace_start = pos + brace_start;
+                
+                // Find the matching closing brace
+                if let Some(subquery_content) = self.extract_balanced_braces(&query[abs_brace_start..]) {
+                    subqueries.push(SubqueryInfo {
+                        id: format!("subquery_{}", pos),
+                        query_text: subquery_content.clone(),
+                        subquery_type,
+                        is_correlated: self.detect_correlation(&subquery_content, query),
+                        outer_vars: self.extract_variables(&subquery_content),
+                        estimated_size: 10, // Default size estimate
+                        estimated_selectivity: 0.1, // Default selectivity estimate
+                        estimated_cost: 100.0, // Default cost estimate
+                        filter_count: subquery_content.matches("FILTER").count(),
+                        join_count: subquery_content.matches(" . ").count(),
+                        outer_cardinality: 1000, // Default cardinality estimate
+                        dependencies: vec![], // No dependencies by default
+                    });
+                }
+            }
+        }
+        
+        if subqueries.is_empty() {
+            None
+        } else {
+            Some(subqueries)
+        }
     }
 
     fn extract_scalar_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
-        // Implementation would parse scalar subqueries in SELECT
-        None
+        let mut subqueries = Vec::new();
+        
+        // Look for scalar subqueries in FILTER clauses
+        let query_upper = query.to_uppercase();
+        let mut search_pos = 0;
+        
+        while let Some(filter_pos) = query_upper[search_pos..].find("FILTER(") {
+            let abs_filter_pos = search_pos + filter_pos + 7; // Skip "FILTER("
+            
+            // Look for SELECT within the filter
+            if let Some(select_pos) = query_upper[abs_filter_pos..].find("SELECT") {
+                let abs_select_pos = abs_filter_pos + select_pos;
+                
+                // Find the subquery by looking for balanced parentheses
+                if let Some(subquery_content) = self.extract_parentheses_content(&query[abs_select_pos..]) {
+                    subqueries.push(SubqueryInfo {
+                        id: format!("scalar_subquery_{}", subqueries.len()),
+                        query_text: subquery_content.clone(),
+                        subquery_type: SubqueryType::Scalar,
+                        is_correlated: self.detect_correlation(&subquery_content, query),
+                        outer_vars: self.extract_variables(&subquery_content),
+                        estimated_size: 20, // Default estimate for scalar subqueries
+                        estimated_selectivity: 0.1, // Default selectivity
+                        estimated_cost: 50.0, // Default cost
+                        filter_count: subquery_content.matches("FILTER").count(),
+                        join_count: subquery_content.matches(" . ").count(),
+                        outer_cardinality: 1000, // Default cardinality
+                        dependencies: vec![],
+                    });
+                }
+            }
+            
+            search_pos = abs_filter_pos;
+        }
+        
+        if subqueries.is_empty() {
+            None
+        } else {
+            Some(subqueries)
+        }
     }
 
     fn extract_from_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
-        // Implementation would parse subqueries in FROM clause
-        None
+        let mut subqueries = Vec::new();
+
+        // Look for subqueries in braces { SELECT ... }
+        let query_lower = query.to_lowercase();
+        if let Some(where_start) = query_lower.find("where") {
+            let where_clause = &query[where_start..];
+
+            // Find subquery patterns within braces
+            let mut brace_count = 0;
+            let mut start_pos = None;
+            let chars: Vec<char> = where_clause.chars().collect();
+
+            for (i, &ch) in chars.iter().enumerate() {
+                match ch {
+                    '{' => {
+                        if brace_count == 0 {
+                            start_pos = Some(i + 1);
+                        }
+                        brace_count += 1;
+                    }
+                    '}' => {
+                        brace_count -= 1;
+                        if brace_count == 0 && start_pos.is_some() {
+                            let start = start_pos.unwrap();
+                            let subquery_text = chars[start..i]
+                                .iter()
+                                .collect::<String>()
+                                .trim()
+                                .to_string();
+
+                            // Check if this is actually a SELECT subquery
+                            if subquery_text.to_lowercase().contains("select") {
+                                subqueries.push(SubqueryInfo {
+                                    id: format!("subquery_{}", subqueries.len()),
+                                    query_text: subquery_text.clone(),
+                                    subquery_type: SubqueryType::From,
+                                    is_correlated: false, // Simple check - could be enhanced
+                                    outer_vars: self.extract_variables(&subquery_text),
+                                    estimated_size: 100, // Default estimate
+                                    estimated_selectivity: 0.1, // Default selectivity
+                                    estimated_cost: 1.0,
+                                    filter_count: 0,
+                                    join_count: 1,
+                                    outer_cardinality: 1000,
+                                    dependencies: Vec::new(),
+                                });
+                            }
+                            start_pos = None;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        if subqueries.is_empty() {
+            None
+        } else {
+            Some(subqueries)
+        }
     }
 
     fn extract_in_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
-        // Implementation would parse IN subqueries
-        None
+        let mut subqueries = Vec::new();
+        let query_upper = query.to_uppercase();
+        
+        // Find IN (...SELECT...) patterns
+        let mut search_pos = 0;
+        while let Some(in_pos) = query_upper[search_pos..].find(" IN ") {
+            let abs_in_pos = search_pos + in_pos;
+            
+            // Look for opening parenthesis after IN
+            if let Some(paren_start) = query[abs_in_pos + 4..].find('(') {
+                let abs_paren_start = abs_in_pos + 4 + paren_start;
+                
+                // Check if there's a SELECT inside the parentheses
+                if let Some(subquery_content) = self.extract_parentheses_content(&query[abs_paren_start..]) {
+                    if subquery_content.to_uppercase().contains("SELECT") {
+                        subqueries.push(SubqueryInfo {
+                            id: format!("in_subquery_{}", subqueries.len()),
+                            query_text: subquery_content.clone(),
+                            subquery_type: SubqueryType::In,
+                            is_correlated: self.detect_correlation(&subquery_content, query),
+                            outer_vars: self.extract_variables(&subquery_content),
+                            estimated_size: 50, // Default estimate
+                            estimated_selectivity: 0.2, // Default selectivity
+                            estimated_cost: 75.0, // Default cost
+                            filter_count: subquery_content.matches("FILTER").count(),
+                            join_count: subquery_content.matches(" . ").count(),
+                            outer_cardinality: 1000, // Default cardinality
+                            dependencies: vec![],
+                        });
+                    }
+                }
+            }
+            search_pos = abs_in_pos + 4;
+        }
+        
+        if subqueries.is_empty() {
+            None
+        } else {
+            Some(subqueries)
+        }
+    }
+
+    fn extract_variables(&self, query: &str) -> Vec<String> {
+        let mut variables = Vec::new();
+        let query_chars: Vec<char> = query.chars().collect();
+
+        for i in 0..query_chars.len() {
+            if query_chars[i] == '?' && i + 1 < query_chars.len() {
+                let mut var_name = String::new();
+                let mut j = i + 1;
+
+                while j < query_chars.len()
+                    && (query_chars[j].is_alphanumeric() || query_chars[j] == '_')
+                {
+                    var_name.push(query_chars[j]);
+                    j += 1;
+                }
+
+                if !var_name.is_empty() && !variables.contains(&var_name) {
+                    variables.push(var_name);
+                }
+            }
+        }
+
+        variables
+    }
+
+    /// Extract content between balanced braces
+    fn extract_balanced_braces(&self, text: &str) -> Option<String> {
+        if !text.starts_with('{') {
+            return None;
+        }
+
+        let mut brace_count = 0;
+        let mut end_pos = 0;
+        let chars: Vec<char> = text.chars().collect();
+
+        for (i, &ch) in chars.iter().enumerate() {
+            match ch {
+                '{' => brace_count += 1,
+                '}' => {
+                    brace_count -= 1;
+                    if brace_count == 0 {
+                        end_pos = i + 1;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if end_pos > 0 {
+            Some(text[..end_pos].to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Extract content between balanced parentheses
+    fn extract_parentheses_content(&self, text: &str) -> Option<String> {
+        if !text.starts_with('(') {
+            return None;
+        }
+
+        let mut paren_count = 0;
+        let mut end_pos = 0;
+        let chars: Vec<char> = text.chars().collect();
+
+        for (i, &ch) in chars.iter().enumerate() {
+            match ch {
+                '(' => paren_count += 1,
+                ')' => {
+                    paren_count -= 1;
+                    if paren_count == 0 {
+                        end_pos = i;
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if end_pos > 0 {
+            // Return content inside parentheses (without the parentheses themselves)
+            Some(text[1..end_pos].to_string())
+        } else {
+            None
+        }
+    }
+
+    /// Detect if a subquery is correlated with the outer query
+    fn detect_correlation(&self, subquery: &str, outer_query: &str) -> bool {
+        let subquery_vars = self.extract_variables(subquery);
+        
+        // Extract variables from the outer query (excluding the subquery itself)
+        let outer_query_without_subquery = outer_query.replace(subquery, "");
+        let outer_vars = self.extract_variables(&outer_query_without_subquery);
+
+        // Check if any variables from the subquery are referenced in the outer query
+        // This indicates correlation
+        subquery_vars.iter().any(|var| outer_vars.contains(var))
     }
 
     fn apply_rewrite(
@@ -521,12 +797,31 @@ impl AdvancedSubqueryOptimizer {
     }
 
     fn rewrite_in_to_join(&self, query: &str, subquery: &SubqueryInfo) -> FusekiResult<String> {
-        // Convert IN to JOIN
-        Ok(query.to_string())
+        // Convert IN (SELECT ...) to JOIN
+        let in_pattern = format!(" IN ({})", subquery.query_text);
+        let join_pattern = format!(" . {{ {} }}", subquery.query_text);
+        
+        Ok(query.replace(&in_pattern, &join_pattern))
     }
 
     fn decorrelate_subquery(&self, query: &str, subquery: &SubqueryInfo) -> FusekiResult<String> {
-        // Decorrelate correlated subquery
+        // Simple decorrelation: convert correlated subquery to join
+        if subquery.is_correlated {
+            // For EXISTS subqueries, convert to semi-join
+            if subquery.subquery_type == SubqueryType::Exists {
+                let exists_pattern = format!("EXISTS {{ {} }}", subquery.query_text);
+                let join_pattern = format!("{{ {} }}", subquery.query_text);
+                return Ok(query.replace(&exists_pattern, &join_pattern));
+            }
+            
+            // For scalar subqueries in filters, convert to join with aggregation
+            if subquery.subquery_type == SubqueryType::Scalar {
+                let subquery_pattern = format!("({})", subquery.query_text);
+                let join_pattern = format!("{{ {} }}", subquery.query_text);
+                return Ok(query.replace(&subquery_pattern, &join_pattern));
+            }
+        }
+        
         Ok(query.to_string())
     }
 

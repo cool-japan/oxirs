@@ -92,7 +92,7 @@ impl SparqlVectorService {
         if let Some(ref monitor) = self.performance_monitor {
             let duration = start_time.elapsed();
             monitor.record_query(duration, result.is_ok());
-            monitor.record_operation(&format!("function_{}", function_name), duration);
+            monitor.record_operation(&format!("function_{function_name}"), duration);
         }
 
         result
@@ -313,7 +313,7 @@ pub mod convenience {
         match service.execute_function("similarity", &args)? {
             VectorServiceResult::Number(score) => Ok(score),
             VectorServiceResult::SimilarityList(results) => {
-                Ok(results.get(0).map(|(_, score)| *score).unwrap_or(0.0))
+                Ok(results.first().map(|(_, score)| *score).unwrap_or(0.0))
             }
             _ => Err(anyhow::anyhow!(
                 "Unexpected result type for similarity query"
@@ -365,7 +365,7 @@ mod tests {
 
     #[test]
     fn test_function_registration() {
-        let mut service = convenience::create_basic_service().unwrap();
+        let service = convenience::create_basic_service().unwrap();
 
         assert!(service.is_function_registered("similarity"));
         assert!(service.is_function_registered("search"));

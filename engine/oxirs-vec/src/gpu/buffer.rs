@@ -30,7 +30,7 @@ impl GpuBuffer {
         self.copy_host_to_device(
             data.as_ptr(),
             self.ptr,
-            data.len() * std::mem::size_of::<f32>(),
+            std::mem::size_of_val(data),
         )
     }
 
@@ -41,10 +41,11 @@ impl GpuBuffer {
         self.copy_device_to_host(
             self.ptr,
             data.as_mut_ptr(),
-            data.len() * std::mem::size_of::<f32>(),
+            std::mem::size_of_val(data),
         )
     }
 
+    #[allow(unused_variables)]
     fn allocate_gpu_memory(size: usize, device_id: i32) -> Result<*mut u8> {
         // Simulate GPU memory allocation
         // In a real implementation, this would use CUDA runtime API

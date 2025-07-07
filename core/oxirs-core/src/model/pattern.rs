@@ -192,6 +192,43 @@ impl From<TermPattern> for ObjectPattern {
     }
 }
 
+// TryFrom implementations for converting patterns to concrete terms
+impl TryFrom<&SubjectPattern> for Subject {
+    type Error = ();
+
+    fn try_from(pattern: &SubjectPattern) -> Result<Self, Self::Error> {
+        match pattern {
+            SubjectPattern::NamedNode(n) => Ok(Subject::NamedNode(n.clone())),
+            SubjectPattern::BlankNode(b) => Ok(Subject::BlankNode(b.clone())),
+            SubjectPattern::Variable(_) => Err(()),
+        }
+    }
+}
+
+impl TryFrom<&PredicatePattern> for Predicate {
+    type Error = ();
+
+    fn try_from(pattern: &PredicatePattern) -> Result<Self, Self::Error> {
+        match pattern {
+            PredicatePattern::NamedNode(n) => Ok(Predicate::NamedNode(n.clone())),
+            PredicatePattern::Variable(_) => Err(()),
+        }
+    }
+}
+
+impl TryFrom<&ObjectPattern> for Object {
+    type Error = ();
+
+    fn try_from(pattern: &ObjectPattern) -> Result<Self, Self::Error> {
+        match pattern {
+            ObjectPattern::NamedNode(n) => Ok(Object::NamedNode(n.clone())),
+            ObjectPattern::BlankNode(b) => Ok(Object::BlankNode(b.clone())),
+            ObjectPattern::Literal(l) => Ok(Object::Literal(l.clone())),
+            ObjectPattern::Variable(_) => Err(()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

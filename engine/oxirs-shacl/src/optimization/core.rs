@@ -4,12 +4,12 @@
 //! including result caching, batch validation, and dependency-aware evaluation ordering.
 
 use crate::{
-    constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator},
+    constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
     PropertyPath, Result, ShaclError, ShapeId,
 };
 use oxirs_core::{model::Term, RdfTerm, Store};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -227,7 +227,7 @@ impl ConstraintCache {
             }
             // Add more constraint types as needed
             _ => {
-                format!("{:?}", constraint).hash(&mut hasher);
+                format!("{constraint:?}").hash(&mut hasher);
             }
         }
 
@@ -239,7 +239,7 @@ impl ConstraintCache {
         use std::collections::hash_map::DefaultHasher;
         let mut hasher = DefaultHasher::new();
         for value in values {
-            format!("{:?}", value).hash(&mut hasher);
+            format!("{value:?}").hash(&mut hasher);
         }
         hasher.finish()
     }
@@ -369,9 +369,6 @@ impl BatchConstraintEvaluator {
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         // For parallel evaluation, we need to be careful about thread safety
         // We'll use a thread pool for CPU-bound constraint evaluation
-
-        use std::sync::{Arc, Mutex};
-        use std::thread;
 
         if batch.len() < 4 {
             // For small batches, sequential is faster
@@ -633,7 +630,7 @@ impl ValidationOptimizationEngine {
     /// Reorder constraints based on cost and selectivity analysis
     fn reorder_constraints_for_optimization(
         &mut self,
-        mut constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
+        constraints_with_contexts: Vec<(Constraint, ConstraintContext)>,
     ) -> Vec<(Constraint, ConstraintContext)> {
         // Group by context to maintain constraint evaluation order within same context
         let mut context_groups: HashMap<String, Vec<(Constraint, ConstraintContext)>> =
@@ -1189,7 +1186,7 @@ impl IncrementalValidationEngine {
         use std::collections::hash_map::DefaultHasher;
         let mut hasher = DefaultHasher::new();
         for constraint in constraints {
-            format!("{:?}", constraint).hash(&mut hasher);
+            format!("{constraint:?}").hash(&mut hasher);
         }
         hasher.finish()
     }
@@ -1238,8 +1235,6 @@ impl IncrementalValidationEngine {
         store: &dyn Store,
         node: &Term,
     ) -> Result<Vec<oxirs_core::model::Triple>> {
-        use oxirs_core::model::Quad;
-
         let mut triples = Vec::new();
 
         // Create a pattern to match triples with this node as subject
@@ -1271,8 +1266,6 @@ impl IncrementalValidationEngine {
         store: &dyn Store,
         node: &Term,
     ) -> Result<Vec<oxirs_core::model::Triple>> {
-        use oxirs_core::model::Quad;
-
         let mut triples = Vec::new();
 
         // Create a pattern to match triples with this node as object
@@ -1376,7 +1369,7 @@ impl IncrementalValidationEngine {
     pub fn generate_change_events(
         &self,
         delta: &ChangesDelta,
-        validation_results: &[crate::constraints::ConstraintEvaluationResult],
+        _validation_results: &[crate::constraints::ConstraintEvaluationResult],
     ) -> Vec<ChangeEvent> {
         let mut events = Vec::new();
         let timestamp = std::time::SystemTime::now();
@@ -1553,11 +1546,10 @@ impl IncrementalValidationEngine {
                 .trim_end_matches("\")");
             oxirs_core::model::NamedNode::new(iri)
                 .map(Term::NamedNode)
-                .map_err(|e| ShaclError::ValidationEngine(format!("Invalid IRI: {}", e)))
+                .map_err(|e| ShaclError::ValidationEngine(format!("Invalid IRI: {e}")))
         } else {
             Err(ShaclError::ValidationEngine(format!(
-                "Unsupported term key format: {}",
-                key
+                "Unsupported term key format: {key}"
             )))
         }
     }

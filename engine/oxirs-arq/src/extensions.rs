@@ -3,7 +3,7 @@
 //! This module provides a comprehensive extension framework for adding custom
 //! SPARQL functions, operators, and other query processing capabilities.
 
-use crate::algebra::{Algebra, BinaryOperator, Binding, Expression, Term, UnaryOperator, Variable};
+use crate::algebra::{Expression, Term, Variable};
 use anyhow::{anyhow, bail, Result};
 use oxirs_core::model::NamedNode;
 use std::any::Any;
@@ -257,7 +257,7 @@ impl Clone for Value {
             Value::Null => Value::Null,
             Value::Custom { type_name, .. } => {
                 // Cannot clone arbitrary Any types, return a placeholder
-                Value::String(format!("Custom({})", type_name))
+                Value::String(format!("Custom({type_name})"))
             }
         }
     }
@@ -688,7 +688,7 @@ impl Value {
                 language: lit.language.clone(),
                 datatype: lit.datatype.as_ref().map(|dt| dt.as_str().to_string()),
             },
-            Term::Variable(var) => Value::String(format!("?{}", var)),
+            Term::Variable(var) => Value::String(format!("?{var}")),
             Term::QuotedTriple(_) => Value::String("<<quoted triple>>".to_string()),
             Term::PropertyPath(_) => Value::String("<property path>".to_string()),
         }
@@ -698,7 +698,7 @@ impl Value {
 /// Macro for easy function registration
 #[macro_export]
 macro_rules! register_function {
-    ($registry:expr, $name:expr, $params:expr, $return_type:expr, $body:expr) => {{
+    ($registry:expr_2021, $name:expr_2021, $params:expr_2021, $return_type:expr_2021, $body:expr_2021) => {{
         #[derive(Debug, Clone)]
         struct GeneratedFunction {
             name: String,

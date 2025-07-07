@@ -108,8 +108,7 @@ impl DnaDataStructure {
                     NucleotideData::Cytosine(SpecialMarker::Enhancer(term.to_string()))
                 }
                 NucleotideData::Cytosine(marker) => NucleotideData::Guanine(Term::NamedNode(
-                    crate::model::NamedNode::new(&format!("marker:{}", marker.type_name()))
-                        .unwrap(),
+                    crate::model::NamedNode::new(format!("marker:{}", marker.type_name())).unwrap(),
                 )),
             };
             self.complementary_strand.push(complement);
@@ -133,15 +132,15 @@ impl DnaDataStructure {
                 NucleotideData::Cytosine(SpecialMarker::StopCodon) => {
                     if in_gene && current_triple_data.len() == 3 {
                         if let (Some(subject), Some(predicate), Some(object)) = (
-                            current_triple_data.get(0),
+                            current_triple_data.first(),
                             current_triple_data.get(1),
                             current_triple_data.get(2),
                         ) {
-                            if let (Ok(s), Ok(p), Ok(o)) = (
+                            if let (Ok(s), Ok(p)) = (
                                 Subject::try_from(subject.clone()),
                                 Predicate::try_from(predicate.clone()),
-                                Object::try_from(object.clone()),
                             ) {
+                                let o: Object = object.clone().into();
                                 triples.push(Triple::new(s, p, o));
                             }
                         }
@@ -197,13 +196,13 @@ impl DnaDataStructure {
 
     /// Check if two nucleotides form a valid base pair
     fn is_valid_base_pair(&self, primary: &NucleotideData, complement: &NucleotideData) -> bool {
-        match (primary, complement) {
-            (NucleotideData::Adenine(_), NucleotideData::Thymine(_)) => true,
-            (NucleotideData::Thymine(_), NucleotideData::Adenine(_)) => true,
-            (NucleotideData::Guanine(_), NucleotideData::Cytosine(_)) => true,
-            (NucleotideData::Cytosine(_), NucleotideData::Guanine(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (primary, complement),
+            (NucleotideData::Adenine(_), NucleotideData::Thymine(_))
+                | (NucleotideData::Thymine(_), NucleotideData::Adenine(_))
+                | (NucleotideData::Guanine(_), NucleotideData::Cytosine(_))
+                | (NucleotideData::Cytosine(_), NucleotideData::Guanine(_))
+        )
     }
 
     /// Get strand length

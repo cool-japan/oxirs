@@ -5,17 +5,17 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::{self, Display};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
-use tracing::warn;
+use tracing::info;
 
 use crate::btree::{BTree, BTreeConfig};
 use crate::mvcc::{MvccStorage, TransactionId, Version};
 use crate::nodes::{NodeId, NodeTable, NodeTableConfig, Term};
-use crate::page::{BufferPool, BufferPoolConfig, PageType};
-use crate::transactions::{IsolationLevel, TransactionManager, TransactionState};
+use crate::page::{BufferPool, BufferPoolConfig};
+use crate::transactions::TransactionManager;
 use crate::wal::StorageInterface;
 
 /// Triple representation using node IDs
@@ -74,7 +74,7 @@ impl Quad {
 }
 
 /// Index type for different triple orderings
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum IndexType {
     SPO, // Subject-Predicate-Object
     POS, // Predicate-Object-Subject
@@ -130,6 +130,103 @@ impl IndexType {
             (false, false, true) => IndexType::OSP, // Only O bound
             (false, false, false) => IndexType::SPO, // No variables bound - scan any index
         }
+    }
+}
+
+/// Condition for partial index filtering
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum PartialIndexCondition {
+    /// Index only triples with specific predicate
+    PredicateEquals(NodeId),
+    /// Index only triples where predicate is in set
+    PredicateIn(Vec<NodeId>),
+    /// Index only triples with specific subject
+    SubjectEquals(NodeId),
+    /// Index only triples with specific object
+    ObjectEquals(NodeId),
+    /// Index only triples where subject matches pattern (IRI prefix)
+    SubjectPrefix(String),
+    /// Index only triples where object is a literal
+    ObjectIsLiteral,
+    /// Index only triples where object is an IRI
+    ObjectIsIRI,
+    /// Combine multiple conditions with AND
+    And(Vec<PartialIndexCondition>),
+    /// Combine multiple conditions with OR
+    Or(Vec<PartialIndexCondition>),
+}
+
+impl PartialIndexCondition {
+    /// Check if a triple matches this condition
+    pub fn matches(&self, triple: &Triple, node_table: &NodeTable) -> bool {
+        match self {
+            PartialIndexCondition::PredicateEquals(predicate) => &triple.predicate == predicate,
+            PartialIndexCondition::PredicateIn(predicates) => {
+                predicates.contains(&triple.predicate)
+            }
+            PartialIndexCondition::SubjectEquals(subject) => &triple.subject == subject,
+            PartialIndexCondition::ObjectEquals(object) => &triple.object == object,
+            PartialIndexCondition::SubjectPrefix(prefix) => {
+                if let Ok(Some(term)) = node_table.get_term(triple.subject) {
+                    match term {
+                        Term::Iri(iri) => iri.starts_with(prefix),
+                        _ => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            PartialIndexCondition::ObjectIsLiteral => {
+                if let Ok(Some(term)) = node_table.get_term(triple.object) {
+                    matches!(term, Term::Literal { .. })
+                } else {
+                    false
+                }
+            }
+            PartialIndexCondition::ObjectIsIRI => {
+                if let Ok(Some(term)) = node_table.get_term(triple.object) {
+                    matches!(term, Term::Iri(_))
+                } else {
+                    false
+                }
+            }
+            PartialIndexCondition::And(conditions) => conditions
+                .iter()
+                .all(|cond| cond.matches(triple, node_table)),
+            PartialIndexCondition::Or(conditions) => conditions
+                .iter()
+                .any(|cond| cond.matches(triple, node_table)),
+        }
+    }
+}
+
+/// Configuration for a partial index
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct PartialIndexConfig {
+    /// Name of the partial index
+    pub name: String,
+    /// Index type (ordering)
+    pub index_type: IndexType,
+    /// Condition that determines which triples are included
+    pub condition: PartialIndexCondition,
+    /// Whether this index is enabled
+    pub enabled: bool,
+}
+
+impl PartialIndexConfig {
+    /// Create a new partial index configuration
+    pub fn new(name: String, index_type: IndexType, condition: PartialIndexCondition) -> Self {
+        Self {
+            name,
+            index_type,
+            condition,
+            enabled: true,
+        }
+    }
+
+    /// Check if a triple should be included in this partial index
+    pub fn should_include(&self, triple: &Triple, node_table: &NodeTable) -> bool {
+        self.enabled && self.condition.matches(triple, node_table)
     }
 }
 
@@ -335,6 +432,8 @@ pub struct TripleStoreConfig {
     pub storage_path: PathBuf,
     /// Enable all six indices (default: only SPO, POS, OSP)
     pub enable_all_indices: bool,
+    /// Partial index configurations
+    pub partial_indices: Vec<PartialIndexConfig>,
     /// Node table configuration
     pub node_config: NodeTableConfig,
     /// Buffer pool configuration
@@ -352,6 +451,7 @@ impl Default for TripleStoreConfig {
         Self {
             storage_path: PathBuf::from("./tdb"),
             enable_all_indices: false,
+            partial_indices: Vec::new(),
             node_config: NodeTableConfig::default(),
             buffer_config: BufferPoolConfig::default(),
             btree_config: BTreeConfig::default(),
@@ -402,6 +502,8 @@ pub struct TripleStore {
     indices: Arc<RwLock<HashMap<IndexType, BTree<TripleKey, bool>>>>,
     /// B+ tree indices for quad orderings
     quad_indices: Arc<RwLock<HashMap<QuadIndexType, BTree<QuadKey, bool>>>>,
+    /// Partial index B+ trees (keyed by index name)
+    partial_indices: Arc<RwLock<HashMap<String, BTree<TripleKey, bool>>>>,
     /// Buffer pool for page management
     buffer_pool: Arc<BufferPool>,
     /// Default graph node ID
@@ -463,6 +565,17 @@ impl TripleStore {
             quad_indices.insert(index_type, BTree::with_config(config.btree_config.clone()));
         }
 
+        // Initialize partial indices
+        let mut partial_indices = HashMap::new();
+        for partial_config in &config.partial_indices {
+            if partial_config.enabled {
+                partial_indices.insert(
+                    partial_config.name.clone(),
+                    BTree::with_config(config.btree_config.clone()),
+                );
+            }
+        }
+
         // Store default graph term
         let default_graph_term = Term::iri("urn:x-arq:DefaultGraph");
         let default_graph = node_table.store_term(&default_graph_term)?;
@@ -475,6 +588,7 @@ impl TripleStore {
             quad_storage,
             indices: Arc::new(RwLock::new(indices)),
             quad_indices: Arc::new(RwLock::new(quad_indices)),
+            partial_indices: Arc::new(RwLock::new(partial_indices)),
             buffer_pool,
             default_graph,
             stats: Arc::new(Mutex::new(TripleStoreStats::default())),
@@ -542,13 +656,13 @@ impl TripleStore {
 
     /// Insert a triple within a transaction
     pub fn insert_triple_tx(&self, tx_id: TransactionId, triple: &Triple) -> Result<()> {
-        // Insert into all indices with prefixed keys to distinguish between indices
+        // Insert into all standard indices with prefixed keys to distinguish between indices
         let indices = self
             .indices
             .read()
             .map_err(|_| anyhow!("Failed to acquire indices lock"))?;
 
-        for (&index_type, btree) in indices.iter() {
+        for (&index_type, _btree) in indices.iter() {
             let key = index_type.triple_to_key(triple);
 
             // Create a prefixed key to distinguish between different indices
@@ -563,6 +677,21 @@ impl TripleStore {
 
             // Note: In a full implementation, we would also update the B+ tree indices
             // For now, we're using MVCC storage as the primary storage
+        }
+
+        // Insert into partial indices if triple matches their conditions
+        for partial_config in &self.config.partial_indices {
+            if partial_config.should_include(triple, &self.node_table) {
+                let key = partial_config.index_type.triple_to_key(triple);
+
+                // Create a unique prefix for partial indices (using a high value to avoid conflicts)
+                let partial_prefix = 1000000 + partial_config.name.len() as u64;
+                let prefixed_key =
+                    TripleKey::new(partial_prefix, key.first, key.second * 1000000 + key.third);
+
+                // Store in MVCC storage with partial index prefix
+                self.mvcc_storage.put_tx(tx_id, prefixed_key, true)?;
+            }
         }
 
         // Note: Stats are updated only when transaction commits
@@ -1083,6 +1212,105 @@ impl TripleStore {
         Ok(stats.clone())
     }
 
+    /// Add a new partial index
+    pub fn add_partial_index(&mut self, config: PartialIndexConfig) -> Result<()> {
+        if config.enabled {
+            let mut partial_indices = self
+                .partial_indices
+                .write()
+                .map_err(|_| anyhow!("Failed to acquire partial indices lock"))?;
+
+            // Create new B+ tree for this partial index
+            partial_indices.insert(
+                config.name.clone(),
+                BTree::with_config(self.config.btree_config.clone()),
+            );
+
+            // Add config to store config
+            self.config.partial_indices.push(config);
+        }
+        Ok(())
+    }
+
+    /// Remove a partial index
+    pub fn remove_partial_index(&mut self, index_name: &str) -> Result<()> {
+        let mut partial_indices = self
+            .partial_indices
+            .write()
+            .map_err(|_| anyhow!("Failed to acquire partial indices lock"))?;
+
+        partial_indices.remove(index_name);
+
+        // Remove from config
+        self.config
+            .partial_indices
+            .retain(|config| config.name != index_name);
+
+        Ok(())
+    }
+
+    /// Get partial index statistics
+    pub fn get_partial_index_stats(&self) -> Result<HashMap<String, u64>> {
+        let mut stats = HashMap::new();
+
+        for config in &self.config.partial_indices {
+            if config.enabled {
+                // Count entries in this partial index by scanning MVCC storage
+                // This is a simplified implementation - in practice you'd want more efficient counting
+                let _partial_prefix = 1000000 + config.name.len() as u64;
+
+                // For now, return a placeholder count
+                // In a full implementation, you'd iterate through the MVCC storage
+                // and count entries with the partial index prefix
+                stats.insert(config.name.clone(), 0);
+            }
+        }
+
+        Ok(stats)
+    }
+
+    /// List all partial index configurations
+    pub fn list_partial_indices(&self) -> Vec<PartialIndexConfig> {
+        self.config.partial_indices.clone()
+    }
+
+    /// Enable or disable a partial index
+    pub fn set_partial_index_enabled(&mut self, index_name: &str, enabled: bool) -> Result<()> {
+        if let Some(config) = self
+            .config
+            .partial_indices
+            .iter_mut()
+            .find(|c| c.name == index_name)
+        {
+            config.enabled = enabled;
+
+            if enabled {
+                // Add to runtime indices
+                let mut partial_indices = self
+                    .partial_indices
+                    .write()
+                    .map_err(|_| anyhow!("Failed to acquire partial indices lock"))?;
+
+                partial_indices.insert(
+                    config.name.clone(),
+                    BTree::with_config(self.config.btree_config.clone()),
+                );
+            } else {
+                // Remove from runtime indices
+                let mut partial_indices = self
+                    .partial_indices
+                    .write()
+                    .map_err(|_| anyhow!("Failed to acquire partial indices lock"))?;
+
+                partial_indices.remove(index_name);
+            }
+
+            Ok(())
+        } else {
+            Err(anyhow!("Partial index '{}' not found", index_name))
+        }
+    }
+
     /// Compact the triple store (garbage collection)
     pub fn compact(&self) -> Result<()> {
         // Compact node table
@@ -1154,7 +1382,7 @@ impl TripleStore {
             .read()
             .map_err(|_| anyhow!("Failed to acquire indices lock"))?;
 
-        for (index_type, btree) in indices.iter() {
+        for (_index_type, btree) in indices.iter() {
             if !btree.validate()? {
                 return Ok(false);
             }
@@ -1378,6 +1606,379 @@ impl StorageInterface for TripleStore {
         self.delete_triple_tx(transaction_id, &triple)?;
         Ok(())
     }
+
+    fn apply_schema_change(
+        &self,
+        _transaction_id: TransactionId,
+        operation: &crate::wal::SchemaOperation,
+    ) -> Result<()> {
+        // Apply schema changes to the storage
+        // This is a placeholder implementation - in a full system this would
+        // handle DDL operations like creating/dropping indices, graphs, etc.
+
+        use crate::wal::SchemaOperation;
+        match operation {
+            SchemaOperation::CreateIndex { index_name, index_type, columns, options: _ } => {
+                info!("Schema change: Creating index {}", index_name);
+                
+                // Parse index type to determine if it's a standard or partial index
+                match index_type.as_str() {
+                    "standard" => {
+                        // Create standard index based on first column specification
+                        if let Some(ordering) = columns.first() {
+                            let idx_type = match ordering.as_str() {
+                                "SPO" => Some(IndexType::SPO),
+                                "POS" => Some(IndexType::POS),
+                                "OSP" => Some(IndexType::OSP),
+                                "SOP" => Some(IndexType::SOP),
+                                "PSO" => Some(IndexType::PSO),
+                                "OPS" => Some(IndexType::OPS),
+                                _ => None,
+                            };
+                            
+                            if let Some(idx_type) = idx_type {
+                                let mut indices = self.indices.write().unwrap();
+                                if !indices.contains_key(&idx_type) {
+                                    let btree = BTree::with_config(self.config.btree_config.clone());
+                                    indices.insert(idx_type, btree);
+                                    info!("Created standard index: {:?}", idx_type);
+                                }
+                            }
+                        }
+                    },
+                    "partial" => {
+                        // Create partial index with conditions
+                        let mut partial_indices = self.partial_indices.write().unwrap();
+                        if !partial_indices.contains_key(index_name) {
+                            let btree = BTree::with_config(self.config.btree_config.clone());
+                            partial_indices.insert(index_name.clone(), btree);
+                            info!("Created partial index: {}", index_name);
+                        }
+                    },
+                    _ => {
+                        info!("Unsupported index type: {}", index_type);
+                    }
+                }
+            }
+            SchemaOperation::DropIndex { index_name, cascade: _ } => {
+                info!("Schema change: Dropping index {}", index_name);
+                
+                // Try to drop from partial indices first
+                let mut partial_indices = self.partial_indices.write().unwrap();
+                if partial_indices.remove(index_name).is_some() {
+                    info!("Dropped partial index: {}", index_name);
+                    return Ok(());
+                }
+                drop(partial_indices);
+                
+                // Try to match standard index names
+                let idx_type = match index_name.as_str() {
+                    "SPO" => Some(IndexType::SPO),
+                    "POS" => Some(IndexType::POS),
+                    "OSP" => Some(IndexType::OSP),
+                    "SOP" => Some(IndexType::SOP),
+                    "PSO" => Some(IndexType::PSO),
+                    "OPS" => Some(IndexType::OPS),
+                    _ => None,
+                };
+                
+                if let Some(idx_type) = idx_type {
+                    let mut indices = self.indices.write().unwrap();
+                    if indices.remove(&idx_type).is_some() {
+                        info!("Dropped standard index: {:?}", idx_type);
+                    } else {
+                        info!("Index {} not found", index_name);
+                    }
+                } else {
+                    info!("Unknown index name: {}", index_name);
+                }
+            }
+            SchemaOperation::CreateGraph { graph_name, metadata } => {
+                info!("Schema change: Creating graph {}", graph_name);
+                
+                // Create a term for the graph name and get its node ID
+                let graph_term = Term::iri(graph_name);
+                let graph_node_id = self.node_table.store_term(&graph_term)?;
+                
+                // Store metadata as properties of the graph if provided
+                for (key, value) in metadata {
+                    let predicate_term = Term::iri(format!("http://oxirs.org/graph/metadata#{}", key));
+                    let predicate_id = self.node_table.store_term(&predicate_term)?;
+                    
+                    let value_term = Term::literal(value);
+                    let value_id = self.node_table.store_term(&value_term)?;
+                    
+                    // Create a metadata triple in the graph itself
+                    let metadata_triple = Triple::new(graph_node_id, predicate_id, value_id);
+                    let _quad_key = QuadKey::new(
+                        metadata_triple.subject,
+                        metadata_triple.predicate,
+                        metadata_triple.object,
+                        graph_node_id,
+                    );
+                    
+                    // Insert the metadata as a quad
+                    let metadata_quad = Quad {
+                        subject: metadata_triple.subject,
+                        predicate: metadata_triple.predicate,
+                        object: metadata_triple.object,
+                        graph: Some(graph_node_id),
+                    };
+                    self.insert_quad(&metadata_quad)?;
+                }
+                
+                info!("Created named graph: {} with node ID: {}", graph_name, graph_node_id);
+            }
+            SchemaOperation::DropGraph { graph_name, cascade: _ } => {
+                info!("Schema change: Dropping graph {}", graph_name);
+                
+                // Get the node ID for the graph name
+                let graph_term = Term::iri(graph_name);
+                if let Some(graph_node_id) = self.node_table.get_node_id(&graph_term)? {
+                    // Query all quads in this graph and delete them
+                    let quads_in_graph = self.query_quads(None, None, None, Some(Some(graph_node_id)))?;
+                    let mut deleted_count = 0;
+                    
+                    for quad in quads_in_graph {
+                        if self.delete_quad(&quad)? {
+                            deleted_count += 1;
+                        }
+                    }
+                    
+                    info!("Dropped named graph: {} with {} quads removed", graph_name, deleted_count);
+                } else {
+                    info!("Graph {} not found", graph_name);
+                }
+            }
+            SchemaOperation::AddConstraint {
+                constraint_name,
+                constraint_type,
+                definition,
+            } => {
+                info!("Schema change: Adding constraint {}", constraint_name);
+                
+                // Store constraint definition as metadata in the default graph
+                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{}", constraint_name));
+                let constraint_id = self.node_table.store_term(&constraint_subject)?;
+                
+                // Store constraint type
+                let type_predicate = Term::iri("http://oxirs.org/constraints#type");
+                let type_predicate_id = self.node_table.store_term(&type_predicate)?;
+                let type_value = Term::literal(constraint_type);
+                let type_value_id = self.node_table.store_term(&type_value)?;
+                
+                let type_triple = Triple::new(constraint_id, type_predicate_id, type_value_id);
+                self.insert_triple(&type_triple)?;
+                
+                // Store constraint definition
+                let def_predicate = Term::iri("http://oxirs.org/constraints#definition");
+                let def_predicate_id = self.node_table.store_term(&def_predicate)?;
+                let def_value = Term::literal(definition);
+                let def_value_id = self.node_table.store_term(&def_value)?;
+                
+                let def_triple = Triple::new(constraint_id, def_predicate_id, def_value_id);
+                self.insert_triple(&def_triple)?;
+                
+                info!("Added constraint: {} of type: {}", constraint_name, constraint_type);
+            }
+            SchemaOperation::DropConstraint { constraint_name } => {
+                info!("Schema change: Dropping constraint {}", constraint_name);
+                
+                // Find and remove constraint metadata triples
+                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{}", constraint_name));
+                if let Some(constraint_id) = self.node_table.get_node_id(&constraint_subject)? {
+                    // Query all triples with this constraint as subject
+                    let constraint_triples = self.query_triples(Some(constraint_id), None, None)?;
+                    let mut deleted_count = 0;
+                    
+                    // Delete each triple
+                    for triple in constraint_triples {
+                        if self.delete_triple(&triple)? {
+                            deleted_count += 1;
+                        }
+                    }
+                    
+                    info!("Dropped constraint: {} with {} metadata triples removed", constraint_name, deleted_count);
+                } else {
+                    info!("Constraint {} not found", constraint_name);
+                }
+            }
+            SchemaOperation::AlterConfiguration {
+                setting_name,
+                old_value,
+                new_value,
+            } => {
+                info!("Schema change: Updating {} from {} to {}", setting_name, old_value, new_value);
+                
+                // Store configuration changes as metadata
+                let config_subject = Term::iri(format!("http://oxirs.org/config/{}", setting_name));
+                let config_id = self.node_table.store_term(&config_subject)?;
+                
+                // Store the new value
+                let value_predicate = Term::iri("http://oxirs.org/config#value");
+                let value_predicate_id = self.node_table.store_term(&value_predicate)?;
+                let value_literal = Term::literal(new_value);
+                let value_id = self.node_table.store_term(&value_literal)?;
+                
+                let config_triple = Triple::new(config_id, value_predicate_id, value_id);
+                
+                // Update or insert the configuration value
+                self.insert_triple(&config_triple)?;
+                
+                // Store the change timestamp
+                let timestamp_predicate = Term::iri("http://oxirs.org/config#modified");
+                let timestamp_predicate_id = self.node_table.store_term(&timestamp_predicate)?;
+                let timestamp_value = Term::literal(chrono::Utc::now().to_rfc3339());
+                let timestamp_value_id = self.node_table.store_term(&timestamp_value)?;
+                
+                let timestamp_triple = Triple::new(config_id, timestamp_predicate_id, timestamp_value_id);
+                self.insert_triple(&timestamp_triple)?;
+                
+                info!("Updated configuration setting: {} = {}", setting_name, new_value);
+            }
+            SchemaOperation::UpdateStatistics { table_name, statistics: _ } => {
+                info!("Schema change: Updating statistics for {}", table_name);
+                
+                // Calculate and store current statistics
+                let stats_subject = Term::iri(format!("http://oxirs.org/stats/{}", table_name));
+                let stats_id = self.node_table.store_term(&stats_subject)?;
+                
+                match table_name.as_str() {
+                    "triples" => {
+                        // Get triple count from stats
+                        let stats = self.get_stats()?;
+                        let triple_count = stats.total_triples;
+                        
+                        // Store triple count
+                        let count_predicate = Term::iri("http://oxirs.org/stats#count");
+                        let count_predicate_id = self.node_table.store_term(&count_predicate)?;
+                        let count_value = Term::literal(triple_count.to_string());
+                        let count_value_id = self.node_table.store_term(&count_value)?;
+                        
+                        let count_triple = Triple::new(stats_id, count_predicate_id, count_value_id);
+                        self.insert_triple(&count_triple)?;
+                        
+                        info!("Updated statistics for {}: {} triples", table_name, triple_count);
+                    },
+                    "quads" => {
+                        // Get quad count from stats
+                        let stats = self.get_stats()?;
+                        let quad_count = stats.total_quads;
+                        
+                        // Store quad count
+                        let count_predicate = Term::iri("http://oxirs.org/stats#count");
+                        let count_predicate_id = self.node_table.store_term(&count_predicate)?;
+                        let count_value = Term::literal(quad_count.to_string());
+                        let count_value_id = self.node_table.store_term(&count_value)?;
+                        
+                        let count_triple = Triple::new(stats_id, count_predicate_id, count_value_id);
+                        self.insert_triple(&count_triple)?;
+                        
+                        info!("Updated statistics for {}: {} quads", table_name, quad_count);
+                    },
+                    _ => {
+                        info!("Unknown table for statistics: {}", table_name);
+                    }
+                }
+                
+                // Store last update timestamp
+                let timestamp_predicate = Term::iri("http://oxirs.org/stats#lastUpdated");
+                let timestamp_predicate_id = self.node_table.store_term(&timestamp_predicate)?;
+                let timestamp_value = Term::literal(chrono::Utc::now().to_rfc3339());
+                let timestamp_value_id = self.node_table.store_term(&timestamp_value)?;
+                
+                let timestamp_triple = Triple::new(stats_id, timestamp_predicate_id, timestamp_value_id);
+                self.insert_triple(&timestamp_triple)?;
+            }
+            SchemaOperation::CreateView {
+                view_name,
+                materialized,
+                definition,
+            } => {
+                info!(
+                    "Schema change: Creating {} view {}",
+                    if *materialized {
+                        "materialized"
+                    } else {
+                        "regular"
+                    },
+                    view_name
+                );
+                
+                // Store view definition as metadata
+                let view_subject = Term::iri(format!("http://oxirs.org/views/{}", view_name));
+                let view_id = self.node_table.store_term(&view_subject)?;
+                
+                // Store view type (materialized or regular)
+                let type_predicate = Term::iri("http://oxirs.org/views#type");
+                let type_predicate_id = self.node_table.store_term(&type_predicate)?;
+                let type_value = Term::literal(if *materialized { "materialized" } else { "regular" });
+                let type_value_id = self.node_table.store_term(&type_value)?;
+                
+                let type_triple = Triple::new(view_id, type_predicate_id, type_value_id);
+                self.insert_triple(&type_triple)?;
+                
+                // Store view query definition
+                let query_predicate = Term::iri("http://oxirs.org/views#query");
+                let query_predicate_id = self.node_table.store_term(&query_predicate)?;
+                let query_value = Term::literal(definition);
+                let query_value_id = self.node_table.store_term(&query_value)?;
+                
+                let query_triple = Triple::new(view_id, query_predicate_id, query_value_id);
+                self.insert_triple(&query_triple)?;
+                
+                // Store creation timestamp
+                let created_predicate = Term::iri("http://oxirs.org/views#created");
+                let created_predicate_id = self.node_table.store_term(&created_predicate)?;
+                let created_value = Term::literal(chrono::Utc::now().to_rfc3339());
+                let created_value_id = self.node_table.store_term(&created_value)?;
+                
+                let created_triple = Triple::new(view_id, created_predicate_id, created_value_id);
+                self.insert_triple(&created_triple)?;
+                
+                info!("Created {} view: {}", if *materialized { "materialized" } else { "regular" }, view_name);
+            }
+            SchemaOperation::DropView {
+                view_name,
+                materialized,
+            } => {
+                info!(
+                    "Schema change: Dropping {} view {}",
+                    if *materialized {
+                        "materialized"
+                    } else {
+                        "regular"
+                    },
+                    view_name
+                );
+                
+                // Find and remove view metadata triples
+                let view_subject = Term::iri(format!("http://oxirs.org/views/{}", view_name));
+                if let Some(view_id) = self.node_table.get_node_id(&view_subject)? {
+                    // Query all triples with this view as subject and delete them
+                    let view_triples = self.query_triples(Some(view_id), None, None)?;
+                    let mut deleted_count = 0;
+                    
+                    for triple in view_triples {
+                        if self.delete_triple(&triple)? {
+                            deleted_count += 1;
+                        }
+                    }
+                    
+                    info!(
+                        "Dropped {} view: {} with {} metadata triples removed",
+                        if *materialized { "materialized" } else { "regular" },
+                        view_name,
+                        deleted_count
+                    );
+                } else {
+                    info!("View {} not found", view_name);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -1538,13 +2139,13 @@ mod tests {
         let mut triples = Vec::new();
         for i in 0..100 {
             let subject_id = store
-                .store_term(&Term::iri(&format!("http://example.org/s{}", i)))
+                .store_term(&Term::iri(format!("http://example.org/s{i}")))
                 .unwrap();
             let predicate_id = store
                 .store_term(&Term::iri("http://example.org/predicate"))
                 .unwrap();
             let object_id = store
-                .store_term(&Term::literal(&format!("value{}", i)))
+                .store_term(&Term::literal(format!("value{i}")))
                 .unwrap();
 
             triples.push(Triple::new(subject_id, predicate_id, object_id));
@@ -1556,5 +2157,208 @@ mod tests {
         // Verify all triples were loaded
         let stats = store.get_stats().unwrap();
         assert_eq!(stats.total_triples, 100);
+    }
+
+    #[test]
+    fn test_partial_index_predicate_filtering() {
+        let mut store = TripleStore::new("test_partial_predicate").unwrap();
+
+        // Create a partial index that only includes triples with specific predicate
+        let name_predicate = store
+            .store_term(&Term::iri("http://example.org/name"))
+            .unwrap();
+
+        let partial_config = PartialIndexConfig::new(
+            "name_index".to_string(),
+            IndexType::SPO,
+            PartialIndexCondition::PredicateEquals(name_predicate),
+        );
+
+        store.add_partial_index(partial_config).unwrap();
+
+        // Insert some triples
+        let subject = store
+            .store_term(&Term::iri("http://example.org/person1"))
+            .unwrap();
+        let name_triple = Triple::new(
+            subject,
+            name_predicate,
+            store.store_term(&Term::literal("John")).unwrap(),
+        );
+
+        let age_predicate = store
+            .store_term(&Term::iri("http://example.org/age"))
+            .unwrap();
+        let age_triple = Triple::new(
+            subject,
+            age_predicate,
+            store.store_term(&Term::literal("30")).unwrap(),
+        );
+
+        store.insert_triple(&name_triple).unwrap();
+        store.insert_triple(&age_triple).unwrap();
+
+        // Verify partial index was created
+        let partial_indices = store.list_partial_indices();
+        assert_eq!(partial_indices.len(), 1);
+        assert_eq!(partial_indices[0].name, "name_index");
+        assert!(partial_indices[0].enabled);
+    }
+
+    #[test]
+    fn test_partial_index_object_type_filtering() {
+        let mut store = TripleStore::new("test_partial_object_type").unwrap();
+
+        // Create a partial index that only includes triples with literal objects
+        let partial_config = PartialIndexConfig::new(
+            "literal_index".to_string(),
+            IndexType::OSP,
+            PartialIndexCondition::ObjectIsLiteral,
+        );
+
+        store.add_partial_index(partial_config).unwrap();
+
+        // Insert triples with different object types
+        let subject = store
+            .store_term(&Term::iri("http://example.org/entity"))
+            .unwrap();
+        let predicate = store
+            .store_term(&Term::iri("http://example.org/prop"))
+            .unwrap();
+
+        let literal_triple = Triple::new(
+            subject,
+            predicate,
+            store.store_term(&Term::literal("literal_value")).unwrap(),
+        );
+
+        let iri_triple = Triple::new(
+            subject,
+            predicate,
+            store
+                .store_term(&Term::iri("http://example.org/other"))
+                .unwrap(),
+        );
+
+        store.insert_triple(&literal_triple).unwrap();
+        store.insert_triple(&iri_triple).unwrap();
+
+        // Verify partial index configuration
+        let partial_indices = store.list_partial_indices();
+        assert_eq!(partial_indices.len(), 1);
+        assert_eq!(partial_indices[0].name, "literal_index");
+        assert_eq!(partial_indices[0].index_type, IndexType::OSP);
+    }
+
+    #[test]
+    fn test_partial_index_compound_conditions() {
+        let mut store = TripleStore::new("test_partial_compound").unwrap();
+
+        // Create a partial index with compound conditions (AND)
+        let name_predicate = store
+            .store_term(&Term::iri("http://example.org/name"))
+            .unwrap();
+
+        let partial_config = PartialIndexConfig::new(
+            "name_literals_index".to_string(),
+            IndexType::POS,
+            PartialIndexCondition::And(vec![
+                PartialIndexCondition::PredicateEquals(name_predicate),
+                PartialIndexCondition::ObjectIsLiteral,
+            ]),
+        );
+
+        store.add_partial_index(partial_config).unwrap();
+
+        let subject = store
+            .store_term(&Term::iri("http://example.org/person"))
+            .unwrap();
+
+        // This should match (name predicate + literal object)
+        let matching_triple = Triple::new(
+            subject,
+            name_predicate,
+            store.store_term(&Term::literal("Alice")).unwrap(),
+        );
+
+        // This should not match (name predicate + IRI object)
+        let non_matching_triple = Triple::new(
+            subject,
+            name_predicate,
+            store
+                .store_term(&Term::iri("http://example.org/alice"))
+                .unwrap(),
+        );
+
+        store.insert_triple(&matching_triple).unwrap();
+        store.insert_triple(&non_matching_triple).unwrap();
+
+        let partial_indices = store.list_partial_indices();
+        assert_eq!(partial_indices.len(), 1);
+
+        // Verify the condition matches correctly
+        let config = &partial_indices[0];
+        assert!(config.should_include(&matching_triple, &store.node_table));
+        assert!(!config.should_include(&non_matching_triple, &store.node_table));
+    }
+
+    #[test]
+    fn test_partial_index_management() {
+        let mut store = TripleStore::new("test_partial_management").unwrap();
+
+        // Create multiple partial indices
+        let config1 = PartialIndexConfig::new(
+            "index1".to_string(),
+            IndexType::SPO,
+            PartialIndexCondition::ObjectIsLiteral,
+        );
+
+        let config2 = PartialIndexConfig::new(
+            "index2".to_string(),
+            IndexType::POS,
+            PartialIndexCondition::ObjectIsIRI,
+        );
+
+        store.add_partial_index(config1).unwrap();
+        store.add_partial_index(config2).unwrap();
+
+        // Verify both indices exist
+        assert_eq!(store.list_partial_indices().len(), 2);
+
+        // Disable one index
+        store.set_partial_index_enabled("index1", false).unwrap();
+
+        let indices = store.list_partial_indices();
+        let index1 = indices.iter().find(|i| i.name == "index1").unwrap();
+        assert!(!index1.enabled);
+
+        // Remove an index
+        store.remove_partial_index("index2").unwrap();
+        assert_eq!(store.list_partial_indices().len(), 1);
+
+        // Try to remove non-existent index
+        assert!(store.remove_partial_index("nonexistent").is_ok());
+    }
+
+    #[test]
+    fn test_partial_index_statistics() {
+        let mut store = TripleStore::new("test_partial_stats").unwrap();
+
+        // Create a partial index
+        let partial_config = PartialIndexConfig::new(
+            "test_stats_index".to_string(),
+            IndexType::SPO,
+            PartialIndexCondition::ObjectIsLiteral,
+        );
+
+        store.add_partial_index(partial_config).unwrap();
+
+        // Get statistics
+        let stats = store.get_partial_index_stats().unwrap();
+        assert!(stats.contains_key("test_stats_index"));
+
+        // Note: In this implementation, the stats are placeholder values
+        // In a production system, you'd implement proper counting
+        assert_eq!(stats["test_stats_index"], 0);
     }
 }

@@ -13,6 +13,7 @@
 //! - N3 (.n3)
 
 pub mod error;
+#[allow(clippy::module_inception)]
 pub mod format;
 pub mod jsonld;
 pub mod n3_lexer;
@@ -23,6 +24,7 @@ pub mod serializer;
 pub mod toolkit;
 pub mod turtle;
 pub mod turtle_grammar;
+pub mod w3c_tests;
 
 // Re-export key types
 pub use error::{FormatError, RdfParseError, RdfSyntaxError, TextPosition};
@@ -36,6 +38,12 @@ pub use jsonld::{JsonLdParser, JsonLdSerializer};
 pub use ntriples::{NTriplesParser, NTriplesSerializer};
 pub use rdfxml::{RdfXmlParser, RdfXmlSerializer};
 pub use turtle::{TurtleParser, TurtleSerializer};
+
+// W3C compliance testing
+pub use w3c_tests::{
+    run_w3c_compliance_tests, RdfComplianceStats, RdfTestResult, RdfTestStatus, RdfTestType,
+    W3cRdfTestConfig, W3cRdfTestSuiteRunner,
+};
 
 use crate::model::{Quad, Triple};
 use crate::OxirsError;

@@ -15,7 +15,6 @@ pub mod variational_processor;
 
 use anyhow::Result;
 use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::error::StreamResult;
@@ -26,8 +25,10 @@ pub use entanglement_manager::*;
 pub use error_correction::*;
 pub use performance_monitor::*;
 pub use quantum_circuit::*;
-pub use quantum_config::*;
-pub use quantum_ml_engine::*;
+pub use quantum_config::{ErrorCorrectionCode, QuantumConfig, QuantumGate as ConfigQuantumGate};
+pub use quantum_ml_engine::{
+    QuantumGate as MLQuantumGate, QuantumMLEngine, QuantumModel, QuantumTrainingStats,
+};
 pub use quantum_optimizer::*;
 pub use variational_processor::*;
 
@@ -84,7 +85,7 @@ impl QuantumStreamProcessor {
     }
 
     /// Internal quantum processing logic
-    async fn quantum_process(&self, event: &StreamEvent) -> Result<QuantumProcessingResult> {
+    async fn quantum_process(&self, _event: &StreamEvent) -> Result<QuantumProcessingResult> {
         // This would contain the main quantum processing logic
         // For now, return a placeholder
         Ok(QuantumProcessingResult::default())

@@ -8,26 +8,14 @@
 //! - Version control and rollback capabilities
 //! - Performance monitoring and analytics
 
-use crate::embeddings::{EmbeddingManager, EmbeddingStrategy};
-use crate::enhanced_performance_monitoring::{
-    AlertSeverity, EnhancedPerformanceMonitor, QueryType,
-};
 use crate::similarity::SimilarityResult;
-use crate::storage_optimizations::{StorageUtils, VectorBlock};
 use crate::{index::VectorIndex, VectorId};
-use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, Utc};
-use parking_lot::RwLock as ParkingRwLock;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, VecDeque};
-use std::sync::{
-    atomic::{AtomicBool, AtomicU64, Ordering},
-    Arc, RwLock,
-};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{mpsc, watch, Mutex, Semaphore};
-use tokio::time::{interval, timeout};
-use uuid::Uuid;
+use anyhow::{anyhow, Result};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, RwLock};
+use std::time::{Duration, Instant};
+use tokio::sync::{watch, Mutex};
+use tokio::time::interval;
 
 /// Real-time update operation
 #[derive(Debug, Clone)]
@@ -225,7 +213,7 @@ impl RealTimeVectorUpdater {
 
     /// Force index compaction
     pub async fn compact_index(&self) -> Result<()> {
-        let index = self.index.read().unwrap();
+        let _index = self.index.read().unwrap();
         // Compact implementation would go here
         // For now, this is a placeholder
 
@@ -237,8 +225,10 @@ impl RealTimeVectorUpdater {
 
     /// Rebuild index if needed
     pub async fn rebuild_index_if_needed(&self) -> Result<bool> {
-        let stats = self.stats.read().unwrap();
-        let index_size = stats.index_size;
+        let index_size = {
+            let stats = self.stats.read().unwrap();
+            stats.index_size
+        };
 
         if index_size == 0 {
             return Ok(false);
@@ -249,7 +239,6 @@ impl RealTimeVectorUpdater {
 
         if update_ratio >= self.config.rebuild_threshold {
             drop(processor);
-            drop(stats);
 
             // Trigger rebuild
             self.rebuild_index().await?;
@@ -310,7 +299,7 @@ impl RealTimeVectorUpdater {
                         if let Err(e) = Self::process_pending_batch(
                             &queue, &processor, &index, &stats, &config
                         ).await {
-                            eprintln!("Batch processing error: {}", e);
+                            eprintln!("Batch processing error: {e}");
                         }
                     }
                     _ = shutdown_rx.changed() => {
@@ -342,7 +331,7 @@ impl RealTimeVectorUpdater {
                     _ = interval.tick() => {
                         // Perform compaction
                         if let Err(e) = Self::perform_compaction(&index, &stats).await {
-                            eprintln!("Compaction error: {}", e);
+                            eprintln!("Compaction error: {e}");
                         }
                     }
                     _ = shutdown_rx.changed() => {
@@ -447,7 +436,7 @@ impl RealTimeVectorUpdater {
             | UpdateOperation::Update { .. }
             | UpdateOperation::Delete { .. } => 1,
             UpdateOperation::Batch { operations } => {
-                operations.iter().map(|op| Self::count_operations(op)).sum()
+                operations.iter().map(Self::count_operations).sum()
             }
         }
     }
@@ -537,6 +526,13 @@ impl RealTimeVectorUpdater {
         stats.total_batches += 1;
         stats.total_updates += successful_ops;
         stats.failed_updates += failed_ops;
+        
+        // Update average processing time
+        let total_time = stats.average_processing_time.as_nanos() as f64
+            * (stats.total_batches - 1) as f64
+            + processing_time.as_nanos() as f64;
+        stats.average_processing_time =
+            Duration::from_nanos((total_time / stats.total_batches as f64) as u64);
 
         processor.total_updates_since_rebuild += successful_ops as usize;
         processor.batch_start_time = None;
@@ -556,10 +552,13 @@ impl BatchProcessor {
     }
 }
 
+/// Search cache type alias for readability
+type SearchCache = Arc<RwLock<HashMap<String, (Vec<SimilarityResult>, Instant)>>>;
+
 /// Real-time search interface that handles live updates
 pub struct RealTimeVectorSearch {
     updater: Arc<RealTimeVectorUpdater>,
-    search_cache: Arc<RwLock<HashMap<String, (Vec<SimilarityResult>, Instant)>>>,
+    search_cache: SearchCache,
     cache_ttl: Duration,
 }
 

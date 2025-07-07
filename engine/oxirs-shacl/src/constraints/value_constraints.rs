@@ -46,7 +46,7 @@
 use serde::{Deserialize, Serialize};
 
 use oxirs_core::{
-    model::{BlankNode, Literal, NamedNode, Quad, Term, Triple},
+    model::{NamedNode, Quad, Term, Triple},
     Store,
 };
 
@@ -116,10 +116,7 @@ impl ConstraintEvaluator for ClassConstraint {
                 value, self.class_iri
             );
             let is_instance = self.check_class_membership(store, value)?;
-            println!(
-                "DEBUG ClassConstraint: Value {:?} is_instance: {}",
-                value, is_instance
-            );
+            println!("DEBUG ClassConstraint: Value {value:?} is_instance: {is_instance}");
             if !is_instance {
                 return Ok(ConstraintEvaluationResult::violated(
                     Some(value.clone()),
@@ -141,12 +138,10 @@ impl ClassConstraint {
         match value {
             Term::NamedNode(node) => {
                 // Query for ?value rdf:type ?class where ?class is self.class_iri or a subclass
-                let type_predicate = NamedNode::new(
-                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
-                )
-                .map_err(|e| {
-                    ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {}", e))
-                })?;
+                let type_predicate =
+                    NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").map_err(
+                        |e| ShaclError::ConstraintValidation(format!("Invalid RDF type IRI: {e}")),
+                    )?;
 
                 // Check direct type assertion
                 let triple =
@@ -242,7 +237,7 @@ impl ConstraintValidator for DatatypeConstraint {
 impl ConstraintEvaluator for DatatypeConstraint {
     fn evaluate(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it has the required datatype
@@ -265,8 +260,7 @@ impl ConstraintEvaluator for DatatypeConstraint {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
                         Some(format!(
-                            "Value {} is not a literal, cannot check datatype",
-                            value
+                            "Value {value} is not a literal, cannot check datatype"
                         )),
                     ));
                 }
@@ -333,7 +327,7 @@ pub enum NodeKind {
 /// Each [`NodeKind`] variant defines which RDF node types are considered valid:
 ///
 /// - [`NodeKind::Iri`]: Only named nodes (IRIs) pass validation
-/// - [`NodeKind::BlankNode`]: Only blank nodes pass validation  
+/// - [`NodeKind::BlankNode`]: Only blank nodes pass validation
 /// - [`NodeKind::Literal`]: Only literal values pass validation
 /// - [`NodeKind::BlankNodeOrIri`]: Both blank nodes and IRIs pass validation
 /// - [`NodeKind::BlankNodeOrLiteral`]: Both blank nodes and literals pass validation
@@ -360,7 +354,7 @@ impl ConstraintValidator for NodeKindConstraint {
 impl ConstraintEvaluator for NodeKindConstraint {
     fn evaluate(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
     ) -> Result<ConstraintEvaluationResult> {
         // For each value, check if it matches the required node kind

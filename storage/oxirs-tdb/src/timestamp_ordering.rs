@@ -725,12 +725,12 @@ mod tests {
 
         // vc1 advances
         vc1.tick();
-        assert_eq!(vc1.compare(&vc2), CausalRelation::HappensBefore);
-        assert_eq!(vc2.compare(&vc1), CausalRelation::HappensAfter);
+        assert_eq!(vc1.compare(&vc2), CausalRelation::HappensAfter);
+        assert_eq!(vc2.compare(&vc1), CausalRelation::HappensBefore);
 
         // vc2 learns about vc1 and advances
         vc2.update(&vc1);
-        assert_eq!(vc1.compare(&vc2), CausalRelation::HappensAfter);
+        assert_eq!(vc1.compare(&vc2), CausalRelation::HappensBefore);
     }
 
     #[test]
@@ -769,7 +769,7 @@ mod tests {
         let bundle1 = manager.tick();
         let bundle2 = manager.tick();
 
-        assert!(bundle2.happens_before(&bundle1) == false);
+        assert!(!bundle2.happens_before(&bundle1));
         assert!(bundle1.happens_before(&bundle2));
     }
 

@@ -366,7 +366,7 @@ impl Word2VecEmbeddingGenerator {
         for len in self.config.min_subword_len..=self.config.max_subword_len.min(chars.len()) {
             for start in 0..=chars.len().saturating_sub(len) {
                 let subword: String = chars[start..start + len].iter().collect();
-                subwords.push(format!("<{}>", subword)); // Mark as subword
+                subwords.push(format!("<{subword}>")); // Mark as subword
             }
         }
 
@@ -691,8 +691,10 @@ mod tests {
 
     #[test]
     fn test_word2vec_generator() {
-        let mut config = Word2VecConfig::default();
-        config.dimensions = 100;
+        let config = Word2VecConfig {
+            dimensions: 100,
+            ..Default::default()
+        };
 
         let embedding_config = EmbeddingConfig {
             model_name: "word2vec-test".to_string(),
@@ -732,9 +734,11 @@ mod tests {
 
     #[test]
     fn test_aggregation_methods() {
-        let mut config = Word2VecConfig::default();
-        config.dimensions = 3;
-        config.normalize = false;
+        let mut config = Word2VecConfig {
+            dimensions: 3,
+            normalize: false,
+            ..Default::default()
+        };
 
         let embedding_config = EmbeddingConfig {
             model_name: "test".to_string(),

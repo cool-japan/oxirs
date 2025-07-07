@@ -1,6 +1,8 @@
 //! GPU device information and management
 
-use anyhow::{anyhow, Result};
+#[cfg(feature = "cuda")]
+use anyhow::anyhow;
+use anyhow::Result;
 
 /// GPU device information
 #[derive(Debug, Clone)]
@@ -71,7 +73,7 @@ impl GpuDevice {
             // Fallback for testing without CUDA
             Ok(Self {
                 device_id,
-                name: format!("Simulated GPU {}", device_id),
+                name: format!("Simulated GPU {device_id}"),
                 compute_capability: (7, 5), // Simulate modern GPU
                 total_memory: 8 * 1024 * 1024 * 1024, // 8GB
                 free_memory: 6 * 1024 * 1024 * 1024, // 6GB free

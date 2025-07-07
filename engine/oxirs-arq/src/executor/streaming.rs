@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::fs::{remove_file, File};
 use std::io::{BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tempfile::NamedTempFile;
 
@@ -1070,7 +1070,7 @@ impl Default for SpillableHashJoin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Literal};
+    use crate::algebra;
 
     #[test]
     fn test_streaming_solution_basic() {

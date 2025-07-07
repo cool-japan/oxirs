@@ -81,6 +81,12 @@ pub struct QuantumStreamProcessor {
     pub active_operations: Vec<QuantumOperation>,
 }
 
+impl Default for QuantumStreamProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumStreamProcessor {
     pub fn new() -> Self {
         Self {

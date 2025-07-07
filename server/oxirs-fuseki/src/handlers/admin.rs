@@ -7,6 +7,7 @@ use crate::{
     server::AppState,
     store::Store,
 };
+use std::sync::Arc;
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
@@ -94,7 +95,7 @@ pub async fn ui_handler(State(state): State<AppState>) -> Result<Html<String>, F
 /// List all datasets
 #[instrument(skip(state))]
 pub async fn list_datasets(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     // auth_user: AuthUser, // Would be used in full implementation
 ) -> Result<Json<Vec<DatasetInfo>>, FusekiError> {
     // Check permissions
@@ -114,7 +115,7 @@ pub async fn list_datasets(
 /// Get specific dataset information
 #[instrument(skip(state))]
 pub async fn get_dataset(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(dataset_name): Path<String>,
     // auth_user: AuthUser,
 ) -> Result<Json<DatasetInfo>, FusekiError> {
@@ -134,7 +135,7 @@ pub async fn get_dataset(
 /// Create new dataset
 #[instrument(skip(state))]
 pub async fn create_dataset(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     // auth_user: AuthUser,
     Json(request): Json<CreateDatasetRequest>,
 ) -> Result<Json<DatasetInfo>, FusekiError> {
@@ -194,7 +195,7 @@ pub async fn create_dataset(
 /// Delete dataset
 #[instrument(skip(state))]
 pub async fn delete_dataset(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(dataset_name): Path<String>,
     // auth_user: AuthUser,
 ) -> Result<StatusCode, FusekiError> {
@@ -219,7 +220,7 @@ pub async fn delete_dataset(
 /// Get server information
 #[instrument(skip(state))]
 pub async fn server_info(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let mut info = HashMap::new();
 
@@ -298,7 +299,7 @@ pub async fn server_stats(State(state): State<AppState>) -> Result<Json<ServerSt
 /// Compact dataset
 #[instrument(skip(state))]
 pub async fn compact_dataset(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(dataset_name): Path<String>,
     Query(params): Query<CompactParams>,
     // auth_user: AuthUser,
@@ -343,7 +344,7 @@ pub async fn compact_dataset(
 /// Backup dataset
 #[instrument(skip(state))]
 pub async fn backup_dataset(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(dataset_name): Path<String>,
     Query(params): Query<BackupParams>,
     // auth_user: AuthUser,

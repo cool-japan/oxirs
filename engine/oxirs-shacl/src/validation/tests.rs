@@ -1,11 +1,13 @@
 //! Tests for the validation module
 
 use super::*;
-use crate::{PropertyPath, Shape, ShapeType};
+use crate::{Constraint, PropertyPath, ValidationConfig};
+use indexmap::IndexMap;
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
     ConcreteStore,
 };
+use std::time::Duration;
 
 #[test]
 fn test_validation_engine_creation() {

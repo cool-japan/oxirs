@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, RwLock};
 use tokio::time::{interval, sleep};
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 
 /// Failover configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,9 +50,10 @@ impl Default for FailoverConfig {
 }
 
 /// Failover state
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum FailoverState {
     /// Using primary connection
+    #[default]
     Primary,
     /// Failed over to secondary
     Secondary,
@@ -64,11 +65,6 @@ pub enum FailoverState {
     Unavailable,
 }
 
-impl Default for FailoverState {
-    fn default() -> Self {
-        FailoverState::Primary
-    }
-}
 
 /// Failover event
 #[derive(Debug, Clone)]
@@ -245,8 +241,10 @@ impl<T: PooledConnection + Clone> FailoverManager<T> {
             FailoverState::Unavailable
         };
 
-        let mut statistics = FailoverStatistics::default();
-        statistics.current_state = initial_state.clone();
+        let mut statistics = FailoverStatistics {
+            current_state: initial_state.clone(),
+            ..Default::default()
+        };
         statistics
             .state_changes
             .push((Instant::now(), initial_state.clone()));

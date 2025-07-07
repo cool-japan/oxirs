@@ -48,10 +48,15 @@ tracing-subscriber = "0.3"
 name = "w3c_test_runner"
 path = "src/bin/w3c_test_runner.rs"
 
+[[bin]]
+name = "shacl_validator"
+path = "src/bin/shacl_validator.rs"
+
 [features]
 default = ["core", "async", "parallel"]
 core = []
 sparql = []
+serde = []
 async = ["tokio", "futures", "futures-util", "tokio-stream"]
 parallel = ["rayon"]
 

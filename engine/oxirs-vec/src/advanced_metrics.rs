@@ -12,8 +12,6 @@
 //! - Hellinger distance
 //! - Mahalanobis distance
 
-use std::collections::HashSet;
-
 use anyhow::Result;
 
 use crate::{Vector, VectorData};
@@ -357,7 +355,7 @@ mod tests {
         let vec2 = Vector::new(vec![0.5, 0.3, 0.1, 0.1]);
 
         let jsd = vec1.jensen_shannon_divergence(&vec2).unwrap();
-        assert!(jsd >= 0.0 && jsd <= 1.0);
+        assert!((0.0..=1.0).contains(&jsd));
 
         // Same distribution should have JSD = 0
         let jsd_same = vec1.jensen_shannon_divergence(&vec1).unwrap();

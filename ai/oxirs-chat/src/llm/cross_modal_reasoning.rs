@@ -1,5 +1,5 @@
 use crate::llm::manager::LLMManager;
-use crate::llm::types::{LLMRequest, LLMResponse, Usage};
+use crate::llm::types::{ChatMessage, ChatRole, LLMRequest, LLMResponse, Priority, Usage, UseCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -21,7 +21,7 @@ pub struct ImageInput {
     pub metadata: HashMap<String, String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ImageFormat {
     Jpeg,
     Png,
@@ -37,7 +37,7 @@ pub struct StructuredData {
     pub schema: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum DataFormat {
     Json,
     Xml,
@@ -229,24 +229,27 @@ impl CrossModalReasoning {
         );
 
         let request = LLMRequest {
-            prompt,
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: prompt,
+                metadata: None,
+            }],
             max_tokens: Some(1000),
-            temperature: Some(0.7),
-            model: None,
+            temperature: 0.7,
             system_prompt: Some(
                 "You are an expert text analyst. Provide thorough, accurate analysis.".to_string(),
             ),
-            stop_sequences: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            logit_bias: None,
-            user: None,
-            stream: false,
-            tools: None,
+            use_case: UseCase::Analysis,
+            priority: Priority::Normal,
+            timeout: None,
         };
 
-        let response = self.llm_manager.read().await.generate(&request).await?;
+        let response = self
+            .llm_manager
+            .write()
+            .await
+            .generate_response(request)
+            .await?;
 
         Ok(ModalityResult {
             content: response.content,
@@ -269,25 +272,28 @@ impl CrossModalReasoning {
         );
 
         let request = LLMRequest {
-            prompt,
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: prompt,
+                metadata: None,
+            }],
             max_tokens: Some(1000),
-            temperature: Some(0.7),
-            model: None,
+            temperature: 0.7,
             system_prompt: Some(
                 "You are an expert visual analyst. Provide thorough, accurate visual analysis."
                     .to_string(),
             ),
-            stop_sequences: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            logit_bias: None,
-            user: None,
-            stream: false,
-            tools: None,
+            use_case: UseCase::Analysis,
+            priority: Priority::Normal,
+            timeout: None,
         };
 
-        let response = self.llm_manager.read().await.generate(&request).await?;
+        let response = self
+            .llm_manager
+            .write()
+            .await
+            .generate_response(request)
+            .await?;
 
         Ok(ModalityResult {
             content: response.content,
@@ -310,25 +316,28 @@ impl CrossModalReasoning {
         );
 
         let request = LLMRequest {
-            prompt,
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: prompt,
+                metadata: None,
+            }],
             max_tokens: Some(1000),
-            temperature: Some(0.7),
-            model: None,
+            temperature: 0.7,
             system_prompt: Some(
                 "You are an expert data analyst. Provide thorough, accurate structural analysis."
                     .to_string(),
             ),
-            stop_sequences: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            logit_bias: None,
-            user: None,
-            stream: false,
-            tools: None,
+            use_case: UseCase::Analysis,
+            priority: Priority::Normal,
+            timeout: None,
         };
 
-        let response = self.llm_manager.read().await.generate(&request).await?;
+        let response = self
+            .llm_manager
+            .write()
+            .await
+            .generate_response(request)
+            .await?;
 
         Ok(ModalityResult {
             content: response.content,
@@ -353,22 +362,25 @@ impl CrossModalReasoning {
         );
 
         let request = LLMRequest {
-            prompt,
+            messages: vec![ChatMessage {
+                role: ChatRole::User,
+                content: prompt,
+                metadata: None,
+            }],
             max_tokens: Some(1500),
-            temperature: Some(0.6),
-            model: None,
+            temperature: 0.6,
             system_prompt: Some("You are an expert cross-modal reasoner. Synthesize information from multiple modalities to provide comprehensive, accurate answers.".to_string()),
-            stop_sequences: None,
-            top_p: None,
-            frequency_penalty: None,
-            presence_penalty: None,
-            logit_bias: None,
-            user: None,
-            stream: false,
-            tools: None,
+            use_case: UseCase::ComplexReasoning,
+            priority: Priority::Normal,
+            timeout: None,
         };
 
-        let response = self.llm_manager.read().await.generate(&request).await?;
+        let response = self
+            .llm_manager
+            .write()
+            .await
+            .generate_response(request)
+            .await?;
 
         // Calculate fusion confidence based on input confidences
         let avg_confidence = steps.iter().map(|s| s.confidence).sum::<f32>() / steps.len() as f32;

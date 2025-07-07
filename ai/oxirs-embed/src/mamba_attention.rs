@@ -14,6 +14,7 @@ use crate::{EmbeddingError, ModelConfig, Vector};
 use anyhow::Result;
 use ndarray::{s, Array1, Array2, Array3, Axis};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::collections::HashMap;
 
 /// Configuration for Mamba attention mechanisms
@@ -676,13 +677,297 @@ impl crate::EmbeddingModel for MambaEmbedding {
         self.stats.clone()
     }
 
-    fn save(&self, _path: &str) -> Result<()> {
-        // TODO: Implement serialization
+    fn save(&self, path: &str) -> Result<()> {
+        use std::fs::File;
+        use std::io::Write;
+
+        // Create the full path for the Mamba model
+        let model_path = format!("{}.mamba", path);
+        let metadata_path = format!("{}.mamba.metadata.json", path);
+
+        // Serialize the model state - convert entity and relation mappings
+        let entity_data: std::collections::HashMap<String, usize> = self.entities.clone();
+        let relation_data: std::collections::HashMap<String, usize> = self.relations.clone();
+
+        // Convert ndarray embeddings to vectors for JSON serialization
+        let entity_embeddings_data = self.entity_embeddings.as_slice().unwrap().to_vec();
+        let relation_embeddings_data = self.relation_embeddings.as_slice().unwrap().to_vec();
+
+        // Serialize Mamba blocks parameters (first block as representative)
+        let mamba_blocks_data = if let Some(first_block) = self.mamba_blocks.first() {
+            serde_json::json!({
+                "config": first_block.config,
+                "in_proj": first_block.in_proj.as_slice().unwrap().to_vec(),
+                "in_proj_shape": first_block.in_proj.shape(),
+                "conv1d": first_block.conv1d.as_slice().unwrap().to_vec(),
+                "conv1d_shape": first_block.conv1d.shape(),
+                "a_log": first_block.a_log.as_slice().unwrap().to_vec(),
+                "a_log_shape": first_block.a_log.shape(),
+                "d": first_block.d.as_slice().unwrap().to_vec(),
+                "d_shape": first_block.d.shape(),
+                "num_blocks": self.mamba_blocks.len(),
+            })
+        } else {
+            serde_json::Value::Null
+        };
+
+        let model_data = serde_json::json!({
+            "model_id": self.id,
+            "config": self.config,
+            "mamba_config": self.mamba_config,
+            "entity_data": entity_data,
+            "relation_data": relation_data,
+            "entity_embeddings": entity_embeddings_data,
+            "entity_embeddings_shape": self.entity_embeddings.shape(),
+            "relation_embeddings": relation_embeddings_data,
+            "relation_embeddings_shape": self.relation_embeddings.shape(),
+            "is_trained": self.is_trained,
+            "stats": self.stats,
+            "mamba_blocks": mamba_blocks_data,
+            "timestamp": chrono::Utc::now(),
+            "version": "1.0"
+        });
+
+        // Write model data
+        let mut file = File::create(&model_path)?;
+        let serialized = serde_json::to_string_pretty(&model_data)?;
+        file.write_all(serialized.as_bytes())?;
+
+        // Write metadata
+        let metadata = serde_json::json!({
+            "model_type": "MambaEmbedding",
+            "model_id": self.id,
+            "dimensions": self.config.dimensions,
+            "num_entities": self.entities.len(),
+            "num_relations": self.relations.len(),
+            "is_trained": self.is_trained,
+            "created_at": chrono::Utc::now(),
+            "file_path": model_path
+        });
+
+        let mut metadata_file = File::create(&metadata_path)?;
+        let metadata_serialized = serde_json::to_string_pretty(&metadata)?;
+        metadata_file.write_all(metadata_serialized.as_bytes())?;
+
+        tracing::info!("Mamba model saved to {} and {}", model_path, metadata_path);
         Ok(())
     }
 
-    fn load(&mut self, _path: &str) -> Result<()> {
-        // TODO: Implement deserialization
+    fn load(&mut self, path: &str) -> Result<()> {
+        use std::fs::File;
+        use std::io::Read;
+
+        // Determine the full path
+        let model_path = format!("{}.mamba", path);
+
+        // Read and deserialize model data
+        let mut file = File::open(&model_path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let model_data: serde_json::Value = serde_json::from_str(&contents)?;
+
+        // Validate version compatibility
+        if let Some(version) = model_data.get("version").and_then(|v| v.as_str()) {
+            if version != "1.0" {
+                return Err(anyhow::anyhow!("Unsupported model version: {}", version));
+            }
+        }
+
+        // Load basic model properties
+        if let Some(model_id) = model_data.get("model_id") {
+            self.id = serde_json::from_value(model_id.clone())?;
+        }
+
+        if let Some(config) = model_data.get("config") {
+            self.config = serde_json::from_value(config.clone())?;
+        }
+
+        if let Some(mamba_config) = model_data.get("mamba_config") {
+            self.mamba_config = serde_json::from_value(mamba_config.clone())?;
+        }
+
+        if let Some(is_trained) = model_data.get("is_trained") {
+            self.is_trained = serde_json::from_value(is_trained.clone())?;
+        }
+
+        if let Some(stats) = model_data.get("stats") {
+            self.stats = serde_json::from_value(stats.clone())?;
+        }
+
+        // Load entity data (mappings)
+        if let Some(entity_data) = model_data.get("entity_data") {
+            self.entities = serde_json::from_value(entity_data.clone())?;
+        }
+
+        // Load relation data (mappings)
+        if let Some(relation_data) = model_data.get("relation_data") {
+            self.relations = serde_json::from_value(relation_data.clone())?;
+        }
+
+        // Load entity embeddings array
+        if let (Some(embeddings_data), Some(embeddings_shape)) = (
+            model_data
+                .get("entity_embeddings")
+                .and_then(|v| v.as_array()),
+            model_data
+                .get("entity_embeddings_shape")
+                .and_then(|v| v.as_array()),
+        ) {
+            let values: Vec<f32> = embeddings_data
+                .iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect();
+            let shape: Vec<usize> = embeddings_shape
+                .iter()
+                .filter_map(|v| v.as_u64().map(|u| u as usize))
+                .collect();
+            if shape.len() == 2 {
+                self.entity_embeddings = Array2::from_shape_vec((shape[0], shape[1]), values)
+                    .map_err(|e| anyhow::anyhow!("Failed to reshape entity_embeddings: {}", e))?;
+            }
+        }
+
+        // Load relation embeddings array
+        if let (Some(embeddings_data), Some(embeddings_shape)) = (
+            model_data
+                .get("relation_embeddings")
+                .and_then(|v| v.as_array()),
+            model_data
+                .get("relation_embeddings_shape")
+                .and_then(|v| v.as_array()),
+        ) {
+            let values: Vec<f32> = embeddings_data
+                .iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect();
+            let shape: Vec<usize> = embeddings_shape
+                .iter()
+                .filter_map(|v| v.as_u64().map(|u| u as usize))
+                .collect();
+            if shape.len() == 2 {
+                self.relation_embeddings = Array2::from_shape_vec((shape[0], shape[1]), values)
+                    .map_err(|e| anyhow::anyhow!("Failed to reshape relation_embeddings: {}", e))?;
+            }
+        }
+
+        // Load Mamba blocks parameters
+        if let Some(mamba_blocks_data) = model_data.get("mamba_blocks") {
+            if !mamba_blocks_data.is_null() {
+                // Get number of blocks to recreate
+                let num_blocks = mamba_blocks_data
+                    .get("num_blocks")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(self.mamba_blocks.len() as u64)
+                    as usize;
+
+                // Recreate blocks with correct count
+                self.mamba_blocks.clear();
+                for _ in 0..num_blocks {
+                    self.mamba_blocks
+                        .push(MambaBlock::new(self.mamba_config.clone()));
+                }
+
+                // Load parameters into first block (as representative)
+                if let Some(first_block) = self.mamba_blocks.first_mut() {
+                    // Load in_proj matrix
+                    if let (Some(in_proj_data), Some(in_proj_shape)) = (
+                        mamba_blocks_data.get("in_proj").and_then(|v| v.as_array()),
+                        mamba_blocks_data
+                            .get("in_proj_shape")
+                            .and_then(|v| v.as_array()),
+                    ) {
+                        let values: Vec<f32> = in_proj_data
+                            .iter()
+                            .filter_map(|v| v.as_f64().map(|f| f as f32))
+                            .collect();
+                        let shape: Vec<usize> = in_proj_shape
+                            .iter()
+                            .filter_map(|v| v.as_u64().map(|u| u as usize))
+                            .collect();
+                        if shape.len() == 2 {
+                            first_block.in_proj =
+                                Array2::from_shape_vec((shape[0], shape[1]), values).map_err(
+                                    |e| anyhow::anyhow!("Failed to reshape in_proj: {}", e),
+                                )?;
+                        }
+                    }
+
+                    // Load conv1d matrix
+                    if let (Some(conv1d_data), Some(conv1d_shape)) = (
+                        mamba_blocks_data.get("conv1d").and_then(|v| v.as_array()),
+                        mamba_blocks_data
+                            .get("conv1d_shape")
+                            .and_then(|v| v.as_array()),
+                    ) {
+                        let values: Vec<f32> = conv1d_data
+                            .iter()
+                            .filter_map(|v| v.as_f64().map(|f| f as f32))
+                            .collect();
+                        let shape: Vec<usize> = conv1d_shape
+                            .iter()
+                            .filter_map(|v| v.as_u64().map(|u| u as usize))
+                            .collect();
+                        if shape.len() == 2 {
+                            first_block.conv1d =
+                                Array2::from_shape_vec((shape[0], shape[1]), values).map_err(
+                                    |e| anyhow::anyhow!("Failed to reshape conv1d: {}", e),
+                                )?;
+                        }
+                    }
+
+                    // Load a_log matrix
+                    if let (Some(a_log_data), Some(a_log_shape)) = (
+                        mamba_blocks_data.get("a_log").and_then(|v| v.as_array()),
+                        mamba_blocks_data
+                            .get("a_log_shape")
+                            .and_then(|v| v.as_array()),
+                    ) {
+                        let values: Vec<f32> = a_log_data
+                            .iter()
+                            .filter_map(|v| v.as_f64().map(|f| f as f32))
+                            .collect();
+                        let shape: Vec<usize> = a_log_shape
+                            .iter()
+                            .filter_map(|v| v.as_u64().map(|u| u as usize))
+                            .collect();
+                        if shape.len() == 2 {
+                            first_block.a_log =
+                                Array2::from_shape_vec((shape[0], shape[1]), values).map_err(
+                                    |e| anyhow::anyhow!("Failed to reshape a_log: {}", e),
+                                )?;
+                        }
+                    }
+
+                    // Load d vector
+                    if let (Some(d_data), Some(d_shape)) = (
+                        mamba_blocks_data.get("d").and_then(|v| v.as_array()),
+                        mamba_blocks_data.get("d_shape").and_then(|v| v.as_array()),
+                    ) {
+                        let values: Vec<f32> = d_data
+                            .iter()
+                            .filter_map(|v| v.as_f64().map(|f| f as f32))
+                            .collect();
+                        let shape: Vec<usize> = d_shape
+                            .iter()
+                            .filter_map(|v| v.as_u64().map(|u| u as usize))
+                            .collect();
+                        if shape.len() == 1 {
+                            first_block.d = Array1::from_shape_vec(shape[0], values)
+                                .map_err(|e| anyhow::anyhow!("Failed to reshape d: {}", e))?;
+                        }
+                    }
+                }
+            }
+        }
+
+        tracing::info!("Mamba model loaded from {}", model_path);
+        tracing::info!(
+            "Model contains {} entities, {} relations",
+            self.entities.len(),
+            self.relations.len()
+        );
+
         Ok(())
     }
 

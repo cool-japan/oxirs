@@ -86,7 +86,7 @@ pub enum ChatRole {
 }
 
 /// Use case classification for intelligent routing
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum UseCase {
     SimpleQuery,
     ComplexReasoning,
@@ -139,7 +139,7 @@ pub struct LLMResponseStream {
 }
 
 /// Token usage information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Usage {
     pub prompt_tokens: usize,
     pub completion_tokens: usize,

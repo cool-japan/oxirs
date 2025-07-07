@@ -5,9 +5,7 @@ use oxirs_chat::{
     server::{ChatServer, ServerConfig},
     ChatConfig, OxiRSChat,
 };
-use oxirs_core::{
-    format::RdfFormat, ConcreteStore, GraphName, Literal, NamedNode, Quad, Store, Triple,
-};
+use oxirs_core::{format::RdfFormat, ConcreteStore, GraphName, Literal, NamedNode, Quad, Triple};
 use std::{path::PathBuf, sync::Arc};
 use tracing::{error, info, warn};
 
@@ -50,6 +48,10 @@ struct Args {
     /// Session persistence path
     #[arg(long)]
     persistence_path: Option<PathBuf>,
+
+    /// CORS allowed origins (comma-separated list). Use "*" for any origin.
+    #[arg(long, default_value = "*")]
+    cors_origins: String,
 }
 
 #[tokio::main]
@@ -81,11 +83,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("Knowledge graph store initialized");
 
-    // Initialize OxiRS Chat instance
+    // Load and prepare model configuration
+    let llm_config = if let Some(model_config_path) = &args.model_config {
+        info!("Loading model configuration from: {:?}", model_config_path);
+        match load_llm_config(model_config_path).await {
+            Ok(config) => {
+                info!("Successfully loaded model configuration");
+                Some(config)
+            }
+            Err(e) => {
+                error!("Failed to load model configuration: {}", e);
+                warn!("Using default model configuration");
+                None
+            }
+        }
+    } else {
+        info!("No model configuration specified, using defaults");
+        None
+    };
+
+    // Initialize OxiRS Chat instance with LLM configuration
     let chat_instance = {
         info!("Initializing OxiRS Chat with advanced AI capabilities");
         let chat_config = ChatConfig::default();
-        match OxiRSChat::new(chat_config, store.clone()).await {
+        match OxiRSChat::new_with_llm_config(chat_config, store.clone(), llm_config).await {
             Ok(chat) => Arc::new(chat),
             Err(e) => {
                 error!("Failed to initialize OxiRS Chat: {}", e);
@@ -98,6 +119,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let host = args.host.clone();
     let port = args.port;
 
+    // Parse CORS origins from command line argument
+    let cors_origins: Vec<String> = args
+        .cors_origins
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
     // Configure the server
     let server_config = ServerConfig {
         host: args.host,
@@ -105,39 +134,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         max_connections: args.max_connections,
         session_timeout: std::time::Duration::from_secs(args.session_timeout),
         enable_metrics: args.enable_metrics,
-        cors_origins: vec!["*".to_string()], // TODO: Make configurable
+        cors_origins,
     };
 
     info!("Server configuration: {:?}", server_config);
 
-    // Load and apply model configuration if provided
-    let llm_config = if let Some(model_config_path) = &args.model_config {
-        info!("Loading model configuration from: {:?}", model_config_path);
-        match load_llm_config(model_config_path).await {
-            Ok(config) => {
-                info!("Successfully loaded model configuration");
-                config
+    // Load existing sessions if persistence path is provided
+    if let Some(ref persistence_path) = args.persistence_path {
+        info!("Loading existing sessions from {:?}", persistence_path);
+        match chat_instance.load_sessions(persistence_path).await {
+            Ok(count) => {
+                info!("Loaded {} existing sessions", count);
             }
             Err(e) => {
-                error!("Failed to load model configuration: {}", e);
-                warn!("Using default model configuration");
-                oxirs_chat::llm::LLMConfig::default()
+                warn!("Failed to load existing sessions: {}", e);
             }
-        }
-    } else {
-        info!("No model configuration specified, using defaults");
-        oxirs_chat::llm::LLMConfig::default()
-    };
-
-    // Initialize the LLM manager with the configuration
-    match oxirs_chat::llm::LLMManager::new(llm_config.clone()) {
-        Ok(_llm_manager) => {
-            info!("LLM manager initialized successfully");
-            // TODO: Store LLM manager in chat manager
-        }
-        Err(e) => {
-            error!("Failed to initialize LLM manager: {}", e);
-            warn!("Chat functionality may be limited without LLM integration");
         }
     }
 
@@ -163,15 +174,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("💾 Session persistence enabled");
     }
 
-    // Set up graceful shutdown
+    // Set up graceful shutdown with session saving
     let chat_instance_for_shutdown = chat_instance_clone.clone();
+    let persistence_path_for_shutdown = args.persistence_path.clone();
     tokio::spawn(async move {
         tokio::signal::ctrl_c()
             .await
             .expect("Failed to listen for Ctrl+C");
         info!("Received shutdown signal, saving sessions...");
-        // TODO: Implement session saving for OxiRSChat
-        info!("Sessions saved, shutting down...");
+
+        if let Some(persistence_path) = persistence_path_for_shutdown {
+            match chat_instance_for_shutdown
+                .save_sessions(&persistence_path)
+                .await
+            {
+                Ok(count) => {
+                    info!(
+                        "Successfully saved {} sessions to {:?}",
+                        count, persistence_path
+                    );
+                }
+                Err(e) => {
+                    error!("Failed to save sessions: {}", e);
+                }
+            }
+        } else {
+            info!("No persistence path configured, sessions will not be saved");
+        }
+
+        info!("Graceful shutdown complete");
         std::process::exit(0);
     });
 
@@ -272,10 +303,7 @@ async fn load_llm_config(
         match extension.to_lowercase().as_str() {
             "toml" => toml::from_str(&config_content)?,
             "json" => serde_json::from_str(&config_content)?,
-            "yaml" | "yml" => {
-                // For YAML support, we'd need to add a yaml crate
-                return Err("YAML configuration not yet supported, use TOML or JSON".into());
-            }
+            "yaml" | "yml" => serde_yaml::from_str(&config_content)?,
             _ => {
                 warn!(
                     "Unknown config file extension '{}', trying TOML format",
@@ -299,7 +327,7 @@ fn parse_rdf_content(
     store: &mut ConcreteStore,
 ) -> Result<usize, Box<dyn std::error::Error>> {
     use oxirs_core::format::parser::simple;
-    use std::io::Cursor;
+    // std::io::Cursor removed - unused import
 
     let mut count = 0;
 

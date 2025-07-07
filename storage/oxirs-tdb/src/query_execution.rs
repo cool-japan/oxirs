@@ -5,12 +5,12 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 
 use crate::mvcc::TransactionId;
-use crate::nodes::{NodeId, Term};
-use crate::triple_store::{IndexType, Quad, Triple, TripleStore};
+use crate::nodes::NodeId;
+use crate::triple_store::{Triple, TripleStore};
 
 /// Variable in a query pattern
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -286,7 +286,7 @@ impl QueryExecutor {
 
         // Convert results to solution bindings
         let mut solutions = Vec::new();
-        let variables = pattern.variables();
+        let _variables = pattern.variables();
 
         for triple in results {
             let mut binding = SolutionBinding::new();
@@ -332,7 +332,6 @@ impl QueryExecutor {
         let plan = QueryPlan::new(patterns);
 
         // Execute query plan
-        let mut results = Vec::new();
         let mut intermediate_results: Option<Vec<SolutionBinding>> = None;
 
         for &pattern_idx in &plan.join_order {
@@ -371,7 +370,7 @@ impl QueryExecutor {
             }
         }
 
-        results = intermediate_results.unwrap_or_default();
+        let results = intermediate_results.unwrap_or_default();
 
         let execution_time = start_time.elapsed().as_millis() as u64;
 

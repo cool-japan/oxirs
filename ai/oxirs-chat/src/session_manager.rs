@@ -302,13 +302,26 @@ pub struct TopicTransition {
 }
 
 /// Type of topic transition
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TransitionType {
     NewTopic,
     TopicShift,
     TopicReturn,
     TopicMerge,
     TopicSplit,
+}
+
+impl PartialEq<&str> for TransitionType {
+    fn eq(&self, other: &&str) -> bool {
+        match (self, *other) {
+            (TransitionType::NewTopic, "new") => true,
+            (TransitionType::TopicShift, "shift") => true,
+            (TransitionType::TopicReturn, "return") => true,
+            (TransitionType::TopicMerge, "merge") => true,
+            (TransitionType::TopicSplit, "split") => true,
+            _ => false,
+        }
+    }
 }
 
 /// Session performance metrics

@@ -6,17 +6,17 @@
 //! stream processing, including state stores, checkpointing, recovery, and
 //! distributed state synchronization.
 
-use crate::{EventMetadata, StreamEvent};
+use crate::StreamEvent;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tokio::sync::RwLock;
+use tracing::{error, info};
 use uuid::Uuid;
 
 /// State store backend type
@@ -331,7 +331,7 @@ impl StateStore for MemoryStateStore {
         let checkpoint_id = Uuid::new_v4().to_string();
 
         if let Some(ref checkpoint_path) = self.config.checkpoint_path {
-            let checkpoint_file = checkpoint_path.join(format!("{}.checkpoint", checkpoint_id));
+            let checkpoint_file = checkpoint_path.join(format!("{checkpoint_id}.checkpoint"));
 
             // Serialize state
             let data = self.data.read().await;
@@ -357,7 +357,7 @@ impl StateStore for MemoryStateStore {
 
     async fn restore(&self, checkpoint_id: &str) -> Result<()> {
         if let Some(ref checkpoint_path) = self.config.checkpoint_path {
-            let checkpoint_file = checkpoint_path.join(format!("{}.checkpoint", checkpoint_id));
+            let checkpoint_file = checkpoint_path.join(format!("{checkpoint_id}.checkpoint"));
 
             // Read checkpoint file
             let mut file = fs::File::open(&checkpoint_file).await?;
@@ -490,6 +490,12 @@ impl StateProcessor {
 pub struct StateProcessorBuilder {
     config: StateConfig,
     stores: HashMap<String, Arc<dyn StateStore>>,
+}
+
+impl Default for StateProcessorBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StateProcessorBuilder {
@@ -638,6 +644,7 @@ pub mod patterns {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::EventMetadata;
     use tempfile::TempDir;
 
     #[tokio::test]

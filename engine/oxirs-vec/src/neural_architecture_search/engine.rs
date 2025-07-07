@@ -45,7 +45,7 @@ impl NeuralArchitectureSearch {
     ) -> Result<Self> {
         let mut rng = ChaCha8Rng::seed_from_u64(config.random_seed);
         let history = Arc::new(RwLock::new(SearchHistory::default()));
-        
+
         // Initialize population
         let population = Self::initialize_population(
             &search_space,
@@ -81,7 +81,7 @@ impl NeuralArchitectureSearch {
                         best_performance = perf.composite_score;
                         best_architecture = Some(arch.clone());
                         generations_without_improvement = 0;
-                        
+
                         // Check if target performance is reached
                         if best_performance >= self.config.target_performance {
                             break;
@@ -203,7 +203,7 @@ impl NeuralArchitectureSearch {
         // Evaluate each architecture
         for arch in &mut self.population {
             arch.generation = generation;
-            
+
             // Placeholder evaluation - in real implementation, this would train and evaluate the model
             let performance = PerformanceMetrics {
                 embedding_quality: self.rng.gen_range(0.0..1.0),

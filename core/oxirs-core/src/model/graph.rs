@@ -6,8 +6,46 @@ use std::iter::FromIterator;
 
 /// An in-memory RDF Graph
 ///
-/// A graph is a set of RDF triples. This implementation uses a HashSet
-/// for efficient insertion, removal, and lookup operations.
+/// A graph is a set of RDF triples representing a collection of statements.
+/// This implementation uses a HashSet for efficient insertion, removal, and
+/// lookup operations with O(1) average-case performance.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_core::model::{Graph, Triple, NamedNode, Literal};
+///
+/// // Create a new empty graph
+/// let mut graph = Graph::new();
+///
+/// // Create some triples
+/// let triple1 = Triple::new(
+///     NamedNode::new("http://example.org/alice").unwrap(),
+///     NamedNode::new("http://example.org/name").unwrap(),
+///     Literal::new("Alice"),
+/// );
+///
+/// let triple2 = Triple::new(
+///     NamedNode::new("http://example.org/alice").unwrap(),
+///     NamedNode::new("http://example.org/age").unwrap(),
+///     Literal::new("30"),
+/// );
+///
+/// // Insert triples into the graph
+/// graph.insert(triple1);
+/// graph.insert(triple2);
+///
+/// // Check if graph contains a triple
+/// assert_eq!(graph.len(), 2);
+/// assert!(graph.contains(&triple1));
+/// ```
+///
+/// # Performance Characteristics
+///
+/// - **Insertion**: O(1) average case
+/// - **Removal**: O(1) average case  
+/// - **Lookup**: O(1) average case
+/// - **Memory**: Each triple stored once (set semantics)
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Graph {
     triples: HashSet<Triple>,
@@ -15,13 +53,40 @@ pub struct Graph {
 
 impl Graph {
     /// Creates a new empty graph
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::Graph;
+    ///
+    /// let graph = Graph::new();
+    /// assert_eq!(graph.len(), 0);
+    /// assert!(graph.is_empty());
+    /// ```
     pub fn new() -> Self {
         Graph {
             triples: HashSet::new(),
         }
     }
 
-    /// Creates a new graph with the specified capacity
+    /// Creates a new graph with the specified initial capacity
+    ///
+    /// This can improve performance when you know approximately how many
+    /// triples the graph will contain, as it avoids unnecessary reallocations.
+    ///
+    /// # Arguments
+    ///
+    /// * `capacity` - The initial capacity for the underlying hash set
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::Graph;
+    ///
+    /// // Create a graph optimized for ~1000 triples
+    /// let graph = Graph::with_capacity(1000);
+    /// assert_eq!(graph.len(), 0);
+    /// ```
     pub fn with_capacity(capacity: usize) -> Self {
         Graph {
             triples: HashSet::with_capacity(capacity),
@@ -29,6 +94,34 @@ impl Graph {
     }
 
     /// Creates a graph from a vector of triples
+    ///
+    /// Duplicates are automatically removed as graphs maintain set semantics.
+    ///
+    /// # Arguments
+    ///
+    /// * `triples` - A vector of triples to insert into the graph
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Graph, Triple, NamedNode, Literal};
+    ///
+    /// let triples = vec![
+    ///     Triple::new(
+    ///         NamedNode::new("http://example.org/alice").unwrap(),
+    ///         NamedNode::new("http://example.org/name").unwrap(),
+    ///         Literal::new("Alice"),
+    ///     ),
+    ///     Triple::new(
+    ///         NamedNode::new("http://example.org/bob").unwrap(),
+    ///         NamedNode::new("http://example.org/name").unwrap(),
+    ///         Literal::new("Bob"),
+    ///     ),
+    /// ];
+    ///
+    /// let graph = Graph::from_triples(triples);
+    /// assert_eq!(graph.len(), 2);
+    /// ```
     pub fn from_triples(triples: Vec<Triple>) -> Self {
         Graph {
             triples: triples.into_iter().collect(),
@@ -280,7 +373,7 @@ mod tests {
         graph.insert(triple2.clone());
 
         let mut collected: Vec<_> = graph.iter().cloned().collect();
-        collected.sort_by_key(|t| format!("{}", t));
+        collected.sort_by_key(|t| format!("{t}"));
 
         assert_eq!(collected.len(), 2);
         assert!(collected.contains(&triple1));

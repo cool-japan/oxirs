@@ -4,18 +4,16 @@
 //! health monitoring, and automated recovery for distributed clusters.
 
 use crate::consensus::ConsensusManager;
-use crate::discovery::{DiscoveryService, NodeInfo};
+use crate::discovery::DiscoveryService;
 use crate::error::{ClusterError, Result};
-use crate::health_monitor::{HealthMonitor, NodeHealth, SystemMetrics};
-use crate::network::RpcMessage;
+use crate::health_monitor::{HealthMonitor, NodeHealth};
 use crate::raft::OxirsNodeId;
 use crate::replication::ReplicationManager;
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{interval, timeout};
 use tracing::{debug, error, info, warn};

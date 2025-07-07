@@ -633,7 +633,7 @@ impl CdcProcessor {
     pub async fn subscribe_to_changes(
         &self,
         service_id: &str,
-    ) -> Result<impl futures_util::Stream<Item = ChangeRecord>> {
+    ) -> Result<impl futures_util::Stream<Item = ChangeRecord> + use<>> {
         self.ensure_change_publisher_exists(service_id).await?;
 
         let publishers = self.change_publishers.read().await;

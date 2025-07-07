@@ -9,8 +9,7 @@ pub use crate::subscriptions::*;
 
 /// Server components
 pub mod components {
-    //! Individual server components
-
+    /// Individual server components
     /// HTTP GraphQL server
     pub mod http {
         pub use crate::server::*;

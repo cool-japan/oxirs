@@ -1,5 +1,5 @@
-use crate::model::iri::IriParseError;
 use crate::model::literal::LanguageTagParseError;
+use oxiri::IriParseError;
 // Note: EncodingError has been moved in newer versions of quick-xml
 use quick_xml::events::attributes::AttrError;
 use std::io;

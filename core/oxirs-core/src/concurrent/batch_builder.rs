@@ -10,6 +10,12 @@ use parking_lot::Mutex;
 use std::collections::HashSet;
 use std::sync::Arc;
 
+/// Type alias for transform functions
+type TransformFn = Arc<dyn Fn(&Triple) -> Option<Triple> + Send + Sync>;
+
+/// Type alias for flush callback functions
+type FlushCallback = Arc<Mutex<Option<Box<dyn Fn(Vec<BatchOperation>) + Send + Sync>>>>;
+
 /// Operation coalescing strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CoalescingStrategy {
@@ -107,13 +113,13 @@ pub struct BatchBuilder {
     /// Query operations
     query_buffer: Vec<(Option<Subject>, Option<Predicate>, Option<Object>)>,
     /// Transform operations
-    transform_buffer: Vec<Arc<dyn Fn(&Triple) -> Option<Triple> + Send + Sync>>,
+    transform_buffer: Vec<TransformFn>,
     /// Current estimated memory usage
     estimated_memory: usize,
     /// Statistics
     stats: BatchBuilderStats,
     /// Flush callback
-    flush_callback: Arc<Mutex<Option<Box<dyn Fn(Vec<BatchOperation>) + Send + Sync>>>>,
+    flush_callback: FlushCallback,
 }
 
 impl BatchBuilder {
@@ -362,11 +368,9 @@ impl BatchBuilder {
     /// Optimize operation order for better cache locality
     fn optimize_operation_order(&mut self) {
         // Sort by subject for better cache locality
-        self.insert_buffer
-            .sort_by(|a, b| a.subject().to_string().cmp(&b.subject().to_string()));
+        self.insert_buffer.sort_by_key(|a| a.subject().to_string());
 
-        self.remove_buffer
-            .sort_by(|a, b| a.subject().to_string().cmp(&b.subject().to_string()));
+        self.remove_buffer.sort_by_key(|a| a.subject().to_string());
     }
 
     /// Create insert batches respecting max batch size
@@ -470,9 +474,9 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", id)).unwrap()),
-            Object::NamedNode(NamedNode::new(&format!("http://object/{}", id)).unwrap()),
+            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
+            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
+            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
         )
     }
 

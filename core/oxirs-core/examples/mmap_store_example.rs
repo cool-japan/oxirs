@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     std::fs::create_dir_all(store_path)?;
 
     let store = MmapStore::new(store_path)?;
-    println!("Created memory-mapped store at: {}", store_path);
+    println!("Created memory-mapped store at: {store_path}");
 
     // Example 1: Adding individual quads
     println!("\n1. Adding individual quads:");
@@ -24,16 +24,18 @@ fn main() -> Result<()> {
 
     for i in 0..10 {
         let quad = Quad::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/person/{}", i))?),
+            Subject::NamedNode(NamedNode::new(format!("http://example.org/person/{i}"))?),
             Predicate::NamedNode(NamedNode::new("http://xmlns.com/foaf/0.1/name")?),
-            Object::Literal(Literal::new_simple_literal(&format!("Person {}", i))),
+            Object::Literal(Literal::new_simple_literal(format!("Person {i}"))),
             GraphName::DefaultGraph,
         );
         store.add(&quad)?;
     }
 
     store.flush()?;
-    println!("   Added {} quads in {:?}", store.len(), start.elapsed());
+    let quad_count = store.len();
+    let elapsed = start.elapsed();
+    println!("   Added {quad_count} quads in {elapsed:?}");
 
     // Example 2: Batch loading for better performance
     println!("\n2. Batch loading example:");
@@ -48,35 +50,33 @@ fn main() -> Result<()> {
             // Create diverse data
             let quad = match id % 4 {
                 0 => Quad::new(
-                    Subject::NamedNode(NamedNode::new(&format!(
-                        "http://dbpedia.org/resource/Entity_{}",
-                        id
+                    Subject::NamedNode(NamedNode::new(format!(
+                        "http://dbpedia.org/resource/Entity_{id}"
                     ))?),
                     Predicate::NamedNode(NamedNode::new(
                         "http://www.w3.org/2000/01/rdf-schema#label",
                     )?),
                     Object::Literal(Literal::new_language_tagged_literal(
-                        &format!("Entity {}", id),
+                        format!("Entity {id}"),
                         "en",
                     )?),
                     GraphName::DefaultGraph,
                 ),
                 1 => Quad::new(
-                    Subject::NamedNode(NamedNode::new(&format!(
-                        "http://dbpedia.org/resource/Entity_{}",
-                        id
+                    Subject::NamedNode(NamedNode::new(format!(
+                        "http://dbpedia.org/resource/Entity_{id}"
                     ))?),
                     Predicate::NamedNode(NamedNode::new(
                         "http://dbpedia.org/ontology/populationTotal",
                     )?),
                     Object::Literal(Literal::new_typed(
-                        &format!("{}", id * 1000),
+                        format!("{}", id * 1000),
                         NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?,
                     )),
                     GraphName::DefaultGraph,
                 ),
                 2 => Quad::new(
-                    Subject::BlankNode(BlankNode::new(&format!("node{}", id))?),
+                    Subject::BlankNode(BlankNode::new(format!("node{id}"))?),
                     Predicate::NamedNode(NamedNode::new(
                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
                     )?),
@@ -84,7 +84,7 @@ fn main() -> Result<()> {
                     GraphName::NamedNode(NamedNode::new("http://example.org/graph/people")?),
                 ),
                 _ => Quad::new(
-                    Subject::NamedNode(NamedNode::new(&format!("http://example.org/doc/{}", id))?),
+                    Subject::NamedNode(NamedNode::new(format!("http://example.org/doc/{id}"))?),
                     Predicate::NamedNode(NamedNode::new("http://purl.org/dc/terms/created")?),
                     Object::Literal(Literal::new_typed(
                         "2024-01-01T00:00:00Z",
@@ -101,16 +101,15 @@ fn main() -> Result<()> {
         store.flush()?;
 
         if (batch + 1) % 10 == 0 {
-            println!("   Progress: {} quads loaded...", (batch + 1) * batch_size);
+            let loaded_count = (batch + 1) * batch_size;
+            println!("   Progress: {loaded_count} quads loaded...");
         }
     }
 
     let elapsed = start.elapsed();
-    println!("   Loaded {} quads in {:?}", total_quads, elapsed);
-    println!(
-        "   Rate: {:.0} quads/second",
-        total_quads as f64 / elapsed.as_secs_f64()
-    );
+    println!("   Loaded {total_quads} quads in {elapsed:?}");
+    let rate = total_quads as f64 / elapsed.as_secs_f64();
+    println!("   Rate: {rate:.0} quads/second");
 
     // Example 3: Store statistics
     println!("\n3. Store statistics:");
@@ -123,10 +122,10 @@ fn main() -> Result<()> {
 
     for i in 0..1000 {
         let quad = Quad::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/update/{}", i))?),
+            Subject::NamedNode(NamedNode::new(format!("http://example.org/update/{i}"))?),
             Predicate::NamedNode(NamedNode::new("http://example.org/timestamp")?),
             Object::Literal(Literal::new_typed(
-                &format!("{}", start.elapsed().as_millis()),
+                format!("{}", start.elapsed().as_millis()),
                 NamedNode::new("http://www.w3.org/2001/XMLSchema#long")?,
             )),
             GraphName::NamedNode(NamedNode::new("http://example.org/graph/updates")?),
@@ -140,7 +139,8 @@ fn main() -> Result<()> {
     }
 
     store.flush()?;
-    println!("   Added 1000 incremental updates in {:?}", start.elapsed());
+    let elapsed = start.elapsed();
+    println!("   Added 1000 incremental updates in {elapsed:?}");
 
     // Final statistics
     println!("\n5. Final store statistics:");
@@ -159,7 +159,8 @@ fn main() -> Result<()> {
     drop(store); // Close the current store
 
     let reopened_store = MmapStore::open(store_path)?;
-    println!("   Reopened store contains {} quads", reopened_store.len());
+    let quad_count = reopened_store.len();
+    println!("   Reopened store contains {quad_count} quads");
 
     println!("\nExample completed successfully!");
 
@@ -167,14 +168,17 @@ fn main() -> Result<()> {
 }
 
 fn print_stats(stats: &StoreStats) {
-    println!("   Quad count: {}", stats.quad_count);
-    println!("   Term count: {}", stats.term_count);
-    println!("   Data size: {} MB", stats.data_size as f64 / 1_048_576.0);
-    println!(
-        "   Index size: {} MB",
-        stats.index_size as f64 / 1_048_576.0
-    );
-    println!("   Term size: {} MB", stats.term_size as f64 / 1_048_576.0);
-    let total_size = stats.data_size + stats.index_size + stats.term_size;
-    println!("   Total size: {} MB", total_size as f64 / 1_048_576.0);
+    let quad_count = stats.quad_count;
+    let term_count = stats.term_count;
+    let data_size_mb = stats.data_size as f64 / 1_048_576.0;
+    let index_size_mb = stats.index_size as f64 / 1_048_576.0;
+    let term_size_mb = stats.term_size as f64 / 1_048_576.0;
+    let total_size_mb = (stats.data_size + stats.index_size + stats.term_size) as f64 / 1_048_576.0;
+
+    println!("   Quad count: {quad_count}");
+    println!("   Term count: {term_count}");
+    println!("   Data size: {data_size_mb} MB");
+    println!("   Index size: {index_size_mb} MB");
+    println!("   Term size: {term_size_mb} MB");
+    println!("   Total size: {total_size_mb} MB");
 }

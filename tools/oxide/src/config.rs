@@ -40,13 +40,16 @@ impl Default for CliConfig {
 /// Convert from new config to legacy format
 impl From<&OxideConfig> for CliConfig {
     fn from(config: &OxideConfig) -> Self {
+        // Get default dataset - use the first configured dataset or None
+        let default_dataset = config.datasets.keys().next().cloned();
+
         CliConfig {
-            default_dataset: None, // TODO: Get from datasets
+            default_dataset,
             default_format: config.general.default_format.clone(),
             server_defaults: ServerDefaults {
                 host: config.server.host.clone(),
                 port: config.server.port,
-                enable_graphql: false, // TODO: Get from server config
+                enable_graphql: config.server.enable_graphql,
             },
         }
     }

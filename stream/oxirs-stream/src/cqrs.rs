@@ -5,14 +5,14 @@
 //! with the event sourcing framework for eventual consistency and scalability.
 
 use crate::event_sourcing::{EventStoreTrait, EventStream};
-use crate::{EventMetadata, StreamEvent};
+use crate::StreamEvent;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{broadcast, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -544,9 +544,12 @@ impl QueryBus {
     }
 }
 
+// Type alias for complex projection type
+type ProjectionMap = Arc<RwLock<HashMap<String, Box<dyn ReadModelProjection<Event = StreamEvent>>>>>;
+
 /// Read model manager for handling projections
 pub struct ReadModelManager {
-    projections: Arc<RwLock<HashMap<String, Box<dyn ReadModelProjection<Event = StreamEvent>>>>>,
+    projections: ProjectionMap,
     projection_positions: Arc<RwLock<HashMap<String, u64>>>,
     event_stream: Arc<dyn EventStream>,
     metrics: Arc<RwLock<ReadModelMetrics>>,

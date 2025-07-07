@@ -4,20 +4,17 @@
 //! that don't fit in memory, with sophisticated spilling and memory management.
 
 use std::collections::{HashMap, VecDeque};
-use std::io::{BufRead, BufReader, BufWriter, Read, Write};
-use std::path::{Path, PathBuf};
+use std::io::{BufRead, Read, Write};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use tempfile::{NamedTempFile, TempDir};
+use tempfile::TempDir;
 use tracing::{debug, info, span, warn, Level};
 
-use crate::algebra::{
-    Algebra, BinaryOperator, Binding, Expression, Solution, Term, TriplePattern, Variable,
-};
-use crate::executor::{ExecutionContext, ExecutionStats};
+use crate::algebra::{Algebra, Binding, Expression, Solution, Term, TriplePattern, Variable};
 use oxirs_core::model::NamedNode;
 
 /// Streaming execution engine for large datasets
@@ -809,7 +806,7 @@ impl StreamingExecutor {
         &self,
         expr: &crate::algebra::Expression,
     ) -> Vec<Variable> {
-        use crate::algebra::{BinaryOperator, Expression, UnaryOperator};
+        use crate::algebra::Expression;
         let mut variables = Vec::new();
 
         match expr {
@@ -947,7 +944,7 @@ impl SpillManager {
     fn spill_data<T: Serialize>(&mut self, data: &T, data_type: SpillDataType) -> Result<String> {
         self.spill_counter += 1;
         let spill_id = format!("spill_{}", self.spill_counter);
-        let file_path = self.spill_directory.join(format!("{}.bin", spill_id));
+        let file_path = self.spill_directory.join(format!("{spill_id}.bin"));
 
         let start_time = Instant::now();
         let serialized = bincode::serialize(data)?;
@@ -1510,7 +1507,7 @@ impl DataStream for StreamingSelection {
 impl StreamingSelection {
     /// Evaluate the filter condition against a solution
     fn evaluate_condition(&self, solution: &Solution) -> Result<bool> {
-        use crate::algebra::{BinaryOperator, Expression, UnaryOperator};
+        use crate::algebra::{BinaryOperator, UnaryOperator};
 
         // Get the primary binding from the solution
         let binding = match solution.first() {
@@ -1834,7 +1831,7 @@ impl StreamingPatternScan {
 
             for var in self.pattern.variables() {
                 let value = Term::Iri(
-                    NamedNode::new(&format!("http://example.org/resource_{}", i)).unwrap(),
+                    NamedNode::new(&format!("http://example.org/resource_{i}")).unwrap(),
                 );
                 binding.insert(var, value);
             }
@@ -1979,7 +1976,7 @@ impl BufferedPatternScan {
 
             for var in self.pattern.variables() {
                 let value =
-                    Term::Iri(NamedNode::new(&format!("http://example.org/item_{}", i)).unwrap());
+                    Term::Iri(NamedNode::new(&format!("http://example.org/item_{i}")).unwrap());
                 binding.insert(var, value);
             }
 

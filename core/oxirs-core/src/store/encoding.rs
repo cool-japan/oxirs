@@ -200,6 +200,13 @@ pub enum EncodedTerm {
         value_id: StrHash,
         datatype_id: StrHash,
     },
+
+    /// Quoted triple (RDF-star)
+    QuotedTriple {
+        subject: Box<EncodedTerm>,
+        predicate: Box<EncodedTerm>,
+        object: Box<EncodedTerm>,
+    },
 }
 
 impl EncodedTerm {
@@ -394,6 +401,16 @@ impl EncodedTerm {
         panic!("Variables cannot be encoded for storage - they are only used in queries")
     }
 
+    /// Encodes a quoted triple (RDF-star)
+    pub fn encode_quoted_triple(quoted_triple: &crate::model::star::QuotedTriple) -> Self {
+        let inner = quoted_triple.inner();
+        EncodedTerm::QuotedTriple {
+            subject: Box::new(Self::encode_term(&Term::from(inner.subject().clone()))),
+            predicate: Box::new(Self::encode_term(&Term::from(inner.predicate().clone()))),
+            object: Box::new(Self::encode_term(&Term::from(inner.object().clone()))),
+        }
+    }
+
     /// Encodes any term
     pub fn encode_term(term: &Term) -> Self {
         match term {
@@ -401,7 +418,7 @@ impl EncodedTerm {
             Term::BlankNode(b) => Self::encode_blank_node(b),
             Term::Literal(l) => Self::encode_literal(l),
             Term::Variable(_) => panic!("Cannot encode variable in this context"),
-            Term::QuotedTriple(_) => todo!("RDF-star encoding not yet implemented"),
+            Term::QuotedTriple(qt) => Self::encode_quoted_triple(qt),
         }
     }
 
@@ -413,7 +430,7 @@ impl EncodedTerm {
             TermRef::Literal(l) => Self::encode_literal_ref(l),
             TermRef::Variable(v) => Self::encode_variable(v),
             #[cfg(feature = "rdf-star")]
-            TermRef::Triple(_) => todo!("RDF-star encoding not yet implemented"),
+            TermRef::Triple(qt) => Self::encode_quoted_triple(qt),
         }
     }
 
@@ -435,6 +452,7 @@ impl EncodedTerm {
             EncodedTerm::SmallBigTypedLiteral { .. } => 12,
             EncodedTerm::BigSmallTypedLiteral { .. } => 13,
             EncodedTerm::BigBigTypedLiteral { .. } => 14,
+            EncodedTerm::QuotedTriple { .. } => 15,
         }
     }
 
@@ -470,6 +488,11 @@ impl EncodedTerm {
         )
     }
 
+    /// Returns true if this is a quoted triple (RDF-star)
+    pub fn is_quoted_triple(&self) -> bool {
+        matches!(self, EncodedTerm::QuotedTriple { .. })
+    }
+
     /// Returns the size in bytes of this encoded term
     pub fn size_hint(&self) -> usize {
         match self {
@@ -488,6 +511,11 @@ impl EncodedTerm {
             EncodedTerm::SmallBigTypedLiteral { .. } => 1 + 16 + 1 + 16,
             EncodedTerm::BigSmallTypedLiteral { .. } => 1 + 16 + 16 + 1,
             EncodedTerm::BigBigTypedLiteral { .. } => 1 + 16 + 16,
+            EncodedTerm::QuotedTriple {
+                subject,
+                predicate,
+                object,
+            } => 1 + subject.size_hint() + predicate.size_hint() + object.size_hint(),
         }
     }
 }

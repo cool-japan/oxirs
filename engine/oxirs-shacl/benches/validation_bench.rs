@@ -1,11 +1,11 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::{
     model::{Literal, NamedNode, Term},
-    ConcreteStore, Store,
+    ConcreteStore,
 };
 use oxirs_shacl::{
-    constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,
-    Severity, Shape, ShapeId, ShapeType, Target, ValidationConfig, Validator,
+    constraints::*, shapes::ShapeFactory, Constraint, PropertyPath, Shape, ShapeId,
+    ValidationConfig, Validator,
 };
 
 fn create_test_data(size: usize) -> (ConcreteStore, Vec<Shape>) {
@@ -14,9 +14,9 @@ fn create_test_data(size: usize) -> (ConcreteStore, Vec<Shape>) {
 
     // Create test data in the store
     for i in 0..size {
-        let person_iri = NamedNode::new(&format!("http://example.org/person{}", i)).unwrap();
-        let name_literal = Term::Literal(Literal::new(&format!("Person {}", i)));
-        let age_literal = Term::Literal(Literal::new(&format!("{}", 20 + (i % 60))));
+        let person_iri = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
+        let name_literal = Term::Literal(Literal::new(format!("Person {i}")));
+        let age_literal = Term::Literal(Literal::new(format!("{}", 20 + (i % 60))));
 
         // Add person type
         let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
@@ -177,7 +177,7 @@ fn bench_shape_parsing(c: &mut Criterion) {
     let simple_shapes_ttl = r#"
         @prefix sh: <http://www.w3.org/ns/shacl#> .
         @prefix ex: <http://example.org/> .
-        
+
         ex:PersonShape a sh:NodeShape ;
             sh:targetClass ex:Person ;
             sh:property [
@@ -192,7 +192,7 @@ fn bench_shape_parsing(c: &mut Criterion) {
         @prefix sh: <http://www.w3.org/ns/shacl#> .
         @prefix ex: <http://example.org/> .
         @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-        
+
         ex:PersonShape a sh:NodeShape ;
             sh:targetClass ex:Person ;
             sh:property [
@@ -219,7 +219,7 @@ fn bench_shape_parsing(c: &mut Criterion) {
                 sh:maxCount 1 ;
                 sh:pattern "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$" ;
             ] .
-            
+
         ex:CompanyShape a sh:NodeShape ;
             sh:targetClass ex:Company ;
             sh:property [

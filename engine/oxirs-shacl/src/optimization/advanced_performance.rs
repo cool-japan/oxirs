@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
     constraints::{Constraint, ConstraintEvaluationResult},
-    ConstraintComponentId, Result, ShaclError, ShapeId,
+    ConstraintComponentId, ShapeId,
 };
 
 /// Advanced performance analytics engine with adaptive optimization
@@ -291,7 +291,7 @@ impl AdvancedPerformanceAnalytics {
     pub fn record_constraint_evaluation(
         &mut self,
         constraint_id: &ConstraintComponentId,
-        constraint: &Constraint,
+        _constraint: &Constraint,
         result: &ConstraintEvaluationResult,
         execution_time: Duration,
         memory_usage: usize,
@@ -300,7 +300,7 @@ impl AdvancedPerformanceAnalytics {
         let metrics = self
             .constraint_metrics
             .entry(constraint_id.clone())
-            .or_insert_with(|| ConstraintPerformanceMetrics::new());
+            .or_insert_with(ConstraintPerformanceMetrics::new);
 
         metrics.update(execution_time, result.is_satisfied(), memory_usage);
 
@@ -339,7 +339,7 @@ impl AdvancedPerformanceAnalytics {
         let metrics = self
             .shape_metrics
             .entry(shape_id.clone())
-            .or_insert_with(|| ShapePerformanceMetrics::new());
+            .or_insert_with(ShapePerformanceMetrics::new);
 
         metrics.update(
             execution_time,
@@ -373,17 +373,15 @@ impl AdvancedPerformanceAnalytics {
             return None;
         }
 
-        if let Some(metrics) = self.constraint_metrics.get(constraint_id) {
-            Some(PerformancePrediction {
+        self.constraint_metrics
+            .get(constraint_id)
+            .map(|metrics| PerformancePrediction {
                 expected_execution_time: metrics.avg_execution_time,
                 confidence_interval: (metrics.min_execution_time, metrics.max_execution_time),
                 predicted_success_rate: metrics.success_rate,
                 predicted_selectivity: metrics.selectivity,
                 trend: metrics.performance_trend.clone(),
             })
-        } else {
-            None
-        }
     }
 
     /// Adjust adaptive thresholds based on recent performance

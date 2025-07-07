@@ -82,10 +82,9 @@ impl IndexStats {
 
     /// Get cached join selectivity
     pub fn get_join_selectivity(&self, pattern_pair: &str) -> Option<f64> {
-        if let Ok(cache) = self.join_selectivity_cache.read() {
-            cache.get(pattern_pair).copied()
-        } else {
-            None
+        match self.join_selectivity_cache.read() {
+            Ok(cache) => cache.get(pattern_pair).copied(),
+            _ => None,
         }
     }
 }
@@ -429,7 +428,7 @@ impl PatternOptimizer {
         }
 
         // Apply bounds and handle edge cases
-        selectivity.max(0.00001).min(1.0)
+        selectivity.clamp(0.00001, 1.0)
     }
 
     /// Extract variables that will be bound by this pattern
@@ -508,7 +507,7 @@ impl PatternOptimizer {
         right: &AlgebraTriplePattern,
     ) -> f64 {
         // Create cache key for this pattern pair
-        let cache_key = format!("{:?}|{:?}", left, right);
+        let cache_key = format!("{left:?}|{right:?}");
 
         // Check cache first
         if let Some(cached) = self.index_stats.get_join_selectivity(&cache_key) {
@@ -545,7 +544,7 @@ impl PatternOptimizer {
         self.index_stats
             .cache_join_selectivity(&cache_key, selectivity);
 
-        selectivity.max(0.00001).min(1.0)
+        selectivity.clamp(0.00001, 1.0)
     }
 
     /// Estimate selectivity for a variable join
@@ -659,6 +658,7 @@ impl PatternOptimizer {
     }
 
     /// Estimate filter selectivity
+    #[allow(clippy::only_used_in_recursion)]
     pub fn estimate_filter_selectivity(&self, filter: &FilterExpression) -> f64 {
         match filter {
             FilterExpression::Equals(_, _) => 0.1, // Equality is selective
@@ -693,17 +693,17 @@ impl PatternOptimizer {
         bound_vars: &HashSet<Variable>,
     ) -> IndexType {
         // Check which components are bound
-        let s_bound = pattern.subject.as_ref().map_or(false, |s| match s {
+        let s_bound = pattern.subject.as_ref().is_some_and(|s| match s {
             SubjectPattern::Variable(v) => bound_vars.contains(v),
             _ => true,
         });
 
-        let p_bound = pattern.predicate.as_ref().map_or(false, |p| match p {
+        let p_bound = pattern.predicate.as_ref().is_some_and(|p| match p {
             PredicatePattern::Variable(v) => bound_vars.contains(v),
             _ => true,
         });
 
-        let o_bound = pattern.object.as_ref().map_or(false, |o| match o {
+        let o_bound = pattern.object.as_ref().is_some_and(|o| match o {
             ObjectPattern::Variable(v) => bound_vars.contains(v),
             _ => true,
         });

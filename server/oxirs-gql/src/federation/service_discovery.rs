@@ -11,10 +11,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
-use super::config::{RemoteEndpoint, RetryStrategy};
 use crate::introspection::IntrospectionQuery;
 
 /// Service discovery configuration

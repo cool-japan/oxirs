@@ -81,7 +81,7 @@ async fn demo_gpu_memory_management() -> Result<()> {
         let size_bytes = size_mb * 1024 * 1024;
         let device_id = i % config.device_ids.len();
 
-        println!("   Allocating {} MB on device {}...", size_mb, device_id);
+        println!("   Allocating {size_mb} MB on device {device_id}...");
         let block_id = memory_pool.allocate(size_bytes, device_id)?;
         allocated_blocks.push(block_id);
 
@@ -98,7 +98,7 @@ async fn demo_gpu_memory_management() -> Result<()> {
     println!("\n🗑️  Deallocating blocks for reuse:");
     for &block_id in &allocated_blocks[..3] {
         memory_pool.deallocate(block_id)?;
-        println!("   Deallocated block {}", block_id);
+        println!("   Deallocated block {block_id}");
     }
 
     // Allocate new blocks (should reuse deallocated ones)
@@ -106,7 +106,7 @@ async fn demo_gpu_memory_management() -> Result<()> {
     for i in 0..2 {
         let size_bytes = 256 * 1024 * 1024; // 256MB
         let block_id = memory_pool.allocate(size_bytes, 0)?;
-        println!("   Reused block ID: {}", block_id);
+        println!("   Reused block ID: {block_id}");
     }
 
     // Show final statistics
@@ -211,13 +211,13 @@ async fn demo_tensor_caching() -> Result<()> {
     // Test cache misses
     let start = Instant::now();
     for i in 0..100 {
-        let entity = format!("missing_entity_{}", i);
+        let entity = format!("missing_entity_{i}");
         let _result = tensor_cache.get_entity_tensor(&entity);
     }
     let miss_time = start.elapsed();
 
-    println!("   Cache hits (1000 ops): {:?}", cache_time);
-    println!("   Cache misses (100 ops): {:?}", miss_time);
+    println!("   Cache hits (1000 ops): {cache_time:?}");
+    println!("   Cache misses (100 ops): {miss_time:?}");
 
     // Show cache statistics
     let cache_stats = tensor_cache.get_stats();
@@ -289,14 +289,14 @@ async fn demo_mixed_precision() -> Result<()> {
         .mapv(|x| x.abs())
         .mean()
         .unwrap();
-    println!("   Precision loss: {:.8}", precision_loss);
+    println!("   Precision loss: {precision_loss:.8}");
 
     // Demonstrate loss scaling
     println!("\n⚖️  Loss scaling demonstration:");
     let base_loss = 0.001234f32;
     let scaled_loss = mixed_precision.scale_loss(base_loss);
-    println!("   Original loss: {:.6}", base_loss);
-    println!("   Scaled loss: {:.2}", scaled_loss);
+    println!("   Original loss: {base_loss:.6}");
+    println!("   Scaled loss: {scaled_loss:.2}");
     println!("   Scaling factor: {:.0}", scaled_loss / base_loss);
 
     // Simulate gradient computation and unscaling
@@ -312,7 +312,7 @@ async fn demo_mixed_precision() -> Result<()> {
     );
 
     let success = mixed_precision.unscale_gradients(&mut gradients);
-    println!("   Unscaling successful: {}", success);
+    println!("   Unscaling successful: {success}");
     println!(
         "   Unscaled gradient norm: {:.6}",
         gradients.iter().map(|x| x * x).sum::<f32>().sqrt()
@@ -322,7 +322,7 @@ async fn demo_mixed_precision() -> Result<()> {
     println!("\n🚨 Overflow detection:");
     let mut overflow_gradients = ndarray::Array2::from_elem((32, 32), f32::INFINITY);
     let overflow_detected = !mixed_precision.unscale_gradients(&mut overflow_gradients);
-    println!("   Overflow detected: {}", overflow_detected);
+    println!("   Overflow detected: {overflow_detected}");
 
     if overflow_detected {
         mixed_precision.adjust_loss_scaling(true);
@@ -350,7 +350,7 @@ async fn demo_multi_stream_processing() -> Result<()> {
     println!("   Number of streams: {}", multi_stream.stream_ids.len());
 
     // Create a batch of entities to process
-    let entities = (0..16).map(|i| format!("entity_{}", i)).collect::<Vec<_>>();
+    let entities = (0..16).map(|i| format!("entity_{i}")).collect::<Vec<_>>();
     println!("   Processing {} entities in parallel", entities.len());
 
     // Define a mock embedding computation function
@@ -370,7 +370,7 @@ async fn demo_multi_stream_processing() -> Result<()> {
         serial_results.push(embedding);
     }
     let serial_time = start.elapsed();
-    println!("   Serial processing: {:?}", serial_time);
+    println!("   Serial processing: {serial_time:?}");
 
     // Measure parallel processing time
     let start = Instant::now();
@@ -378,11 +378,11 @@ async fn demo_multi_stream_processing() -> Result<()> {
         .process_batch_parallel(entities.clone(), compute_embedding)
         .await?;
     let parallel_time = start.elapsed();
-    println!("   Parallel processing: {:?}", parallel_time);
+    println!("   Parallel processing: {parallel_time:?}");
 
     // Calculate speedup
     let speedup = serial_time.as_secs_f64() / parallel_time.as_secs_f64();
-    println!("   Speedup: {:.2}x", speedup);
+    println!("   Speedup: {speedup:.2}x");
 
     // Verify results are equivalent
     let results_match = serial_results.len() == parallel_results.len()
@@ -399,7 +399,7 @@ async fn demo_multi_stream_processing() -> Result<()> {
     println!("\n🔄 Stream assignment demonstration:");
     for i in 0..8 {
         let stream_id = multi_stream.get_next_stream();
-        println!("   Task {} → Stream {}", i, stream_id);
+        println!("   Task {i} → Stream {stream_id}");
     }
 
     multi_stream.synchronize_all();
@@ -510,7 +510,7 @@ async fn demo_accelerated_training() -> Result<()> {
         .await?;
     let accelerated_time = start.elapsed();
 
-    println!("   Accelerated generation: {:?}", accelerated_time);
+    println!("   Accelerated generation: {accelerated_time:?}");
     println!("   Generated {} embeddings", accelerated_embeddings.len());
     println!(
         "   Average embedding norm: {:.4}",
@@ -609,12 +609,12 @@ async fn demo_performance_benchmarks() -> Result<()> {
     println!("🔥 Running performance benchmarks:");
 
     for (name, config) in configs {
-        println!("\n📊 Configuration: {}", name);
+        println!("\n📊 Configuration: {name}");
 
         let mut gpu_manager = GpuAccelerationManager::new(config);
 
         // Create larger dataset for benchmarking
-        let entities: Vec<String> = (0..1000).map(|i| format!("entity_{}", i)).collect();
+        let entities: Vec<String> = (0..1000).map(|i| format!("entity_{i}")).collect();
 
         // Benchmark embedding function
         let benchmark_fn = |entity: &str| -> Array1<f32> {
@@ -640,9 +640,9 @@ async fn demo_performance_benchmarks() -> Result<()> {
         let avg_latency = duration.as_micros() as f64 / entities.len() as f64;
 
         println!("   Entities processed: {}", results.len());
-        println!("   Total time: {:?}", duration);
-        println!("   Throughput: {:.1} embeddings/sec", throughput);
-        println!("   Average latency: {:.1} μs/embedding", avg_latency);
+        println!("   Total time: {duration:?}");
+        println!("   Throughput: {throughput:.1} embeddings/sec");
+        println!("   Average latency: {avg_latency:.1} μs/embedding");
 
         // Memory efficiency
         let perf_stats = gpu_manager.get_performance_stats();

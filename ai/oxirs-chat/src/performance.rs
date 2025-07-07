@@ -14,7 +14,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
 use crate::{
-    analytics::{ConversationAnalytics, ConversationTracker},
+    analytics::ConversationAnalytics,
     cache::{AdvancedCacheManager, CacheConfig, CacheStats},
     Message, MessageRole,
 };
@@ -216,7 +216,7 @@ pub struct PerformanceMonitor {
     config: PerformanceConfig,
     request_metrics: Arc<RwLock<VecDeque<RequestMetrics>>>,
     cache_manager: Arc<AdvancedCacheManager>,
-    conversation_tracker: Arc<RwLock<ConversationTracker>>,
+    conversation_tracker: Arc<RwLock<ConversationAnalytics>>,
     optimization_history: Arc<RwLock<Vec<AppliedOptimization>>>,
     last_alert_time: Arc<RwLock<SystemTime>>,
 }
@@ -237,7 +237,7 @@ impl PerformanceMonitor {
     pub fn new(
         config: PerformanceConfig,
         cache_manager: Arc<AdvancedCacheManager>,
-        conversation_tracker: Arc<RwLock<ConversationTracker>>,
+        conversation_tracker: Arc<RwLock<ConversationAnalytics>>,
     ) -> Self {
         let monitor = Self {
             config: config.clone(),

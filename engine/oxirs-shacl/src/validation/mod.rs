@@ -2,22 +2,14 @@
 //!
 //! This module implements the core validation engine that orchestrates SHACL validation.
 
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::collections::HashMap;
 
 use oxirs_core::{
-    model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple},
-    OxirsError, Store,
+    model::{Term, Triple},
 };
 
-use crate::{
-    constraints::*, iri_resolver::*, optimization::*, paths::*, report::*, sparql::*, targets::*,
-    Constraint, ConstraintComponentId, PropertyPath, Result, Severity, ShaclError, Shape, ShapeId,
-    Target, ValidationConfig, ValidationReport,
-};
+use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId};
 
 // Re-export submodules
 #[cfg(feature = "async")]
@@ -265,7 +257,6 @@ impl ValidationViolation {
 // We exclude the HashMap field from hashing to make this hashable
 impl std::hash::Hash for ValidationViolation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        use std::hash::Hash;
 
         self.focus_node.hash(state);
         self.result_path.hash(state);

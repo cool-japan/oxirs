@@ -826,7 +826,7 @@ mod tests {
         );
 
         let quality_score = metrics.calculate_quality_score();
-        assert!(quality_score >= 0.0 && quality_score <= 1.0);
+        assert!((0.0..=1.0).contains(&quality_score));
         assert!(quality_score < 1.0); // Should be less than perfect due to violations
     }
 
@@ -1060,7 +1060,7 @@ impl QualifiedValidationStats {
 
     /// Get percentile validation time (p should be between 0.0 and 1.0)
     pub fn percentile_validation_time_ms(&self, p: f64) -> f64 {
-        if self.validation_times.is_empty() || p < 0.0 || p > 1.0 {
+        if self.validation_times.is_empty() || !(0.0..=1.0).contains(&p) {
             return 0.0;
         }
 

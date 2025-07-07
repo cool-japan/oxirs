@@ -20,6 +20,7 @@ use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vect
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use serde_json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -229,13 +230,107 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         stats
     }
 
-    fn save(&self, _path: &str) -> Result<()> {
-        // TODO: Implement model saving
+    fn save(&self, path: &str) -> Result<()> {
+        use std::fs::File;
+        use std::io::Write;
+        
+        // Create the full path including model metadata
+        let model_path = format!("{}.contextual", path);
+        let metadata_path = format!("{}.metadata.json", path);
+        
+        // Serialize the model configuration and state
+        let model_data = serde_json::json!({
+            "model_id": self.model_id,
+            "config": self.config,
+            "model_config": self.model_config,
+            "stats": self.stats,
+            "entities": self.entities,
+            "relations": self.relations,
+            "triples": self.triples,
+            "timestamp": chrono::Utc::now(),
+            "version": "1.0"
+        });
+        
+        // Write model data
+        let mut file = File::create(&model_path)?;
+        let serialized = serde_json::to_string_pretty(&model_data)?;
+        file.write_all(serialized.as_bytes())?;
+        
+        // Write metadata
+        let metadata = serde_json::json!({
+            "model_type": "ContextualEmbedding",
+            "model_id": self.model_id,
+            "dimensions": self.config.context_dim,
+            "num_entities": self.entities.len(),
+            "num_relations": self.relations.len(),
+            "num_triples": self.triples.len(),
+            "is_trained": self.stats.is_trained,
+            "created_at": chrono::Utc::now(),
+            "file_path": model_path
+        });
+        
+        let mut metadata_file = File::create(&metadata_path)?;
+        let metadata_serialized = serde_json::to_string_pretty(&metadata)?;
+        metadata_file.write_all(metadata_serialized.as_bytes())?;
+        
+        tracing::info!("Contextual model saved to {} and {}", model_path, metadata_path);
         Ok(())
     }
 
-    fn load(&mut self, _path: &str) -> Result<()> {
-        // TODO: Implement model loading
+    fn load(&mut self, path: &str) -> Result<()> {
+        use std::fs::File;
+        use std::io::Read;
+        
+        // Determine the full path
+        let model_path = format!("{}.contextual", path);
+        
+        // Read and deserialize model data
+        let mut file = File::open(&model_path)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        
+        let model_data: serde_json::Value = serde_json::from_str(&contents)?;
+        
+        // Validate version compatibility
+        if let Some(version) = model_data.get("version").and_then(|v| v.as_str()) {
+            if version != "1.0" {
+                return Err(anyhow::anyhow!("Unsupported model version: {}", version));
+            }
+        }
+        
+        // Load model components
+        if let Some(model_id) = model_data.get("model_id") {
+            self.model_id = serde_json::from_value(model_id.clone())?;
+        }
+        
+        if let Some(config) = model_data.get("config") {
+            self.config = serde_json::from_value(config.clone())?;
+        }
+        
+        if let Some(model_config) = model_data.get("model_config") {
+            self.model_config = serde_json::from_value(model_config.clone())?;
+        }
+        
+        if let Some(stats) = model_data.get("stats") {
+            self.stats = serde_json::from_value(stats.clone())?;
+        }
+        
+        if let Some(entities) = model_data.get("entities") {
+            self.entities = serde_json::from_value(entities.clone())?;
+        }
+        
+        if let Some(relations) = model_data.get("relations") {
+            self.relations = serde_json::from_value(relations.clone())?;
+        }
+        
+        if let Some(triples) = model_data.get("triples") {
+            self.triples = serde_json::from_value(triples.clone())?;
+        }
+        
+        tracing::info!("Contextual model loaded from {}", model_path);
+        tracing::info!("Model contains {} entities, {} relations, {} triples", 
+                      self.entities.len(), self.relations.len(), self.triples.len());
+        
         Ok(())
     }
 

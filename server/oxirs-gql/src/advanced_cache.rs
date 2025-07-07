@@ -3,13 +3,13 @@
 //! This module provides sophisticated caching strategies including adaptive TTL,
 //! cache warming, intelligent invalidation, and multi-tier caching.
 
-use anyhow::{anyhow, Result};
+// anyhow removed - unused import
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 
 /// Cache configuration with adaptive settings
 #[derive(Debug, Clone)]

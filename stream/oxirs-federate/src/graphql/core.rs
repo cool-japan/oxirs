@@ -647,13 +647,16 @@ impl GraphQLFederation {
 
         if let Some(service_id) = event.data.get("serviceId").and_then(|v| v.as_str()) {
             // Re-validate unified schema after change
-            if let Err(e) = self.create_unified_schema().await {
-                warn!(
-                    "Schema validation failed after change in service {}: {}",
-                    service_id, e
-                );
-            } else {
-                info!("Schema successfully updated for service {}", service_id);
+            match self.create_unified_schema().await {
+                Err(e) => {
+                    warn!(
+                        "Schema validation failed after change in service {}: {}",
+                        service_id, e
+                    );
+                }
+                _ => {
+                    info!("Schema successfully updated for service {}", service_id);
+                }
             }
         }
 

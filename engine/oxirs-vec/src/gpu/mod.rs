@@ -30,4 +30,3 @@ pub use kernels::*;
 pub use memory_pool::GpuMemoryPool;
 pub use performance::GpuPerformanceStats;
 pub use types::GpuExecutionConfig;
-pub use types::*;

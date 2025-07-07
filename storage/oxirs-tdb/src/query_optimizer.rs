@@ -190,11 +190,154 @@ pub struct OptimizationRecommendation {
     pub reasoning: String,
 }
 
-/// Advanced query optimizer with ML-based recommendations
+/// Index creation recommendation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct IndexRecommendation {
+    pub index_type: IndexType,
+    pub pattern_frequency: u64,
+    pub average_cost: f64,
+    pub potential_savings: f64,
+    pub confidence: f64,
+    pub reason: String,
+}
+
+/// Adaptive index manager for smart indexing
+#[derive(Debug, Clone)]
+pub struct AdaptiveIndexManager {
+    pattern_frequency: HashMap<QueryPattern, u64>,
+    pattern_costs: HashMap<QueryPattern, Vec<f64>>,
+    index_usage: HashMap<IndexType, u64>,
+    creation_threshold: u64,
+    cost_improvement_threshold: f64,
+}
+
+impl AdaptiveIndexManager {
+    /// Create a new adaptive index manager
+    pub fn new() -> Self {
+        Self {
+            pattern_frequency: HashMap::new(),
+            pattern_costs: HashMap::new(),
+            index_usage: HashMap::new(),
+            creation_threshold: 100, // Create index after 100 queries of same pattern
+            cost_improvement_threshold: 0.3, // 30% cost improvement required
+        }
+    }
+
+    /// Record a query pattern execution
+    pub fn record_pattern_execution(
+        &mut self,
+        pattern: &QueryPattern,
+        cost: f64,
+        index_used: IndexType,
+    ) {
+        // Update pattern frequency
+        *self.pattern_frequency.entry(pattern.clone()).or_insert(0) += 1;
+
+        // Record cost for this pattern
+        self.pattern_costs
+            .entry(pattern.clone())
+            .or_default()
+            .push(cost);
+
+        // Update index usage
+        *self.index_usage.entry(index_used).or_insert(0) += 1;
+    }
+
+    /// Get index creation recommendations based on usage patterns
+    pub fn get_index_recommendations(&self) -> Vec<IndexRecommendation> {
+        let mut recommendations = Vec::new();
+
+        for (pattern, frequency) in &self.pattern_frequency {
+            if *frequency >= self.creation_threshold {
+                let optimal_index = IndexType::optimal_for_pattern(pattern.pattern_type());
+                let current_usage = self.index_usage.get(&optimal_index).copied().unwrap_or(0);
+
+                // Only recommend if the optimal index is underused
+                if current_usage < *frequency / 2 {
+                    let empty_costs = Vec::new();
+                    let costs = self.pattern_costs.get(pattern).unwrap_or(&empty_costs);
+                    let average_cost = if costs.is_empty() {
+                        0.0
+                    } else {
+                        costs.iter().sum::<f64>() / costs.len() as f64
+                    };
+
+                    let potential_savings = average_cost * self.cost_improvement_threshold;
+                    let confidence = (*frequency as f64 / self.creation_threshold as f64).min(1.0);
+
+                    if potential_savings > 10.0 {
+                        // Only recommend if significant savings
+                        recommendations.push(IndexRecommendation {
+                            index_type: optimal_index,
+                            pattern_frequency: *frequency,
+                            average_cost,
+                            potential_savings,
+                            confidence,
+                            reason: format!(
+                                "Pattern {:?} executed {} times with average cost {:.2}, optimal index {} could reduce cost by {:.2}",
+                                pattern.pattern_type(), frequency, average_cost,
+                                format!("{:?}", optimal_index), potential_savings
+                            ),
+                        });
+                    }
+                }
+            }
+        }
+
+        // Sort by potential savings (highest first)
+        recommendations.sort_by(|a, b| {
+            b.potential_savings
+                .partial_cmp(&a.potential_savings)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+        recommendations
+    }
+
+    /// Get pattern analysis summary
+    pub fn get_pattern_analysis(&self) -> PatternAnalysisSummary {
+        let total_patterns = self.pattern_frequency.len();
+        let total_executions: u64 = self.pattern_frequency.values().sum();
+        let most_frequent_pattern = self
+            .pattern_frequency
+            .iter()
+            .max_by_key(|(_, freq)| *freq)
+            .map(|(pattern, freq)| (pattern.clone(), *freq));
+
+        let index_efficiency: HashMap<IndexType, f64> = self
+            .index_usage
+            .iter()
+            .map(|(index, usage)| {
+                let efficiency = *usage as f64 / total_executions as f64;
+                (*index, efficiency)
+            })
+            .collect();
+
+        PatternAnalysisSummary {
+            total_patterns,
+            total_executions,
+            most_frequent_pattern,
+            index_efficiency,
+            recommendations_available: self.get_index_recommendations().len(),
+        }
+    }
+}
+
+/// Pattern analysis summary
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PatternAnalysisSummary {
+    pub total_patterns: usize,
+    pub total_executions: u64,
+    pub most_frequent_pattern: Option<(QueryPattern, u64)>,
+    pub index_efficiency: HashMap<IndexType, f64>,
+    pub recommendations_available: usize,
+}
+
+/// Advanced query optimizer with ML-based recommendations and adaptive indexing
 pub struct QueryOptimizer {
     stats_history: Arc<RwLock<Vec<QueryStats>>>,
     cost_model: QueryCostModel,
     pattern_cache: Arc<RwLock<HashMap<QueryPattern, OptimizationRecommendation>>>,
+    adaptive_index_manager: Arc<RwLock<AdaptiveIndexManager>>,
     max_history_size: usize,
 }
 
@@ -205,6 +348,7 @@ impl QueryOptimizer {
             stats_history: Arc::new(RwLock::new(Vec::new())),
             cost_model: QueryCostModel::default(),
             pattern_cache: Arc::new(RwLock::new(HashMap::new())),
+            adaptive_index_manager: Arc::new(RwLock::new(AdaptiveIndexManager::new())),
             max_history_size: 10_000,
         }
     }
@@ -216,12 +360,19 @@ impl QueryOptimizer {
             .write()
             .map_err(|_| anyhow::anyhow!("Failed to acquire write lock on stats history"))?;
 
-        history.push(stats);
+        history.push(stats.clone());
 
         // Limit history size
         if history.len() > self.max_history_size {
             let history_len = history.len();
             history.drain(0..history_len - self.max_history_size);
+        }
+
+        drop(history); // Release lock early
+
+        // Record pattern execution for adaptive indexing
+        if let Ok(mut manager) = self.adaptive_index_manager.write() {
+            manager.record_pattern_execution(&stats.pattern, stats.cost, stats.index_used);
         }
 
         Ok(())
@@ -419,6 +570,69 @@ impl QueryOptimizer {
 
         Ok(())
     }
+
+    /// Get index creation recommendations based on query patterns
+    pub fn get_index_recommendations(&self) -> Result<Vec<IndexRecommendation>> {
+        let manager = self.adaptive_index_manager.read().map_err(|_| {
+            anyhow::anyhow!("Failed to acquire read lock on adaptive index manager")
+        })?;
+
+        Ok(manager.get_index_recommendations())
+    }
+
+    /// Get pattern analysis summary for understanding query behavior
+    pub fn get_pattern_analysis(&self) -> Result<PatternAnalysisSummary> {
+        let manager = self.adaptive_index_manager.read().map_err(|_| {
+            anyhow::anyhow!("Failed to acquire read lock on adaptive index manager")
+        })?;
+
+        Ok(manager.get_pattern_analysis())
+    }
+
+    /// Check if any new indices should be created based on current patterns
+    pub fn should_create_indices(&self) -> Result<bool> {
+        let recommendations = self.get_index_recommendations()?;
+        Ok(!recommendations.is_empty())
+    }
+
+    /// Get the most beneficial index to create next
+    pub fn get_next_index_to_create(&self) -> Result<Option<IndexRecommendation>> {
+        let recommendations = self.get_index_recommendations()?;
+        Ok(recommendations.into_iter().next())
+    }
+
+    /// Reset adaptive indexing data (useful for testing or fresh starts)
+    pub fn reset_adaptive_indexing(&self) -> Result<()> {
+        let mut manager = self.adaptive_index_manager.write().map_err(|_| {
+            anyhow::anyhow!("Failed to acquire write lock on adaptive index manager")
+        })?;
+
+        *manager = AdaptiveIndexManager::new();
+        Ok(())
+    }
+
+    /// Get comprehensive optimization report including adaptive indexing insights
+    pub fn generate_optimization_report(&self) -> Result<OptimizationReport> {
+        let stats_summary = self.get_statistics_summary()?;
+        let pattern_analysis = self.get_pattern_analysis()?;
+        let index_recommendations = self.get_index_recommendations()?;
+
+        Ok(OptimizationReport {
+            query_statistics: stats_summary,
+            pattern_analysis,
+            index_recommendations,
+            report_timestamp: chrono::Utc::now(),
+        })
+    }
+}
+
+/// Comprehensive optimization report
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OptimizationReport {
+    pub query_statistics: QueryStatisticsSummary,
+    pub pattern_analysis: PatternAnalysisSummary,
+    pub index_recommendations: Vec<IndexRecommendation>,
+    pub report_timestamp: DateTime<Utc>,
 }
 
 impl Default for QueryOptimizer {

@@ -840,7 +840,7 @@ impl StreamEvent {
     pub fn affects_graph(&self, target_graph: &str) -> bool {
         match self {
             StreamEvent::TripleAdded { graph, .. } | StreamEvent::TripleRemoved { graph, .. } => {
-                graph.as_ref().map_or(false, |g| g == target_graph)
+                graph.as_ref().is_some_and(|g| g == target_graph)
             }
             StreamEvent::QuadAdded { graph, .. } | StreamEvent::QuadRemoved { graph, .. } => {
                 graph == target_graph
@@ -867,12 +867,12 @@ impl StreamEvent {
                 ..
             } => source_graph == target_graph || target_graphs.contains(&target_graph.to_string()),
             StreamEvent::IndexCreated { graph, .. } => {
-                graph.as_ref().map_or(false, |g| g == target_graph)
+                graph.as_ref().is_some_and(|g| g == target_graph)
             }
             StreamEvent::ShapeValidationStarted {
                 target_graph: shape_target,
                 ..
-            } => shape_target.as_ref().map_or(false, |g| g == target_graph),
+            } => shape_target.as_ref().is_some_and(|g| g == target_graph),
             _ => false,
         }
     }

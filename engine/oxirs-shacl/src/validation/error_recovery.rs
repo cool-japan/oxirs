@@ -7,7 +7,7 @@
 use crate::{
     constraints::{Constraint, ConstraintContext},
     validation::ConstraintEvaluationResult,
-    Result, ShaclError, ValidationConfig,
+    Result, ShaclError,
 };
 use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
@@ -239,11 +239,7 @@ impl MemoryMonitor {
     /// Get memory usage delta since baseline
     fn memory_usage_delta(&self) -> usize {
         let current = Self::get_current_memory_usage();
-        if current > self.baseline_memory {
-            current - self.baseline_memory
-        } else {
-            0
-        }
+        current.saturating_sub(self.baseline_memory)
     }
 }
 
@@ -463,9 +459,7 @@ impl ErrorRecoveryManager {
         if stack.len() >= self.config.max_recursion_depth {
             return Err(ShaclError::RecursionLimit(format!(
                 "Maximum recursion depth {} exceeded while validating shape {} for node {}",
-                self.config.max_recursion_depth,
-                context.shape_id.to_string(),
-                context.focus_node.to_string()
+                self.config.max_recursion_depth, context.shape_id, context.focus_node
             )));
         }
         Ok(())
@@ -573,7 +567,7 @@ impl ErrorRecoveryManager {
                 Ok(partial_results
                     .into_iter()
                     .next()
-                    .unwrap_or_else(|| ConstraintEvaluationResult::satisfied()))
+                    .unwrap_or_else(ConstraintEvaluationResult::satisfied))
             }
             ErrorRecoveryResult::Degraded {
                 degraded_results, ..
@@ -582,7 +576,7 @@ impl ErrorRecoveryManager {
                 Ok(degraded_results
                     .into_iter()
                     .next()
-                    .unwrap_or_else(|| ConstraintEvaluationResult::satisfied()))
+                    .unwrap_or_else(ConstraintEvaluationResult::satisfied))
             }
             ErrorRecoveryResult::Failed { .. } => Err(error),
         }
@@ -598,8 +592,7 @@ impl ErrorRecoveryManager {
             // Return a satisfied result with a note about recursion limit
             Ok(ConstraintEvaluationResult::satisfied_with_note(format!(
                 "Recursion limit reached for shape {} on node {}",
-                context.shape_id.to_string(),
-                context.focus_node.to_string()
+                context.shape_id, context.focus_node
             )))
         } else {
             Err(error)
@@ -619,8 +612,7 @@ impl ErrorRecoveryManager {
             // Return a satisfied result with a note about memory pressure
             Ok(ConstraintEvaluationResult::satisfied_with_note(format!(
                 "Memory limit reached during validation of shape {} on node {}",
-                context.shape_id.to_string(),
-                context.focus_node.to_string()
+                context.shape_id, context.focus_node
             )))
         } else {
             Err(error)
@@ -771,7 +763,7 @@ pub struct MemoryUsageInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constraints::ClassConstraint;
+
     use crate::ShapeId;
     use oxirs_core::model::{NamedNode, Term};
 
@@ -809,7 +801,7 @@ mod tests {
     fn test_memory_monitor() {
         let monitor = MemoryMonitor::default();
         let usage = monitor.memory_usage_delta();
-        assert!(usage >= 0);
+        // usage is always >= 0 by type invariant
     }
 
     #[test]

@@ -3,12 +3,12 @@
 //! Hierarchical lock management system supporting multiple lock modes with deadlock detection,
 //! timeout handling, and fair scheduling for efficient concurrent access control.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Condvar, Mutex, RwLock};
 use std::thread::{self, ThreadId};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 /// Lock mode enumeration
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord)]
@@ -260,7 +260,7 @@ impl LockTableEntry {
     }
 
     /// Release a lock held by a transaction
-    fn release_lock(&mut self, transaction_id: TransactionId, mode: LockMode) -> bool {
+    fn release_lock(&mut self, transaction_id: TransactionId, _mode: LockMode) -> bool {
         if let Some(grant) = self.granted.get_mut(&transaction_id) {
             if grant.decrement() {
                 self.granted.remove(&transaction_id);

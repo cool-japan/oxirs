@@ -496,18 +496,19 @@ impl EmotionalLearningNetwork {
         &self,
         pattern: &str,
     ) -> Result<EmotionalPrediction, OxirsError> {
-        let memory_prediction = if let Ok(memory) = self.emotional_memory.read() {
-            memory
-                .long_term_associations
-                .get(pattern)
-                .map(|assoc| EmotionalPrediction {
-                    predicted_emotion: assoc.emotion.clone(),
-                    confidence: assoc.confidence,
-                    intensity: assoc.intensity,
-                    reasoning: "Historical association".to_string(),
-                })
-        } else {
-            None
+        let memory_prediction = match self.emotional_memory.read() {
+            Ok(memory) => {
+                memory
+                    .long_term_associations
+                    .get(pattern)
+                    .map(|assoc| EmotionalPrediction {
+                        predicted_emotion: assoc.emotion.clone(),
+                        confidence: assoc.confidence,
+                        intensity: assoc.intensity,
+                        reasoning: "Historical association".to_string(),
+                    })
+            }
+            _ => None,
         };
 
         if let Some(prediction) = memory_prediction {
@@ -906,6 +907,12 @@ impl MoodTracker {
                 confidence_intervals: HashMap::new(),
             },
         }
+    }
+}
+
+impl Default for EmotionalLearningNetwork {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

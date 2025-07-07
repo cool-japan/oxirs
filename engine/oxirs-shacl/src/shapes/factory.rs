@@ -7,10 +7,11 @@ use crate::{
         cardinality_constraints::{MaxCountConstraint, MinCountConstraint},
         string_constraints::{MaxLengthConstraint, MinLengthConstraint, PatternConstraint},
         value_constraints::{ClassConstraint, DatatypeConstraint},
+        Constraint,
     },
     paths::PropertyPath,
     targets::Target,
-    Constraint, ConstraintComponentId, Shape, ShapeId,
+    ConstraintComponentId, Shape, ShapeId,
 };
 
 /// Shape factory for creating shapes programmatically

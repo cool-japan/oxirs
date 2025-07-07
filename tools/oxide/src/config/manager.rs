@@ -93,6 +93,14 @@ pub struct ServerConfig {
     /// Authentication settings
     #[serde(default)]
     pub auth: AuthConfig,
+
+    /// Enable GraphQL endpoint
+    #[serde(default)]
+    pub enable_graphql: bool,
+
+    /// GraphQL endpoint path
+    #[serde(default = "default_graphql_path")]
+    pub graphql_path: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -396,6 +404,8 @@ impl Default for ServerConfig {
             admin_enabled: false,
             cors: CorsConfig::default(),
             auth: AuthConfig::default(),
+            enable_graphql: false,
+            graphql_path: default_graphql_path(),
         }
     }
 }
@@ -418,6 +428,9 @@ fn default_host() -> String {
 }
 fn default_port() -> u16 {
     3030
+}
+fn default_graphql_path() -> String {
+    "/graphql".to_string()
 }
 
 #[cfg(test)]
@@ -442,6 +455,12 @@ mod tests {
 
     #[test]
     fn test_env_override() {
+        // Use a lock to ensure single-threaded access to environment variables
+        use std::sync::Mutex;
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
+
+        // Set test environment variables - safe because we have exclusive access via mutex
         std::env::set_var("OXIDE_DEFAULT_FORMAT", "ntriples");
         std::env::set_var("OXIDE_SERVER_PORT", "8080");
 
@@ -451,7 +470,7 @@ mod tests {
         assert_eq!(config.general.default_format, "ntriples");
         assert_eq!(config.server.port, 8080);
 
-        // Clean up
+        // Clean up - safe because we still have exclusive access via mutex
         std::env::remove_var("OXIDE_DEFAULT_FORMAT");
         std::env::remove_var("OXIDE_SERVER_PORT");
     }

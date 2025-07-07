@@ -23,7 +23,7 @@ use oxirs_shacl::{
 
 use crate::{
     advanced_validation_strategies::{AdvancedValidationConfig, ValidationContext},
-    neural_patterns::NeuralPatternRecognizer,
+    neural_patterns::{NeuralPatternConfig, NeuralPatternRecognizer},
     quantum_consciousness_synthesis::QuantumConsciousnessProcessor,
     validation_performance::{PerformanceConfig, ValidationPerformanceOptimizer},
     Result, ShaclAiError,
@@ -506,7 +506,7 @@ impl SophisticatedValidationOptimizer {
     async fn select_optimization_strategy(
         &self,
         context: &OptimizationContext,
-    ) -> Result<Box<dyn OptimizationStrategy>> {
+    ) -> Result<OptimizationStrategyEnum> {
         let strategy_scores = self.evaluate_strategy_suitability(context).await?;
 
         // Select best strategy based on context and historical performance
@@ -527,7 +527,7 @@ impl SophisticatedValidationOptimizer {
     async fn execute_multi_stage_optimization(
         &self,
         context: &OptimizationContext,
-        strategy: &dyn OptimizationStrategy,
+        strategy: &OptimizationStrategyEnum,
     ) -> Result<OptimizationResults> {
         let mut optimization_results = OptimizationResults::new();
 
@@ -578,27 +578,21 @@ impl SophisticatedValidationOptimizer {
     async fn evaluate_strategy_suitability(
         &self,
         context: &OptimizationContext,
-    ) -> Result<Vec<(Box<dyn OptimizationStrategy>, f64)>> {
+    ) -> Result<Vec<(OptimizationStrategyEnum, f64)>> {
         let mut strategy_scores = Vec::new();
 
         // Evaluate quantum strategy
         if self.config.enable_quantum_optimization {
             let quantum_strategy = QuantumOptimizationStrategy::new();
             let score = quantum_strategy.evaluate_suitability(context).await?;
-            strategy_scores.push((
-                Box::new(quantum_strategy) as Box<dyn OptimizationStrategy>,
-                score,
-            ));
+            strategy_scores.push((OptimizationStrategyEnum::Quantum(quantum_strategy), score));
         }
 
         // Evaluate neural strategy
         if self.config.enable_neural_optimization {
             let neural_strategy = NeuralOptimizationStrategy::new();
             let score = neural_strategy.evaluate_suitability(context).await?;
-            strategy_scores.push((
-                Box::new(neural_strategy) as Box<dyn OptimizationStrategy>,
-                score,
-            ));
+            strategy_scores.push((OptimizationStrategyEnum::Neural(neural_strategy), score));
         }
 
         // Evaluate evolutionary strategy
@@ -606,7 +600,7 @@ impl SophisticatedValidationOptimizer {
             let evolutionary_strategy = EvolutionaryOptimizationStrategy::new();
             let score = evolutionary_strategy.evaluate_suitability(context).await?;
             strategy_scores.push((
-                Box::new(evolutionary_strategy) as Box<dyn OptimizationStrategy>,
+                OptimizationStrategyEnum::Evolutionary(evolutionary_strategy),
                 score,
             ));
         }
@@ -614,10 +608,7 @@ impl SophisticatedValidationOptimizer {
         // Add hybrid strategy
         let hybrid_strategy = HybridOptimizationStrategy::new();
         let score = hybrid_strategy.evaluate_suitability(context).await?;
-        strategy_scores.push((
-            Box::new(hybrid_strategy) as Box<dyn OptimizationStrategy>,
-            score,
-        ));
+        strategy_scores.push((OptimizationStrategyEnum::Hybrid(hybrid_strategy), score));
 
         Ok(strategy_scores)
     }
@@ -669,24 +660,42 @@ impl SophisticatedValidationOptimizer {
     ) -> Result<OptimizationMetrics> {
         let best_solution = optimization_results.get_best_solution();
 
-        Ok(OptimizationMetrics {
-            execution_time_ms: best_solution.execution_time.as_millis() as f64,
-            memory_usage_mb: best_solution.memory_usage_mb,
-            cpu_usage_percent: best_solution.cpu_usage_percent,
-            io_operations_count: best_solution.io_operations_count,
-            accuracy: best_solution.accuracy,
-            precision: best_solution.precision,
-            recall: best_solution.recall,
-            f1_score: best_solution.f1_score,
-            throughput_ops_per_sec: best_solution.throughput_ops_per_sec,
-            false_positive_rate: best_solution.false_positive_rate,
-            false_negative_rate: best_solution.false_negative_rate,
-            parallel_efficiency: best_solution.parallel_efficiency,
-            energy_consumption_joules: best_solution.energy_consumption_joules,
-            overall_efficiency_score: self
-                .calculate_overall_efficiency_score(&best_solution)
-                .await?,
-        })
+        if let Some(solution) = best_solution {
+            Ok(OptimizationMetrics {
+                execution_time_ms: solution.execution_time.as_millis() as f64,
+                memory_usage_mb: solution.memory_usage_mb,
+                cpu_usage_percent: solution.cpu_usage_percent,
+                io_operations_count: solution.io_operations_count,
+                accuracy: solution.accuracy,
+                precision: solution.precision,
+                recall: solution.recall,
+                f1_score: solution.f1_score,
+                throughput_ops_per_sec: solution.throughput_ops_per_sec,
+                false_positive_rate: solution.false_positive_rate,
+                false_negative_rate: solution.false_negative_rate,
+                parallel_efficiency: solution.parallel_efficiency,
+                energy_consumption_joules: solution.energy_consumption_joules,
+                overall_efficiency_score: self.calculate_overall_efficiency_score(solution).await?,
+            })
+        } else {
+            // Default metrics when no solution is available
+            Ok(OptimizationMetrics {
+                execution_time_ms: 0.0,
+                memory_usage_mb: 0.0,
+                cpu_usage_percent: 0.0,
+                io_operations_count: 0,
+                accuracy: 0.0,
+                precision: 0.0,
+                recall: 0.0,
+                f1_score: 0.0,
+                throughput_ops_per_sec: 0.0,
+                false_positive_rate: 0.0,
+                false_negative_rate: 0.0,
+                parallel_efficiency: 0.0,
+                energy_consumption_joules: 0.0,
+                overall_efficiency_score: 0.0,
+            })
+        }
     }
 
     /// Calculate confidence score for optimization result
@@ -1072,11 +1081,11 @@ impl OptimizationCache {
 impl QuantumValidationOptimizer {
     pub fn new() -> Self {
         Self {
-            quantum_annealer: QuantumAnnealer::default(),
-            quantum_gate_optimizer: QuantumGateOptimizer::default(),
-            quantum_superposition_manager: QuantumSuperpositionManager::default(),
-            quantum_entanglement_network: QuantumEntanglementNetwork::default(),
-            quantum_measurement_system: QuantumMeasurementSystem::default(),
+            quantum_annealer: QuantumAnnealer::new(),
+            quantum_gate_optimizer: QuantumGateOptimizer::new(),
+            quantum_superposition_manager: QuantumSuperpositionManager::new(),
+            quantum_entanglement_network: QuantumEntanglementNetwork::new(),
+            quantum_measurement_system: QuantumMeasurementSystem::new(),
         }
     }
 }
@@ -1084,11 +1093,11 @@ impl QuantumValidationOptimizer {
 impl NeuralValidationOptimizer {
     pub fn new() -> Self {
         Self {
-            pattern_recognizer: NeuralPatternRecognizer::default(),
-            neural_network_optimizer: NeuralNetworkOptimizer::default(),
-            attention_mechanism: AttentionMechanism::default(),
-            recurrent_optimizer: RecurrentOptimizer::default(),
-            transformer_optimizer: TransformerOptimizer::default(),
+            pattern_recognizer: NeuralPatternRecognizer::new(NeuralPatternConfig::default()),
+            neural_network_optimizer: NeuralNetworkOptimizer::new(),
+            attention_mechanism: AttentionMechanism::new(),
+            recurrent_optimizer: RecurrentOptimizer::new(),
+            transformer_optimizer: TransformerOptimizer::new(),
         }
     }
 }
@@ -1096,11 +1105,11 @@ impl NeuralValidationOptimizer {
 impl EvolutionaryValidationOptimizer {
     pub fn new() -> Self {
         Self {
-            genetic_algorithm: GeneticAlgorithm::default(),
-            particle_swarm_optimizer: ParticleSwarmOptimizer::default(),
-            differential_evolution: DifferentialEvolution::default(),
-            ant_colony_optimizer: AntColonyOptimizer::default(),
-            simulated_annealing: SimulatedAnnealing::default(),
+            genetic_algorithm: GeneticAlgorithm::new(),
+            particle_swarm_optimizer: ParticleSwarmOptimizer::new(),
+            differential_evolution: DifferentialEvolution::new(),
+            ant_colony_optimizer: AntColonyOptimizer::new(),
+            simulated_annealing: SimulatedAnnealing::new(),
         }
     }
 }
@@ -1108,11 +1117,11 @@ impl EvolutionaryValidationOptimizer {
 impl MultiObjectiveOptimizer {
     pub fn new() -> Self {
         Self {
-            pareto_optimizer: ParetoOptimizer::default(),
+            pareto_optimizer: ParetoOptimizer::new(),
             scalarization_methods: Vec::new(),
-            dominance_relations: DominanceRelationManager::default(),
-            objective_balancer: ObjectiveBalancer::default(),
-            trade_off_analyzer: TradeOffAnalyzer::default(),
+            dominance_relations: DominanceRelationManager::new(),
+            objective_balancer: ObjectiveBalancer::new(),
+            trade_off_analyzer: TradeOffAnalyzer::new(),
         }
     }
 }
@@ -1120,11 +1129,11 @@ impl MultiObjectiveOptimizer {
 impl AdaptiveLearningOptimizer {
     pub fn new() -> Self {
         Self {
-            reinforcement_learner: ReinforcementLearner::default(),
-            online_learner: OnlineLearner::default(),
-            meta_learner: MetaLearner::default(),
-            transfer_learner: TransferLearner::default(),
-            continual_learner: ContinualLearner::default(),
+            reinforcement_learner: ReinforcementLearner::new(),
+            online_learner: OnlineLearner::new(),
+            meta_learner: MetaLearner::new(),
+            transfer_learner: TransferLearner::new(),
+            continual_learner: ContinualLearner::new(),
         }
     }
 }
@@ -1132,11 +1141,11 @@ impl AdaptiveLearningOptimizer {
 impl RealTimeOptimizer {
     pub fn new() -> Self {
         Self {
-            streaming_optimizer: StreamingOptimizer::default(),
-            incremental_optimizer: IncrementalOptimizer::default(),
-            dynamic_adapter: DynamicAdapter::default(),
-            feedback_processor: FeedbackProcessor::default(),
-            real_time_monitor: RealTimeMonitor::default(),
+            streaming_optimizer: StreamingOptimizer::new(),
+            incremental_optimizer: IncrementalOptimizer::new(),
+            dynamic_adapter: DynamicAdapter::new(),
+            feedback_processor: FeedbackProcessor::new(),
+            real_time_monitor: RealTimeMonitor::new(),
         }
     }
 }

@@ -3,9 +3,9 @@
 //! Advanced multi-region replication system for OxiRS Stream providing global data consistency,
 //! failover capabilities, and optimized cross-region communication.
 
-use crate::{EventMetadata, StreamEvent};
+use crate::StreamEvent;
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tokio::time;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// Region configuration
@@ -229,6 +229,12 @@ pub enum ReplicationStatus {
 pub struct VectorClock {
     /// Clock values per region
     pub clocks: HashMap<String, u64>,
+}
+
+impl Default for VectorClock {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VectorClock {
@@ -613,13 +619,9 @@ impl MultiRegionReplicationManager {
         }
 
         // Wait for replication based on mode
-        match self.config.strategy {
-            _ => {
-                // Wait for all replications (can be optimized based on replication mode)
-                for task in replication_tasks {
-                    let _ = task.await;
-                }
-            }
+        // Wait for all replications (can be optimized based on replication mode)
+        for task in replication_tasks {
+            let _ = task.await;
         }
 
         Ok(())
@@ -814,12 +816,13 @@ impl RegionHealthMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::event::EventMetadata;
     use std::collections::HashMap;
 
     fn create_test_region(id: &str) -> RegionConfig {
         RegionConfig {
             region_id: id.to_string(),
-            region_name: format!("Region {}", id),
+            region_name: format!("Region {id}"),
             location: GeographicLocation {
                 country: "US".to_string(),
                 region: "California".to_string(),
@@ -829,7 +832,7 @@ mod tests {
                 availability_zone: Some("us-west-1a".to_string()),
             },
             endpoints: vec![RegionEndpoint {
-                url: format!("https://{}.example.com", id),
+                url: format!("https://{id}.example.com"),
                 endpoint_type: EndpointType::Primary,
                 is_healthy: true,
                 last_health_check: Some(Utc::now()),

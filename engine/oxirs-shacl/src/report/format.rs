@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 
 /// Report output formats supported by the SHACL validator
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ReportFormat {
     /// Turtle/TTL format
     Turtle,
@@ -15,6 +15,7 @@ pub enum ReportFormat {
     /// N-Triples format
     NTriples,
     /// JSON format (non-RDF)
+    #[default]
     Json,
     /// HTML format with styling
     Html,
@@ -131,12 +132,6 @@ impl ReportFormat {
     /// Check if this format supports styling/formatting
     pub fn supports_styling(&self) -> bool {
         matches!(self, ReportFormat::Html)
-    }
-}
-
-impl Default for ReportFormat {
-    fn default() -> Self {
-        ReportFormat::Json
     }
 }
 

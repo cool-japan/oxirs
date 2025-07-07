@@ -13,7 +13,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::{Vector, VectorData, VectorPrecision};
+use crate::{Vector, VectorData};
 
 /// Named dimension vector where each dimension has a semantic name
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -393,7 +393,7 @@ impl ConfidenceScoredVector {
         }
 
         // Validate confidence scores
-        if confidence_scores.iter().any(|&c| c < 0.0 || c > 1.0) {
+        if confidence_scores.iter().any(|&c| !(0.0..=1.0).contains(&c)) {
             return Err(anyhow::anyhow!(
                 "Confidence scores must be between 0.0 and 1.0"
             ));
@@ -489,7 +489,7 @@ impl ConfidenceScoredVector {
             .iter()
             .zip(&self.confidence)
             .enumerate()
-            .filter(|(_, (_, &conf))| conf < threshold)
+            .filter(|&(_, (_, &conf))| conf < threshold)
             .map(|(idx, (&value, &conf))| (idx, value, conf))
             .collect()
     }

@@ -9,17 +9,13 @@ pub mod function_library;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::SystemTime;
 
-use oxirs_core::{
-    model::{BlankNode, Literal, NamedNode, RdfTerm, Term, Triple, Variable},
-    OxirsError, Store,
-};
+use oxirs_core::{model::RdfTerm, Store};
 
 use crate::{
-    constraints::{ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator},
+    constraints::{ConstraintContext, ConstraintEvaluationResult},
     validation::constraint_validators::ConstraintValidator,
-    Result, Severity, ShaclError, ShapeId,
+    Result, Severity, ShaclError,
 };
 
 /// SPARQL-based constraint
@@ -58,6 +54,12 @@ pub struct SparqlConstraintExecutor {
     cache: HashMap<String, ConstraintEvaluationResult>,
 }
 
+impl Default for SparqlConstraintExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SparqlConstraintExecutor {
     pub fn new() -> Self {
         Self {
@@ -80,6 +82,12 @@ impl SparqlConstraintExecutor {
 #[derive(Debug)]
 pub struct SparqlConstraintLibrary {
     constraints: HashMap<String, SparqlConstraint>,
+}
+
+impl Default for SparqlConstraintLibrary {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SparqlConstraintLibrary {
@@ -243,12 +251,17 @@ impl Default for EnhancedSparqlExecutor {
 pub mod examples {
     use super::*;
     use oxirs_core::model::{Literal, NamedNode, Term};
-    use std::time::SystemTime;
 
     /// Example string manipulation function
     #[derive(Debug)]
     pub struct UpperCaseFunction {
         metadata: FunctionMetadata,
+    }
+
+    impl Default for UpperCaseFunction {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl UpperCaseFunction {
@@ -314,6 +327,12 @@ pub mod examples {
         metadata: FunctionMetadata,
     }
 
+    impl Default for PowerFunction {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl PowerFunction {
         pub fn new() -> Self {
             Self {
@@ -347,10 +366,8 @@ pub mod examples {
             let result = base.powf(exponent);
 
             // Return as double literal
-            let double_type =
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").map_err(|e| {
-                    ShaclError::ValidationEngine(format!("Invalid datatype IRI: {}", e))
-                })?;
+            let double_type = NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
+                .map_err(|e| ShaclError::ValidationEngine(format!("Invalid datatype IRI: {e}")))?;
 
             Ok(Term::Literal(Literal::new_typed(
                 result.to_string(),
@@ -424,6 +441,8 @@ pub mod examples {
 mod tests {
     use super::examples::*;
     use super::*;
+    use oxirs_core::model::Term;
+    use std::time::SystemTime;
 
     #[test]
     fn test_enhanced_executor_creation() {

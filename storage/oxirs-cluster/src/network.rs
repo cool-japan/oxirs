@@ -15,8 +15,7 @@ use std::time::SystemTime;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
-use tokio_rustls::{TlsAcceptor, TlsConnector};
-use tracing::{debug, error, info, warn};
+use tracing::error;
 
 /// RPC message types for Raft protocol
 #[derive(Debug, Clone, Serialize, Deserialize)]

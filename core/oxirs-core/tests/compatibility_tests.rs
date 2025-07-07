@@ -44,7 +44,7 @@ mod iri_tests {
     #[test]
     fn test_iri_display() {
         let iri = NamedNode::new("http://example.org/resource").unwrap();
-        assert_eq!(format!("{}", iri), "<http://example.org/resource>");
+        assert_eq!(format!("{iri}"), "<http://example.org/resource>");
     }
 }
 
@@ -81,7 +81,7 @@ mod blank_node_tests {
     #[test]
     fn test_blank_node_display() {
         let bn = BlankNode::new("test").unwrap();
-        assert_eq!(format!("{}", bn), "_:test");
+        assert_eq!(format!("{bn}"), "_:test");
     }
 }
 
@@ -98,7 +98,7 @@ mod literal_tests {
             "http://www.w3.org/2001/XMLSchema#string"
         );
         assert!(lit.language().is_none());
-        assert_eq!(format!("{}", lit), "\"hello world\"");
+        assert_eq!(format!("{lit}"), "\"hello world\"");
     }
 
     #[test]
@@ -111,7 +111,7 @@ mod literal_tests {
             "http://www.w3.org/2001/XMLSchema#integer"
         );
         assert_eq!(
-            format!("{}", lit),
+            format!("{lit}"),
             "\"42\"^^<http://www.w3.org/2001/XMLSchema#integer>"
         );
     }
@@ -121,7 +121,7 @@ mod literal_tests {
         let lit = Literal::new_lang("hello", "en").unwrap();
         assert_eq!(lit.value(), "hello");
         assert_eq!(lit.language().unwrap(), "en");
-        assert_eq!(format!("{}", lit), "\"hello\"@en");
+        assert_eq!(format!("{lit}"), "\"hello\"@en");
 
         // Complex language tags
         let lit2 = Literal::new_lang("hello", "en-US").unwrap();
@@ -183,7 +183,7 @@ mod variable_tests {
     #[test]
     fn test_variable_display() {
         let var = Variable::new("x").unwrap();
-        assert_eq!(format!("{}", var), "?x");
+        assert_eq!(format!("{var}"), "?x");
         assert_eq!(var.name(), "x");
         assert_eq!(var.with_prefix(), "?x");
     }
@@ -306,7 +306,6 @@ mod ordering_tests {
 #[cfg(test)]
 mod serialization_tests {
     use super::*;
-    use serde_json;
 
     #[test]
     fn test_named_node_serialization() {

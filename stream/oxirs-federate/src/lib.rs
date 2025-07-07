@@ -69,6 +69,7 @@ pub mod source_selection;
 pub mod streaming;
 pub mod streaming_optimizer;
 pub mod test_infrastructure;
+pub mod vector_similarity_federation;
 
 pub use adaptive_load_balancer::*;
 pub use auth::*;
@@ -127,6 +128,7 @@ pub use source_selection::*;
 pub use streaming::*;
 pub use streaming_optimizer::*;
 pub use test_infrastructure::*;
+pub use vector_similarity_federation::*;
 
 /// Main federation engine that coordinates all federated query processing
 #[derive(Debug, Clone)]
@@ -147,6 +149,8 @@ pub struct FederationEngine {
     cache: Arc<FederationCache>,
     /// Automatic service discovery
     auto_discovery: Arc<RwLock<Option<AutoDiscovery>>>,
+    /// Vector similarity federation
+    vector_federation: Arc<RwLock<Option<VectorSimilarityFederation>>>,
 }
 
 impl FederationEngine {
@@ -169,6 +173,7 @@ impl FederationEngine {
             monitor,
             cache,
             auto_discovery: Arc::new(RwLock::new(None)),
+            vector_federation: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -193,6 +198,7 @@ impl FederationEngine {
             monitor,
             cache,
             auto_discovery: Arc::new(RwLock::new(None)),
+            vector_federation: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -598,12 +604,13 @@ impl FederationEngine {
     pub async fn stop_auto_discovery(&self) -> Result<()> {
         let mut auto_discovery_guard = self.auto_discovery.write().await;
 
-        if let Some(mut discovery) = auto_discovery_guard.take() {
-            discovery.stop().await;
-            info!("Auto-discovery stopped");
-            Ok(())
-        } else {
-            Err(anyhow!("Auto-discovery is not running"))
+        match auto_discovery_guard.take() {
+            Some(mut discovery) => {
+                discovery.stop().await;
+                info!("Auto-discovery stopped");
+                Ok(())
+            }
+            _ => Err(anyhow!("Auto-discovery is not running")),
         }
     }
 
@@ -672,6 +679,51 @@ impl FederationEngine {
         }
 
         Ok(results)
+    }
+
+    /// Enable vector similarity federation
+    pub async fn enable_vector_federation(&self, config: VectorFederationConfig) -> Result<()> {
+        let vector_federation =
+            VectorSimilarityFederation::new(config, self.service_registry.clone()).await?;
+
+        let mut vec_fed = self.vector_federation.write().await;
+        *vec_fed = Some(vector_federation);
+
+        info!("Vector similarity federation enabled");
+        Ok(())
+    }
+
+    /// Register a vector-enabled service
+    pub async fn register_vector_service(&self, metadata: VectorServiceMetadata) -> Result<()> {
+        let vec_fed = self.vector_federation.read().await;
+        if let Some(ref federation) = *vec_fed {
+            federation.register_vector_service(metadata).await
+        } else {
+            Err(anyhow!("Vector federation is not enabled"))
+        }
+    }
+
+    /// Execute semantic query routing
+    pub async fn semantic_query_routing(&self, query: &str) -> Result<Vec<String>> {
+        let vec_fed = self.vector_federation.read().await;
+        if let Some(ref federation) = *vec_fed {
+            let query_embedding = federation.generate_query_embedding(query).await?;
+            federation
+                .semantic_query_routing(&query_embedding, query)
+                .await
+        } else {
+            Ok(Vec::new()) // Return empty if vector federation is disabled
+        }
+    }
+
+    /// Get vector federation statistics
+    pub async fn get_vector_statistics(&self) -> Result<Option<VectorFederationStats>> {
+        let vec_fed = self.vector_federation.read().await;
+        if let Some(ref federation) = *vec_fed {
+            Ok(Some(federation.get_statistics().await?))
+        } else {
+            Ok(None)
+        }
     }
 }
 

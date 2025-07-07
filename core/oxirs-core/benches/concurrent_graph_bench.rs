@@ -8,9 +8,9 @@ use std::thread;
 
 fn create_test_triple(id: usize) -> Triple {
     Triple::new(
-        Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", id)).unwrap()),
-        Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", id)).unwrap()),
-        Object::NamedNode(NamedNode::new(&format!("http://object/{}", id)).unwrap()),
+        Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
+        Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
+        Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
     )
 }
 
@@ -162,7 +162,7 @@ fn bench_batch_operations(c: &mut Criterion) {
             |b, &batch_size| {
                 b.iter(|| {
                     let graph = ConcurrentGraph::new();
-                    let triples: Vec<_> = (0..batch_size).map(|i| create_test_triple(i)).collect();
+                    let triples: Vec<_> = (0..batch_size).map(create_test_triple).collect();
 
                     graph.insert_batch(triples).unwrap()
                 });

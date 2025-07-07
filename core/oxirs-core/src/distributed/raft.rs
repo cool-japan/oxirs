@@ -73,6 +73,26 @@ impl Default for CompactionConfig {
     }
 }
 
+/// Vote request parameters
+#[derive(Debug, Clone)]
+struct VoteRequestParams {
+    pub request_term: u64,
+    pub candidate_id: String,
+    pub last_log_index: u64,
+    pub last_log_term: u64,
+}
+
+/// Append entries request parameters  
+#[derive(Debug, Clone)]
+struct AppendEntriesParams {
+    pub request_term: u64,
+    pub leader_id: String,
+    pub prev_log_index: u64,
+    pub prev_log_term: u64,
+    pub entries: Vec<RaftLogEntry>,
+    pub leader_commit: u64,
+}
+
 /// Snapshot configuration
 #[derive(Debug, Clone)]
 pub struct SnapshotConfig {
@@ -512,10 +532,12 @@ impl RaftNode {
                             &voted_for,
                             &log,
                             &node_id,
-                            term,
-                            candidate_id,
-                            last_log_index,
-                            last_log_term,
+                            VoteRequestParams {
+                                request_term: term,
+                                candidate_id,
+                                last_log_index,
+                                last_log_term,
+                            },
                         )
                         .await;
                     }
@@ -532,12 +554,14 @@ impl RaftNode {
                             &current_term,
                             &log,
                             &commit_index,
-                            term,
-                            _leader_id,
-                            prev_log_index,
-                            prev_log_term,
-                            entries,
-                            leader_commit,
+                            AppendEntriesParams {
+                                request_term: term,
+                                leader_id: _leader_id,
+                                prev_log_index,
+                                prev_log_term,
+                                entries,
+                                leader_commit,
+                            },
                         )
                         .await;
                     }
@@ -687,25 +711,22 @@ impl RaftNode {
         voted_for: &Arc<RwLock<Option<String>>>,
         log: &Arc<RwLock<RaftLog>>,
         node_id: &str,
-        request_term: u64,
-        candidate_id: String,
-        last_log_index: u64,
-        last_log_term: u64,
+        request: VoteRequestParams,
     ) {
         let mut term = current_term.write().await;
         let mut voted = voted_for.write().await;
 
         // Update term if needed
-        if request_term > *term {
-            *term = request_term;
+        if request.request_term > *term {
+            *term = request.request_term;
             *voted = None;
             *state.write().await = NodeState::Follower;
         }
 
         // Check if we can vote
-        let vote_granted = if request_term < *term {
-            false
-        } else if voted.is_some() && voted.as_ref().unwrap() != &candidate_id {
+        let vote_granted = if request.request_term < *term
+            || (voted.is_some() && voted.as_ref().unwrap() != &request.candidate_id)
+        {
             false
         } else {
             // Check log up-to-date
@@ -714,12 +735,13 @@ impl RaftNode {
             let our_last_term = log_guard.last_term();
             drop(log_guard);
 
-            last_log_term > our_last_term
-                || (last_log_term == our_last_term && last_log_index >= our_last_index)
+            request.last_log_term > our_last_term
+                || (request.last_log_term == our_last_term
+                    && request.last_log_index >= our_last_index)
         };
 
         if vote_granted {
-            *voted = Some(candidate_id);
+            *voted = Some(request.candidate_id);
         }
 
         // Send response (would use actual networking)
@@ -737,23 +759,18 @@ impl RaftNode {
         current_term: &Arc<RwLock<u64>>,
         log: &Arc<RwLock<RaftLog>>,
         commit_index: &Arc<RwLock<u64>>,
-        request_term: u64,
-        _leader_id: String,
-        prev_log_index: u64,
-        prev_log_term: u64,
-        entries: Vec<RaftLogEntry>,
-        leader_commit: u64,
+        request: AppendEntriesParams,
     ) {
         let mut term = current_term.write().await;
 
         // Update term if needed
-        if request_term > *term {
-            *term = request_term;
+        if request.request_term > *term {
+            *term = request.request_term;
             *state.write().await = NodeState::Follower;
         }
 
         // Reject if term is old
-        if request_term < *term {
+        if request.request_term < *term {
             return;
         }
 
@@ -762,24 +779,24 @@ impl RaftNode {
 
         // Check log consistency
         let mut log_guard = log.write().await;
-        let success = if prev_log_index == 0 {
+        let success = if request.prev_log_index == 0 {
             true
-        } else if let Some(entry) = log_guard.get(prev_log_index) {
-            entry.term == prev_log_term
+        } else if let Some(entry) = log_guard.get(request.prev_log_index) {
+            entry.term == request.prev_log_term
         } else {
             false
         };
 
         if success {
             // Append entries
-            for entry in entries {
+            for entry in request.entries {
                 log_guard.append(entry);
             }
 
             // Update commit index
-            if leader_commit > *commit_index.read().await {
+            if request.leader_commit > *commit_index.read().await {
                 let last_index = log_guard.last_index();
-                *commit_index.write().await = leader_commit.min(last_index);
+                *commit_index.write().await = request.leader_commit.min(last_index);
             }
         }
     }
@@ -1077,9 +1094,9 @@ mod tests {
                 index: i,
                 term: 1,
                 entry: LogEntry::AddTriple(Triple::new(
-                    NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
                     NamedNode::new("http://example.org/p").unwrap(),
-                    crate::model::Object::Literal(Literal::new(&format!("value{}", i))),
+                    crate::model::Object::Literal(Literal::new(format!("value{i}"))),
                 )),
                 timestamp: i,
             };
@@ -1105,9 +1122,9 @@ mod tests {
                 index: i,
                 term: 1,
                 entry: LogEntry::AddTriple(Triple::new(
-                    NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+                    NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
                     NamedNode::new("http://example.org/p").unwrap(),
-                    crate::model::Object::Literal(Literal::new(&format!("value{}", i))),
+                    crate::model::Object::Literal(Literal::new(format!("value{i}"))),
                 )),
                 timestamp: i,
             };

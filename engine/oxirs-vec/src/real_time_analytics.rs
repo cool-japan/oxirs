@@ -3,7 +3,6 @@
 //! This module provides comprehensive monitoring, analytics, and performance insights
 //! for vector search systems including dashboards, alerts, and benchmarking.
 
-use crate::{similarity::SimilarityMetric, Vector, VectorStore};
 use anyhow::{anyhow, Result};
 use chrono;
 use parking_lot::RwLock;
@@ -365,6 +364,7 @@ pub struct OverviewData {
 
 /// Query performance dashboard data
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct QueryPerformanceData {
     pub latency_trends: Vec<(SystemTime, Duration)>,
     pub throughput_trends: Vec<(SystemTime, f64)>,
@@ -399,6 +399,7 @@ pub struct QualityMetricsData {
 
 /// Usage analytics dashboard data
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct UsageAnalyticsData {
     pub user_activity: Vec<(SystemTime, u64)>,
     pub popular_queries: Vec<PopularQuery>,
@@ -797,7 +798,7 @@ impl VectorAnalyticsEngine {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
                         csv_content
-                            .push_str(&format!("{},query_{},{},query\n", timestamp, key, num_val));
+                            .push_str(&format!("{timestamp},query_{key},{num_val},query\n"));
                     }
                 }
             }
@@ -809,8 +810,7 @@ impl VectorAnalyticsEngine {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
                         csv_content.push_str(&format!(
-                            "{},system_{},{},system\n",
-                            timestamp, key, num_val
+                            "{timestamp},system_{key},{num_val},system\n"
                         ));
                     }
                 }
@@ -835,13 +835,12 @@ impl VectorAnalyticsEngine {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
                         prometheus_content.push_str(&format!(
-                            "# HELP vector_query_{} Query metric {}\n",
-                            key, key
+                            "# HELP vector_query_{key} Query metric {key}\n"
                         ));
                         prometheus_content
-                            .push_str(&format!("# TYPE vector_query_{} gauge\n", key));
+                            .push_str(&format!("# TYPE vector_query_{key} gauge\n"));
                         prometheus_content
-                            .push_str(&format!("vector_query_{} {} {}\n", key, num_val, timestamp));
+                            .push_str(&format!("vector_query_{key} {num_val} {timestamp}\n"));
                     }
                 }
             }
@@ -853,14 +852,12 @@ impl VectorAnalyticsEngine {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
                         prometheus_content.push_str(&format!(
-                            "# HELP vector_system_{} System metric {}\n",
-                            key, key
+                            "# HELP vector_system_{key} System metric {key}\n"
                         ));
                         prometheus_content
-                            .push_str(&format!("# TYPE vector_system_{} gauge\n", key));
+                            .push_str(&format!("# TYPE vector_system_{key} gauge\n"));
                         prometheus_content.push_str(&format!(
-                            "vector_system_{} {} {}\n",
-                            key, num_val, timestamp
+                            "vector_system_{key} {num_val} {timestamp}\n"
                         ));
                     }
                 }
@@ -885,8 +882,7 @@ impl VectorAnalyticsEngine {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
                         influxdb_content.push_str(&format!(
-                            "vector_query,type=query {}={} {}\n",
-                            key, num_val, timestamp
+                            "vector_query,type=query {key}={num_val} {timestamp}\n"
                         ));
                     }
                 }
@@ -899,8 +895,7 @@ impl VectorAnalyticsEngine {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
                         influxdb_content.push_str(&format!(
-                            "vector_system,type=system {}={} {}\n",
-                            key, num_val, timestamp
+                            "vector_system,type=system {key}={num_val} {timestamp}\n"
                         ));
                     }
                 }
@@ -1033,7 +1028,7 @@ impl VectorAnalyticsEngine {
             score -= (query_metrics.average_latency.as_millis() as f64 - 100.0) * 0.1;
         }
 
-        score.max(0.0).min(100.0)
+        score.clamp(0.0, 100.0)
     }
 
     fn calculate_current_qps(query_metrics: &QueryMetrics) -> f64 {
@@ -1117,7 +1112,7 @@ impl VectorAnalyticsEngine {
 <body>
     <h1>🔍 OxiRS Vector Search Analytics Dashboard</h1>
     <p class="refresh-time">Last updated: {}</p>
-    
+
     <div class="dashboard">
         <div class="card">
             <h2>System Health</h2>
@@ -1127,7 +1122,7 @@ impl VectorAnalyticsEngine {
                 <span class="metric-value">{}</span>
             </div>
         </div>
-        
+
         <div class="card">
             <h2>Query Performance</h2>
             <div class="metric">
@@ -1143,7 +1138,7 @@ impl VectorAnalyticsEngine {
                 <span class="metric-value">{:.1}</span>
             </div>
         </div>
-        
+
         <div class="card">
             <h2>System Resources</h2>
             <div class="metric">
@@ -1159,7 +1154,7 @@ impl VectorAnalyticsEngine {
                 <span class="metric-value">{:.1}%</span>
             </div>
         </div>
-        
+
         <div class="card">
             <h2>Vector Index</h2>
             <div class="metric">
@@ -1171,7 +1166,7 @@ impl VectorAnalyticsEngine {
                 <span class="metric-value">{} MB</span>
             </div>
         </div>
-        
+
         <div class="card">
             <h2>Active Alerts</h2>
             {}
@@ -1298,6 +1293,12 @@ pub struct ProfileData {
     pub call_history: VecDeque<(SystemTime, Duration)>,
 }
 
+impl Default for PerformanceProfiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceProfiler {
     pub fn new() -> Self {
         Self {
@@ -1307,7 +1308,7 @@ impl PerformanceProfiler {
     }
 
     pub fn start_profile(&self, function_name: &str) -> String {
-        let profile_id = format!("{}_{}", function_name, chrono::Utc::now().timestamp_nanos());
+        let profile_id = format!("{}_{}", function_name, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
         let mut active = self.active_profiles.write();
         active.insert(profile_id.clone(), Instant::now());
         profile_id
@@ -1383,6 +1384,12 @@ pub struct AnalyticsReport {
     pub generated_at: SystemTime,
 }
 
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetricsCollector {
     pub fn new() -> Self {
         Self {
@@ -1394,6 +1401,12 @@ impl MetricsCollector {
     }
 }
 
+impl Default for PerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceMonitor {
     pub fn new() -> Self {
         Self {
@@ -1401,6 +1414,12 @@ impl PerformanceMonitor {
             alert_history: Arc::new(RwLock::new(VecDeque::new())),
             current_alerts: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+}
+
+impl Default for QueryAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1470,18 +1489,6 @@ impl Default for OverviewData {
     }
 }
 
-impl Default for QueryPerformanceData {
-    fn default() -> Self {
-        Self {
-            latency_trends: Vec::new(),
-            throughput_trends: Vec::new(),
-            error_rate_trends: Vec::new(),
-            top_slow_queries: Vec::new(),
-            query_distribution: HashMap::new(),
-            performance_percentiles: HashMap::new(),
-        }
-    }
-}
 
 impl Default for SystemHealthData {
     fn default() -> Self {
@@ -1510,17 +1517,6 @@ impl Default for QualityMetricsData {
     }
 }
 
-impl Default for UsageAnalyticsData {
-    fn default() -> Self {
-        Self {
-            user_activity: Vec::new(),
-            popular_queries: Vec::new(),
-            usage_patterns: HashMap::new(),
-            growth_metrics: GrowthMetrics::default(),
-            feature_usage: HashMap::new(),
-        }
-    }
-}
 
 impl Default for UsageTrends {
     fn default() -> Self {

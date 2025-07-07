@@ -1019,7 +1019,7 @@ impl HealthMonitor {
         // Simulate random health status
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let health_value: f32 = rng.gen();
+        let health_value: f32 = rng.r#gen();
 
         if health_value > 0.9 {
             Ok(ServiceHealth::Healthy)

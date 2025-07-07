@@ -1,10 +1,10 @@
 use oxirs_core::{
-    model::{Literal, NamedNode, Term},
+    model::{NamedNode, Term},
     ConcreteStore, Store,
 };
 use oxirs_shacl::{
-    constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,
-    Severity, Shape, ShapeId, ShapeType, Target, ValidationConfig, Validator,
+    constraints::*, shapes::ShapeFactory, Constraint, PropertyPath, Shape, ShapeId, ShapeType,
+    Target, ValidationConfig, Validator,
 };
 
 #[test]
@@ -64,7 +64,7 @@ fn test_full_validation_workflow() {
         }
         Err(e) => {
             // If it fails due to unimplemented store features, that's expected
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             assert!(
                 error_msg.contains("not yet implemented") || error_msg.contains("not implemented")
             );
@@ -233,7 +233,7 @@ fn test_validation_report_formats() {
         Err(e) => {
             // If store validation fails due to unimplemented features,
             // create a mock report for testing serialization
-            let error_msg = format!("{}", e);
+            let error_msg = format!("{e}");
             assert!(
                 error_msg.contains("not yet implemented") || error_msg.contains("not implemented")
             );
@@ -290,7 +290,7 @@ fn test_error_handling() {
     assert!(result.is_err());
 
     // Test invalid property shape (property shape without path)
-    let mut invalid_shape = Shape::new(
+    let invalid_shape = Shape::new(
         ShapeId::new("http://example.org/InvalidShape"),
         ShapeType::PropertyShape,
     );

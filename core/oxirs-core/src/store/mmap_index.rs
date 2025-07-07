@@ -20,6 +20,7 @@ const NODE_SIZE: usize = 4096;
 const MAX_KEYS: usize = 100;
 
 /// Minimum keys per node (except root)
+#[allow(dead_code)]
 const MIN_KEYS: usize = MAX_KEYS / 2;
 
 /// Cache size for frequently accessed nodes
@@ -132,6 +133,7 @@ impl Node {
         self.keys.len() >= MAX_KEYS
     }
 
+    #[allow(dead_code)]
     fn is_underflow(&self) -> bool {
         self.keys.len() < MIN_KEYS
     }
@@ -139,6 +141,7 @@ impl Node {
 
 /// Memory-mapped B-tree index
 pub struct MmapIndex {
+    #[allow(dead_code)]
     path: PathBuf,
     file: Arc<Mutex<File>>,
     header: Arc<RwLock<IndexHeader>>,
@@ -157,6 +160,7 @@ impl MmapIndex {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&path)
             .context("Failed to open index file")?;
 

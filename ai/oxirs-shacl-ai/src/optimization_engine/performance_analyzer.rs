@@ -1,6 +1,9 @@
 //! Performance analyzer for runtime optimization
 
-use crate::{shape::AiShape, shape_management::PerformanceProfile, Result, ShaclAiError};
+use crate::{
+    shape::AiShape, shape_management::PerformanceProfile,
+    sophisticated_validation_optimization::RealTimeOptimizer, Result, ShaclAiError,
+};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +13,12 @@ pub struct PerformanceAnalyzer {
     profiling_data: Arc<Mutex<ProfilingData>>,
     bottleneck_detector: BottleneckDetector,
     trend_analyzer: TrendAnalyzer,
+    /// Real-time optimization engine
+    real_time_optimizer: RealTimeOptimizer,
+    /// Adaptive performance tuner
+    adaptive_tuner: AdaptivePerformanceTuner,
+    /// Performance prediction model
+    performance_predictor: PerformancePredictor,
 }
 
 /// Profiling data collected during validation
@@ -99,12 +108,57 @@ pub struct TrendDataPoint {
     pub context: HashMap<String, String>,
 }
 
+/// Adaptive performance tuner for runtime optimization
+#[derive(Debug)]
+pub struct AdaptivePerformanceTuner {
+    tuning_history: Vec<TuningRecord>,
+    current_parameters: HashMap<String, f64>,
+}
+
+/// Performance predictor for forecasting validation performance
+#[derive(Debug)]
+pub struct PerformancePredictor {
+    prediction_models: Vec<PredictionModel>,
+    historical_data: Vec<PerformanceRecord>,
+}
+
+/// Tuning record for adaptive performance tuning
+#[derive(Debug, Clone)]
+pub struct TuningRecord {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub parameter_name: String,
+    pub old_value: f64,
+    pub new_value: f64,
+    pub performance_impact: f64,
+}
+
+/// Prediction model for performance forecasting
+#[derive(Debug, Clone)]
+pub struct PredictionModel {
+    pub model_name: String,
+    pub accuracy: f64,
+    pub prediction_horizon_ms: u64,
+}
+
+/// Performance record for historical analysis
+#[derive(Debug, Clone)]
+pub struct PerformanceRecord {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub execution_time_ms: f64,
+    pub memory_usage_mb: f64,
+    pub constraint_count: usize,
+    pub context: HashMap<String, String>,
+}
+
 impl PerformanceAnalyzer {
     pub fn new() -> Self {
         Self {
             profiling_data: Arc::new(Mutex::new(ProfilingData::default())),
             bottleneck_detector: BottleneckDetector::new(),
             trend_analyzer: TrendAnalyzer::new(),
+            real_time_optimizer: RealTimeOptimizer::new(),
+            adaptive_tuner: AdaptivePerformanceTuner::new(),
+            performance_predictor: PerformancePredictor::new(),
         }
     }
 
@@ -245,7 +299,91 @@ impl TrendAnalyzer {
     }
 }
 
+impl AdaptivePerformanceTuner {
+    pub fn new() -> Self {
+        Self {
+            tuning_history: Vec::new(),
+            current_parameters: HashMap::new(),
+        }
+    }
+
+    /// Tune performance parameters based on runtime observations
+    pub async fn tune_parameters(&mut self, performance_data: &ProfilingData) -> Result<()> {
+        // Simple adaptive tuning logic
+        for (constraint_type, execution_times) in &performance_data.constraint_execution_times {
+            if !execution_times.is_empty() {
+                let avg_time = execution_times.iter().sum::<f64>() / execution_times.len() as f64;
+
+                // Record tuning if average time is above threshold
+                if avg_time > 50.0 {
+                    // 50ms threshold
+                    let record = TuningRecord {
+                        timestamp: chrono::Utc::now(),
+                        parameter_name: format!("{}_timeout", constraint_type),
+                        old_value: 100.0,          // Default timeout
+                        new_value: avg_time * 2.0, // Double the average time
+                        performance_impact: -0.1,  // Assume 10% improvement
+                    };
+
+                    self.tuning_history.push(record);
+                    self.current_parameters
+                        .insert(format!("{}_timeout", constraint_type), avg_time * 2.0);
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl PerformancePredictor {
+    pub fn new() -> Self {
+        Self {
+            prediction_models: Vec::new(),
+            historical_data: Vec::new(),
+        }
+    }
+
+    /// Predict performance for given constraint count
+    pub fn predict_performance(&self, constraint_count: usize) -> Result<PerformanceRecord> {
+        // Simple linear prediction based on constraint count
+        let estimated_time = constraint_count as f64 * 5.0; // 5ms per constraint
+        let estimated_memory = constraint_count as f64 * 1.0; // 1MB per constraint
+
+        Ok(PerformanceRecord {
+            timestamp: chrono::Utc::now(),
+            execution_time_ms: estimated_time,
+            memory_usage_mb: estimated_memory,
+            constraint_count,
+            context: HashMap::new(),
+        })
+    }
+
+    /// Add historical performance data
+    pub fn add_performance_record(&mut self, record: PerformanceRecord) {
+        self.historical_data.push(record);
+
+        // Keep only recent records (last 1000)
+        if self.historical_data.len() > 1000 {
+            self.historical_data
+                .drain(0..self.historical_data.len() - 1000);
+        }
+    }
+}
+
 impl Default for PerformanceAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for AdaptivePerformanceTuner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Default for PerformancePredictor {
     fn default() -> Self {
         Self::new()
     }

@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::constraints::Constraint;
 use crate::{paths::PropertyPath, targets::Target, Result, ShaclError, Shape, ShapeId};
 
 /// Shape validator for validating that shapes graphs are well-formed
@@ -54,7 +55,7 @@ impl ShapeValidator {
                 }
                 Err(e) => {
                     let mut shape_report = SingleShapeValidationReport::new(shape.id.clone());
-                    shape_report.add_error(format!("Critical validation error: {}", e));
+                    shape_report.add_error(format!("Critical validation error: {e}"));
                     report.add_shape_result(shape_report);
                 }
             }
@@ -136,7 +137,7 @@ impl ShapeValidator {
 
         for target in &shape.targets {
             if let Err(e) = self.validate_target(target) {
-                report.add_error(format!("Invalid target: {}", e));
+                report.add_error(format!("Invalid target: {e}"));
             }
         }
     }
@@ -203,7 +204,7 @@ impl ShapeValidator {
     fn validate_property_path(&self, shape: &Shape, report: &mut SingleShapeValidationReport) {
         if let Some(path) = &shape.path {
             if let Err(e) = self.validate_path_structure(path) {
-                report.add_error(format!("Invalid property path: {}", e));
+                report.add_error(format!("Invalid property path: {e}"));
             }
         }
     }
@@ -252,14 +253,13 @@ impl ShapeValidator {
         for (component_id, constraint) in &shape.constraints {
             // Validate individual constraint
             if let Err(e) = constraint.validate() {
-                report.add_error(format!("Invalid constraint '{}': {}", component_id, e));
+                report.add_error(format!("Invalid constraint '{component_id}': {e}"));
             }
 
             // Validate constraint references to other shapes (if any)
             if let Err(e) = self.validate_constraint_references(constraint, shape_map, depth) {
                 report.add_error(format!(
-                    "Invalid constraint reference in '{}': {}",
-                    component_id, e
+                    "Invalid constraint reference in '{component_id}': {e}"
                 ));
             }
         }
@@ -272,8 +272,6 @@ impl ShapeValidator {
         shape_map: &HashMap<ShapeId, &Shape>,
         depth: usize,
     ) -> Result<()> {
-        use crate::Constraint;
-
         match constraint {
             Constraint::Node(node_constraint) => {
                 if !shape_map.contains_key(&node_constraint.shape) {
@@ -295,8 +293,7 @@ impl ShapeValidator {
                 for shape_id in &and_constraint.shapes {
                     if !shape_map.contains_key(shape_id) {
                         return Err(ShaclError::ShapeValidation(format!(
-                            "Referenced shape '{}' not found in AND constraint",
-                            shape_id
+                            "Referenced shape '{shape_id}' not found in AND constraint"
                         )));
                     }
                 }
@@ -305,8 +302,7 @@ impl ShapeValidator {
                 for shape_id in &or_constraint.shapes {
                     if !shape_map.contains_key(shape_id) {
                         return Err(ShaclError::ShapeValidation(format!(
-                            "Referenced shape '{}' not found in OR constraint",
-                            shape_id
+                            "Referenced shape '{shape_id}' not found in OR constraint"
                         )));
                     }
                 }
@@ -315,8 +311,7 @@ impl ShapeValidator {
                 for shape_id in &xone_constraint.shapes {
                     if !shape_map.contains_key(shape_id) {
                         return Err(ShaclError::ShapeValidation(format!(
-                            "Referenced shape '{}' not found in XONE constraint",
-                            shape_id
+                            "Referenced shape '{shape_id}' not found in XONE constraint"
                         )));
                     }
                 }
@@ -349,14 +344,14 @@ impl ShapeValidator {
         // Check for reasonable order values
         if let Some(order) = shape.order {
             if order < 0 {
-                report.add_warning(format!("Shape order {} is negative", order));
+                report.add_warning(format!("Shape order {order} is negative"));
             }
         }
 
         // Check for reasonable priority values
         if let Some(priority) = shape.priority {
             if priority < 0 {
-                report.add_warning(format!("Shape priority {} is negative", priority));
+                report.add_warning(format!("Shape priority {priority} is negative"));
             }
         }
     }
@@ -371,8 +366,7 @@ impl ShapeValidator {
             let mut visited = HashSet::new();
             if self.has_circular_dependency(shape_id, shape_map, &mut visited) {
                 report.add_global_error(format!(
-                    "Circular dependency detected starting from shape '{}'",
-                    shape_id
+                    "Circular dependency detected starting from shape '{shape_id}'"
                 ));
             }
         }
@@ -419,8 +413,6 @@ impl ShapeValidator {
         shape_map: &HashMap<ShapeId, &Shape>,
         visited: &mut HashSet<ShapeId>,
     ) -> bool {
-        use crate::Constraint;
-
         match constraint {
             Constraint::Node(node_constraint) => {
                 self.has_circular_dependency(&node_constraint.shape, shape_map, visited)
@@ -512,6 +504,34 @@ impl ShapeValidationReport {
             .iter()
             .map(|r| r.warnings.len())
             .sum::<usize>()
+    }
+
+    /// Check if the shapes graph is valid
+    pub fn is_valid(&self) -> bool {
+        self.is_valid
+    }
+
+    /// Get the total number of errors (alias for total_errors)
+    pub fn error_count(&self) -> usize {
+        self.total_errors()
+    }
+
+    /// Get all errors as a vector of strings
+    pub fn all_errors(&self) -> Vec<String> {
+        let mut all_errors = self.global_errors.clone();
+        for shape_result in &self.shape_results {
+            all_errors.extend(shape_result.errors.clone());
+        }
+        all_errors
+    }
+
+    /// Get all warnings as a vector of strings
+    pub fn all_warnings(&self) -> Vec<String> {
+        let mut all_warnings = Vec::new();
+        for shape_result in &self.shape_results {
+            all_warnings.extend(shape_result.warnings.clone());
+        }
+        all_warnings
     }
 }
 

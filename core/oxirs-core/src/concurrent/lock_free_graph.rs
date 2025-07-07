@@ -198,58 +198,48 @@ impl ConcurrentGraph {
                 }
             }
             // Subject and predicate specified
-            (Some(s), Some(p), None) => {
-                if let Some(pred_map) = graph_node.spo_index.get(s) {
-                    if let Some(obj_set) = pred_map.get(p) {
-                        obj_set
-                            .iter()
-                            .map(|o| Triple::new(s.clone(), p.clone(), o.clone()))
-                            .collect()
-                    } else {
-                        Vec::new()
-                    }
-                } else {
-                    Vec::new()
-                }
-            }
+            (Some(s), Some(p), None) => match graph_node.spo_index.get(s) {
+                Some(pred_map) => match pred_map.get(p) {
+                    Some(obj_set) => obj_set
+                        .iter()
+                        .map(|o| Triple::new(s.clone(), p.clone(), o.clone()))
+                        .collect(),
+                    _ => Vec::new(),
+                },
+                _ => Vec::new(),
+            },
             // Only subject specified
-            (Some(s), None, None) => {
-                if let Some(pred_map) = graph_node.spo_index.get(s) {
-                    pred_map
-                        .iter()
-                        .flat_map(|pred_entry| {
-                            let p = pred_entry.key().clone();
-                            let s = s.clone();
-                            pred_entry
-                                .value()
-                                .iter()
-                                .map(move |o| Triple::new(s.clone(), p.clone(), o.clone()))
-                                .collect::<Vec<_>>()
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                }
-            }
+            (Some(s), None, None) => match graph_node.spo_index.get(s) {
+                Some(pred_map) => pred_map
+                    .iter()
+                    .flat_map(|pred_entry| {
+                        let p = pred_entry.key().clone();
+                        let s = s.clone();
+                        pred_entry
+                            .value()
+                            .iter()
+                            .map(move |o| Triple::new(s.clone(), p.clone(), o.clone()))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
             // Object specified
-            (None, None, Some(o)) => {
-                if let Some(subj_map) = graph_node.osp_index.get(o) {
-                    subj_map
-                        .iter()
-                        .flat_map(|subj_entry| {
-                            let s = subj_entry.key().clone();
-                            let o = o.clone();
-                            subj_entry
-                                .value()
-                                .iter()
-                                .map(move |p| Triple::new(s.clone(), p.clone(), o.clone()))
-                                .collect::<Vec<_>>()
-                        })
-                        .collect()
-                } else {
-                    Vec::new()
-                }
-            }
+            (None, None, Some(o)) => match graph_node.osp_index.get(o) {
+                Some(subj_map) => subj_map
+                    .iter()
+                    .flat_map(|subj_entry| {
+                        let s = subj_entry.key().clone();
+                        let o = o.clone();
+                        subj_entry
+                            .value()
+                            .iter()
+                            .map(move |p| Triple::new(s.clone(), p.clone(), o.clone()))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
             // Other patterns - scan all triples
             _ => graph_node
                 .triples
@@ -481,8 +471,8 @@ mod tests {
                 thread::spawn(move || {
                     for j in 0..ops_per_thread {
                         let triple = create_test_triple(
-                            &format!("http://s{}", i),
-                            &format!("http://p{}", j),
+                            &format!("http://s{i}"),
+                            &format!("http://p{j}"),
                             &format!("http://o{}", i * ops_per_thread + j),
                         );
                         graph.insert(triple).unwrap();
@@ -503,7 +493,7 @@ mod tests {
         let graph = ConcurrentGraph::new();
 
         let triples: Vec<_> = (0..10)
-            .map(|i| create_test_triple(&format!("http://s{}", i), "http://p", "http://o"))
+            .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
             .collect();
 
         let inserted = graph.insert_batch(triples.clone()).unwrap();
@@ -520,7 +510,7 @@ mod tests {
         let graph = ConcurrentGraph::new();
 
         for i in 0..10 {
-            let triple = create_test_triple(&format!("http://s{}", i), "http://p", "http://o");
+            let triple = create_test_triple(&format!("http://s{i}"), "http://p", "http://o");
             graph.insert(triple).unwrap();
         }
 

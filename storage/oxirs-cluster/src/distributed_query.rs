@@ -302,7 +302,7 @@ impl DistributedQueryExecutor {
     async fn create_subqueries(
         &self,
         parsed: &ParsedQuery,
-        distribution: &DataDistribution,
+        _distribution: &DataDistribution,
     ) -> Result<Vec<SubqueryPlan>> {
         let mut subqueries = Vec::new();
         let nodes: Vec<_> = self.cluster_nodes.read().await.iter().cloned().collect();

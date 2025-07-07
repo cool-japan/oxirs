@@ -8,9 +8,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    validation::ValidationViolation, ConstraintComponentId, PropertyPath, Severity, ShapeId,
-};
+use crate::{validation::ValidationViolation, ConstraintComponentId, PropertyPath, ShapeId};
 
 use oxirs_core::model::Term;
 
@@ -37,7 +35,7 @@ pub struct NestedValidationViolation {
 }
 
 /// Nested validation results container
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NestedValidationResults {
     /// Child violations from nested constraint evaluation
     pub child_violations: Vec<NestedValidationViolation>,
@@ -208,7 +206,7 @@ pub struct DisjointViolation {
 }
 
 /// Summary of nested validation results
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NestedResultSummary {
     /// Total nested violations
     pub total_nested_violations: usize,
@@ -249,7 +247,7 @@ pub struct RootCause {
 }
 
 /// Additional context for nested violations
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NestedViolationContext {
     /// Evaluation path that led to this violation
     pub evaluation_path: Vec<EvaluationStep>,
@@ -284,7 +282,7 @@ pub struct EvaluationStep {
 }
 
 /// Performance metrics for nested violation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NestedViolationMetrics {
     /// Time spent evaluating this constraint
     pub evaluation_time_ms: u64,
@@ -430,55 +428,6 @@ impl NestedViolationBuilder {
             parent_violation_id: self.parent_violation_id,
             violation_id,
             context: self.context,
-        }
-    }
-}
-
-impl Default for NestedViolationContext {
-    fn default() -> Self {
-        Self {
-            evaluation_path: Vec::new(),
-            evaluation_order: 0,
-            caused_early_termination: false,
-            performance_metrics: NestedViolationMetrics::default(),
-            constraint_dependencies: Vec::new(),
-        }
-    }
-}
-
-impl Default for NestedViolationMetrics {
-    fn default() -> Self {
-        Self {
-            evaluation_time_ms: 0,
-            memory_usage_bytes: None,
-            sub_evaluations: 0,
-            cache_hits: 0,
-            cache_misses: 0,
-        }
-    }
-}
-
-impl Default for NestedValidationResults {
-    fn default() -> Self {
-        Self {
-            child_violations: Vec::new(),
-            logical_context: None,
-            shape_context: None,
-            qualified_context: None,
-            nested_summary: NestedResultSummary::default(),
-        }
-    }
-}
-
-impl Default for NestedResultSummary {
-    fn default() -> Self {
-        Self {
-            total_nested_violations: 0,
-            max_nesting_depth: 0,
-            violations_by_level: HashMap::new(),
-            violations_by_constraint_type: HashMap::new(),
-            deepest_violation_level: 0,
-            root_causes: Vec::new(),
         }
     }
 }

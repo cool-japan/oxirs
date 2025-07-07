@@ -611,7 +611,7 @@ impl GeneticGraphOptimizer {
                         fastrand::f64();
 
                     structure.mutations.push(MutationType::IndexMutation {
-                        index_id: format!("secondary_{}", index_idx),
+                        index_id: format!("secondary_{index_idx}"),
                         old_value: old_value.to_string(),
                         new_value: structure.indexing_genes.secondary_indexes[index_idx].parameters
                             [param_idx]
@@ -723,7 +723,7 @@ pub fn default_fitness_function(structure: &GraphStructure) -> f64 {
 
     // Reward optimal cache size (not too small, not too large)
     let cache_mb = structure.storage_genes.caching.cache_size_mb as f64;
-    fitness += if cache_mb >= 128.0 && cache_mb <= 512.0 {
+    fitness += if (128.0..=512.0).contains(&cache_mb) {
         0.2
     } else {
         0.0
@@ -740,7 +740,7 @@ pub fn default_fitness_function(structure: &GraphStructure) -> f64 {
 
     // Reward good compression settings
     let compression_level = structure.indexing_genes.compression.level as f64;
-    fitness += if compression_level >= 3.0 && compression_level <= 7.0 {
+    fitness += if (3.0..=7.0).contains(&compression_level) {
         0.1
     } else {
         0.0
@@ -748,7 +748,7 @@ pub fn default_fitness_function(structure: &GraphStructure) -> f64 {
 
     // Reward reasonable block sizes
     let block_size = structure.storage_genes.block_size as f64;
-    fitness += if block_size >= 8192.0 && block_size <= 65536.0 {
+    fitness += if (8192.0..=65536.0).contains(&block_size) {
         0.1
     } else {
         0.0

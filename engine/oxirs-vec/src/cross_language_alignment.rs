@@ -5,17 +5,13 @@
 //! It supports multilingual embeddings, translation-based alignment, and cross-lingual
 //! similarity scoring for knowledge graphs with multilingual content.
 
-use crate::{
-    embeddings::{EmbeddingGenerator, EmbeddingStrategy},
-    similarity::{SimilarityMetric, SimilarityResult},
-    Vector, VectorError,
-};
+use crate::{embeddings::EmbeddingGenerator, similarity::SimilarityMetric, Vector};
 
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use tracing::{debug, info, span, warn, Level};
+use tracing::{info, span, Level};
 
 /// Configuration for cross-language vector alignment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -222,22 +218,22 @@ impl LanguageDetector for SimpleLanguageDetector {
             "de" // German
         } else if text_lower
             .chars()
-            .any(|c| c >= '\u{4e00}' && c <= '\u{9fff}')
+            .any(|c| ('\u{4e00}'..='\u{9fff}').contains(&c))
         {
             "zh" // Chinese
         } else if text_lower
             .chars()
-            .any(|c| c >= '\u{3040}' && c <= '\u{309f}')
+            .any(|c| ('\u{3040}'..='\u{309f}').contains(&c))
         {
             "ja" // Japanese
         } else if text_lower
             .chars()
-            .any(|c| c >= '\u{0600}' && c <= '\u{06ff}')
+            .any(|c| ('\u{0600}'..='\u{06ff}').contains(&c))
         {
             "ar" // Arabic
         } else if text_lower
             .chars()
-            .any(|c| c >= '\u{0400}' && c <= '\u{04ff}')
+            .any(|c| ('\u{0400}'..='\u{04ff}').contains(&c))
         {
             "ru" // Russian
         } else {
@@ -263,7 +259,7 @@ impl LanguageDetector for SimpleLanguageDetector {
 pub struct AlignmentMapping {
     /// Source language
     pub source_language: String,
-    /// Target language  
+    /// Target language
     pub target_language: String,
     /// Transformation matrix (if learned)
     pub transformation_matrix: Option<Vec<Vec<f32>>>,
@@ -429,7 +425,7 @@ impl CrossLanguageAligner {
         target_language: &str,
     ) -> Result<Vector> {
         // For now, use the same embedding generator with language prefix
-        let prefixed_content = format!("[{}] {}", target_language, content);
+        let prefixed_content = format!("[{target_language}] {content}");
         let embeddable_content = crate::embeddings::EmbeddableContent::Text(prefixed_content);
         self.embedding_generator.generate(&embeddable_content)
     }
@@ -441,7 +437,7 @@ impl CrossLanguageAligner {
         source_lang: &str,
         target_lang: &str,
     ) -> Result<String> {
-        let cache_key = format!("{}:{}:{}", source_lang, target_lang, text);
+        let cache_key = format!("{source_lang}:{target_lang}:{text}");
 
         // Check cache first
         {
@@ -453,13 +449,16 @@ impl CrossLanguageAligner {
 
         // Simulate translation (in real implementation, would call translation API)
         let translated = match (source_lang, target_lang) {
-            ("en", "es") => format!("[ES] {}", text),
-            ("en", "fr") => format!("[FR] {}", text),
-            ("en", "de") => format!("[DE] {}", text),
+            ("en", "es") => format!("[ES] {text}"),
+            ("en", "fr") => format!("[FR] {text}"),
+            ("en", "de") => format!("[DE] {text}"),
             ("es", "en") => text.replace("[ES]", "[EN]"),
             ("fr", "en") => text.replace("[FR]", "[EN]"),
             ("de", "en") => text.replace("[DE]", "[EN]"),
-            _ => format!("[{}] {}", target_lang.to_uppercase(), text),
+            _ => {
+                let upper_lang = target_lang.to_uppercase();
+                format!("[{upper_lang}] {text}")
+            }
         };
 
         // Cache the translation
@@ -509,7 +508,7 @@ impl CrossLanguageAligner {
         source_lang: &str,
         target_lang: &str,
     ) -> Result<Vector> {
-        let mapping_key = format!("{}:{}", source_lang, target_lang);
+        let mapping_key = format!("{source_lang}:{target_lang}");
         let mappings = self.alignment_mappings.read().unwrap();
 
         if let Some(mapping) = mappings.get(&mapping_key) {
@@ -609,7 +608,7 @@ impl CrossLanguageAligner {
         target_language: &str,
         translation_pairs: Vec<(String, String)>,
     ) -> Result<()> {
-        let span = span!(Level::INFO, "learn_alignment_mapping", 
+        let span = span!(Level::INFO, "learn_alignment_mapping",
                           source = %source_language, target = %target_language);
         let _enter = span.enter();
 
@@ -646,7 +645,7 @@ impl CrossLanguageAligner {
             quality_score,
         };
 
-        let mapping_key = format!("{}:{}", source_language, target_language);
+        let mapping_key = format!("{source_language}:{target_language}");
         let mut mappings = self.alignment_mappings.write().unwrap();
         mappings.insert(mapping_key, mapping);
 
@@ -735,7 +734,7 @@ impl CrossLanguageAligner {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::embeddings::{EmbeddingConfig, MockEmbeddingGenerator};
+    use crate::embeddings::MockEmbeddingGenerator;
 
     #[test]
     fn test_cross_language_config_creation() {

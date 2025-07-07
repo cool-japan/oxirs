@@ -47,7 +47,7 @@ impl AutoDiscovery {
         self.discovery_channel = Some(tx.clone());
 
         // Check if any discovery method is enabled
-        let any_enabled = self.config.enable_dns_discovery 
+        let any_enabled = self.config.enable_dns_discovery
             || self.config.enable_kubernetes_discovery
             || self.config.enable_mdns;
 
@@ -372,14 +372,17 @@ impl AutoDiscovery {
                     discovered.discovery_method.as_str()
                 ));
 
-                if let Err(e) = registry.register(enhanced_service).await {
-                    warn!(
-                        "Failed to register discovered service {}: {}",
-                        discovered.url, e
-                    );
-                } else {
-                    registered_count += 1;
-                    info!("Registered discovered service: {}", discovered.url);
+                match registry.register(enhanced_service).await {
+                    Err(e) => {
+                        warn!(
+                            "Failed to register discovered service {}: {}",
+                            discovered.url, e
+                        );
+                    }
+                    _ => {
+                        registered_count += 1;
+                        info!("Registered discovered service: {}", discovered.url);
+                    }
                 }
             }
         }

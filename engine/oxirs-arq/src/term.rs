@@ -3,17 +3,16 @@
 //! This module provides a complete implementation of RDF terms with full datatype support,
 //! SPARQL-compliant comparison and ordering, variable binding, and expression evaluation.
 
-use crate::algebra::{Iri, Literal, Term as AlgebraTerm, TriplePattern, Variable};
+use crate::algebra::{Literal, Term as AlgebraTerm, TriplePattern, Variable};
 use crate::path::PropertyPath;
 use anyhow::{anyhow, bail, Result};
-use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Timelike, Utc};
+use base64::Engine;
+use chrono::{DateTime, Datelike, NaiveDate, NaiveTime, Timelike};
 use ordered_float::OrderedFloat;
 use oxirs_core::model::NamedNode;
-use rust_decimal::Decimal;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
-use std::str::FromStr;
 
 /// XSD namespace for datatype URIs
 pub const XSD_NS: &str = "http://www.w3.org/2001/XMLSchema#";
@@ -23,7 +22,6 @@ pub const RDF_NS: &str = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 
 /// Common XSD datatypes
 pub mod xsd {
-    use super::XSD_NS;
 
     pub const STRING: &str = "http://www.w3.org/2001/XMLSchema#string";
     pub const BOOLEAN: &str = "http://www.w3.org/2001/XMLSchema#boolean";
@@ -259,7 +257,7 @@ impl LiteralValue {
             xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
                 let dt = DateTime::parse_from_rfc3339(value)
                     .map_err(|_| anyhow!("Invalid dateTime value: {}", value))?;
-                ParsedValue::DateTime(dt.timestamp_nanos())
+                ParsedValue::DateTime(dt.timestamp_nanos_opt().unwrap_or(0))
             }
             xsd::DATE => {
                 let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
@@ -280,7 +278,8 @@ impl LiteralValue {
                 ParsedValue::Binary(bytes)
             }
             xsd::BASE64_BINARY => {
-                let bytes = base64::decode(value)
+                let bytes = base64::engine::general_purpose::STANDARD
+                    .decode(value)
                     .map_err(|_| anyhow!("Invalid base64Binary value: {}", value))?;
                 ParsedValue::Binary(bytes)
             }
@@ -888,7 +887,7 @@ mod tests {
         assert!(quoted_triple.is_quoted_triple());
 
         // Test display format
-        let display = format!("{}", quoted_triple);
+        let display = format!("{quoted_triple}");
         assert!(display.starts_with("<<"));
         assert!(display.ends_with(">>"));
     }

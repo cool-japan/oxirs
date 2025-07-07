@@ -355,9 +355,9 @@ mod tests {
         // Add some triples
         for i in 0..15 {
             let triple = SerializableTriple {
-                subject: format!("http://example.org/s{}", i),
+                subject: format!("http://example.org/s{i}"),
                 predicate: "http://example.org/p".to_string(),
-                object: format!("value{}", i),
+                object: format!("value{i}"),
                 object_type: ObjectType::Literal {
                     datatype: None,
                     language: None,

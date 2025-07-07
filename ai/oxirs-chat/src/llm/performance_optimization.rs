@@ -1,5 +1,5 @@
 use crate::llm::manager::LLMManager;
-use crate::llm::types::{LLMRequest, LLMResponse, Usage};
+use crate::llm::types::{ChatMessage, ChatRole, LLMRequest, LLMResponse, Priority, Usage, UseCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -122,6 +122,7 @@ pub struct CacheEntry {
 pub struct BatchRequest {
     pub requests: Vec<LLMRequest>,
     pub batch_id: String,
+    #[serde(skip, default = "Instant::now")]
     pub created_at: Instant,
     pub priority: BatchPriority,
 }
@@ -310,6 +311,8 @@ impl PerformanceOptimizer {
         if let Some(entry) = cache.get(&cache_key) {
             // Check TTL
             if entry.created_at.elapsed().unwrap_or(Duration::MAX) < self.config.cache_ttl {
+                // Clone the response before dropping the cache
+                let response = entry.response.clone();
                 // Update access statistics
                 drop(cache);
                 let mut cache_write = self.cache.write().await;
@@ -317,7 +320,7 @@ impl PerformanceOptimizer {
                     entry_mut.access_count += 1;
                     entry_mut.last_accessed = SystemTime::now();
                 }
-                return Ok(Some(entry.response.clone()));
+                return Ok(Some(response));
             }
         }
 
@@ -328,14 +331,22 @@ impl PerformanceOptimizer {
         &self,
         request: &LLMRequest,
     ) -> Result<Option<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
-        let prompt_size = request.prompt.len();
+        let prompt_content = request
+            .messages
+            .iter()
+            .map(|msg| msg.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let prompt_size = prompt_content.len();
         if prompt_size > self.config.compression_threshold {
             let compression_engine = self.compression_engine.read().await;
-            let compressed_prompt = compression_engine.compress(&request.prompt)?;
+            let compressed_prompt = compression_engine.compress(&prompt_content)?;
 
             if compressed_prompt.len() < prompt_size {
                 let mut optimized_request = request.clone();
-                optimized_request.prompt = compressed_prompt;
+                if let Some(first_msg) = optimized_request.messages.first_mut() {
+                    first_msg.content = compressed_prompt;
+                }
                 return Ok(Some(optimized_request));
             }
         }
@@ -355,11 +366,19 @@ impl PerformanceOptimizer {
         request: &LLMRequest,
     ) -> Result<Option<LLMRequest>, Box<dyn std::error::Error + Send + Sync>> {
         // Simple query optimization - could be enhanced with more sophisticated logic
-        let optimized_prompt = self.apply_prompt_optimization(&request.prompt)?;
+        let prompt_content = request
+            .messages
+            .iter()
+            .map(|msg| msg.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let optimized_prompt = self.apply_prompt_optimization(&prompt_content)?;
 
-        if optimized_prompt != request.prompt {
+        if optimized_prompt != prompt_content {
             let mut optimized_request = request.clone();
-            optimized_request.prompt = optimized_prompt;
+            if let Some(first_msg) = optimized_request.messages.first_mut() {
+                first_msg.content = optimized_prompt;
+            }
             return Ok(Some(optimized_request));
         }
 
@@ -535,21 +554,19 @@ impl PerformanceOptimizer {
 
         for i in 0..config.request_count {
             let request = LLMRequest {
-                prompt: format!("Test prompt {} for benchmarking performance", i),
+                messages: vec![ChatMessage {
+                    role: ChatRole::User,
+                    content: format!("Test prompt {} for benchmarking performance", i),
+                    metadata: None,
+                }],
                 max_tokens: Some(100),
-                temperature: Some(0.7),
-                model: None,
+                temperature: 0.7,
                 system_prompt: Some(
                     "You are a helpful assistant for performance testing.".to_string(),
                 ),
-                stop_sequences: None,
-                top_p: None,
-                frequency_penalty: None,
-                presence_penalty: None,
-                logit_bias: None,
-                user: Some(format!("test_user_{}", i)),
-                stream: false,
-                tools: None,
+                use_case: UseCase::SimpleQuery,
+                priority: Priority::Normal,
+                timeout: None,
             };
             requests.push(request);
         }
@@ -564,20 +581,29 @@ impl PerformanceOptimizer {
         // Simulate LLM response for benchmarking
         tokio::time::sleep(Duration::from_millis(100)).await;
 
+        let prompt_content = request
+            .messages
+            .iter()
+            .map(|msg| msg.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+
         Ok(LLMResponse {
             content: format!(
                 "Test response for: {}",
-                request.prompt.chars().take(50).collect::<String>()
+                prompt_content.chars().take(50).collect::<String>()
             ),
             usage: Usage {
-                prompt_tokens: request.prompt.len() / 4,
+                prompt_tokens: prompt_content.len() / 4,
                 completion_tokens: 25,
-                total_tokens: (request.prompt.len() / 4) + 25,
+                total_tokens: (prompt_content.len() / 4) + 25,
                 cost: 0.001,
             },
-            finish_reason: Some("completed".to_string()),
-            model: "test-model".to_string(),
-            created: chrono::Utc::now(),
+            model_used: "test-model".to_string(),
+            provider_used: "test-provider".to_string(),
+            latency: Duration::from_millis(100),
+            quality_score: Some(0.8),
+            metadata: std::collections::HashMap::new(),
         })
     }
 
@@ -947,10 +973,16 @@ impl PerformanceOptimizer {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        request.prompt.hash(&mut hasher);
+        let prompt_content = request
+            .messages
+            .iter()
+            .map(|msg| msg.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n");
+        prompt_content.hash(&mut hasher);
         request.max_tokens.hash(&mut hasher);
-        request.temperature.hash(&mut hasher);
-        request.model.hash(&mut hasher);
+        request.temperature.to_bits().hash(&mut hasher);
+        request.use_case.hash(&mut hasher);
 
         Ok(format!("cache_{:x}", hasher.finish()))
     }

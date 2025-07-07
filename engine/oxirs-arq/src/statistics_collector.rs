@@ -3,14 +3,11 @@
 //! This module provides sophisticated statistics collection capabilities
 //! for accurate cardinality estimation and query optimization.
 
-use crate::algebra::{Algebra, Literal, Term, TriplePattern, Variable};
+use crate::algebra::{Algebra, Term, TriplePattern, Variable};
 use crate::optimizer::{IndexStatistics, IndexType, Statistics};
 use anyhow::Result;
-use oxirs_core::model::NamedNode;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
 
 /// Histogram for value distribution analysis
 #[derive(Debug, Clone)]
@@ -176,6 +173,12 @@ pub struct StatisticsCollector {
     adaptive_config: AdaptiveConfig,
 }
 
+impl Default for StatisticsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StatisticsCollector {
     /// Create a new statistics collector
     pub fn new() -> Self {
@@ -220,7 +223,7 @@ impl StatisticsCollector {
     pub fn collect_from_patterns(&mut self, patterns: &[TriplePattern]) -> Result<()> {
         // Count pattern occurrences
         for pattern in patterns {
-            let pattern_key = format!("{}", pattern);
+            let pattern_key = format!("{pattern}");
             *self
                 .stats
                 .pattern_cardinality
@@ -339,7 +342,7 @@ impl StatisticsCollector {
             Term::PropertyPath(path) => {
                 // Property paths are complex patterns that affect selectivity
                 // Track as a special type of predicate usage
-                let path_key = format!("path:{}", path);
+                let path_key = format!("path:{path}");
                 *self.stats.pattern_cardinality.entry(path_key).or_insert(0) += 1;
 
                 // Property paths typically increase cardinality estimates
@@ -348,7 +351,7 @@ impl StatisticsCollector {
                     *self
                         .stats
                         .cardinalities
-                        .entry(format!("path:{}", path))
+                        .entry(format!("path:{path}"))
                         .or_insert(0) += 1;
                 }
             }
@@ -359,19 +362,19 @@ impl StatisticsCollector {
                         *self
                             .stats
                             .pattern_cardinality
-                            .entry(format!("subject:_:{}", id))
+                            .entry(format!("subject:_:{id}"))
                             .or_insert(0) += 1;
                     }
                     TermPosition::Object => {
                         *self
                             .stats
                             .pattern_cardinality
-                            .entry(format!("object:_:{}", id))
+                            .entry(format!("object:_:{id}"))
                             .or_insert(0) += 1;
                     }
                     TermPosition::Predicate => {
                         // Blank nodes as predicates are unusual but possible in some contexts
-                        let blank_predicate_key = format!("blank_predicate:{}", id);
+                        let blank_predicate_key = format!("blank_predicate:{id}");
                         *self
                             .stats
                             .pattern_cardinality
@@ -484,7 +487,7 @@ impl StatisticsCollector {
     /// Update index statistics based on collected data
     fn update_index_statistics(&mut self) -> Result<()> {
         // Determine which indexes would be most beneficial
-        let total_patterns = self.stats.pattern_cardinality.values().sum::<usize>() as f64;
+        let _total_patterns = self.stats.pattern_cardinality.values().sum::<usize>() as f64;
 
         // Subject-Predicate index benefit
         let sp_benefit = self
@@ -1029,7 +1032,7 @@ impl StatisticsCollector {
                     .boundaries
                     .get(i)
                     .cloned()
-                    .unwrap_or_else(|| format!("bucket_{}", i));
+                    .unwrap_or_else(|| format!("bucket_{i}"));
             }
         }
 
@@ -1302,7 +1305,7 @@ impl DynamicStatisticsUpdater {
         match algebra {
             Algebra::Bgp(patterns) => {
                 for pattern in patterns {
-                    let pattern_key = format!("{}", pattern);
+                    let pattern_key = format!("{pattern}");
                     let current = stats
                         .pattern_cardinality
                         .get(&pattern_key)
@@ -1401,6 +1404,8 @@ pub use rand;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::Literal;
+    use oxirs_core::model::NamedNode;
 
     #[test]
     fn test_histogram_operations() {

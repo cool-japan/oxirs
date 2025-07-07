@@ -168,7 +168,7 @@ impl EnhancedExecutionOptimizer {
     /// Predict execution performance
     pub fn predict_performance(&self, algebra: &Algebra) -> Result<PerformancePrediction> {
         let model = self.performance_model.read().unwrap();
-        
+
         let complexity_score = self.compute_complexity_score(algebra);
         let selectivity_score = self.estimate_selectivity_score(algebra);
         let operator_cost = self.estimate_operator_cost(algebra);
@@ -229,7 +229,7 @@ impl EnhancedExecutionOptimizer {
             Algebra::Join { left, right } => {
                 let left_cost = self.estimate_execution_cost(left);
                 let right_cost = self.estimate_execution_cost(right);
-                
+
                 // Optimize recursively first
                 let opt_left = self.optimize_join_order(left)?;
                 let opt_right = self.optimize_join_order(right)?;
@@ -260,7 +260,7 @@ impl EnhancedExecutionOptimizer {
                     Algebra::Join { left, right } => {
                         let filter_vars = self.extract_filter_variables(condition);
                         let left_vars = self.extract_algebra_variables(left);
-                        
+
                         // If filter only uses left variables, push it down
                         if filter_vars.is_subset(&left_vars) {
                             let filtered_left = Algebra::Filter {
@@ -291,13 +291,13 @@ impl EnhancedExecutionOptimizer {
                     Algebra::Join { left, right } => {
                         let left_vars = self.extract_algebra_variables(left);
                         let right_vars = self.extract_algebra_variables(right);
-                        
+
                         let left_needed: Vec<Variable> = variables
                             .iter()
                             .filter(|v| left_vars.contains(v))
                             .cloned()
                             .collect();
-                        
+
                         let right_needed: Vec<Variable> = variables
                             .iter()
                             .filter(|v| right_vars.contains(v))
@@ -347,7 +347,7 @@ impl EnhancedExecutionOptimizer {
             Algebra::Union { left, right } => {
                 let left_cost = self.estimate_execution_cost(left);
                 let right_cost = self.estimate_execution_cost(right);
-                
+
                 // Optimize recursively first
                 let opt_left = self.optimize_union_reordering(left)?;
                 let opt_right = self.optimize_union_reordering(right)?;
@@ -394,14 +394,14 @@ impl EnhancedExecutionOptimizer {
     /// Cache optimization result
     fn cache_optimization(&self, query_hash: &str, algebra: &Algebra, estimated_cost: f64) {
         let mut cache = self.pattern_cache.write().unwrap();
-        
+
         // Remove old entries if cache is full
         if cache.len() >= self.config.cache_size {
             let oldest_key = cache
                 .iter()
                 .min_by_key(|(_, v)| v.timestamp)
                 .map(|(k, _)| k.clone());
-            
+
             if let Some(key) = oldest_key {
                 cache.remove(&key);
             }
@@ -438,10 +438,10 @@ impl EnhancedExecutionOptimizer {
     /// Update performance model with new data
     fn update_performance_model(&self, algebra: &Algebra, stats: &ExecutionStats) -> Result<()> {
         let mut model = self.performance_model.write().unwrap();
-        
+
         let pattern_key = self.extract_pattern_key(algebra);
         let actual_time = stats.execution_time.as_secs_f64();
-        
+
         // Update pattern weights using exponential moving average
         let current_weight = model.pattern_weights.get(&pattern_key).unwrap_or(&1.0);
         let new_weight = current_weight * (1.0 - model.learning_rate) + actual_time * model.learning_rate;
@@ -542,7 +542,7 @@ impl EnhancedExecutionOptimizer {
                 })
             })
             .sum();
-        
+
         let count = cache.values().filter(|c| c.actual_cost.is_some()).count();
         if count > 0 {
             total_benefit / count as f64

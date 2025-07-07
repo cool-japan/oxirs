@@ -42,6 +42,11 @@ flate2 = "1.0"
 # Internal OxiRS dependencies
 oxirs-vec = { path = "../../engine/oxirs-vec" }
 
+# Web server dependencies (for API server feature)
+axum = { version = "0.7", optional = true }
+tower = { version = "0.4", optional = true }
+tower-http = { version = "0.5", features = ["cors", "timeout", "trace"], optional = true }
+
 [dev-dependencies]
 criterion = { workspace = true }
 tempfile = { workspace = true }
@@ -63,4 +68,4 @@ custom-models = []
 ontology-aware = []
 multi-modal = []
 gpu-acceleration = []
-api-server = []
+api-server = ["dep:axum", "dep:tower", "dep:tower-http"]

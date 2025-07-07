@@ -55,6 +55,8 @@ prost-types = "0.13"
 apache-avro = "0.17"
 tokio-stream = "0.1"
 lz4_flex = "0.11"
+snap = "1.1"
+brotli = "6.0"
 crc32fast = "1.4"
 dashmap = "6.1"
 num_cpus = "1.16"
@@ -65,6 +67,11 @@ opentelemetry = { workspace = true, optional = true }
 opentelemetry-jaeger = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 opentelemetry-semantic-conventions = { workspace = true, optional = true }
+sysinfo = "0.32"
+wasmparser = "0.219"
+ed25519-dalek = "2.1"
+rsa = "0.9"
+once_cell.workspace = true
 
 [dev-dependencies]
 criterion.workspace = true
@@ -81,6 +88,7 @@ redis = ["dep:redis"]
 pulsar = ["dep:pulsar"]
 opentelemetry = ["dep:opentelemetry", "dep:opentelemetry-jaeger", "dep:opentelemetry_sdk", "dep:opentelemetry-semantic-conventions"]
 all-backends = ["kafka", "nats", "kinesis", "redis", "pulsar"]
+wasm = []
 
 [[bench]]
 name = "performance_benchmarks"

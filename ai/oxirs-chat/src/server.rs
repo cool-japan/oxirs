@@ -22,7 +22,7 @@ use tower_http::{
     cors::{Any, CorsLayer},
     trace::TraceLayer,
 };
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::{ChatSession, Message, MessageRole, OxiRSChat, ThreadInfo};
@@ -67,6 +67,7 @@ pub struct WebSocketSessionInfo {
     pub user_id: Option<String>,
     pub connected_at: SystemTime,
     pub last_activity: SystemTime,
+    pub subscribed_topics: std::collections::HashSet<String>,
 }
 
 /// Server-wide broadcast messages
@@ -189,10 +190,46 @@ impl ChatServer {
     }
 
     pub async fn serve(self) -> Result<(), Box<dyn std::error::Error>> {
-        let cors = CorsLayer::new()
-            .allow_origin(Any)
-            .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
-            .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
+        // Configure CORS based on server configuration
+        let cors = if self.state.config.cors_origins.contains(&"*".to_string()) {
+            // Allow any origin if wildcard is specified
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+        } else {
+            // Configure specific allowed origins
+            let origins: Result<Vec<HeaderValue>, _> = self
+                .state
+                .config
+                .cors_origins
+                .iter()
+                .map(|origin| origin.parse())
+                .collect();
+
+            match origins {
+                Ok(origins) => {
+                    info!(
+                        "Configuring CORS with specific origins: {:?}",
+                        self.state.config.cors_origins
+                    );
+                    CorsLayer::new()
+                        .allow_origin(origins)
+                        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+                }
+                Err(e) => {
+                    warn!(
+                        "Invalid CORS origin configuration: {}, falling back to any origin",
+                        e
+                    );
+                    CorsLayer::new()
+                        .allow_origin(Any)
+                        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+                        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION])
+                }
+            }
+        };
 
         let middleware = ServiceBuilder::new()
             .layer(TraceLayer::new_for_http())
@@ -263,17 +300,18 @@ async fn get_session(
     Path(session_id): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
-    if let Some(session_arc) = state.chat.get_session(&session_id).await {
-        let session = session_arc.lock().await;
-        Ok(Json(serde_json::json!({
-            "session_id": session_id,
-            "status": "active",
-            "message_count": session.messages.len(),
-            "created_at": session.created_at.to_rfc3339(),
-            "last_activity": session.last_activity.to_rfc3339()
-        })))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    match state.chat.get_session(&session_id).await {
+        Some(session_arc) => {
+            let session = session_arc.lock().await;
+            Ok(Json(serde_json::json!({
+                "session_id": session_id,
+                "status": "active",
+                "message_count": session.messages.len(),
+                "created_at": session.created_at.to_rfc3339(),
+                "last_activity": session.last_activity.to_rfc3339()
+            })))
+        }
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -282,42 +320,43 @@ async fn send_message(
     State(state): State<AppState>,
     Json(request): Json<SendMessageRequest>,
 ) -> Result<Json<MessageResponse>, StatusCode> {
-    if let Some(_session_arc) = state.chat.get_session(&session_id).await {
-        match state
-            .chat
-            .process_message(&session_id, request.content)
-            .await
-        {
-            Ok(message) => {
-                // Session is automatically managed by OxiRSChat
+    match state.chat.get_session(&session_id).await {
+        Some(_session_arc) => {
+            match state
+                .chat
+                .process_message(&session_id, request.content)
+                .await
+            {
+                Ok(message) => {
+                    // Session is automatically managed by OxiRSChat
 
-                let response = MessageResponse {
-                    message_id: message.id,
-                    content: message.content.to_string(),
-                    role: match message.role {
-                        MessageRole::User => "user".to_string(),
-                        MessageRole::Assistant => "assistant".to_string(),
-                        MessageRole::System => "system".to_string(),
-                        MessageRole::Function => "function".to_string(),
-                    },
-                    timestamp: message.timestamp.to_rfc3339(),
-                    metadata: message
-                        .metadata
-                        .map(|m| serde_json::to_value(m).unwrap_or_default()),
-                    thread_id: message.thread_id,
-                    parent_message_id: message.parent_message_id,
-                    reactions: message.reactions,
-                };
+                    let response = MessageResponse {
+                        message_id: message.id,
+                        content: message.content.to_string(),
+                        role: match message.role {
+                            MessageRole::User => "user".to_string(),
+                            MessageRole::Assistant => "assistant".to_string(),
+                            MessageRole::System => "system".to_string(),
+                            MessageRole::Function => "function".to_string(),
+                        },
+                        timestamp: message.timestamp.to_rfc3339(),
+                        metadata: message
+                            .metadata
+                            .map(|m| serde_json::to_value(m).unwrap_or_default()),
+                        thread_id: message.thread_id,
+                        parent_message_id: message.parent_message_id,
+                        reactions: message.reactions,
+                    };
 
-                Ok(Json(response))
-            }
-            Err(e) => {
-                error!("Failed to process message: {}", e);
-                Err(StatusCode::INTERNAL_SERVER_ERROR)
+                    Ok(Json(response))
+                }
+                Err(e) => {
+                    error!("Failed to process message: {}", e);
+                    Err(StatusCode::INTERNAL_SERVER_ERROR)
+                }
             }
         }
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -326,36 +365,37 @@ async fn get_messages(
     Query(params): Query<SessionQuery>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MessageResponse>>, StatusCode> {
-    if let Some(session_arc) = state.chat.get_session(&session_id).await {
-        let session = session_arc.lock().await;
-        let messages: Vec<MessageResponse> = session
-            .messages
-            .iter()
-            .skip(params.offset.unwrap_or(0))
-            .take(params.limit.unwrap_or(100))
-            .map(|msg| MessageResponse {
-                message_id: msg.id.clone(),
-                content: msg.content.to_string(),
-                role: match msg.role {
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::Function => "function".to_string(),
-                },
-                timestamp: msg.timestamp.to_rfc3339(),
-                metadata: msg
-                    .metadata
-                    .as_ref()
-                    .map(|m| serde_json::to_value(m).unwrap_or_default()),
-                thread_id: msg.thread_id.clone(),
-                parent_message_id: msg.parent_message_id.clone(),
-                reactions: msg.reactions.clone(),
-            })
-            .collect();
+    match state.chat.get_session(&session_id).await {
+        Some(session_arc) => {
+            let session = session_arc.lock().await;
+            let messages: Vec<MessageResponse> = session
+                .messages
+                .iter()
+                .skip(params.offset.unwrap_or(0))
+                .take(params.limit.unwrap_or(100))
+                .map(|msg| MessageResponse {
+                    message_id: msg.id.clone(),
+                    content: msg.content.to_string(),
+                    role: match msg.role {
+                        MessageRole::User => "user".to_string(),
+                        MessageRole::Assistant => "assistant".to_string(),
+                        MessageRole::System => "system".to_string(),
+                        MessageRole::Function => "function".to_string(),
+                    },
+                    timestamp: msg.timestamp.to_rfc3339(),
+                    metadata: msg
+                        .metadata
+                        .as_ref()
+                        .map(|m| serde_json::to_value(m).unwrap_or_default()),
+                    thread_id: msg.thread_id.clone(),
+                    parent_message_id: msg.parent_message_id.clone(),
+                    reactions: msg.reactions.clone(),
+                })
+                .collect();
 
-        Ok(Json(messages))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+            Ok(Json(messages))
+        }
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -371,13 +411,14 @@ async fn get_threads(
     Path(session_id): Path<String>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<ThreadInfo>>, StatusCode> {
-    if let Some(session_arc) = state.chat.get_session(&session_id).await {
-        let session = session_arc.lock().await;
-        // Thread functionality not yet implemented
-        let threads: Vec<ThreadInfo> = Vec::new();
-        Ok(Json(threads))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+    match state.chat.get_session(&session_id).await {
+        Some(session_arc) => {
+            let session = session_arc.lock().await;
+            // Thread functionality not yet implemented
+            let threads: Vec<ThreadInfo> = Vec::new();
+            Ok(Json(threads))
+        }
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -385,35 +426,36 @@ async fn get_thread_messages(
     Path((session_id, thread_id)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MessageResponse>>, StatusCode> {
-    if let Some(session_arc) = state.chat.get_session(&session_id).await {
-        let session = session_arc.lock().await;
-        let messages: Vec<MessageResponse> = session
-            .messages
-            .iter()
-            .filter(|msg| msg.thread_id.as_ref() == Some(&thread_id))
-            .map(|msg| MessageResponse {
-                message_id: msg.id.clone(),
-                content: msg.content.to_string(),
-                role: match msg.role {
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::Function => "function".to_string(),
-                },
-                timestamp: msg.timestamp.to_rfc3339(),
-                metadata: msg
-                    .metadata
-                    .as_ref()
-                    .map(|m| serde_json::to_value(m).unwrap_or_default()),
-                thread_id: msg.thread_id.clone(),
-                parent_message_id: msg.parent_message_id.clone(),
-                reactions: msg.reactions.clone(),
-            })
-            .collect();
+    match state.chat.get_session(&session_id).await {
+        Some(session_arc) => {
+            let session = session_arc.lock().await;
+            let messages: Vec<MessageResponse> = session
+                .messages
+                .iter()
+                .filter(|msg| msg.thread_id.as_ref() == Some(&thread_id))
+                .map(|msg| MessageResponse {
+                    message_id: msg.id.clone(),
+                    content: msg.content.to_string(),
+                    role: match msg.role {
+                        MessageRole::User => "user".to_string(),
+                        MessageRole::Assistant => "assistant".to_string(),
+                        MessageRole::System => "system".to_string(),
+                        MessageRole::Function => "function".to_string(),
+                    },
+                    timestamp: msg.timestamp.to_rfc3339(),
+                    metadata: msg
+                        .metadata
+                        .as_ref()
+                        .map(|m| serde_json::to_value(m).unwrap_or_default()),
+                    thread_id: msg.thread_id.clone(),
+                    parent_message_id: msg.parent_message_id.clone(),
+                    reactions: msg.reactions.clone(),
+                })
+                .collect();
 
-        Ok(Json(messages))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+            Ok(Json(messages))
+        }
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -421,36 +463,37 @@ async fn get_message_replies(
     Path((session_id, message_id)): Path<(String, String)>,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<MessageResponse>>, StatusCode> {
-    if let Some(session_arc) = state.chat.get_session(&session_id).await {
-        let session = session_arc.lock().await;
-        let messages: Vec<MessageResponse> = session
-            .messages
-            .iter()
-            .filter(|msg| msg.parent_message_id.as_ref() == Some(&message_id))
-            .cloned()
-            .map(|msg| MessageResponse {
-                message_id: msg.id.clone(),
-                content: msg.content.to_string(),
-                role: match msg.role {
-                    MessageRole::User => "user".to_string(),
-                    MessageRole::Assistant => "assistant".to_string(),
-                    MessageRole::System => "system".to_string(),
-                    MessageRole::Function => "function".to_string(),
-                },
-                timestamp: msg.timestamp.to_rfc3339(),
-                metadata: msg
-                    .metadata
-                    .as_ref()
-                    .map(|m| serde_json::to_value(m).unwrap_or_default()),
-                thread_id: msg.thread_id.clone(),
-                parent_message_id: msg.parent_message_id.clone(),
-                reactions: msg.reactions.clone(),
-            })
-            .collect();
+    match state.chat.get_session(&session_id).await {
+        Some(session_arc) => {
+            let session = session_arc.lock().await;
+            let messages: Vec<MessageResponse> = session
+                .messages
+                .iter()
+                .filter(|msg| msg.parent_message_id.as_ref() == Some(&message_id))
+                .cloned()
+                .map(|msg| MessageResponse {
+                    message_id: msg.id.clone(),
+                    content: msg.content.to_string(),
+                    role: match msg.role {
+                        MessageRole::User => "user".to_string(),
+                        MessageRole::Assistant => "assistant".to_string(),
+                        MessageRole::System => "system".to_string(),
+                        MessageRole::Function => "function".to_string(),
+                    },
+                    timestamp: msg.timestamp.to_rfc3339(),
+                    metadata: msg
+                        .metadata
+                        .as_ref()
+                        .map(|m| serde_json::to_value(m).unwrap_or_default()),
+                    thread_id: msg.thread_id.clone(),
+                    parent_message_id: msg.parent_message_id.clone(),
+                    reactions: msg.reactions.clone(),
+                })
+                .collect();
 
-        Ok(Json(messages))
-    } else {
-        Err(StatusCode::NOT_FOUND)
+            Ok(Json(messages))
+        }
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -465,36 +508,37 @@ async fn add_reaction(
     State(state): State<AppState>,
     Json(request): Json<AddReactionRequest>,
 ) -> Result<StatusCode, StatusCode> {
-    if let Some(session_arc) = state.chat.get_session(&session_id).await {
-        let mut session = session_arc.lock().await;
-        // Convert emoji string to ReactionType
-        let reaction_type = match request.emoji.as_str() {
-            "👍" | "like" => crate::ReactionType::Like,
-            "👎" | "dislike" => crate::ReactionType::Dislike,
-            "✅" | "helpful" => crate::ReactionType::Helpful,
-            "❌" | "not_helpful" => crate::ReactionType::NotHelpful,
-            "✔️" | "accurate" => crate::ReactionType::Accurate,
-            "❌" | "inaccurate" => crate::ReactionType::Inaccurate,
-            "💭" | "clear" => crate::ReactionType::Clear,
-            "😵" | "confusing" => crate::ReactionType::Confusing,
-            _ => crate::ReactionType::Like, // Default to Like for unknown emojis
-        };
+    match state.chat.get_session(&session_id).await {
+        Some(session_arc) => {
+            let mut session = session_arc.lock().await;
+            // Convert emoji string to ReactionType
+            let reaction_type = match request.emoji.as_str() {
+                "👍" | "like" => crate::ReactionType::Like,
+                "👎" | "dislike" => crate::ReactionType::Dislike,
+                "✅" | "helpful" => crate::ReactionType::Helpful,
+                "❌" | "not_helpful" => crate::ReactionType::NotHelpful,
+                "✔️" | "accurate" => crate::ReactionType::Accurate,
+                "❌" | "inaccurate" => crate::ReactionType::Inaccurate,
+                "💭" | "clear" => crate::ReactionType::Clear,
+                "😵" | "confusing" => crate::ReactionType::Confusing,
+                _ => crate::ReactionType::Like, // Default to Like for unknown emojis
+            };
 
-        // Find and update the message
-        if let Some(message) = session.messages.iter_mut().find(|m| m.id == message_id) {
-            message.reactions.push(crate::MessageReaction {
-                reaction_type,
-                user_id: Some(request.user_id),
-                timestamp: chrono::Utc::now(),
-            });
+            // Find and update the message
+            if let Some(message) = session.messages.iter_mut().find(|m| m.id == message_id) {
+                message.reactions.push(crate::MessageReaction {
+                    reaction_type,
+                    user_id: Some(request.user_id),
+                    timestamp: chrono::Utc::now(),
+                });
 
-            // Session is automatically managed
-            Ok(StatusCode::OK)
-        } else {
-            Err(StatusCode::NOT_FOUND)
+                // Session is automatically managed
+                Ok(StatusCode::OK)
+            } else {
+                Err(StatusCode::NOT_FOUND)
+            }
         }
-    } else {
-        Err(StatusCode::NOT_FOUND)
+        _ => Err(StatusCode::NOT_FOUND),
     }
 }
 
@@ -523,6 +567,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
         user_id: None,
         connected_at: SystemTime::now(),
         last_activity: SystemTime::now(),
+        subscribed_topics: std::collections::HashSet::new(),
     };
 
     {
@@ -538,6 +583,8 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
     let tx_clone = tx.clone();
 
     let session_id_clone = session_id.clone();
+    let ws_session_id_clone = ws_session_id.clone();
+    let ws_session_id_cleanup = ws_session_id.clone();
     let send_task = tokio::spawn(async move {
         loop {
             tokio::select! {
@@ -574,8 +621,11 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
         }
     });
 
+    let state_clone = state.clone();
     let recv_task = tokio::spawn(async move {
         let tx = tx_clone;
+        let ws_session_id = ws_session_id.clone();
+        let state = state_clone;
         while let Some(msg) = receiver.next().await {
             if let Ok(msg) = msg {
                 match msg {
@@ -588,37 +638,41 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                     parent_message_id,
                                 } => {
                                     // Process message using OxiRSChat
-                                    if let Ok(response_msg) =
-                                        state.chat.process_message(&session_id, content).await
-                                    {
-                                        let response = WebSocketResponse::Message {
-                                            message_id: response_msg.id,
-                                            content: response_msg.content.to_string(),
-                                            role: match response_msg.role {
-                                                MessageRole::User => "user".to_string(),
-                                                MessageRole::Assistant => "assistant".to_string(),
-                                                MessageRole::System => "system".to_string(),
-                                                MessageRole::Function => "function".to_string(),
-                                            },
-                                            timestamp: response_msg.timestamp.to_rfc3339(),
-                                            metadata: response_msg.metadata.map(|m| {
-                                                serde_json::to_value(m).unwrap_or_default()
-                                            }),
-                                        };
+                                    match state.chat.process_message(&session_id, content).await {
+                                        Ok(response_msg) => {
+                                            let response = WebSocketResponse::Message {
+                                                message_id: response_msg.id,
+                                                content: response_msg.content.to_string(),
+                                                role: match response_msg.role {
+                                                    MessageRole::User => "user".to_string(),
+                                                    MessageRole::Assistant => {
+                                                        "assistant".to_string()
+                                                    }
+                                                    MessageRole::System => "system".to_string(),
+                                                    MessageRole::Function => "function".to_string(),
+                                                },
+                                                timestamp: response_msg.timestamp.to_rfc3339(),
+                                                metadata: response_msg.metadata.map(|m| {
+                                                    serde_json::to_value(m).unwrap_or_default()
+                                                }),
+                                            };
 
-                                        // Session is automatically managed by OxiRSChat
+                                            // Session is automatically managed by OxiRSChat
 
-                                        if let Ok(json) = serde_json::to_string(&response) {
-                                            let _ = tx.send(json).await;
+                                            if let Ok(json) = serde_json::to_string(&response) {
+                                                let _ = tx.send(json).await;
+                                            }
                                         }
-                                    } else {
-                                        // Handle message processing error
-                                        let error_response = WebSocketResponse::Error {
-                                            code: "PROCESSING_ERROR".to_string(),
-                                            message: "Failed to process message".to_string(),
-                                        };
-                                        if let Ok(json) = serde_json::to_string(&error_response) {
-                                            let _ = tx.send(json).await;
+                                        _ => {
+                                            // Handle message processing error
+                                            let error_response = WebSocketResponse::Error {
+                                                code: "PROCESSING_ERROR".to_string(),
+                                                message: "Failed to process message".to_string(),
+                                            };
+                                            if let Ok(json) = serde_json::to_string(&error_response)
+                                            {
+                                                let _ = tx.send(json).await;
+                                            }
                                         }
                                     }
                                 }
@@ -628,8 +682,44 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                         let _ = tx.send(json).await;
                                     }
                                 }
-                                WebSocketMessage::Subscribe { topics: _ } => {
-                                    // TODO: Implement topic subscription
+                                WebSocketMessage::Subscribe { topics } => {
+                                    // Implement topic subscription
+                                    let mut sessions = state.websocket_sessions.write().await;
+                                    if let Some(ws_info) = sessions.get_mut(&ws_session_id) {
+                                        // Update subscribed topics
+                                        ws_info.subscribed_topics.clear();
+                                        for topic in &topics {
+                                            ws_info.subscribed_topics.insert(topic.clone());
+                                        }
+                                        ws_info.last_activity = SystemTime::now();
+
+                                        // Send confirmation
+                                        let response = WebSocketResponse::Status {
+                                            status: "subscribed".to_string(),
+                                            data: serde_json::json!({
+                                                "topics": topics,
+                                                "subscription_count": ws_info.subscribed_topics.len()
+                                            }),
+                                        };
+
+                                        if let Ok(json) = serde_json::to_string(&response) {
+                                            let _ = tx.send(json).await;
+                                        }
+
+                                        info!(
+                                            "WebSocket session {} subscribed to topics: {:?}",
+                                            ws_session_id, topics
+                                        );
+                                    } else {
+                                        // Session not found
+                                        let error_response = WebSocketResponse::Error {
+                                            code: "SESSION_NOT_FOUND".to_string(),
+                                            message: "WebSocket session not found".to_string(),
+                                        };
+                                        if let Ok(json) = serde_json::to_string(&error_response) {
+                                            let _ = tx.send(json).await;
+                                        }
+                                    }
                                 }
                                 WebSocketMessage::AddReaction {
                                     message_id,
@@ -705,7 +795,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
 
     {
         let mut sessions = state.websocket_sessions.write().await;
-        sessions.remove(&ws_session_id);
+        sessions.remove(&ws_session_id_cleanup);
     }
 }
 
@@ -821,4 +911,61 @@ async fn metrics_handler() -> Result<String, StatusCode> {
     ));
 
     Ok(metrics.join("\n"))
+}
+
+/// Broadcast a message to all WebSocket clients subscribed to a specific topic
+async fn broadcast_to_topic(
+    state: &AppState,
+    topic: &str,
+    message: serde_json::Value,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    let sessions = state.websocket_sessions.read().await;
+    let mut sent_count = 0;
+
+    // Create the broadcast message
+    let server_message = ServerMessage {
+        message_type: ServerMessageType::SystemStatus,
+        session_id: "system".to_string(),
+        data: serde_json::json!({
+            "topic": topic,
+            "message": message
+        }),
+    };
+
+    // Find all sessions subscribed to this topic
+    for (ws_session_id, ws_info) in sessions.iter() {
+        if ws_info.subscribed_topics.contains(topic) {
+            // Send the message via broadcast channel
+            if state.broadcast_tx.send(server_message.clone()).is_ok() {
+                sent_count += 1;
+                debug!(
+                    "Sent topic '{}' message to WebSocket session: {}",
+                    topic, ws_session_id
+                );
+            }
+        }
+    }
+
+    if sent_count > 0 {
+        info!(
+            "Broadcasted topic '{}' message to {} subscribers",
+            topic, sent_count
+        );
+    }
+
+    Ok(sent_count)
+}
+
+/// Get list of all active topics with subscriber counts
+async fn get_active_topics(state: &AppState) -> HashMap<String, usize> {
+    let sessions = state.websocket_sessions.read().await;
+    let mut topic_counts: HashMap<String, usize> = HashMap::new();
+
+    for ws_info in sessions.values() {
+        for topic in &ws_info.subscribed_topics {
+            *topic_counts.entry(topic.clone()).or_insert(0) += 1;
+        }
+    }
+
+    topic_counts
 }

@@ -3,7 +3,7 @@
 //! This module provides sophisticated parallel execution capabilities for query processing
 //! with work-stealing, NUMA awareness, and adaptive parallelization strategies.
 
-use crate::algebra::{Algebra, Binding, Solution, Term, TriplePattern, Variable};
+use crate::algebra::{Algebra, Solution, Term, TriplePattern, Variable};
 use crate::executor::config::ParallelConfig;
 use crate::executor::parallel_optimized::{
     CacheFriendlyHashJoin, CacheFriendlyStorage, LockFreeWorkStealingQueue, MemoryPool,
@@ -16,8 +16,6 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-#[cfg(feature = "parallel")]
-use num_cpus;
 #[cfg(feature = "parallel")]
 use tokio::sync::Semaphore;
 #[cfg(feature = "parallel")]
@@ -234,7 +232,7 @@ impl ParallelExecutor {
         work_items: Vec<WorkItem>,
     ) -> Result<(Vec<Solution>, ParallelStats)> {
         let start_time = Instant::now();
-        let mut steal_events = 0;
+        let _steal_events = 0;
 
         // Distribute work across NUMA-aware queues
         for (i, item) in work_items.into_iter().enumerate() {
@@ -636,8 +634,8 @@ impl ParallelExecutor {
                 Algebra::Join { left, right } => {
                     let sem_left = semaphore.clone();
                     let sem_right = semaphore.clone();
-                    let left_clone = left.as_ref().clone();
-                    let right_clone = right.as_ref().clone();
+                    let _left_clone = left.as_ref().clone();
+                    let _right_clone = right.as_ref().clone();
                     let solutions_left = solutions.clone();
                     let solutions_right = solutions;
 
@@ -745,7 +743,7 @@ impl ParallelExecutor {
     }
 
     /// Process a single work item
-    fn process_work_item(&self, work_item: WorkItem, patterns: &[TriplePattern]) -> Vec<Solution> {
+    fn process_work_item(&self, work_item: WorkItem, _patterns: &[TriplePattern]) -> Vec<Solution> {
         // Simplified processing - in real implementation, this would
         // execute the algebra against the solutions
         match work_item.algebra {
@@ -979,7 +977,7 @@ impl Default for ParallelStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Literal};
+    use crate::algebra;
     use crate::executor::config::ThreadPoolConfig;
     use oxirs_core::model::NamedNode;
 
@@ -1046,7 +1044,7 @@ mod tests {
 
         let (results, stats) = executor.execute_union_parallel(left, right).unwrap();
         assert_eq!(results.len(), 2);
-        assert!(stats.execution_time.as_millis() >= 0);
+        // execution_time.as_millis() is always >= 0 by type invariant (u128)
     }
 
     #[test]

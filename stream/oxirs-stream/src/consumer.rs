@@ -3,7 +3,6 @@
 //! Consumer types and configuration for streaming backends.
 
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// Consumer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

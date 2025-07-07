@@ -5,11 +5,9 @@
 
 use std::collections::HashMap;
 
-use lru::LruCache;
-use oxirs_core::model::{NamedNode as CoreNamedNode, Triple as CoreTriple};
 use tracing::{debug, span, Level};
 
-use crate::model::{NamedNode, StarGraph, StarTerm, StarTriple};
+use crate::model::{StarGraph, StarTerm, StarTriple};
 use crate::{StarError, StarResult};
 
 /// Standard RDF vocabulary for reification
@@ -445,6 +443,7 @@ pub enum TermType {
 pub struct AdvancedReificator {
     strategy: AdvancedReificationStrategy,
     contexts: HashMap<String, ReificationContext>,
+    #[allow(dead_code)]
     cache: lru::LruCache<String, Vec<StarTriple>>,
     statistics: ReificationStatistics,
 }
@@ -489,7 +488,7 @@ impl AdvancedReificator {
             self.statistics.total_triples += 1;
 
             let strategy = self.select_strategy_for_triple(triple)?;
-            let strategy_name = format!("{:?}", strategy);
+            let strategy_name = format!("{strategy:?}");
             *self
                 .statistics
                 .strategy_usage
@@ -613,14 +612,13 @@ impl AdvancedReificator {
 
     /// Check if a term matches a term type
     fn matches_term_type(&self, term: &StarTerm, term_type: &TermType) -> bool {
-        match (term, term_type) {
-            (StarTerm::NamedNode(_), TermType::NamedNode) => true,
-            (StarTerm::BlankNode(_), TermType::BlankNode) => true,
-            (StarTerm::Literal(_), TermType::Literal) => true,
-            (StarTerm::QuotedTriple(_), TermType::QuotedTriple) => true,
-            (StarTerm::Variable(_), TermType::Variable) => true,
-            _ => false,
-        }
+        matches!((term, term_type), 
+            (StarTerm::NamedNode(_), TermType::NamedNode) 
+            | (StarTerm::BlankNode(_), TermType::BlankNode) 
+            | (StarTerm::Literal(_), TermType::Literal) 
+            | (StarTerm::QuotedTriple(_), TermType::QuotedTriple) 
+            | (StarTerm::Variable(_), TermType::Variable)
+        )
     }
 
     /// Calculate the nesting depth of quoted triples in a triple
@@ -647,7 +645,7 @@ impl AdvancedReificator {
         strategy: &ReificationStrategy,
     ) -> StarResult<Vec<StarTriple>> {
         // Get or create context for this strategy
-        let context_key = format!("{:?}", strategy);
+        let context_key = format!("{strategy:?}");
         if !self.contexts.contains_key(&context_key) {
             self.contexts.insert(
                 context_key.clone(),
@@ -782,7 +780,7 @@ mod tests {
         let reified_graph = advanced_reificator
             .reify_graph_advanced(&star_graph)
             .unwrap();
-        assert!(reified_graph.len() > 0);
+        assert!(!reified_graph.is_empty());
 
         let stats = advanced_reificator.get_statistics();
         assert!(stats.total_triples > 0);
@@ -822,10 +820,10 @@ mod tests {
         let reified_graph = advanced_reificator
             .reify_graph_advanced(&star_graph)
             .unwrap();
-        assert!(reified_graph.len() > 0);
+        assert!(!reified_graph.is_empty());
 
         let stats = advanced_reificator.get_statistics();
-        assert!(stats.strategy_usage.len() > 0);
+        assert!(!stats.strategy_usage.is_empty());
     }
 }
 
@@ -901,8 +899,7 @@ pub mod utils {
         for (stmt_id, completeness) in statements {
             if !completeness.iter().all(|&x| x) {
                 return Err(StarError::reification_error(format!(
-                    "Incomplete reification for statement {}",
-                    stmt_id
+                    "Incomplete reification for statement {stmt_id}"
                 )));
             }
         }

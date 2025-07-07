@@ -771,10 +771,10 @@ impl AdvancedPerformanceOptimizer {
     /// Main optimization loop
     async fn optimization_loop(&self) {
         let mut interval = tokio::time::interval(self.config.optimization_interval);
-        
+
         loop {
             interval.tick().await;
-            
+
             if let Err(e) = self.perform_optimization_cycle().await {
                 eprintln!("Optimization cycle failed: {}", e);
             }
@@ -784,22 +784,22 @@ impl AdvancedPerformanceOptimizer {
     /// Perform a complete optimization cycle
     async fn perform_optimization_cycle(&self) -> Result<()> {
         let start_time = Instant::now();
-        
+
         // Collect current metrics
         let metrics = self.metrics_collector.collect_all_metrics().await?;
-        
+
         // Analyze performance
         let analysis = self.analyze_performance(&metrics).await?;
-        
+
         // Apply optimizations based on analysis
         let optimizations = self.generate_optimizations(&analysis).await?;
-        
+
         // Execute optimizations
         let results = self.execute_optimizations(optimizations).await?;
-        
+
         // Update statistics
         self.update_optimization_statistics(&results, start_time.elapsed()).await?;
-        
+
         Ok(())
     }
 
@@ -892,7 +892,7 @@ impl MetricsCollector {
 
     async fn metrics_collection_loop(&self) {
         let mut interval = tokio::time::interval(Duration::from_secs(10));
-        
+
         loop {
             interval.tick().await;
             if let Err(e) = self.collect_metrics().await {
@@ -967,7 +967,7 @@ impl PerformancePredictor {
 
     async fn training_loop(&self) {
         let mut interval = tokio::time::interval(Duration::from_secs(3600));
-        
+
         loop {
             interval.tick().await;
             if let Err(e) = self.train_models().await {
@@ -1000,7 +1000,7 @@ mod tests {
     async fn test_performance_optimizer_creation() {
         let config = OptimizationConfig::default();
         let optimizer = AdvancedPerformanceOptimizer::new(config);
-        
+
         let stats = optimizer.get_statistics();
         assert_eq!(stats.total_optimizations, 0);
     }

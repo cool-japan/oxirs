@@ -12,9 +12,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock, Semaphore};
-use tokio::task::JoinSet;
-use tracing::{debug, error, info, warn};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 #[cfg(feature = "nats")]
@@ -23,10 +22,7 @@ use async_nats::{
     Client, ConnectOptions, HeaderMap as NatsHeaderMap,
 };
 
-use crate::{
-    executor::{GraphQLResponse, SparqlResults},
-    ExecutionMetadata, FederatedService, QueryResult, ServiceStatus,
-};
+use crate::{FederatedService, QueryResult, ServiceStatus};
 
 /// NATS Federation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -614,13 +610,14 @@ impl RequestReplyHandler {
 
     /// Handle incoming reply
     pub fn handle_reply(&mut self, request_id: &str, response: FederationMessage) -> Result<()> {
-        if let Some(pending) = self.pending_requests.remove(request_id) {
-            if pending.sender.send(response).is_err() {
-                warn!("Failed to send reply to waiting request: {}", request_id);
+        match self.pending_requests.remove(request_id) {
+            Some(pending) => {
+                if pending.sender.send(response).is_err() {
+                    warn!("Failed to send reply to waiting request: {}", request_id);
+                }
+                Ok(())
             }
-            Ok(())
-        } else {
-            Err(anyhow!("No pending request found for ID: {}", request_id))
+            _ => Err(anyhow!("No pending request found for ID: {}", request_id)),
         }
     }
 

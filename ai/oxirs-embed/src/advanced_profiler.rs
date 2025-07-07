@@ -962,7 +962,7 @@ impl PerformanceAnalyzer {
     async fn run_algorithm(
         &self,
         algorithm: &AnalysisAlgorithm,
-        data: &VecDeque<MetricDataPoint>,
+        _data: &VecDeque<MetricDataPoint>,
     ) -> Result<AnalysisResult> {
         // Placeholder implementation - would contain actual algorithm logic
         Ok(AnalysisResult {
@@ -1195,8 +1195,8 @@ impl OptimizationRecommender {
     /// Evaluate rule conditions
     async fn evaluate_rule_conditions(
         &self,
-        rule: &RecommendationRule,
-        analysis: &PerformanceAnalysisReport,
+        _rule: &RecommendationRule,
+        _analysis: &PerformanceAnalysisReport,
     ) -> Result<bool> {
         // Placeholder implementation - would check actual conditions
         Ok(true)
@@ -1206,7 +1206,7 @@ impl OptimizationRecommender {
     async fn create_recommendation_from_rule(
         &self,
         rule: &RecommendationRule,
-        analysis: &PerformanceAnalysisReport,
+        _analysis: &PerformanceAnalysisReport,
     ) -> Result<OptimizationRecommendation> {
         Ok(OptimizationRecommendation {
             id: Uuid::new_v4().to_string(),

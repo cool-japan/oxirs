@@ -52,12 +52,12 @@ pub fn apply_activation(x: &Array2<f32>, activation: &ActivationFunction) -> Arr
             x.mapv(|v| if v > 0.0 { v } else { alpha * (v.exp() - 1.0) })
         }
         ActivationFunction::SELU => {
-            let alpha = 1.6732632423543772;
-            let scale = 1.0507009873554805;
+            let alpha = 1.673_263_2;
+            let scale = 1.050_701;
             x.mapv(|v| scale * if v > 0.0 { v } else { alpha * (v.exp() - 1.0) })
         }
         ActivationFunction::GELU => {
-            x.mapv(|v| 0.5 * v * (1.0 + (v * 0.7978845608 * (1.0 + 0.044715 * v * v)).tanh()))
+            x.mapv(|v| 0.5 * v * (1.0 + (v * 0.797_884_6 * (1.0 + 0.044715 * v * v)).tanh()))
         }
         ActivationFunction::Swish => x.mapv(|v| v * (1.0 / (1.0 + (-v).exp()))),
         ActivationFunction::Mish => x.mapv(|v| v * (1.0 + (-v).exp()).ln().tanh()),
@@ -75,7 +75,7 @@ pub fn apply_activation(x: &Array2<f32>, activation: &ActivationFunction) -> Arr
         }
         ActivationFunction::Softplus => x.mapv(|v| (1.0 + v.exp()).ln()),
         ActivationFunction::Softsign => x.mapv(|v| v / (1.0 + v.abs())),
-        ActivationFunction::HardTanh => x.mapv(|v| v.max(-1.0).min(1.0)),
+        ActivationFunction::HardTanh => x.mapv(|v| v.clamp(-1.0, 1.0)),
         ActivationFunction::Identity => x.clone(),
     }
 }

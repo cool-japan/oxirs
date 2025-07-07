@@ -12,8 +12,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use tracing::{debug, info, span, warn, Level};
+use tracing::{debug, info, span, Level};
 
 use crate::algebra::Solution;
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
@@ -891,7 +890,7 @@ impl MaterializedViewManager {
         let start_time = Instant::now();
 
         // Get view definition
-        let definition = {
+        let _definition = {
             let views = self.views.read().unwrap();
             let view = views
                 .get(view_id)
@@ -1319,7 +1318,7 @@ impl QueryRewriter {
         _cost_model: &Arc<Mutex<CostModel>>,
     ) -> Result<(Algebra, Vec<String>)> {
         // Simplified rewrite logic
-        let views_guard = views.read().unwrap();
+        let _views_guard = views.read().unwrap();
         let used_views = Vec::new();
 
         // For now, return original query

@@ -4,7 +4,6 @@
 //! including basic concepts, rule authoring best practices, and step-by-step examples.
 
 use anyhow::Result;
-use std::collections::HashMap;
 
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 
@@ -55,7 +54,6 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 /// let derived_facts = engine.forward_chain(&facts).unwrap();
 /// println!("Derived facts: {:?}", derived_facts);
 /// ```
-
 pub struct GettingStartedGuide;
 
 impl GettingStartedGuide {
@@ -309,7 +307,6 @@ impl GettingStartedGuide {
 /// # Rule Authoring Best Practices
 ///
 /// This section provides comprehensive guidelines for writing effective rules.
-
 pub struct RuleAuthoringBestPractices;
 
 impl RuleAuthoringBestPractices {
@@ -434,7 +431,7 @@ impl RuleAuthoringBestPractices {
         // All head variables should appear in body (safety condition)
         for var in &head_vars {
             if !body_vars.contains(var) {
-                println!("Warning: Variable {} in head but not in body", var);
+                println!("Warning: Variable {var} in head but not in body");
                 return Ok(false);
             }
         }
@@ -443,31 +440,27 @@ impl RuleAuthoringBestPractices {
     }
 
     fn collect_variables(atom: &RuleAtom, vars: &mut std::collections::HashSet<String>) {
-        match atom {
-            RuleAtom::Triple {
+        if let RuleAtom::Triple {
                 subject,
                 predicate,
                 object,
-            } => {
-                if let Term::Variable(var) = subject {
-                    vars.insert(var.clone());
-                }
-                if let Term::Variable(var) = predicate {
-                    vars.insert(var.clone());
-                }
-                if let Term::Variable(var) = object {
-                    vars.insert(var.clone());
-                }
+            } = atom {
+            if let Term::Variable(var) = subject {
+                vars.insert(var.clone());
             }
-            _ => {} // Handle other atom types as needed
-        }
+            if let Term::Variable(var) = predicate {
+                vars.insert(var.clone());
+            }
+            if let Term::Variable(var) = object {
+                vars.insert(var.clone());
+            }
+        } // Handle other atom types as needed
     }
 }
 
 /// # Debugging and Troubleshooting Guide
 ///
 /// This section provides guidance on debugging rule engines and troubleshooting common issues.
-
 pub struct DebuggingGuide;
 
 impl DebuggingGuide {
@@ -498,12 +491,12 @@ impl DebuggingGuide {
         let conflicts = debug_engine.get_conflicts();
 
         println!("Execution trace: {} entries", trace.len());
-        println!("Performance metrics: {:?}", metrics);
+        println!("Performance metrics: {metrics:?}");
         println!("Detected conflicts: {}", conflicts.len());
 
         // Generate debug report
         let report = debug_engine.generate_debug_report();
-        println!("{}", report);
+        println!("{report}");
 
         Ok(())
     }
@@ -557,7 +550,6 @@ impl DebuggingGuide {
 /// # Integration Examples
 ///
 /// Examples of integrating the rule engine with other components.
-
 pub struct IntegrationExamples;
 
 impl IntegrationExamples {

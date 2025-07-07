@@ -35,15 +35,15 @@ impl TestSuiteCoordinator {
             .par_iter()
             .map(|module| {
                 let start_time = Instant::now();
-                
+
                 // Track resource usage for this module
                 let resource_start = self.resource_tracker.snapshot();
-                
+
                 let result = {
                     let mut module_guard = module.lock().unwrap();
                     module_guard.run_tests_parallel(config)
                 };
-                
+
                 let resource_end = self.resource_tracker.snapshot();
                 let execution_time = start_time.elapsed();
 
@@ -69,16 +69,16 @@ impl TestSuiteCoordinator {
 
     pub fn run_all_sequential(&self, config: &IntegrationTestConfig) -> Result<Vec<ModuleTestResult>> {
         let mut results = Vec::new();
-        
+
         for module in &self.modules {
             let start_time = Instant::now();
             let resource_start = self.resource_tracker.snapshot();
-            
+
             let result = {
                 let mut module_guard = module.lock().unwrap();
                 module_guard.run_tests_sequential(config)
             };
-            
+
             let resource_end = self.resource_tracker.snapshot();
             let execution_time = start_time.elapsed();
 
@@ -107,7 +107,7 @@ impl TestSuiteCoordinator {
     fn add_resource_metrics(&self, result: &mut ModuleTestResult, start: &ResourceSnapshot, end: &ResourceSnapshot) {
         let memory_usage = end.memory_mb - start.memory_mb;
         let cpu_avg = (end.cpu_percent + start.cpu_percent) / 2.0;
-        
+
         result.recommendations.push(Recommendation {
             priority: if memory_usage > 100.0 {
                 RecommendationPriority::High
@@ -201,7 +201,7 @@ impl TestExecutionContext {
 
     pub fn create_test_result(&self, name: &str, passed: bool, error: Option<String>) -> IndividualTestResult {
         let execution_time = self.elapsed();
-        
+
         if passed {
             IndividualTestResult::new_passed(
                 name.to_string(),
@@ -297,7 +297,7 @@ ex:PersonShape a sh:NodeShape ;
     pub fn generate_test_vectors(count: usize, dimensions: usize) -> Vec<Vec<f32>> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        
+
         (0..count)
             .map(|_| {
                 (0..dimensions)

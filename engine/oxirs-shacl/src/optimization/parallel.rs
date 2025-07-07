@@ -7,12 +7,10 @@ use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
     optimization::core::{ConstraintCache, ConstraintDependencyAnalyzer},
     report::ValidationReport,
-    validation::ValidationViolation,
     Result, ShaclError, Shape, ShapeId,
 };
 use indexmap::IndexMap;
 use oxirs_core::{model::Term, Store};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -327,12 +325,8 @@ impl ParallelValidationEngine {
         num_threads: usize,
     ) -> Result<Vec<ValidationWorkResult>> {
         let results = Arc::new(Mutex::new(Vec::new()));
-        let work_queues: Arc<Vec<Mutex<Vec<ValidationWorkItem>>>> = Arc::new(
-            work_chunks
-                .into_iter()
-                .map(|chunk| Mutex::new(chunk))
-                .collect(),
-        );
+        let work_queues: Arc<Vec<Mutex<Vec<ValidationWorkItem>>>> =
+            Arc::new(work_chunks.into_iter().map(Mutex::new).collect());
 
         let mut handles = Vec::new();
 
@@ -384,10 +378,9 @@ impl ParallelValidationEngine {
 
         loop {
             // Try to get work from own queue first
-            let work_item = if let Ok(mut my_queue) = work_queues[my_queue_id].lock() {
-                my_queue.pop()
-            } else {
-                None
+            let work_item = match work_queues[my_queue_id].lock() {
+                Ok(mut my_queue) => my_queue.pop(),
+                _ => None,
             };
 
             let work_item = if let Some(item) = work_item {

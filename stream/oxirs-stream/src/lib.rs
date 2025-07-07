@@ -19,14 +19,16 @@
 //! - **Reliability**: 99.99% delivery success rate
 //! - **Scalability**: Linear scaling to 1000+ partitions
 
+#![allow(dead_code)]
+
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tokio::sync::{RwLock, Semaphore};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::backend::StreamBackend;
@@ -37,13 +39,13 @@ pub use backend_optimizer::{
     OptimizationDecision, OptimizationStats, OptimizerConfig, PatternType, WorkloadPattern,
 };
 pub use bridge::{
-    BridgeInfo, BridgeType, ExternalMessage, ExternalSystemConfig, ExternalSystemType,
+    BridgeInfo, BridgeStatistics, BridgeType, ExternalMessage, ExternalSystemConfig, ExternalSystemType,
     MessageBridgeManager, MessageTransformer, RoutingRule,
 };
-pub use circuit_breaker::{CircuitBreakerError, FailureType, SharedCircuitBreakerExt};
+pub use circuit_breaker::{CircuitBreakerError, CircuitBreakerMetrics, FailureType, SharedCircuitBreakerExt};
 pub use connection_pool::{
     ConnectionFactory, ConnectionPool, DetailedPoolMetrics, LoadBalancingStrategy, PoolConfig,
-    PoolStatus,
+    PoolStats, PoolStatus,
 };
 pub use cqrs::{
     CQRSConfig, CQRSHealthStatus, CQRSSystem, Command, CommandBus, CommandBusMetrics,
@@ -51,7 +53,7 @@ pub use cqrs::{
     QueryHandler, QueryResult as CQRSQueryResult, ReadModelManager, ReadModelMetrics,
     ReadModelProjection, RetryConfig as CQRSRetryConfig,
 };
-pub use delta::{BatchDeltaProcessor, DeltaComputer, DeltaProcessor};
+pub use delta::{BatchDeltaProcessor, DeltaComputer, DeltaProcessor, ProcessorStats};
 pub use event::{
     EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult as EventQueryResult,
     SchemaChangeType, SchemaType, SparqlOperationType, StreamEvent,
@@ -88,8 +90,9 @@ pub use sparql_streaming::{
 };
 pub use store_integration::{
     ChangeDetectionStrategy, ChangeNotification, RealtimeUpdateManager, StoreChangeDetector,
-    UpdateFilter, UpdateNotification,
+    UpdateChannel, UpdateFilter, UpdateNotification,
 };
+
 // Stream, StreamConsumer, and StreamProducer are defined below in this module
 pub use biological_computing::{
     AminoAcid, BiologicalProcessingStats, BiologicalStreamProcessor, Cell, CellState,
@@ -106,7 +109,7 @@ pub use observability::{
 };
 pub use performance_utils::{
     AdaptiveRateLimiter, IntelligentMemoryPool, IntelligentPrefetcher, ParallelStreamProcessor,
-    PerformanceUtilsConfig, PoolStats,
+    PerformanceUtilsConfig,
 };
 pub use quantum_communication::{
     BellState, EntanglementDistribution, QuantumCommConfig, QuantumCommSystem,
@@ -135,11 +138,8 @@ pub use wasm_edge_computing::{
 };
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
-    WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata,
+    WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata, WebhookSecurity, WebhookStatistics,
 };
-
-#[cfg(test)]
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub mod backend;
 pub mod backend_optimizer;
@@ -372,7 +372,7 @@ pub struct StreamProducer {
     stats: Arc<RwLock<ProducerStats>>,
     circuit_breaker: Option<circuit_breaker::SharedCircuitBreaker>,
     last_flush: Instant,
-    pending_events: Arc<RwLock<Vec<StreamEvent>>>,
+    _pending_events: Arc<RwLock<Vec<StreamEvent>>>,
     batch_buffer: Arc<RwLock<Vec<StreamEvent>>>,
     flush_semaphore: Arc<Semaphore>,
 }
@@ -394,10 +394,10 @@ enum BackendProducer {
 
 /// Producer statistics for monitoring
 #[derive(Debug, Default, Clone)]
-struct ProducerStats {
+pub struct ProducerStats {
     events_published: u64,
     events_failed: u64,
-    bytes_sent: u64,
+    _bytes_sent: u64,
     avg_latency_ms: f64,
     max_latency_ms: u64,
     batch_count: u64,
@@ -408,11 +408,14 @@ struct ProducerStats {
 }
 
 /// Memory-based producer for testing and development
-// Global shared storage for memory backend events
-static MEMORY_EVENTS: std::sync::OnceLock<Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>>> =
-    std::sync::OnceLock::new();
+// Type aliases for complex types
+type MemoryEventVec = Vec<(DateTime<Utc>, StreamEvent)>;
+type MemoryEventStore = Arc<RwLock<MemoryEventVec>>;
 
-pub fn get_memory_events() -> Arc<RwLock<Vec<(DateTime<Utc>, StreamEvent)>>> {
+// Global shared storage for memory backend events
+static MEMORY_EVENTS: std::sync::OnceLock<MemoryEventStore> = std::sync::OnceLock::new();
+
+pub fn get_memory_events() -> MemoryEventStore {
     MEMORY_EVENTS
         .get_or_init(|| Arc::new(RwLock::new(Vec::new())))
         .clone()
@@ -433,7 +436,7 @@ struct MemoryProducer {
 }
 
 impl MemoryProducer {
-    fn new(_max_size: Option<usize>, _persistence: bool) -> Self {
+    fn _new(_max_size: Option<usize>, _persistence: bool) -> Self {
         Self {
             backend: Box::new(backend::memory::MemoryBackend::new()),
             topic: "oxirs-stream".to_string(), // Default topic
@@ -496,7 +499,7 @@ impl MemoryProducer {
         Ok(())
     }
 
-    fn get_stats(&self) -> &ProducerStats {
+    fn _get_stats(&self) -> &ProducerStats {
         &self.stats
     }
 }
@@ -671,12 +674,9 @@ impl StreamProducer {
                 BackendProducer::Pulsar(producer)
             }
             StreamBackendType::Memory {
-                max_size,
-                persistence,
-            } => BackendProducer::Memory(MemoryProducer::with_topic(config.topic.clone())),
-            _ => {
-                return Err(anyhow!("Backend not supported or feature not enabled"));
-            }
+                max_size: _,
+                persistence: _,
+            } => BackendProducer::Memory(MemoryProducer::with_topic(config.topic.clone()))
         };
 
         let stats = Arc::new(RwLock::new(ProducerStats {
@@ -707,7 +707,7 @@ impl StreamProducer {
             stats,
             circuit_breaker,
             last_flush: Instant::now(),
-            pending_events: Arc::new(RwLock::new(Vec::new())),
+            _pending_events: Arc::new(RwLock::new(Vec::new())),
             batch_buffer: Arc::new(RwLock::new(Vec::new())),
             flush_semaphore: Arc::new(Semaphore::new(1)),
         })
@@ -1003,12 +1003,12 @@ impl StreamProducer {
 
 /// Enhanced stream consumer for receiving RDF changes with backend support
 pub struct StreamConsumer {
-    config: StreamConfig,
+    _config: StreamConfig,
     backend_consumer: BackendConsumer,
     stats: Arc<RwLock<ConsumerStats>>,
     circuit_breaker: Option<circuit_breaker::SharedCircuitBreaker>,
     last_poll: Instant,
-    message_buffer: Arc<RwLock<Vec<StreamEvent>>>,
+    _message_buffer: Arc<RwLock<Vec<StreamEvent>>>,
     consumer_group: Option<String>,
 }
 
@@ -1025,17 +1025,17 @@ enum BackendConsumer {
 
 /// Consumer statistics for monitoring
 #[derive(Debug, Default, Clone)]
-struct ConsumerStats {
+pub struct ConsumerStats {
     events_consumed: u64,
     events_failed: u64,
-    bytes_received: u64,
+    _bytes_received: u64,
     avg_processing_time_ms: f64,
     max_processing_time_ms: u64,
-    consumer_lag: u64,
+    _consumer_lag: u64,
     circuit_breaker_trips: u64,
     last_message: Option<DateTime<Utc>>,
     backend_type: String,
-    batch_size: usize,
+    _batch_size: usize,
 }
 
 /// Memory-based consumer for testing and development
@@ -1047,7 +1047,7 @@ struct MemoryConsumer {
 }
 
 impl MemoryConsumer {
-    fn new() -> Self {
+    fn _new() -> Self {
         Self {
             backend: Box::new(backend::memory::MemoryBackend::new()),
             topic: "oxirs-stream".to_string(),
@@ -1114,7 +1114,7 @@ impl MemoryConsumer {
         }
     }
 
-    fn get_stats(&self) -> &ConsumerStats {
+    fn _get_stats(&self) -> &ConsumerStats {
         &self.stats
     }
 
@@ -1244,10 +1244,7 @@ impl StreamConsumer {
             StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
-            } => BackendConsumer::Memory(MemoryConsumer::with_topic(config.topic.clone())),
-            _ => {
-                return Err(anyhow!("Backend not supported or feature not enabled"));
-            }
+            } => BackendConsumer::Memory(MemoryConsumer::with_topic(config.topic.clone()))
         };
 
         let stats = Arc::new(RwLock::new(ConsumerStats {
@@ -1260,7 +1257,7 @@ impl StreamConsumer {
                 BackendConsumer::Pulsar(_) => "pulsar".to_string(),
                 BackendConsumer::Memory(_) => "memory".to_string(),
             },
-            batch_size: config.batch_size,
+            _batch_size: config.batch_size,
             ..Default::default()
         }));
 
@@ -1271,12 +1268,12 @@ impl StreamConsumer {
         );
 
         Ok(Self {
-            config,
+            _config: config,
             backend_consumer,
             stats,
             circuit_breaker,
             last_poll: Instant::now(),
-            message_buffer: Arc::new(RwLock::new(Vec::new())),
+            _message_buffer: Arc::new(RwLock::new(Vec::new())),
             consumer_group,
         })
     }
@@ -1454,10 +1451,12 @@ impl StreamConsumer {
                 consumer.reset();
                 Ok(())
             }
-            _ => {
-                warn!("Reset position not supported for this backend");
-                Ok(())
-            }
+            #[cfg(feature = "redis")]
+            BackendConsumer::Redis(_) => Err(anyhow!("Reset position not supported for Redis backend")),
+            #[cfg(feature = "kinesis")]
+            BackendConsumer::Kinesis(_) => Err(anyhow!("Reset position not supported for Kinesis backend")),
+            #[cfg(feature = "pulsar")]
+            BackendConsumer::Pulsar(_) => Err(anyhow!("Reset position not supported for Pulsar backend")),
         }
     }
 

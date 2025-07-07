@@ -442,10 +442,10 @@ impl VectorReader {
         // In production, implement block-wise reading for efficiency
         let mut vector_data = vec![0f32; self.header.dimensions];
 
-        for i in 0..self.header.dimensions {
+        for vector_item in vector_data.iter_mut().take(self.header.dimensions) {
             let mut bytes = [0u8; 4];
             self.reader.read_exact(&mut bytes)?;
-            vector_data[i] = f32::from_le_bytes(bytes);
+            *vector_item = f32::from_le_bytes(bytes);
         }
 
         self.vectors_read += 1;
@@ -678,9 +678,11 @@ mod tests {
 
     #[test]
     fn test_vector_file_header() {
-        let mut header = VectorFileHeader::default();
-        header.vector_count = 1000;
-        header.dimensions = 128;
+        let mut header = VectorFileHeader {
+            vector_count: 1000,
+            dimensions: 128,
+            ..Default::default()
+        };
         header.calculate_checksum();
 
         assert!(header.verify_checksum());

@@ -19,12 +19,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     constraints::{Constraint, ConstraintContext},
-    optimization::{
-        AdvancedConstraintEvaluator, ConstraintCache, ConstraintPerformanceStats,
-        StreamingValidationEngine, StreamingValidationResult,
-    },
-    validation::{ConstraintEvaluationResult, ValidationViolation},
-    Result, ShaclError, Shape, ShapeId, ValidationReport,
+    optimization::StreamingValidationEngine,
+    Result, ShaclError, ShapeId, ValidationReport,
 };
 
 /// Enhanced batch validation engine with comprehensive features
@@ -164,7 +160,7 @@ impl BatchProgressTracker {
             violations_found: violations,
             errors_encountered: errors,
             progress_percentage: if total > 0 {
-                (processed as f64 / total as f64 * 100.0)
+                processed as f64 / total as f64 * 100.0
             } else {
                 0.0
             },
@@ -753,7 +749,7 @@ impl EnhancedBatchValidationEngine {
         for (item_index, node) in nodes.iter().enumerate() {
             let context = ConstraintContext::new(
                 node.clone(),
-                ShapeId::new(&format!("BatchValidation_{}", batch_index)),
+                ShapeId::new(format!("BatchValidation_{batch_index}")),
             );
 
             // Use the streaming engine's evaluator
@@ -774,7 +770,7 @@ impl EnhancedBatchValidationEngine {
                             message: error.to_string(),
                             node: Some(node.clone()),
                             shape: Some(context.shape_id.clone()),
-                            constraint: Some(format!("{:?}", constraint)),
+                            constraint: Some(format!("{constraint:?}")),
                             timestamp: Instant::now(),
                             batch_index,
                             item_index,
@@ -833,10 +829,7 @@ impl EnhancedBatchValidationEngine {
     ) -> Result<usize> {
         let context = ConstraintContext::new(
             node.clone(),
-            ShapeId::new(&format!(
-                "SingleNodeValidation_{}_{}",
-                batch_index, item_index
-            )),
+            ShapeId::new(format!("SingleNodeValidation_{batch_index}_{item_index}")),
         );
 
         let mut violations = 0;

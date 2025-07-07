@@ -4,7 +4,7 @@
 //! Provides low-level operation assembly and disassembly for efficient storage operations.
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 
 use crate::nodes::NodeId;

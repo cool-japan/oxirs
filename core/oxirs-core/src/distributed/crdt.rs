@@ -141,6 +141,12 @@ pub struct GrowSet<T: Clone + Ord + Send + Sync> {
     delta_elements: Option<BTreeSet<T>>,
 }
 
+impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> Default for GrowSet<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> GrowSet<T> {
     /// Create new grow-only set
     pub fn new() -> Self {
@@ -204,6 +210,14 @@ pub struct TwoPhaseSet<T: Clone + Ord + Send + Sync> {
     /// Delta tracking
     delta_added: Option<BTreeSet<T>>,
     delta_removed: Option<BTreeSet<T>>,
+}
+
+impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> Default
+    for TwoPhaseSet<T>
+{
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> TwoPhaseSet<T> {
@@ -291,7 +305,7 @@ impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> OrSet
 
         self.elements
             .entry(element.clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(tag.clone());
 
         if let Some(ref mut delta) = self.delta {
@@ -347,7 +361,7 @@ impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> Crdt 
         for (element, tags) in &other.elements {
             self.elements
                 .entry(element.clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .extend(tags.iter().cloned());
         }
 
@@ -355,7 +369,7 @@ impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> Crdt 
         for (element, tags) in &other.tombstones {
             self.tombstones
                 .entry(element.clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .extend(tags.iter().cloned());
         }
 
@@ -388,17 +402,14 @@ impl<T: Clone + Ord + Send + Sync + Serialize + for<'de> Deserialize<'de>> Crdt 
     fn apply_delta(&mut self, delta: Self::Delta) {
         // Apply added elements
         for (element, tags) in delta.added {
-            self.elements
-                .entry(element)
-                .or_insert_with(BTreeSet::new)
-                .extend(tags);
+            self.elements.entry(element).or_default().extend(tags);
         }
 
         // Apply removed tombstones
         for (element, tags) in delta.removed {
             self.tombstones
                 .entry(element.clone())
-                .or_insert_with(BTreeSet::new)
+                .or_default()
                 .extend(tags);
 
             // Remove element if fully tombstoned
@@ -689,17 +700,17 @@ impl RdfCrdt {
         // Filter tombstones by age
         self.triples
             .tombstones
-            .retain(|_, tags| tags.iter().any(|tag| tag.timestamp as u64 > cutoff));
+            .retain(|_, tags| tags.iter().any(|tag| tag.timestamp > cutoff));
 
         // Same for indexes
         for set in self.predicate_index.values_mut() {
             set.tombstones
-                .retain(|_, tags| tags.iter().any(|tag| tag.timestamp as u64 > cutoff));
+                .retain(|_, tags| tags.iter().any(|tag| tag.timestamp > cutoff));
         }
 
         for set in self.subject_index.values_mut() {
             set.tombstones
-                .retain(|_, tags| tags.iter().any(|tag| tag.timestamp as u64 > cutoff));
+                .retain(|_, tags| tags.iter().any(|tag| tag.timestamp > cutoff));
         }
 
         let removed = start_tombstones - self.triples.tombstones.len();

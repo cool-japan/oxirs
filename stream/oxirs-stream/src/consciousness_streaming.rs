@@ -10,7 +10,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, info, warn};
+use tracing::debug;
 use uuid::Uuid;
 
 use crate::{EventMetadata, StreamEvent};
@@ -879,16 +879,12 @@ impl MeditationStateManager {
     }
 
     async fn get_current_influence(&self) -> Option<MeditationInfluence> {
-        if let Some(state) = &*self.current_state.read().await {
-            Some(MeditationInfluence {
-                clarity_enhancement: state.focus_quality * 0.3,
-                emotional_regulation: state.equanimity * 0.4,
-                insight_boost: state.insight_clarity * 0.5,
-                focus_improvement: state.focus_quality * 0.2,
-            })
-        } else {
-            None
-        }
+        (*self.current_state.read().await).as_ref().map(|state| MeditationInfluence {
+            clarity_enhancement: state.focus_quality * 0.3,
+            emotional_regulation: state.equanimity * 0.4,
+            insight_boost: state.insight_clarity * 0.5,
+            focus_improvement: state.focus_quality * 0.2,
+        })
     }
 }
 

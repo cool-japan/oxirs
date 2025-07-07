@@ -13,9 +13,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use oxirs_core::model::{NamedNode, Term};
-
-use crate::{ConstraintComponentId, PropertyPath, Result, ShaclError, ShapeId};
+use crate::{Result, ShaclError};
 
 /// Memory optimization engine for SHACL validation
 #[derive(Debug)]
@@ -338,8 +336,7 @@ impl MemoryPool {
 
         // No available object found, create a new one if pool not full
         if pool.len() < pool_capacity {
-            let mut data = Vec::with_capacity(size);
-            data.resize(size, 0);
+            let mut data = vec![0; size];
 
             let ptr = data.as_mut_ptr();
 
@@ -998,15 +995,15 @@ pub mod compact {
         ) -> Result<crate::validation::ValidationViolation> {
             let interner = self.interner.read().unwrap();
 
-            let focus_node_str = interner.get(compact.focus_node).ok_or_else(|| {
+            let _focus_node_str = interner.get(compact.focus_node).ok_or_else(|| {
                 ShaclError::MemoryOptimization("Invalid focus node reference".to_string())
             })?;
 
-            let shape_id_str = interner.get(compact.shape_id).ok_or_else(|| {
+            let _shape_id_str = interner.get(compact.shape_id).ok_or_else(|| {
                 ShaclError::MemoryOptimization("Invalid shape ID reference".to_string())
             })?;
 
-            let constraint_component_str =
+            let _constraint_component_str =
                 interner.get(compact.constraint_component).ok_or_else(|| {
                     ShaclError::MemoryOptimization(
                         "Invalid constraint component reference".to_string(),

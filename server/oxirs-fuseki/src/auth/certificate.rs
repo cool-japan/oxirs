@@ -96,8 +96,6 @@ impl CertificateAuthService {
         }
 
         // Check issuer DN patterns if configured
-        // TODO: Add trusted_issuers field to CertificateConfig if needed
-        /*
         if let Some(trusted_issuers) = self
             .config
             .certificate
@@ -113,7 +111,6 @@ impl CertificateAuthService {
                 }
             }
         }
-        */
 
         Ok(false)
     }
@@ -326,5 +323,90 @@ impl CertificateAuthService {
         Err(FusekiError::authentication(
             "No common name found in certificate DN",
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::{CertificateConfig, CertificateUserMapping, CertificateValidationLevel};
+    use std::sync::Arc;
+
+    #[test]
+    fn test_match_issuer_pattern_exact() {
+        let config = Arc::new(SecurityConfig::default());
+        let auth_service = CertificateAuthService::new(config);
+
+        let issuer_dn = "CN=Test CA,O=Test Corp,C=US";
+        let pattern = "CN=Test CA,O=Test Corp,C=US";
+
+        let result = auth_service
+            .match_issuer_pattern(issuer_dn, pattern)
+            .unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_match_issuer_pattern_wildcard() {
+        let config = Arc::new(SecurityConfig::default());
+        let auth_service = CertificateAuthService::new(config);
+
+        let issuer_dn = "CN=Test CA,O=Test Corp,C=US";
+        let pattern = "CN=Test CA,O=*,C=US";
+
+        let result = auth_service
+            .match_issuer_pattern(issuer_dn, pattern)
+            .unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_match_issuer_pattern_wildcard_all() {
+        let config = Arc::new(SecurityConfig::default());
+        let auth_service = CertificateAuthService::new(config);
+
+        let issuer_dn = "CN=Any CA,O=Any Corp,C=US";
+        let pattern = "*";
+
+        let result = auth_service
+            .match_issuer_pattern(issuer_dn, pattern)
+            .unwrap();
+        assert!(result);
+    }
+
+    #[test]
+    fn test_match_issuer_pattern_no_match() {
+        let config = Arc::new(SecurityConfig::default());
+        let auth_service = CertificateAuthService::new(config);
+
+        let issuer_dn = "CN=Test CA,O=Test Corp,C=US";
+        let pattern = "CN=Different CA,O=Test Corp,C=US";
+
+        let result = auth_service
+            .match_issuer_pattern(issuer_dn, pattern)
+            .unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_extract_username_from_dn() {
+        let config = Arc::new(SecurityConfig::default());
+        let auth_service = CertificateAuthService::new(config);
+
+        let dn = "CN=john.doe,O=Test Corp,C=US";
+        let username = auth_service.extract_username_from_dn(dn).unwrap();
+
+        assert_eq!(username, "john.doe");
+    }
+
+    #[test]
+    fn test_extract_email_from_dn() {
+        let config = Arc::new(SecurityConfig::default());
+        let auth_service = CertificateAuthService::new(config);
+
+        let dn = "CN=John Doe,emailAddress=john.doe@example.com,O=Test Corp,C=US";
+        let email = auth_service.extract_email_from_dn(dn).unwrap();
+
+        assert_eq!(email, "john.doe@example.com");
     }
 }

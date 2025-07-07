@@ -256,6 +256,12 @@ pub enum IsolationMethod {
     ElectromagneticIsolation(f64),
 }
 
+impl Default for QuantumGraphProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumGraphProcessor {
     /// Create a new quantum graph processor
     pub fn new() -> Self {
@@ -397,6 +403,12 @@ impl QuantumGraphProcessor {
     }
 }
 
+impl Default for QuantumGateSet {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumGateSet {
     /// Create standard quantum gate set
     pub fn new() -> Self {
@@ -437,6 +449,12 @@ impl QuantumGateSet {
     }
 }
 
+impl Default for DecoherenceHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DecoherenceHandler {
     /// Create new decoherence handler
     pub fn new() -> Self {
@@ -464,6 +482,12 @@ impl DecoherenceHandler {
             entangled_states: state.entangled_states.clone(),
             coherence_time: state.coherence_time,
         })
+    }
+}
+
+impl Default for QuantumErrorCorrection {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -504,7 +528,7 @@ impl QuantumErrorCorrection {
         match error_type {
             ErrorType::BitFlip => {
                 // Apply bit flip correction
-                state.amplitudes.mapv_inplace(|a| a * -1.0);
+                state.amplitudes.mapv_inplace(|a| -a);
             }
             ErrorType::PhaseFlip => {
                 // Apply phase flip correction
@@ -512,7 +536,7 @@ impl QuantumErrorCorrection {
             }
             ErrorType::Combined => {
                 // Apply combined correction
-                state.amplitudes.mapv_inplace(|a| a * -1.0);
+                state.amplitudes.mapv_inplace(|a| -a);
                 state.phases.mapv_inplace(|p| p + PI);
             }
             ErrorType::Decoherence => {
@@ -528,6 +552,12 @@ impl QuantumErrorCorrection {
             }
         }
         Ok(state)
+    }
+}
+
+impl Default for SyndromeCalculator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -566,6 +596,12 @@ impl SyndromeCalculator {
     }
 }
 
+impl Default for ErrorDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ErrorDetector {
     /// Create new error detector
     pub fn new() -> Self {
@@ -578,6 +614,12 @@ impl ErrorDetector {
     /// Detect error from syndrome
     pub fn detect_error(&self, syndrome: &[i8]) -> OxirsResult<Option<ErrorType>> {
         self.pattern_matcher.match_pattern(syndrome)
+    }
+}
+
+impl Default for ErrorPatternMatcher {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -605,6 +647,12 @@ impl ErrorPatternMatcher {
         } else {
             Ok(None)
         }
+    }
+}
+
+impl Default for CoherencePreservation {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

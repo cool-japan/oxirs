@@ -19,12 +19,18 @@ use tempfile::TempDir;
 
 /// Generate random terms for benchmarking
 fn generate_random_triple(rng: &mut impl Rng) -> (Term, Term, Term) {
-    let subject = Term::iri(&format!("http://example.org/subject/{}", rng.gen::<u64>()));
-    let predicate = Term::iri(&format!("http://example.org/predicate/{}", rng.gen::<u8>()));
+    let subject = Term::iri(&format!(
+        "http://example.org/subject/{}",
+        rng.r#gen::<u64>()
+    ));
+    let predicate = Term::iri(&format!(
+        "http://example.org/predicate/{}",
+        rng.r#gen::<u8>()
+    ));
     let object = if rng.gen_bool(0.5) {
-        Term::literal(&format!("value_{}", rng.gen::<u32>()))
+        Term::literal(&format!("value_{}", rng.r#gen::<u32>()))
     } else {
-        Term::iri(&format!("http://example.org/object/{}", rng.gen::<u64>()))
+        Term::iri(&format!("http://example.org/object/{}", rng.r#gen::<u64>()))
     };
 
     (subject, predicate, object)
@@ -474,7 +480,7 @@ fn bench_index_patterns(c: &mut Criterion) {
         let subject = Term::iri(&format!("http://example.org/star_subject/{}", subject_id));
         for i in 0..100 {
             let predicate = Term::iri(&format!("http://example.org/predicate/{}", i));
-            let object = Term::literal(&format!("value_{}", rng.gen::<u32>()));
+            let object = Term::literal(&format!("value_{}", rng.r#gen::<u32>()));
             store.insert_triple(&subject, &predicate, &object).unwrap();
         }
     }
@@ -489,7 +495,7 @@ fn bench_index_patterns(c: &mut Criterion) {
     for subject_id in 0..100000 {
         let subject = Term::iri(&format!("http://example.org/person/{}", subject_id));
         let predicate = popular_predicates.choose(&mut rng).unwrap();
-        let object = Term::literal(&format!("value_{}", rng.gen::<u32>()));
+        let object = Term::literal(&format!("value_{}", rng.r#gen::<u32>()));
         store.insert_triple(&subject, predicate, &object).unwrap();
     }
 
@@ -622,7 +628,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                                 "http://example.org/person/{}",
                                 rng.gen_range(0..50000)
                             )),
-                            _ => Term::literal(&format!("value_{}", rng.gen::<u32>())),
+                            _ => Term::literal(&format!("value_{}", rng.r#gen::<u32>())),
                         };
                         store.insert_triple(&person, &predicate, &object).unwrap();
                     }
@@ -645,7 +651,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                             "2024-01-01",
                             "http://www.w3.org/2001/XMLSchema#date",
                         ),
-                        _ => Term::literal(&format!("metadata_{}", rng.gen::<u32>())),
+                        _ => Term::literal(&format!("metadata_{}", rng.r#gen::<u32>())),
                     };
                     store.insert_triple(&document, &predicate, &object).unwrap();
                 }
@@ -668,7 +674,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                             "http://example.org/person/{}",
                             rng.gen_range(0..50000)
                         )),
-                        _ => Term::literal(&format!("schema_value_{}", rng.gen::<u32>())),
+                        _ => Term::literal(&format!("schema_value_{}", rng.r#gen::<u32>())),
                     };
                     store.insert_triple(&product, &predicate, &object).unwrap();
                 }

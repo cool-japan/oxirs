@@ -854,7 +854,7 @@ mod tests {
             .await;
 
         let summary = metrics.get_summary().await;
-        assert_eq!(summary.cache_hit_ratio, 66.66666666666667); // 2 hits out of 3 operations
+        assert!((summary.cache_hit_ratio - 66.66666666666667).abs() < 1e-10); // 2 hits out of 3 operations (approximately)
     }
 
     #[tokio::test]

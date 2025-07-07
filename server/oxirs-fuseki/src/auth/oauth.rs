@@ -649,8 +649,8 @@ mod tests {
             .unwrap();
 
         assert!(url.contains("response_type=code"));
-        assert!(url.contains("client_id=test_client_id"));
-        assert!(url.contains(&state));
+        assert!(url.contains("client_id=test%5Fclient%5Fid")); // URL-encoded test_client_id
+        assert!(url.contains(&urlencoding::encode(&state))); // URL-encoded state
         assert!(!state.is_empty());
     }
 

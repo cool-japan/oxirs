@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
 
 /// Transaction isolation levels with full SQL standard compliance
@@ -173,6 +173,32 @@ pub struct TransactionStats {
     pub nested_transactions: u64,
 }
 
+/// Savepoint for nested transaction rollback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Savepoint {
+    /// Unique savepoint identifier
+    pub id: String,
+    /// Savepoint name
+    pub name: String,
+    /// Transaction ID this savepoint belongs to
+    pub transaction_id: String,
+    /// Creation timestamp
+    pub created_at: SystemTime,
+    /// Snapshot of transaction state at savepoint creation
+    pub state_snapshot: SavepointState,
+}
+
+/// Snapshot of transaction state for savepoint rollback
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SavepointState {
+    /// Number of operations performed at savepoint creation
+    pub operation_count: u64,
+    /// Lock state at savepoint creation
+    pub locks_snapshot: Vec<LockInfo>,
+    /// Children transactions at savepoint creation
+    pub children_snapshot: HashSet<String>,
+}
+
 /// Comprehensive transaction information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionInfo {
@@ -196,6 +222,10 @@ pub struct TransactionInfo {
     pub parent_id: Option<String>,
     /// Child transaction IDs
     pub children: HashSet<String>,
+    /// Active savepoints (ordered by creation time)
+    pub savepoints: VecDeque<Savepoint>,
+    /// Operation counter for savepoint rollback
+    pub operation_count: u64,
     /// Held locks
     pub locks: Vec<LockInfo>,
     /// Read set (for optimistic concurrency control)
@@ -232,6 +262,8 @@ impl TransactionInfo {
             timeout,
             parent_id,
             children: HashSet::new(),
+            savepoints: VecDeque::new(),
+            operation_count: 0,
             locks: Vec::new(),
             read_set: HashSet::new(),
             write_set: HashSet::new(),
@@ -635,6 +667,162 @@ impl TransactionManager {
         Ok(())
     }
 
+    /// Create a savepoint within a transaction
+    pub fn create_savepoint(&self, tx_id: &str, savepoint_name: &str) -> Result<String> {
+        let mut transactions = self.transactions.write().unwrap();
+        let tx_info = transactions
+            .get_mut(tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        if !tx_info.is_active() {
+            return Err(anyhow!("Transaction {} is not active", tx_id));
+        }
+
+        // Generate unique savepoint ID
+        let savepoint_id = format!(
+            "{}_{}_sp_{}",
+            tx_id,
+            savepoint_name,
+            tx_info.savepoints.len()
+        );
+
+        // Create snapshot of current transaction state
+        let state_snapshot = SavepointState {
+            operation_count: tx_info.operation_count,
+            locks_snapshot: tx_info.locks.clone(),
+            children_snapshot: tx_info.children.clone(),
+        };
+
+        // Create savepoint
+        let savepoint = Savepoint {
+            id: savepoint_id.clone(),
+            name: savepoint_name.to_string(),
+            transaction_id: tx_id.to_string(),
+            created_at: SystemTime::now(),
+            state_snapshot,
+        };
+
+        // Add savepoint to transaction
+        tx_info.savepoints.push_back(savepoint);
+        tx_info.update_activity();
+
+        info!(
+            "Created savepoint {} for transaction {}",
+            savepoint_id, tx_id
+        );
+        Ok(savepoint_id)
+    }
+
+    /// Rollback to a specific savepoint
+    pub fn rollback_to_savepoint(&self, tx_id: &str, savepoint_name: &str) -> Result<()> {
+        let mut transactions = self.transactions.write().unwrap();
+        let tx_info = transactions
+            .get_mut(tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        if !tx_info.is_active() {
+            return Err(anyhow!("Transaction {} is not active", tx_id));
+        }
+
+        // Find the savepoint
+        let savepoint_index = tx_info
+            .savepoints
+            .iter()
+            .position(|sp| sp.name == savepoint_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Savepoint {} not found in transaction {}",
+                    savepoint_name,
+                    tx_id
+                )
+            })?;
+
+        let savepoint = tx_info.savepoints[savepoint_index].clone();
+
+        // Rollback child transactions that were created after this savepoint
+        let children_to_abort: Vec<String> = tx_info
+            .children
+            .difference(&savepoint.state_snapshot.children_snapshot)
+            .cloned()
+            .collect();
+
+        // Release the write lock before calling abort_transaction to avoid deadlock
+        drop(transactions);
+
+        for child_id in children_to_abort {
+            if let Err(e) = self.abort_transaction(&child_id) {
+                warn!(
+                    "Failed to abort child transaction {} during savepoint rollback: {}",
+                    child_id, e
+                );
+            }
+        }
+
+        // Reacquire the lock and restore state
+        let mut transactions = self.transactions.write().unwrap();
+        let tx_info = transactions
+            .get_mut(tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found during rollback", tx_id))?;
+
+        // Restore transaction state to savepoint
+        tx_info.operation_count = savepoint.state_snapshot.operation_count;
+        tx_info.children = savepoint.state_snapshot.children_snapshot;
+
+        // Remove savepoints created after this one
+        tx_info.savepoints.truncate(savepoint_index + 1);
+        tx_info.update_activity();
+
+        info!(
+            "Rolled back transaction {} to savepoint {}",
+            tx_id, savepoint_name
+        );
+        Ok(())
+    }
+
+    /// Release a savepoint (remove it from the transaction)
+    pub fn release_savepoint(&self, tx_id: &str, savepoint_name: &str) -> Result<()> {
+        let mut transactions = self.transactions.write().unwrap();
+        let tx_info = transactions
+            .get_mut(tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        if !tx_info.is_active() {
+            return Err(anyhow!("Transaction {} is not active", tx_id));
+        }
+
+        // Find and remove the savepoint
+        let savepoint_index = tx_info
+            .savepoints
+            .iter()
+            .position(|sp| sp.name == savepoint_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Savepoint {} not found in transaction {}",
+                    savepoint_name,
+                    tx_id
+                )
+            })?;
+
+        tx_info.savepoints.remove(savepoint_index);
+        tx_info.update_activity();
+
+        info!(
+            "Released savepoint {} from transaction {}",
+            savepoint_name, tx_id
+        );
+        Ok(())
+    }
+
+    /// Get all savepoints for a transaction
+    pub fn get_savepoints(&self, tx_id: &str) -> Result<Vec<Savepoint>> {
+        let transactions = self.transactions.read().unwrap();
+        let tx_info = transactions
+            .get(tx_id)
+            .ok_or_else(|| anyhow!("Transaction {} not found", tx_id))?;
+
+        Ok(tx_info.savepoints.iter().cloned().collect())
+    }
+
     /// Acquire a lock on a resource
     pub fn acquire_lock(&self, tx_id: &str, resource: Resource, mode: LockMode) -> Result<()> {
         let start_time = Instant::now();
@@ -880,14 +1068,17 @@ impl TransactionManager {
 
         for cycle in cycles {
             if let Some(victim) = self.select_deadlock_victim(&cycle) {
-                if let Err(e) = self.abort_transaction(&victim) {
-                    warn!("Failed to abort deadlock victim {}: {}", victim, e);
-                } else {
-                    aborted.push(victim);
-                    info!(
-                        "Aborted transaction {} to resolve deadlock",
-                        aborted.last().unwrap()
-                    );
+                match self.abort_transaction(&victim) {
+                    Err(e) => {
+                        warn!("Failed to abort deadlock victim {}: {}", victim, e);
+                    }
+                    _ => {
+                        aborted.push(victim);
+                        info!(
+                            "Aborted transaction {} to resolve deadlock",
+                            aborted.last().unwrap()
+                        );
+                    }
                 }
             }
         }
@@ -1147,5 +1338,135 @@ mod tests {
 
         tm.commit_transaction(&tx1).unwrap();
         tm.commit_transaction(&tx2).unwrap();
+    }
+
+    #[test]
+    fn test_savepoint_creation() {
+        let tm = TransactionManager::new();
+
+        let tx_id = tm
+            .begin_transaction(TransactionType::ReadWrite, None, None, None)
+            .unwrap();
+
+        // Create a savepoint
+        let savepoint_id = tm.create_savepoint(&tx_id, "checkpoint1").unwrap();
+        assert!(savepoint_id.contains("checkpoint1"));
+
+        // Verify savepoint exists
+        let savepoints = tm.get_savepoints(&tx_id).unwrap();
+        assert_eq!(savepoints.len(), 1);
+        assert_eq!(savepoints[0].name, "checkpoint1");
+
+        tm.commit_transaction(&tx_id).unwrap();
+    }
+
+    #[test]
+    fn test_savepoint_rollback() {
+        let tm = TransactionManager::new();
+
+        let tx_id = tm
+            .begin_transaction(TransactionType::ReadWrite, None, None, None)
+            .unwrap();
+
+        // Create a savepoint
+        tm.create_savepoint(&tx_id, "checkpoint1").unwrap();
+
+        // Create a nested transaction after savepoint
+        let child_tx = tm
+            .begin_transaction(TransactionType::Nested, None, None, Some(tx_id.clone()))
+            .unwrap();
+
+        // Verify child exists
+        let tx_info = tm.get_transaction_info(&tx_id).unwrap();
+        assert!(tx_info.children.contains(&child_tx));
+
+        // Rollback to savepoint (should abort child transaction)
+        tm.rollback_to_savepoint(&tx_id, "checkpoint1").unwrap();
+
+        // Verify child was aborted and removed
+        let tx_info = tm.get_transaction_info(&tx_id).unwrap();
+        assert!(!tx_info.children.contains(&child_tx));
+
+        tm.commit_transaction(&tx_id).unwrap();
+    }
+
+    #[test]
+    fn test_savepoint_release() {
+        let tm = TransactionManager::new();
+
+        let tx_id = tm
+            .begin_transaction(TransactionType::ReadWrite, None, None, None)
+            .unwrap();
+
+        // Create multiple savepoints
+        tm.create_savepoint(&tx_id, "checkpoint1").unwrap();
+        tm.create_savepoint(&tx_id, "checkpoint2").unwrap();
+
+        // Verify both exist
+        let savepoints = tm.get_savepoints(&tx_id).unwrap();
+        assert_eq!(savepoints.len(), 2);
+
+        // Release one savepoint
+        tm.release_savepoint(&tx_id, "checkpoint1").unwrap();
+
+        // Verify only one remains
+        let savepoints = tm.get_savepoints(&tx_id).unwrap();
+        assert_eq!(savepoints.len(), 1);
+        assert_eq!(savepoints[0].name, "checkpoint2");
+
+        tm.commit_transaction(&tx_id).unwrap();
+    }
+
+    #[test]
+    fn test_multiple_savepoints() {
+        let tm = TransactionManager::new();
+
+        let tx_id = tm
+            .begin_transaction(TransactionType::ReadWrite, None, None, None)
+            .unwrap();
+
+        // Create multiple savepoints
+        tm.create_savepoint(&tx_id, "sp1").unwrap();
+        tm.create_savepoint(&tx_id, "sp2").unwrap();
+        tm.create_savepoint(&tx_id, "sp3").unwrap();
+
+        // Verify all exist in order
+        let savepoints = tm.get_savepoints(&tx_id).unwrap();
+        assert_eq!(savepoints.len(), 3);
+        assert_eq!(savepoints[0].name, "sp1");
+        assert_eq!(savepoints[1].name, "sp2");
+        assert_eq!(savepoints[2].name, "sp3");
+
+        // Rollback to middle savepoint
+        tm.rollback_to_savepoint(&tx_id, "sp2").unwrap();
+
+        // Verify sp3 was removed but sp1 and sp2 remain
+        let savepoints = tm.get_savepoints(&tx_id).unwrap();
+        assert_eq!(savepoints.len(), 2);
+        assert_eq!(savepoints[0].name, "sp1");
+        assert_eq!(savepoints[1].name, "sp2");
+
+        tm.commit_transaction(&tx_id).unwrap();
+    }
+
+    #[test]
+    fn test_savepoint_error_cases() {
+        let tm = TransactionManager::new();
+
+        let tx_id = tm
+            .begin_transaction(TransactionType::ReadWrite, None, None, None)
+            .unwrap();
+
+        // Try to rollback to non-existent savepoint
+        assert!(tm.rollback_to_savepoint(&tx_id, "nonexistent").is_err());
+
+        // Try to release non-existent savepoint
+        assert!(tm.release_savepoint(&tx_id, "nonexistent").is_err());
+
+        // Create and commit transaction
+        tm.commit_transaction(&tx_id).unwrap();
+
+        // Try to create savepoint on committed transaction
+        assert!(tm.create_savepoint(&tx_id, "after_commit").is_err());
     }
 }

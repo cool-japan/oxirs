@@ -1,4 +1,3 @@
-use chrono::Utc;
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_stream::processing::{
     AggregateFunction, EventProcessor, WindowConfig, WindowTrigger, WindowType,
@@ -9,15 +8,16 @@ use tokio::runtime::Runtime;
 
 /// High-performance benchmark for oxirs-stream targeting 100K+ events/second
 /// and <10ms latency as specified in the TODO requirements
-
 fn create_benchmark_event(id: usize) -> StreamEvent {
-    let mut metadata = EventMetadata::default();
-    metadata.source = "benchmark".to_string();
+    let metadata = EventMetadata {
+        source: "benchmark".to_string(),
+        ..Default::default()
+    };
 
     StreamEvent::TripleAdded {
-        subject: format!("http://benchmark.org/subject_{}", id),
+        subject: format!("http://benchmark.org/subject_{id}"),
         predicate: "http://benchmark.org/predicate".to_string(),
-        object: format!("\"benchmark_value_{}\"", id),
+        object: format!("\"benchmark_value_{id}\""),
         graph: None,
         metadata,
     }
@@ -54,8 +54,7 @@ fn bench_memory_backend_throughput(c: &mut Criterion) {
 
                         // Log performance for analysis
                         println!(
-                            "Created {} events in {:?} ({:.0} events/sec)",
-                            count, duration, events_per_sec
+                            "Created {count} events in {duration:?} ({events_per_sec:.0} events/sec)"
                         );
 
                         duration
@@ -87,8 +86,7 @@ fn bench_event_processing_latency(c: &mut Criterion) {
                 // Target: process single event in <1ms
                 assert!(
                     latency < Duration::from_millis(1),
-                    "Failed to meet <1ms processing target. Got: {:?}",
-                    latency
+                    "Failed to meet <1ms processing target. Got: {latency:?}"
                 );
 
                 latency
@@ -120,9 +118,8 @@ fn bench_delta_processing_throughput(c: &mut Criterion) {
                         for i in 0..count {
                             let update = format!(
                                 r#"INSERT DATA {{
-                                    <http://benchmark.org/subject_{}> <http://benchmark.org/predicate> "value_{}" .
-                                }}"#,
-                                i, i
+                                    <http://benchmark.org/subject_{i}> <http://benchmark.org/predicate> "value_{i}" .
+                                }}"#
                             );
 
                             let _events = computer.compute_delta(black_box(&update)).unwrap();
@@ -132,8 +129,7 @@ fn bench_delta_processing_throughput(c: &mut Criterion) {
                         let updates_per_sec = (count as f64) / duration.as_secs_f64();
 
                         // Log performance for analysis
-                        println!("Processed {} SPARQL updates in {:?} ({:.0} updates/sec)", 
-                                count, duration, updates_per_sec);
+                        println!("Processed {count} SPARQL updates in {duration:?} ({updates_per_sec:.0} updates/sec)");
 
                         duration
                     })
@@ -166,9 +162,8 @@ fn bench_rdf_patch_processing(c: &mut Criterion) {
                         for i in 0..count {
                             let update = format!(
                                 r#"INSERT DATA {{
-                                    <http://patch.org/s_{}> <http://patch.org/p> "object_{}" .
-                                }}"#,
-                                i, i
+                                    <http://patch.org/s_{i}> <http://patch.org/p> "object_{i}" .
+                                }}"#
                             );
 
                             let _patch = computer.sparql_to_patch(black_box(&update)).unwrap();
@@ -179,8 +174,7 @@ fn bench_rdf_patch_processing(c: &mut Criterion) {
 
                         // Log performance for analysis
                         println!(
-                            "Generated {} patches in {:?} ({:.0} patches/sec)",
-                            count, duration, patches_per_sec
+                            "Generated {count} patches in {duration:?} ({patches_per_sec:.0} patches/sec)"
                         );
 
                         duration
@@ -237,8 +231,7 @@ fn bench_stream_processing_pipeline(c: &mut Criterion) {
 
                 // Log performance for analysis
                 println!(
-                    "Processed {} events in {:?} ({:.0} events/sec, {} window results)",
-                    event_count, duration, events_per_sec, total_results
+                    "Processed {event_count} events in {duration:?} ({events_per_sec:.0} events/sec, {total_results} window results)"
                 );
 
                 duration

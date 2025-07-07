@@ -41,6 +41,10 @@ pub enum N3Token {
     },
     Variable(String), // ?var or $var (for SPARQL compatibility)
 
+    // RDF-star support
+    QuotedTripleStart, // <<
+    QuotedTripleEnd,   // >>
+
     // Special values
     True,  // true
     False, // false
@@ -73,43 +77,45 @@ impl fmt::Display for N3Token {
             N3Token::Prefix => write!(f, "@prefix"),
             N3Token::Base => write!(f, "@base"),
             N3Token::A => write!(f, "a"),
-            N3Token::Iri(iri) => write!(f, "<{}>", iri),
+            N3Token::Iri(iri) => write!(f, "<{iri}>"),
             N3Token::PrefixedName {
                 prefix: Some(prefix),
                 local,
-            } => write!(f, "{}:{}", prefix, local),
+            } => write!(f, "{prefix}:{local}"),
             N3Token::PrefixedName {
                 prefix: None,
                 local,
-            } => write!(f, ":{}", local),
-            N3Token::BlankNode(label) => write!(f, "_:{}", label),
+            } => write!(f, ":{local}"),
+            N3Token::BlankNode(label) => write!(f, "_:{label}"),
             N3Token::Literal {
                 value,
                 datatype: Some(dt),
                 language: None,
-            } => write!(f, "\"{}\"^^<{}>", value, dt),
+            } => write!(f, "\"{value}\"^^<{dt}>"),
             N3Token::Literal {
                 value,
                 datatype: None,
                 language: Some(lang),
-            } => write!(f, "\"{}\"@{}", value, lang),
+            } => write!(f, "\"{value}\"@{lang}"),
             N3Token::Literal {
                 value,
                 datatype: None,
                 language: None,
-            } => write!(f, "\"{}\"", value),
+            } => write!(f, "\"{value}\""),
             N3Token::Literal {
                 value,
                 datatype: Some(dt),
                 language: Some(lang),
-            } => write!(f, "\"{}\"@{}^^<{}>", value, lang, dt),
-            N3Token::Variable(var) => write!(f, "?{}", var),
+            } => write!(f, "\"{value}\"@{lang}^^<{dt}>"),
+            N3Token::Variable(var) => write!(f, "?{var}"),
+            N3Token::QuotedTripleStart => write!(f, "<<"),
+            N3Token::QuotedTripleEnd => write!(f, ">>"),
             N3Token::True => write!(f, "true"),
             N3Token::False => write!(f, "false"),
-            N3Token::Integer(i) => write!(f, "{}", i),
-            N3Token::Decimal(d) => write!(f, "{}", d),
-            N3Token::Double(d) => write!(f, "{}", d),
-            N3Token::Comment(comment) => write!(f, "# {}", comment),
+            N3Token::Integer(i) => write!(f, "{i}"),
+            N3Token::Decimal(d) => write!(f, "{d}"),
+            N3Token::Double(d) => write!(f, "{d}"),
+            N3Token::Comment(comment) => write!(f, "# {comment}"),
             N3Token::Whitespace => write!(f, " "),
             N3Token::Eof => write!(f, "EOF"),
         }
@@ -186,7 +192,7 @@ impl N3Lexer {
                                 _ => {
                                     return Err(RdfParseError::Syntax(
                                         RdfSyntaxError::with_position(
-                                            format!("Invalid IRI escape sequence: \\{}", escaped),
+                                            format!("Invalid IRI escape sequence: \\{escaped}"),
                                             *buffer.position(),
                                         ),
                                     ));
@@ -208,7 +214,7 @@ impl N3Lexer {
                 }
                 _ => {
                     return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                        format!("Invalid character in IRI: '{}'", ch),
+                        format!("Invalid character in IRI: '{ch}'"),
                         *buffer.position(),
                     )));
                 }
@@ -237,7 +243,7 @@ impl N3Lexer {
                 }
                 Some(ch) => {
                     return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                        format!("Invalid hex digit in Unicode escape: '{}'", ch),
+                        format!("Invalid hex digit in Unicode escape: '{ch}'"),
                         *buffer.position(),
                     )));
                 }
@@ -279,7 +285,7 @@ impl N3Lexer {
                 buffer.advance();
             } else {
                 return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Invalid character in prefix: '{}'", ch),
+                    format!("Invalid character in prefix: '{ch}'"),
                     *buffer.position(),
                 )));
             }
@@ -330,7 +336,7 @@ impl N3Lexer {
             }
             Some(ch) => {
                 return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Invalid first character in blank node label: '{}'", ch),
+                    format!("Invalid first character in blank node label: '{ch}'"),
                     *buffer.position(),
                 )));
             }
@@ -428,7 +434,7 @@ impl N3Lexer {
                         }
                         Some(other) => {
                             return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                                format!("Invalid escape sequence: \\{}", other),
+                                format!("Invalid escape sequence: \\{other}"),
                                 *buffer.position(),
                             )));
                         }
@@ -578,7 +584,7 @@ impl N3Lexer {
             // Double
             let value = number_str.parse::<f64>().map_err(|_| {
                 RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Invalid double literal: {}", number_str),
+                    format!("Invalid double literal: {number_str}"),
                     *buffer.position(),
                 ))
             })?;
@@ -587,7 +593,7 @@ impl N3Lexer {
             // Decimal
             let value = number_str.parse::<f64>().map_err(|_| {
                 RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Invalid decimal literal: {}", number_str),
+                    format!("Invalid decimal literal: {number_str}"),
                     *buffer.position(),
                 ))
             })?;
@@ -596,7 +602,7 @@ impl N3Lexer {
             // Integer
             let value = number_str.parse::<i64>().map_err(|_| {
                 RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Invalid integer literal: {}", number_str),
+                    format!("Invalid integer literal: {number_str}"),
                     *buffer.position(),
                 ))
             })?;
@@ -746,10 +752,32 @@ impl TokenRecognizer for N3Lexer {
                     return Ok(Some(N3Token::RightBrace));
                 }
 
-                // IRI
+                // IRI or quoted triple start
                 Some('<') => {
-                    let iri = self.read_iri(buffer)?;
-                    return Ok(Some(N3Token::Iri(iri)));
+                    // Check if this is the start of a quoted triple <<
+                    if buffer.peek() == Some('<') {
+                        buffer.advance(); // First <
+                        buffer.advance(); // Second <
+                        return Ok(Some(N3Token::QuotedTripleStart));
+                    } else {
+                        let iri = self.read_iri(buffer)?;
+                        return Ok(Some(N3Token::Iri(iri)));
+                    }
+                }
+
+                // Quoted triple end
+                Some('>') => {
+                    // Check if this is the end of a quoted triple >>
+                    if buffer.peek() == Some('>') {
+                        buffer.advance(); // First >
+                        buffer.advance(); // Second >
+                        return Ok(Some(N3Token::QuotedTripleEnd));
+                    } else {
+                        return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
+                            "Unexpected '>' character".to_string(),
+                            *buffer.position(),
+                        )));
+                    }
                 }
 
                 // Blank node
@@ -802,7 +830,7 @@ impl TokenRecognizer for N3Lexer {
                         "base" => return Ok(Some(N3Token::Base)),
                         _ => {
                             return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                                format!("Unknown directive: @{}", directive),
+                                format!("Unknown directive: @{directive}"),
                                 *buffer.position(),
                             )));
                         }
@@ -829,7 +857,7 @@ impl TokenRecognizer for N3Lexer {
 
                 Some(ch) => {
                     return Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                        format!("Unexpected character: '{}'", ch),
+                        format!("Unexpected character: '{ch}'"),
                         *buffer.position(),
                     )));
                 }

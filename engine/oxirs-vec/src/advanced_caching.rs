@@ -2,7 +2,7 @@
 //!
 //! This module provides:
 //! - Multi-level caching (memory + persistent)
-//! - LRU, LFU, ARC eviction policies  
+//! - LRU, LFU, ARC eviction policies
 //! - TTL expiration
 //! - Cache coherence and invalidation
 //! - Background cache updates
@@ -12,7 +12,6 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -302,7 +301,7 @@ impl MemoryCache {
     fn find_lfu_key(&self) -> Option<CacheKey> {
         self.frequency_map
             .iter()
-            .min_by_key(|(_, &freq)| freq)
+            .min_by_key(|&(_, &freq)| freq)
             .map(|(key, _)| key.clone())
     }
 
@@ -553,9 +552,47 @@ impl PersistentCache {
 
         // Create subdirectory structure to avoid too many files in one directory
         let sub_dir = format!("{:02x}", (hash % 256) as u8);
-        self.cache_dir
-            .join(sub_dir)
-            .join(format!("{:016x}.cache", hash))
+
+        // Encode key information in filename for reconstruction during cleanup
+        let encoded_key = self.encode_cache_key_for_filename(key);
+        let filename = format!("{hash:016x}_{encoded_key}.cache");
+
+        self.cache_dir.join(sub_dir).join(filename)
+    }
+
+    /// Encode cache key information into filename-safe format
+    fn encode_cache_key_for_filename(&self, key: &CacheKey) -> String {
+        let key_data = serde_json::json!({
+            "namespace": key.namespace,
+            "key": key.key,
+            "variant": key.variant
+        });
+
+        // Use base64 encoding to safely include key information in filename
+        use base64::{engine::general_purpose, Engine as _};
+        general_purpose::URL_SAFE_NO_PAD.encode(key_data.to_string().as_bytes())
+    }
+
+    /// Decode cache key from filename
+    fn decode_cache_key_from_filename(&self, filename: &str) -> Option<CacheKey> {
+        if let Some(encoded_part) = filename
+            .strip_suffix(".cache")
+            .and_then(|s| s.split('_').nth(1))
+        {
+            use base64::{engine::general_purpose, Engine as _};
+            if let Ok(decoded_bytes) = general_purpose::URL_SAFE_NO_PAD.decode(encoded_part) {
+                if let Ok(decoded_str) = String::from_utf8(decoded_bytes) {
+                    if let Ok(key_data) = serde_json::from_str::<serde_json::Value>(&decoded_str) {
+                        return Some(CacheKey {
+                            namespace: key_data["namespace"].as_str()?.to_string(),
+                            key: key_data["key"].as_str()?.to_string(),
+                            variant: key_data["variant"].as_str().map(|s| s.to_string()),
+                        });
+                    }
+                }
+            }
+        }
+        None
     }
 
     /// Hash cache key
@@ -1129,19 +1166,29 @@ impl CacheInvalidator {
                     if sub_entry.file_type()?.is_file() {
                         if let Some(file_name) = sub_entry.file_name().to_str() {
                             if file_name.ends_with(".cache") {
-                                // Try to load and check if expired using the public load method
-                                if let Ok(Some(entry)) =
-                                    persistent_cache.load(&CacheKey::new("temp", "temp"))
+                                // Decode cache key from filename - no more hacks!
+                                if let Some(cache_key) =
+                                    persistent_cache.decode_cache_key_from_filename(file_name)
                                 {
-                                    // This is a hack - we can't easily reconstruct the cache key from filename
-                                    // In practice, we'd store metadata in the file or use a better file naming scheme
-                                    // For now, just remove files older than a certain age
+                                    // Load the actual cache entry to check expiration
+                                    if let Ok(Some(entry)) = persistent_cache.load(&cache_key) {
+                                        if entry.is_expired() {
+                                            let _ = std::fs::remove_file(sub_entry.path());
+                                            removed_count += 1;
+                                        }
+                                    } else {
+                                        // If we can't load the entry, it might be corrupted - remove it
+                                        let _ = std::fs::remove_file(sub_entry.path());
+                                        removed_count += 1;
+                                    }
+                                } else {
+                                    // If we can't decode the key, it might be an old format - use file age as fallback
                                     if let Ok(metadata) = std::fs::metadata(sub_entry.path()) {
                                         if let Ok(modified) = metadata.modified() {
                                             let age = modified
                                                 .elapsed()
                                                 .unwrap_or(Duration::from_secs(0));
-                                            // Remove files older than 24 hours as a simple heuristic
+                                            // Remove files older than 24 hours as fallback for old cache files
                                             if age > Duration::from_secs(24 * 3600) {
                                                 let _ = std::fs::remove_file(sub_entry.path());
                                                 removed_count += 1;
@@ -1229,7 +1276,7 @@ impl BackgroundCacheWorker {
             while !*shutdown_signal.read().unwrap() {
                 // Perform maintenance tasks
                 if let Err(e) = Self::perform_maintenance(&cache, &invalidator) {
-                    eprintln!("Background cache maintenance error: {}", e);
+                    eprintln!("Background cache maintenance error: {e}");
                 }
 
                 // Sleep for the configured interval
@@ -1268,8 +1315,7 @@ impl BackgroundCacheWorker {
         let expired_count = invalidator.invalidate_expired()?;
         if expired_count > 0 {
             println!(
-                "Background worker cleaned {} expired entries",
-                expired_count
+                "Background worker cleaned {expired_count} expired entries"
             );
         }
 
@@ -1289,7 +1335,7 @@ impl BackgroundCacheWorker {
     }
 
     /// Perform aggressive cleanup when memory usage is high
-    fn aggressive_cleanup(cache: &Arc<MultiLevelCache>) -> Result<()> {
+    fn aggressive_cleanup(_cache: &Arc<MultiLevelCache>) -> Result<()> {
         // Force cleanup of memory cache by temporarily reducing limits
         // This is a simplified approach - in practice you'd implement more sophisticated logic
         println!("Performing aggressive cache cleanup due to high memory usage");
@@ -1297,7 +1343,7 @@ impl BackgroundCacheWorker {
     }
 
     /// Sync frequently accessed entries to persistent storage
-    fn sync_hot_entries(cache: &Arc<MultiLevelCache>) -> Result<()> {
+    fn sync_hot_entries(_cache: &Arc<MultiLevelCache>) -> Result<()> {
         // In a real implementation, you'd identify hot entries and ensure they're in persistent storage
         // This helps with cache warming after restarts
         Ok(())
@@ -1686,7 +1732,7 @@ mod tests {
         let loaded_count = warmer
             .warm_with_generator(5, |i| {
                 Some((
-                    CacheKey::new("generated", &format!("item_{}", i)),
+                    CacheKey::new("generated", format!("item_{i}")),
                     Vector::new(vec![i as f32, (i * 2) as f32]),
                 ))
             })
@@ -1696,7 +1742,7 @@ mod tests {
 
         // Verify generated data is in cache
         for i in 0..5 {
-            let key = CacheKey::new("generated", &format!("item_{}", i));
+            let key = CacheKey::new("generated", format!("item_{i}"));
             let cached_vector = cache.get(&key).unwrap();
             assert_eq!(cached_vector.as_f32(), vec![i as f32, (i * 2) as f32]);
         }

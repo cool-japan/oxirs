@@ -169,7 +169,7 @@ impl Compressor {
 
     /// Decompress LZ4
     fn decompress_lz4(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
-        let mut decoder = Decoder::new(&data[..])?;
+        let mut decoder = Decoder::new(data)?;
         let mut decompressed = Vec::new();
         std::io::copy(&mut decoder, &mut decompressed)?;
         Ok(decompressed)
@@ -177,12 +177,12 @@ impl Compressor {
 
     /// Compress using Zstandard
     fn compress_zstd(&self, data: &[u8], level: i32) -> Result<Vec<u8>, OxirsError> {
-        Ok(zstd::encode_all(&data[..], level)?)
+        zstd::encode_all(data, level).map_err(Into::into)
     }
 
     /// Decompress Zstandard
     fn decompress_zstd(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
-        Ok(zstd::decode_all(&data[..])?)
+        zstd::decode_all(data).map_err(Into::into)
     }
 
     /// Custom RDF compression

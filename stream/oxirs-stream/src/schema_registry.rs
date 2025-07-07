@@ -10,7 +10,9 @@
 //! - Schema evolution management
 //! - Integration with external schema registries (Confluent, etc.)
 
-use crate::{EventMetadata, StreamEvent};
+#[cfg(test)]
+use crate::EventMetadata;
+use crate::StreamEvent;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -286,7 +288,7 @@ impl SchemaRegistry {
         if next_version > 1 {
             let latest_version = next_version - 1;
             if let Some(existing_schema) = subject_schemas.get(&latest_version) {
-                self.check_compatibility(&existing_schema, &schema_content, format.clone())
+                self.check_compatibility(existing_schema, &schema_content, format.clone())
                     .await?;
             }
         }
@@ -469,27 +471,27 @@ impl SchemaRegistry {
                 .properties
                 .get("subject")
                 .cloned()
-                .or_else(|| Some(format!("rdf.triple.added"))),
+                .or_else(|| Some("rdf.triple.added".to_string())),
             StreamEvent::TripleRemoved { metadata, .. } => metadata
                 .properties
                 .get("subject")
                 .cloned()
-                .or_else(|| Some(format!("rdf.triple.removed"))),
+                .or_else(|| Some("rdf.triple.removed".to_string())),
             StreamEvent::SparqlUpdate { metadata, .. } => metadata
                 .properties
                 .get("subject")
                 .cloned()
-                .or_else(|| Some(format!("sparql.update"))),
+                .or_else(|| Some("sparql.update".to_string())),
             StreamEvent::TransactionBegin { metadata, .. } => metadata
                 .properties
                 .get("subject")
                 .cloned()
-                .or_else(|| Some(format!("transaction.begin"))),
+                .or_else(|| Some("transaction.begin".to_string())),
             StreamEvent::TransactionCommit { metadata, .. } => metadata
                 .properties
                 .get("subject")
                 .cloned()
-                .or_else(|| Some(format!("transaction.commit"))),
+                .or_else(|| Some("transaction.commit".to_string())),
             _ => Some(format!("stream.event.{:?}", std::mem::discriminant(event))),
         }
     }
@@ -556,18 +558,18 @@ impl SchemaRegistry {
             StreamEvent::TripleAdded {
                 subject,
                 predicate,
-                object,
+                object: _,
                 ..
             } => {
                 let mut errors = Vec::new();
 
                 // Basic URI validation
                 if !subject.starts_with("http://") && !subject.starts_with("https://") {
-                    errors.push(format!("Invalid subject URI: {}", subject));
+                    errors.push(format!("Invalid subject URI: {subject}"));
                 }
 
                 if !predicate.starts_with("http://") && !predicate.starts_with("https://") {
-                    errors.push(format!("Invalid predicate URI: {}", predicate));
+                    errors.push(format!("Invalid predicate URI: {predicate}"));
                 }
 
                 if errors.is_empty() {

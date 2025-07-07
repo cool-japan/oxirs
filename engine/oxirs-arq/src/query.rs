@@ -4,16 +4,14 @@
 //! converting SPARQL query strings into algebraic expressions for execution.
 
 use crate::algebra::{
-    Aggregate, Algebra, BinaryOperator, Binding, Expression, GroupCondition, Iri, Literal,
-    OrderCondition, PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator,
-    Variable,
+    Algebra, BinaryOperator, Expression, GroupCondition, Iri, Literal, OrderCondition,
+    PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator, Variable,
 };
 use crate::update::{GraphReference, GraphTarget, QuadPattern, UpdateOperation};
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Result};
 use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::str::FromStr;
 
 /// SPARQL query types
 #[derive(Debug, Clone, PartialEq)]

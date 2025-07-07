@@ -9,6 +9,7 @@ use crate::transaction::{IsolationLevel, TransactionId};
 use anyhow::Result;
 use dashmap::DashMap;
 use oxirs_core::model::Triple;
+#[cfg(test)]
 use oxirs_core::vocab::xsd;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
@@ -343,9 +344,15 @@ impl MVCCManager {
                 self.get_latest_version(key).await
             }
             IsolationLevel::ReadCommitted => {
-                // Read the latest committed version
-                self.get_latest_committed_version(key, &snapshot.timestamp)
-                    .await
+                // First check for version from current transaction
+                if let Some(version) = self.get_version_from_transaction(key, transaction_id).await
+                {
+                    Some(version)
+                } else {
+                    // Otherwise get the latest committed version
+                    self.get_latest_committed_version(key, &snapshot.timestamp)
+                        .await
+                }
             }
             IsolationLevel::RepeatableRead | IsolationLevel::Serializable => {
                 // Read the version as of transaction start
@@ -411,12 +418,16 @@ impl MVCCManager {
         let write_set = snapshot.write_set.read().await;
 
         // Check for write-write conflicts
+        let committed = self.committed_transactions.read().await;
         for key in write_set.iter() {
             if let Some(versions) = self.versions.get(key) {
-                // Check if any version was written after our snapshot
-                let has_conflict = versions
-                    .range(snapshot.timestamp..)
-                    .any(|(ts, v)| ts > &snapshot.timestamp && v.transaction_id != *transaction_id);
+                // Check if any committed version conflicts with our writes
+                let has_conflict = versions.range(snapshot.timestamp..).any(|(ts, v)| {
+                    ts > &snapshot.timestamp &&
+                        v.transaction_id != *transaction_id &&
+                        // Only consider it a conflict if the other transaction is committed
+                        committed.values().any(|tx_id| tx_id == &v.transaction_id)
+                });
 
                 if has_conflict {
                     warn!(
@@ -432,9 +443,12 @@ impl MVCCManager {
         if snapshot.isolation_level == IsolationLevel::Serializable {
             for key in read_set.iter() {
                 if let Some(versions) = self.versions.get(key) {
-                    // Check if any version was written after our snapshot
+                    // Check if any committed version was written after our snapshot
                     let has_conflict = versions.range(snapshot.timestamp..).any(|(ts, v)| {
-                        ts > &snapshot.timestamp && v.transaction_id != *transaction_id
+                        ts > &snapshot.timestamp &&
+                        v.transaction_id != *transaction_id &&
+                        // Only consider it a conflict if the other transaction is committed
+                        committed.values().any(|tx_id| tx_id == &v.transaction_id)
                     });
 
                     if has_conflict {
@@ -524,6 +538,21 @@ impl MVCCManager {
                         .any(|tx_id| tx_id == &version.transaction_id)
                 })
                 .map(|(_, version)| version.clone())
+        })
+    }
+
+    /// Get version from a specific transaction
+    async fn get_version_from_transaction(
+        &self,
+        key: &str,
+        transaction_id: &TransactionId,
+    ) -> Option<Version> {
+        self.versions.get(key).and_then(|versions| {
+            versions
+                .values()
+                .rev()
+                .find(|version| version.transaction_id == *transaction_id)
+                .cloned()
         })
     }
 

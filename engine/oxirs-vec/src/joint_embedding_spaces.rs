@@ -2,17 +2,16 @@
 //!
 //! This module implements advanced joint embedding spaces that enable:
 //! - CLIP-style text-image alignment
-//! - Cross-modal attention mechanisms  
+//! - Cross-modal attention mechanisms
 //! - Contrastive learning for alignment
 //! - Multi-modal fusion strategies
 //! - Domain adaptation and transfer learning
 
 use crate::{
     cross_modal_embeddings::{
-        AudioData, CrossModalConfig, FusionStrategy, ImageData, Modality, ModalityData,
-        MultiModalContent, VideoData,
+        AudioData, ImageData, Modality, ModalityData, MultiModalContent, VideoData,
     },
-    Vector, VectorData, VectorPrecision,
+    Vector,
 };
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
@@ -76,6 +75,12 @@ impl Default for JointEmbeddingConfig {
         }
     }
 }
+
+/// Type alias for contrastive pairs result
+type ContrastivePairs = (
+    Vec<(Modality, Vector, Modality, Vector)>,
+    Vec<(Modality, Vector, Modality, Vector)>,
+);
 
 /// Joint embedding space for cross-modal alignment
 pub struct JointEmbeddingSpace {
@@ -346,12 +351,12 @@ impl LinearProjector {
         let mut output = vec![0.0; self.output_dim];
 
         // Matrix multiplication: output = input * weights^T + bias
-        for i in 0..self.output_dim {
+        for (i, output_val) in output.iter_mut().enumerate().take(self.output_dim) {
             let mut sum = self.bias[i];
-            for j in 0..self.input_dim {
-                sum += input_values[j] * self.weights[i][j];
+            for (j, &input_val) in input_values.iter().enumerate().take(self.input_dim) {
+                sum += input_val * self.weights[i][j];
             }
-            output[i] = sum;
+            *output_val = sum;
         }
 
         // Apply activation function
@@ -609,16 +614,16 @@ impl DomainAdapter {
             &self.target_stats
         };
 
-        for i in 0..adapted_values.len() {
+        for (i, adapted_value) in adapted_values.iter_mut().enumerate() {
             if i < stats.mean.len() && i < stats.variance.len() {
                 // Normalize using domain statistics
                 let normalized =
-                    (adapted_values[i] - stats.mean[i]) / (stats.variance[i].sqrt() + 1e-8);
+                    (*adapted_value - stats.mean[i]) / (stats.variance[i].sqrt() + 1e-8);
 
                 // Apply adaptation weights
-                adapted_values[i] =
+                *adapted_value =
                     normalized * self.adaptation_weights[i] * self.adaptation_strength
-                        + adapted_values[i] * (1.0 - self.adaptation_strength);
+                        + *adapted_value * (1.0 - self.adaptation_strength);
             }
         }
 
@@ -646,11 +651,11 @@ impl DomainAdapter {
         // Update running statistics
         for embedding in embeddings {
             let values = embedding.as_f32();
-            for i in 0..dim {
-                let delta = values[i] - stats.mean[i];
+            for (i, &value) in values.iter().enumerate().take(dim) {
+                let delta = value - stats.mean[i];
                 stats.sample_count += 1;
                 stats.mean[i] += delta / stats.sample_count as f32;
-                let delta2 = values[i] - stats.mean[i];
+                let delta2 = value - stats.mean[i];
                 stats.variance[i] += delta * delta2;
             }
         }
@@ -926,8 +931,8 @@ impl JointEmbeddingSpace {
             Ok(attended_embeddings[0].clone())
         } else {
             let mut fused = attended_embeddings[0].clone();
-            for i in 1..attended_embeddings.len() {
-                fused = fused.add(&attended_embeddings[i])?;
+            for embedding in attended_embeddings.iter().skip(1) {
+                fused = fused.add(embedding)?;
             }
             Ok(fused.scale(1.0 / attended_embeddings.len() as f32))
         }
@@ -951,7 +956,7 @@ impl JointEmbeddingSpace {
             timestamp: std::time::SystemTime::now(),
         };
 
-        let cache_key = format!("{:?}_{:?}_{}", mod1, mod2, similarity);
+        let cache_key = format!("{mod1:?}_{mod2:?}_{similarity}");
         let mut cache = self.alignment_cache.write();
         cache.insert(cache_key, alignment);
 
@@ -1104,10 +1109,7 @@ impl CLIPAligner {
     fn create_contrastive_pairs(
         &self,
         batch: &[(MultiModalContent, MultiModalContent)],
-    ) -> Result<(
-        Vec<(Modality, Vector, Modality, Vector)>,
-        Vec<(Modality, Vector, Modality, Vector)>,
-    )> {
+    ) -> Result<ContrastivePairs> {
         let mut positive_pairs = Vec::new();
         let mut negative_pairs = Vec::new();
 
@@ -1467,8 +1469,8 @@ impl ContrastiveOptimizer {
     }
 }
 
-impl DataAugmentation {
-    pub fn default() -> Self {
+impl Default for DataAugmentation {
+    fn default() -> Self {
         Self {
             text_augmentations: vec![
                 TextAugmentation::RandomWordDropout(0.1),
@@ -1492,6 +1494,12 @@ impl DataAugmentation {
             cross_modal_mixup: false,
             augmentation_probability: 0.5,
         }
+    }
+}
+
+impl Default for CurriculumLearning {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1553,7 +1561,7 @@ mod tests {
             )
             .unwrap();
 
-        assert!(similarity >= -1.0 && similarity <= 1.0);
+        assert!((-1.0..=1.0).contains(&similarity));
     }
 
     #[test]

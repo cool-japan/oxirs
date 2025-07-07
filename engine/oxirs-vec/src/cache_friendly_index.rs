@@ -274,9 +274,8 @@ impl CacheFriendlyVectorIndex {
 
     /// Prefetch data for upcoming access
     #[inline(always)]
-    fn prefetch_vector(&self, index: usize) {
+    fn prefetch_vector(&self, _index: usize) {
         if !self.config.enable_prefetch {
-            return;
         }
 
         // Prefetch vector data for next few vectors
@@ -299,7 +298,6 @@ impl CacheFriendlyVectorIndex {
 
     /// Sequential search with cache-friendly access pattern
     fn search_sequential(&self, query: &[f32], k: usize) -> Vec<(usize, f32)> {
-        use oxirs_core::simd::SimdOps;
 
         let count = self.hot_data.vectors_soa.count.load(Ordering::Relaxed);
         let metric = self.config.similarity_config.primary_metric;
@@ -427,7 +425,6 @@ impl CacheFriendlyVectorIndex {
 
     /// Compute similarity for a specific index
     fn compute_similarity_at(&self, query: &[f32], idx: usize) -> f32 {
-        use oxirs_core::simd::SimdOps;
 
         let metric = self.config.similarity_config.primary_metric;
 
@@ -531,7 +528,7 @@ impl VectorIndex for CacheFriendlyVectorIndex {
         Ok(results)
     }
 
-    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+    fn get_vector(&self, _uri: &str) -> Option<&Vector> {
         // This requires reconstructing the vector from SoA layout
         // For now, return None as this is primarily an optimization for search
         None
@@ -569,7 +566,7 @@ mod tests {
         // Insert test vectors
         for i in 0..100 {
             let vector = Vector::new(vec![i as f32; 128]);
-            index.insert(format!("vec_{}", i), vector).unwrap();
+            index.insert(format!("vec_{i}"), vector).unwrap();
         }
 
         // Search for nearest neighbors

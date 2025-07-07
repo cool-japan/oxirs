@@ -5,7 +5,7 @@
 
 use crate::network::{NetworkService, RpcMessage};
 use crate::raft::OxirsNodeId;
-use crate::shard::{ShardId, ShardMetadata};
+use crate::shard::ShardId;
 use crate::storage::StorageBackend;
 use anyhow::Result;
 use oxirs_core::model::Triple;
@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock, Semaphore};
-use tokio::time::{interval, Instant};
+use tokio::time::Instant;
 use tracing::{debug, error, info, warn};
 
 /// Migration strategy types

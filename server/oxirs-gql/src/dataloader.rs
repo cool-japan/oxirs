@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -209,12 +209,15 @@ where
 
         if self.config.enable_cache {
             for key in keys {
-                if let Some(cached_value) = self.get_from_cache(&key).await {
-                    results.insert(key, cached_value);
-                    self.update_stats_cache_hit().await;
-                } else {
-                    missing_keys.push(key);
-                    self.update_stats_cache_miss().await;
+                match self.get_from_cache(&key).await {
+                    Some(cached_value) => {
+                        results.insert(key, cached_value);
+                        self.update_stats_cache_hit().await;
+                    }
+                    _ => {
+                        missing_keys.push(key);
+                        self.update_stats_cache_miss().await;
+                    }
                 }
                 self.update_stats_request().await;
             }
@@ -580,7 +583,7 @@ mod tests {
 
             let mut results = HashMap::new();
             for key in keys {
-                results.insert(key, format!("value_{}", key));
+                results.insert(key, format!("value_{key}"));
             }
             Ok(results)
         }

@@ -3,6 +3,10 @@
 //! Provides comprehensive analytics, insights, pattern recognition, and conversation intelligence
 //! to help understand user behavior, optimize responses, and improve the chat experience.
 
+mod anomaly_detector;
+mod pattern_detector;
+mod types;
+
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -24,6 +28,11 @@ use crate::{
     types::*,
     ChatSession, Message, MessageContent, MessageMetadata, MessageRole, SessionMetrics,
 };
+
+// Re-export all types and components
+pub use anomaly_detector::*;
+pub use pattern_detector::*;
+pub use types::*;
 
 /// Message intent classification with confidence
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -4,16 +4,16 @@
 //! rate limiting, query depth analysis, query whitelisting, SQL injection prevention,
 //! and advanced threat detection for GraphQL endpoints.
 
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
+use serde::Serialize;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::net::IpAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::instrument;
 
-use crate::ast::{Document, Field, OperationType, Selection, SelectionSet, Value};
+use crate::ast::OperationType;
 
 /// Security configuration for GraphQL endpoints
 #[derive(Debug, Clone)]
@@ -399,12 +399,12 @@ impl AdvancedSecuritySystem {
     }
 
     /// Validate a GraphQL request
-    #[instrument(skip(self, query, variables))]
+    #[instrument(skip(self, query))]
     pub async fn validate_request(
         &self,
         context: &SecurityContext,
         query: &str,
-        variables: Option<&serde_json::Value>,
+        _variables: Option<&serde_json::Value>,
         operation_name: Option<&str>,
     ) -> Result<Vec<SecurityViolation>> {
         let mut violations = Vec::new();

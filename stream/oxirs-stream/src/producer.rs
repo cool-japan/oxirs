@@ -3,7 +3,6 @@
 //! Producer types and configuration for streaming backends.
 
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
 
 /// Producer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

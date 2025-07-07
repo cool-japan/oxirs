@@ -15,10 +15,9 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Mutex, RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::error::StreamError;
 use crate::StreamEvent;
 
 /// Delivery guarantee levels
@@ -123,9 +122,10 @@ impl Default for DlqConfig {
 }
 
 /// Replay status for DLQ messages
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum ReplayStatus {
     /// Message is available for replay
+    #[default]
     Available,
     /// Message is currently being replayed
     InProgress,
@@ -135,12 +135,6 @@ pub enum ReplayStatus {
     Failed,
     /// Message replay is temporarily paused
     Paused,
-}
-
-impl Default for ReplayStatus {
-    fn default() -> Self {
-        ReplayStatus::Available
-    }
 }
 
 /// Message wrapper with reliability metadata
@@ -574,7 +568,7 @@ impl ReliabilityManager {
                 // Process retry queue
                 let message = retry_queue.lock().await.pop_front();
 
-                if let Some(mut msg) = message {
+                if let Some(msg) = message {
                     // Calculate retry delay
                     let delay = msg.next_retry_delay(&config);
 
@@ -1016,7 +1010,7 @@ mod tests {
         for i in 0..3 {
             let event = StreamEvent::Heartbeat {
                 timestamp: Utc::now(),
-                source: format!("test-{}", i),
+                source: format!("test-{i}"),
                 metadata: crate::event::EventMetadata::default(),
             };
 

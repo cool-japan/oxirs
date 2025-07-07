@@ -3,17 +3,17 @@
 //! This module provides real-time performance analytics with predictive capabilities,
 //! anomaly detection, capacity planning, and intelligent alerting.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 use tokio::sync::{broadcast, Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio::time::{interval, Interval};
-use tracing::{debug, error, info, warn};
+use tokio::time::interval;
+use tracing::{error, info};
 
-use crate::ai_query_predictor::{AIQueryPredictor, QueryPrediction};
-use crate::performance::{OperationMetrics, PerformanceStats, PerformanceTracker};
+use crate::ai_query_predictor::AIQueryPredictor;
+use crate::performance::{PerformanceStats, PerformanceTracker};
 
 /// Configuration for predictive analytics
 #[derive(Debug, Clone)]

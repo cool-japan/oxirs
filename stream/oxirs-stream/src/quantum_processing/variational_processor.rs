@@ -13,7 +13,7 @@ impl VariationalProcessor {
         Self {
             config,
             ansatz_types: vec![
-                VariationalAnsatz::Hardware_efficient,
+                VariationalAnsatz::HardwareEfficient,
                 VariationalAnsatz::UCCSD,
             ],
         }
@@ -23,7 +23,7 @@ impl VariationalProcessor {
 /// Variational ansatz types
 #[derive(Debug, Clone)]
 pub enum VariationalAnsatz {
-    Hardware_efficient,
+    HardwareEfficient,
     UCCSD,
     RealAmplitudes,
     EfficientSU2,

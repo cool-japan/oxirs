@@ -385,7 +385,7 @@ impl<'a> QueryExecutor<'a> {
         let mut distinct_solutions = Vec::new();
 
         for solution in solutions {
-            if seen.insert(format!("{:?}", solution)) {
+            if seen.insert(format!("{solution:?}")) {
                 distinct_solutions.push(solution);
             }
         }
@@ -542,6 +542,7 @@ impl<'a> QueryExecutor<'a> {
     }
 
     /// Evaluate an expression to a term value
+    #[allow(clippy::only_used_in_recursion)]
     fn evaluate_expression_to_term(&self, expr: &Expression, solution: &Solution) -> Option<Term> {
         match expr {
             Expression::Variable(var) => solution.get(var).cloned(),

@@ -101,23 +101,26 @@ fn deeply_nested_triple_strategy(max_depth: u32) -> BoxedStrategy<StarTriple> {
 fn malformed_rdf_strategy() -> impl Strategy<Value = String> {
     prop_oneof![
         // Missing closing brackets
-        "<http://example.org/s> <http://example.org/p> <http://example.org/o",
+        Just("<http://example.org/s> <http://example.org/p> <http://example.org/o".to_string()),
         // Extra closing brackets
-        "<http://example.org/s> <http://example.org/p> <http://example.org/o>> .",
+        Just("<http://example.org/s> <http://example.org/p> <http://example.org/o>> .".to_string()),
         // Missing dots
-        "<http://example.org/s> <http://example.org/p> <http://example.org/o>",
+        Just("<http://example.org/s> <http://example.org/p> <http://example.org/o>".to_string()),
         // Invalid prefixes
-        "@prefix : <> .",
-        "@prefix invalid: incomplete",
+        Just("@prefix : <> .".to_string()),
+        Just("@prefix invalid: incomplete".to_string()),
         // Malformed literals
-        "\"unclosed literal",
-        "\"literal\"@invalid-lang",
-        "\"literal\"^^<invalid-datatype>",
+        Just("\"unclosed literal".to_string()),
+        Just("\"literal\"@invalid-lang".to_string()),
+        Just("\"literal\"^^<invalid-datatype>".to_string()),
         // Invalid quoted triples
-        "<<<http://example.org/s> <http://example.org/p> <http://example.org/o>>> incomplete",
-        "<<incomplete>> <http://example.org/p> <http://example.org/o> .",
+        Just(
+            "<<<http://example.org/s> <http://example.org/p> <http://example.org/o>>> incomplete"
+                .to_string()
+        ),
+        Just("<<incomplete>> <http://example.org/p> <http://example.org/o> .".to_string()),
         // Mixed syntax
-        "<s> <p> \"o\" . { <s2> <p2> <o2> .",
+        Just("<s> <p> \"o\" . { <s2> <p2> <o2> .".to_string()),
     ]
 }
 
@@ -206,7 +209,7 @@ mod tests {
                 match result {
                     Ok(graph) => {
                         // If parsing succeeds unexpectedly, graph should be valid
-                        prop_assert!(graph.len() >= 0);
+                        // (graph.len() is always >= 0 by type invariant)
                         prop_assert!(graph.is_valid());
                     },
                     Err(error) => {
@@ -319,7 +322,7 @@ mod tests {
 
             // Graph should maintain consistency
             prop_assert!(graph.len() <= operations);
-            prop_assert!(graph.len() >= 0);
+            // (graph.len() is always >= 0 by type invariant)
 
             // Should be able to clear efficiently
             graph.clear();

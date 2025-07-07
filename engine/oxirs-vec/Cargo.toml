@@ -38,7 +38,7 @@ regex = "1.11"
 pdf-extract = { version = "0.7", optional = true }
 zip = { version = "2.2", optional = true }
 quick-xml = { version = "0.37", optional = true }
-base64 = { version = "0.22", optional = true }
+base64 = "0.22"
 image = { version = "0.25", optional = true }
 chrono = { version = "0.4", features = ["serde"] }
 cuda-runtime-sys = { version = "0.3.0-alpha.1", optional = true }
@@ -51,6 +51,9 @@ uuid = { version = "1.11", features = ["v4"] }
 num_cpus = "1.16"
 humantime = "2.1"
 indicatif = "0.17"
+# HuggingFace integration
+tokenizers = { version = "0.20", optional = true }
+hf-hub = { version = "0.4", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
@@ -67,6 +70,7 @@ cuda = ["cuda-runtime-sys", "cudarc"]
 candle-gpu = ["candle-core"]
 gpu-full = ["cuda", "candle-gpu", "gpu"]
 images = ["image"]
-content-processing = ["pdf-extract", "zip", "quick-xml", "base64", "images"]
+content-processing = ["pdf-extract", "zip", "quick-xml", "images"]
 python = ["pyo3", "numpy"]
+huggingface = ["tokenizers", "hf-hub"]
 

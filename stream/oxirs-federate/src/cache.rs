@@ -5,10 +5,12 @@
 
 use anyhow::{anyhow, Result};
 use bloom::{BloomFilter, ASMS};
+use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use lru::LruCache;
 use moka::future::Cache as AsyncCache;
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
+use std::io::{Read, Write};
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -239,14 +241,14 @@ impl FederationCache {
 
     /// Get cached capabilities
     pub async fn get_capabilities(&self, service_id: &str) -> Option<Vec<ServiceCapability>> {
-        let cache_key = format!("capabilities:{}", service_id);
+        let cache_key = format!("capabilities:{service_id}");
         self.get_typed_value(&cache_key, CacheType::Capabilities)
             .await
     }
 
     /// Cache capabilities
     pub async fn put_capabilities(&self, service_id: &str, capabilities: Vec<ServiceCapability>) {
-        let cache_key = format!("capabilities:{}", service_id);
+        let cache_key = format!("capabilities:{service_id}");
         let entry = CacheEntry {
             value: CacheValue::Capabilities(capabilities),
             created_at: SystemTime::now(),
@@ -284,9 +286,9 @@ impl FederationCache {
     /// Invalidate all cache entries for a service
     pub async fn invalidate_service(&self, service_id: &str) {
         let prefixes = vec![
-            format!("service_meta:{}", service_id),
-            format!("schema:{}", service_id),
-            format!("capabilities:{}", service_id),
+            format!("service_meta:{service_id}"),
+            format!("schema:{service_id}"),
+            format!("capabilities:{service_id}"),
         ];
 
         for prefix in prefixes {
@@ -413,7 +415,7 @@ impl FederationCache {
 
         // Cache for common service types
         for service_type in &["sparql", "graphql", "federation"] {
-            self.put_service_metadata(&format!("warmup-{}", service_type), metadata.clone())
+            self.put_service_metadata(&format!("warmup-{service_type}"), metadata.clone())
                 .await;
         }
 
@@ -868,7 +870,8 @@ impl RedisCache {
             .map_err(|e| anyhow!("Failed to serialize cache entry: {}", e))?;
 
         if let Some(ttl) = ttl {
-            conn.set_ex(key, serialized, ttl.as_secs()).await
+            conn.set_ex::<_, _, ()>(key, serialized, ttl.as_secs())
+                .await
         } else {
             conn.set(key, serialized).await
         }
@@ -886,7 +889,7 @@ impl RedisCache {
             .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
 
-        conn.del(key)
+        conn.del::<_, ()>(key)
             .await
             .map_err(|e| anyhow!("Redis delete failed: {}", e))?;
 
@@ -909,7 +912,7 @@ impl RedisCache {
             .map_err(|e| anyhow!("Redis keys scan failed: {}", e))?;
 
         if !keys.is_empty() {
-            conn.del(&keys)
+            conn.del::<_, ()>(&keys)
                 .await
                 .map_err(|e| anyhow!("Redis bulk delete failed: {}", e))?;
         }
@@ -1092,6 +1095,146 @@ pub struct CacheEfficiencyMetrics {
     pub query_cache_effectiveness: f64,
     /// Metadata cache effectiveness (metadata hits / total requests)
     pub metadata_cache_effectiveness: f64,
+}
+
+/// Compression utilities for cache entries
+impl FederationCache {
+    /// Compress cache entry data for storage efficiency
+    fn compress_data(data: &[u8]) -> Result<Vec<u8>> {
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder.write_all(data)?;
+        encoder.finish().map_err(Into::into)
+    }
+
+    /// Decompress cache entry data
+    fn decompress_data(compressed: &[u8]) -> Result<Vec<u8>> {
+        let mut decoder = GzDecoder::new(compressed);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed)?;
+        Ok(decompressed)
+    }
+
+    /// Check if entry should be compressed based on size
+    fn should_compress(size: usize) -> bool {
+        size > 1024 // Compress entries larger than 1KB
+    }
+
+    /// Enhanced memory pressure monitoring
+    pub async fn check_memory_pressure(&self) -> MemoryPressureLevel {
+        let stats = self.get_stats().await;
+        let l1_usage = {
+            let l1 = self.l1_cache.read().await;
+            l1.len() as f64 / l1.cap().get() as f64
+        };
+
+        // Estimate memory usage based on cache statistics
+        let estimated_memory_mb = (stats.hits + stats.misses) as f64 * 0.5; // Rough estimate
+
+        if l1_usage > 0.9 || estimated_memory_mb > 1000.0 {
+            MemoryPressureLevel::High
+        } else if l1_usage > 0.7 || estimated_memory_mb > 500.0 {
+            MemoryPressureLevel::Medium
+        } else {
+            MemoryPressureLevel::Low
+        }
+    }
+
+    /// Adaptive cache cleanup based on memory pressure
+    pub async fn adaptive_cleanup(&self) -> Result<u64> {
+        let pressure = self.check_memory_pressure().await;
+        let mut cleaned = 0u64;
+
+        match pressure {
+            MemoryPressureLevel::High => {
+                // Aggressive cleanup - remove 30% of L1 cache
+                let mut l1 = self.l1_cache.write().await;
+                let target_removals = (l1.len() as f64 * 0.3) as usize;
+                for _ in 0..target_removals {
+                    if l1.pop_lru().is_some() {
+                        cleaned += 1;
+                    }
+                }
+                info!("High memory pressure: cleaned {} L1 entries", cleaned);
+            }
+            MemoryPressureLevel::Medium => {
+                // Moderate cleanup - remove 15% of L1 cache
+                let mut l1 = self.l1_cache.write().await;
+                let target_removals = (l1.len() as f64 * 0.15) as usize;
+                for _ in 0..target_removals {
+                    if l1.pop_lru().is_some() {
+                        cleaned += 1;
+                    }
+                }
+                debug!("Medium memory pressure: cleaned {} L1 entries", cleaned);
+            }
+            MemoryPressureLevel::Low => {
+                // Light cleanup - just expired entries
+                debug!("Low memory pressure: no cleanup needed");
+            }
+        }
+
+        Ok(cleaned)
+    }
+
+    /// Intelligent prefetching based on query patterns
+    pub async fn intelligent_prefetch(&self, query_patterns: &[String]) -> Result<u64> {
+        let mut prefetched = 0u64;
+
+        for pattern in query_patterns {
+            // Generate related cache keys that might be needed
+            let related_keys = self.generate_related_cache_keys(pattern);
+
+            for key in related_keys {
+                if self.get_query_result(&key).await.is_none() {
+                    // Prefetch placeholder entry to warm cache
+                    let placeholder = CacheEntry {
+                        value: CacheValue::QueryResult(QueryResultCache::Sparql(SparqlResults {
+                            head: crate::executor::SparqlHead { vars: vec![] },
+                            results: crate::executor::SparqlResultsData { bindings: vec![] },
+                        })),
+                        created_at: SystemTime::now(),
+                        expires_at: SystemTime::now() + Duration::from_secs(300),
+                        access_count: 0,
+                        last_accessed: SystemTime::now(),
+                    };
+
+                    self.put_entry(&key, placeholder).await;
+                    prefetched += 1;
+                }
+            }
+        }
+
+        info!("Intelligent prefetch completed: {} entries", prefetched);
+        Ok(prefetched)
+    }
+
+    /// Generate related cache keys for a query pattern
+    fn generate_related_cache_keys(&self, pattern: &str) -> Vec<String> {
+        let mut keys = Vec::new();
+
+        // Generate variations of the query pattern
+        keys.push(format!("query_variant_1:{pattern}"));
+        keys.push(format!("query_variant_2:{pattern}"));
+        keys.push(format!("related_pattern:{pattern}"));
+
+        // Add common prefixes based on pattern analysis
+        if pattern.contains("SELECT") {
+            keys.push(format!("select_optimization:{pattern}"));
+        }
+        if pattern.contains("SERVICE") {
+            keys.push(format!("service_prefetch:{pattern}"));
+        }
+
+        keys
+    }
+}
+
+/// Memory pressure levels for adaptive management
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MemoryPressureLevel {
+    Low,
+    Medium,
+    High,
 }
 
 #[cfg(test)]

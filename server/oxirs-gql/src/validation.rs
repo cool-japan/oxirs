@@ -389,7 +389,7 @@ impl QueryValidator {
     fn validate_variables(
         &self,
         variable_definitions: &[VariableDefinition],
-        context: &ValidationContext,
+        _context: &ValidationContext,
         mut result: ValidationResult,
     ) -> Result<ValidationResult> {
         for var_def in variable_definitions {

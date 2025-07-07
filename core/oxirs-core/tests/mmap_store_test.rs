@@ -4,7 +4,7 @@ use anyhow::Result;
 use oxirs_core::model::{
     BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject,
 };
-use oxirs_core::store::{MmapStore, StoreStats};
+use oxirs_core::store::MmapStore;
 use std::sync::{Arc, Barrier};
 use std::thread;
 use tempfile::TempDir;
@@ -36,10 +36,12 @@ fn test_add_and_persist_quads() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let path = temp_dir.path();
 
-    // Add quads and verify persistence
+    // Add quads and verify persistence using batch API for better performance
     {
         let store = MmapStore::new(path)?;
 
+        // Create all quads first, then add them in a batch
+        let mut quads = Vec::with_capacity(100);
         for i in 0..100 {
             let quad = Quad::new(
                 Subject::NamedNode(NamedNode::new(&format!(
@@ -50,9 +52,11 @@ fn test_add_and_persist_quads() -> Result<()> {
                 Object::Literal(Literal::new_simple_literal(&format!("value {}", i))),
                 GraphName::DefaultGraph,
             );
-            store.add(&quad)?;
+            quads.push(quad);
         }
 
+        // Use batch API for much better performance
+        store.add_batch(&quads)?;
         store.flush()?;
         assert_eq!(store.len(), 100);
     }
@@ -119,7 +123,8 @@ fn test_blank_nodes() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = MmapStore::new(temp_dir.path())?;
 
-    // Add quads with blank nodes
+    // Add quads with blank nodes using batch API for better performance
+    let mut quads = Vec::with_capacity(50);
     for i in 0..50 {
         let quad = Quad::new(
             Subject::BlankNode(BlankNode::new(&format!("b{}", i))?),
@@ -127,9 +132,10 @@ fn test_blank_nodes() -> Result<()> {
             Object::BlankNode(BlankNode::new(&format!("b{}", i + 50))?),
             GraphName::DefaultGraph,
         );
-        store.add(&quad)?;
+        quads.push(quad);
     }
 
+    store.add_batch(&quads)?;
     store.flush()?;
     assert_eq!(store.len(), 50);
 
@@ -303,26 +309,30 @@ fn test_very_large_dataset() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = MmapStore::new(temp_dir.path())?;
 
-    // Add 1 million quads
-    for i in 0..1_000_000 {
-        let quad = Quad::new_default_graph(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/entity/{}", i))?),
-            Predicate::NamedNode(NamedNode::new(&format!(
-                "http://example.org/property/{}",
-                i % 100
-            ))?),
-            Object::Literal(Literal::new_typed(
-                &format!("{}", i),
-                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?,
-            )),
-        );
-        store.add(&quad)?;
+    // Add 1 million quads using efficient batching
+    let batch_size = 10_000;
+    for batch_start in (0..1_000_000).step_by(batch_size) {
+        let batch_end = std::cmp::min(batch_start + batch_size, 1_000_000);
+        let mut quads = Vec::with_capacity(batch_end - batch_start);
 
-        // Flush every 10,000 quads
-        if i % 10_000 == 9_999 {
-            store.flush()?;
-            println!("Progress: {} quads", i + 1);
+        for i in batch_start..batch_end {
+            let quad = Quad::new_default_graph(
+                Subject::NamedNode(NamedNode::new(&format!("http://example.org/entity/{}", i))?),
+                Predicate::NamedNode(NamedNode::new(&format!(
+                    "http://example.org/property/{}",
+                    i % 100
+                ))?),
+                Object::Literal(Literal::new_typed(
+                    &format!("{}", i),
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?,
+                )),
+            );
+            quads.push(quad);
         }
+
+        store.add_batch(&quads)?;
+        store.flush()?;
+        println!("Progress: {} quads", batch_end);
     }
 
     store.flush()?;

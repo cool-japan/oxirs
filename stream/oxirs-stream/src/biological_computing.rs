@@ -4,13 +4,11 @@
 //! data processing, including DNA storage algorithms, protein folding optimization,
 //! cellular automata, and evolutionary computation for streaming RDF data.
 
-use async_trait::async_trait;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
 
 use crate::error::{StreamError, StreamResult};
 use crate::event::StreamEvent;
@@ -346,6 +344,7 @@ impl CellularAutomaton {
     pub fn evolve(&mut self) {
         let mut new_grid = self.grid.clone();
 
+        #[allow(clippy::needless_range_loop)]
         for y in 0..self.height {
             for x in 0..self.width {
                 let neighbors = self.count_live_neighbors(x, y);
@@ -537,7 +536,7 @@ impl EvolutionaryOptimizer {
 
             // Crossover
             let (mut child1, mut child2) = if rand::random::<f64>() < self.crossover_rate {
-                self.crossover(&parent1, &parent2)
+                self.crossover(parent1, parent2)
             } else {
                 (parent1.clone(), parent2.clone())
             };
@@ -584,10 +583,8 @@ impl EvolutionaryOptimizer {
         let mut child2_genome = parent2.genome.clone();
 
         // Single-point crossover
-        for i in crossover_point..parent1.genome.len() {
-            child1_genome[i] = parent2.genome[i];
-            child2_genome[i] = parent1.genome[i];
-        }
+        child1_genome[crossover_point..parent1.genome.len()].copy_from_slice(&parent2.genome[crossover_point..]);
+        child2_genome[crossover_point..parent1.genome.len()].copy_from_slice(&parent1.genome[crossover_point..]);
 
         (
             Individual {
@@ -628,7 +625,7 @@ pub struct BiologicalStreamProcessor {
     /// DNA storage system
     dna_storage: HashMap<String, DNASequence>,
     /// Protein folding optimizer
-    protein_optimizer: HashMap<String, ProteinStructure>,
+    _protein_optimizer: HashMap<String, ProteinStructure>,
     /// Cellular automaton for distributed processing
     automaton: CellularAutomaton,
     /// Evolutionary optimizer
@@ -658,12 +655,18 @@ pub struct BiologicalProcessingStats {
     pub error_correction_rate: f64,
 }
 
+impl Default for BiologicalStreamProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BiologicalStreamProcessor {
     /// Create a new biological stream processor
     pub fn new() -> Self {
         Self {
             dna_storage: HashMap::new(),
-            protein_optimizer: HashMap::new(),
+            _protein_optimizer: HashMap::new(),
             automaton: CellularAutomaton::new(32, 32), // 32x32 cell grid
             evolutionary_optimizer: EvolutionaryOptimizer::new(100, 50), // Population 100, genome size 50
             stats: Arc::new(RwLock::new(BiologicalProcessingStats::default())),

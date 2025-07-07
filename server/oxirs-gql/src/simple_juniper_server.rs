@@ -5,13 +5,13 @@
 
 use crate::juniper_schema::{create_schema, GraphQLContext, Schema};
 use crate::RdfStore;
-use anyhow::{anyhow, Result};
-use juniper::{execute, InputValue, Variables};
+use anyhow::Result;
+use juniper::{execute, Variables};
 use serde_json;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tracing::{error, info, warn};
+use tracing::{error, info};
 
 /// Configuration for the GraphQL server
 #[derive(Debug, Clone)]

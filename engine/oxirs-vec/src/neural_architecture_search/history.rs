@@ -88,8 +88,8 @@ impl SearchHistory {
 
     /// Update search statistics
     pub fn update_statistics(&mut self, generation: usize, evaluation_time: f64) {
-        self.search_stats.avg_evaluation_time_minutes = 
-            (self.search_stats.avg_evaluation_time_minutes * (self.search_stats.total_evaluations - 1) as f64 + evaluation_time) 
+        self.search_stats.avg_evaluation_time_minutes =
+            (self.search_stats.avg_evaluation_time_minutes * (self.search_stats.total_evaluations - 1) as f64 + evaluation_time)
             / self.search_stats.total_evaluations as f64;
     }
 

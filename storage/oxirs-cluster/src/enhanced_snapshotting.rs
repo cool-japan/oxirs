@@ -13,12 +13,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::sync::{mpsc, Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::{Mutex, RwLock};
+use tracing::{debug, error, info};
 
 /// Snapshot format version
 pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
@@ -232,7 +231,7 @@ impl EnhancedSnapshotManager {
         };
 
         // Serialize the snapshot data
-        let mut serializer = self.serializer.lock().await;
+        let serializer = self.serializer.lock().await;
         let serialized_data = serializer.serialize(&snapshot_data)?;
         drop(serializer);
 
@@ -284,7 +283,7 @@ impl EnhancedSnapshotManager {
 
         // Save metadata
         let metadata_path = snapshot_dir.join("metadata.json");
-        let mut serializer = self.serializer.lock().await;
+        let serializer = self.serializer.lock().await;
         let metadata_data = serializer.serialize(&enhanced_metadata)?;
         drop(serializer);
         let mut writer = AtomicFileWriter::new(&metadata_path).await?;

@@ -549,25 +549,25 @@ impl OxirsPerformanceBenchmarkSuite {
     pub fn initialize_default_benchmarks(&mut self) -> Result<()> {
         // ARQ module benchmarks
         self.add_arq_benchmarks()?;
-        
+
         // SHACL module benchmarks
         self.add_shacl_benchmarks()?;
-        
+
         // Vector module benchmarks
         self.add_vec_benchmarks()?;
-        
+
         // Star module benchmarks
         self.add_star_benchmarks()?;
-        
+
         // Rule module benchmarks
         self.add_rule_benchmarks()?;
-        
+
         // Core module benchmarks
         self.add_core_benchmarks()?;
-        
+
         // Cross-module benchmarks
         self.add_cross_module_benchmarks()?;
-        
+
         Ok(())
     }
 
@@ -1013,26 +1013,26 @@ impl OxirsPerformanceBenchmarkSuite {
     pub async fn run_all_benchmarks(&mut self) -> Result<BenchmarkReport> {
         let start_time = Instant::now();
         let mut results = Vec::new();
-        
+
         // Run module benchmarks
         for (module_id, module_benchmark) in &self.module_benchmarks {
             let module_results = self.run_module_benchmarks(*module_id, module_benchmark).await?;
             results.extend(module_results);
         }
-        
+
         // Run cross-module benchmarks
         let cross_module_results = self.run_cross_module_benchmarks().await?;
         results.extend(cross_module_results);
-        
+
         // Analyze results
         let analysis = self.analyze_results(&results).await?;
-        
+
         // Detect regressions
         let regressions = self.detect_regressions(&results).await?;
-        
+
         // Update performance history
         self.update_performance_history(&results).await?;
-        
+
         Ok(BenchmarkReport {
             timestamp: chrono::Utc::now().to_rfc3339(),
             total_duration: start_time.elapsed(),
@@ -1051,24 +1051,24 @@ impl OxirsPerformanceBenchmarkSuite {
         module_benchmark: &ModuleBenchmark,
     ) -> Result<Vec<BenchmarkResult>> {
         let mut results = Vec::new();
-        
+
         for scenario in &module_benchmark.scenarios {
             let result = self.run_scenario_benchmark(module_id, scenario).await?;
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
     /// Run cross-module benchmarks
     async fn run_cross_module_benchmarks(&self) -> Result<Vec<BenchmarkResult>> {
         let mut results = Vec::new();
-        
+
         for benchmark in &self.cross_module_benchmarks {
             let result = self.run_cross_module_benchmark(benchmark).await?;
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
@@ -1085,9 +1085,9 @@ impl OxirsPerformanceBenchmarkSuite {
         // 3. Execute benchmark iterations
         // 4. Collect performance metrics
         // 5. Clean up resources
-        
+
         tokio::time::sleep(Duration::from_millis(10)).await;
-        
+
         Ok(BenchmarkResult {
             timestamp: chrono::Utc::now().to_rfc3339(),
             module: format!("{:?}", module_id),
@@ -1149,7 +1149,7 @@ impl OxirsPerformanceBenchmarkSuite {
     ) -> Result<BenchmarkResult> {
         // Placeholder implementation
         tokio::time::sleep(Duration::from_millis(100)).await;
-        
+
         Ok(BenchmarkResult {
             timestamp: chrono::Utc::now().to_rfc3339(),
             module: "CrossModule".to_string(),
@@ -1217,16 +1217,16 @@ impl OxirsPerformanceBenchmarkSuite {
     /// Update performance history
     async fn update_performance_history(&self, results: &[BenchmarkResult]) -> Result<()> {
         let mut history = self.performance_history.write().await;
-        
+
         for result in results {
             let key = (
                 result.module.parse::<ModuleId>().unwrap_or(ModuleId::Core),
                 result.scenario.clone(),
             );
-            
+
             history.history.entry(key).or_insert_with(Vec::new).push(result.clone());
         }
-        
+
         Ok(())
     }
 
@@ -1284,7 +1284,7 @@ impl OxirsPerformanceBenchmarkSuite {
     fn generate_csv_report(&self, report: &BenchmarkReport) -> Result<String> {
         let mut csv = String::new();
         csv.push_str("Module,Scenario,Mean Time (ms),Peak Memory (MB),Throughput (ops/sec),Error Rate\n");
-        
+
         for result in &report.results {
             csv.push_str(&format!(
                 "{},{},{},{},{},{}\n",
@@ -1296,14 +1296,14 @@ impl OxirsPerformanceBenchmarkSuite {
                 result.metrics.error_metrics.error_rate
             ));
         }
-        
+
         Ok(csv)
     }
 
     /// Generate Prometheus metrics
     fn generate_prometheus_metrics(&self, report: &BenchmarkReport) -> Result<String> {
         let mut metrics = String::new();
-        
+
         for result in &report.results {
             metrics.push_str(&format!(
                 "oxirs_benchmark_execution_time{{module=\"{}\",scenario=\"{}\"}} {}\n",
@@ -1311,14 +1311,14 @@ impl OxirsPerformanceBenchmarkSuite {
                 result.scenario,
                 result.metrics.execution_time.mean.as_millis()
             ));
-            
+
             metrics.push_str(&format!(
                 "oxirs_benchmark_memory_usage{{module=\"{}\",scenario=\"{}\"}} {}\n",
                 result.module,
                 result.scenario,
                 result.metrics.memory_usage.peak_usage
             ));
-            
+
             metrics.push_str(&format!(
                 "oxirs_benchmark_throughput{{module=\"{}\",scenario=\"{}\"}} {}\n",
                 result.module,
@@ -1326,7 +1326,7 @@ impl OxirsPerformanceBenchmarkSuite {
                 result.metrics.throughput.ops_per_second
             ));
         }
-        
+
         Ok(metrics)
     }
 }
@@ -1492,7 +1492,7 @@ mod tests {
     async fn test_benchmark_suite_creation() {
         let config = BenchmarkConfig::default();
         let mut suite = OxirsPerformanceBenchmarkSuite::new(config);
-        
+
         assert!(suite.initialize_default_benchmarks().is_ok());
         assert!(!suite.module_benchmarks.is_empty());
         assert!(!suite.cross_module_benchmarks.is_empty());
@@ -1506,7 +1506,7 @@ mod tests {
         };
         let mut suite = OxirsPerformanceBenchmarkSuite::new(config);
         suite.initialize_default_benchmarks().unwrap();
-        
+
         let report = suite.run_all_benchmarks().await.unwrap();
         assert!(!report.results.is_empty());
         assert!(report.total_duration > Duration::ZERO);

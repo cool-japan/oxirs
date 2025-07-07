@@ -10,7 +10,7 @@ use crate::{
 };
 use anyhow::{bail, Context, Result};
 use blake3::Hasher;
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use memmap2::{Mmap, MmapOptions};
 use oxirs_core::parallel::*;
 use parking_lot::{Mutex, RwLock};
 use std::collections::{BinaryHeap, HashMap};
@@ -27,6 +27,9 @@ const VERSION: u32 = 1;
 
 /// Default page size for memory mapping (4KB)
 const PAGE_SIZE: usize = 4096;
+
+/// Vector page size for advanced memory mapping (16KB for better vector alignment)
+const VECTOR_PAGE_SIZE: usize = 16384;
 
 /// Header size (must be page-aligned)
 const HEADER_SIZE: usize = PAGE_SIZE;
@@ -119,6 +122,7 @@ impl MemoryMappedVectorIndex {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(true)
             .open(&path)
             .context("Failed to open data file")?;
 
@@ -139,7 +143,7 @@ impl MemoryMappedVectorIndex {
             header
         } else {
             // Existing file, read header
-            let mut mmap = unsafe { MmapOptions::new().map(&data_file)? };
+            let mmap = unsafe { MmapOptions::new().map(&data_file)? };
             let header = unsafe { std::ptr::read(mmap.as_ptr() as *const FileHeader) };
             header.validate()?;
             header
@@ -169,19 +173,29 @@ impl MemoryMappedVectorIndex {
         Ok(index)
     }
 
-    /// Reload memory mapping
+    /// Reload memory mapping with optimized configuration
     fn reload_mmap(&mut self) -> Result<()> {
         let file = self.data_file.lock();
         let file_len = file.metadata()?.len();
 
         if file_len > HEADER_SIZE as u64 {
-            let mmap = unsafe { MmapOptions::new().map(&*file)? };
+            // Create optimized memory mapping with proper options
+            let mmap = unsafe {
+                MmapOptions::new()
+                    .huge(Some(21)) // Use huge pages (2MB) for better performance
+                    .populate() // Pre-populate pages to reduce page faults
+                    .map(&*file)?
+            };
 
             // Create advanced memory map if lazy loading is enabled
             if self.enable_lazy_loading {
-                // Note: We don't pass the mmap to AdvancedMemoryMap since it can't be cloned
-                // The advanced mmap will create its own mapping
-                let advanced = AdvancedMemoryMap::new(None, 10000);
+                // Calculate optimal page count based on file size
+                let optimal_pages = ((file_len as usize / VECTOR_PAGE_SIZE) / 10)
+                    .clamp(1000, 50000);
+
+                // Create advanced memory mapping with cloned mmap
+                let cloned_mmap = unsafe { MmapOptions::new().map(&*file)? };
+                let advanced = AdvancedMemoryMap::new(Some(cloned_mmap), optimal_pages);
                 self.advanced_mmap = Some(Arc::new(advanced));
             }
 
@@ -234,7 +248,7 @@ impl MemoryMappedVectorIndex {
         Ok(())
     }
 
-    /// Flush write buffer to disk
+    /// Flush write buffer to disk with optimized batch operations
     fn flush_buffer(&self) -> Result<()> {
         let mut buffer = self.write_buffer.lock();
         if buffer.is_empty() {
@@ -246,46 +260,62 @@ impl MemoryMappedVectorIndex {
 
         // Calculate required space
         let vectors_to_write = buffer.len();
-        let vector_data_size = vectors_to_write * header.vector_size as usize;
 
-        // Extend file if needed
-        let current_data_end =
-            header.data_offset + (header.vector_count * header.vector_size as u64);
-        let new_data_end = current_data_end + vector_data_size as u64;
-
-        file.set_len(new_data_end)?;
-        file.seek(SeekFrom::Start(current_data_end))?;
-
-        // Write vectors
-        let mut uri_map = self.uri_map.write();
-        let mut uri_store = self.uri_store.write();
-
-        for (uri, vector) in buffer.drain(..) {
-            // Validate dimensions
+        // Pre-validate all vectors and calculate total size
+        let mut total_vector_data_size = 0;
+        for (_, vector) in buffer.iter() {
             if header.dimensions == 0 {
                 header.dimensions = vector.dimensions as u32;
                 header.vector_size = vector.dimensions as u32 * std::mem::size_of::<f32>() as u32;
+                total_vector_data_size = vectors_to_write * header.vector_size as usize;
             } else if vector.dimensions != header.dimensions as usize {
                 bail!(
                     "Vector dimensions ({}) don't match index dimensions ({})",
                     vector.dimensions,
                     header.dimensions
                 );
+            } else {
+                total_vector_data_size = vectors_to_write * header.vector_size as usize;
             }
-
-            // Write vector data
-            let vector_f32 = vector.as_f32();
-            let vector_bytes: Vec<u8> = vector_f32.iter().flat_map(|&f| f.to_le_bytes()).collect();
-            file.write_all(&vector_bytes)?;
-
-            // Update mappings
-            let vector_id = header.vector_count;
-            uri_map.insert(uri.clone(), vector_id);
-            uri_store.push(uri);
-            header.vector_count += 1;
         }
 
-        // Update header
+        // Extend file if needed
+        let current_data_end =
+            header.data_offset + (header.vector_count * header.vector_size as u64);
+        let new_data_end = current_data_end + total_vector_data_size as u64;
+
+        file.set_len(new_data_end)?;
+        file.seek(SeekFrom::Start(current_data_end))?;
+
+        // Prepare batch write buffer for better I/O performance
+        let mut batch_write_buffer = Vec::with_capacity(total_vector_data_size);
+        let mut uri_updates = Vec::with_capacity(vectors_to_write);
+        let mut uri_map = self.uri_map.write();
+        let mut uri_store = self.uri_store.write();
+
+        // Batch prepare all data in memory first
+        for (uri, vector) in buffer.drain(..) {
+            // Convert vector to bytes
+            let vector_f32 = vector.as_f32();
+            let vector_bytes: Vec<u8> = vector_f32.iter().flat_map(|&f| f.to_le_bytes()).collect();
+            batch_write_buffer.extend_from_slice(&vector_bytes);
+
+            // Prepare URI updates
+            let vector_id = header.vector_count + uri_updates.len() as u64;
+            uri_updates.push((uri, vector_id));
+        }
+
+        // Single large write operation for much better performance
+        file.write_all(&batch_write_buffer)?;
+
+        // Update all URI mappings after successful write
+        for (uri, vector_id) in uri_updates {
+            uri_map.insert(uri.clone(), vector_id);
+            uri_store.push(uri);
+        }
+        header.vector_count += vectors_to_write as u64;
+
+        // Update header with optimized single write
         header.compute_checksum();
         file.seek(SeekFrom::Start(0))?;
         let header_bytes = unsafe {
@@ -295,27 +325,44 @@ impl MemoryMappedVectorIndex {
             )
         };
         file.write_all(header_bytes)?;
+
+        // Use fsync for better durability control
         file.sync_all()?;
 
-        // Reload memory mapping
+        // Reload memory mapping with optimizations
         drop(file);
         drop(header);
         drop(uri_map);
         drop(uri_store);
 
-        // For now, just reload the basic mmap without advanced features in flush
-        // Advanced features will be enabled on load
+        // Reload with advanced memory mapping if enabled
         let file = self.data_file.lock();
         let file_len = file.metadata()?.len();
         if file_len > HEADER_SIZE as u64 {
-            let mmap = unsafe { MmapOptions::new().map(&*file)? };
+            // Use optimized mmap options for better performance
+            let mmap = unsafe {
+                MmapOptions::new()
+                    .populate() // Pre-populate pages
+                    .map(&*file)?
+            };
             *self.data_mmap.write() = Some(mmap);
+
+            // Update advanced mmap if it exists
+            if let Some(ref advanced_mmap) = self.advanced_mmap {
+                // Trigger a prefetch of recently written pages
+                let start_page = (current_data_end as usize) / VECTOR_PAGE_SIZE;
+                let end_page = (new_data_end as usize) / VECTOR_PAGE_SIZE;
+
+                for page_id in start_page..=end_page.min(start_page + 10) {
+                    advanced_mmap.async_prefetch(page_id);
+                }
+            }
         }
 
         Ok(())
     }
 
-    /// Get vector by ID from memory-mapped region
+    /// Get vector by ID from memory-mapped region with optimized loading
     fn get_vector_by_id(&self, id: u64) -> Result<Option<Vector>> {
         let header = self.header.read();
 
@@ -323,30 +370,74 @@ impl MemoryMappedVectorIndex {
             return Ok(None);
         }
 
+        // Try advanced memory mapping first for better performance
+        if let Some(ref advanced_mmap) = self.advanced_mmap {
+            let offset = header.data_offset as usize + (id as usize * header.vector_size as usize);
+            let page_id = offset / VECTOR_PAGE_SIZE;
+
+            if let Ok(page_entry) = advanced_mmap.get_page(page_id) {
+                let page_offset = offset % VECTOR_PAGE_SIZE;
+                let vector_end = page_offset + header.vector_size as usize;
+
+                if vector_end <= page_entry.data().len() {
+                    // Use NUMA-optimized vector allocation
+                    let numa_node = page_entry.numa_node();
+                    let values = self
+                        .numa_allocator
+                        .allocate_vector_on_node(header.dimensions as usize, Some(numa_node));
+
+                    // Optimized SIMD-friendly vector parsing
+                    return Ok(Some(self.parse_vector_optimized(
+                        &page_entry.data()[page_offset..vector_end],
+                        header.dimensions as usize,
+                        values,
+                    )?));
+                }
+            }
+        }
+
+        // Fallback to direct memory mapping
         if let Some(ref mmap) = *self.data_mmap.read() {
             let offset = header.data_offset as usize + (id as usize * header.vector_size as usize);
             let end = offset + header.vector_size as usize;
 
             if end <= mmap.len() {
                 let vector_bytes = &mmap[offset..end];
-                let mut values = Vec::with_capacity(header.dimensions as usize);
+                let values = self
+                    .numa_allocator
+                    .allocate_vector_on_node(header.dimensions as usize, None);
 
-                for i in 0..header.dimensions as usize {
-                    let byte_offset = i * std::mem::size_of::<f32>();
-                    let bytes = [
-                        vector_bytes[byte_offset],
-                        vector_bytes[byte_offset + 1],
-                        vector_bytes[byte_offset + 2],
-                        vector_bytes[byte_offset + 3],
-                    ];
-                    values.push(f32::from_le_bytes(bytes));
-                }
-
-                return Ok(Some(Vector::new(values)));
+                return Ok(Some(self.parse_vector_optimized(
+                    vector_bytes,
+                    header.dimensions as usize,
+                    values,
+                )?));
             }
         }
 
         Ok(None)
+    }
+
+    /// Optimized vector parsing with SIMD acceleration where possible
+    fn parse_vector_optimized(
+        &self,
+        bytes: &[u8],
+        dimensions: usize,
+        mut values: Vec<f32>,
+    ) -> Result<Vector> {
+        values.clear();
+        values.reserve_exact(dimensions);
+
+        // Use chunked parsing for better cache locality
+        for chunk in bytes.chunks_exact(4) {
+            if values.len() >= dimensions {
+                break;
+            }
+            let float_val = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
+            values.push(float_val);
+        }
+
+        Ok(Vector::new(values))
     }
 
     /// Search using brute force with memory-mapped vectors
@@ -386,7 +477,7 @@ impl MemoryMappedVectorIndex {
                         uri: uri_store
                             .get(id as usize)
                             .cloned()
-                            .unwrap_or_else(|| format!("vector_{}", id)),
+                            .unwrap_or_else(|| format!("vector_{id}")),
                         distance,
                         score: 1.0 - distance, // Convert distance to similarity score
                         metadata: None,
@@ -398,7 +489,7 @@ impl MemoryMappedVectorIndex {
                             uri: uri_store
                                 .get(id as usize)
                                 .cloned()
-                                .unwrap_or_else(|| format!("vector_{}", id)),
+                                .unwrap_or_else(|| format!("vector_{id}")),
                             distance,
                             score: 1.0 - distance, // Convert distance to similarity score
                             metadata: None,
@@ -443,7 +534,7 @@ impl MemoryMappedVectorIndex {
                                 uri: uri_store
                                     .get(id as usize)
                                     .cloned()
-                                    .unwrap_or_else(|| format!("vector_{}", id)),
+                                    .unwrap_or_else(|| format!("vector_{id}")),
                                 distance,
                                 score: 1.0 - distance, // Convert distance to similarity score
                                 metadata: None,
@@ -455,7 +546,7 @@ impl MemoryMappedVectorIndex {
                                     uri: uri_store
                                         .get(id as usize)
                                         .cloned()
-                                        .unwrap_or_else(|| format!("vector_{}", id)),
+                                        .unwrap_or_else(|| format!("vector_{id}")),
                                     distance,
                                     score: 1.0 - distance, // Convert distance to similarity score
                                     metadata: None,
@@ -633,7 +724,7 @@ impl VectorIndex for MemoryMappedVectorIndex {
                     let uri = uri_store
                         .get(id as usize)
                         .cloned()
-                        .unwrap_or_else(|| format!("vector_{}", id));
+                        .unwrap_or_else(|| format!("vector_{id}"));
                     results.push((uri, distance));
                 }
             }
@@ -655,11 +746,11 @@ impl Drop for MemoryMappedVectorIndex {
     fn drop(&mut self) {
         // Flush any remaining vectors
         if let Err(e) = self.flush_buffer() {
-            eprintln!("Error flushing buffer on drop: {}", e);
+            eprintln!("Error flushing buffer on drop: {e}");
         }
         // Save URI mappings
         if let Err(e) = self.save_uri_mappings() {
-            eprintln!("Error saving URI mappings on drop: {}", e);
+            eprintln!("Error saving URI mappings on drop: {e}");
         }
     }
 }
@@ -720,7 +811,7 @@ mod tests {
 
             for i in 0..10 {
                 let vec = Vector::new(vec![i as f32, (i + 1) as f32, (i + 2) as f32]);
-                index.insert(format!("vec{}", i), vec)?;
+                index.insert(format!("vec{i}"), vec)?;
             }
         }
 

@@ -11,11 +11,7 @@
 //! - Comparative analysis across algorithms
 
 use crate::{
-    benchmarking::{BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat, BenchmarkResult},
-    hnsw::HnswIndex,
-    ivf::IvfIndex,
-    lsh::LshIndex,
-    similarity::SimilarityMetric,
+    benchmarking::{BenchmarkConfig, BenchmarkDataset, BenchmarkOutputFormat},
     Vector, VectorIndex,
 };
 use anyhow::{anyhow, Result};
@@ -614,6 +610,12 @@ pub enum ObjectiveFunction {
     Pareto { objectives: Vec<ObjectiveFunction> },
 }
 
+impl Default for AdvancedBenchmarkConfig {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdvancedBenchmarkConfig {
     pub fn new() -> Self {
         Self {
@@ -739,7 +741,7 @@ impl AdvancedBenchmarkSuite {
     /// Analyze dataset characteristics
     fn analyze_dataset(
         &self,
-        mut base_dataset: BenchmarkDataset,
+        base_dataset: BenchmarkDataset,
     ) -> Result<EnhancedBenchmarkDataset> {
         tracing::info!("Analyzing dataset: {}", base_dataset.name);
 
@@ -1352,7 +1354,7 @@ impl AdvancedBenchmarkSuite {
         for (i, vector) in dataset.base_dataset.train_vectors.iter().enumerate() {
             algorithm
                 .index
-                .insert(format!("vec_{}", i), vector.clone())?;
+                .insert(format!("vec_{i}"), vector.clone())?;
         }
 
         let build_time = build_start.elapsed();
@@ -1519,7 +1521,7 @@ impl AdvancedBenchmarkSuite {
 
     fn measure_quality(
         &self,
-        index: &dyn VectorIndex,
+        _index: &dyn VectorIndex,
         dataset: &EnhancedBenchmarkDataset,
     ) -> Result<QualityMetrics> {
         if dataset.base_dataset.ground_truth.is_none() {
@@ -1597,7 +1599,7 @@ impl AdvancedBenchmarkSuite {
         for result in results {
             dataset_groups
                 .entry(result.dataset_name.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(result);
         }
 
@@ -1727,6 +1729,12 @@ impl PerformanceProfiler {
             enable_cpu_profiling: true,
             sample_interval: Duration::from_millis(10),
         }
+    }
+}
+
+impl Default for HyperparameterTuner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

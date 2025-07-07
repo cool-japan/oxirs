@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use uuid::Uuid;
 
-use crate::{Vector, VectorIndex};
+use crate::Vector;
 
 /// Content to be processed for embedding generation
 #[derive(Debug, Clone, Serialize, Deserialize)]

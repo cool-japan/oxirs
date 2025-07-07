@@ -8,7 +8,6 @@ use crate::{
     query::Query,
     Result,
 };
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -514,7 +513,7 @@ impl ArqCacheManager {
     }
 
     /// Invalidate caches based on dataset changes
-    pub fn invalidate_on_dataset_change(&self, changed_predicates: &[String]) -> Result<()> {
+    pub fn invalidate_on_dataset_change(&self, _changed_predicates: &[String]) -> Result<()> {
         // Implementation would invalidate relevant cache entries
         // For now, clear all caches as a conservative approach
         self.clear_all_caches();

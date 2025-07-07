@@ -199,7 +199,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "john" && p == "ancestor" && o == "mary")
         }));
 
@@ -244,7 +244,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "LivingThing")
         }));
     }
@@ -279,7 +279,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "Person")
         }));
     }
@@ -342,7 +342,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "john" && p == "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" && o == "Adult")
         }));
     }
@@ -388,7 +388,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "alice" && p == "type" && o == "Human")
         }));
     }
@@ -475,9 +475,9 @@ mod comprehensive_tests {
         let mut large_facts = Vec::new();
         for i in 0..1000 {
             large_facts.push(RuleAtom::Triple {
-                subject: Term::Constant(format!("entity_{}", i)),
+                subject: Term::Constant(format!("entity_{i}")),
                 predicate: Term::Constant("input".to_string()),
-                object: Term::Constant(format!("value_{}", i)),
+                object: Term::Constant(format!("value_{i}")),
             });
         }
 
@@ -547,7 +547,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "john" && p == "hasProperty" && o == "conscious")
         }));
     }
@@ -628,7 +628,7 @@ mod comprehensive_tests {
             matches!(fact, RuleAtom::Triple {
                 subject: Term::Constant(s),
                 predicate: Term::Constant(p),
-                object: Term::Constant(o) 
+                object: Term::Constant(o)
             } if s == "john" && p == "category" && o == "adult_parent")
         }));
     }

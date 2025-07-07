@@ -352,16 +352,16 @@ where
     /// Get value from cache with multi-level lookup
     pub fn get(&self, key: &K) -> Option<V> {
         let start_time = Instant::now();
-        
+
         // Track access event
         self.track_access(key, AccessType::Read);
-        
+
         // Try L1 cache first (hot data)
         if let Some(value) = self.get_from_l1(key) {
             self.record_cache_hit(1, start_time.elapsed());
             return Some(value);
         }
-        
+
         // Try L2 cache (warm data)
         if let Some(value) = self.get_from_l2(key) {
             // Promote to L1 for future fast access
@@ -369,7 +369,7 @@ where
             self.record_cache_hit(2, start_time.elapsed());
             return Some(value);
         }
-        
+
         // Try L3 cache (cold data, compressed)
         if let Some(value) = self.get_from_l3(key) {
             // Promote to L2 and potentially L1
@@ -377,7 +377,7 @@ where
             self.record_cache_hit(3, start_time.elapsed());
             return Some(value);
         }
-        
+
         // Cache miss
         self.record_cache_miss(start_time.elapsed());
         None
@@ -386,38 +386,38 @@ where
     /// Put value into cache with intelligent level placement
     pub fn put(&self, key: K, value: V) -> Result<()> {
         let start_time = Instant::now();
-        
+
         // Track access event
         self.track_access(&key, AccessType::Write);
-        
+
         // Determine optimal cache level based on access patterns
         let target_level = self.determine_optimal_level(&key, &value);
-        
+
         match target_level {
             1 => self.put_in_l1(key, value)?,
             2 => self.put_in_l2(key, value)?,
             3 => self.put_in_l3(key, value)?,
             _ => self.put_in_l1(key, value)?, // Default to L1
         }
-        
+
         // Update statistics
         self.record_cache_put(start_time.elapsed());
-        
+
         // Check for memory pressure and cleanup if needed
         if self.check_memory_pressure() {
             self.perform_cleanup()?;
         }
-        
+
         // Update prediction model
         self.update_prediction_model(&key);
-        
+
         Ok(())
     }
 
     /// Remove value from all cache levels
     pub fn remove(&self, key: &K) -> Option<V> {
         self.track_access(key, AccessType::Eviction);
-        
+
         // Try removing from each level, return first found
         if let Some(value) = self.remove_from_l1(key) {
             return Some(value);
@@ -442,7 +442,7 @@ where
             let mut l3 = self.l3_cache.write().unwrap();
             l3.clear();
         }
-        
+
         // Reset statistics
         {
             let mut stats = self.stats.write().unwrap();
@@ -561,12 +561,12 @@ where
     fn update_avg_access_time(&self, stats: &mut CacheStatistics, access_time: Duration) {
         let total_operations = stats.l1_hits + stats.l2_hits + stats.l3_hits + stats.misses;
         let access_time_us = access_time.as_micros() as f64;
-        
+
         if total_operations == 1 {
             stats.avg_access_time_us = access_time_us;
         } else {
-            stats.avg_access_time_us = 
-                (stats.avg_access_time_us * (total_operations - 1) as f64 + access_time_us) 
+            stats.avg_access_time_us =
+                (stats.avg_access_time_us * (total_operations - 1) as f64 + access_time_us)
                 / total_operations as f64;
         }
     }
@@ -584,11 +584,11 @@ where
             let mut l3 = self.l3_cache.write().unwrap();
             l3.evict_least_recently_used(l3.entries.len() / 10); // Evict 10%
         }
-        
+
         let mut monitor = self.memory_monitor.write().unwrap();
         monitor.last_cleanup = Some(Instant::now());
         monitor.pressure_alerts += 1;
-        
+
         Ok(())
     }
 
@@ -632,10 +632,10 @@ where
         if let Some(entry) = self.entries.get_mut(key) {
             entry.last_accessed = Instant::now();
             entry.access_count += 1;
-            
+
             // Update access tracking
             self.update_access_tracking(key);
-            
+
             Some(entry.value.clone())
         } else {
             None
@@ -741,13 +741,13 @@ where
         if let Some(entry) = self.entries.get_mut(key) {
             entry.last_accessed = Instant::now();
             entry.access_count += 1;
-            
+
             // Update access order
             if let Some(pos) = self.access_order.iter().position(|k| k == key) {
                 self.access_order.remove(pos);
             }
             self.access_order.push_back(key.clone());
-            
+
             // Decompress and return value
             self.decompress_entry(entry)
         } else {
@@ -763,10 +763,10 @@ where
 
         // Compress value
         let compressed_entry = self.compress_value(value)?;
-        
+
         self.entries.insert(key.clone(), compressed_entry);
         self.access_order.push_back(key);
-        
+
         Ok(())
     }
 
@@ -840,12 +840,12 @@ where
         };
 
         self.access_history.push_back(event);
-        
+
         // Maintain history size
         if self.access_history.len() > self.max_history_size {
             self.access_history.pop_front();
         }
-        
+
         // Update pattern analysis
         self.analyze_patterns();
     }
@@ -885,7 +885,7 @@ mod tests {
     fn test_cache_creation() {
         let config = AdvancedCacheConfig::default();
         let cache: AdvancedCache<String, String> = AdvancedCache::new(config);
-        
+
         // Test basic functionality
         assert!(cache.get(&"test".to_string()).is_none());
     }
@@ -894,10 +894,10 @@ mod tests {
     fn test_cache_put_get() {
         let config = AdvancedCacheConfig::default();
         let cache: AdvancedCache<String, String> = AdvancedCache::new(config);
-        
+
         let key = "test_key".to_string();
         let value = "test_value".to_string();
-        
+
         cache.put(key.clone(), value.clone()).unwrap();
         assert_eq!(cache.get(&key), Some(value));
     }
@@ -906,7 +906,7 @@ mod tests {
     fn test_cache_statistics() {
         let config = AdvancedCacheConfig::default();
         let cache: AdvancedCache<String, String> = AdvancedCache::new(config);
-        
+
         let stats = cache.statistics();
         assert_eq!(stats.l1_hits, 0);
         assert_eq!(stats.misses, 0);

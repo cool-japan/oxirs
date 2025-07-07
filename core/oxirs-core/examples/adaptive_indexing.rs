@@ -1,7 +1,7 @@
 //! Example demonstrating adaptive indexing that learns from query patterns
 
 use oxirs_core::model::*;
-use oxirs_core::store::{AdaptiveConfig, AdaptiveIndexManager, IndexedGraph, QueryPattern};
+use oxirs_core::store::{AdaptiveConfig, AdaptiveIndexManager, IndexedGraph};
 use rand::Rng;
 use std::time::{Duration, Instant};
 
@@ -33,7 +33,7 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
     // Insert sample data
     println!("Inserting sample RDF data...");
     for i in 0..100 {
-        let person = NamedNode::new(&format!("http://example.org/person{}", i))?;
+        let person = NamedNode::new(format!("http://example.org/person{i}"))?;
         let name_pred = NamedNode::new("http://example.org/name")?;
         let age_pred = NamedNode::new("http://example.org/age")?;
         let knows_pred = NamedNode::new("http://example.org/knows")?;
@@ -42,19 +42,19 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
         manager.insert(Triple::new(
             person.clone(),
             name_pred,
-            Literal::new(&format!("Person {}", i)),
+            Literal::new(format!("Person {i}")),
         ))?;
 
         // Add age
         manager.insert(Triple::new(
             person.clone(),
             age_pred,
-            Literal::new(&format!("{}", 20 + i % 50)),
+            Literal::new(format!("{}", 20 + i % 50)),
         ))?;
 
         // Add relationships
         if i > 0 {
-            let friend = NamedNode::new(&format!("http://example.org/person{}", i - 1))?;
+            let friend = NamedNode::new(format!("http://example.org/person{}", i - 1))?;
             manager.insert(Triple::new(person, knows_pred, friend))?;
         }
     }
@@ -77,7 +77,7 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
     let knows_pred = Predicate::NamedNode(NamedNode::new("http://example.org/knows")?);
     for _ in 0..8 {
         let results = manager.query(Some(&person1), Some(&knows_pred), None)?;
-        assert!(results.len() > 0);
+        assert!(!results.is_empty());
     }
     println!("  Executed 8 queries for pattern: (person1 knows ?)");
 
@@ -120,11 +120,11 @@ fn example_index_creation() -> Result<(), Box<dyn std::error::Error>> {
 
     // Insert diverse data
     println!("Creating diverse RDF dataset...");
-    let predicates = vec!["type", "label", "comment", "seeAlso", "isPartOf"];
-    let types = vec!["Person", "Organization", "Document", "Project", "Event"];
+    let predicates = ["type", "label", "comment", "seeAlso", "isPartOf"];
+    let types = ["Person", "Organization", "Document", "Project", "Event"];
 
     for i in 0..200 {
-        let subject = NamedNode::new(&format!("http://example.org/resource{}", i))?;
+        let subject = NamedNode::new(format!("http://example.org/resource{i}"))?;
 
         // Add type
         let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;

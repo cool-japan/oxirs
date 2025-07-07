@@ -215,13 +215,13 @@ impl AIQueryOptimizer {
         match &query.form {
             QueryForm::Select { where_clause, .. } => {
                 let (num_patterns, predicates, join_types) =
-                    self.analyze_graph_pattern(&where_clause)?;
+                    self.analyze_graph_pattern(where_clause)?;
 
                 Ok(QueryPattern {
                     num_patterns,
                     predicates,
                     join_types,
-                    has_filter: self.has_filter(&where_clause),
+                    has_filter: self.has_filter(where_clause),
                 })
             }
             _ => Err(OxirsError::Query("Unsupported query form".to_string())),
@@ -299,6 +299,7 @@ impl AIQueryOptimizer {
     }
 
     /// Check if pattern has filters
+    #[allow(clippy::only_used_in_recursion)]
     fn has_filter(&self, pattern: &GraphPattern) -> bool {
         match pattern {
             GraphPattern::Filter { .. } => true,
@@ -320,14 +321,16 @@ impl AIQueryOptimizer {
         candidates.push(basic_plan.clone());
 
         // Generate join order variations
-        if let QueryForm::Select { where_clause, .. } = &query.form {
-            if let GraphPattern::Bgp(patterns) = where_clause {
-                // Try different join orders
-                let join_orders = self.generate_join_orders(patterns);
-                for order in join_orders {
-                    if let Ok(plan) = self.create_plan_with_order(patterns, &order) {
-                        candidates.push(plan);
-                    }
+        if let QueryForm::Select {
+            where_clause: GraphPattern::Bgp(patterns),
+            ..
+        } = &query.form
+        {
+            // Try different join orders
+            let join_orders = self.generate_join_orders(patterns);
+            for order in join_orders {
+                if let Ok(plan) = self.create_plan_with_order(patterns, &order) {
+                    candidates.push(plan);
                 }
             }
         }
@@ -422,7 +425,7 @@ impl AIQueryOptimizer {
             .cost_model
             .learned_parameters
             .read()
-            .map_err(|e| OxirsError::Query(format!("Failed to read parameters: {}", e)))?;
+            .map_err(|e| OxirsError::Query(format!("Failed to read parameters: {e}")))?;
 
         let base_cost = self.estimate_plan_cost(plan, &params)?;
 
@@ -433,6 +436,7 @@ impl AIQueryOptimizer {
     }
 
     /// Estimate base cost of a plan
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_plan_cost(
         &self,
         plan: &ExecutionPlan,
@@ -722,7 +726,7 @@ impl MultiQueryOptimizer {
         counts: &mut HashMap<String, usize>,
     ) -> Result<(), OxirsError> {
         if let QueryForm::Select { where_clause, .. } = &query.form {
-            self.count_graph_patterns(&where_clause, counts)?;
+            self.count_graph_patterns(where_clause, counts)?;
         }
         Ok(())
     }
@@ -733,14 +737,11 @@ impl MultiQueryOptimizer {
         pattern: &GraphPattern,
         counts: &mut HashMap<String, usize>,
     ) -> Result<(), OxirsError> {
-        match pattern {
-            GraphPattern::Bgp(patterns) => {
-                for triple in patterns {
-                    let key = format!("{:?}", triple); // Simplified
-                    *counts.entry(key).or_insert(0) += 1;
-                }
+        if let GraphPattern::Bgp(patterns) = pattern {
+            for triple in patterns {
+                let key = format!("{triple}"); // Simplified
+                *counts.entry(key).or_insert(0) += 1;
             }
-            _ => {}
         }
         Ok(())
     }

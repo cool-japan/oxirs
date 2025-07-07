@@ -269,7 +269,7 @@ impl AdaptiveLearningSystem {
                 // Check if we should perform adaptation
                 let should_adapt = {
                     let buffer_guard = buffer.read().unwrap();
-                    let metrics_guard = metrics.read().unwrap();
+                    let _metrics_guard = metrics.read().unwrap();
 
                     buffer_guard.len() >= config.min_samples_for_adaptation
                         && last_adaptation.elapsed().as_secs_f64()
@@ -277,7 +277,7 @@ impl AdaptiveLearningSystem {
                 };
 
                 if should_adapt {
-                    if let Err(e) = Self::perform_adaptation(
+                    match Self::perform_adaptation(
                         &buffer,
                         &metrics,
                         &parameters,
@@ -287,9 +287,12 @@ impl AdaptiveLearningSystem {
                     )
                     .await
                     {
-                        warn!("Error during adaptation: {}", e);
-                    } else {
-                        last_adaptation = Instant::now();
+                        Err(e) => {
+                            warn!("Error during adaptation: {}", e);
+                        }
+                        _ => {
+                            last_adaptation = Instant::now();
+                        }
                     }
                 }
             }

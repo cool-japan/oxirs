@@ -4,18 +4,17 @@
 //! advanced performance features with the core SHACL validation engine.
 
 use crate::{
-    constraints::{ConstraintContext, ConstraintEvaluationResult},
+    constraints::ConstraintContext,
     iri_resolver::IriResolver,
     optimization::{
-        AdvancedConstraintEvaluator, ConstraintCache, IncrementalValidationEngine,
-        OptimizationConfig, StreamingValidationEngine, ValidationOptimizationEngine,
+        IncrementalValidationEngine, OptimizationConfig, StreamingValidationEngine,
+        ValidationOptimizationEngine,
     },
     paths::PropertyPathEvaluator,
     report::ValidationReport,
     sparql::SparqlConstraintExecutor,
     targets::TargetSelector,
-    Constraint, ConstraintComponentId, PropertyPath, Result, ShaclError, Shape, ShapeId,
-    ValidationConfig,
+    Result, Shape, ShapeId, ValidationConfig,
 };
 use indexmap::IndexMap;
 use oxirs_core::{model::Term, Store};
@@ -129,7 +128,7 @@ impl OptimizedValidationEngine {
 
             // Create constraint-context pairs for optimization
             for focus_node in target_nodes {
-                for (component_id, constraint) in &shape.constraints {
+                for (_component_id, constraint) in &shape.constraints {
                     let values = if shape.is_property_shape() {
                         // For property shapes, evaluate the property path to get values
                         if let Some(path) = &shape.path {
@@ -235,7 +234,7 @@ impl OptimizedValidationEngine {
         };
 
         // Convert incremental result to validation report
-        let mut report = ValidationReport::new();
+        let report = ValidationReport::new();
         if incremental_result.new_violations > 0 {
             // For incremental validation, we'd need to collect specific violations
             // This is a simplified implementation
@@ -283,7 +282,7 @@ impl OptimizedValidationEngine {
         };
 
         // Convert streaming result to validation report
-        let mut report = ValidationReport::new();
+        let report = ValidationReport::new();
         for _ in 0..streaming_result.total_violations {
             // Would need actual violation details in practice
         }
@@ -299,7 +298,7 @@ impl OptimizedValidationEngine {
         &mut self,
         store: &dyn Store,
         shapes: &IndexMap<ShapeId, Shape>,
-        max_threads: Option<usize>,
+        _max_threads: Option<usize>,
     ) -> Result<ValidationReport> {
         // For parallel validation, we need to be careful about thread safety
         // Currently disabled in the optimization engine due to Rc<> issues
@@ -417,11 +416,12 @@ pub struct CacheStatistics {
 }
 
 /// Strategy pattern for different validation approaches
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub enum ValidationStrategy {
     /// Standard sequential validation
     Sequential,
     /// Optimized with constraint reordering and caching
+    #[default]
     Optimized,
     /// Incremental validation for changed data
     Incremental { force_revalidate: bool },
@@ -429,12 +429,6 @@ pub enum ValidationStrategy {
     Streaming { batch_size: usize },
     /// Parallel validation (when thread-safe)
     Parallel { max_threads: usize },
-}
-
-impl Default for ValidationStrategy {
-    fn default() -> Self {
-        ValidationStrategy::Optimized
-    }
 }
 
 impl OptimizedValidationEngine {
@@ -456,7 +450,7 @@ impl OptimizedValidationEngine {
                 let changed_nodes = context.and_then(|c| c.changed_nodes);
                 self.validate_incremental(store, shapes, changed_nodes.as_deref(), force_revalidate)
             }
-            ValidationStrategy::Streaming { batch_size } => {
+            ValidationStrategy::Streaming { batch_size: _ } => {
                 // Create a node stream from target selection
                 let nodes = self.collect_all_target_nodes(store, shapes)?;
                 self.validate_streaming(store, shapes, nodes.into_iter())

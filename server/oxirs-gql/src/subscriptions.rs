@@ -5,7 +5,7 @@
 
 use crate::ast::{Document, Value};
 use crate::execution::FieldResolver;
-use crate::execution::{ExecutionContext, ExecutionResult, QueryExecutor};
+use crate::execution::{ExecutionContext, QueryExecutor};
 use crate::types::Schema;
 use anyhow::{anyhow, Result};
 use futures_util::{SinkExt, StreamExt};
@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{broadcast, mpsc, RwLock as AsyncRwLock};
+use tokio::sync::{broadcast, RwLock as AsyncRwLock};
 use tokio::time::interval;
 use tokio_tungstenite::{accept_async, tungstenite::Message, WebSocketStream};
 use tracing::{debug, error, info, warn};
@@ -561,8 +561,8 @@ impl SubscriptionManager {
     /// Check if a subscription query involves a specific resource
     fn subscription_involves_resource(
         &self,
-        subscription: &ActiveSubscription,
-        resource: &str,
+        _subscription: &ActiveSubscription,
+        _resource: &str,
     ) -> bool {
         // This is a simplified implementation - in practice, you'd want to analyze
         // the GraphQL query to determine which resources it depends on

@@ -48,6 +48,7 @@ uuid = { version = "1.0", features = ["v4", "serde"] }
 # Configuration
 config = "0.14"
 toml = "0.8"
+serde_yaml = "0.9"
 
 # Metrics and Monitoring
 metrics = "0.24"
@@ -68,6 +69,12 @@ async-trait = "0.1"
 # Session persistence and state management
 sled = "0.34"
 bincode = "1.3"
+zstd = "0.13"
+
+# Encryption
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
 
 # Natural Language Processing
 tokenizers = "0.19"

@@ -3,8 +3,8 @@
 //! This module provides sophisticated result merging capabilities for combining
 //! vector search results from multiple sources, algorithms, and modalities.
 
-use crate::{similarity::SimilarityMetric, Vector, VectorError};
-use anyhow::{anyhow, Result};
+use crate::Vector;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -623,7 +623,7 @@ impl AdvancedResultMerger {
     fn apply_score_combination(
         &self,
         mut results: Vec<MergedResult>,
-        sources: &[SourceResult],
+        _sources: &[SourceResult],
     ) -> Result<Vec<MergedResult>> {
         match self.config.combination_strategy {
             ScoreCombinationStrategy::Average => {
@@ -752,7 +752,7 @@ impl AdvancedResultMerger {
     /// Enhance diversity of results
     fn enhance_diversity(
         &self,
-        mut results: Vec<MergedResult>,
+        results: Vec<MergedResult>,
         diversity_config: &DiversityConfig,
     ) -> Result<Vec<MergedResult>> {
         if results.len() <= diversity_config.max_diverse_results {

@@ -144,7 +144,7 @@ impl QueryDecomposer {
         let mut var_counts = HashMap::new();
         for (_, pattern) in &component.patterns {
             for var_ref in [&pattern.subject, &pattern.predicate, &pattern.object] {
-                if let Some(ref var_name) = var_ref {
+                if let Some(var_name) = var_ref {
                     if var_name.starts_with('?') {
                         *var_counts.entry(var_name.clone()).or_insert(0) += 1;
                     }
@@ -170,7 +170,7 @@ impl QueryDecomposer {
         let mut var_to_patterns: HashMap<String, Vec<usize>> = HashMap::new();
         for (idx, pattern) in patterns {
             for var_ref in [&pattern.subject, &pattern.predicate, &pattern.object] {
-                if let Some(ref var_name) = var_ref {
+                if let Some(var_name) = var_ref {
                     if var_name.starts_with('?') {
                         var_to_patterns
                             .entry(var_name.clone())
@@ -250,7 +250,7 @@ impl QueryDecomposer {
         let mut constant_count = 0;
 
         for term in [&pattern.subject, &pattern.predicate, &pattern.object] {
-            if let Some(ref term_value) = term {
+            if let Some(term_value) = term {
                 if term_value.starts_with('?') {
                     variable_count += 1;
                 } else {
@@ -923,12 +923,12 @@ impl QueryDecomposer {
 
         // Add all pattern features
         for (key, value) in pattern_features {
-            combined.insert(format!("pattern_{}", key), *value);
+            combined.insert(format!("pattern_{key}"), *value);
         }
 
         // Add all service features
         for (key, value) in service_features {
-            combined.insert(format!("service_{}", key), *value);
+            combined.insert(format!("service_{key}"), *value);
         }
 
         // Add interaction features

@@ -34,7 +34,7 @@ fn test_term_creation_and_conversion() {
 #[test]
 fn test_numeric_operations() {
     let int_term = Term::typed_literal("42", xsd::INTEGER).unwrap();
-    let float_term = Term::typed_literal("3.14", xsd::FLOAT).unwrap();
+    let float_term = Term::typed_literal("3.15", xsd::FLOAT).unwrap();
     let double_term = Term::typed_literal("2.718", xsd::DOUBLE).unwrap();
 
     // Test numeric conversion
@@ -43,7 +43,7 @@ fn test_numeric_operations() {
 
     let float_num = float_term.to_numeric().unwrap();
     match float_num {
-        NumericValue::Float(f) => assert!((f - 3.14).abs() < 0.001),
+        NumericValue::Float(f) => assert!((f - 3.15).abs() < 0.001),
         _ => panic!("Expected float"),
     }
 
@@ -52,7 +52,7 @@ fn test_numeric_operations() {
     match (promoted_int, promoted_float) {
         (NumericValue::Float(a), NumericValue::Float(b)) => {
             assert!((a - 42.0).abs() < 0.001);
-            assert!((b - 3.14).abs() < 0.001);
+            assert!((b - 3.15).abs() < 0.001);
         }
         _ => panic!("Expected both to be floats after promotion"),
     }

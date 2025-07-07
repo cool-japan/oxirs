@@ -15,6 +15,11 @@ use std::sync::Arc;
 #[cfg(feature = "hnsw")]
 use hnsw_rs::prelude::*;
 
+/// Type alias for filter functions
+pub type FilterFunction = Box<dyn Fn(&str) -> bool>;
+/// Type alias for filter functions with Send + Sync
+pub type FilterFunctionSync = Box<dyn Fn(&str) -> bool + Send + Sync>;
+
 /// Configuration for vector index
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct IndexConfig {
@@ -190,7 +195,7 @@ impl AdvancedVectorIndex {
     }
 
     /// Add metadata to a vector
-    pub fn add_metadata(&mut self, uri: &str, metadata: HashMap<String, String>) -> Result<()> {
+    pub fn add_metadata(&mut self, _uri: &str, _metadata: HashMap<String, String>) -> Result<()> {
         // For now, we'll store metadata separately
         // In a full implementation, this would be integrated with the index
         Ok(())
@@ -201,8 +206,8 @@ impl AdvancedVectorIndex {
         &self,
         query: &Vector,
         k: usize,
-        ef: Option<usize>,
-        filter: Option<Box<dyn Fn(&str) -> bool>>,
+        _ef: Option<usize>,
+        filter: Option<FilterFunction>,
     ) -> Result<Vec<SearchResult>> {
         match self.config.index_type {
             IndexType::Hnsw => {
@@ -249,7 +254,7 @@ impl AdvancedVectorIndex {
         &self,
         query: &Vector,
         k: usize,
-        filter: Option<Box<dyn Fn(&str) -> bool>>,
+        filter: Option<FilterFunction>,
     ) -> Result<Vec<SearchResult>> {
         if self.config.parallel && self.vectors.len() > 1000 {
             // For parallel search, we need Send + Sync filter
@@ -268,7 +273,7 @@ impl AdvancedVectorIndex {
         &self,
         query: &Vector,
         k: usize,
-        filter: Option<Box<dyn Fn(&str) -> bool>>,
+        filter: Option<FilterFunction>,
     ) -> Result<Vec<SearchResult>> {
         let mut heap = BinaryHeap::new();
 
@@ -311,7 +316,7 @@ impl AdvancedVectorIndex {
         &self,
         query: &Vector,
         k: usize,
-        filter: Option<Box<dyn Fn(&str) -> bool + Send + Sync>>,
+        filter: Option<FilterFunctionSync>,
     ) -> Result<Vec<SearchResult>> {
         // Split vectors into chunks for parallel processing
         let chunk_size = (self.vectors.len() / num_threads()).max(100);
@@ -603,7 +608,7 @@ impl VectorIndex for QuantizedVectorIndex {
         Ok(results)
     }
 
-    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+    fn get_vector(&self, _uri: &str) -> Option<&Vector> {
         // Quantized index doesn't store original vectors
         // Return None as we only have quantized representations
         None

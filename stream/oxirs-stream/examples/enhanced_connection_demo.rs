@@ -10,9 +10,8 @@ use anyhow::Result;
 use oxirs_stream::connection_pool::{
     ConnectionFactory, ConnectionPool, LoadBalancingStrategy, PoolConfig, PooledConnection,
 };
-use oxirs_stream::failover::FailoverEvent;
-use oxirs_stream::health_monitor::{HealthCheckConfig, HealthEvent};
-use oxirs_stream::reconnect::{ReconnectConfig, ReconnectEvent};
+use oxirs_stream::health_monitor::HealthEvent;
+use oxirs_stream::reconnect::ReconnectEvent;
 use oxirs_stream::FailoverConfig;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
@@ -281,7 +280,7 @@ async fn main() -> Result<()> {
 
     // Periodically print pool status
     let pool_clone = pool.clone();
-    let status_handle = tokio::spawn(async move {
+    let _status_handle = tokio::spawn(async move {
         loop {
             sleep(Duration::from_secs(10)).await;
 

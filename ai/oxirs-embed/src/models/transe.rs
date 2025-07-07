@@ -326,7 +326,7 @@ impl TransE {
     async fn train_epoch(&mut self, learning_rate: f64) -> Result<f64> {
         let mut rng = if let Some(seed) = self.base.config.seed {
             let mut thread_rng = rand::thread_rng();
-            StdRng::seed_from_u64(seed + thread_rng.gen::<u64>())
+            StdRng::seed_from_u64(seed + thread_rng.r#gen::<u64>())
         } else {
             StdRng::from_rng(&mut rand::thread_rng()).expect("Failed to create RNG")
         };

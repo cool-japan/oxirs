@@ -268,13 +268,14 @@ where
             }
         }
 
-        if let Some(value) = self.map.get(key).cloned() {
-            // Move to front
-            self.move_to_front(key);
-            self.access_times.insert(key.clone(), Instant::now());
-            Some(value)
-        } else {
-            None
+        match self.map.get(key).cloned() {
+            Some(value) => {
+                // Move to front
+                self.move_to_front(key);
+                self.access_times.insert(key.clone(), Instant::now());
+                Some(value)
+            }
+            _ => None,
         }
     }
 
@@ -295,12 +296,13 @@ where
     }
 
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        if let Some(value) = self.map.remove(key) {
-            self.order.retain(|k| k != key);
-            self.access_times.remove(key);
-            Some(value)
-        } else {
-            None
+        match self.map.remove(key) {
+            Some(value) => {
+                self.order.retain(|k| k != key);
+                self.access_times.remove(key);
+                Some(value)
+            }
+            _ => None,
         }
     }
 
@@ -578,7 +580,10 @@ impl CacheManager {
             return Ok(0);
         }
 
-        info!("Starting cache warming with {} entities", entities.len());
+        info!(
+            "Starting cache warming with {entities_len} entities",
+            entities_len = entities.len()
+        );
         let mut warmed_count = 0;
 
         for entity in entities {
@@ -594,12 +599,12 @@ impl CacheManager {
                     warmed_count += 1;
                 }
                 Err(e) => {
-                    warn!("Failed to warm cache for entity {}: {}", entity, e);
+                    warn!("Failed to warm cache for entity {entity}: {e}");
                 }
             }
         }
 
-        info!("Cache warming completed: {} entities cached", warmed_count);
+        info!("Cache warming completed: {warmed_count} entities cached");
         Ok(warmed_count)
     }
 
@@ -713,7 +718,7 @@ impl CacheManager {
         computation_time_us: u64,
     ) {
         let key = ComputationKey {
-            operation: format!("attention_weights_{}", layer_id),
+            operation: format!("attention_weights_{layer_id}"),
             inputs: vec![input_hash.to_string()],
             model_id,
         };
@@ -735,7 +740,7 @@ impl CacheManager {
         model_id: Uuid,
     ) -> Option<Vec<f64>> {
         let key = ComputationKey {
-            operation: format!("attention_weights_{}", layer_id),
+            operation: format!("attention_weights_{layer_id}"),
             inputs: vec![input_hash.to_string()],
             model_id,
         };
@@ -762,7 +767,7 @@ impl CacheManager {
         computation_time_us: u64,
     ) {
         let key = ComputationKey {
-            operation: format!("intermediate_activations_{}", layer_id),
+            operation: format!("intermediate_activations_{layer_id}"),
             inputs: vec![input_hash.to_string()],
             model_id,
         };
@@ -784,7 +789,7 @@ impl CacheManager {
         model_id: Uuid,
     ) -> Option<Vec<f64>> {
         let key = ComputationKey {
-            operation: format!("intermediate_activations_{}", layer_id),
+            operation: format!("intermediate_activations_{layer_id}"),
             inputs: vec![input_hash.to_string()],
             model_id,
         };
@@ -811,7 +816,7 @@ impl CacheManager {
         computation_time_us: u64,
     ) {
         let key = ComputationKey {
-            operation: format!("gradients_{}", layer_id),
+            operation: format!("gradients_{layer_id}"),
             inputs: vec![batch_hash.to_string()],
             model_id,
         };
@@ -833,7 +838,7 @@ impl CacheManager {
         model_id: Uuid,
     ) -> Option<Vec<Vec<f64>>> {
         let key = ComputationKey {
-            operation: format!("gradients_{}", layer_id),
+            operation: format!("gradients_{layer_id}"),
             inputs: vec![batch_hash.to_string()],
             model_id,
         };
@@ -909,7 +914,7 @@ impl CacheManager {
         computation_time_us: u64,
     ) {
         let key = ComputationKey {
-            operation: format!("feature_vectors_{}", task_name),
+            operation: format!("feature_vectors_{task_name}"),
             inputs: vec![input_hash.to_string()],
             model_id,
         };
@@ -931,7 +936,7 @@ impl CacheManager {
         model_id: Uuid,
     ) -> Option<Vec<f64>> {
         let key = ComputationKey {
-            operation: format!("feature_vectors_{}", task_name),
+            operation: format!("feature_vectors_{task_name}"),
             inputs: vec![input_hash.to_string()],
             model_id,
         };
@@ -958,7 +963,7 @@ impl CacheManager {
         computation_time_us: u64,
     ) {
         let key = ComputationKey {
-            operation: format!("embedding_matrices_{}", operation),
+            operation: format!("embedding_matrices_{operation}"),
             inputs: vec![batch_hash.to_string()],
             model_id,
         };
@@ -980,7 +985,7 @@ impl CacheManager {
         model_id: Uuid,
     ) -> Option<Vec<Vec<f64>>> {
         let key = ComputationKey {
-            operation: format!("embedding_matrices_{}", operation),
+            operation: format!("embedding_matrices_{operation}"),
             inputs: vec![batch_hash.to_string()],
             model_id,
         };
@@ -1007,7 +1012,7 @@ impl CacheManager {
         computation_time_us: u64,
     ) {
         let key = ComputationKey {
-            operation: format!("loss_values_{}", loss_type),
+            operation: format!("loss_values_{loss_type}"),
             inputs: vec![epoch_batch.to_string()],
             model_id,
         };
@@ -1029,7 +1034,7 @@ impl CacheManager {
         model_id: Uuid,
     ) -> Option<Vec<f64>> {
         let key = ComputationKey {
-            operation: format!("loss_values_{}", loss_type),
+            operation: format!("loss_values_{loss_type}"),
             inputs: vec![epoch_batch.to_string()],
             model_id,
         };
@@ -1171,7 +1176,7 @@ impl CacheManager {
             self.put_computation(key, result, 0);
         }
 
-        info!("Batch cached {} computation results", count);
+        info!("Batch cached {count} computation results");
     }
 
     /// Get cache efficiency metrics for different computation types
@@ -1263,7 +1268,7 @@ impl CachedEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         let key = ComputationKey {
-            operation: format!("predict_objects_{}", k),
+            operation: format!("predict_objects_{k}"),
             inputs: vec![subject.to_string(), predicate.to_string()],
             model_id: *self.model.model_id(),
         };

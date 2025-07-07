@@ -242,7 +242,7 @@ impl ConsciousnessModule {
 
         // Update emotional learning network with optimized string handling
         let context =
-            self.get_pooled_string(&format!("performance_feedback_{:.2}", performance_feedback));
+            self.get_pooled_string(&format!("performance_feedback_{performance_feedback:.2}"));
         let _ = self.emotional_learning.learn_emotional_association(
             &context,
             self.emotional_state.clone(),
@@ -377,22 +377,19 @@ impl ConsciousnessModule {
 
     /// Get performance metrics and optimization suggestions
     pub fn get_performance_metrics(&self) -> ConsciousnessPerformanceMetrics {
-        let cache_stats = if let Ok(cache) = self.optimization_cache.read() {
-            (cache.get_hit_rate(), cache.cache_hits + cache.cache_misses)
-        } else {
-            (0.0, 0)
+        let cache_stats = match self.optimization_cache.read() {
+            Ok(cache) => (cache.get_hit_rate(), cache.cache_hits + cache.cache_misses),
+            _ => (0.0, 0),
         };
 
-        let pattern_cache_size = if let Ok(cache) = self.pattern_cache.read() {
-            cache.len()
-        } else {
-            0
+        let pattern_cache_size = match self.pattern_cache.read() {
+            Ok(cache) => cache.len(),
+            _ => 0,
         };
 
-        let string_pool_size = if let Ok(pool) = self.string_pool.read() {
-            pool.len()
-        } else {
-            0
+        let string_pool_size = match self.string_pool.read() {
+            Ok(pool) => pool.len(),
+            _ => 0,
         };
 
         ConsciousnessPerformanceMetrics {
@@ -457,7 +454,7 @@ impl ConsciousnessModule {
         self.emotional_state = measurement.measured_state.clone();
 
         // Learn from the quantum measurement experience
-        let context = format!("quantum_measurement_fidelity_{:.2}", measurement.fidelity);
+        let context = format!("quantum_measurement_fidelity_{}", measurement.fidelity);
         let _ = self.emotional_learning.learn_emotional_association(
             &context,
             measurement.measured_state.clone(),
@@ -494,7 +491,7 @@ impl ConsciousnessModule {
         // Learn from dream processing outcomes
         match &step_result {
             StepResult::ProcessingComplete(algorithm) => {
-                let context = format!("dream_processing_{}", algorithm);
+                let context = format!("dream_processing_{algorithm}");
                 let _ = self
                     .emotional_learning
                     .update_mood(EmotionalState::Creative, &context);
@@ -901,6 +898,12 @@ pub enum MessageType {
     AnomalyDetection,
 }
 
+impl Default for MetaConsciousness {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetaConsciousness {
     /// Create a new meta-consciousness component
     pub fn new() -> Self {
@@ -941,14 +944,15 @@ impl MetaConsciousness {
 
     /// Send a consciousness message between components
     pub fn send_message(&self, message: ConsciousnessMessage) -> Result<(), crate::OxirsError> {
-        if let Ok(mut channels) = self.communication_channels.write() {
-            let key = format!("{}_{}", message.source, message.target);
-            channels.insert(key, message);
-            Ok(())
-        } else {
-            Err(crate::OxirsError::Query(
+        match self.communication_channels.write() {
+            Ok(mut channels) => {
+                let key = format!("{}_{}", message.source, message.target);
+                channels.insert(key, message);
+                Ok(())
+            }
+            _ => Err(crate::OxirsError::Query(
                 "Failed to send consciousness message".to_string(),
-            ))
+            )),
         }
     }
 
@@ -957,17 +961,18 @@ impl MetaConsciousness {
         &self,
         component: &str,
     ) -> Result<Vec<ConsciousnessMessage>, crate::OxirsError> {
-        if let Ok(channels) = self.communication_channels.read() {
-            let messages: Vec<ConsciousnessMessage> = channels
-                .values()
-                .filter(|msg| msg.target == component)
-                .cloned()
-                .collect();
-            Ok(messages)
-        } else {
-            Err(crate::OxirsError::Query(
+        match self.communication_channels.read() {
+            Ok(channels) => {
+                let messages: Vec<ConsciousnessMessage> = channels
+                    .values()
+                    .filter(|msg| msg.target == component)
+                    .cloned()
+                    .collect();
+                Ok(messages)
+            }
+            _ => Err(crate::OxirsError::Query(
                 "Failed to receive consciousness messages".to_string(),
-            ))
+            )),
         }
     }
 
@@ -1096,12 +1101,10 @@ impl ConsciousnessModule {
         if recommendations.confidence > 0.7 {
             self.consciousness_level = recommendations
                 .recommended_consciousness_level
-                .min(1.0)
-                .max(0.0);
+                .clamp(0.0, 1.0);
             self.integration_level = recommendations
                 .recommended_integration_level
-                .min(1.0)
-                .max(0.0);
+                .clamp(0.0, 1.0);
 
             // Send optimization messages
             for optimization in &recommendations.suggested_optimizations {
@@ -1155,7 +1158,7 @@ impl ConsciousnessModule {
         };
 
         let experience = ExperienceFeedback {
-            context: format!("query_pattern_complexity_{:.2}", pattern_complexity),
+            context: format!("query_pattern_complexity_{pattern_complexity:.2}"),
             performance_score: execution_metrics.success_rate,
             satisfaction_level: execution_metrics.user_satisfaction,
             emotional_outcome,
@@ -1290,14 +1293,11 @@ mod tests {
             consciousness.dream_processor.dream_state,
             DreamState::Awake
         ));
-        assert!(
-            consciousness
-                .quantum_consciousness
-                .consciousness_superposition
-                .state_amplitudes
-                .len()
-                > 0
-        );
+        assert!(!consciousness
+            .quantum_consciousness
+            .consciousness_superposition
+            .state_amplitudes
+            .is_empty());
         assert!(
             consciousness
                 .emotional_learning

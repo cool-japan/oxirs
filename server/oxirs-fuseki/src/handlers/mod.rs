@@ -32,5 +32,5 @@ pub use oauth2::{
 pub use saml::{
     get_saml_metadata, handle_saml_acs, handle_saml_slo, initiate_saml_logout, initiate_saml_sso,
 };
-pub use sparql_refactored::{query_handler, update_handler};
+pub use sparql_refactored::{query_handler, query_handler_get, query_handler_post, update_handler};
 pub use websocket::{websocket_handler, SubscriptionManager};

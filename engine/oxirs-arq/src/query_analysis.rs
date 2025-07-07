@@ -3,11 +3,10 @@
 //! Provides variable discovery, join variable identification, filter safety analysis,
 //! and semantic validation for SPARQL queries.
 
-use crate::algebra::{Algebra, Expression, Literal, Term, TriplePattern, Variable};
+use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
 use crate::cost_model::{CostEstimate, CostModel, IOPattern};
-use crate::statistics_collector::{Histogram, StatisticsCollector};
-use anyhow::{anyhow, Result};
-use oxirs_core::model::NamedNode;
+use crate::statistics_collector::StatisticsCollector;
+use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 
 /// Index type for optimization
@@ -351,7 +350,7 @@ impl QueryAnalyzer {
     }
 
     /// Add index information for optimization (placeholder implementation)
-    pub fn add_index(&mut self, predicate: &str, index_type: IndexType) {
+    pub fn add_index(&mut self, _predicate: &str, _index_type: IndexType) {
         // This is a placeholder implementation
         // In a real implementation, this would store index information
         // for use in optimization decisions
@@ -541,8 +540,8 @@ impl QueryAnalyzer {
     /// Collect variables from group condition
     fn collect_variables_from_group_condition(
         &self,
-        condition: &crate::algebra::GroupCondition,
-        variables: &mut HashSet<Variable>,
+        _condition: &crate::algebra::GroupCondition,
+        _variables: &mut HashSet<Variable>,
     ) -> Result<()> {
         // Implementation depends on GroupCondition structure
         // For now, assume it contains an expression
@@ -732,14 +731,14 @@ impl QueryAnalyzer {
     }
 
     /// Check if variable is in GROUP BY
-    fn is_in_group_by(&self, var: &Variable, algebra: &Algebra) -> bool {
+    fn is_in_group_by(&self, _var: &Variable, _algebra: &Algebra) -> bool {
         // Implementation depends on how GROUP BY variables are represented
         // This is a placeholder
         false
     }
 
     /// Check if variable is in ORDER BY
-    fn is_in_order_by(&self, var: &Variable, algebra: &Algebra) -> bool {
+    fn is_in_order_by(&self, _var: &Variable, _algebra: &Algebra) -> bool {
         // Implementation depends on how ORDER BY variables are represented
         // This is a placeholder
         false
@@ -825,7 +824,7 @@ impl QueryAnalyzer {
     }
 
     /// Check if expression contains service call
-    fn contains_service_call(&self, expr: &Expression) -> bool {
+    fn contains_service_call(&self, _expr: &Expression) -> bool {
         // Implementation depends on how service calls are represented
         // This is a placeholder
         false
@@ -846,7 +845,7 @@ impl QueryAnalyzer {
     }
 
     /// Check if context is optional
-    fn in_optional_context(&self, context: &Algebra) -> bool {
+    fn in_optional_context(&self, _context: &Algebra) -> bool {
         // Implementation depends on how optional patterns are represented
         // This is a placeholder
         false
@@ -899,9 +898,9 @@ impl QueryAnalyzer {
     /// Detect type errors
     fn detect_type_errors(
         &self,
-        algebra: &Algebra,
-        variable_types: &HashMap<Variable, VariableType>,
-        type_errors: &mut Vec<TypeError>,
+        _algebra: &Algebra,
+        _variable_types: &HashMap<Variable, VariableType>,
+        _type_errors: &mut Vec<TypeError>,
     ) -> Result<()> {
         // Implementation for detecting type errors
         // This is a placeholder for more sophisticated type checking
@@ -911,9 +910,9 @@ impl QueryAnalyzer {
     /// Detect type warnings
     fn detect_type_warnings(
         &self,
-        algebra: &Algebra,
-        variable_types: &HashMap<Variable, VariableType>,
-        type_warnings: &mut Vec<TypeWarning>,
+        _algebra: &Algebra,
+        _variable_types: &HashMap<Variable, VariableType>,
+        _type_warnings: &mut Vec<TypeWarning>,
     ) -> Result<()> {
         // Implementation for detecting type warnings
         // This is a placeholder
@@ -1016,9 +1015,9 @@ impl QueryAnalyzer {
     /// Generate filter placement hints
     fn generate_filter_placement_hints(
         &self,
-        algebra: &Algebra,
+        _algebra: &Algebra,
     ) -> Result<Vec<FilterPlacementHint>> {
-        let mut hints = Vec::new();
+        let hints = Vec::new();
         // Implementation for filter placement analysis
         // This is a placeholder
         Ok(hints)
@@ -1102,8 +1101,8 @@ impl QueryAnalyzer {
     /// Check for invalid aggregates
     fn check_invalid_aggregates(
         &self,
-        algebra: &Algebra,
-        errors: &mut Vec<ValidationError>,
+        _algebra: &Algebra,
+        _errors: &mut Vec<ValidationError>,
     ) -> Result<()> {
         // Implementation for aggregate validation
         // This is a placeholder
@@ -1113,8 +1112,8 @@ impl QueryAnalyzer {
     /// Check semantic consistency
     fn check_semantic_consistency(
         &self,
-        algebra: &Algebra,
-        errors: &mut Vec<ValidationError>,
+        _algebra: &Algebra,
+        _errors: &mut Vec<ValidationError>,
     ) -> Result<()> {
         // Implementation for semantic consistency checks
         // This is a placeholder
@@ -1131,15 +1130,14 @@ impl Default for QueryAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::algebra::{BinaryOperator, Literal, Term, Variable};
+    use oxirs_core::model::NamedNode;
 
     #[test]
     fn test_query_analyzer() {
         let analyzer = QueryAnalyzer::new();
         assert!(analyzer.enable_type_inference);
     }
-
-    use crate::algebra::{BinaryOperator, Term, Variable};
-    use oxirs_core::model::NamedNode;
 
     #[test]
     fn test_variable_discovery() {

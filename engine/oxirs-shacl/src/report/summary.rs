@@ -195,16 +195,14 @@ impl ValidationSummary {
         if let Some(shape) = self.most_problematic_shape() {
             let count = self.violations_by_shape.get(shape).unwrap_or(&0);
             summary.push(format!(
-                "Most problematic shape: {} ({} violations)",
-                shape, count
+                "Most problematic shape: {shape} ({count} violations)"
             ));
         }
 
         if let Some(component) = self.most_common_violation_type() {
             let count = self.violations_by_component.get(component).unwrap_or(&0);
             summary.push(format!(
-                "Most common violation: {} ({} occurrences)",
-                component, count
+                "Most common violation: {component} ({count} occurrences)"
             ));
         }
 
@@ -319,7 +317,7 @@ impl ValidationAnalysis {
             if *count > summary.total_violations() / 3 {
                 insights.push(QualityInsight {
                     insight_type: InsightType::ConcentratedViolations,
-                    description: format!("Shape {} has many violations", shape),
+                    description: format!("Shape {shape} has many violations"),
                     severity: Severity::Warning,
                     affected_count: *count,
                     recommendation: "Review and possibly refine this shape definition".to_string(),
@@ -332,7 +330,7 @@ impl ValidationAnalysis {
             if *count > summary.total_violations() / 2 {
                 insights.push(QualityInsight {
                     insight_type: InsightType::CommonPattern,
-                    description: format!("Constraint {} frequently violated", component),
+                    description: format!("Constraint {component} frequently violated"),
                     severity: Severity::Info,
                     affected_count: *count,
                     recommendation: "Consider if this constraint is too strict".to_string(),

@@ -11,6 +11,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
+use wasmparser::{Validator, WasmFeatures};
+use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use rsa::{RsaPublicKey, pkcs1v15::VerifyingKey as RsaVerifyingKey, signature::Verifier as RsaVerifier};
 
 /// WebAssembly edge processor for distributed streaming
 pub struct WasmEdgeProcessor {
@@ -754,8 +757,42 @@ impl WasmEdgeProcessor {
             return Err(StreamError::InvalidModule("Unsupported WASM version".to_string()));
         }
 
-        // TODO: More thorough validation using wasmparser
-        Ok(())
+        // Enhanced validation using wasmparser
+        let mut validator = Validator::new_with_features(WasmFeatures {
+            mutable_global: true,
+            saturating_float_to_int: true,
+            sign_extension: true,
+            reference_types: true,
+            multi_value: true,
+            bulk_memory: true,
+            simd: true,
+            relaxed_simd: false,
+            threads: false,
+            shared_everything_threads: false,
+            tail_call: false,
+            floats: true,
+            multi_memory: false,
+            exceptions: false,
+            memory64: false,
+            extended_const: false,
+            component_model: false,
+            function_references: false,
+            memory_control: false,
+            gc: false,
+            custom_page_sizes: false,
+            wide_arithmetic: false,
+        });
+
+        match validator.validate_all(bytecode) {
+            Ok(_) => {
+                debug!("WASM module validation successful");
+                Ok(())
+            }
+            Err(e) => {
+                error!("WASM module validation failed: {}", e);
+                Err(StreamError::InvalidModule(format!("Validation failed: {}", e)))
+            }
+        }
     }
 
     /// Convert stream event to event type
@@ -807,11 +844,105 @@ impl WasmEdgeProcessor {
     /// Verify digital signature
     async fn verify_digital_signature(
         &self,
-        _data: &[u8],
-        _signature: &DigitalSignature,
+        data: &[u8],
+        signature: &DigitalSignature,
     ) -> StreamResult<()> {
-        // TODO: Implement actual signature verification
-        Ok(())
+        debug!("Verifying digital signature using {:?} algorithm", signature.algorithm);
+        
+        match signature.algorithm {
+            SignatureAlgorithm::Ed25519 => {
+                self.verify_ed25519_signature(data, signature).await
+            }
+            SignatureAlgorithm::RSA => {
+                self.verify_rsa_signature(data, signature).await
+            }
+            SignatureAlgorithm::ECDSA => {
+                warn!("ECDSA signature verification not yet implemented");
+                Err(StreamError::UnsupportedOperation("ECDSA verification not implemented".to_string()))
+            }
+            SignatureAlgorithm::Falcon => {
+                warn!("Falcon signature verification not yet implemented");
+                Err(StreamError::UnsupportedOperation("Falcon verification not implemented".to_string()))
+            }
+            SignatureAlgorithm::Dilithium => {
+                warn!("Dilithium signature verification not yet implemented");
+                Err(StreamError::UnsupportedOperation("Dilithium verification not implemented".to_string()))
+            }
+        }
+    }
+
+    /// Verify Ed25519 signature
+    async fn verify_ed25519_signature(
+        &self,
+        data: &[u8],
+        signature: &DigitalSignature,
+    ) -> StreamResult<()> {
+        // Parse the public key
+        if signature.public_key.len() != 32 {
+            return Err(StreamError::InvalidSignature("Invalid Ed25519 public key length".to_string()));
+        }
+
+        let public_key_bytes: [u8; 32] = signature.public_key.as_slice().try_into()
+            .map_err(|_| StreamError::InvalidSignature("Failed to parse Ed25519 public key".to_string()))?;
+        
+        let verifying_key = VerifyingKey::from_bytes(&public_key_bytes)
+            .map_err(|e| StreamError::InvalidSignature(format!("Invalid Ed25519 public key: {}", e)))?;
+
+        // Parse the signature
+        if signature.signature.len() != 64 {
+            return Err(StreamError::InvalidSignature("Invalid Ed25519 signature length".to_string()));
+        }
+
+        let signature_bytes: [u8; 64] = signature.signature.as_slice().try_into()
+            .map_err(|_| StreamError::InvalidSignature("Failed to parse Ed25519 signature".to_string()))?;
+        
+        let sig = Signature::from_bytes(&signature_bytes);
+
+        // Verify the signature
+        match verifying_key.verify(data, &sig) {
+            Ok(_) => {
+                debug!("Ed25519 signature verification successful");
+                Ok(())
+            }
+            Err(e) => {
+                error!("Ed25519 signature verification failed: {}", e);
+                Err(StreamError::InvalidSignature("Ed25519 signature verification failed".to_string()))
+            }
+        }
+    }
+
+    /// Verify RSA signature
+    async fn verify_rsa_signature(
+        &self,
+        data: &[u8],
+        signature: &DigitalSignature,
+    ) -> StreamResult<()> {
+        use rsa::pkcs1::DecodeRsaPublicKey;
+        use sha2::{Sha256, Digest};
+
+        // Parse the RSA public key from DER format
+        let public_key = RsaPublicKey::from_pkcs1_der(&signature.public_key)
+            .map_err(|e| StreamError::InvalidSignature(format!("Invalid RSA public key: {}", e)))?;
+
+        let verifying_key = RsaVerifyingKey::<Sha256>::new(public_key);
+
+        // Hash the data
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        let hash = hasher.finalize();
+
+        // Verify the signature
+        match verifying_key.verify(&hash, &signature.signature.as_slice().try_into()
+            .map_err(|_| StreamError::InvalidSignature("Invalid RSA signature format".to_string()))?) {
+            Ok(_) => {
+                debug!("RSA signature verification successful");
+                Ok(())
+            }
+            Err(e) => {
+                error!("RSA signature verification failed: {}", e);
+                Err(StreamError::InvalidSignature("RSA signature verification failed".to_string()))
+            }
+        }
     }
 
     /// Deploy module to edge location

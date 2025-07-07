@@ -508,7 +508,7 @@ impl StreamingProcessor {
     pub async fn subscribe_to_stream(
         &self,
         stream_id: &str,
-    ) -> Result<impl Stream<Item = StreamEvent> + Unpin> {
+    ) -> Result<impl Stream<Item = StreamEvent> + Unpin + use<>> {
         self.ensure_stream_exists(stream_id).await?;
 
         let publishers = self.event_publishers.read().await;

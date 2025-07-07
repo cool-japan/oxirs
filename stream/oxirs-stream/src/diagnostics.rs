@@ -5,16 +5,15 @@
 
 use crate::{
     health_monitor::{HealthMonitor, HealthStatus},
-    monitoring::{HealthChecker, MetricsCollector, Profiler},
-    EventMetadata, StreamEvent,
+    monitoring::{HealthChecker, MetricsCollector},
+    StreamEvent,
 };
-use anyhow::{anyhow, Result};
-use chrono::{DateTime, Duration, Timelike, Utc};
+use anyhow::Result;
+use chrono::{DateTime, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 /// Diagnostic report containing comprehensive system information
@@ -181,15 +180,19 @@ pub struct Recommendation {
     pub expected_impact: String,
 }
 
+// Type aliases for complex types
+type HealthMonitorMap = HashMap<
+    String,
+    Arc<RwLock<HealthMonitor<Box<dyn crate::connection_pool::PooledConnection>>>>,
+>;
+type EventBuffer = Arc<RwLock<VecDeque<(StreamEvent, DateTime<Utc>)>>>;
+
 /// Diagnostic analyzer for generating reports
 pub struct DiagnosticAnalyzer {
     metrics_collector: Arc<RwLock<MetricsCollector>>,
     health_checker: Arc<RwLock<HealthChecker>>,
-    health_monitors: HashMap<
-        String,
-        Arc<RwLock<HealthMonitor<Box<dyn crate::connection_pool::PooledConnection>>>>,
-    >,
-    event_buffer: Arc<RwLock<VecDeque<(StreamEvent, DateTime<Utc>)>>>,
+    health_monitors: HealthMonitorMap,
+    event_buffer: EventBuffer,
     error_tracker: Arc<RwLock<ErrorTracker>>,
 }
 
@@ -270,6 +273,64 @@ impl DiagnosticAnalyzer {
         })
     }
 
+    /// Get active backends from metrics
+    fn get_active_backends(metrics: &crate::monitoring::StreamingMetrics) -> Vec<String> {
+        let mut backends = Vec::new();
+
+        // Determine active backends based on metrics
+        if metrics.backend_connections_active > 0 {
+            // Check common backend patterns in metrics
+            if metrics.producer_events_published > 0 || metrics.consumer_events_consumed > 0 {
+                backends.push("memory".to_string()); // Always include memory backend
+            }
+
+            // Add other backends based on available feature flags or connections
+            #[cfg(feature = "kafka")]
+            backends.push("kafka".to_string());
+
+            #[cfg(feature = "nats")]
+            backends.push("nats".to_string());
+
+            #[cfg(feature = "redis")]
+            backends.push("redis".to_string());
+
+            #[cfg(feature = "pulsar")]
+            backends.push("pulsar".to_string());
+
+            #[cfg(feature = "kinesis")]
+            backends.push("kinesis".to_string());
+        }
+
+        // Fallback to default backends if none detected
+        if backends.is_empty() {
+            backends.push("memory".to_string());
+        }
+
+        backends
+    }
+
+    /// Calculate backpressure events from metrics
+    fn calculate_backpressure_events(metrics: &crate::monitoring::StreamingMetrics) -> u64 {
+        // Calculate backpressure events based on available metrics
+        // Backpressure typically occurs when error rate is high or processing is slow
+        let mut backpressure_events = 0;
+
+        // High error rate might indicate backpressure
+        if metrics.error_rate > 0.1 {
+            backpressure_events += (metrics.error_rate * 100.0) as u64;
+        }
+
+        // Circuit breaker trips often indicate backpressure scenarios
+        backpressure_events += metrics.backend_circuit_breaker_trips;
+
+        // High out-of-order rate might indicate processing delays
+        if metrics.out_of_order_rate > 0.05 {
+            backpressure_events += (metrics.out_of_order_rate * 50.0) as u64;
+        }
+
+        backpressure_events
+    }
+
     /// Collect system information
     async fn collect_system_info(&self) -> Result<SystemInfo> {
         let metrics = self.metrics_collector.read().await.get_metrics().await;
@@ -281,13 +342,50 @@ impl DiagnosticAnalyzer {
                 .signed_duration_since(metrics.collection_start_time)
                 .to_std()
                 .unwrap_or_default(),
-            backends: vec!["kafka".to_string(), "nats".to_string(), "redis".to_string()], // TODO: Get from config
+            backends: Self::get_active_backends(&metrics),
             active_connections: metrics.backend_connections_active as usize,
             memory_usage_mb: (metrics.system_memory_usage_bytes / 1024 / 1024) as f64,
             cpu_usage_percent: metrics.system_cpu_usage_percent,
             thread_count: 0, // Thread count not available in metrics, using placeholder
-            environment: HashMap::new(), // TODO: Collect relevant env vars
+            environment: Self::collect_relevant_env_vars(),
         })
+    }
+
+    /// Collect relevant environment variables for diagnostics
+    fn collect_relevant_env_vars() -> HashMap<String, String> {
+        let mut env_vars = HashMap::new();
+
+        // List of environment variables relevant to streaming operations
+        let relevant_vars = [
+            "RUST_LOG",
+            "RUST_BACKTRACE",
+            "OXIRS_LOG_LEVEL",
+            "KAFKA_BROKERS",
+            "NATS_SERVERS",
+            "REDIS_URL",
+            "AWS_REGION",
+            "AWS_ACCESS_KEY_ID",
+            "OTEL_EXPORTER_JAEGER_ENDPOINT",
+            "PROMETHEUS_ENDPOINT",
+            "PATH",
+            "CARGO_PKG_VERSION",
+            "RUST_VERSION",
+        ];
+
+        for var in &relevant_vars {
+            if let Ok(value) = std::env::var(var) {
+                // Mask sensitive values for security
+                let masked_value =
+                    if var.contains("KEY") || var.contains("SECRET") || var.contains("TOKEN") {
+                        format!("{}***", &value[..std::cmp::min(4, value.len())])
+                    } else {
+                        value
+                    };
+                env_vars.insert(var.to_string(), masked_value);
+            }
+        }
+
+        env_vars
     }
 
     /// Analyze system health
@@ -477,7 +575,7 @@ impl DiagnosticAnalyzer {
     async fn detect_bottlenecks(
         &self,
         metrics: &crate::monitoring::StreamingMetrics,
-        throughput: &ThroughputMetrics,
+        _throughput: &ThroughputMetrics,
         latency: &LatencyMetrics,
     ) -> Result<Vec<Bottleneck>> {
         let mut bottlenecks = Vec::new();
@@ -509,7 +607,7 @@ impl DiagnosticAnalyzer {
                     component: "Consumer".to_string(),
                     metric: "Lag".to_string(),
                     severity: "High".to_string(),
-                    description: format!("Consumer lag is {:.2} ms behind", lag_ms),
+                    description: format!("Consumer lag is {lag_ms:.2} ms behind"),
                     recommendation: "Increase consumer parallelism or optimize processing"
                         .to_string(),
                 });
@@ -609,7 +707,7 @@ impl DiagnosticAnalyzer {
             error_rate: metrics.error_rate,
             duplicate_rate: metrics.duplicate_rate,
             out_of_order_rate: metrics.out_of_order_rate,
-            backpressure_events: 0, // TODO: Add backpressure tracking to StreamingMetrics
+            backpressure_events: Self::calculate_backpressure_events(&metrics),
             circuit_breaker_trips: metrics.backend_circuit_breaker_trips,
         })
     }
@@ -632,7 +730,7 @@ impl DiagnosticAnalyzer {
 
             let bucket = timeline_buckets
                 .entry(bucket_time)
-                .or_insert_with(HashMap::new);
+                .or_default();
             *bucket.entry(error.error_type.clone()).or_insert(0) += 1;
         }
 
@@ -833,7 +931,7 @@ impl DiagnosticAnalyzer {
             .or_insert(0) += 1;
 
         // Update patterns
-        let pattern_key = format!("{}:{}", component, error_type);
+        let pattern_key = format!("{component}:{error_type}");
         let pattern = error_tracker
             .error_patterns
             .entry(pattern_key)
@@ -983,7 +1081,7 @@ impl DiagnosticCLI {
                 println!("   {}", rec.description);
                 println!("   Actions:");
                 for action in &rec.action_items {
-                    println!("   - {}", action);
+                    println!("   - {action}");
                 }
             }
         }
@@ -991,7 +1089,7 @@ impl DiagnosticCLI {
         // Save report to file
         let report_file = format!("diagnostic_report_{}.json", report.report_id);
         std::fs::write(&report_file, serde_json::to_string_pretty(&report)?)?;
-        println!("\nFull report saved to: {}", report_file);
+        println!("\nFull report saved to: {report_file}");
 
         Ok(())
     }
@@ -1074,7 +1172,7 @@ impl DiagnosticCLI {
 
         println!("\nError Categories:");
         for (category, count) in &errors.error_categories {
-            println!("  {}: {} errors", category, count);
+            println!("  {category}: {count} errors");
         }
 
         if !errors.top_errors.is_empty() {
@@ -1149,7 +1247,7 @@ mod tests {
         let report = analyzer.generate_report().await.unwrap();
 
         assert!(!report.report_id.is_empty());
-        assert!(report.duration.as_nanos() >= 0); // Duration should be non-negative
+        // Duration is always non-negative by type invariant (u128)
         assert!(report.health_summary.availability_percentage >= 0.0);
         assert!(report.health_summary.availability_percentage <= 100.0);
     }

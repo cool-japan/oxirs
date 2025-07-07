@@ -13,19 +13,17 @@ use governor::{
 };
 use reqwest::{
     header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE, USER_AGENT},
-    Client, StatusCode,
+    Client,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Semaphore};
-use tower::limit::ConcurrencyLimitLayer;
-use tower::ServiceBuilder;
-use tracing::{debug, error, info, warn};
+use tokio::sync::RwLock;
+use tokio::sync::Semaphore;
+use tracing::{debug, info, warn};
 
 use crate::{
-    auth::AuthCredentials,
     executor::{GraphQLResponse, SparqlResults},
     service::{AuthType, ServiceAuthConfig},
     FederatedService,
@@ -150,13 +148,14 @@ impl SparqlClient {
         let mut headers = if let Some(auth) = &self.service.auth {
             if auth.auth_type == AuthType::OAuth2 {
                 // Refresh OAuth2 token if needed before building headers
-                if let Ok(Some(fresh_token)) = self.ensure_fresh_oauth2_token(auth).await {
-                    let mut headers = self.build_headers(false)?;
-                    let auth_value = format!("Bearer {}", fresh_token);
-                    headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
-                    headers
-                } else {
-                    self.build_headers(true)?
+                match self.ensure_fresh_oauth2_token(auth).await {
+                    Ok(Some(fresh_token)) => {
+                        let mut headers = self.build_headers(false)?;
+                        let auth_value = format!("Bearer {}", fresh_token);
+                        headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
+                        headers
+                    }
+                    _ => self.build_headers(true)?,
                 }
             } else {
                 self.build_headers(true)?
@@ -493,11 +492,16 @@ impl ServiceClient for SparqlClient {
     async fn health_check(&self) -> Result<bool> {
         // Use a lightweight query for health check
         let query = "ASK { }"; // Simpler query that should always work if service is reachable
-        // Respect the client's configured timeout
+                               // Respect the client's configured timeout
         let timeout = self.config.request_timeout;
         match tokio::time::timeout(timeout, self.execute_sparql_query(query)).await {
             Ok(Ok(_)) => Ok(true),
-            Ok(Err(_)) | Err(_) => Ok(false), // Either query failed or timed out
+            Ok(Err(_)) => Ok(false), // Query failed
+            Err(_) => {
+                // Timeout occurred - record this as an error since the request was attempted
+                self.record_error("health_check_timeout").await;
+                Ok(false)
+            }
         }
     }
 
@@ -743,7 +747,12 @@ impl ServiceClient for GraphQLClient {
         let timeout = self.config.request_timeout;
         match tokio::time::timeout(timeout, self.execute_graphql_query(query, None)).await {
             Ok(Ok(_)) => Ok(true),
-            Ok(Err(_)) | Err(_) => Ok(false), // Either query failed or timed out
+            Ok(Err(_)) => Ok(false), // Query failed
+            Err(_) => {
+                // Timeout occurred - record this as an error since the request was attempted
+                self.record_error("health_check_timeout").await;
+                Ok(false)
+            }
         }
     }
 

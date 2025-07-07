@@ -340,11 +340,12 @@ impl AdaptiveIndexManager {
         let stats = self.pattern_stats.clone();
 
         indexes.retain(|pattern, _| {
-            if let Some(pattern_stats) = stats.get(pattern) {
-                // Keep if still meeting frequency threshold
-                pattern_stats.query_frequency >= self.config.min_frequency_for_index * 0.5
-            } else {
-                false
+            match stats.get(pattern) {
+                Some(pattern_stats) => {
+                    // Keep if still meeting frequency threshold
+                    pattern_stats.query_frequency >= self.config.min_frequency_for_index * 0.5
+                }
+                _ => false,
             }
         });
     }
@@ -388,7 +389,7 @@ impl AdaptiveIndexManager {
     /// Remove a triple and update indexes
     pub fn remove(&self, triple: &Triple) -> Result<bool, OxirsError> {
         // Remove from base graph
-        let removed = self.base_graph.write().remove(&triple);
+        let removed = self.base_graph.write().remove(triple);
 
         if removed {
             // Update adaptive indexes

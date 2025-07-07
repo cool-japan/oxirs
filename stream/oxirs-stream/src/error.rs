@@ -2,7 +2,6 @@
 //!
 //! Error types for the streaming module.
 
-use std::fmt;
 use thiserror::Error;
 
 /// Result type for streaming operations
@@ -106,6 +105,15 @@ pub enum StreamError {
 
     #[error("WASM edge computing error: {0}")]
     WasmEdgeComputing(String),
+
+    #[error("Invalid WASM module: {0}")]
+    InvalidModule(String),
+
+    #[error("Invalid signature: {0}")]
+    InvalidSignature(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 
     #[error("Performance optimization error: {metric}, expected: {expected}, actual: {actual}")]
     PerformanceOptimization {

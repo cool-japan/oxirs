@@ -8,10 +8,10 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, mpsc, oneshot, RwLock};
+use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
@@ -438,7 +438,7 @@ impl ContinuousQueryManager {
     /// Unregister a query
     pub async fn unregister_query(&self, query_id: &str) -> Result<()> {
         let mut queries = self.queries.write().await;
-        let query = queries
+        let _query = queries
             .remove(query_id)
             .ok_or_else(|| anyhow!("Query not found"))?;
 
@@ -638,7 +638,7 @@ impl ContinuousQueryManager {
                                         };
 
                                         // Dispatch results
-                                        if let Err(e) = Self::dispatch_results(
+                                        match Self::dispatch_results(
                                             &queries,
                                             &dispatcher,
                                             &query_id_clone,
@@ -646,16 +646,20 @@ impl ContinuousQueryManager {
                                         )
                                         .await
                                         {
-                                            error!(
-                                                "Failed to dispatch results for query {}: {}",
-                                                query_id_clone, e
-                                            );
-                                        } else {
-                                            let _ =
-                                                event_notifier.send(QueryEvent::ResultsDelivered {
-                                                    id: query_id_clone.clone(),
-                                                    count: result.bindings.len(),
-                                                });
+                                            Err(e) => {
+                                                error!(
+                                                    "Failed to dispatch results for query {}: {}",
+                                                    query_id_clone, e
+                                                );
+                                            }
+                                            _ => {
+                                                let _ = event_notifier.send(
+                                                    QueryEvent::ResultsDelivered {
+                                                        id: query_id_clone.clone(),
+                                                        count: result.bindings.len(),
+                                                    },
+                                                );
+                                            }
                                         }
 
                                         last_result_hash = Some(hash);
@@ -736,7 +740,7 @@ impl ContinuousQueryManager {
         executor: &Arc<QueryExecutor>,
         query: &str,
         metadata: &QueryMetadata,
-        last_hash: Option<&String>,
+        _last_hash: Option<&String>,
     ) -> Result<(QueryResult, String)> {
         // Check cache if enabled
         if metadata.enable_caching {
@@ -961,7 +965,7 @@ impl ResultCache {
     }
 
     /// Get cached result
-    fn get(&self, query: &str, ttl: Duration) -> Option<QueryResult> {
+    fn get(&self, query: &str, _ttl: Duration) -> Option<QueryResult> {
         self.cache.get(query).and_then(|cached| {
             if cached.cached_at.elapsed() < cached.ttl {
                 Some(cached.data.clone())

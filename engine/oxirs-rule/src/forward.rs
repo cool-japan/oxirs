@@ -477,6 +477,7 @@ impl ForwardChainer {
     }
 
     /// Substitute variables in a term
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_term(&self, term: &Term, substitution: &Substitution) -> Term {
         match term {
             Term::Variable(var) => substitution

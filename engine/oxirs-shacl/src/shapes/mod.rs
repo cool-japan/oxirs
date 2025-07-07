@@ -26,7 +26,7 @@ pub fn format_term_for_sparql(term: &Term) -> String {
         Term::NamedNode(nn) => format!("<{}>", nn.as_str()),
         Term::BlankNode(bn) => format!("_:{}", bn.as_str()),
         Term::Literal(lit) => format_literal_for_sparql(lit),
-        _ => format!("{}", term),
+        _ => format!("{term}"),
     }
 }
 

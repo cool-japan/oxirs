@@ -1,7 +1,6 @@
 //! Main quantum stream processor
 
-use super::algorithms::QuantumAlgorithmSuite;
-use crate::error::{StreamError, StreamResult};
+use crate::error::StreamResult;
 use crate::event::StreamEvent;
 
 // Re-export the main types (they're implemented in types.rs)
@@ -16,7 +15,7 @@ impl QuantumStreamProcessor {
     ) -> StreamResult<Vec<QuantumEvent>> {
         let mut quantum_events = Vec::new();
 
-        for event in events {
+        for _event in events {
             // Convert StreamEvent to QuantumEvent
             let quantum_event = QuantumEvent {
                 id: format!("q-{}", uuid::Uuid::new_v4()),

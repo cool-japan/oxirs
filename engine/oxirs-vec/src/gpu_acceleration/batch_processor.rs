@@ -39,13 +39,13 @@ impl BatchVectorProcessor {
         }
 
         let start_time = Instant::now();
-        
+
         // Process the batch (simplified implementation)
         let batch_size = self.processing_queue.len();
         self.processing_queue.clear();
-        
+
         let execution_time = start_time.elapsed().as_secs_f64() * 1000.0;
-        
+
         let result = GpuOperationResult {
             operation: GpuOperationType::Insert,
             execution_time_ms: execution_time,
@@ -92,7 +92,7 @@ impl GpuPerformanceReport {
         let failed_operations = total_operations - successful_operations;
         let total_execution_time_ms: f64 = results.iter().map(|r| r.execution_time_ms).sum();
         let total_memory_used: usize = results.iter().map(|r| r.memory_used).sum();
-        
+
         let average_execution_time_ms = if total_operations > 0 {
             total_execution_time_ms / total_operations as f64
         } else {

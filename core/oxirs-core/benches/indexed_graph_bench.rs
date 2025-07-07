@@ -71,9 +71,9 @@ fn bench_query_patterns(c: &mut Criterion) {
         for j in 0..10 {
             for k in 0..10 {
                 let triple = create_triple(
-                    &format!("http://example.org/s{}", i),
-                    &format!("http://example.org/p{}", j),
-                    &format!("object{}", k),
+                    &format!("http://example.org/s{i}"),
+                    &format!("http://example.org/p{j}"),
+                    &format!("object{k}"),
                 );
                 graph.insert(&triple);
             }

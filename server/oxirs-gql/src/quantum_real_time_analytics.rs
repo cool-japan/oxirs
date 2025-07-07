@@ -7,13 +7,12 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{broadcast, Mutex as AsyncMutex, RwLock as AsyncRwLock};
-use tokio::time::{interval, Interval};
-use tracing::{debug, error, info, warn};
+use std::time::{Duration, SystemTime};
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
+use tokio::time::interval;
+use tracing::{debug, error, info};
 
-use crate::ai_query_predictor::{AIQueryPredictor, QueryPrediction};
-use crate::predictive_analytics::{PredictiveAnalyticsEngine, TrendAnalysis};
+use crate::ai_query_predictor::AIQueryPredictor;
 use crate::quantum_optimizer::{Complex64, QuantumQueryOptimizer, QuantumState};
 
 /// Configuration for quantum-enhanced real-time analytics
@@ -282,7 +281,7 @@ impl QuantumRealTimeAnalyticsEngine {
 
         // Initialize superposition with query features
         for (i, &byte) in query_bytes.iter().enumerate() {
-            let index = (i % superposition_size);
+            let index = i % superposition_size;
             let amplitude = (byte as f64) / 255.0;
             query_superposition_states[index] = Complex64::new(
                 amplitude * (index as f64 * 0.1).cos(),
@@ -448,7 +447,7 @@ impl QuantumRealTimeAnalyticsEngine {
     /// Generate quantum-enhanced performance insights
     pub async fn generate_performance_insights(&self) -> Result<QuantumPerformanceInsights> {
         let metrics = self.get_analytics_metrics().await?;
-        let recent_measurements = self.get_recent_measurements(10).await?;
+        let _recent_measurements = self.get_recent_measurements(10).await?;
 
         // Calculate quantum efficiency score
         let quantum_efficiency_score = (metrics.quantum_advantage_ratio

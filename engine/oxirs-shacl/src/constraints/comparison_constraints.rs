@@ -1,7 +1,7 @@
 //! Comparison constraint implementations
 
 use super::constraint_context::{ConstraintContext, ConstraintEvaluationResult};
-use crate::{ConstraintComponentId, Result, Severity};
+use crate::Result;
 use oxirs_core::{model::Term, rdf_store::Store};
 use serde::{Deserialize, Serialize};
 

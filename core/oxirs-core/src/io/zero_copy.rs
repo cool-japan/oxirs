@@ -179,7 +179,7 @@ fn write_string<W: Write>(writer: &mut W, s: &str) -> io::Result<()> {
 }
 
 /// Read a length-prefixed string (zero-copy)
-fn read_string<'a>(data: &'a [u8]) -> Result<(&'a str, &'a [u8]), OxirsError> {
+fn read_string(data: &[u8]) -> Result<(&str, &[u8]), OxirsError> {
     if data.len() < 4 {
         return Err(OxirsError::Parse(
             "Insufficient data for string length".into(),
@@ -194,7 +194,7 @@ fn read_string<'a>(data: &'a [u8]) -> Result<(&'a str, &'a [u8]), OxirsError> {
     }
 
     let s = str::from_utf8(&data[..len])
-        .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
+        .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {e}")))?;
 
     Ok((s, &data[len..]))
 }
@@ -257,18 +257,18 @@ impl ZeroCopySerialize for Term {
     }
 
     fn serialize_to_bytes(&self, buf: &mut BytesMut) {
-        match self {
-            &Term::NamedNode(ref n) => {
+        match *self {
+            Term::NamedNode(ref n) => {
                 buf.put_u8(TERM_NAMED_NODE);
                 buf.put_u32_le(n.as_str().len() as u32);
                 buf.put_slice(n.as_str().as_bytes());
             }
-            &Term::BlankNode(ref b) => {
+            Term::BlankNode(ref b) => {
                 buf.put_u8(TERM_BLANK_NODE);
                 buf.put_u32_le(b.as_str().len() as u32);
                 buf.put_slice(b.as_str().as_bytes());
             }
-            &Term::Literal(ref l) => {
+            Term::Literal(ref l) => {
                 if let Some(lang) = l.language() {
                     buf.put_u8(TERM_LITERAL_LANG);
                     buf.put_u32_le(l.value().len() as u32);
@@ -287,12 +287,12 @@ impl ZeroCopySerialize for Term {
                     buf.put_slice(l.value().as_bytes());
                 }
             }
-            &Term::Variable(ref v) => {
+            Term::Variable(ref v) => {
                 buf.put_u8(TERM_VARIABLE);
                 buf.put_u32_le(v.as_str().len() as u32);
                 buf.put_slice(v.as_str().as_bytes());
             }
-            &Term::QuotedTriple(_) => {
+            Term::QuotedTriple(_) => {
                 panic!("QuotedTriple bytes serialization not supported");
             }
         }
@@ -361,10 +361,7 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                     rest,
                 ))
             }
-            _ => Err(OxirsError::Parse(format!(
-                "Unknown term type: {}",
-                term_type
-            ))),
+            _ => Err(OxirsError::Parse(format!("Unknown term type: {term_type}"))),
         }
     }
 
@@ -380,7 +377,7 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                 let len = buf.get_u32_le() as usize;
                 let bytes = buf.split_to(len);
                 let iri = str::from_utf8(&bytes)
-                    .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
+                    .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {e}")))?;
                 Ok(ZeroCopyTerm::NamedNode(ZeroCopyIri::new(
                     ZeroCopyStr::new_owned(iri.to_string()),
                 )))
@@ -389,7 +386,7 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                 let len = buf.get_u32_le() as usize;
                 let bytes = buf.split_to(len);
                 let id = str::from_utf8(&bytes)
-                    .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
+                    .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {e}")))?;
                 Ok(ZeroCopyTerm::BlankNode(ZeroCopyBlankNode::new(
                     ZeroCopyStr::new_owned(id.to_string()),
                 )))
@@ -398,15 +395,12 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                 let len = buf.get_u32_le() as usize;
                 let bytes = buf.split_to(len);
                 let value = str::from_utf8(&bytes)
-                    .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
+                    .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {e}")))?;
                 Ok(ZeroCopyTerm::Literal(ZeroCopyLiteral::new_simple(
                     ZeroCopyStr::new_owned(value.to_string()),
                 )))
             }
-            _ => Err(OxirsError::Parse(format!(
-                "Unknown term type: {}",
-                term_type
-            ))),
+            _ => Err(OxirsError::Parse(format!("Unknown term type: {term_type}"))),
         }
     }
 }

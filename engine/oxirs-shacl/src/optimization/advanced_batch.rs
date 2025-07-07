@@ -7,20 +7,13 @@
 use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
     optimization::core::ConstraintCache,
-    report::ValidationReport,
-    validation::ValidationViolation,
-    Result, ShaclError, Shape, ShapeId,
+    Result, ShapeId,
 };
-use indexmap::IndexMap;
 use oxirs_core::{model::Term, Store};
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc, Mutex, RwLock,
-};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// Advanced batch validation configuration
@@ -228,7 +221,7 @@ impl AdvancedBatchValidator {
         &self,
         constraints: Vec<(Constraint, ConstraintContext)>,
     ) -> Result<HashMap<ConstraintGroupKey, Vec<ConstraintBatchItem>>> {
-        let mut grouping = self.grouping_strategy.write().unwrap();
+        let _grouping = self.grouping_strategy.write().unwrap();
         let mut grouped = HashMap::new();
 
         for (constraint, context) in constraints {
@@ -294,14 +287,13 @@ impl AdvancedBatchValidator {
         for (_group_key, items) in grouped_constraints {
             for item in items {
                 // Check if adding this item would exceed our limits
-                if current_batch.len() >= target_batch_size
-                    || current_batch_cost + item.estimated_cost > target_cost_per_batch
+                if (current_batch.len() >= target_batch_size
+                    || current_batch_cost + item.estimated_cost > target_cost_per_batch)
+                    && !current_batch.is_empty()
                 {
-                    if !current_batch.is_empty() {
-                        optimized_batches.push(current_batch);
-                        current_batch = Vec::new();
-                        current_batch_cost = 0.0;
-                    }
+                    optimized_batches.push(current_batch);
+                    current_batch = Vec::new();
+                    current_batch_cost = 0.0;
                 }
 
                 current_batch.push(item.clone());
@@ -407,8 +399,8 @@ impl AdvancedBatchValidator {
     fn execute_single_batch<S: Store>(
         &self,
         scheduled_batch: &ScheduledBatch,
-        store: &S,
-        batch_index: usize,
+        _store: &S,
+        _batch_index: usize,
     ) -> Result<Vec<ConstraintEvaluationResult>> {
         let mut results = Vec::with_capacity(scheduled_batch.items.len());
 
@@ -537,13 +529,13 @@ impl AdvancedBatchValidator {
         total_time: Duration,
     ) -> Result<BatchValidationResult> {
         let mut all_constraint_results = Vec::new();
-        let mut total_memory_used = 0;
+        let mut _total_memory_used = 0;
         let mut total_cache_hits = 0;
         let mut total_items = 0;
 
         for result in &results {
             all_constraint_results.extend(result.constraint_results.clone());
-            total_memory_used += result.memory_used;
+            _total_memory_used += result.memory_used;
             total_cache_hits += result.cache_hits;
             total_items += result.items_processed;
         }
@@ -559,12 +551,12 @@ impl AdvancedBatchValidator {
             batch_stats: BatchExecutionStats {
                 batches_executed: results.len(),
                 constraints_processed: total_items,
-                avg_batch_size: if results.len() > 0 {
+                avg_batch_size: if !results.is_empty() {
                     total_items as f64 / results.len() as f64
                 } else {
                     0.0
                 },
-                avg_batch_execution_time: if results.len() > 0 {
+                avg_batch_execution_time: if !results.is_empty() {
                     Duration::from_nanos(
                         (results
                             .iter()

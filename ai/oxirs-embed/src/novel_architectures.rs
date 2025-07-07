@@ -1453,10 +1453,13 @@ impl EmbeddingModel for NovelArchitectureModel {
                         .slice_mut(s![..copy_len])
                         .assign(&input.slice(s![..copy_len]));
 
-                    if let Ok(quantum_output) = self.quantum_forward(&padded_input) {
-                        results.push(quantum_output.mapv(|x| x as f32).to_vec());
-                    } else {
-                        results.push(vec![0.0; self.config.base_config.dimensions]);
+                    match self.quantum_forward(&padded_input) {
+                        Ok(quantum_output) => {
+                            results.push(quantum_output.mapv(|x| x as f32).to_vec());
+                        }
+                        _ => {
+                            results.push(vec![0.0; self.config.base_config.dimensions]);
+                        }
                     }
                 }
                 _ => {

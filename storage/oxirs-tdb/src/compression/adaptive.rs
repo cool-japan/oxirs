@@ -7,10 +7,9 @@ use crate::compression::{
     dictionary::AdaptiveDictionary,
     frame_of_reference::FrameOfReferenceEncoder,
     run_length::RunLengthEncoder,
-    AdvancedCompressionType, CompressedData, CompressionAlgorithm, CompressionMetadata,
+    AdvancedCompressionType, CompressedData, CompressionAlgorithm,
 };
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
 use std::time::Instant;
 
 /// Adaptive compressor that selects the best algorithm for given data
@@ -237,7 +236,7 @@ impl AdaptiveCompressor {
                 encoder.compress(data)?
             }
             AdvancedCompressionType::FrameOfReference => {
-                let encoder = FrameOfReferenceEncoder;
+                let encoder = FrameOfReferenceEncoder::default();
                 encoder.compress(data)?
             }
             AdvancedCompressionType::AdaptiveDictionary => {
@@ -325,7 +324,7 @@ impl AdaptiveCompressor {
                 encoder.decompress(&temp_compressed)
             }
             AdvancedCompressionType::FrameOfReference => {
-                let encoder = FrameOfReferenceEncoder;
+                let encoder = FrameOfReferenceEncoder::default();
                 encoder.decompress(&temp_compressed)
             }
             AdvancedCompressionType::AdaptiveDictionary => {

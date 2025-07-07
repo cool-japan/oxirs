@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 #[cfg(feature = "wasm")]
 use wasmtime::{Engine, Instance, Module, Store, TypedFunc};
@@ -272,7 +272,7 @@ impl WasmEdgeProcessor {
         };
 
         #[cfg(not(feature = "wasm"))]
-        let wasm_engine = ();
+        let _wasm_engine = ();
 
         let execution_semaphore = Semaphore::new(config.max_concurrent_instances);
         let security_manager = SecurityManager::new();
@@ -425,7 +425,7 @@ impl WasmEdgeProcessor {
     /// Internal plugin execution
     async fn execute_plugin_internal(
         &self,
-        plugin: &WasmPlugin,
+        _plugin: &WasmPlugin,
         events: Vec<StreamEvent>,
         _edge_id: &str,
         _execution_id: &str,
@@ -690,6 +690,12 @@ impl WasmEdgeProcessor {
     }
 }
 
+impl Default for SecurityManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SecurityManager {
     pub fn new() -> Self {
         let mut execution_policies = HashMap::new();
@@ -794,6 +800,12 @@ pub struct EdgeResourceOptimizer {
     allocation_history: RwLock<Vec<AllocationEvent>>,
     prediction_engine: PredictionEngine,
     optimization_metrics: RwLock<OptimizationMetrics>,
+}
+
+impl Default for EdgeResourceOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EdgeResourceOptimizer {
@@ -978,6 +990,12 @@ pub struct WasmIntelligentCache {
     prefetch_predictor: PrefetchPredictor,
 }
 
+impl Default for WasmIntelligentCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl WasmIntelligentCache {
     pub fn new() -> Self {
         Self {
@@ -1086,6 +1104,12 @@ pub struct AdaptiveSecuritySandbox {
     security_metrics: RwLock<SecurityMetrics>,
 }
 
+impl Default for AdaptiveSecuritySandbox {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdaptiveSecuritySandbox {
     pub fn new() -> Self {
         Self {
@@ -1182,7 +1206,7 @@ impl AdaptiveSecuritySandbox {
                     let mut restrictions = HashMap::new();
                     restrictions.insert("action".to_string(), "reduce_memory".to_string());
                     policies.insert(
-                        format!("{}_memory_limit", plugin_id),
+                        format!("{plugin_id}_memory_limit"),
                         AdaptivePolicy {
                             policy_type: "memory_restriction".to_string(),
                             restrictions,
@@ -1196,7 +1220,7 @@ impl AdaptiveSecuritySandbox {
                     let mut restrictions = HashMap::new();
                     restrictions.insert("action".to_string(), "block_network".to_string());
                     policies.insert(
-                        format!("{}_network_access", plugin_id),
+                        format!("{plugin_id}_network_access"),
                         AdaptivePolicy {
                             policy_type: "network_restriction".to_string(),
                             restrictions,
@@ -1348,6 +1372,12 @@ pub struct PredictionEngine {
     models: HashMap<String, ResourceModel>,
 }
 
+impl Default for PredictionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PredictionEngine {
     pub fn new() -> Self {
         Self {
@@ -1405,6 +1435,12 @@ pub struct CacheOptimizer {
     optimization_strategy: OptimizationStrategy,
 }
 
+impl Default for CacheOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CacheOptimizer {
     pub fn new() -> Self {
         Self {
@@ -1424,6 +1460,12 @@ pub enum OptimizationStrategy {
 #[derive(Debug)]
 pub struct PrefetchPredictor {
     access_patterns: HashMap<String, Vec<String>>,
+}
+
+impl Default for PrefetchPredictor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PrefetchPredictor {
@@ -1447,6 +1489,12 @@ pub struct ThreatDetector {
     threat_signatures: Vec<ThreatSignature>,
 }
 
+impl Default for ThreatDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ThreatDetector {
     pub fn new() -> Self {
         Self {
@@ -1466,6 +1514,12 @@ impl ThreatDetector {
 #[derive(Debug)]
 pub struct BehavioralAnalyzer {
     baseline_profiles: HashMap<String, BehaviorProfile>,
+}
+
+impl Default for BehavioralAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BehavioralAnalyzer {

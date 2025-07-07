@@ -3,9 +3,9 @@
 //! Advanced backend selection algorithms, cost modeling, and ML-driven optimization
 //! for choosing the optimal streaming backend based on workload patterns and performance metrics.
 
-use crate::backend::{BackendType, StreamBackendConfig};
+use crate::backend::BackendType;
 use crate::event::StreamEvent;
-use crate::monitoring::{BackendMetricsUpdate, StreamingMetrics};
+use crate::monitoring::StreamingMetrics;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Backend optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,9 +157,9 @@ pub struct MLPredictor {
     /// Learned patterns
     patterns: HashMap<String, PatternModel>,
     /// Feature weights
-    feature_weights: Vec<f64>,
+    _feature_weights: Vec<f64>,
     /// Prediction confidence threshold
-    confidence_threshold: f64,
+    _confidence_threshold: f64,
 }
 
 /// Single performance data point for ML training
@@ -199,7 +199,7 @@ pub struct BackendOptimizer {
 /// Pattern analyzer for workload classification
 pub struct PatternAnalyzer {
     event_history: Vec<(DateTime<Utc>, StreamEvent)>,
-    pattern_cache: HashMap<String, WorkloadPattern>,
+    _pattern_cache: HashMap<String, WorkloadPattern>,
     analysis_window: ChronoDuration,
 }
 
@@ -628,7 +628,7 @@ impl PatternAnalyzer {
     pub fn new(analysis_window: ChronoDuration) -> Self {
         Self {
             event_history: Vec::new(),
-            pattern_cache: HashMap::new(),
+            _pattern_cache: HashMap::new(),
             analysis_window,
         }
     }
@@ -965,13 +965,19 @@ impl CostCalculator {
     }
 }
 
+impl Default for MLPredictor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MLPredictor {
     pub fn new() -> Self {
         Self {
             performance_history: Vec::new(),
             patterns: HashMap::new(),
-            feature_weights: vec![1.0; 10], // Start with equal weights
-            confidence_threshold: 0.7,
+            _feature_weights: vec![1.0; 10], // Start with equal weights
+            _confidence_threshold: 0.7,
         }
     }
 
@@ -1067,7 +1073,7 @@ impl MLPredictor {
             }
 
             // Create pattern model for this backend
-            let pattern_name = format!("{:?}_model", backend_type);
+            let pattern_name = format!("{backend_type:?}_model");
             let model = self.train_linear_model(&backend_data).await?;
             self.patterns.insert(pattern_name, model);
         }
@@ -1309,8 +1315,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_backend_recommendation() {
-        let mut config = OptimizerConfig::default();
-        config.enable_ml_prediction = false; // Disable ML prediction for test
+        let config = OptimizerConfig {
+            enable_ml_prediction: false, // Disable ML prediction for test
+            ..Default::default()
+        };
         let optimizer = BackendOptimizer::new(config);
 
         // Add some backend performance data

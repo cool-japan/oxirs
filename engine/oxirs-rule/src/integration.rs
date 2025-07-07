@@ -6,11 +6,10 @@
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
 use oxirs_core::model::{
-    GraphName, Literal, NamedNode, Object, Predicate, Quad, RdfTerm, Subject, Triple, Variable,
+    GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple,
 };
 use oxirs_core::{OxirsError, RdfStore};
-use std::collections::HashMap;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info};
 
 /// Integration bridge for connecting oxirs-rule with oxirs-core
 pub struct RuleIntegration {
@@ -117,7 +116,7 @@ impl RuleIntegration {
     ) -> Result<Vec<Triple>> {
         // First get direct matches from store
         let quads = self.store.query_quads(subject, predicate, object, None)?;
-        let direct_matches: Vec<Triple> = quads
+        let _direct_matches: Vec<Triple> = quads
             .into_iter()
             .map(|quad| {
                 Triple::new(
@@ -246,9 +245,9 @@ impl RuleIntegration {
     fn term_to_subject(&self, term: &Term) -> Result<Subject> {
         match term {
             Term::Constant(value) => {
-                if value.starts_with("_:") {
+                if let Some(stripped) = value.strip_prefix("_:") {
                     // Blank node
-                    Ok(Subject::BlankNode(oxirs_core::BlankNode::new(&value[2..])?))
+                    Ok(Subject::BlankNode(oxirs_core::BlankNode::new(stripped)?))
                 } else {
                     // Named node
                     Ok(Subject::NamedNode(NamedNode::new(value)?))
@@ -284,9 +283,9 @@ impl RuleIntegration {
     fn term_to_object(&self, term: &Term) -> Result<Object> {
         match term {
             Term::Constant(value) => {
-                if value.starts_with("_:") {
+                if let Some(stripped) = value.strip_prefix("_:") {
                     // Blank node
-                    Ok(Object::BlankNode(oxirs_core::BlankNode::new(&value[2..])?))
+                    Ok(Object::BlankNode(oxirs_core::BlankNode::new(stripped)?))
                 } else {
                     // Named node
                     Ok(Object::NamedNode(NamedNode::new(value)?))
@@ -359,6 +358,7 @@ impl RuleIntegration {
     ) -> Result<ProcessingStats> {
         let start_time = std::time::Instant::now();
         let mut processed = 0;
+        #[allow(unused_assignments)]
         let mut derived = 0;
 
         // Insert triples into named graph
@@ -479,7 +479,7 @@ impl RuleIntegration {
 
         for triple_batch in triples.chunks(batch_size) {
             // Begin transaction (conceptual - oxirs-core may not have transactions yet)
-            let batch_start = self.store.len()?;
+            let _batch_start = self.store.len()?;
 
             // Process batch
             for triple in triple_batch {
@@ -542,13 +542,13 @@ impl RuleIntegration {
                         }
                         Err(e) => {
                             failed += 1;
-                            error_details.push(format!("Triple {}: {}", index, e));
+                            error_details.push(format!("Triple {index}: {e}"));
                         }
                     }
                 }
                 Err(e) => {
                     failed += 1;
-                    error_details.push(format!("Parse error {}: {}", index, e));
+                    error_details.push(format!("Parse error {index}: {e}"));
                 }
             }
         }
@@ -589,10 +589,10 @@ impl RuleIntegration {
             // In a full implementation, this would look up the prefix in stored mappings
             // For now, return common namespace expansions
             let expanded = match prefix {
-                "rdf" => format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{}", local_name),
-                "rdfs" => format!("http://www.w3.org/2000/01/rdf-schema#{}", local_name),
-                "owl" => format!("http://www.w3.org/2002/07/owl#{}", local_name),
-                "xsd" => format!("http://www.w3.org/2001/XMLSchema#{}", local_name),
+                "rdf" => format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{local_name}"),
+                "rdfs" => format!("http://www.w3.org/2000/01/rdf-schema#{local_name}"),
+                "owl" => format!("http://www.w3.org/2002/07/owl#{local_name}"),
+                "xsd" => format!("http://www.w3.org/2001/XMLSchema#{local_name}"),
                 _ => prefixed_iri.to_string(), // Return as-is if prefix not recognized
             };
 
@@ -606,7 +606,7 @@ impl RuleIntegration {
     pub fn validate_rdf_data(&self) -> Result<ValidationReport> {
         let quad_count = self.store.len()?;
         let mut warnings = Vec::new();
-        let mut errors = Vec::new();
+        let errors = Vec::new();
 
         // Basic validation checks
         if quad_count == 0 {
@@ -1290,6 +1290,6 @@ mod tests {
         assert!(!report.warnings.is_empty()); // Should warn about empty store
         assert!(report.errors.is_empty());
 
-        println!("Validation report: {}", report);
+        println!("Validation report: {report}");
     }
 }

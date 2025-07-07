@@ -11,19 +11,13 @@
 //! - Performance monitoring and query analytics
 //! - Neural-symbolic query processing
 
-use crate::{
-    hnsw::{HnswConfig, HnswIndex},
-    index::{IndexConfig, VectorIndex},
-    similarity::SimilarityMetric,
-    sparql_integration::{SparqlVectorFunctions, VectorServiceConfig},
-    Vector, VectorPrecision,
-};
-use anyhow::{Context, Error as AnyhowError, Result};
+use crate::VectorIndex;
+use anyhow::{Error as AnyhowError, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, span, warn, Level};
+use tracing::{debug, span, Level};
 
 /// Vector-aware query optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1000,6 +994,12 @@ impl VectorQueryPlanner {
     }
 }
 
+impl Default for VectorFunctionRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VectorFunctionRegistry {
     /// Create a new vector function registry
     pub fn new() -> Self {
@@ -1049,7 +1049,7 @@ impl VectorFunctionRegistry {
             let functions = self.functions.read().unwrap();
             functions
                 .get(name)
-                .ok_or_else(|| AnyhowError::msg(format!("Function not found: {}", name)))?
+                .ok_or_else(|| AnyhowError::msg(format!("Function not found: {name}")))?
                 .clone()
         };
 
@@ -1079,14 +1079,14 @@ impl VectorFunctionRegistry {
         monitor
             .execution_times
             .entry(name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(execution_time);
 
         // Add performance trend point
         monitor
             .trends
             .entry(name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((Instant::now(), execution_time.as_secs_f64()));
 
         Ok(())
@@ -1116,6 +1116,12 @@ impl VectorFunctionRegistry {
             total_execution_time: execution_times.iter().sum(),
             error_rate: monitor.error_rates.get(name).copied().unwrap_or(0.0),
         })
+    }
+}
+
+impl Default for VectorTypeChecker {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

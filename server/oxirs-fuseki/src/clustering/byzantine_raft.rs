@@ -280,66 +280,6 @@ impl BftNodeState {
         }
     }
 
-    /// Generate proof-of-work for leader election
-    pub fn generate_proof_of_work(
-        &self,
-        term: u64,
-        candidate_id: &str,
-    ) -> FusekiResult<ProofOfWork> {
-        let start_time = Instant::now();
-        let mut nonce = 0u64;
-
-        let challenge = format!("{}:{}:{}", term, candidate_id, self.identity.node_id);
-
-        loop {
-            let mut context = Context::new(&SHA256);
-            context.update(challenge.as_bytes());
-            context.update(&nonce.to_le_bytes());
-            let hash = context.finish();
-
-            // Check if hash meets difficulty requirement
-            let leading_zeros = count_leading_zeros(hash.as_ref());
-            if leading_zeros >= POW_DIFFICULTY {
-                let compute_time = start_time.elapsed();
-                return Ok(ProofOfWork {
-                    nonce,
-                    hash: hash.as_ref().to_vec(),
-                    difficulty: leading_zeros,
-                    compute_time_ms: compute_time.as_millis() as u64,
-                });
-            }
-
-            nonce += 1;
-
-            // Prevent infinite loop
-            if nonce % 1000000 == 0 {
-                debug!(
-                    "PoW computation: {} attempts, {} leading zeros required",
-                    nonce, POW_DIFFICULTY
-                );
-            }
-        }
-    }
-
-    /// Verify proof-of-work
-    pub fn verify_proof_of_work(&self, pow: &ProofOfWork, term: u64, candidate_id: &str) -> bool {
-        let challenge = format!("{}:{}:{}", term, candidate_id, candidate_id);
-
-        let mut context = Context::new(&SHA256);
-        context.update(challenge.as_bytes());
-        context.update(&pow.nonce.to_le_bytes());
-        let computed_hash = context.finish();
-
-        // Verify hash matches
-        if computed_hash.as_ref() != pow.hash {
-            return false;
-        }
-
-        // Verify difficulty
-        let leading_zeros = count_leading_zeros(&pow.hash);
-        leading_zeros >= POW_DIFFICULTY
-    }
-
     /// Detect Byzantine behavior patterns
     fn detect_byzantine_patterns(&mut self, bft_message: &BftMessage) -> FusekiResult<()> {
         match &bft_message.inner {
@@ -524,6 +464,67 @@ impl BftNodeState {
                 entries.pop_front();
             }
         }
+    }
+
+    /// Generate proof-of-work for leader election
+    pub fn generate_proof_of_work(&self, term: u64, candidate: &str) -> FusekiResult<ProofOfWork> {
+        let start_time = Instant::now();
+        let mut nonce = 0u64;
+
+        loop {
+            // Create hash input
+            let mut context = Context::new(&SHA256);
+            context.update(&term.to_le_bytes());
+            context.update(candidate.as_bytes());
+            context.update(&nonce.to_le_bytes());
+            context.update(&self.identity.node_id.as_bytes());
+
+            let hash = context.finish();
+            let hash_bytes = hash.as_ref();
+
+            let difficulty = count_leading_zeros(hash_bytes);
+
+            if difficulty >= POW_DIFFICULTY {
+                let compute_time = start_time.elapsed().as_millis() as u64;
+                return Ok(ProofOfWork {
+                    nonce,
+                    hash: hash_bytes.to_vec(),
+                    difficulty,
+                    compute_time_ms: compute_time,
+                });
+            }
+
+            nonce += 1;
+
+            // Prevent infinite loops in tests
+            if nonce > 1_000_000 {
+                return Err(FusekiError::internal(
+                    "Proof of work computation took too long",
+                ));
+            }
+        }
+    }
+
+    /// Verify proof-of-work
+    pub fn verify_proof_of_work(&self, pow: &ProofOfWork, term: u64, candidate: &str) -> bool {
+        // Recreate hash
+        let mut context = Context::new(&SHA256);
+        context.update(&term.to_le_bytes());
+        context.update(candidate.as_bytes());
+        context.update(&pow.nonce.to_le_bytes());
+        context.update(&self.identity.node_id.as_bytes());
+
+        let hash = context.finish();
+        let hash_bytes = hash.as_ref();
+
+        // Verify hash matches
+        if hash_bytes != pow.hash.as_slice() {
+            return false;
+        }
+
+        // Verify difficulty
+        let actual_difficulty = count_leading_zeros(hash_bytes);
+        actual_difficulty >= POW_DIFFICULTY && actual_difficulty == pow.difficulty
     }
 }
 

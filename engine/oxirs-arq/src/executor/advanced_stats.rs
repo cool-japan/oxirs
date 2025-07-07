@@ -1155,7 +1155,7 @@ impl AdvancedStatisticsCollector {
     ) -> Result<()> {
         // Extract query features
         let features = self.extract_query_features(algebra);
-        
+
         // Create performance data point
         let data_point = PerformanceDataPoint {
             timestamp: SystemTime::now(),
@@ -1331,7 +1331,7 @@ impl AdvancedStatisticsCollector {
         let joins = self.count_joins(algebra) as f64 * 2.0;
         let filters = self.count_filters(algebra) as f64 * 0.5;
         let unions = self.count_unions(algebra) as f64 * 1.5;
-        
+
         patterns + joins + filters + unions
     }
 

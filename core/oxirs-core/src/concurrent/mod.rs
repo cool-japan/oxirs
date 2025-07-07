@@ -30,9 +30,9 @@ mod tests {
 
     fn create_test_triple(id: usize) -> Triple {
         Triple::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://subject/{}", id)).unwrap()),
-            Predicate::NamedNode(NamedNode::new(&format!("http://predicate/{}", id)).unwrap()),
-            Object::NamedNode(NamedNode::new(&format!("http://object/{}", id)).unwrap()),
+            Subject::NamedNode(NamedNode::new(format!("http://subject/{id}")).unwrap()),
+            Predicate::NamedNode(NamedNode::new(format!("http://predicate/{id}")).unwrap()),
+            Object::NamedNode(NamedNode::new(format!("http://object/{id}")).unwrap()),
         )
     }
 
@@ -91,11 +91,14 @@ mod tests {
         assert_eq!(graph.len(), (num_threads / 2) * ops_per_thread);
 
         println!("Concurrent stress test completed:");
-        println!("  Duration: {:?}", duration);
-        println!("  Total writes: {}", (num_threads / 2) * ops_per_thread);
-        println!("  Total reads: {}", total_reads);
-        println!("  Final graph size: {}", graph.len());
-        println!("  Stats: {:?}", graph.stats());
+        println!("  Duration: {duration:?}");
+        let total_writes = (num_threads / 2) * ops_per_thread;
+        println!("  Total writes: {total_writes}");
+        println!("  Total reads: {total_reads}");
+        let graph_size = graph.len();
+        println!("  Final graph size: {graph_size}");
+        let stats = graph.stats();
+        println!("  Stats: {stats:?}");
     }
 
     #[test]
@@ -169,9 +172,11 @@ mod tests {
         let total_net_insertions: i32 = handles.into_iter().map(|h| h.join().unwrap()).sum();
 
         println!("Mixed operations test:");
-        println!("  Net insertions: {}", total_net_insertions);
-        println!("  Final graph size: {}", graph.len());
-        println!("  Stats: {:?}", graph.stats());
+        println!("  Net insertions: {total_net_insertions}");
+        let graph_size = graph.len();
+        println!("  Final graph size: {graph_size}");
+        let stats = graph.stats();
+        println!("  Stats: {stats:?}");
 
         // The graph size should be consistent with net insertions
         assert!(total_net_insertions >= 0);

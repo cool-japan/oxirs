@@ -72,16 +72,16 @@ impl TurtleContext {
     pub fn resolve_prefixed_name(&self, prefix: Option<&str>, local: &str) -> ParseResult<String> {
         match prefix {
             Some(prefix) => match self.prefixes.get(prefix) {
-                Some(base_iri) => Ok(format!("{}{}", base_iri, local)),
+                Some(base_iri) => Ok(format!("{base_iri}{local}")),
                 None => Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Undefined prefix: {}", prefix),
+                    format!("Undefined prefix: {prefix}"),
                     self.position,
                 ))),
             },
             None => {
                 // Default prefix (empty prefix)
                 match self.prefixes.get("") {
-                    Some(base_iri) => Ok(format!("{}{}", base_iri, local)),
+                    Some(base_iri) => Ok(format!("{base_iri}{local}")),
                     None => Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
                         "No default prefix defined".to_string(),
                         self.position,
@@ -99,7 +99,7 @@ impl TurtleContext {
             match &self.base_iri {
                 Some(base) => Ok(self.resolve_relative_iri(base, iri)),
                 None => Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                    format!("Relative IRI without base: {}", iri),
+                    format!("Relative IRI without base: {iri}"),
                     self.position,
                 ))),
             }
@@ -125,9 +125,9 @@ impl TurtleContext {
 
         // Simple implementation - in production would use proper URI resolution
         if base.ends_with('/') || base.ends_with('#') {
-            format!("{}{}", base, relative)
+            format!("{base}{relative}")
         } else {
-            format!("{}/{}", base, relative)
+            format!("{base}/{relative}")
         }
     }
 }
@@ -233,7 +233,7 @@ impl TurtleGrammarRecognizer {
                 let xsd_integer = NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")
                     .map_err(|e| RdfParseError::internal(e.to_string()))?;
                 Ok(Object::Literal(Literal::new_typed_literal(
-                    &i.to_string(),
+                    i.to_string(),
                     xsd_integer,
                 )))
             }
@@ -241,7 +241,7 @@ impl TurtleGrammarRecognizer {
                 let xsd_decimal = NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal")
                     .map_err(|e| RdfParseError::internal(e.to_string()))?;
                 Ok(Object::Literal(Literal::new_typed_literal(
-                    &d.to_string(),
+                    d.to_string(),
                     xsd_decimal,
                 )))
             }
@@ -249,7 +249,7 @@ impl TurtleGrammarRecognizer {
                 let xsd_double = NamedNode::new("http://www.w3.org/2001/XMLSchema#double")
                     .map_err(|e| RdfParseError::internal(e.to_string()))?;
                 Ok(Object::Literal(Literal::new_typed_literal(
-                    &d.to_string(),
+                    d.to_string(),
                     xsd_double,
                 )))
             }
@@ -276,7 +276,7 @@ impl TurtleGrammarRecognizer {
                 Ok(Object::NamedNode(rdf_type))
             }
             _ => Err(RdfParseError::Syntax(RdfSyntaxError::with_position(
-                format!("Unexpected token in term position: {:?}", token),
+                format!("Unexpected token in term position: {token:?}"),
                 context.position,
             ))),
         }

@@ -3,7 +3,6 @@
 //! This module provides comprehensive performance monitoring, analytics dashboard,
 //! and quality assurance metrics for the vector search engine.
 
-use crate::{similarity::SimilarityMetric, Vector};
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
@@ -280,19 +279,15 @@ impl EnhancedPerformanceMonitor {
     fn generate_prometheus_export(&self, report: &AnalyticsReport) -> Result<String> {
         let mut prometheus = String::new();
 
-        prometheus.push_str(&format!(
-            "# HELP vector_search_queries_total Total number of queries\n"
-        ));
-        prometheus.push_str(&format!("# TYPE vector_search_queries_total counter\n"));
+        prometheus.push_str("# HELP vector_search_queries_total Total number of queries\n");
+        prometheus.push_str("# TYPE vector_search_queries_total counter\n");
         prometheus.push_str(&format!(
             "vector_search_queries_total {}\n",
             report.query_statistics.total_queries
         ));
 
-        prometheus.push_str(&format!(
-            "# HELP vector_search_latency_seconds Query latency in seconds\n"
-        ));
-        prometheus.push_str(&format!("# TYPE vector_search_latency_seconds histogram\n"));
+        prometheus.push_str("# HELP vector_search_latency_seconds Query latency in seconds\n");
+        prometheus.push_str("# TYPE vector_search_latency_seconds histogram\n");
         prometheus.push_str(&format!(
             "vector_search_latency_seconds {:.6}\n",
             report.query_statistics.average_latency.as_secs_f64()
@@ -347,6 +342,12 @@ pub struct QueryMetricsCollector {
     queries: VecDeque<QueryInfo>,
     statistics: QueryStatistics,
     max_retention: usize,
+}
+
+impl Default for QueryMetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryMetricsCollector {
@@ -479,6 +480,12 @@ pub struct SystemMetricsCollector {
     max_retention: usize,
 }
 
+impl Default for SystemMetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemMetricsCollector {
     pub fn new() -> Self {
         Self {
@@ -551,6 +558,12 @@ pub struct QualityMetricsCollector {
     metrics_history: VecDeque<QualityMetrics>,
     statistics: QualityStatistics,
     max_retention: usize,
+}
+
+impl Default for QualityMetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QualityMetricsCollector {
@@ -727,6 +740,12 @@ pub struct AnalyticsEngine {
     recommendations: Arc<RwLock<Vec<Recommendation>>>,
 }
 
+impl Default for AnalyticsEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnalyticsEngine {
     pub fn new() -> Self {
         Self {
@@ -818,19 +837,19 @@ impl DashboardData {
         }
     }
 
-    pub fn update_query_stats(&mut self, query: &QueryInfo) {
+    pub fn update_query_stats(&mut self, _query: &QueryInfo) {
         // Update query statistics
         self.last_updated = SystemTime::now();
         // Additional updates would be implemented here
     }
 
-    pub fn update_system_stats(&mut self, metrics: &SystemMetrics) {
+    pub fn update_system_stats(&mut self, _metrics: &SystemMetrics) {
         // Update system statistics
         self.last_updated = SystemTime::now();
         // Additional updates would be implemented here
     }
 
-    pub fn update_quality_stats(&mut self, metrics: &QualityMetrics) {
+    pub fn update_quality_stats(&mut self, _metrics: &QualityMetrics) {
         // Update quality statistics
         self.last_updated = SystemTime::now();
         // Additional updates would be implemented here

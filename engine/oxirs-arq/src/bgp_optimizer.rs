@@ -3,10 +3,10 @@
 //! This module provides index-aware BGP optimization with sophisticated
 //! selectivity estimation for triple patterns.
 
-use crate::algebra::{Algebra, Term, TriplePattern, Variable};
-use crate::optimizer::{IndexPosition, IndexStatistics, IndexType, Statistics};
+use crate::algebra::{Term, TriplePattern};
+use crate::optimizer::index_types::IndexType;
+use crate::optimizer::{IndexPosition, IndexStatistics, Statistics};
 use anyhow::Result;
-use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 
 /// BGP optimization result
@@ -373,7 +373,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::SubjectPredicate)
+                .contains(&IndexType::SubjectPredicateIndex)
             {
                 best_index_factor = 0.01; // Very efficient with full index
             }
@@ -383,7 +383,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::SubjectPredicate)
+                .contains(&IndexType::SubjectPredicateIndex)
             {
                 best_index_factor = 0.1;
             }
@@ -393,7 +393,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::PredicateObject)
+                .contains(&IndexType::PredicateObjectIndex)
             {
                 best_index_factor = 0.15;
             }
@@ -403,7 +403,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::SubjectObject)
+                .contains(&IndexType::SubjectObjectIndex)
             {
                 best_index_factor = 0.2;
             }
@@ -709,9 +709,9 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::HashIndex(IndexPosition::FullTriple))
+                .contains(&IndexType::FullIndex)
             {
-                return Ok(IndexType::HashIndex(IndexPosition::FullTriple));
+                return Ok(IndexType::FullIndex);
             }
         }
 
@@ -720,9 +720,9 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::HashIndex(IndexPosition::SubjectPredicate))
+                .contains(&IndexType::SubjectPredicateIndex)
             {
-                return Ok(IndexType::HashIndex(IndexPosition::SubjectPredicate));
+                return Ok(IndexType::SubjectPredicateIndex);
             }
             // Fall back to B+ tree index
             if self
@@ -736,7 +736,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::SubjectPredicate)
+                .contains(&IndexType::SubjectPredicateIndex)
             {
                 return Ok(IndexType::SubjectPredicate);
             }
@@ -773,7 +773,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::PredicateObject)
+                .contains(&IndexType::PredicateObjectIndex)
             {
                 return Ok(IndexType::PredicateObject);
             }
@@ -800,7 +800,7 @@ impl<'a> BGPOptimizer<'a> {
             if self
                 .index_stats
                 .available_indexes
-                .contains(&IndexType::SubjectObject)
+                .contains(&IndexType::SubjectObjectIndex)
             {
                 return Ok(IndexType::SubjectObject);
             }
@@ -946,7 +946,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Estimate index scan cost
     fn estimate_index_scan_cost(
         &self,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
         index_type: &IndexType,
         cardinality: usize,
     ) -> Result<f64> {
@@ -985,7 +985,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Calculate overall metrics
     fn calculate_overall_metrics(
         &self,
-        patterns: &[TriplePattern],
+        _patterns: &[TriplePattern],
         pattern_selectivities: &[PatternSelectivity],
         join_selectivities: &HashMap<(usize, usize), f64>,
         index_plan: &IndexUsagePlan,
@@ -1035,19 +1035,19 @@ impl<'a> BGPOptimizer<'a> {
         if self.is_subject_variable(pattern, var) {
             self.index_stats
                 .available_indexes
-                .contains(&IndexType::SubjectPredicate)
+                .contains(&IndexType::SubjectPredicateIndex)
                 || self
                     .index_stats
                     .available_indexes
-                    .contains(&IndexType::SubjectObject)
+                    .contains(&IndexType::SubjectObjectIndex)
         } else if self.is_object_variable(pattern, var) {
             self.index_stats
                 .available_indexes
-                .contains(&IndexType::PredicateObject)
+                .contains(&IndexType::PredicateObjectIndex)
                 || self
                     .index_stats
                     .available_indexes
-                    .contains(&IndexType::SubjectObject)
+                    .contains(&IndexType::SubjectObjectIndex)
         } else {
             false
         }
@@ -1298,6 +1298,20 @@ impl<'a> BGPOptimizer<'a> {
                 // OSPC index is optimal when object is bound
                 self.is_bound(&pattern.object)
             }
+            // Legacy alias variants for compatibility
+            IndexType::SubjectPredicateIndex => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.predicate)
+            }
+            IndexType::PredicateObjectIndex => {
+                self.is_bound(&pattern.predicate) || self.is_bound(&pattern.object)
+            }
+            IndexType::SubjectObjectIndex => {
+                self.is_bound(&pattern.subject) || self.is_bound(&pattern.object)
+            }
+            IndexType::FullIndex => true, // Full index supports all patterns
+            IndexType::SubjectIndex => self.is_bound(&pattern.subject),
+            IndexType::PredicateIndex => self.is_bound(&pattern.predicate),
+            IndexType::ObjectIndex => self.is_bound(&pattern.object),
         }
     }
 
@@ -1327,8 +1341,8 @@ impl<'a> BGPOptimizer<'a> {
     /// Estimate benefit of index intersection
     fn estimate_intersection_benefit(
         &self,
-        pattern: &TriplePattern,
-        primary_index: &IndexType,
+        _pattern: &TriplePattern,
+        _primary_index: &IndexType,
         secondary_indexes: &[IndexType],
     ) -> Result<f64> {
         let base_selectivity = 0.1; // Assumed selectivity without intersection
@@ -1339,7 +1353,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Recommend intersection algorithm based on characteristics
     fn recommend_intersection_algorithm(
         &self,
-        primary_index: &IndexType,
+        _primary_index: &IndexType,
         secondary_indexes: &[IndexType],
         bound_positions: usize,
     ) -> IntersectionAlgorithm {
@@ -1364,8 +1378,8 @@ impl<'a> BGPOptimizer<'a> {
     /// Estimate performance gain from bloom filter
     fn estimate_bloom_filter_gain(
         &self,
-        pattern: &TriplePattern,
-        position: TermPosition,
+        _pattern: &TriplePattern,
+        _position: TermPosition,
         selectivity: f64,
     ) -> Result<f64> {
         // Bloom filters most effective for negative lookups
@@ -1602,7 +1616,7 @@ impl<'a> BGPOptimizer<'a> {
     fn create_index_union_intersection(
         &self,
         idx1: usize,
-        idx2: usize,
+        _idx2: usize,
         index1: &IndexType,
         index2: &IndexType,
         pattern1: &TriplePattern,
@@ -1763,7 +1777,7 @@ impl<'a> BGPOptimizer<'a> {
         primary_index: &IndexType,
         secondary_indexes: &[IndexType],
         bound_positions: usize,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
     ) -> IntersectionAlgorithm {
         // Bitmap intersection for bitmap indexes
         if matches!(primary_index, IndexType::BitmapIndex(_))
@@ -1837,7 +1851,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Estimate adaptive improvement from alternative indexes
     fn estimate_adaptive_improvement(
         &self,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
         current_index: &IndexType,
         alternatives: &[IndexType],
     ) -> Result<f64> {
@@ -2028,7 +2042,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Identify optimal pipeline breaker locations
     fn identify_pipeline_breakers(
         &self,
-        patterns: &[TriplePattern],
+        _patterns: &[TriplePattern],
         pattern_selectivities: &[PatternSelectivity],
         memory_limit: usize,
     ) -> Result<Vec<PipelineBreaker>> {
@@ -2075,7 +2089,7 @@ impl<'a> BGPOptimizer<'a> {
     /// Identify candidates for spilling to disk
     fn identify_spill_candidates(
         &self,
-        patterns: &[TriplePattern],
+        _patterns: &[TriplePattern],
         pattern_selectivities: &[PatternSelectivity],
         memory_limit: usize,
     ) -> Result<Vec<SpillCandidate>> {
@@ -2421,7 +2435,7 @@ mod tests {
         // Test pattern with bound predicate
         let pattern = TriplePattern {
             subject: Term::Variable(Variable::new("s").unwrap()),
-            predicate: Term::Iri(NamedNode::new_unchecked(
+            predicate: Term::Iri(Iri::new_unchecked(
                 "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
             )),
             object: Term::Variable(Variable::new("o").unwrap()),
@@ -2444,13 +2458,13 @@ mod tests {
 
         let p1 = TriplePattern {
             subject: Term::Variable(Variable::new("x").unwrap()),
-            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+            predicate: Term::Iri(Iri::new_unchecked("http://xmlns.com/foaf/0.1/name")),
             object: Term::Variable(Variable::new("name").unwrap()),
         };
 
         let p2 = TriplePattern {
             subject: Term::Variable(Variable::new("x").unwrap()),
-            predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/knows")),
+            predicate: Term::Iri(Iri::new_unchecked("http://xmlns.com/foaf/0.1/knows")),
             object: Term::Variable(Variable::new("y").unwrap()),
         };
 
@@ -2469,7 +2483,7 @@ mod tests {
             // Less selective pattern
             TriplePattern {
                 subject: Term::Variable(Variable::new("s").unwrap()),
-                predicate: Term::Iri(NamedNode::new_unchecked(
+                predicate: Term::Iri(Iri::new_unchecked(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
                 )),
                 object: Term::Variable(Variable::new("o").unwrap()),
@@ -2477,7 +2491,7 @@ mod tests {
             // More selective pattern
             TriplePattern {
                 subject: Term::Variable(Variable::new("s").unwrap()),
-                predicate: Term::Iri(NamedNode::new_unchecked("http://xmlns.com/foaf/0.1/name")),
+                predicate: Term::Iri(Iri::new_unchecked("http://xmlns.com/foaf/0.1/name")),
                 object: Term::Literal(Literal {
                     value: "John Doe".to_string(),
                     language: None,

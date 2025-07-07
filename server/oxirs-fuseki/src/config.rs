@@ -315,6 +315,10 @@ pub struct CertificateConfig {
 
     /// Certificate validation strictness
     pub validation_level: CertificateValidationLevel,
+
+    /// Trusted issuer DN patterns for certificate validation
+    /// Certificates from these issuers will be trusted without requiring CA certificates in trust store
+    pub trusted_issuers: Option<Vec<String>>,
 }
 
 /// Certificate user mapping configuration
@@ -996,9 +1000,24 @@ impl ServerConfig {
 
     /// Get the socket address for the server
     pub fn socket_addr(&self) -> FusekiResult<SocketAddr> {
+        use std::net::ToSocketAddrs;
+
         let addr = format!("{}:{}", self.server.host, self.server.port);
-        addr.parse().map_err(|e| {
-            FusekiError::configuration(format!("Invalid host:port combination '{}': {}", addr, e))
+
+        // Try to resolve the hostname to socket addresses
+        let socket_addrs: Vec<SocketAddr> = addr
+            .to_socket_addrs()
+            .map_err(|e| {
+                FusekiError::configuration(format!(
+                    "Invalid host:port combination '{}': {}",
+                    addr, e
+                ))
+            })?
+            .collect();
+
+        // Return the first resolved address
+        socket_addrs.into_iter().next().ok_or_else(|| {
+            FusekiError::configuration(format!("No valid socket address found for '{}'", addr))
         })
     }
 
@@ -1530,12 +1549,13 @@ mod tests {
     fn test_save_and_load_yaml() {
         let config = ServerConfig::default();
         let temp_file = NamedTempFile::new().unwrap();
+        let temp_path = temp_file.path().with_extension("yaml");
 
         // Save configuration
-        config.save_yaml(temp_file.path()).unwrap();
+        config.save_yaml(&temp_path).unwrap();
 
         // Load configuration
-        let loaded_config = ServerConfig::from_file(temp_file.path()).unwrap();
+        let loaded_config = ServerConfig::from_file(&temp_path).unwrap();
 
         assert_eq!(config.server.port, loaded_config.server.port);
         assert_eq!(config.server.host, loaded_config.server.host);

@@ -3,10 +3,8 @@
 //! This module provides comprehensive interactive reporting capabilities including
 //! web-based report viewers, real-time filtering, sorting, and export functionality.
 
-use std::collections::{BTreeMap, HashMap};
-use std::fmt::Write;
+use std::collections::BTreeMap;
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -476,7 +474,7 @@ impl InteractiveReportViewer {
         let mut focus_node_patterns = std::collections::HashSet::new();
 
         for violation in &report.violations {
-            available_severities.insert(violation.result_severity.clone());
+            available_severities.insert(violation.result_severity);
             available_shapes.insert(violation.source_shape.clone());
             available_components.insert(violation.source_constraint_component.clone());
 
@@ -522,7 +520,7 @@ impl InteractiveReportViewer {
             background-color: {};
             color: {};
         }}
-        
+
         .header {{
             text-align: center;
             margin-bottom: 30px;
@@ -530,17 +528,17 @@ impl InteractiveReportViewer {
             background-color: {};
             border-radius: 8px;
         }}
-        
+
         .status.conforming {{ color: #28a745; }}
         .status.non-conforming {{ color: #dc3545; }}
-        
+
         .summary-section {{
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }}
-        
+
         .summary-card {{
             background-color: {};
             padding: 20px;
@@ -548,24 +546,24 @@ impl InteractiveReportViewer {
             text-align: center;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }}
-        
+
         .summary-card h3 {{ margin-top: 0; }}
         .summary-number {{ font-size: 2em; font-weight: bold; color: {}; }}
-        
+
         .filter-section {{
             background-color: {};
             padding: 20px;
             border-radius: 8px;
             margin-bottom: 30px;
         }}
-        
+
         .filter-row {{
             display: flex;
             gap: 15px;
             margin-bottom: 15px;
             flex-wrap: wrap;
         }}
-        
+
         .violations-table {{
             width: 100%;
             border-collapse: collapse;
@@ -573,34 +571,34 @@ impl InteractiveReportViewer {
             border-radius: 8px;
             overflow: hidden;
         }}
-        
+
         .violations-table th,
         .violations-table td {{
             padding: 12px;
             text-align: left;
             border-bottom: 1px solid #ddd;
         }}
-        
+
         .violations-table th {{
             background-color: {};
             cursor: pointer;
         }}
-        
+
         .violations-table tr:hover {{
             background-color: rgba(0,123,255,0.1);
         }}
-        
+
         .severity-violation {{ color: #dc3545; font-weight: bold; }}
         .severity-warning {{ color: #ffc107; font-weight: bold; }}
         .severity-info {{ color: #17a2b8; font-weight: bold; }}
-        
+
         .pagination {{
             display: flex;
             justify-content: center;
             gap: 10px;
             margin: 30px 0;
         }}
-        
+
         .pagination button {{
             padding: 8px 12px;
             border: 1px solid #ddd;
@@ -609,16 +607,16 @@ impl InteractiveReportViewer {
             cursor: pointer;
             border-radius: 4px;
         }}
-        
+
         .pagination button:hover {{
             background-color: {};
         }}
-        
+
         .pagination button.active {{
             background-color: {};
             color: white;
         }}
-        
+
         .export-section {{
             text-align: center;
             margin-top: 30px;
@@ -626,7 +624,7 @@ impl InteractiveReportViewer {
             background-color: {};
             border-radius: 8px;
         }}
-        
+
         .btn {{
             padding: 10px 20px;
             margin: 5px;
@@ -636,15 +634,15 @@ impl InteractiveReportViewer {
             background-color: {};
             color: white;
         }}
-        
+
         .btn:hover {{
             opacity: 0.8;
         }}
-        
+
         .search-section {{
             margin-bottom: 20px;
         }}
-        
+
         .search-input {{
             width: 100%;
             padding: 10px;
@@ -652,14 +650,14 @@ impl InteractiveReportViewer {
             border-radius: 4px;
             font-size: 16px;
         }}
-        
+
         .charts-section {{
             margin-bottom: 30px;
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }}
-        
+
         .chart-container {{
             background-color: {};
             padding: 20px;
@@ -721,8 +719,7 @@ impl InteractiveReportViewer {
     /// Generate charts section HTML
     fn generate_charts_section(&self, summary: &ViewSummary) -> String {
         // This would typically include Chart.js or similar library
-        format!(
-            r#"
+        r#"
         <div class="charts-section">
             <div class="chart-container">
                 <h3>Violations by Severity</h3>
@@ -734,7 +731,7 @@ impl InteractiveReportViewer {
             </div>
         </div>
         "#
-        )
+        .to_string()
     }
 
     /// Generate filter section HTML
@@ -749,12 +746,10 @@ impl InteractiveReportViewer {
         html.push_str("<label>Severity:</label><br>\n");
         for severity in &options.available_severities {
             html.push_str(&format!(
-                "<input type=\"checkbox\" id=\"severity_{}\" name=\"severity\" value=\"{}\" checked>\n",
-                severity, severity
+                "<input type=\"checkbox\" id=\"severity_{severity}\" name=\"severity\" value=\"{severity}\" checked>\n"
             ));
             html.push_str(&format!(
-                "<label for=\"severity_{}\">{}</label><br>\n",
-                severity, severity
+                "<label for=\"severity_{severity}\">{severity}</label><br>\n"
             ));
         }
         html.push_str("</div>\n");
@@ -887,7 +882,7 @@ impl InteractiveReportViewer {
         <script>
         let currentSort = { field: 'severity', direction: 'desc' };
         let currentFilters = {};
-        
+
         function sortBy(field) {
             if (currentSort.field === field) {
                 currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
@@ -898,35 +893,35 @@ impl InteractiveReportViewer {
             // In a real implementation, this would trigger a server request
             console.log('Sort by:', currentSort);
         }
-        
+
         function goToPage(page) {
             // In a real implementation, this would trigger a server request
             console.log('Go to page:', page);
         }
-        
+
         function exportReport(format) {
             // In a real implementation, this would trigger export
             console.log('Export as:', format);
             alert('Export functionality would be implemented here');
         }
-        
+
         function applyFilters() {
             // Collect filter values
             const severityFilters = Array.from(document.querySelectorAll('input[name="severity"]:checked'))
                 .map(cb => cb.value);
-            
+
             currentFilters.severity = severityFilters;
-            
+
             // In a real implementation, this would trigger filtering
             console.log('Apply filters:', currentFilters);
         }
-        
+
         function searchViolations() {
             const query = document.getElementById('searchInput').value;
             // In a real implementation, this would trigger search
             console.log('Search:', query);
         }
-        
+
         // Add event listeners
         document.addEventListener('DOMContentLoaded', function() {
             // Search as you type
@@ -934,7 +929,7 @@ impl InteractiveReportViewer {
             if (searchInput) {
                 searchInput.addEventListener('input', searchViolations);
             }
-            
+
             // Filter checkboxes
             document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
                 cb.addEventListener('change', applyFilters);
@@ -1009,7 +1004,7 @@ impl InteractiveReportViewer {
         _config: &ExportConfig,
     ) -> Result<Vec<u8>> {
         let json = serde_json::to_string_pretty(view)
-            .map_err(|e| ShaclError::ReportGeneration(format!("JSON export failed: {}", e)))?;
+            .map_err(|e| ShaclError::ReportGeneration(format!("JSON export failed: {e}")))?;
         Ok(json.into_bytes())
     }
 
@@ -1042,8 +1037,6 @@ impl Default for InteractiveReportViewer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{validation::ValidationViolation, ShapeId};
-    use oxirs_core::model::NamedNode;
 
     #[test]
     fn test_interactive_viewer_creation() {

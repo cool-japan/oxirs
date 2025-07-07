@@ -96,7 +96,7 @@ pub enum RestrictionType {
 }
 
 /// Property characteristics
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PropertyCharacteristics {
     pub is_functional: bool,
     pub is_inverse_functional: bool,
@@ -107,22 +107,9 @@ pub struct PropertyCharacteristics {
     pub is_irreflexive: bool,
 }
 
-impl Default for PropertyCharacteristics {
-    fn default() -> Self {
-        Self {
-            is_functional: false,
-            is_inverse_functional: false,
-            is_transitive: false,
-            is_symmetric: false,
-            is_asymmetric: false,
-            is_reflexive: false,
-            is_irreflexive: false,
-        }
-    }
-}
 
 /// OWL knowledge base context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OwlContext {
     /// Class equivalences
     pub equivalent_classes: HashMap<String, HashSet<String>>,
@@ -144,21 +131,6 @@ pub struct OwlContext {
     pub inconsistencies: Vec<String>,
 }
 
-impl Default for OwlContext {
-    fn default() -> Self {
-        Self {
-            equivalent_classes: HashMap::new(),
-            equivalent_properties: HashMap::new(),
-            disjoint_classes: HashMap::new(),
-            inverse_properties: HashMap::new(),
-            same_individuals: HashMap::new(),
-            different_individuals: HashMap::new(),
-            property_characteristics: HashMap::new(),
-            class_expressions: HashMap::new(),
-            inconsistencies: Vec::new(),
-        }
-    }
-}
 
 impl OwlContext {
     /// Add class equivalence
@@ -263,8 +235,7 @@ impl OwlContext {
                 for ind2 in same_set {
                     if diff_set.contains(ind2) {
                         self.inconsistencies.push(format!(
-                            "Individual {} is both same as and different from {}",
-                            ind1, ind2
+                            "Individual {ind1} is both same as and different from {ind2}"
                         ));
                     }
                 }
@@ -277,8 +248,7 @@ impl OwlContext {
                 for class2 in equiv_set {
                     if disjoint_set.contains(class2) {
                         self.inconsistencies.push(format!(
-                            "Class {} is both equivalent to and disjoint with {}",
-                            class1, class2
+                            "Class {class1} is both equivalent to and disjoint with {class2}"
                         ));
                     }
                 }
@@ -318,8 +288,6 @@ impl OwlReasoner {
 
     /// Initialize OWL RL entailment rules
     fn initialize_owl_rl_rules(&mut self) {
-        use vocabulary::*;
-
         // Equivalence rules
         self.add_equivalence_rules();
 

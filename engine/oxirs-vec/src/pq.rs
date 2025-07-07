@@ -1060,7 +1060,7 @@ mod tests {
 
         // Insert vectors
         for (i, vec) in training_vectors.iter().enumerate() {
-            index.insert(format!("vec{}", i), vec.clone()).unwrap();
+            index.insert(format!("vec{i}"), vec.clone()).unwrap();
         }
 
         // Search for nearest neighbors

@@ -74,11 +74,14 @@ pub struct ReplayDetector {
     replay_attempts: HashMap<NodeId, usize>,
 }
 
+/// Type alias for complex message storage type
+type NodeMessageStore = HashMap<NodeId, HashMap<(ViewNumber, SequenceNumber), Vec<Vec<u8>>>>;
+
 /// Equivocation detection system
 #[derive(Debug, Clone)]
 pub struct EquivocationDetector {
     /// Messages per view/sequence from each node
-    node_messages: HashMap<NodeId, HashMap<(ViewNumber, SequenceNumber), Vec<Vec<u8>>>>,
+    node_messages: NodeMessageStore,
     /// Detected equivocations
     equivocations: HashMap<NodeId, usize>,
 }
@@ -108,6 +111,12 @@ pub struct CollusionDetector {
     collusion_threshold: usize,
 }
 
+impl Default for PartitionDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PartitionDetector {
     pub fn new() -> Self {
         Self {
@@ -115,6 +124,12 @@ impl PartitionDetector {
             partitioned_nodes: HashSet::new(),
             partition_timeout: Duration::from_secs(30),
         }
+    }
+}
+
+impl Default for ReplayDetector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -128,12 +143,24 @@ impl ReplayDetector {
     }
 }
 
+impl Default for EquivocationDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EquivocationDetector {
     pub fn new() -> Self {
         Self {
             node_messages: HashMap::new(),
             equivocations: HashMap::new(),
         }
+    }
+}
+
+impl Default for ResourceMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -145,6 +172,12 @@ impl ResourceMonitor {
             memory_usage: HashMap::new(),
             resource_attacks: HashMap::new(),
         }
+    }
+}
+
+impl Default for CollusionDetector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

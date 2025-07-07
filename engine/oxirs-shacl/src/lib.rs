@@ -516,7 +516,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 
 use indexmap::IndexMap;
 use once_cell::sync::Lazy;
@@ -524,8 +524,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use oxirs_core::{
-    graph::Graph,
-    model::{BlankNode, Literal, NamedNode, Quad, Term, Triple, Variable},
+    model::{Literal, Term},
     OxirsError, Store,
 };
 
@@ -551,27 +550,42 @@ pub mod validation;
 pub mod vocabulary;
 pub mod w3c_test_suite;
 
-// Re-export key types for convenience
-pub use analytics::*;
+// Re-export key types for convenience - avoiding ambiguous glob re-exports
+pub use analytics::ValidationAnalytics;
 pub use builders::*;
-pub use constraints::*;
-pub use custom_components::*;
+pub use constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult};
+pub use custom_components::{
+    ComponentMetadata, CustomConstraint, CustomConstraintRegistry, EmailValidationComponent,
+    RangeConstraintComponent, RegexConstraintComponent,
+};
 pub use federated_validation::*;
 pub use iri_resolver::*;
-pub use optimization::*;
+pub use optimization::{
+    NegationOptimizer, OptimizationConfig, OptimizationResult, OptimizationStrategy,
+    ValidationOptimizationEngine,
+};
 pub use paths::*;
-pub use report::*;
-pub use security::*;
+pub use report::{
+    ReportFormat, ReportGenerator, ReportMetadata, ValidationReport, ValidationSummary,
+};
+pub use security::{SecureSparqlExecutor, SecurityConfig, SecurityPolicy};
 pub use shape_import::*;
 pub use shape_inheritance::*;
-pub use shapes::*;
+// Import specific types from shapes to avoid conflicts
+pub use shapes::{
+    format_literal_for_sparql, format_term_for_sparql, ShapeCacheStats, ShapeFactory, ShapeParser,
+    ShapeParsingConfig, ShapeParsingContext, ShapeParsingStats, ShapeValidationReport,
+    ShapeValidator, SingleShapeValidationReport,
+};
 pub use sparql::*;
-pub use targets::*;
-pub use validation::*;
+// Import specific types from targets to avoid conflicts
+pub use targets::{
+    Target, TargetCacheStats, TargetOptimizationConfig, TargetSelectionStats, TargetSelector,
+};
+pub use validation::{ValidationEngine, ValidationViolation};
 pub use w3c_test_suite::*;
 
-// Re-export optimization types
-pub use targets::{TargetCacheStats, TargetOptimizationConfig, TargetSelectionStats};
+// Re-export optimization types (note: these are already imported above)
 
 /// SHACL namespace IRI
 pub static SHACL_NS: &str = "http://www.w3.org/ns/shacl#";
@@ -580,7 +594,7 @@ pub static SHACL_NS: &str = "http://www.w3.org/ns/shacl#";
 pub static SHACL_VOCAB: Lazy<vocabulary::ShaclVocabulary> =
     Lazy::new(vocabulary::ShaclVocabulary::new);
 
-/// IRI resolver for validation and expansion  
+/// IRI resolver for validation and expansion
 pub use iri_resolver::IriResolver;
 
 /// Core error type for SHACL operations
@@ -913,7 +927,7 @@ impl Default for Shape {
 }
 
 /// Shape metadata for tracking additional information
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ShapeMetadata {
     /// Author of the shape
     pub author: Option<String>,
@@ -937,32 +951,15 @@ pub struct ShapeMetadata {
     pub custom: HashMap<String, String>,
 }
 
-impl Default for ShapeMetadata {
-    fn default() -> Self {
-        Self {
-            author: None,
-            created: None,
-            modified: None,
-            version: None,
-            license: None,
-            tags: Vec::new(),
-            custom: HashMap::new(),
-        }
-    }
-}
-
 /// Violation severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, Default,
+)]
 pub enum Severity {
     Info,
     Warning,
+    #[default]
     Violation,
-}
-
-impl Default for Severity {
-    fn default() -> Self {
-        Severity::Violation
-    }
 }
 
 impl fmt::Display for Severity {
@@ -1051,6 +1048,9 @@ pub struct Validator {
 
     /// Configuration for validation
     config: ValidationConfig,
+
+    /// Shape import manager for handling external references
+    import_manager: shape_import::ShapeImportManager,
 }
 
 impl Validator {
@@ -1061,6 +1061,7 @@ impl Validator {
             shape_dependencies: petgraph::Graph::new(),
             target_cache: HashMap::new(),
             config: ValidationConfig::default(),
+            import_manager: shape_import::ShapeImportManager::default(),
         }
     }
 
@@ -1071,6 +1072,18 @@ impl Validator {
             shape_dependencies: petgraph::Graph::new(),
             target_cache: HashMap::new(),
             config,
+            import_manager: shape_import::ShapeImportManager::default(),
+        }
+    }
+
+    /// Create a new validator with custom import configuration
+    pub fn with_import_config(config: ValidationConfig, import_config: shape_import::ShapeImportConfig) -> Self {
+        Self {
+            shapes: IndexMap::new(),
+            shape_dependencies: petgraph::Graph::new(),
+            target_cache: HashMap::new(),
+            config,
+            import_manager: shape_import::ShapeImportManager::new(import_config),
         }
     }
 
@@ -1095,7 +1108,7 @@ impl Validator {
 
     /// Remove a shape from the validator
     pub fn remove_shape(&mut self, shape_id: &ShapeId) -> Option<Shape> {
-        let removed = self.shapes.remove(shape_id);
+        let removed = self.shapes.shift_remove(shape_id);
         if removed.is_some() {
             self.target_cache.clear();
 
@@ -1164,6 +1177,177 @@ impl Validator {
         Ok(count)
     }
 
+    /// Load shapes from RDF data with automatic import processing
+    /// 
+    /// This method processes import directives (owl:imports, sh:include, sh:imports)
+    /// found in the RDF data and recursively loads referenced shapes.
+    pub fn load_shapes_with_imports(
+        &mut self,
+        rdf_data: &str,
+        format: &str,
+        base_iri: Option<&str>,
+    ) -> Result<shape_import::ImportResult> {
+        // First, load the primary shapes normally
+        let mut parser = shapes::ShapeParser::new();
+        let primary_shapes = parser.parse_shapes_from_rdf(rdf_data, format, base_iri)?;
+
+        let mut total_count = primary_shapes.len();
+        let mut warnings = Vec::new();
+        let mut dependency_chain = Vec::new();
+
+        // Add primary shapes
+        for shape in primary_shapes {
+            self.add_shape(shape)?;
+        }
+
+        // Extract and process import directives
+        let import_directives = self.import_manager.extract_import_directives(rdf_data)?;
+        
+        for directive in import_directives {
+            match self.import_manager.import_shapes(&directive, 0) {
+                Ok(import_result) => {
+                    // Add imported shapes
+                    for shape in import_result.shapes {
+                        if let Err(e) = self.add_shape(shape) {
+                            warnings.push(format!("Failed to add imported shape: {}", e));
+                        } else {
+                            total_count += 1;
+                        }
+                    }
+                    
+                    // Merge warnings and dependency chain
+                    warnings.extend(import_result.warnings);
+                    dependency_chain.extend(import_result.dependency_chain);
+                }
+                Err(e) => {
+                    warnings.push(format!(
+                        "Failed to import from {}: {}",
+                        directive.source_iri, e
+                    ));
+                }
+            }
+        }
+
+        // Create comprehensive import result
+        Ok(shape_import::ImportResult {
+            shapes: self.shapes.values().cloned().collect(),
+            metadata: shape_import::ImportMetadata {
+                source_iri: base_iri.unwrap_or("inline").to_string(),
+                shape_count: total_count,
+                imported_at: chrono::Utc::now().to_rfc3339(),
+                import_depth: 0,
+                content_type: Some(format.to_string()),
+                content_size: rdf_data.len(),
+                content_hash: {
+                    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                    rdf_data.hash(&mut hasher);
+                    format!("{:x}", hasher.finish())
+                },
+            },
+            warnings,
+            dependency_chain,
+        })
+    }
+
+    /// Load shapes from external source using import directive
+    pub fn load_shapes_from_external(
+        &mut self,
+        directive: &shape_import::ImportDirective,
+    ) -> Result<shape_import::ImportResult> {
+        let import_result = self.import_manager.import_shapes(directive, 0)?;
+        
+        // Add imported shapes to validator
+        let mut added_count = 0;
+        let mut warnings = import_result.warnings.clone();
+        
+        for shape in &import_result.shapes {
+            match self.add_shape(shape.clone()) {
+                Ok(()) => added_count += 1,
+                Err(e) => warnings.push(format!("Failed to add shape {}: {}", shape.id, e)),
+            }
+        }
+
+        Ok(shape_import::ImportResult {
+            shapes: import_result.shapes,
+            metadata: import_result.metadata,
+            warnings,
+            dependency_chain: import_result.dependency_chain,
+        })
+    }
+
+    /// Load shapes from URL with automatic format detection
+    pub fn load_shapes_from_url(
+        &mut self,
+        url: &str,
+        import_type: Option<shape_import::ImportType>,
+    ) -> Result<shape_import::ImportResult> {
+        let directive = shape_import::ImportDirective {
+            source_iri: url.to_string(),
+            target_namespace: None,
+            specific_shapes: None,
+            import_type: import_type.unwrap_or(shape_import::ImportType::Include),
+            format_hint: None,
+        };
+
+        self.load_shapes_from_external(&directive)
+    }
+
+    /// Load specific shapes from external source
+    pub fn load_specific_shapes_from_external(
+        &mut self,
+        source_iri: &str,
+        shape_iris: Vec<String>,
+        target_namespace: Option<String>,
+    ) -> Result<shape_import::ImportResult> {
+        let directive = shape_import::ImportDirective {
+            source_iri: source_iri.to_string(),
+            target_namespace,
+            specific_shapes: Some(shape_iris),
+            import_type: shape_import::ImportType::Selective,
+            format_hint: None,
+        };
+
+        self.load_shapes_from_external(&directive)
+    }
+
+    /// Resolve and load external references found in loaded shapes
+    pub fn resolve_external_references(&mut self) -> Result<Vec<shape_import::ImportResult>> {
+        let mut current_shapes: Vec<Shape> = self.shapes.values().cloned().collect();
+        self.import_manager.resolve_external_references(&mut current_shapes)
+    }
+
+    /// Get import statistics
+    pub fn get_import_statistics(&self) -> &shape_import::ImportStatistics {
+        self.import_manager.get_statistics()
+    }
+
+    /// Clear import cache
+    pub fn clear_import_cache(&mut self) {
+        self.import_manager.clear_cache();
+    }
+
+    /// Check for circular dependencies in imported shapes
+    pub fn check_import_dependencies(&self) -> Result<()> {
+        self.import_manager.check_circular_dependencies()
+    }
+
+    /// Configure import security settings
+    pub fn configure_import_security(
+        &mut self,
+        allow_http: bool,
+        allow_file: bool,
+        max_resource_size: usize,
+    ) {
+        self.import_manager = shape_import::ShapeImportManager::new(
+            shape_import::ShapeImportConfig {
+                allow_http,
+                allow_file,
+                max_resource_size,
+                ..shape_import::ShapeImportConfig::default()
+            }
+        );
+    }
+
     /// Validate data in a store against all loaded shapes
     pub fn validate_store(
         &self,
@@ -1183,9 +1367,9 @@ impl Validator {
         nodes: &[Term],
         config: Option<ValidationConfig>,
     ) -> Result<ValidationReport> {
-        let shape = self.get_shape(shape_id).ok_or_else(|| {
-            ShaclError::ValidationEngine(format!("Shape not found: {}", shape_id))
-        })?;
+        let shape = self
+            .get_shape(shape_id)
+            .ok_or_else(|| ShaclError::ValidationEngine(format!("Shape not found: {shape_id}")))?;
 
         let config = config.unwrap_or_else(|| self.config.clone());
         let mut engine = validation::ValidationEngine::new(&self.shapes, config);
@@ -1322,7 +1506,7 @@ impl Validator {
                             description: None,
                             groups: vec![],
                             order: None,
-                            severity: shape.severity.clone(),
+                            severity: shape.severity,
                             messages: indexmap::IndexMap::new(),
                             extends: vec![],
                             priority: None,
@@ -1344,7 +1528,7 @@ impl Validator {
                             description: None,
                             groups: vec![],
                             order: None,
-                            severity: shape.severity.clone(),
+                            severity: shape.severity,
                             messages: indexmap::IndexMap::new(),
                             extends: vec![],
                             priority: None,
@@ -1365,7 +1549,7 @@ impl Validator {
                         description: None,
                         groups: vec![],
                         order: None,
-                        severity: shape.severity.clone(),
+                        severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
                         priority: None,
@@ -1382,7 +1566,7 @@ impl Validator {
                         description: None,
                         groups: vec![],
                         order: None,
-                        severity: shape.severity.clone(),
+                        severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
                         priority: None,
@@ -1402,7 +1586,7 @@ impl Validator {
                         description: None,
                         groups: vec![],
                         order: None,
-                        severity: shape.severity.clone(),
+                        severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
                         priority: None,
@@ -1422,7 +1606,7 @@ impl Validator {
                         description: None,
                         groups: vec![],
                         order: None,
-                        severity: shape.severity.clone(),
+                        severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
                         priority: None,
@@ -1442,7 +1626,7 @@ impl Validator {
                         description: None,
                         groups: vec![],
                         order: None,
-                        severity: shape.severity.clone(),
+                        severity: shape.severity,
                         messages: indexmap::IndexMap::new(),
                         extends: vec![],
                         priority: None,
@@ -1651,13 +1835,11 @@ impl Validator {
     /// Enhanced SHACL specification compliance validation
     fn validate_shacl_compliance(&self, shape: &Shape) -> Result<()> {
         // Check for required properties on property shapes
-        if shape.is_property_shape() {
-            if shape.path.is_none() {
-                return Err(ShaclError::ShapeParsing(format!(
-                    "Property shape '{}' must have exactly one sh:path property",
-                    shape.id
-                )));
-            }
+        if shape.is_property_shape() && shape.path.is_none() {
+            return Err(ShaclError::ShapeParsing(format!(
+                "Property shape '{}' must have exactly one sh:path property",
+                shape.id
+            )));
         }
 
         // Validate that node shapes don't have sh:path
@@ -1693,7 +1875,7 @@ impl Validator {
         // Check for redundant targets
         let mut unique_targets = HashSet::new();
         for target in &shape.targets {
-            let target_key = format!("{:?}", target);
+            let target_key = format!("{target:?}");
             if unique_targets.contains(&target_key) {
                 tracing::warn!("Shape '{}' has duplicate target: {:?}", shape.id, target);
             }
@@ -1885,22 +2067,20 @@ impl Validator {
         // Check if it's a valid absolute IRI
         if iri.starts_with("http://") || iri.starts_with("https://") || iri.starts_with("urn:") {
             Url::parse(iri)
-                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid IRI '{}': {}", iri, e)))?;
+                .map_err(|e| ShaclError::ShapeParsing(format!("Invalid IRI '{iri}': {e}")))?;
         } else if iri.contains(':') {
             // Could be a prefixed name - validate prefix part
             if let Some(colon_pos) = iri.find(':') {
                 let prefix = &iri[..colon_pos];
                 if prefix.is_empty() {
                     return Err(ShaclError::ShapeParsing(format!(
-                        "Invalid prefixed name '{}': empty prefix",
-                        iri
+                        "Invalid prefixed name '{iri}': empty prefix"
                     )));
                 }
             }
         } else {
             return Err(ShaclError::ShapeParsing(format!(
-                "Invalid IRI '{}': must be absolute or prefixed",
-                iri
+                "Invalid IRI '{iri}': must be absolute or prefixed"
             )));
         }
 
@@ -1978,8 +2158,6 @@ impl Validator {
 
     /// Update shape dependency graph
     fn update_shape_dependencies(&mut self, shape_id: ShapeId) -> Result<()> {
-        use petgraph::graph::NodeIndex;
-
         // Find or create node for this shape
         let shape_node = self.get_or_create_shape_node(&shape_id);
 
@@ -2062,7 +2240,6 @@ impl Validator {
     /// Get optimal shape evaluation order based on dependencies and sh:order property
     pub fn get_evaluation_order(&self) -> Vec<ShapeId> {
         use petgraph::algo::toposort;
-        use petgraph::visit::IntoNodeReferences;
 
         // Perform topological sort on the dependency graph
         let mut shape_ids: Vec<ShapeId> = match toposort(&self.shape_dependencies, None) {

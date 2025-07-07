@@ -281,6 +281,7 @@ pub enum BondType {
 }
 
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 pub enum NucleotideState {
     GTP,
     GDP,
@@ -575,6 +576,12 @@ impl CellularDivision {
     }
 }
 
+impl Default for MitoticApparatus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MitoticApparatus {
     /// Create new mitotic apparatus
     pub fn new() -> Self {
@@ -616,7 +623,7 @@ impl MitoticApparatus {
             let kinetochore = Kinetochore {
                 chromosome_attachment: true,
                 microtubule_attachments: vec![MicrotubuleAttachment {
-                    microtubule_id: format!("mt_{}", i),
+                    microtubule_id: format!("mt_{i}"),
                     attachment_strength: 1.0,
                     attachment_type: AttachmentType::Amphitelic,
                 }],
@@ -636,6 +643,12 @@ impl MitoticApparatus {
     }
 }
 
+impl Default for SpindleApparatus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpindleApparatus {
     /// Create new spindle apparatus
     pub fn new() -> Self {
@@ -651,21 +664,27 @@ impl SpindleApparatus {
     pub fn nucleate_microtubules(&mut self) -> OxirsResult<()> {
         // Create different types of microtubules
         for i in 0..20 {
-            let microtubule = Microtubule::new(format!("kt_mt_{}", i));
+            let microtubule = Microtubule::new(format!("kt_mt_{i}"));
             self.kinetochore_microtubules.push(microtubule);
         }
 
         for i in 0..10 {
-            let microtubule = Microtubule::new(format!("polar_mt_{}", i));
+            let microtubule = Microtubule::new(format!("polar_mt_{i}"));
             self.polar_microtubules.push(microtubule);
         }
 
         for i in 0..15 {
-            let microtubule = Microtubule::new(format!("astral_mt_{}", i));
+            let microtubule = Microtubule::new(format!("astral_mt_{i}"));
             self.astral_microtubules.push(microtubule);
         }
 
         Ok(())
+    }
+}
+
+impl Default for CheckpointSystem {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -684,6 +703,12 @@ impl CheckpointSystem {
         let damage_level =
             self.dna_damage_checkpoint.atm_activity + self.dna_damage_checkpoint.atr_activity;
         Ok(damage_level < 0.1) // Low damage threshold
+    }
+}
+
+impl Default for SpindleCheckpoint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -732,6 +757,12 @@ impl SpindleCheckpoint {
 }
 
 // Implementation stubs for other components
+impl Default for Centrosome {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Centrosome {
     pub fn new() -> Self {
         Self {
@@ -747,6 +778,12 @@ impl Centrosome {
                 z: 0.0,
             },
         }
+    }
+}
+
+impl Default for Centriole {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -789,12 +826,24 @@ impl Microtubule {
     }
 }
 
+impl Default for SpindlePole {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpindlePole {
     pub fn new() -> Self {
         Self {
             centrosome: Centrosome::new(),
             microtubule_nucleation_sites: Vec::new(),
         }
+    }
+}
+
+impl Default for DnaDamageCheckpoint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -805,6 +854,12 @@ impl DnaDamageCheckpoint {
             atr_activity: 0.0,
             p53_level: 0.1,
         }
+    }
+}
+
+impl Default for ReplicationCheckpoint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

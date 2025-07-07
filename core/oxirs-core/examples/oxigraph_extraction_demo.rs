@@ -14,25 +14,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test NamedNode (IRI) functionality
     println!("✅ NamedNode (IRI) Functionality:");
     let person_iri = NamedNode::new("http://example.org/Person")?;
-    println!("   Created NamedNode: {}", person_iri);
+    println!("   Created NamedNode: {person_iri}");
 
     // Test Blank Node functionality
     println!("\n✅ BlankNode Functionality:");
     let blank = BlankNode::new_unique();
-    println!("   Created unique BlankNode: {}", blank);
+    println!("   Created unique BlankNode: {blank}");
 
     // Test Literal functionality
     println!("\n✅ Literal Functionality:");
     let string_lit = Literal::new("Hello World");
-    println!("   Simple literal: {}", string_lit);
+    println!("   Simple literal: {string_lit}");
 
     let typed_lit = xsd_literals::integer_literal(42);
-    println!("   Typed literal: {}", typed_lit);
+    println!("   Typed literal: {typed_lit}");
 
     // Test Variable functionality
     println!("\n✅ Variable Functionality:");
     let var = Variable::new("x")?;
-    println!("   SPARQL variable: {}", var);
+    println!("   SPARQL variable: {var}");
 
     // Test Vocabulary constants
     println!("\n✅ Vocabulary Constants:");

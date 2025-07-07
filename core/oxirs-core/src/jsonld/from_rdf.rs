@@ -9,13 +9,13 @@ use json_event_parser::{JsonEvent, WriterJsonSerializer};
 // use oxrdf::{
 //     GraphName, GraphNameRef, NamedNode, NamedOrBlankNode, NamedOrBlankNodeRef, QuadRef, TermRef,
 // };
-use crate::model::iri::{Iri, IriParseError};
 use crate::model::node::NamedOrBlankNodeRef;
 use crate::model::quad::GraphNameRef;
 use crate::model::triple::{ObjectRef, PredicateRef, SubjectRef};
 use crate::model::*;
 use crate::optimization::TermRef;
 use crate::vocab::xsd;
+use oxiri::{Iri, IriParseError};
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;
@@ -599,6 +599,7 @@ impl InnerJsonLdWriter {
         }
     }
 
+    #[allow(dead_code)]
     fn type_value(id: NamedOrBlankNodeRef<'_>) -> Cow<'_, str> {
         match id {
             NamedOrBlankNodeRef::NamedNode(iri) => iri.as_str().into(),

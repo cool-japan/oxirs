@@ -2,7 +2,7 @@
 //!
 //! This module provides unified integration of all optimization components:
 //! - Index-aware BGP optimization
-//! - Statistics-based cost estimation  
+//! - Statistics-based cost estimation
 //! - Streaming optimization
 //! - Machine learning-enhanced planning
 //! - Adaptive query execution
@@ -11,16 +11,15 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
-use tracing::{debug, info, span, warn, Level};
+use anyhow::Result;
+use tracing::{debug, info, span, Level};
 
 use crate::advanced_optimizer::{AdvancedOptimizer, AdvancedOptimizerConfig};
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
 use crate::bgp_optimizer::{BGPOptimizer, IndexUsagePlan, OptimizedBGP};
 use crate::cost_model::{CostEstimate, CostModel};
-use crate::optimizer::{IndexStatistics, IndexType, OptimizationDecision, Statistics};
-use crate::statistics_collector::{Histogram, StatisticsCollector};
+use crate::optimizer::{IndexStatistics, IndexType, Statistics};
+use crate::statistics_collector::StatisticsCollector;
 use crate::streaming::{StreamingConfig, StreamingExecutor};
 
 /// Integrated query planner combining all optimization techniques
@@ -564,7 +563,7 @@ impl IntegratedQueryPlanner {
     /// Generate adaptive hints for execution
     fn generate_adaptive_hints(
         &self,
-        algebra: &Algebra,
+        _algebra: &Algebra,
         cost_estimate: &CostEstimate,
     ) -> Result<AdaptiveHints> {
         let mut hints = AdaptiveHints::default();
@@ -622,7 +621,7 @@ impl IntegratedQueryPlanner {
     }
 
     /// Calculate confidence in execution plan
-    fn calculate_plan_confidence(&self, cost_estimate: &CostEstimate) -> Result<f64> {
+    fn calculate_plan_confidence(&self, _cost_estimate: &CostEstimate) -> Result<f64> {
         // Base confidence on cost model accuracy and statistics quality
         let base_confidence = 0.7;
         let stats_factor = 0.2; // Would be calculated from statistics quality
@@ -710,7 +709,7 @@ impl PlanCache {
         if let Some(oldest_key) = self
             .last_access
             .iter()
-            .min_by_key(|(_, &instant)| instant)
+            .min_by_key(|&(_, &instant)| instant)
             .map(|(&key, _)| key)
         {
             self.plans.remove(&oldest_key);
@@ -746,7 +745,7 @@ impl IntegratedQueryPlanner {
 
     fn optimize_bgp_patterns(&mut self, algebra: &Algebra) -> Result<OptimizedBGP> {
         // Create BGPOptimizer with required statistics
-        let bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.index_stats);
+        let _bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.index_stats);
 
         // Extract BGP patterns from algebra
         let bgp_patterns = self.extract_bgp_patterns(algebra);
@@ -854,16 +853,15 @@ impl IntegratedQueryPlanner {
         let mut cpu_cost = 0.0;
         let mut io_cost = 0.0;
         let mut memory_cost = strategy.memory_allocation as f64 / 1024.0 / 1024.0; // Memory cost in MB
-        let mut network_cost = 0.0;
-        let mut estimated_cardinality = 1;
+        let network_cost = 0.0;
 
         // Recursively calculate costs based on algebra structure
-        match algebra {
+        let estimated_cardinality = match algebra {
             Algebra::Bgp(patterns) => {
                 // Cost for BGP evaluation
                 cpu_cost += patterns.len() as f64 * 2.0; // Base cost per pattern
                 io_cost += patterns.len() as f64 * 1.0; // I/O cost for pattern matching
-                estimated_cardinality = (patterns.len() * 100).max(1); // Estimate based on pattern count
+                (patterns.len() * 100).max(1) // Estimate based on pattern count
             }
             Algebra::Join { left, right } => {
                 // Recursive cost calculation for joins
@@ -877,9 +875,8 @@ impl IntegratedQueryPlanner {
                 let join_cost = (left_cost.cardinality * right_cost.cardinality) as f64 * 0.001;
                 cpu_cost += join_cost;
 
-                estimated_cardinality =
-                    ((left_cost.cardinality as f64 * right_cost.cardinality as f64 * 0.1) as usize)
-                        .max(1);
+                ((left_cost.cardinality as f64 * right_cost.cardinality as f64 * 0.1) as usize)
+                    .max(1)
             }
             Algebra::Union { left, right } => {
                 let left_cost = self.estimate_execution_cost(left, strategy)?;
@@ -887,14 +884,13 @@ impl IntegratedQueryPlanner {
 
                 cpu_cost += left_cost.cpu_cost + right_cost.cpu_cost;
                 io_cost += left_cost.io_cost + right_cost.io_cost;
-                estimated_cardinality = left_cost.cardinality + right_cost.cardinality;
+                left_cost.cardinality + right_cost.cardinality
             }
             Algebra::Filter { pattern, .. } => {
                 let pattern_cost = self.estimate_execution_cost(pattern, strategy)?;
                 cpu_cost += pattern_cost.cpu_cost + 5.0; // Additional cost for filtering
                 io_cost += pattern_cost.io_cost;
-                estimated_cardinality = (pattern_cost.cardinality as f64 * 0.5) as usize;
-                // Filtering reduces cardinality
+                (pattern_cost.cardinality as f64 * 0.5) as usize // Filtering reduces cardinality
             }
             Algebra::Group {
                 pattern, variables, ..
@@ -902,8 +898,7 @@ impl IntegratedQueryPlanner {
                 let pattern_cost = self.estimate_execution_cost(pattern, strategy)?;
                 cpu_cost += pattern_cost.cpu_cost + variables.len() as f64 * 3.0; // Grouping cost
                 io_cost += pattern_cost.io_cost;
-                estimated_cardinality = (pattern_cost.cardinality as f64 * 0.2) as usize;
-                // Grouping reduces cardinality
+                (pattern_cost.cardinality as f64 * 0.2) as usize // Grouping reduces cardinality
             }
             Algebra::OrderBy {
                 pattern,
@@ -913,15 +908,15 @@ impl IntegratedQueryPlanner {
                 let sort_cost = (pattern_cost.cardinality as f64).log2() * conditions.len() as f64; // O(n log n) sort
                 cpu_cost += pattern_cost.cpu_cost + sort_cost;
                 io_cost += pattern_cost.io_cost;
-                estimated_cardinality = pattern_cost.cardinality;
+                pattern_cost.cardinality
             }
             _ => {
                 // Default costs for other algebra types
                 cpu_cost += 1.0;
                 io_cost += 0.5;
-                estimated_cardinality = 100;
+                100
             }
-        }
+        };
 
         // Apply strategy-specific adjustments
         if strategy.use_streaming {
@@ -995,7 +990,7 @@ impl IntegratedQueryPlanner {
 
     fn update_cost_model(&mut self, record: &ExecutionRecord) -> Result<()> {
         // Update cost model with actual vs. estimated performance
-        let mut cost_model = self.cost_model.lock().unwrap();
+        let _cost_model = self.cost_model.lock().unwrap();
 
         // Calculate estimation error
         let duration_error = if record.estimated_duration.as_millis() > 0 {

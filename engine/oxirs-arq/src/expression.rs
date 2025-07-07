@@ -3,15 +3,11 @@
 //! This module provides comprehensive expression evaluation capabilities
 //! using the enhanced term system.
 
-use crate::algebra::{
-    Aggregate, BinaryOperator, Expression as AlgebraExpression, UnaryOperator, Variable,
-};
-use crate::extensions::{ExecutionContext as ExtContext, ExtensionRegistry};
+use crate::algebra::{BinaryOperator, Expression as AlgebraExpression, UnaryOperator};
+use crate::extensions::ExtensionRegistry;
 use crate::term::{xsd, BindingContext, NumericValue, Term};
 use anyhow::{anyhow, bail, Result};
-use chrono::{Datelike, NaiveDate, NaiveDateTime};
-use oxirs_core::model::NamedNode;
-use std::collections::HashMap;
+use chrono::Datelike;
 use std::sync::Arc;
 
 /// Expression evaluator with full SPARQL 1.1 support
@@ -306,15 +302,15 @@ impl ExpressionEvaluator {
         let str_val = match &args[0] {
             Term::Iri(iri) => iri.clone(),
             Term::Literal(lit) => lit.lexical_form.clone(),
-            Term::BlankNode(id) => format!("_:{}", id),
-            Term::Variable(var) => format!("?{}", var),
+            Term::BlankNode(id) => format!("_:{id}"),
+            Term::Variable(var) => format!("?{var}"),
             Term::QuotedTriple(triple) => {
                 format!(
                     "<<{} {} {}>>",
                     triple.subject, triple.predicate, triple.object
                 )
             }
-            Term::PropertyPath(path) => format!("{}", path),
+            Term::PropertyPath(path) => format!("{path}"),
         };
 
         Ok(Term::literal(&str_val))
@@ -846,6 +842,7 @@ impl ExpressionEvaluator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxirs_core::{NamedNode, Variable};
 
     #[test]
     fn test_expression_evaluation() {

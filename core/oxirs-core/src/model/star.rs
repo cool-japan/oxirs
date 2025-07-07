@@ -77,13 +77,15 @@ impl RdfTerm for QuotedTriple {
 impl SubjectTerm for QuotedTriple {}
 impl ObjectTerm for QuotedTriple {}
 
+// Custom serialization for QuotedTriple to handle Arc<Triple>
 #[cfg(feature = "serde")]
 impl serde::Serialize for QuotedTriple {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        self.inner.serialize(serializer)
+        // Serialize the inner triple directly
+        self.inner.as_ref().serialize(serializer)
     }
 }
 
@@ -217,7 +219,7 @@ impl StarPattern {
         vars
     }
 
-    fn collect_variables(&self, vars: &mut Vec<crate::model::Variable>) {
+    fn collect_variables(&self, _vars: &mut Vec<crate::model::Variable>) {
         match self {
             StarPattern::Triple(_) => {
                 // TODO: implement properly when query algebra is available
@@ -227,15 +229,15 @@ impl StarPattern {
                 predicate: _,
                 object,
             } => {
-                subject.collect_variables(vars);
-                object.collect_variables(vars);
+                subject.collect_variables(_vars);
+                object.collect_variables(_vars);
             }
             StarPattern::Annotation {
                 statement,
                 property: _,
                 value: _,
             } => {
-                statement.collect_variables(vars);
+                statement.collect_variables(_vars);
             }
         }
     }
@@ -331,7 +333,7 @@ mod tests {
 
         assert_eq!(quoted.inner(), &triple);
         assert_eq!(
-            format!("{}", quoted),
+            format!("{quoted}"),
             "<< <http://example.org/alice> <http://example.org/says> \"Hello\" . >>"
         );
     }

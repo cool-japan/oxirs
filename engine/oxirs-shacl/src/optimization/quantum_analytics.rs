@@ -6,13 +6,9 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
-use crate::{
-    constraints::{Constraint, ConstraintEvaluationResult},
-    ConstraintComponentId, Result, ShaclError, ShapeId,
-};
+use crate::{constraints::ConstraintEvaluationResult, ConstraintComponentId, Result};
 
 // Define placeholder structures early for forward references
 #[derive(Debug)]
@@ -809,7 +805,7 @@ mod tests {
         let analytics = QuantumPerformanceAnalytics::new(config);
 
         let transcendence = analytics.calculate_transcendence_level();
-        assert!(transcendence >= 0.0 && transcendence <= 1.0);
+        assert!((0.0..=1.0).contains(&transcendence));
     }
 
     #[test]
@@ -818,6 +814,6 @@ mod tests {
         let analytics = QuantumPerformanceAnalytics::new(config);
 
         let harmony = analytics.calculate_cosmic_harmony();
-        assert!(harmony >= 0.0 && harmony <= 1.0);
+        assert!((0.0..=1.0).contains(&harmony));
     }
 }

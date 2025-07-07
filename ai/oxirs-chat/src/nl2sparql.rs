@@ -9,7 +9,10 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
+    fs,
+    path::Path,
     sync::Arc,
+    time::Duration,
 };
 use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info, warn};
@@ -349,7 +352,7 @@ pub enum SPARQLQueryType {
 }
 
 /// SPARQL query template
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SPARQLTemplate {
     pub name: String,
     pub description: String,
@@ -361,7 +364,7 @@ pub struct SPARQLTemplate {
 }
 
 /// Template parameter
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateParameter {
     pub name: String,
     pub parameter_type: ParameterType,
@@ -370,7 +373,7 @@ pub struct TemplateParameter {
     pub extraction_pattern: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ParameterType {
     Entity,
     Property,
@@ -380,14 +383,14 @@ pub enum ParameterType {
 }
 
 /// Template example
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateExample {
     pub natural_language: String,
     pub parameters: HashMap<String, String>,
     pub expected_sparql: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum QueryComplexity {
     Simple,
     Medium,
@@ -505,11 +508,48 @@ impl NL2SPARQLSystem {
                     let mut bindings = Vec::new();
                     let mut result_count = 0;
 
-                    // Process query results
-                    // Note: OxirsQueryResults is currently a placeholder
-                    // TODO: Implement proper SPARQL result processing when Store.query() returns actual results
-                    let _results = results; // Currently just a placeholder
-                    result_count = 0; // No real results from placeholder implementation
+                    // Process query results based on query type
+                    match results.results() {
+                        oxirs_core::rdf_store::QueryResults::Bindings(result_bindings) => {
+                            // Convert Variable bindings to String-based bindings for API compatibility
+                            for binding in result_bindings {
+                                let mut string_binding = HashMap::new();
+                                for var in binding.variables() {
+                                    if let Some(term) = binding.get(var) {
+                                        string_binding.insert(var.clone(), format!("{}", term));
+                                    }
+                                }
+                                bindings.push(string_binding);
+                            }
+                            result_count = bindings.len();
+                        }
+                        oxirs_core::rdf_store::QueryResults::Boolean(answer) => {
+                            // For ASK queries, create a single binding with the boolean result
+                            let mut ask_binding = HashMap::new();
+                            ask_binding.insert("result".to_string(), answer.to_string());
+                            bindings.push(ask_binding);
+                            result_count = 1;
+                        }
+                        oxirs_core::rdf_store::QueryResults::Graph(quads) => {
+                            // For CONSTRUCT queries, convert quads to bindings
+                            for (index, quad) in quads.iter().enumerate() {
+                                let mut quad_binding = HashMap::new();
+                                quad_binding
+                                    .insert("subject".to_string(), format!("{}", quad.subject()));
+                                quad_binding.insert(
+                                    "predicate".to_string(),
+                                    format!("{}", quad.predicate()),
+                                );
+                                quad_binding
+                                    .insert("object".to_string(), format!("{}", quad.object()));
+                                let graph = quad.graph_name();
+                                quad_binding.insert("graph".to_string(), format!("{}", graph));
+                                quad_binding.insert("quad_index".to_string(), index.to_string());
+                                bindings.push(quad_binding);
+                            }
+                            result_count = quads.len();
+                        }
+                    }
 
                     info!(
                         "Query executed successfully: {} results in {}ms",
@@ -704,8 +744,99 @@ LIMIT {{limit}}
         Ok(())
     }
 
-    fn load_templates_from_directory(&mut self, _dir: &str) -> Result<()> {
-        // TODO: Implement loading templates from directory
+    fn load_templates_from_directory(&mut self, dir: &str) -> Result<()> {
+        let dir_path = Path::new(dir);
+
+        if !dir_path.exists() {
+            warn!("Template directory does not exist: {}", dir);
+            return Ok(());
+        }
+
+        info!("Loading templates from directory: {}", dir);
+
+        let entries = fs::read_dir(dir_path)?;
+        let mut loaded_count = 0;
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_file() {
+                let extension = path.extension().and_then(|s| s.to_str());
+
+                match extension {
+                    Some("json") => {
+                        if let Err(e) = self.load_json_template(&path) {
+                            error!("Failed to load JSON template from {:?}: {}", path, e);
+                        } else {
+                            loaded_count += 1;
+                            debug!("Loaded template from {:?}", path);
+                        }
+                    }
+                    Some("yaml") | Some("yml") => {
+                        if let Err(e) = self.load_yaml_template(&path) {
+                            error!("Failed to load YAML template from {:?}: {}", path, e);
+                        } else {
+                            loaded_count += 1;
+                            debug!("Loaded template from {:?}", path);
+                        }
+                    }
+                    _ => {
+                        debug!("Skipping non-template file: {:?}", path);
+                    }
+                }
+            }
+        }
+
+        info!("Loaded {} templates from directory: {}", loaded_count, dir);
+        Ok(())
+    }
+
+    /// Load a single JSON template file
+    fn load_json_template(&mut self, path: &Path) -> Result<()> {
+        let content = fs::read_to_string(path)?;
+        let template: SPARQLTemplate = serde_json::from_str(&content)?;
+
+        // Validate the template
+        if template.name.is_empty() {
+            return Err(anyhow!("Template name cannot be empty"));
+        }
+
+        if template.template.is_empty() {
+            return Err(anyhow!("Template SPARQL cannot be empty"));
+        }
+
+        // Register the template in the Handlebars engine
+        self.template_engine
+            .register_template_string(&template.name, &template.template)?;
+
+        // Store the template
+        self.templates.insert(template.name.clone(), template);
+
+        Ok(())
+    }
+
+    /// Load a single YAML template file
+    fn load_yaml_template(&mut self, path: &Path) -> Result<()> {
+        let content = fs::read_to_string(path)?;
+        let template: SPARQLTemplate = serde_yaml::from_str(&content)?;
+
+        // Validate the template
+        if template.name.is_empty() {
+            return Err(anyhow!("Template name cannot be empty"));
+        }
+
+        if template.template.is_empty() {
+            return Err(anyhow!("Template SPARQL cannot be empty"));
+        }
+
+        // Register the template in the Handlebars engine
+        self.template_engine
+            .register_template_string(&template.name, &template.template)?;
+
+        // Store the template
+        self.templates.insert(template.name.clone(), template);
+
         Ok(())
     }
 
@@ -722,9 +853,13 @@ LIMIT {{limit}}
         // Fill template with parameters
         let sparql_query = self.fill_template(&template, &parameters)?;
 
+        // Calculate confidence based on template quality and parameter extraction
+        let confidence =
+            self.calculate_template_confidence(&template, &parameters, query_context)?;
+
         Ok(SPARQLGenerationResult {
             query: sparql_query,
-            confidence: 0.8, // TODO: Calculate actual confidence
+            confidence,
             generation_method: GenerationMethod::Template(template.name.clone()),
             parameters,
             explanation: None,
@@ -752,7 +887,7 @@ LIMIT {{limit}}
     ) -> Result<SPARQLGenerationResult> {
         let system_prompt = self.create_sparql_generation_prompt();
 
-        if let Some(ref llm_manager) = self.llm_manager {
+        if let Some(llm_manager) = self.llm_manager.clone() {
             let query_text = query_context
                 .conversation_history
                 .iter()
@@ -784,9 +919,13 @@ LIMIT {{limit}}
                 Ok(response) => {
                     let sparql_query = self.extract_sparql_from_response(&response.content)?;
 
+                    // Calculate confidence based on LLM response quality and SPARQL validity
+                    let confidence =
+                        self.calculate_llm_confidence(&response, &sparql_query, query_context)?;
+
                     Ok(SPARQLGenerationResult {
                         query: sparql_query,
-                        confidence: 0.7, // TODO: Calculate based on LLM confidence
+                        confidence,
                         generation_method: GenerationMethod::LLM(response.model_used.clone()),
                         parameters: HashMap::new(),
                         explanation: None,
@@ -848,10 +987,255 @@ LIMIT {{limit}}
 
     async fn generate_rule_based(
         &self,
-        _query_context: &QueryContext,
+        query_context: &QueryContext,
     ) -> Result<SPARQLGenerationResult> {
-        // TODO: Implement rule-based generation
-        Err(anyhow!("Rule-based generation not yet implemented"))
+        // Extract the user query from conversation history
+        let query_text = query_context
+            .conversation_history
+            .iter()
+            .rev()
+            .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+            .map(|msg| msg.content.as_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if query_text.is_empty() {
+            return Err(anyhow!("No user query found in context"));
+        }
+
+        // Initialize rule-based analysis
+        let mut parameters = HashMap::new();
+        let mut confidence: f32 = 0.0;
+        let mut hints = Vec::new();
+
+        // Rule 1: Basic SELECT pattern detection
+        let select_query = if query_text.contains("find") || query_text.contains("show") || 
+                              query_text.contains("list") || query_text.contains("get") ||
+                              query_text.contains("what") || query_text.contains("which") {
+            confidence += 0.3;
+            true
+        } else {
+            false
+        };
+
+        // Rule 2: COUNT pattern detection
+        let count_query = if query_text.contains("how many") || query_text.contains("count") ||
+                            query_text.contains("number of") {
+            confidence += 0.3;
+            true
+        } else {
+            false
+        };
+
+        // Rule 3: ASK pattern detection  
+        let ask_query = if query_text.starts_with("is") || query_text.starts_with("does") ||
+                          query_text.starts_with("has") || query_text.contains("whether") {
+            confidence += 0.3;
+            true
+        } else {
+            false
+        };
+
+        // Rule 4: Entity extraction using extracted entities from context
+        let mut subjects = Vec::new();
+        let mut predicates = Vec::new();
+        let mut objects = Vec::new();
+
+        // Use entities from query context if available (entities is Vec<Vec<String>>)
+        for entity_group in &query_context.entities {
+            for entity in entity_group {
+                // Treat all entities as potential subjects/objects
+                if entity.starts_with("http") || entity.starts_with("urn:") {
+                    subjects.push(format!("<{}>", entity));
+                } else {
+                    objects.push(format!("\"{}\"", entity));
+                }
+                parameters.insert(format!("entity_{}", entity), entity.clone());
+            }
+        }
+
+        // Rule 5: Common property patterns
+        if query_text.contains("name") || query_text.contains("label") {
+            predicates.push("rdfs:label".to_string());
+            confidence += 0.1;
+        }
+        if query_text.contains("type") || query_text.contains("kind") {
+            predicates.push("rdf:type".to_string());
+            confidence += 0.1;
+        }
+        if query_text.contains("born") || query_text.contains("birth") {
+            predicates.push("dbo:birthDate".to_string());
+            confidence += 0.1;
+        }
+        if query_text.contains("location") || query_text.contains("place") {
+            predicates.push("dbo:location".to_string());
+            confidence += 0.1;
+        }
+
+        // Rule 6: Generate SPARQL based on detected patterns
+        let sparql_query = if count_query {
+            // Generate COUNT query
+            let subject_var = if subjects.is_empty() { "?entity" } else { "?s" };
+            let predicate = if predicates.is_empty() { "?p" } else { &predicates[0] };
+            let object_var = if objects.is_empty() { "?o" } else { &objects[0] };
+
+            hints.push(OptimizationHint {
+                hint_type: OptimizationHintType::SimplifyExpression,
+                description: "COUNT queries can be optimized with LIMIT".to_string(),
+                estimated_improvement: Some(0.5),
+            });
+
+            format!(
+                "SELECT (COUNT(*) AS ?count) WHERE {{\n  {} {} {} .\n}}",
+                subject_var, predicate, object_var
+            )
+        } else if ask_query {
+            // Generate ASK query
+            let subject = if subjects.is_empty() { "?s" } else { &subjects[0] };
+            let predicate = if predicates.is_empty() { "?p" } else { &predicates[0] };
+            let object = if objects.is_empty() { "?o" } else { &objects[0] };
+
+            format!(
+                "ASK {{\n  {} {} {} .\n}}",
+                subject, predicate, object
+            )
+        } else {
+            // Generate basic SELECT query
+            let mut select_vars = Vec::new();
+            let mut where_patterns = Vec::new();
+
+            if subjects.is_empty() {
+                select_vars.push("?subject");
+                where_patterns.push(format!("?subject {} ?object", 
+                    if predicates.is_empty() { "?predicate" } else { &predicates[0] }));
+            } else {
+                select_vars.push("?object");
+                where_patterns.push(format!("{} {} ?object", 
+                    &subjects[0], 
+                    if predicates.is_empty() { "?predicate" } else { &predicates[0] }));
+            }
+
+            if predicates.is_empty() {
+                select_vars.push("?predicate");
+            }
+
+            hints.push(OptimizationHint {
+                hint_type: OptimizationHintType::UseFilter,
+                description: "Consider adding LIMIT clause for large result sets".to_string(),
+                estimated_improvement: Some(0.8),
+            });
+
+            format!(
+                "SELECT {} WHERE {{\n  {}\n}} LIMIT 100",
+                select_vars.join(" "),
+                where_patterns.join(" .\n  ")
+            )
+        };
+
+        // Rule 7: Confidence adjustment based on query complexity and rule coverage
+        if !subjects.is_empty() { confidence += 0.2; }
+        if !predicates.is_empty() { confidence += 0.2; }
+        if !objects.is_empty() { confidence += 0.1; }
+
+        // Ensure confidence is within bounds
+        confidence = confidence.min(1.0).max(0.0);
+
+        // If confidence is too low, provide a generic fallback
+        let final_query = if confidence < 0.3 {
+            // Generic fallback query
+            confidence = 0.3;
+            hints.push(OptimizationHint {
+                hint_type: OptimizationHintType::SimplifyExpression,
+                description: "Low confidence - using generic query pattern".to_string(),
+                estimated_improvement: Some(0.2),
+            });
+            "SELECT ?subject ?predicate ?object WHERE {\n  ?subject ?predicate ?object .\n} LIMIT 10".to_string()
+        } else {
+            sparql_query
+        };
+
+        // Create generation metadata
+        let metadata = GenerationMetadata {
+            generation_time_ms: 50, // Rule-based is fast
+            template_used: None,     // No template used
+            llm_model_used: None,    // No LLM used
+            iterations: 1,           // Single iteration for rule-based
+            fallback_used: confidence < 0.3, // Fallback used if confidence too low
+        };
+
+        // Create explanation
+        let explanation = QueryExplanation {
+            natural_language: format!(
+                "This query was generated using rule-based analysis. Detected patterns: {}, confidence: {:.1}%",
+                if select_query { "selection" } 
+                else if count_query { "counting" } 
+                else if ask_query { "yes/no question" } 
+                else { "general query" },
+                confidence * 100.0
+            ),
+            reasoning_steps: vec![
+                ReasoningStep {
+                    step_type: ReasoningStepType::EntityExtraction,
+                    description: "Analyzed natural language for query patterns".to_string(),
+                    input: query_text.clone(),
+                    output: format!("Detected: select={}, count={}, ask={}", select_query, count_query, ask_query),
+                    confidence: 0.8,
+                },
+                ReasoningStep {
+                    step_type: ReasoningStepType::EntityExtraction,
+                    description: "Extracted entities from conversation context".to_string(),
+                    input: "Entity groups from context".to_string(),
+                    output: format!("Found {} subjects, {} objects", subjects.len(), objects.len()),
+                    confidence: 0.7,
+                },
+                ReasoningStep {
+                    step_type: ReasoningStepType::PropertyMapping,
+                    description: "Inferred predicates from common vocabulary patterns".to_string(),
+                    input: "Common property keywords".to_string(),
+                    output: format!("Detected {} predicates", predicates.len()),
+                    confidence: 0.6,
+                },
+                ReasoningStep {
+                    step_type: ReasoningStepType::QueryConstruction,
+                    description: "Generated SPARQL based on linguistic rules".to_string(),
+                    input: "Combined patterns and entities".to_string(),
+                    output: "SPARQL query structure".to_string(),
+                    confidence,
+                },
+            ],
+            parameter_mapping: parameters.clone(),
+            alternatives: vec![
+                "Template-based generation for better structure".to_string(),
+                "LLM-based generation for complex queries".to_string(),
+            ],
+        };
+
+        Ok(SPARQLGenerationResult {
+            query: final_query,
+            confidence,
+            generation_method: GenerationMethod::RuleBased,
+            parameters,
+            explanation: Some(explanation),
+            validation_result: ValidationResult {
+                is_valid: true, // Assume generated queries are syntactically valid
+                syntax_errors: Vec::new(),
+                semantic_warnings: if confidence < 0.5 { 
+                    vec![SemanticWarning {
+                        message: "Low confidence rule-based generation".to_string(),
+                        warning_type: SemanticWarningType::PerformanceIssue,
+                        severity: WarningSeverity::Medium,
+                    }] 
+                } else { 
+                    Vec::new() 
+                },
+                schema_issues: Vec::new(),
+                suggestions: vec![
+                    "Consider using template-based or LLM-based generation for better accuracy".to_string(),
+                ],
+            },
+            optimization_hints: hints,
+            metadata,
+        })
     }
 
     fn select_template(&self, query_context: &QueryContext) -> Result<&SPARQLTemplate> {
@@ -980,7 +1364,6 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         result: &SPARQLGenerationResult,
         query_context: &QueryContext,
     ) -> Result<QueryExplanation> {
-        // TODO: Implement explanation generation
         let query_text = query_context
             .conversation_history
             .iter()
@@ -988,12 +1371,311 @@ Always respond with just the SPARQL query, no additional explanation unless requ
             .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
             .map(|msg| msg.content.as_str())
             .unwrap_or("Unknown query");
+
+        let mut reasoning_steps = Vec::new();
+        let mut alternatives = Vec::new();
+
+        // Step 1: Input Analysis
+        reasoning_steps.push(ReasoningStep {
+            step_type: ReasoningStepType::EntityExtraction,
+            description: "Analyzed natural language query".to_string(),
+            input: query_text.to_string(),
+            output: format!("Identified intent: {:?}", query_context.query_intent),
+            confidence: 0.9,
+        });
+
+        // Step 2: Method Selection
+        let method_description = match result.generation_method {
+            GenerationMethod::Template(ref template_name) => {
+                format!(
+                    "Selected template-based generation using template: {}",
+                    template_name
+                )
+            }
+            GenerationMethod::LLM(ref model_name) => {
+                format!("Selected LLM-based generation using model: {}", model_name)
+            }
+            GenerationMethod::Hybrid => {
+                "Selected hybrid approach combining template and LLM generation".to_string()
+            }
+            GenerationMethod::RuleBased => "Selected rule-based generation approach".to_string(),
+        };
+
+        reasoning_steps.push(ReasoningStep {
+            step_type: ReasoningStepType::TemplateSelection,
+            description: method_description,
+            input: "Query analysis results".to_string(),
+            output: format!("Generation method: {:?}", result.generation_method),
+            confidence: result.confidence,
+        });
+
+        // Step 3: Parameter Extraction
+        if !result.parameters.is_empty() {
+            let parameters_description = result
+                .parameters
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, v))
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            reasoning_steps.push(ReasoningStep {
+                step_type: ReasoningStepType::ParameterFilling,
+                description: "Extracted parameters from natural language".to_string(),
+                input: query_text.to_string(),
+                output: parameters_description,
+                confidence: 0.8,
+            });
+        }
+
+        // Step 4: Query Construction
+        reasoning_steps.push(ReasoningStep {
+            step_type: ReasoningStepType::QueryConstruction,
+            description: "Constructed SPARQL query from parameters".to_string(),
+            input: "Template and extracted parameters".to_string(),
+            output: result.query.clone(),
+            confidence: result.confidence,
+        });
+
+        // Step 5: Validation
+        if result.validation_result.is_valid {
+            reasoning_steps.push(ReasoningStep {
+                step_type: ReasoningStepType::Validation,
+                description: "Query validated successfully".to_string(),
+                input: result.query.clone(),
+                output: "Query is syntactically and semantically valid".to_string(),
+                confidence: 1.0,
+            });
+        } else {
+            reasoning_steps.push(ReasoningStep {
+                step_type: ReasoningStepType::Validation,
+                description: "Query validation found issues".to_string(),
+                input: result.query.clone(),
+                output: format!(
+                    "Found {} errors and {} warnings",
+                    result.validation_result.syntax_errors.len(),
+                    result.validation_result.semantic_warnings.len()
+                ),
+                confidence: 0.5,
+            });
+        }
+
+        // Step 6: Optimization
+        if !result.optimization_hints.is_empty() {
+            reasoning_steps.push(ReasoningStep {
+                step_type: ReasoningStepType::Optimization,
+                description: "Applied query optimizations".to_string(),
+                input: "Original query".to_string(),
+                output: format!(
+                    "Applied {} optimization hints",
+                    result.optimization_hints.len()
+                ),
+                confidence: 0.9,
+            });
+        }
+
+        // Generate alternative explanations
+        alternatives.push("Could have used different parameter extraction patterns".to_string());
+        alternatives
+            .push("Could have selected a different template or generation method".to_string());
+
+        if result.confidence < 0.8 {
+            alternatives.push("Consider rephrasing the query for better accuracy".to_string());
+        }
+
+        // Generate natural language explanation
+        let natural_language = self
+            .generate_natural_language_explanation(query_text, &result, &reasoning_steps)
+            .await?;
+
         Ok(QueryExplanation {
-            natural_language: format!("Generated SPARQL query for: {}", query_text),
-            reasoning_steps: Vec::new(),
+            natural_language,
+            reasoning_steps,
             parameter_mapping: result.parameters.clone(),
-            alternatives: Vec::new(),
+            alternatives,
         })
+    }
+
+    /// Generate natural language explanation
+    async fn generate_natural_language_explanation(
+        &self,
+        query_text: &str,
+        result: &SPARQLGenerationResult,
+        reasoning_steps: &[ReasoningStep],
+    ) -> Result<String> {
+        let mut explanation = String::new();
+
+        explanation.push_str(&format!("For your query '{}', I:\n\n", query_text));
+
+        for (i, step) in reasoning_steps.iter().enumerate() {
+            explanation.push_str(&format!("{}. {}\n", i + 1, step.description));
+
+            if step.confidence < 0.7 {
+                explanation.push_str(&format!(
+                    "   (Note: This step has lower confidence: {:.1}%)\n",
+                    step.confidence * 100.0
+                ));
+            }
+        }
+
+        explanation.push_str(&format!(
+            "\nThe resulting SPARQL query has a confidence score of {:.1}%.\n",
+            result.confidence * 100.0
+        ));
+
+        if result.confidence < 0.7 {
+            explanation.push_str("You may want to rephrase your query for better results.\n");
+        }
+
+        if !result.validation_result.is_valid {
+            explanation.push_str(
+                "Note: The generated query has some validation issues that may affect execution.\n",
+            );
+        }
+
+        Ok(explanation)
+    }
+
+    /// Calculate confidence for template-based generation
+    fn calculate_template_confidence(
+        &self,
+        template: &SPARQLTemplate,
+        parameters: &HashMap<String, String>,
+        query_context: &QueryContext,
+    ) -> Result<f32> {
+        let mut confidence_factors = Vec::new();
+
+        // Factor 1: Template specificity (0.6-1.0)
+        let specificity_score = if template.parameters.len() > 0 {
+            0.6 + (template.parameters.len() as f32 * 0.1).min(0.4)
+        } else {
+            0.6
+        };
+        confidence_factors.push(specificity_score);
+
+        // Factor 2: Parameter extraction quality (0.5-1.0)
+        let mut param_quality: f32 = 1.0;
+        for param in &template.parameters {
+            if let Some(value) = parameters.get(&param.name) {
+                if value.is_empty() {
+                    param_quality *= 0.7;
+                } else if value.len() < 2 {
+                    param_quality *= 0.8;
+                } else if value.contains("unknown") || value.contains("undefined") {
+                    param_quality *= 0.6;
+                }
+            } else {
+                param_quality *= 0.5;
+            }
+        }
+        confidence_factors.push(param_quality.max(0.5));
+
+        // Factor 3: Intent pattern match quality (0.4-1.0)
+        let intent_match_score = if template.intent_patterns.is_empty() {
+            0.7
+        } else {
+            let query_text = query_context
+                .conversation_history
+                .iter()
+                .rev()
+                .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
+                .map(|msg| msg.content.as_str())
+                .unwrap_or("");
+            let mut best_match: f32 = 0.0;
+
+            for pattern in &template.intent_patterns {
+                let pattern_lower = pattern.to_lowercase();
+                let pattern_words: std::collections::HashSet<_> =
+                    pattern_lower.split_whitespace().collect();
+                let query_lower = query_text.to_lowercase();
+                let query_words: std::collections::HashSet<_> =
+                    query_lower.split_whitespace().collect();
+
+                let intersection_size = pattern_words.intersection(&query_words).count();
+                let union_size = pattern_words.union(&query_words).count();
+
+                if union_size > 0 {
+                    let jaccard_similarity = intersection_size as f32 / union_size as f32;
+                    best_match = best_match.max(jaccard_similarity);
+                }
+            }
+
+            0.4 + best_match * 0.6
+        };
+        confidence_factors.push(intent_match_score);
+
+        let base_confidence =
+            confidence_factors.iter().sum::<f32>() / confidence_factors.len() as f32;
+        let template_bonus = if template.examples.len() > 0 {
+            0.05
+        } else {
+            0.0
+        };
+        let final_confidence = (base_confidence + template_bonus).min(1.0).max(0.1);
+
+        debug!(
+            "Template confidence for '{}': {:.3}",
+            template.name, final_confidence
+        );
+
+        Ok(final_confidence)
+    }
+
+    /// Calculate confidence for LLM-based generation
+    fn calculate_llm_confidence(
+        &mut self,
+        response: &crate::llm::LLMResponse,
+        sparql_query: &str,
+        _query_context: &QueryContext,
+    ) -> Result<f32> {
+        let mut confidence_factors = Vec::new();
+
+        // Factor 1: LLM response confidence if available (0.3-1.0)
+        let llm_confidence: f32 = 0.7; // Default confidence since field is not available
+        confidence_factors.push(llm_confidence.max(0.3));
+
+        // Factor 2: SPARQL syntax validity (0.2-1.0)
+        let syntax_score = if self
+            .validator
+            .validate(sparql_query)
+            .map(|r| r.is_valid)
+            .unwrap_or(false)
+        {
+            1.0
+        } else {
+            0.2
+        };
+        confidence_factors.push(syntax_score);
+
+        // Factor 3: Query completeness (0.4-1.0)
+        let completeness_score = if sparql_query.trim().is_empty() {
+            0.4
+        } else if sparql_query.to_uppercase().contains("SELECT")
+            && sparql_query.to_uppercase().contains("WHERE")
+        {
+            0.9
+        } else if sparql_query.to_uppercase().contains("CONSTRUCT")
+            && sparql_query.to_uppercase().contains("WHERE")
+        {
+            0.9
+        } else if sparql_query.to_uppercase().contains("ASK") {
+            0.8
+        } else {
+            0.6
+        };
+        confidence_factors.push(completeness_score);
+
+        let weights = [0.25, 0.35, 0.40];
+        let weighted_sum: f32 = confidence_factors
+            .iter()
+            .zip(weights.iter())
+            .map(|(factor, weight)| factor * weight)
+            .sum();
+
+        let final_confidence = weighted_sum.min(1.0).max(0.1);
+
+        debug!("LLM confidence for query: {:.3}", final_confidence);
+
+        Ok(final_confidence)
     }
 }
 

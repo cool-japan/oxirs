@@ -92,12 +92,15 @@ bytes = "1.5"
 # AI and ML dependencies
 ndarray = { version = "0.15", features = ["rayon"] }
 
-# Dependencies for Unicode normalization (replacing oxiri/oxilangtag)
+# High-performance validation dependencies from oxrdf ecosystem
+oxiri.workspace = true         # Fast IRI validation and parsing
+oxilangtag.workspace = true    # Fast language tag validation
+oxsdatatypes.workspace = true  # Fast XSD datatype validation and parsing
+
+# Dependencies for Unicode normalization 
 icu = "1.5"
 icu_normalizer = "1.5"
 icu_properties = "1.5"
-# oxiri = "0.2"         # REMOVED: Using native IRI validation
-# oxilangtag = "0.1"    # REMOVED: Using native language tag validation
 
 # Random number generation dependencies
 rand_core.workspace = true

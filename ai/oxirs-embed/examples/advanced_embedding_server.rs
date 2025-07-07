@@ -249,7 +249,7 @@ impl EmbeddingServerDemo {
                 name.to_string(),
                 model_type.to_string(),
                 "demo-user".to_string(),
-                format!("Demo {} model for embedding server", model_type),
+                format!("Demo {model_type} model for embedding server"),
             )
             .await?;
 

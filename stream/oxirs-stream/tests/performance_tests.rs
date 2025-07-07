@@ -894,10 +894,8 @@ mod reliability_tests {
         let mut duplicates = 0;
 
         for _ in 0..test_count {
-            if let Ok(Ok(Some(event))) =
-                timeout(Duration::from_millis(10), consumer.consume()).await
-            {
-                match event {
+            match timeout(Duration::from_millis(10), consumer.consume()).await {
+                Ok(Ok(Some(event))) => match event {
                     StreamEvent::TripleAdded { metadata, .. } => {
                         if received_events.contains_key(&metadata.event_id) {
                             duplicates += 1;
@@ -906,9 +904,10 @@ mod reliability_tests {
                         }
                     }
                     _ => {}
+                },
+                _ => {
+                    break;
                 }
-            } else {
-                break;
             }
         }
 

@@ -184,7 +184,7 @@ impl DecisionTreeLearner {
 
         let (constraint_type, count) = constraint_counts
             .iter()
-            .max_by_key(|(_, &count)| count)
+            .max_by_key(|&(_, &count)| count)
             .unwrap();
 
         let confidence = *count as f64 / labels.len() as f64;

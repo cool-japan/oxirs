@@ -1,11 +1,7 @@
 //! Example demonstrating streaming result sets for large query results
 
-use crossbeam::channel;
 use oxirs_core::model::*;
-use oxirs_core::query::{
-    ConstructResults, SelectResults, StreamingConfig, StreamingQueryResults,
-    StreamingResultBuilder, StreamingSolution,
-};
+use oxirs_core::query::{StreamingResultBuilder, StreamingSolution};
 use oxirs_core::OxirsError;
 use std::collections::HashMap;
 use std::thread;
@@ -59,20 +55,18 @@ fn basic_streaming_example() -> Result<(), OxirsError> {
             let mut bindings = HashMap::new();
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::NamedNode(NamedNode::new(&format!(
-                    "http://example.org/person/{}",
-                    i
+                Some(Term::NamedNode(NamedNode::new(format!(
+                    "http://example.org/person/{i}"
                 ))?)),
             );
             bindings.insert(
                 variables[1].clone(),
-                Some(Term::Literal(Literal::new(&format!("Person {}", i)))),
+                Some(Term::Literal(Literal::new(format!("Person {i}")))),
             );
             bindings.insert(
                 variables[2].clone(),
-                Some(Term::Literal(Literal::new(&format!(
-                    "person{}@example.com",
-                    i
+                Some(Term::Literal(Literal::new(format!(
+                    "person{i}@example.com"
                 )))),
             );
 
@@ -91,13 +85,13 @@ fn basic_streaming_example() -> Result<(), OxirsError> {
         println!("  Solution {}:", count + 1);
         for var in results.variables() {
             if let Some(value) = solution.get(var) {
-                println!("    ?{} = {}", var, value);
+                println!("    ?{var} = {value}");
             }
         }
         count += 1;
     }
 
-    println!("Total solutions: {}", count);
+    println!("Total solutions: {count}");
     Ok(())
 }
 
@@ -113,14 +107,13 @@ fn batch_processing_example() -> Result<(), OxirsError> {
             let mut bindings = HashMap::new();
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::NamedNode(NamedNode::new(&format!(
-                    "http://example.org/item/{}",
-                    i
+                Some(Term::NamedNode(NamedNode::new(format!(
+                    "http://example.org/item/{i}"
                 ))?)),
             );
             bindings.insert(
                 variables[1].clone(),
-                Some(Term::Literal(Literal::new(&(i * 10).to_string()))),
+                Some(Term::Literal(Literal::new((i * 10).to_string()))),
             );
             sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
         }
@@ -141,20 +134,14 @@ fn batch_processing_example() -> Result<(), OxirsError> {
         total_processed += batch.len();
 
         // Process batch (e.g., bulk insert to database)
-        println!(
-            "Processing batch {} with {} items",
-            batch_count,
-            batch.len()
-        );
+        let batch_size = batch.len();
+        println!("Processing batch {batch_count} with {batch_size} items");
 
         // Simulate batch processing time
         thread::sleep(Duration::from_millis(10));
     }
 
-    println!(
-        "Processed {} items in {} batches",
-        total_processed, batch_count
-    );
+    println!("Processed {total_processed} items in {batch_count} batches");
     Ok(())
 }
 
@@ -172,9 +159,8 @@ fn progress_tracking_example() -> Result<(), OxirsError> {
             let mut bindings = HashMap::new();
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::NamedNode(NamedNode::new(&format!(
-                    "http://example.org/resource/{}",
-                    i
+                Some(Term::NamedNode(NamedNode::new(format!(
+                    "http://example.org/resource/{i}"
                 ))?)),
             );
             sender.send(Ok(StreamingSolution::new(bindings))).unwrap();
@@ -227,7 +213,7 @@ fn cancellation_example() -> Result<(), OxirsError> {
             let mut bindings = HashMap::new();
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::Literal(Literal::new(&i.to_string()))),
+                Some(Term::Literal(Literal::new(i.to_string()))),
             );
 
             if sender.send(Ok(StreamingSolution::new(bindings))).is_err() {
@@ -243,13 +229,13 @@ fn cancellation_example() -> Result<(), OxirsError> {
     let mut count = 0;
     let limit = 100;
 
-    println!("Processing results (will cancel after {})...", limit);
+    println!("Processing results (will cancel after {limit})...");
 
     while let Ok(Some(_)) = results.next() {
         count += 1;
 
         if count >= limit {
-            println!("Cancelling query after {} results", count);
+            println!("Cancelling query after {count} results");
             results.cancel();
             break;
         }
@@ -276,8 +262,8 @@ fn construct_streaming_example() -> Result<(), OxirsError> {
         let pred = NamedNode::new("http://example.org/hasValue")?;
 
         for i in 0..20 {
-            let subj = NamedNode::new(&format!("http://example.org/item/{}", i))?;
-            let obj = Literal::new(&format!("Value {}", i));
+            let subj = NamedNode::new(format!("http://example.org/item/{i}"))?;
+            let obj = Literal::new(format!("Value {i}"));
 
             let triple = Triple::new(subj, pred.clone(), obj);
             sender.send(Ok(triple)).unwrap();
@@ -295,7 +281,7 @@ fn construct_streaming_example() -> Result<(), OxirsError> {
         count += 1;
     }
 
-    println!("Total triples constructed: {}", count);
+    println!("Total triples constructed: {count}");
     Ok(())
 }
 
@@ -313,10 +299,10 @@ fn memory_efficient_example() -> Result<(), OxirsError> {
         for i in 0..10000 {
             let mut bindings = HashMap::new();
             // Each result contains some data
-            let data = format!("Data item {} with some content", i);
+            let data = format!("Data item {i} with some content");
             bindings.insert(
                 variables[0].clone(),
-                Some(Term::Literal(Literal::new(&data))),
+                Some(Term::Literal(Literal::new(data))),
             );
 
             if sender.send(Ok(StreamingSolution::new(bindings))).is_err() {
@@ -340,14 +326,11 @@ fn memory_efficient_example() -> Result<(), OxirsError> {
         if Some(&count) == checkpoints.first() {
             checkpoints.remove(0);
             let progress = results.progress();
-            println!(
-                "Checkpoint {}: Memory usage = {} KB",
-                count,
-                progress.memory_used / 1024
-            );
+            let memory_kb = progress.memory_used / 1024;
+            println!("Checkpoint {count}: Memory usage = {memory_kb} KB");
         }
     }
 
-    println!("Processed {} results efficiently", count);
+    println!("Processed {count} results efficiently");
     Ok(())
 }

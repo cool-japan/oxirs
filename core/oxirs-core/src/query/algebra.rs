@@ -35,20 +35,20 @@ pub enum PropertyPath {
 impl fmt::Display for PropertyPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PropertyPath::Predicate(p) => write!(f, "{}", p),
-            PropertyPath::Inverse(p) => write!(f, "^{}", p),
-            PropertyPath::Sequence(a, b) => write!(f, "({} / {})", a, b),
-            PropertyPath::Alternative(a, b) => write!(f, "({} | {})", a, b),
-            PropertyPath::ZeroOrMore(p) => write!(f, "({})*", p),
-            PropertyPath::OneOrMore(p) => write!(f, "({})+", p),
-            PropertyPath::ZeroOrOne(p) => write!(f, "({})?", p),
+            PropertyPath::Predicate(p) => write!(f, "{p}"),
+            PropertyPath::Inverse(p) => write!(f, "^{p}"),
+            PropertyPath::Sequence(a, b) => write!(f, "({a} / {b})"),
+            PropertyPath::Alternative(a, b) => write!(f, "({a} | {b})"),
+            PropertyPath::ZeroOrMore(p) => write!(f, "({p})*"),
+            PropertyPath::OneOrMore(p) => write!(f, "({p})+"),
+            PropertyPath::ZeroOrOne(p) => write!(f, "({p})?"),
             PropertyPath::NegatedPropertySet(ps) => {
                 write!(f, "!(")?;
                 for (i, p) in ps.iter().enumerate() {
                     if i > 0 {
                         write!(f, " | ")?;
                     }
-                    write!(f, "{}", p)?;
+                    write!(f, "{p}")?;
                 }
                 write!(f, ")")
             }
@@ -290,10 +290,10 @@ impl TermPattern {
     /// Formats using the SPARQL S-Expression syntax
     pub fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
         match self {
-            TermPattern::NamedNode(node) => write!(f, "{}", node),
-            TermPattern::BlankNode(node) => write!(f, "{}", node),
-            TermPattern::Literal(literal) => write!(f, "{}", literal),
-            TermPattern::Variable(var) => write!(f, "{}", var),
+            TermPattern::NamedNode(node) => write!(f, "{node}"),
+            TermPattern::BlankNode(node) => write!(f, "{node}"),
+            TermPattern::Literal(literal) => write!(f, "{literal}"),
+            TermPattern::Variable(var) => write!(f, "{var}"),
         }
     }
 }
@@ -301,10 +301,10 @@ impl TermPattern {
 impl fmt::Display for TermPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TermPattern::NamedNode(n) => write!(f, "{}", n),
-            TermPattern::BlankNode(b) => write!(f, "{}", b),
-            TermPattern::Literal(l) => write!(f, "{}", l),
-            TermPattern::Variable(v) => write!(f, "{}", v),
+            TermPattern::NamedNode(n) => write!(f, "{n}"),
+            TermPattern::BlankNode(b) => write!(f, "{b}"),
+            TermPattern::Literal(l) => write!(f, "{l}"),
+            TermPattern::Variable(v) => write!(f, "{v}"),
         }
     }
 }
@@ -517,7 +517,7 @@ pub enum UpdateOperation {
     Modify {
         delete: Option<Vec<QuadPattern>>,
         insert: Option<Vec<QuadPattern>>,
-        where_clause: GraphPattern,
+        where_clause: Box<GraphPattern>,
         using: Dataset,
     },
     /// LOAD

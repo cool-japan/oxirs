@@ -45,7 +45,6 @@
 //! ```
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -97,11 +96,11 @@ pub use health_monitor::{HealthMonitor, HealthMonitorConfig, NodeHealth, SystemM
 use conflict_resolution::{
     ConflictResolver, ResolutionStrategy, TimestampedOperation, VectorClock,
 };
-use consensus::{ConsensusManager, ConsensusStatus};
+use consensus::ConsensusManager;
 use discovery::{DiscoveryConfig, DiscoveryService, NodeInfo};
 use distributed_query::{DistributedQueryExecutor, ResultBinding};
 use edge_computing::{EdgeComputingManager, EdgeDeploymentStrategy, EdgeDeviceProfile};
-use raft::{OxirsNodeId, RdfCommand, RdfResponse};
+use raft::{OxirsNodeId, RdfResponse};
 use region_manager::{
     ConsensusStrategy as RegionConsensusStrategy, MultiRegionReplicationStrategy, Region,
     RegionManager,
@@ -1118,7 +1117,7 @@ impl ClusterNode {
         priority: u32,
     ) -> Result<RdfResponse> {
         // Create timestamped operation
-        let timestamped_op = self
+        let _timestamped_op = self
             .create_timestamped_operation(operation.clone(), priority)
             .await;
 
@@ -1150,7 +1149,7 @@ impl ClusterNode {
                 self.insert_triple(&new_triple.0, &new_triple.1, &new_triple.2)
                     .await
             }
-            conflict_resolution::RdfOperation::Batch { operations } => {
+            conflict_resolution::RdfOperation::Batch { operations: _ } => {
                 // Process batch operations sequentially
                 // Note: This is a simplified implementation that doesn't use recursion
                 // In a full implementation, each operation would be processed individually

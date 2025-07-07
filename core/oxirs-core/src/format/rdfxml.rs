@@ -63,7 +63,7 @@ impl RdfXmlParser {
     /// Parse RDF/XML from a byte slice
     pub fn parse_slice(&self, slice: &[u8]) -> ParseResult<Vec<Triple>> {
         let content = std::str::from_utf8(slice)
-            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {}", e)))?;
+            .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {e}")))?;
         self.parse_str(content)
     }
 
@@ -252,12 +252,12 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 
         // Add other namespace declarations
         for (prefix, iri) in &self.config.prefixes {
-            write!(self.writer, " xmlns:{}=\"{}\"", prefix, iri)?;
+            write!(self.writer, " xmlns:{prefix}=\"{iri}\"")?;
         }
 
         // Add base IRI if present
         if let Some(base) = &self.config.base_iri {
-            write!(self.writer, " xml:base=\"{}\"", base)?;
+            write!(self.writer, " xml:base=\"{base}\"")?;
         }
 
         writeln!(self.writer, ">")?;
@@ -275,9 +275,9 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
         // Stub implementation
         for triple in &self.triples {
             if self.config.pretty {
-                writeln!(self.writer, "  <!-- TODO: Serialize triple: {} -->", triple)?;
+                writeln!(self.writer, "  <!-- TODO: Serialize triple: {triple} -->")?;
             } else {
-                writeln!(self.writer, "<!-- TODO: Serialize triple: {} -->", triple)?;
+                writeln!(self.writer, "<!-- TODO: Serialize triple: {triple} -->")?;
             }
         }
 
@@ -356,7 +356,7 @@ pub mod namespaces {
         // For now, use simple numbering
         let mut counter = 1;
         loop {
-            let prefix = format!("ns{}", counter);
+            let prefix = format!("ns{counter}");
             if !existing_prefixes.contains_key(&prefix) {
                 return prefix;
             }

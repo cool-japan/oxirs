@@ -418,7 +418,7 @@ impl ErrorRecoveryManager {
         }
 
         let operation_id = self.generate_operation_id(&error);
-        
+
         // Check circuit breaker
         if self.is_circuit_open(&operation_id).await {
             return Err(AdvancedStarError::CircuitBreakerOpen {
@@ -439,17 +439,17 @@ impl ErrorRecoveryManager {
 
         // Find appropriate recovery strategy
         let strategy = self.find_recovery_strategy(&error);
-        
+
         if let Some(strategy) = strategy {
             info!("Attempting recovery for error using strategy: {}", strategy.get_name());
-            
+
             let context = self.create_error_context(&error);
             let recovery_start = Instant::now();
-            
+
             let result = strategy.recover(&error, &context);
-            
+
             let recovery_time = recovery_start.elapsed();
-            
+
             if result.success {
                 info!("Error recovery successful");
                 self.record_success(&operation_id).await;
@@ -459,11 +459,11 @@ impl ErrorRecoveryManager {
                 warn!("Error recovery failed");
                 self.record_failure(&operation_id).await;
                 self.record_recovery_attempt(&error, strategy.get_name(), recovery_time, false, Some("Recovery strategy failed".to_string())).await;
-                
+
                 if result.retry_recommended {
                     self.schedule_retry(&operation_id, result.delay_before_retry).await;
                 }
-                
+
                 Err(error)
             }
         } else {
@@ -556,7 +556,7 @@ impl ErrorRecoveryManager {
     /// Get error statistics
     pub async fn get_error_statistics(&self) -> ErrorStatistics {
         let history = self.error_history.lock().unwrap();
-        
+
         let total_errors = history.len();
         let successful_recoveries = history.iter()
             .filter(|record| matches!(record.outcome, RecoveryOutcome::Success))
@@ -667,10 +667,10 @@ impl ErrorRecoveryManager {
                     last_failure_time: None,
                     config: self.config.circuit_breaker.clone(),
                 });
-            
+
             breaker.success_count += 1;
-            
-            if breaker.state == CircuitBreakerState::HalfOpen && 
+
+            if breaker.state == CircuitBreakerState::HalfOpen &&
                breaker.success_count >= breaker.config.success_threshold {
                 breaker.state = CircuitBreakerState::Closed;
                 breaker.failure_count = 0;
@@ -693,10 +693,10 @@ impl ErrorRecoveryManager {
                     last_failure_time: None,
                     config: self.config.circuit_breaker.clone(),
                 });
-            
+
             breaker.failure_count += 1;
             breaker.last_failure_time = Some(Instant::now());
-            
+
             if breaker.failure_count >= breaker.config.failure_threshold {
                 breaker.state = CircuitBreakerState::Open;
             }
@@ -709,7 +709,7 @@ impl ErrorRecoveryManager {
             let retry_time = now + delay.unwrap_or_else(|| {
                 Duration::from_millis(self.config.base_retry_delay)
             });
-            
+
             state.last_retry_times.insert(operation_id.to_string(), retry_time);
         }
     }
@@ -820,7 +820,7 @@ impl ErrorRecoveryManager {
 
     fn get_error_type_counts(&self, history: &VecDeque<ErrorRecord>) -> HashMap<String, usize> {
         let mut counts = HashMap::new();
-        
+
         for record in history {
             let error_type = match &record.error {
                 AdvancedStarError::ParseErrorWithContext { .. } => "parse_error",
@@ -831,10 +831,10 @@ impl ErrorRecoveryManager {
                 AdvancedStarError::TimeoutError { .. } => "timeout_error",
                 AdvancedStarError::CircuitBreakerOpen { .. } => "circuit_breaker_open",
             };
-            
+
             *counts.entry(error_type.to_string()).or_insert(0) += 1;
         }
-        
+
         counts
     }
 }
@@ -1036,7 +1036,7 @@ impl RecoveryStrategy for TimeoutErrorRecovery {
         if let AdvancedStarError::TimeoutError { timeout_duration, .. } = error {
             // Increase timeout for retry
             let new_timeout = *timeout_duration * 2;
-            
+
             RecoveryResult {
                 success: false,
                 retry_recommended: true,
@@ -1075,15 +1075,15 @@ mod tests {
     async fn test_error_enhancement() {
         let config = ErrorRecoveryConfig::default();
         let manager = ErrorRecoveryManager::new(config);
-        
+
         let original_error = StarError::ParseError {
             message: "Invalid quoted triple syntax".to_string(),
             line: Some(5),
             column: Some(10),
         };
-        
+
         let enhanced_error = manager.enhance_error(original_error, None);
-        
+
         match enhanced_error {
             AdvancedStarError::ParseErrorWithContext { message, line, column, recoverable, .. } => {
                 assert_eq!(message, "Invalid quoted triple syntax");
@@ -1099,17 +1099,17 @@ mod tests {
     async fn test_retry_logic() {
         let config = ErrorRecoveryConfig::default();
         let manager = ErrorRecoveryManager::new(config);
-        
+
         let operation_id = "test_operation";
-        
+
         // Should allow retries initially
         assert!(manager.should_retry(operation_id).await);
-        
+
         // Record failures up to max retries
         for _ in 0..3 {
             manager.record_failure(operation_id).await;
         }
-        
+
         // Should not allow more retries
         assert!(!manager.should_retry(operation_id).await);
     }

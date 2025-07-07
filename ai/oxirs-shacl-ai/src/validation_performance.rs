@@ -603,10 +603,9 @@ impl ParallelValidationExecutor {
 
     /// Get cache hit rate
     fn get_cache_hit_rate(&self) -> f64 {
-        if let Ok(cache) = self.result_cache.lock() {
-            cache.get_hit_rate()
-        } else {
-            0.0
+        match self.result_cache.lock() {
+            Ok(cache) => cache.get_hit_rate(),
+            _ => 0.0,
         }
     }
 }

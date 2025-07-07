@@ -64,9 +64,10 @@ pub enum ScoreNormalizationStrategy {
 }
 
 /// Fusion algorithms for combining scores
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum FusionAlgorithm {
     /// Sum of normalized scores
+    #[default]
     CombSum,
     /// Maximum score across sources
     CombMax,
@@ -88,11 +89,6 @@ pub enum FusionAlgorithm {
     MLFusion,
 }
 
-impl Default for FusionAlgorithm {
-    fn default() -> Self {
-        FusionAlgorithm::CombSum
-    }
-}
 
 /// A single result from a vector search
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -705,7 +701,7 @@ impl ResultFusionEngine {
     /// Apply result diversification to reduce redundancy
     fn apply_diversification(
         &self,
-        mut results: Vec<VectorSearchResult>,
+        results: Vec<VectorSearchResult>,
     ) -> Result<Vec<VectorSearchResult>> {
         if results.len() <= 1 || self.config.diversification_factor == 0.0 {
             return Ok(results);
@@ -895,10 +891,10 @@ pub mod fusion_utils {
         fused_results: &FusedResults,
         ground_truth: Option<&[String]>,
     ) -> FusionQualityMetrics {
-        let mut metrics = FusionQualityMetrics::default();
-
-        // Basic metrics
-        metrics.result_count = fused_results.results.len();
+        let mut metrics = FusionQualityMetrics {
+            result_count: fused_results.results.len(),
+            ..Default::default()
+        };
         if !fused_results.results.is_empty() {
             metrics.avg_score = fused_results.results.iter().map(|r| r.score).sum::<f32>()
                 / fused_results.results.len() as f32;

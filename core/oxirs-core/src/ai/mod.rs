@@ -359,6 +359,7 @@ impl AiEngine {
     }
 
     /// Train embedding model on knowledge graph
+    #[allow(clippy::await_holding_lock)]
     pub async fn train_embedding_model(
         &self,
         model_name: &str,
@@ -370,10 +371,19 @@ impl AiEngine {
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
 
-        let mut trainer = self.trainer.lock().unwrap();
-        trainer
-            .train_embedding_model(model.clone(), training_data, validation_data)
-            .await
+        // Clone the trainer Arc to avoid holding the lock across await
+        let trainer = self.trainer.clone();
+        let model = model.clone();
+        let training_data = training_data.to_vec();
+        let validation_data = validation_data.to_vec();
+
+        // TODO: Use async-aware mutex to avoid holding lock across await
+        {
+            let mut trainer_guard = trainer.lock().unwrap();
+            trainer_guard
+                .train_embedding_model(model, &training_data, &validation_data)
+                .await
+        }
     }
 
     /// Evaluate model performance
@@ -387,7 +397,7 @@ impl AiEngine {
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
 
-        Ok(EvaluationMetrics::evaluate(model.as_ref(), test_data).await?)
+        EvaluationMetrics::evaluate(model.as_ref(), test_data).await
     }
 
     /// Get AI engine statistics

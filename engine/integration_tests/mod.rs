@@ -106,7 +106,7 @@ impl OxirsIntegrationTestSuite {
         self.test_modules.push(Box::new(VectorIntegrationTests::new()));
         self.test_modules.push(Box::new(RuleIntegrationTests::new()));
         self.test_modules.push(Box::new(StarIntegrationTests::new()));
-        
+
         // Cross-module integration tests
         self.test_modules.push(Box::new(NeuralSymbolicIntegrationTests::new()));
         self.test_modules.push(Box::new(PerformanceIntegrationTests::new()));
@@ -154,7 +154,7 @@ impl OxirsIntegrationTestSuite {
 
         // Analyze integration coverage
         let integration_analysis = self.analyze_integration_coverage(&module_results)?;
-        
+
         // Calculate overall performance score
         let performance_score = self.calculate_performance_score(&module_results);
 
@@ -272,7 +272,7 @@ impl PerformanceMonitor {
     pub fn record_operation(&mut self, operation: &str, duration: Duration, success: bool) {
         let metric = self.metrics.entry(operation.to_string())
             .or_insert_with(|| PerformanceMetric::new(operation));
-        
+
         metric.record_execution(duration, success);
     }
 

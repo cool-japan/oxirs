@@ -1,8 +1,6 @@
 //! Integration tests for W3C SHACL test suite functionality
 
-use oxirs_shacl::w3c_test_suite::{
-    ComplianceStats, TestCategory, W3cTestConfig, W3cTestSuiteRunner,
-};
+use oxirs_shacl::w3c_test_suite::{TestCategory, W3cTestConfig, W3cTestSuiteRunner};
 use std::collections::HashSet;
 
 #[tokio::test]
@@ -55,7 +53,7 @@ async fn test_w3c_test_suite_execution() {
 
     // Verify statistics
     assert!(stats.total_tests > 0);
-    assert!(stats.total_execution_time_ms >= 0);
+    // total_execution_time_ms is always >= 0 by type invariant
 
     // At least some tests should be executed or skipped
     assert!(stats.tests_passed + stats.tests_failed + stats.tests_skipped + stats.tests_error > 0);
@@ -90,7 +88,7 @@ async fn test_compliance_report_generation() {
     assert!(report.generated_at.timestamp() > 0);
 
     // Should have summary stats
-    assert!(report.summary.total_tests >= 0);
+    // total_tests is always >= 0 by type invariant
 }
 
 #[test]
@@ -189,9 +187,6 @@ async fn test_expected_results_structure() {
         for entry in &manifest.entries {
             // All test entries should have expected results
             let expected = &entry.expected_result;
-
-            // Conformance expectation should be defined
-            assert!(expected.conforms == true || expected.conforms == false);
 
             // If violation count is specified, it should be reasonable
             if let Some(count) = expected.violation_count {

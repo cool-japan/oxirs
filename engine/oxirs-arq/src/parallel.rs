@@ -5,8 +5,8 @@
 //! adaptive algorithms.
 
 use crate::algebra::{
-    Aggregate, Algebra, Binding, Expression, Iri, Literal, PropertyPath, Solution,
-    Term as AlgebraTerm, TriplePattern, Variable,
+    Aggregate, Algebra, Binding, Expression, Literal, PropertyPath, Solution, Term as AlgebraTerm,
+    TriplePattern, Variable,
 };
 use crate::executor::stats::ExecutionStats;
 use crate::executor::{Dataset, ExecutionContext, ParallelConfig};
@@ -60,7 +60,7 @@ impl ParallelQueryExecutor {
     pub fn new(config: ParallelConfig) -> Result<Self> {
         let thread_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(config.max_threads)
-            .thread_name(|idx| format!("oxirs-arq-worker-{}", idx))
+            .thread_name(|idx| format!("oxirs-arq-worker-{idx}"))
             .stack_size(
                 config
                     .thread_pool_config
@@ -98,7 +98,7 @@ impl ParallelQueryExecutor {
             .install(|| self.execute_parallel_internal(algebra, dataset, context, stats))?;
 
         // Calculate speedup
-        let parallel_time = start.elapsed();
+        let _parallel_time = start.elapsed();
         {
             let mut pstats = self.stats.write();
             pstats.thread_utilization = self.calculate_thread_utilization();
@@ -458,15 +458,16 @@ impl ParallelQueryExecutor {
                     .collect();
 
                 if key.len() == join_vars.len() {
-                    if let Some(matches) = hash_table.get(&key) {
-                        matches
+                    match hash_table.get(&key) {
+                        Some(matches) => matches
                             .iter()
                             .filter_map(|build_binding| {
                                 self.merge_bindings(build_binding, probe_binding)
                             })
-                            .collect::<Vec<_>>()
-                    } else {
-                        vec![]
+                            .collect::<Vec<_>>(),
+                        _ => {
+                            vec![]
+                        }
                     }
                 } else {
                     vec![]
@@ -857,8 +858,8 @@ impl ParallelQueryExecutor {
         match term {
             AlgebraTerm::Iri(iri) => iri.as_str().to_string(),
             AlgebraTerm::Literal(lit) => lit.value.to_string(),
-            AlgebraTerm::Variable(var) => format!("?{}", var),
-            AlgebraTerm::BlankNode(id) => format!("_:{}", id),
+            AlgebraTerm::Variable(var) => format!("?{var}"),
+            AlgebraTerm::BlankNode(id) => format!("_:{id}"),
             AlgebraTerm::QuotedTriple(_) => "<<quoted triple>>".to_string(),
             AlgebraTerm::PropertyPath(_) => "<<property path>>".to_string(),
         }
@@ -1077,7 +1078,7 @@ impl ParallelQueryExecutor {
         object: &AlgebraTerm,
         dataset: &dyn Dataset,
         context: &ExecutionContext,
-        stats: &mut ExecutionStats,
+        _stats: &mut ExecutionStats,
         include_zero: bool,
     ) -> Result<Solution> {
         let mut result = Vec::new();
@@ -1099,11 +1100,11 @@ impl ParallelQueryExecutor {
                 .par_iter()
                 .flat_map(|current_node| {
                     // Find all nodes reachable in one step
-                    let next_var = Variable::new(&format!("?__next_{}", depth)).unwrap();
+                    let next_var = Variable::new(&format!("?__next_{depth}")).unwrap();
                     let next_term = AlgebraTerm::Variable(next_var.clone());
 
                     let mut local_stats = ExecutionStats::new();
-                    if let Ok(step_results) = self.execute_parallel_property_path(
+                    match self.execute_parallel_property_path(
                         current_node,
                         path,
                         &next_term,
@@ -1111,12 +1112,11 @@ impl ParallelQueryExecutor {
                         context,
                         &mut local_stats,
                     ) {
-                        step_results
+                        Ok(step_results) => step_results
                             .into_iter()
                             .filter_map(|binding| binding.get(&next_var).cloned())
-                            .collect::<Vec<_>>()
-                    } else {
-                        Vec::new()
+                            .collect::<Vec<_>>(),
+                        _ => Vec::new(),
                     }
                 })
                 .filter(|node| !visited.contains(node))
@@ -1242,7 +1242,7 @@ impl ParallelQueryExecutor {
     /// Execute service in parallel (federation)
     fn execute_parallel_service(
         &self,
-        endpoint: &AlgebraTerm,
+        _endpoint: &AlgebraTerm,
         pattern: &Algebra,
         silent: bool,
         dataset: &dyn Dataset,
@@ -1264,7 +1264,7 @@ impl ParallelQueryExecutor {
     /// Execute graph pattern in parallel
     fn execute_parallel_graph(
         &self,
-        graph: &AlgebraTerm,
+        _graph: &AlgebraTerm,
         pattern: &Algebra,
         dataset: &dyn Dataset,
         context: &ExecutionContext,

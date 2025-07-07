@@ -578,22 +578,22 @@ pub enum AlertLevel {
 pub trait ModuleCoordinator: Send + Sync + std::fmt::Debug {
     /// Initialize the module
     fn initialize(&self, config: &AiOrchestratorConfig) -> Result<()>;
-    
+
     /// Start the module
     fn start(&self) -> Result<()>;
-    
+
     /// Stop the module
     fn stop(&self) -> Result<()>;
-    
+
     /// Get module status
     fn status(&self) -> ModuleStatus;
-    
+
     /// Handle cross-module events
     fn handle_event(&self, event: &Event) -> Result<()>;
-    
+
     /// Get module metrics
     fn get_metrics(&self) -> HashMap<String, f64>;
-    
+
     /// Update module configuration
     fn update_config(&self, config: &AiOrchestratorConfig) -> Result<()>;
 }
@@ -942,7 +942,7 @@ impl OxirsAiOrchestrator {
         let workflow_orchestrator = Arc::new(RwLock::new(WorkflowOrchestrator::default()));
         let event_bus = Arc::new(RwLock::new(EventBus::default()));
         let config_manager = Arc::new(RwLock::new(ConfigManager::default()));
-        
+
         let mut orchestrator = Self {
             config,
             model_registry,
@@ -953,12 +953,12 @@ impl OxirsAiOrchestrator {
             event_bus,
             config_manager,
         };
-        
+
         orchestrator.initialize_module_coordinators()?;
-        
+
         Ok(orchestrator)
     }
-    
+
     /// Initialize module coordinators
     fn initialize_module_coordinators(&mut self) -> Result<()> {
         // Initialize coordinators for each module type
@@ -986,65 +986,65 @@ impl OxirsAiOrchestrator {
             ModuleType::Core,
             Arc::new(CoreModuleCoordinator::new()?),
         );
-        
+
         Ok(())
     }
-    
+
     /// Start the orchestrator
     pub async fn start(&self) -> Result<()> {
         let span = span!(Level::INFO, "orchestrator_start");
         let _enter = span.enter();
-        
+
         info!("Starting OxiRS AI Orchestrator");
-        
+
         // Initialize all module coordinators
         for (module_type, coordinator) in &self.module_coordinators {
             debug!("Initializing module coordinator: {:?}", module_type);
             coordinator.initialize(&self.config)?;
             coordinator.start()?;
         }
-        
+
         // Start performance monitoring
         self.start_performance_monitoring().await?;
-        
+
         // Start configuration management
         self.start_configuration_management().await?;
-        
+
         info!("OxiRS AI Orchestrator started successfully");
         Ok(())
     }
-    
+
     /// Stop the orchestrator
     pub async fn stop(&self) -> Result<()> {
         let span = span!(Level::INFO, "orchestrator_stop");
         let _enter = span.enter();
-        
+
         info!("Stopping OxiRS AI Orchestrator");
-        
+
         // Stop all module coordinators
         for (module_type, coordinator) in &self.module_coordinators {
             debug!("Stopping module coordinator: {:?}", module_type);
             coordinator.stop()?;
         }
-        
+
         // Stop performance monitoring
         self.stop_performance_monitoring().await?;
-        
+
         // Stop configuration management
         self.stop_configuration_management().await?;
-        
+
         info!("OxiRS AI Orchestrator stopped successfully");
         Ok(())
     }
-    
+
     /// Register a model
     pub async fn register_model(&self, model_info: ModelInfo) -> Result<()> {
         let mut registry = self.model_registry.write().await;
-        
+
         registry.models.insert(model_info.id.clone(), model_info.clone());
         registry.usage_stats.insert(model_info.id.clone(), ModelUsageStats::default());
         registry.lifecycle_state.insert(model_info.id.clone(), ModelLifecycleState::Registered);
-        
+
         // Emit model registration event
         self.emit_event(Event {
             id: format!("model_registered_{}", model_info.id.name),
@@ -1056,19 +1056,19 @@ impl OxirsAiOrchestrator {
             ]),
             timestamp: Instant::now(),
         }).await?;
-        
+
         info!("Registered model: {:?}", model_info.id);
         Ok(())
     }
-    
+
     /// Unregister a model
     pub async fn unregister_model(&self, model_id: &ModelId) -> Result<()> {
         let mut registry = self.model_registry.write().await;
-        
+
         if let Some(model_info) = registry.models.remove(model_id) {
             registry.usage_stats.remove(model_id);
             registry.lifecycle_state.remove(model_id);
-            
+
             // Emit model unregistration event
             self.emit_event(Event {
                 id: format!("model_unregistered_{}", model_id.name),
@@ -1079,22 +1079,22 @@ impl OxirsAiOrchestrator {
                 ]),
                 timestamp: Instant::now(),
             }).await?;
-            
+
             info!("Unregistered model: {:?}", model_id);
         } else {
             warn!("Attempted to unregister non-existent model: {:?}", model_id);
         }
-        
+
         Ok(())
     }
-    
+
     /// Execute a workflow
     pub async fn execute_workflow(&self, workflow: Workflow) -> Result<WorkflowExecution> {
         let span = span!(Level::INFO, "workflow_execution", workflow_id = %workflow.id.0);
         let _enter = span.enter();
-        
+
         let mut orchestrator = self.workflow_orchestrator.write().await;
-        
+
         let execution_id = format!("exec_{}_{}", workflow.id.0, Instant::now().elapsed().as_millis());
         let execution = WorkflowExecution {
             id: execution_id.clone(),
@@ -1105,7 +1105,7 @@ impl OxirsAiOrchestrator {
             results: HashMap::new(),
             metrics: HashMap::new(),
         };
-        
+
         // Emit workflow start event
         self.emit_event(Event {
             id: format!("workflow_started_{}", execution_id),
@@ -1117,25 +1117,25 @@ impl OxirsAiOrchestrator {
             ]),
             timestamp: Instant::now(),
         }).await?;
-        
+
         orchestrator.execution_history.push(execution.clone());
-        
+
         info!("Started workflow execution: {}", execution_id);
         Ok(execution)
     }
-    
+
     /// Emit an event to the event bus
     async fn emit_event(&self, event: Event) -> Result<()> {
         let mut event_bus = self.event_bus.write().await;
-        
+
         // Update event statistics
         let stats = event_bus.event_stats.entry(event.event_type.clone()).or_default();
         stats.total_events += 1;
         stats.last_event = Some(event.timestamp);
-        
+
         // Store event in history
         event_bus.event_history.push(event.clone());
-        
+
         // Notify subscribers
         if let Some(subscribers) = event_bus.subscribers.get(&event.event_type) {
             for subscriber in subscribers {
@@ -1144,38 +1144,38 @@ impl OxirsAiOrchestrator {
                 }
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Start performance monitoring
     async fn start_performance_monitoring(&self) -> Result<()> {
         // Implementation for performance monitoring startup
         info!("Performance monitoring started");
         Ok(())
     }
-    
+
     /// Stop performance monitoring
     async fn stop_performance_monitoring(&self) -> Result<()> {
         // Implementation for performance monitoring shutdown
         info!("Performance monitoring stopped");
         Ok(())
     }
-    
+
     /// Start configuration management
     async fn start_configuration_management(&self) -> Result<()> {
         // Implementation for configuration management startup
         info!("Configuration management started");
         Ok(())
     }
-    
+
     /// Stop configuration management
     async fn stop_configuration_management(&self) -> Result<()> {
         // Implementation for configuration management shutdown
         info!("Configuration management stopped");
         Ok(())
     }
-    
+
     /// Get orchestrator status
     pub async fn get_status(&self) -> Result<OrchestratorStatus> {
         let status = OrchestratorStatus {
@@ -1185,33 +1185,33 @@ impl OxirsAiOrchestrator {
             performance_metrics: self.get_performance_metrics().await?,
             active_workflows: self.get_active_workflows().await?,
         };
-        
+
         Ok(status)
     }
-    
+
     /// Get module statuses
     async fn get_module_statuses(&self) -> Result<HashMap<ModuleType, ModuleStatus>> {
         let mut statuses = HashMap::new();
-        
+
         for (module_type, coordinator) in &self.module_coordinators {
             statuses.insert(*module_type, coordinator.status());
         }
-        
+
         Ok(statuses)
     }
-    
+
     /// Get resource usage
     async fn get_resource_usage(&self) -> Result<ResourceUsage> {
         let resource_manager = self.resource_manager.lock().await;
         Ok(resource_manager.current_usage.clone())
     }
-    
+
     /// Get performance metrics
     async fn get_performance_metrics(&self) -> Result<HashMap<String, f64>> {
         let monitor = self.performance_monitor.read().await;
         Ok(monitor.metrics.iter().map(|(k, v)| (k.clone(), v.value)).collect())
     }
-    
+
     /// Get active workflows
     async fn get_active_workflows(&self) -> Result<Vec<WorkflowId>> {
         let orchestrator = self.workflow_orchestrator.read().await;
@@ -1323,27 +1323,27 @@ impl ModuleCoordinator for EmbedModuleCoordinator {
     fn initialize(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
-    
+
     fn start(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn stop(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn status(&self) -> ModuleStatus {
         self.status.clone()
     }
-    
+
     fn handle_event(&self, _event: &Event) -> Result<()> {
         Ok(())
     }
-    
+
     fn get_metrics(&self) -> HashMap<String, f64> {
         HashMap::new()
     }
-    
+
     fn update_config(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
@@ -1366,27 +1366,27 @@ impl ModuleCoordinator for VecModuleCoordinator {
     fn initialize(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
-    
+
     fn start(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn stop(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn status(&self) -> ModuleStatus {
         self.status.clone()
     }
-    
+
     fn handle_event(&self, _event: &Event) -> Result<()> {
         Ok(())
     }
-    
+
     fn get_metrics(&self) -> HashMap<String, f64> {
         HashMap::new()
     }
-    
+
     fn update_config(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
@@ -1409,27 +1409,27 @@ impl ModuleCoordinator for ShaclModuleCoordinator {
     fn initialize(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
-    
+
     fn start(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn stop(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn status(&self) -> ModuleStatus {
         self.status.clone()
     }
-    
+
     fn handle_event(&self, _event: &Event) -> Result<()> {
         Ok(())
     }
-    
+
     fn get_metrics(&self) -> HashMap<String, f64> {
         HashMap::new()
     }
-    
+
     fn update_config(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
@@ -1452,27 +1452,27 @@ impl ModuleCoordinator for ArqModuleCoordinator {
     fn initialize(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
-    
+
     fn start(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn stop(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn status(&self) -> ModuleStatus {
         self.status.clone()
     }
-    
+
     fn handle_event(&self, _event: &Event) -> Result<()> {
         Ok(())
     }
-    
+
     fn get_metrics(&self) -> HashMap<String, f64> {
         HashMap::new()
     }
-    
+
     fn update_config(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
@@ -1495,27 +1495,27 @@ impl ModuleCoordinator for RuleModuleCoordinator {
     fn initialize(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
-    
+
     fn start(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn stop(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn status(&self) -> ModuleStatus {
         self.status.clone()
     }
-    
+
     fn handle_event(&self, _event: &Event) -> Result<()> {
         Ok(())
     }
-    
+
     fn get_metrics(&self) -> HashMap<String, f64> {
         HashMap::new()
     }
-    
+
     fn update_config(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
@@ -1538,27 +1538,27 @@ impl ModuleCoordinator for CoreModuleCoordinator {
     fn initialize(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
-    
+
     fn start(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn stop(&self) -> Result<()> {
         Ok(())
     }
-    
+
     fn status(&self) -> ModuleStatus {
         self.status.clone()
     }
-    
+
     fn handle_event(&self, _event: &Event) -> Result<()> {
         Ok(())
     }
-    
+
     fn get_metrics(&self) -> HashMap<String, f64> {
         HashMap::new()
     }
-    
+
     fn update_config(&self, _config: &AiOrchestratorConfig) -> Result<()> {
         Ok(())
     }
@@ -1567,20 +1567,20 @@ impl ModuleCoordinator for CoreModuleCoordinator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     async fn test_orchestrator_creation() {
         let config = AiOrchestratorConfig::default();
         let orchestrator = OxirsAiOrchestrator::new(config).unwrap();
-        
+
         assert_eq!(orchestrator.module_coordinators.len(), 6);
     }
-    
+
     #[tokio::test]
     async fn test_model_registration() {
         let config = AiOrchestratorConfig::default();
         let orchestrator = OxirsAiOrchestrator::new(config).unwrap();
-        
+
         let model_info = ModelInfo {
             id: ModelId {
                 module: ModuleType::Embed,
@@ -1595,18 +1595,18 @@ mod tests {
             capabilities: HashSet::from([ModelCapability::TextEmbedding]),
             metadata: HashMap::new(),
         };
-        
+
         orchestrator.register_model(model_info).await.unwrap();
-        
+
         let registry = orchestrator.model_registry.read().await;
         assert_eq!(registry.models.len(), 1);
     }
-    
+
     #[tokio::test]
     async fn test_workflow_execution() {
         let config = AiOrchestratorConfig::default();
         let orchestrator = OxirsAiOrchestrator::new(config).unwrap();
-        
+
         let workflow = Workflow {
             id: WorkflowId("test_workflow".to_string()),
             name: "Test Workflow".to_string(),
@@ -1627,9 +1627,9 @@ mod tests {
             },
             status: WorkflowStatus::Pending,
         };
-        
+
         let execution = orchestrator.execute_workflow(workflow).await.unwrap();
-        
+
         assert_eq!(execution.status, WorkflowStatus::Running);
     }
 }

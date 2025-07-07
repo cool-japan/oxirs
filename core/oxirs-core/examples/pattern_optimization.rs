@@ -3,7 +3,7 @@
 use oxirs_core::model::*;
 use oxirs_core::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use oxirs_core::query::pattern_optimizer::IndexStats;
-use oxirs_core::query::{IndexType, PatternExecutor, PatternOptimizer};
+use oxirs_core::query::{PatternExecutor, PatternOptimizer};
 use oxirs_core::store::IndexedGraph;
 use std::sync::Arc;
 use std::time::Instant;
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn populate_sample_data(graph: &Arc<IndexedGraph>) -> Result<(), Box<dyn std::error::Error>> {
     // Add people
     for i in 0..100 {
-        let person = NamedNode::new(&format!("http://example.org/person/{}", i))?;
+        let person = NamedNode::new(format!("http://example.org/person/{i}"))?;
         let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
         let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name")?;
         let knows_pred = NamedNode::new("http://xmlns.com/foaf/0.1/knows")?;
@@ -54,24 +54,27 @@ fn populate_sample_data(graph: &Arc<IndexedGraph>) -> Result<(), Box<dyn std::er
         graph.insert(&Triple::new(
             person.clone(),
             name_pred,
-            Literal::new(format!("Person {}", i)),
+            Literal::new(format!("Person {i}")),
         ));
 
         // Add age
+        let age = 20 + (i % 50);
         graph.insert(&Triple::new(
             person.clone(),
             age_pred,
-            Literal::new(format!("{}", 20 + (i % 50))),
+            Literal::new(format!("{age}")),
         ));
 
         // Add some knows relationships
         if i > 0 {
-            let friend = NamedNode::new(&format!("http://example.org/person/{}", i - 1))?;
+            let friend_id = i - 1;
+            let friend = NamedNode::new(format!("http://example.org/person/{friend_id}"))?;
             graph.insert(&Triple::new(person, knows_pred, friend));
         }
     }
 
-    println!("Added {} triples to the graph", graph.len());
+    let triple_count = graph.len();
+    println!("Added {triple_count} triples to the graph");
     Ok(())
 }
 
@@ -154,7 +157,8 @@ fn multi_pattern_optimization(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std
     println!("\nOptimized execution order:");
 
     for (i, (pattern, strategy)) in plan.patterns.iter().enumerate() {
-        println!("\n{}. Pattern:", i + 1);
+        let step_num = i + 1;
+        println!("\n{step_num}. Pattern:");
         print_pattern(pattern);
         println!("   Index: {:?}", strategy.index_type);
         println!("   Cost: {:.2}", strategy.estimated_cost);
@@ -164,7 +168,8 @@ fn multi_pattern_optimization(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std
 
     println!("\nVariable binding progression:");
     for (i, bindings) in plan.binding_order.iter().enumerate() {
-        println!("  After step {}: {:?}", i + 1, bindings);
+        let step_num = i + 1;
+        println!("  After step {step_num}: {bindings:?}");
     }
 
     Ok(())
@@ -219,7 +224,7 @@ fn index_selection_demo(stats: &Arc<IndexStats>) -> Result<(), Box<dyn std::erro
 
     for (name, pattern) in scenarios {
         let index = optimizer.get_optimal_index(&pattern, &Default::default());
-        println!("{}: {:?}", name, index);
+        println!("{name}: {index:?}");
     }
 
     Ok(())
@@ -268,9 +273,10 @@ fn performance_comparison(
     if !results.is_empty() {
         println!("\nSample results:");
         for (i, result) in results.iter().take(3).enumerate() {
-            println!("  Result {}:", i + 1);
+            let result_num = i + 1;
+            println!("  Result {result_num}:");
             for (var, term) in result {
-                println!("    ?{} = {}", var, term);
+                println!("    ?{var} = {term}");
             }
         }
     }
@@ -280,20 +286,20 @@ fn performance_comparison(
 
 fn print_pattern(pattern: &AlgebraTriplePattern) {
     let subject = match &pattern.subject {
-        AlgebraTermPattern::Variable(v) => format!("?{}", v),
+        AlgebraTermPattern::Variable(v) => format!("?{v}"),
         AlgebraTermPattern::NamedNode(n) => format!("<{}>", n.as_str()),
         AlgebraTermPattern::BlankNode(b) => format!("_:{}", b.as_str()),
         AlgebraTermPattern::Literal(l) => format!("\"{}\"", l.value()),
     };
 
     let predicate = match &pattern.predicate {
-        AlgebraTermPattern::Variable(v) => format!("?{}", v),
+        AlgebraTermPattern::Variable(v) => format!("?{v}"),
         AlgebraTermPattern::NamedNode(n) => format!("<{}>", n.as_str()),
         _ => "???".to_string(),
     };
 
     let object = match &pattern.object {
-        AlgebraTermPattern::Variable(v) => format!("?{}", v),
+        AlgebraTermPattern::Variable(v) => format!("?{v}"),
         AlgebraTermPattern::NamedNode(n) => format!("<{}>", n.as_str()),
         AlgebraTermPattern::BlankNode(b) => format!("_:{}", b.as_str()),
         AlgebraTermPattern::Literal(l) => format!("\"{}\"", l.value()),

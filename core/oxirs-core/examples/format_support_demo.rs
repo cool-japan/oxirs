@@ -3,13 +3,12 @@
 //! Demonstrates the comprehensive RDF format support extracted from OxiGraph libraries.
 //! Shows unified parsing and serialization across all major RDF formats.
 
-use oxirs_core::format::serializer::simple;
 use oxirs_core::format::{
     FormatDetection, FormatHandler, JsonLdParser, JsonLdProfile, JsonLdProfileSet,
-    JsonLdSerializer, NTriplesParser, NTriplesSerializer, RdfFormat, RdfParser, RdfSerializer,
-    RdfXmlParser, RdfXmlSerializer, TurtleParser, TurtleSerializer,
+    JsonLdSerializer, NTriplesParser, NTriplesSerializer, RdfFormat, RdfXmlParser,
+    RdfXmlSerializer, TurtleParser, TurtleSerializer,
 };
-use oxirs_core::model::{BlankNode, Literal, NamedNode, Quad, Triple};
+use oxirs_core::model::{Quad, Triple};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎯 RDF Format Support Phase 3 Extraction Demo");
@@ -123,11 +122,11 @@ fn test_format_handler() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n✅ Unified Format Handler:");
 
     // Test creating handlers for different formats
-    let turtle_handler = FormatHandler::new(RdfFormat::Turtle);
-    let jsonld_handler = FormatHandler::new(RdfFormat::JsonLd {
+    let _turtle_handler = FormatHandler::new(RdfFormat::Turtle);
+    let _jsonld_handler = FormatHandler::new(RdfFormat::JsonLd {
         profile: JsonLdProfileSet::empty(),
     });
-    let rdfxml_handler = FormatHandler::new(RdfFormat::RdfXml);
+    let _rdfxml_handler = FormatHandler::new(RdfFormat::RdfXml);
 
     println!("   Created handlers for:");
     println!("     ✓ Turtle format");
@@ -225,7 +224,7 @@ fn test_jsonld_format() -> Result<(), Box<dyn std::error::Error>> {
     // Test JSON-LD profiles
     let streaming_profile = JsonLdProfileSet::from_profile(JsonLdProfile::Streaming);
     let expanded_profile = JsonLdProfileSet::from_profile(JsonLdProfile::Expanded);
-    let combined_profile = JsonLdProfile::Streaming | JsonLdProfile::Expanded;
+    let _combined_profile = JsonLdProfile::Streaming | JsonLdProfile::Expanded;
 
     println!("   Profile support:");
     println!("     ✓ Streaming profile");
@@ -335,8 +334,8 @@ fn test_simple_functions() -> Result<(), Box<dyn std::error::Error>> {
     println!("     ✓ serialize_nquads(quads) → String");
 
     // Test that the functions exist and can be called
-    let empty_triples: Vec<Triple> = Vec::new();
-    let empty_quads: Vec<Quad> = Vec::new();
+    let _empty_triples: Vec<Triple> = Vec::new();
+    let _empty_quads: Vec<Quad> = Vec::new();
 
     // These return Ok(empty) with current stub implementation
     // TODO: Implement parser::simple functions

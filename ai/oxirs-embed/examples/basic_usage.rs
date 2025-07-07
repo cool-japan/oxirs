@@ -95,12 +95,12 @@ async fn basic_transe_example() -> Result<()> {
         "http://example.org/knows",
         "http://example.org/bob",
     )?;
-    println!("Score for (alice, knows, bob): {:.6}", score);
+    println!("Score for (alice, knows, bob): {score:.6}");
 
     // Make predictions
     let predictions =
         model.predict_objects("http://example.org/alice", "http://example.org/knows", 5)?;
-    println!("Top predictions for (alice, knows, ?): {:?}", predictions);
+    println!("Top predictions for (alice, knows, ?): {predictions:?}");
 
     Ok(())
 }
@@ -132,9 +132,9 @@ async fn model_comparison_example() -> Result<()> {
 
     // Add triples to all models
     for (s, p, o) in &triples {
-        let subject = NamedNode::new(&format!("http://example.org/{}", s))?;
-        let predicate = NamedNode::new(&format!("http://example.org/{}", p))?;
-        let object = NamedNode::new(&format!("http://example.org/{}", o))?;
+        let subject = NamedNode::new(&format!("http://example.org/{s}"))?;
+        let predicate = NamedNode::new(&format!("http://example.org/{p}"))?;
+        let object = NamedNode::new(&format!("http://example.org/{o}"))?;
         let triple = Triple::new(subject, predicate, object);
 
         transe.add_triple(triple.clone())?;

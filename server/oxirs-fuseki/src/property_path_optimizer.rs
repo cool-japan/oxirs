@@ -53,7 +53,7 @@ impl Default for CostModel {
             repetition_multiplier: 3.0,
             index_reduction_factor: 0.1,
             join_cost: 20.0,
-            memory_factor: 0.01,
+            memory_factor: 0.0001,
         }
     }
 }
@@ -819,7 +819,7 @@ impl AdvancedPropertyPathOptimizer {
             estimated_cost: cost,
             estimated_selectivity: 0.5,
             can_use_index,
-            memory_usage: 1024 * 100, // 100KB estimate
+            memory_usage: if can_use_index { 1024 } else { 1024 * 100 }, // 1KB for index, 100KB for scan
             dependencies: vec![],
         })
     }
@@ -996,7 +996,18 @@ impl AdvancedPropertyPathOptimizer {
         Box::pin(async move {
             // This would use actual statistics in production
             Ok(match path {
-                PathPattern::Property(_) => 1000,
+                PathPattern::Property(prop) => {
+                    // Use lower cardinality for indexed properties
+                    if self
+                        .can_use_property_index(prop, &TraversalDirection::Forward)
+                        .await
+                        .unwrap_or(false)
+                    {
+                        100 // Much lower cardinality for indexed lookups
+                    } else {
+                        1000
+                    }
+                }
                 PathPattern::Sequence(seq) => {
                     // Multiply selectivities
                     let mut cardinality = 10000u64;
@@ -1071,15 +1082,8 @@ impl AdvancedPropertyPathOptimizer {
         &self,
         execution_plan: &EnhancedPathExecutionPlan,
     ) -> FusekiResult<f64> {
-        let mut total_cost = 0.0;
-
-        // Base cost from the execution plan
-        total_cost += execution_plan.estimated_cost;
-
-        // Add cost for each step
-        for step in &execution_plan.steps {
-            total_cost += step.estimated_cost;
-        }
+        // Use the execution plan's estimated cost (which is already the sum of all step costs)
+        let mut total_cost = execution_plan.estimated_cost;
 
         // Apply strategy-specific multipliers
         match &execution_plan.strategy {

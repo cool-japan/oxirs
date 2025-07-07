@@ -1,7 +1,6 @@
 //! Core validation engine implementation
 
 use indexmap::IndexMap;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -11,7 +10,7 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, iri_resolver::*, optimization::*, paths::*, report::*, sparql::*, targets::*,
+    constraints::*, iri_resolver::*, optimization::*, paths::*, shapes::*, sparql::*, targets::*, 
     Constraint, ConstraintComponentId, PropertyPath, Result, ShaclError, Shape, ShapeId, Target,
     ValidationConfig, ValidationReport,
 };
@@ -96,6 +95,9 @@ pub struct ValidationEngine<'a> {
     /// SPARQL constraint executor
     sparql_executor: SparqlConstraintExecutor,
 
+    /// Shape validator for validating shapes graphs
+    shape_validator: ShapeValidator,
+
     /// Validation statistics
     stats: ValidationStats,
 
@@ -122,6 +124,7 @@ impl<'a> ValidationEngine<'a> {
             target_selector: TargetSelector::new(),
             path_evaluator: PropertyPathEvaluator::new(),
             sparql_executor: SparqlConstraintExecutor::new(),
+            shape_validator: ShapeValidator::new(),
             stats: ValidationStats::default(),
             constraint_cache: ConstraintCache::new(),
             inheritance_cache: InheritanceCache::new(),
@@ -143,6 +146,7 @@ impl<'a> ValidationEngine<'a> {
             target_selector: TargetSelector::new(),
             path_evaluator: PropertyPathEvaluator::new(),
             sparql_executor: SparqlConstraintExecutor::new(),
+            shape_validator: ShapeValidator::new(),
             stats: ValidationStats::default(),
             constraint_cache: ConstraintCache::new(),
             inheritance_cache: InheritanceCache::new(),
@@ -177,9 +181,64 @@ impl<'a> ValidationEngine<'a> {
         self.inheritance_cache.clear();
     }
 
+    /// Validate that the shapes graph is well-formed according to SHACL specification
+    ///
+    /// This method validates the shapes themselves before they are used to validate data.
+    /// It checks for structural integrity, correct SHACL syntax, valid targets, 
+    /// property paths, and constraint definitions.
+    ///
+    /// # Returns
+    /// 
+    /// Returns a `ShapeValidationReport` containing any validation errors or warnings
+    /// for the shapes graph. If the shapes graph is valid, the report will indicate
+    /// conformance.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use oxirs_shacl::{ValidationEngine, ValidationConfig, Shape, ShapeId};
+    /// use indexmap::IndexMap;
+    ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let shapes = IndexMap::new();
+    /// let config = ValidationConfig::default();
+    /// let engine = ValidationEngine::new(&shapes, config);
+    ///
+    /// // Validate that shapes are well-formed
+    /// let shape_report = engine.validate_shapes_graph()?;
+    /// if shape_report.is_valid() {
+    ///     println!("Shapes graph is valid!");
+    /// } else {
+    ///     println!("Shape validation errors found:");
+    ///     for error in shape_report.all_errors() {
+    ///         println!("  - {}", error);
+    ///     }
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn validate_shapes_graph(&self) -> Result<ShapeValidationReport> {
+        let shapes_vec: Vec<Shape> = self.shapes.values().cloned().collect();
+        self.shape_validator.validate_shapes(&shapes_vec)
+    }
+
     /// Validate all data in a store against all loaded shapes
+    ///
+    /// This method first validates that the shapes graph is well-formed, then
+    /// proceeds to validate the data against those shapes.
     pub fn validate_store(&mut self, store: &dyn Store) -> Result<ValidationReport> {
         let start_time = Instant::now();
+        
+        // First, validate that the shapes graph is well-formed
+        let shape_validation_report = self.validate_shapes_graph()?;
+        if !shape_validation_report.is_valid() {
+            return Err(ShaclError::ShapeValidation(format!(
+                "Shapes graph validation failed with {} error(s): {}",
+                shape_validation_report.error_count(),
+                shape_validation_report.all_errors().join("; ")
+            )));
+        }
+        
         let mut report = ValidationReport::new();
 
         // Validate each active shape
@@ -285,15 +344,24 @@ impl<'a> ValidationEngine<'a> {
         shape: &Shape,
         graph_name: Option<&str>,
     ) -> Result<ValidationReport> {
+        eprintln!(
+            "DEBUG validate_shape: validating shape {} (type: {:?})",
+            shape.id.as_str(),
+            shape.shape_type
+        );
+        eprintln!(
+            "DEBUG validate_shape: shape has {} targets",
+            shape.targets.len()
+        );
         let mut report = ValidationReport::new();
 
         // If no explicit targets, this might be an implicit target shape
         if shape.targets.is_empty() && shape.is_node_shape() {
             // Try using the shape IRI as an implicit class target
-            let implicit_target =
-                Target::implicit(NamedNode::new(shape.id.as_str()).map_err(|e| {
-                    ShaclError::TargetSelection(format!("Invalid shape IRI: {}", e))
-                })?);
+            let implicit_target = Target::implicit(
+                NamedNode::new(shape.id.as_str())
+                    .map_err(|e| ShaclError::TargetSelection(format!("Invalid shape IRI: {e}")))?,
+            );
             let target_nodes =
                 self.target_selector
                     .select_targets(store, &implicit_target, graph_name)?;
@@ -310,13 +378,28 @@ impl<'a> ValidationEngine<'a> {
         } else {
             // Validate against explicit targets
             for target in &shape.targets {
+                eprintln!("DEBUG validate_shape: processing target {:?}", target);
                 let target_nodes = self
                     .target_selector
                     .select_targets(store, target, graph_name)?;
+                eprintln!(
+                    "DEBUG validate_shape: found {} target nodes",
+                    target_nodes.len()
+                );
 
-                for node in target_nodes {
+                for (i, node) in target_nodes.iter().enumerate() {
+                    eprintln!(
+                        "DEBUG validate_shape: validating target node[{}] = {:?}",
+                        i, node
+                    );
                     let node_result =
-                        self.validate_node_against_shape(store, shape, &node, graph_name)?;
+                        self.validate_node_against_shape(store, shape, node, graph_name)?;
+                    eprintln!(
+                        "DEBUG validate_shape: node[{}] result: conforms={}, violations={}",
+                        i,
+                        node_result.conforms(),
+                        node_result.violation_count()
+                    );
                     report.merge_result(node_result);
 
                     if self.should_stop_validation(&report) {
@@ -416,6 +499,17 @@ impl<'a> ValidationEngine<'a> {
         let resolved_constraints = self.resolve_inherited_constraints(&shape.id)?;
 
         for (component_id, constraint) in &resolved_constraints {
+            eprintln!(
+                "DEBUG validate_constraints: evaluating constraint {} for shape {}",
+                component_id.as_str(),
+                shape.id.as_str()
+            );
+            eprintln!("DEBUG validate_constraints: constraint = {:?}", constraint);
+            eprintln!(
+                "DEBUG validate_constraints: focus_node = {:?}, values = {:?}",
+                focus_node, values
+            );
+
             // Create constraint context
             let context = ConstraintContext::new(focus_node.clone(), shape.id.clone())
                 .with_values(values.to_vec())
@@ -423,6 +517,10 @@ impl<'a> ValidationEngine<'a> {
 
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
+            eprintln!(
+                "DEBUG validate_constraints: constraint result = {:?}",
+                constraint_result
+            );
 
             match constraint_result {
                 ConstraintEvaluationResult::Satisfied => {
@@ -440,9 +538,7 @@ impl<'a> ValidationEngine<'a> {
                         focus_node.clone(),
                         shape.id.clone(),
                         component_id.clone(),
-                        constraint
-                            .severity()
-                            .unwrap_or_else(|| shape.severity.clone()),
+                        constraint.severity().unwrap_or(shape.severity),
                     )
                     .with_value(violating_value.unwrap_or_else(|| focus_node.clone()))
                     .with_message(message.unwrap_or_else(|| {
@@ -550,8 +646,7 @@ impl<'a> ValidationEngine<'a> {
                 message,
                 details: _,
             } => ConstraintEvaluationResult::satisfied_with_note(format!(
-                "Constraint evaluation error: {}",
-                message
+                "Constraint evaluation error: {message}"
             )),
         };
 

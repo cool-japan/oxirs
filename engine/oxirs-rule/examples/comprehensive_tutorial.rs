@@ -2,7 +2,7 @@
 //!
 //! This example demonstrates all major features of the OxiRS Rule Engine including:
 //! - Forward and backward chaining
-//! - RDFS and OWL reasoning  
+//! - RDFS and OWL reasoning
 //! - SWRL rule execution
 //! - RETE network processing
 //! - Debugging and performance analysis

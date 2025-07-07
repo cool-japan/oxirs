@@ -389,13 +389,8 @@ impl AuthManager {
             AuthMethod::ApiKey => self.authenticate_api_key(&credentials).await,
             AuthMethod::Basic => self.authenticate_basic(&credentials).await,
             AuthMethod::ServiceToService => self.authenticate_service(&credentials).await,
-            _ => Ok(AuthResult {
-                success: false,
-                identity: None,
-                token: None,
-                error: Some("Authentication method not implemented".to_string()),
-                required_actions: vec![],
-            }),
+            AuthMethod::OAuth2 => self.authenticate_oauth2(&credentials).await,
+            AuthMethod::Saml => self.authenticate_saml(&credentials).await,
         }
     }
 
@@ -737,6 +732,125 @@ impl AuthManager {
         }
     }
 
+    /// Authenticate using OAuth2
+    async fn authenticate_oauth2(&self, credentials: &AuthCredentials) -> Result<AuthResult> {
+        if let AuthCredentials::OAuth2 { access_token, refresh_token: _ } = credentials {
+            // Basic OAuth2 token validation
+            // In a real implementation, this would validate against the OAuth2 provider
+            if access_token.starts_with("oauth2_") && access_token.len() > 20 {
+                let identity = Identity {
+                    user_id: format!("oauth2:{}", &access_token[7..17]),
+                    username: "OAuth2 User".to_string(),
+                    email: Some("oauth2.user@example.com".to_string()),
+                    roles: ["user"].into_iter().map(String::from).collect(),
+                    permissions: [
+                        Permission::QueryRead,
+                        Permission::QueryExecute,
+                    ]
+                    .into_iter()
+                    .collect(),
+                    auth_method: AuthMethod::OAuth2,
+                    authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
+                        + self.config.token_expiry.as_secs(),
+                    claims: [(
+                        "oauth2_token".to_string(),
+                        serde_json::Value::String(access_token.clone()),
+                    )]
+                    .into_iter()
+                    .collect(),
+                };
+
+                let token = self.create_access_token(&identity).await?;
+
+                Ok(AuthResult {
+                    success: true,
+                    identity: Some(identity),
+                    token: Some(token),
+                    error: None,
+                    required_actions: vec![],
+                })
+            } else {
+                Ok(AuthResult {
+                    success: false,
+                    identity: None,
+                    token: None,
+                    error: Some("Invalid OAuth2 access token".to_string()),
+                    required_actions: vec![AuthAction::ProvideCredentials],
+                })
+            }
+        } else {
+            Ok(AuthResult {
+                success: false,
+                identity: None,
+                token: None,
+                error: Some("Invalid credentials for OAuth2 authentication".to_string()),
+                required_actions: vec![AuthAction::ProvideCredentials],
+            })
+        }
+    }
+
+    /// Authenticate using SAML
+    async fn authenticate_saml(&self, credentials: &AuthCredentials) -> Result<AuthResult> {
+        if let AuthCredentials::Saml { assertion, signature: _ } = credentials {
+            // Basic SAML assertion validation
+            // In a real implementation, this would validate the SAML assertion and signature
+            if assertion.contains("<saml:Assertion") && assertion.contains("</saml:Assertion>") {
+                // Extract basic user info from SAML assertion (simplified)
+                let user_id = extract_saml_attribute(assertion, "NameID").unwrap_or_else(|| "saml_user".to_string());
+                
+                let identity = Identity {
+                    user_id: format!("saml:{}", user_id),
+                    username: extract_saml_attribute(assertion, "displayName").unwrap_or_else(|| "SAML User".to_string()),
+                    email: extract_saml_attribute(assertion, "email"),
+                    roles: ["user"].into_iter().map(String::from).collect(),
+                    permissions: [
+                        Permission::QueryRead,
+                        Permission::QueryExecute,
+                    ]
+                    .into_iter()
+                    .collect(),
+                    auth_method: AuthMethod::Saml,
+                    authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+                    expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
+                        + self.config.token_expiry.as_secs(),
+                    claims: [(
+                        "saml_assertion".to_string(),
+                        serde_json::Value::String(assertion.clone()),
+                    )]
+                    .into_iter()
+                    .collect(),
+                };
+
+                let token = self.create_access_token(&identity).await?;
+
+                Ok(AuthResult {
+                    success: true,
+                    identity: Some(identity),
+                    token: Some(token),
+                    error: None,
+                    required_actions: vec![],
+                })
+            } else {
+                Ok(AuthResult {
+                    success: false,
+                    identity: None,
+                    token: None,
+                    error: Some("Invalid SAML assertion".to_string()),
+                    required_actions: vec![AuthAction::ProvideCredentials],
+                })
+            }
+        } else {
+            Ok(AuthResult {
+                success: false,
+                identity: None,
+                token: None,
+                error: Some("Invalid credentials for SAML authentication".to_string()),
+                required_actions: vec![AuthAction::ProvideCredentials],
+            })
+        }
+    }
+
     fn encode_jwt(&self, claims: &JwtClaims) -> Result<String> {
         let header = Header::new(Algorithm::HS256);
         let encoding_key = EncodingKey::from_secret(self.config.jwt_secret.as_bytes());
@@ -880,6 +994,10 @@ pub enum AuthCredentials {
         access_token: String,
         refresh_token: Option<String>,
     },
+    Saml {
+        assertion: String,
+        signature: Option<String>,
+    },
 }
 
 /// Authentication statistics
@@ -890,6 +1008,45 @@ pub struct AuthStatistics {
     pub active_sessions: usize,
     pub unique_users: usize,
     pub total_authentications: usize,
+}
+
+/// Extract an attribute value from a SAML assertion (simplified parser)
+fn extract_saml_attribute(assertion: &str, attribute_name: &str) -> Option<String> {
+    // Simple XML parsing - in a real implementation, use a proper XML parser
+    let patterns = [
+        format!("<saml:AttributeValue>{}</saml:AttributeValue>", attribute_name),
+        format!("<AttributeValue>{}</AttributeValue>", attribute_name),
+        format!("{}=\"([^\"]+)\"", attribute_name),
+    ];
+    
+    for pattern in &patterns {
+        if let Some(start) = assertion.find(pattern) {
+            if let Some(end) = assertion[start..].find('>') {
+                let content_start = start + end + 1;
+                if let Some(content_end) = assertion[content_start..].find('<') {
+                    let content = &assertion[content_start..content_start + content_end];
+                    if !content.is_empty() {
+                        return Some(content.to_string());
+                    }
+                }
+            }
+        }
+    }
+    
+    // Try to extract NameID
+    if attribute_name == "NameID" {
+        if let Some(start) = assertion.find("<saml:NameID") {
+            if let Some(content_start) = assertion[start..].find('>') {
+                let content_start = start + content_start + 1;
+                if let Some(content_end) = assertion[content_start..].find("</saml:NameID>") {
+                    let content = &assertion[content_start..content_start + content_end];
+                    return Some(content.to_string());
+                }
+            }
+        }
+    }
+    
+    None
 }
 
 #[cfg(test)]

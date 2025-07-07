@@ -1,11 +1,10 @@
 //! Main BGP optimizer implementation
 
-use crate::algebra::{Term, TriplePattern, Variable};
+use crate::algebra::{Term, TriplePattern};
 use crate::bgp_optimizer::{IndexUsagePlan, OptimizedBGP, PatternSelectivity, SelectivityInfo};
-use crate::optimizer::{IndexStatistics, IndexType, Statistics};
+use crate::optimizer::{IndexStatistics, Statistics};
 use anyhow::Result;
-use oxirs_core::model::NamedNode;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Advanced BGP optimizer with index awareness and selectivity estimation
 pub struct BGPOptimizer<'a> {

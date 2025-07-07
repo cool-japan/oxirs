@@ -62,9 +62,10 @@ impl SparqlParser {
         } else if query.to_uppercase().starts_with("DESCRIBE") {
             self.parse_describe_query(query)
         } else {
-            Err(OxirsError::Parse(format!(
+            Err(OxirsError::Parse(
                 "Unsupported query form. Query must start with SELECT, CONSTRUCT, ASK, or DESCRIBE"
-            )))
+                    .to_string(),
+            ))
         }
     }
 
@@ -167,8 +168,7 @@ impl SparqlParser {
             let parts: Vec<&str> = triple_str.split_whitespace().collect();
             if parts.len() != 3 {
                 return Err(OxirsError::Parse(format!(
-                    "Invalid triple pattern: '{}'",
-                    triple_str
+                    "Invalid triple pattern: '{triple_str}'"
                 )));
             }
 
@@ -246,8 +246,7 @@ impl SparqlParser {
             let parts: Vec<&str> = triple_str.split_whitespace().collect();
             if parts.len() != 3 {
                 return Err(OxirsError::Parse(format!(
-                    "Invalid triple pattern: '{}'",
-                    triple_str
+                    "Invalid triple pattern: '{triple_str}'"
                 )));
             }
 
@@ -265,15 +264,15 @@ impl SparqlParser {
 
     fn parse_term_pattern(&self, term: &str) -> Result<TermPattern, OxirsError> {
         if term.starts_with('?') || term.starts_with('$') {
-            Ok(TermPattern::Variable(Variable::new(term)?))
+            Variable::new(term).map(TermPattern::Variable)
         } else if term.starts_with('<') && term.ends_with('>') {
             let iri = &term[1..term.len() - 1];
-            Ok(TermPattern::NamedNode(NamedNode::new(iri)?))
+            NamedNode::new(iri).map(TermPattern::NamedNode)
         } else if term.starts_with('"') && term.ends_with('"') {
             let value = &term[1..term.len() - 1];
             Ok(TermPattern::Literal(Literal::new(value)))
         } else if term.starts_with("_:") {
-            Ok(TermPattern::BlankNode(BlankNode::new(term)?))
+            BlankNode::new(term).map(TermPattern::BlankNode)
         } else if let Some(colon_pos) = term.find(':') {
             // Prefixed name
             let prefix = &term[..colon_pos];
@@ -281,12 +280,12 @@ impl SparqlParser {
 
             if let Some(namespace) = self.prefixes.get(prefix) {
                 let iri = format!("{}{}", namespace.as_str(), local);
-                Ok(TermPattern::NamedNode(NamedNode::new(iri)?))
+                NamedNode::new(iri).map(TermPattern::NamedNode)
             } else {
-                Err(OxirsError::Parse(format!("Unknown prefix: {}", prefix)))
+                Err(OxirsError::Parse(format!("Unknown prefix: {prefix}")))
             }
         } else {
-            Err(OxirsError::Parse(format!("Invalid term pattern: {}", term)))
+            Err(OxirsError::Parse(format!("Invalid term pattern: {term}")))
         }
     }
 

@@ -1,14 +1,12 @@
 //! Core query execution and optimization for SPARQL vector operations
 
-use super::config::{
-    VectorQuery, VectorQueryOptimizer, VectorQueryResult, VectorServiceArg, VectorServiceResult,
-};
+use super::config::{VectorQuery, VectorQueryOptimizer, VectorQueryResult, VectorServiceArg};
 use super::cross_language::CrossLanguageProcessor;
 use super::monitoring::PerformanceMonitor;
 use crate::{
     embeddings::{EmbeddableContent, EmbeddingManager},
     graph_aware_search::{GraphAwareSearch, GraphContext, GraphSearchScope},
-    VectorStore, VectorStoreTrait,
+    VectorStore,
 };
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
@@ -177,7 +175,7 @@ impl QueryExecutor {
         let similarity =
             crate::similarity::cosine_similarity(&vector1.as_slice(), &vector2.as_slice());
 
-        Ok(vec![(format!("{}-{}", resource1, resource2), similarity)])
+        Ok(vec![(format!("{resource1}-{resource2}"), similarity)])
     }
 
     /// Execute similar query to find similar resources

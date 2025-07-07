@@ -2,7 +2,7 @@
 //!
 //! This module provides parsers for RDF-star formats including:
 //! - Turtle-star (*.ttls)
-//! - N-Triples-star (*.nts)  
+//! - N-Triples-star (*.nts)
 //! - TriG-star (*.trigs)
 //! - N-Quads-star (*.nqs)
 
@@ -12,7 +12,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
 
 use anyhow::{Context, Result};
-use tracing::{debug, error, span, Level};
+use tracing::{debug, span, Level};
 
 use crate::model::{BlankNode, Literal, NamedNode, StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::{StarConfig, StarError, StarResult};
@@ -90,7 +90,7 @@ impl FromStr for StarFormat {
             "trig-star" | "trigs" => Ok(StarFormat::TrigStar),
             "nquads-star" | "nqs" => Ok(StarFormat::NQuadsStar),
             "json-ld-star" | "jsonld-star" | "jlds" => Ok(StarFormat::JsonLdStar),
-            _ => Err(StarError::parse_error(format!("Unknown format: {}", s))),
+            _ => Err(StarError::parse_error(format!("Unknown format: {s}"))),
         }
     }
 }
@@ -103,6 +103,7 @@ struct ParseContext {
     /// Current base IRI
     base_iri: Option<String>,
     /// Current graph name (for TriG/N-Quads)
+    #[allow(dead_code)]
     current_graph: Option<StarTerm>,
     /// Blank node counter
     blank_node_counter: usize,
@@ -199,6 +200,7 @@ impl ParseContext {
     }
 
     /// Clear errors
+    #[allow(dead_code)]
     fn clear_errors(&mut self) {
         self.parsing_errors.clear();
     }
@@ -216,10 +218,10 @@ impl ParseContext {
             let local = &prefixed[colon_pos + 1..];
 
             if let Some(namespace) = self.prefixes.get(prefix) {
-                Ok(format!("{}{}", namespace, local))
+                Ok(format!("{namespace}{local}"))
             } else {
-                let error_msg = format!("Unknown prefix: '{}'", prefix);
-                let context = format!("in prefixed name '{}'", prefixed);
+                let error_msg = format!("Unknown prefix: '{prefix}'");
+                let context = format!("in prefixed name '{prefixed}'");
 
                 if self.strict_mode {
                     self.add_error(error_msg.clone(), context, ErrorSeverity::Fatal);
@@ -231,7 +233,7 @@ impl ParseContext {
                 }
             }
         } else {
-            let error_msg = format!("Invalid prefixed name: '{}'", prefixed);
+            let error_msg = format!("Invalid prefixed name: '{prefixed}'");
             self.add_error(
                 error_msg.clone(),
                 prefixed.to_string(),
@@ -246,7 +248,7 @@ impl ParseContext {
         if let Some(ref base) = self.base_iri {
             // Simple relative IRI resolution (not fully RFC compliant)
             if iri.starts_with('#') {
-                format!("{}{}", base, iri)
+                format!("{base}{iri}")
             } else {
                 iri.to_string()
             }
@@ -262,7 +264,7 @@ impl ParseContext {
         }
 
         // Add recovery attempt to error log
-        let recovery_msg = format!("Attempting error recovery from: {}", error_context);
+        let recovery_msg = format!("Attempting error recovery from: {error_context}");
         self.add_error(
             recovery_msg,
             error_context.to_string(),
@@ -299,7 +301,7 @@ impl StarParser {
     }
 
     /// Set error recovery mode
-    pub fn set_error_recovery(&mut self, enabled: bool) {
+    pub fn set_error_recovery(&mut self, _enabled: bool) {
         // This is a no-op for now since error recovery is handled per-parse
         // but we keep the method for API compatibility
     }
@@ -362,7 +364,7 @@ impl StarParser {
                 Err(e) => {
                     let error_context = format!("line {}: {}", line_num + 1, line);
                     context.add_error(
-                        format!("Parse error: {}", e),
+                        format!("Parse error: {e}"),
                         error_context,
                         if context.strict_mode {
                             ErrorSeverity::Fatal
@@ -427,17 +429,17 @@ impl StarParser {
         }
 
         // Parse triple
-        if line.ends_with('.') {
-            let triple_str = &line[..line.len() - 1].trim();
+        if let Some(stripped) = line.strip_suffix('.') {
+            let triple_str = stripped.trim();
             match self.parse_triple_pattern_safe(triple_str, context) {
                 Ok(triple) => {
                     graph.insert(triple).map_err(|e| {
-                        StarError::parse_error(format!("Failed to insert triple: {}", e))
+                        StarError::parse_error(format!("Failed to insert triple: {e}"))
                     })?;
                 }
                 Err(e) => {
                     let error_msg =
-                        format!("Failed to parse triple pattern '{}': {}", triple_str, e);
+                        format!("Failed to parse triple pattern '{triple_str}': {e}");
                     context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
 
                     if context.strict_mode {
@@ -448,7 +450,7 @@ impl StarParser {
             }
         } else if !line.trim().is_empty() {
             // Non-empty line that doesn't end with '.' - potential malformed statement
-            let error_msg = format!("Malformed statement (missing terminating '.'): {}", line);
+            let error_msg = format!("Malformed statement (missing terminating '.'): {line}");
             context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Warning);
 
             if context.strict_mode {
@@ -460,6 +462,7 @@ impl StarParser {
     }
 
     /// Parse a single Turtle-star line (legacy method)
+    #[allow(dead_code)]
     fn parse_turtle_line(
         &self,
         line: &str,
@@ -478,8 +481,8 @@ impl StarParser {
         }
 
         // Parse triple
-        if line.ends_with('.') {
-            let triple_str = &line[..line.len() - 1].trim();
+        if let Some(stripped) = line.strip_suffix('.') {
+            let triple_str = stripped.trim();
             let triple = self.parse_triple_pattern(triple_str, context)?;
             graph.insert(triple)?;
         }
@@ -488,6 +491,7 @@ impl StarParser {
     }
 
     /// Parse a single TriG-star line
+    #[allow(dead_code)]
     fn parse_trig_line(
         &self,
         line: &str,
@@ -515,11 +519,9 @@ impl StarParser {
             if !graph_part.is_empty() {
                 let graph_term = self.parse_term(graph_part, context)?;
                 *current_graph = Some(graph_term);
-                context.current_graph = current_graph.clone();
             } else {
                 // Default graph
                 *current_graph = None;
-                context.current_graph = None;
             }
             *in_graph_block = true;
             *brace_count = line.chars().filter(|&c| c == '{').count();
@@ -531,7 +533,6 @@ impl StarParser {
             if close_braces >= *brace_count {
                 *in_graph_block = false;
                 *current_graph = None;
-                context.current_graph = None;
                 *brace_count = 0;
             } else {
                 *brace_count -= close_braces;
@@ -588,7 +589,7 @@ impl StarParser {
                     .insert(prefix_name.to_string(), namespace.to_string());
             }
         } else {
-            let error_msg = format!("Malformed @prefix directive: {}", line);
+            let error_msg = format!("Malformed @prefix directive: {line}");
             context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
             if context.strict_mode {
                 return Err(StarError::parse_error(error_msg));
@@ -613,7 +614,7 @@ impl StarParser {
                 context.base_iri = Some(base_iri.to_string());
             }
         } else {
-            let error_msg = format!("Malformed @base directive: {}", line);
+            let error_msg = format!("Malformed @base directive: {line}");
             context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
             if context.strict_mode {
                 return Err(StarError::parse_error(error_msg));
@@ -628,49 +629,87 @@ impl StarParser {
         pattern: &str,
         context: &mut ParseContext,
     ) -> StarResult<StarTriple> {
-        match self.tokenize_triple(pattern) {
-            Ok(terms) => {
-                if terms.len() != 3 {
-                    let error_msg =
-                        format!("Triple must have exactly 3 terms, found {}", terms.len());
-                    context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                    return Err(StarError::parse_error(error_msg));
-                }
-
-                let subject = self.parse_term_safe(&terms[0], context)?;
-                let predicate = self.parse_term_safe(&terms[1], context)?;
-                let object = self.parse_term_safe(&terms[2], context)?;
-
-                let triple = StarTriple::new(subject, predicate, object);
-
-                // Validate the constructed triple
-                if let Err(validation_error) = triple.validate() {
-                    let error_msg = format!("Invalid triple: {}", validation_error);
-                    context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                    return Err(StarError::parse_error(error_msg));
-                }
-
-                Ok(triple)
-            }
-            Err(e) => {
-                let error_msg = format!("Failed to tokenize triple: {}", e);
-                context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
-                Err(StarError::parse_error(error_msg))
-            }
-        }
+        self.parse_triple_pattern_safe_with_depth(pattern, context, 0)
     }
 
     /// Parse term with enhanced error handling
     fn parse_term_safe(&self, term_str: &str, context: &mut ParseContext) -> StarResult<StarTerm> {
+        self.parse_term_safe_with_depth(term_str, context, 0)
+    }
+
+    /// Parse term with depth tracking for quoted triples
+    fn parse_term_safe_with_depth(
+        &self,
+        term_str: &str,
+        context: &mut ParseContext,
+        depth: usize,
+    ) -> StarResult<StarTerm> {
+        const MAX_QUOTED_TRIPLE_DEPTH: usize = 100;
+
         let term_str = term_str.trim();
+
+        // Check for empty input
+        if term_str.is_empty() {
+            let error_msg = "Empty term in triple".to_string();
+            context.add_error(
+                error_msg.clone(),
+                term_str.to_string(),
+                ErrorSeverity::Error,
+            );
+            return Err(StarError::parse_error(error_msg));
+        }
 
         // Quoted triple: << ... >>
         if term_str.starts_with("<<") && term_str.ends_with(">>") {
-            let inner = &term_str[2..term_str.len() - 2];
-            match self.parse_triple_pattern_safe(inner, context) {
+            // Check depth limit to prevent stack overflow
+            if depth >= MAX_QUOTED_TRIPLE_DEPTH {
+                let error_msg = format!(
+                    "Maximum quoted triple nesting depth ({MAX_QUOTED_TRIPLE_DEPTH}) exceeded"
+                );
+                context.add_error(
+                    error_msg.clone(),
+                    term_str.to_string(),
+                    ErrorSeverity::Error,
+                );
+                return Err(StarError::parse_error(error_msg));
+            }
+
+            let inner = &term_str[2..term_str.len() - 2].trim();
+
+            // Check for empty quoted triple
+            if inner.is_empty() {
+                let error_msg = "Empty quoted triple content".to_string();
+                context.add_error(
+                    error_msg.clone(),
+                    term_str.to_string(),
+                    ErrorSeverity::Error,
+                );
+                if context.strict_mode {
+                    return Err(StarError::parse_error(error_msg));
+                }
+                // In non-strict mode, create a placeholder error term
+                return self
+                    .parse_term("<urn:error:empty-quoted-triple>", context)
+                    .map_err(|e| StarError::parse_error(e.to_string()));
+            }
+
+            // Validate proper quoted triple delimiters
+            if !self.validate_quoted_triple_delimiters(term_str) {
+                let error_msg = "Malformed quoted triple delimiters".to_string();
+                context.add_error(
+                    error_msg.clone(),
+                    term_str.to_string(),
+                    ErrorSeverity::Error,
+                );
+                if context.strict_mode {
+                    return Err(StarError::parse_error(error_msg));
+                }
+            }
+
+            match self.parse_triple_pattern_safe_with_depth(inner, context, depth + 1) {
                 Ok(inner_triple) => return Ok(StarTerm::quoted_triple(inner_triple)),
                 Err(e) => {
-                    let error_msg = format!("Failed to parse quoted triple: {}", e);
+                    let error_msg = format!("Failed to parse quoted triple content: {e}");
                     context.add_error(
                         error_msg.clone(),
                         term_str.to_string(),
@@ -679,7 +718,9 @@ impl StarParser {
                     if context.strict_mode {
                         return Err(StarError::parse_error(error_msg));
                     }
-                    // In non-strict mode, try to continue with partial parsing
+                    // In non-strict mode, try to parse as regular term
+                    // but with better error context
+                    return self.parse_term_fallback(term_str, context, &error_msg);
                 }
             }
         }
@@ -687,6 +728,103 @@ impl StarParser {
         // Continue with other term types...
         self.parse_term(term_str, context)
             .map_err(|e| StarError::parse_error(e.to_string()))
+    }
+
+    /// Validate quoted triple delimiter structure
+    fn validate_quoted_triple_delimiters(&self, term_str: &str) -> bool {
+        let mut depth = 0;
+        let mut chars = term_str.chars().peekable();
+
+        while let Some(ch) = chars.next() {
+            match ch {
+                '<' if chars.peek() == Some(&'<') => {
+                    chars.next(); // consume second '<'
+                    depth += 1;
+                }
+                '>' if chars.peek() == Some(&'>') => {
+                    chars.next(); // consume second '>'
+                    depth -= 1;
+                    if depth < 0 {
+                        return false; // More closing than opening
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        depth == 0 // Should be balanced
+    }
+
+    /// Parse triple pattern with depth tracking
+    fn parse_triple_pattern_safe_with_depth(
+        &self,
+        pattern: &str,
+        context: &mut ParseContext,
+        depth: usize,
+    ) -> StarResult<StarTriple> {
+        match self.tokenize_triple(pattern) {
+            Ok(terms) => {
+                if terms.len() != 3 {
+                    let error_msg = format!(
+                        "Triple must have exactly 3 terms, found {} (depth: {})",
+                        terms.len(),
+                        depth
+                    );
+                    context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
+                    return Err(StarError::parse_error(error_msg));
+                }
+
+                let subject = self.parse_term_safe_with_depth(&terms[0], context, depth)?;
+                let predicate = self.parse_term_safe_with_depth(&terms[1], context, depth)?;
+                let object = self.parse_term_safe_with_depth(&terms[2], context, depth)?;
+
+                let triple = StarTriple::new(subject, predicate, object);
+
+                // Validate the constructed triple
+                if let Err(validation_error) = triple.validate() {
+                    let error_msg =
+                        format!("Invalid triple at depth {depth}: {validation_error}");
+                    context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
+                    return Err(StarError::parse_error(error_msg));
+                }
+
+                Ok(triple)
+            }
+            Err(e) => {
+                let error_msg = format!("Failed to tokenize triple at depth {depth}: {e}");
+                context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
+                Err(StarError::parse_error(error_msg))
+            }
+        }
+    }
+
+    /// Fallback parsing with better error context
+    fn parse_term_fallback(
+        &self,
+        term_str: &str,
+        context: &mut ParseContext,
+        original_error: &str,
+    ) -> StarResult<StarTerm> {
+        match self.parse_term(term_str, context) {
+            Ok(term) => {
+                // Log a warning that we fell back to regular parsing
+                context.add_error(
+                    format!("Quoted triple parsing failed, parsed as regular term: {original_error}"),
+                    term_str.to_string(),
+                    ErrorSeverity::Warning,
+                );
+                Ok(term)
+            }
+            Err(fallback_error) => {
+                let combined_error = format!("Both quoted triple and regular term parsing failed. Quoted triple error: {original_error}. Regular term error: {fallback_error}");
+                context.add_error(
+                    combined_error.clone(),
+                    term_str.to_string(),
+                    ErrorSeverity::Error,
+                );
+                Err(StarError::parse_error(combined_error))
+            }
+        }
     }
 
     /// Parse @prefix directive (legacy)
@@ -732,8 +870,8 @@ impl StarParser {
                 continue;
             }
 
-            if line.ends_with('.') {
-                let triple_str = &line[..line.len() - 1].trim();
+            if let Some(stripped) = line.strip_suffix('.') {
+                let triple_str = &stripped.trim();
                 let triple = self
                     .parse_triple_pattern(triple_str, &mut context)
                     .with_context(|| format!("Error parsing line {}: {}", line_num + 1, line))
@@ -787,7 +925,7 @@ impl StarParser {
             // Check if we have a complete statement
             if self.is_complete_trig_statement(&accumulated_line, &mut trig_state) {
                 match self.parse_complete_trig_statement(
-                    &accumulated_line.trim(),
+                    accumulated_line.trim(),
                     &mut context,
                     &mut graph,
                     &mut trig_state,
@@ -801,7 +939,7 @@ impl StarParser {
                         let error_context =
                             format!("line {}: {}", line_num + 1, accumulated_line.trim());
                         context.add_error(
-                            format!("TriG-star parse error: {}", e),
+                            format!("TriG-star parse error: {e}"),
                             error_context,
                             if context.strict_mode {
                                 ErrorSeverity::Fatal
@@ -911,8 +1049,8 @@ impl StarParser {
                 continue;
             }
 
-            if line.ends_with('.') {
-                let quad_str = &line[..line.len() - 1].trim();
+            if let Some(stripped) = line.strip_suffix('.') {
+                let quad_str = &stripped.trim();
                 match self.parse_quad_pattern_safe(quad_str, &mut context) {
                     Ok(quad) => {
                         graph.insert_quad(quad)?;
@@ -920,7 +1058,7 @@ impl StarParser {
                     Err(e) => {
                         let error_context = format!("line {}: {}", line_num + 1, line);
                         context.add_error(
-                            format!("Parse error: {}", e),
+                            format!("Parse error: {e}"),
                             error_context,
                             if context.strict_mode {
                                 ErrorSeverity::Fatal
@@ -1012,7 +1150,7 @@ impl StarParser {
 
                 // Validate the constructed quad
                 if let Err(validation_error) = quad.validate() {
-                    let error_msg = format!("Invalid quad: {}", validation_error);
+                    let error_msg = format!("Invalid quad: {validation_error}");
                     context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
                     return Err(StarError::parse_error(error_msg));
                 }
@@ -1020,7 +1158,7 @@ impl StarParser {
                 Ok(quad)
             }
             Err(e) => {
-                let error_msg = format!("Failed to tokenize quad: {}", e);
+                let error_msg = format!("Failed to tokenize quad: {e}");
                 context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
                 Err(StarError::parse_error(error_msg))
             }
@@ -1028,6 +1166,7 @@ impl StarParser {
     }
 
     /// Parse a quad pattern (subject predicate object graph)
+    #[allow(dead_code)]
     fn parse_quad_pattern(&self, pattern: &str, context: &mut ParseContext) -> Result<StarQuad> {
         let terms = self.tokenize_quad(pattern)?;
 
@@ -1215,20 +1354,19 @@ impl StarParser {
         if term_str.starts_with('<') && term_str.ends_with('>') {
             let iri = &term_str[1..term_str.len() - 1];
             let resolved = context.resolve_relative(iri);
-            return Ok(StarTerm::iri(&resolved).map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e))?);
+            return StarTerm::iri(&resolved).map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e));
         }
 
         // Prefixed name
         if term_str.contains(':') && !term_str.starts_with('_') && !term_str.starts_with('"') {
             let resolved = context.resolve_prefix(term_str)?;
-            return Ok(StarTerm::iri(&resolved).map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e))?);
+            return StarTerm::iri(&resolved).map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e));
         }
 
         // Blank node: _:id
-        if term_str.starts_with("_:") {
-            let id = &term_str[2..];
-            return Ok(StarTerm::blank_node(id)
-                .map_err(|e| anyhow::anyhow!("Invalid blank node: {}", e))?);
+        if let Some(id) = term_str.strip_prefix("_:") {
+            return StarTerm::blank_node(id)
+                .map_err(|e| anyhow::anyhow!("Invalid blank node: {}", e));
         }
 
         // Literal: "value"@lang or "value"^^<datatype>
@@ -1237,11 +1375,8 @@ impl StarParser {
         }
 
         // Variable: ?name (for SPARQL-star)
-        if term_str.starts_with('?') {
-            let name = &term_str[1..];
-            return Ok(
-                StarTerm::variable(name).map_err(|e| anyhow::anyhow!("Invalid variable: {}", e))?
-            );
+        if let Some(name) = term_str.strip_prefix('?') {
+            return StarTerm::variable(name).map_err(|e| anyhow::anyhow!("Invalid variable: {}", e));
         }
 
         Err(anyhow::anyhow!("Unrecognized term format: {}", term_str))
@@ -1251,17 +1386,16 @@ impl StarParser {
     fn parse_literal(&self, literal_str: &str, context: &mut ParseContext) -> Result<StarTerm> {
         let mut chars = literal_str.chars().peekable();
         let mut value = String::new();
-        let mut in_string = false;
         let mut escape_next = false;
 
         // Skip opening quote
         if chars.next() != Some('"') {
             return Err(anyhow::anyhow!("Literal must start with quote"));
         }
-        in_string = true;
+        let mut in_string = true;
 
         // Parse value
-        while let Some(ch) = chars.next() {
+        for ch in chars.by_ref() {
             if escape_next {
                 value.push(ch);
                 escape_next = false;
@@ -1289,14 +1423,12 @@ impl StarParser {
         // Check for language tag or datatype
         let remaining: String = chars.collect();
 
-        if remaining.starts_with('@') {
-            let lang = &remaining[1..];
+        if let Some(lang) = remaining.strip_prefix('@') {
             Ok(StarTerm::literal_with_language(&value, lang)
                 .map_err(|e| anyhow::anyhow!("Invalid literal: {}", e))?)
-        } else if remaining.starts_with("^^") {
-            let datatype_str = &remaining[2..];
-            let datatype = if datatype_str.starts_with('<') && datatype_str.ends_with('>') {
-                datatype_str[1..datatype_str.len() - 1].to_string()
+        } else if let Some(datatype_str) = remaining.strip_prefix("^^") {
+            let datatype = if let Some(stripped) = datatype_str.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+                stripped.to_string()
             } else {
                 context.resolve_prefix(datatype_str)?
             };
@@ -1414,8 +1546,8 @@ impl StarParser {
         }
 
         // Handle regular triples
-        if statement.ends_with('.') {
-            let triple_str = &statement[..statement.len() - 1].trim();
+        if let Some(stripped) = statement.strip_suffix('.') {
+            let triple_str = &stripped.trim();
             if !triple_str.is_empty() {
                 let triple = self.parse_triple_pattern(triple_str, context)?;
 
@@ -1449,10 +1581,7 @@ impl StarParser {
         if graph_name.starts_with('"') && graph_name.ends_with('"') {
             let inner = &graph_name[1..graph_name.len() - 1];
             context.add_error(
-                format!(
-                    "Graph names should not be quoted strings. Converting '{}' to IRI",
-                    inner
-                ),
+                format!("Graph names should not be quoted strings. Converting '{inner}' to IRI"),
                 graph_name.to_string(),
                 ErrorSeverity::Warning,
             );
@@ -1489,10 +1618,7 @@ impl StarParser {
                         match &term {
                             StarTerm::NamedNode(_) | StarTerm::BlankNode(_) => Some(term),
                             _ => {
-                                let error_msg = format!(
-                                    "Graph name must be an IRI or blank node, found: {:?}",
-                                    term
-                                );
+                                let error_msg = format!("Graph name must be an IRI or blank node, found: {term:?}");
                                 context.add_error(
                                     error_msg.clone(),
                                     statement.to_string(),
@@ -1550,7 +1676,7 @@ impl StarParser {
                                     triple_str, e
                                 );
                                 context.add_error(
-                                    format!("Failed to parse triple in graph block: {}", e),
+                                    format!("Failed to parse triple in graph block: {e}"),
                                     triple_str.to_string(),
                                     ErrorSeverity::Warning,
                                 );
@@ -1582,12 +1708,12 @@ impl StarParser {
         let mut content = String::new();
         let mut buf_reader = BufReader::new(reader);
         buf_reader.read_to_string(&mut content).map_err(|e| {
-            StarError::parse_error(format!("Failed to read JSON-LD-star content: {}", e))
+            StarError::parse_error(format!("Failed to read JSON-LD-star content: {e}"))
         })?;
 
         // Parse JSON
         let json_value: serde_json::Value = serde_json::from_str(&content)
-            .map_err(|e| StarError::parse_error(format!("Invalid JSON: {}", e)))?;
+            .map_err(|e| StarError::parse_error(format!("Invalid JSON: {e}")))?;
 
         // Process JSON-LD-star document
         self.process_jsonld_star_value(&json_value, &mut graph, &mut context)?;
@@ -1776,8 +1902,7 @@ impl StarParser {
             }
         };
 
-        // Create and insert triple
-        let triple = StarTriple::new(subject.clone(), predicate.clone(), object.clone());
+        // Create and insert quad
         let quad = StarQuad::new(subject.clone(), predicate.clone(), object, None);
         graph.insert_quad(quad)?;
 
@@ -1929,7 +2054,7 @@ mod tests {
         let data = r#"
             @prefix ex: <http://example.org/> .
             @prefix foaf: <http://xmlns.com/foaf/0.1/> .
-            
+
             ex:alice foaf:knows ex:bob .
             << ex:alice foaf:age "25" >> ex:certainty "high" .
         "#;
@@ -2054,8 +2179,7 @@ ex:graph1 {
 
     #[test]
     fn test_trig_star_error_recovery() {
-        let mut config = StarConfig::default();
-        config.strict_mode = false; // Enable error recovery
+        let config = StarConfig { strict_mode: false, ..Default::default() }; // Enable error recovery
         let parser = StarParser::with_config(config);
 
         // TriG with errors that should be recoverable

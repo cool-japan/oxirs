@@ -38,6 +38,12 @@ pub struct PerformanceTracker {
     start_time: Instant,
 }
 
+impl Default for PerformanceTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceTracker {
     pub fn new() -> Self {
         Self {

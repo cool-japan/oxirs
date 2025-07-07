@@ -696,6 +696,12 @@ impl TransactionCoordinator {
     }
 }
 
+impl Default for TransactionLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TransactionLog {
     /// Create a new transaction log
     pub fn new() -> Self {
@@ -721,6 +727,12 @@ impl TransactionLog {
             .iter()
             .filter(|e| e.transaction_id == transaction_id)
             .collect()
+    }
+}
+
+impl Default for LockManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -827,7 +839,7 @@ impl LockManager {
         for &node in wait_graph.keys() {
             if !visited.contains(&node) {
                 let mut path = Vec::new();
-                if self.detect_cycle_dfs(
+                if Self::detect_cycle_dfs(
                     &wait_graph,
                     node,
                     &mut visited,
@@ -845,7 +857,6 @@ impl LockManager {
 
     /// DFS for cycle detection
     fn detect_cycle_dfs(
-        &self,
         graph: &HashMap<TransactionId, HashSet<TransactionId>>,
         node: TransactionId,
         visited: &mut HashSet<TransactionId>,
@@ -860,7 +871,7 @@ impl LockManager {
         if let Some(neighbors) = graph.get(&node) {
             for &neighbor in neighbors {
                 if !visited.contains(&neighbor) {
-                    if self.detect_cycle_dfs(graph, neighbor, visited, rec_stack, path, cycles) {
+                    if Self::detect_cycle_dfs(graph, neighbor, visited, rec_stack, path, cycles) {
                         return true;
                     }
                 } else if rec_stack.contains(&neighbor) {
@@ -888,15 +899,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_basic_transaction() {
-        let config = TransactionConfig::default();
+        use tokio::time::{timeout, Duration};
+
+        let config = TransactionConfig {
+            timeout: Duration::from_secs(5),
+            ..Default::default()
+        };
         let shard_config = crate::distributed::sharding::ShardingConfig::default();
         let shard_manager = Arc::new(ShardManager::new(shard_config, ShardingStrategy::Hash));
         let coordinator = TransactionCoordinator::new(config, shard_manager);
 
-        // Begin transaction
-        let tx_id = coordinator.begin_transaction().await.unwrap();
+        // Begin transaction with timeout
+        let tx_id = timeout(Duration::from_secs(2), coordinator.begin_transaction())
+            .await
+            .expect("begin_transaction timed out")
+            .expect("begin_transaction failed");
 
-        // Add operations
+        // Add operations with timeout
         let op = TransactionOp::Insert(SerializableTriple {
             subject: "http://example.org/s".to_string(),
             predicate: "http://example.org/p".to_string(),
@@ -907,10 +926,33 @@ mod tests {
             },
         });
 
-        coordinator.add_operation(tx_id, op).await.unwrap();
+        timeout(Duration::from_secs(2), coordinator.add_operation(tx_id, op))
+            .await
+            .expect("add_operation timed out")
+            .expect("add_operation failed");
 
-        // Commit (will use single-shard optimization)
-        coordinator.commit_transaction(tx_id).await.unwrap();
+        // Check participants were added
+        let transaction = coordinator
+            .transactions
+            .get(&tx_id)
+            .expect("Transaction should exist");
+        {
+            let participants = transaction.participants.read();
+            assert!(
+                !participants.is_empty(),
+                "Transaction should have participants after adding operation"
+            );
+            println!("Participants: {:?}", *participants);
+        } // Lock is dropped here before await
+
+        // Commit with timeout (will use single-shard optimization)
+        timeout(
+            Duration::from_secs(2),
+            coordinator.commit_transaction(tx_id),
+        )
+        .await
+        .expect("commit_transaction timed out")
+        .expect("commit_transaction failed");
     }
 
     #[test]

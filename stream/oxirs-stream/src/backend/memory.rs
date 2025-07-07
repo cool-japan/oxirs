@@ -266,7 +266,7 @@ impl StreamBackend for MemoryBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::event::{StreamEvent, StreamEventType};
+    use crate::event::StreamEvent;
 
     #[tokio::test]
     async fn test_memory_backend_basic_operations() {
@@ -321,7 +321,7 @@ mod tests {
         // Send some events
         for i in 0..5 {
             let event = StreamEvent::GraphCreated {
-                graph: format!("http://example.org/graph{}", i),
+                graph: format!("http://example.org/graph{i}"),
                 metadata: crate::event::EventMetadata::default(),
             };
             backend.send_event(&topic, event).await.unwrap();

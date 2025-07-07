@@ -6,16 +6,16 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::mem;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 
-use crate::{
-    EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamConsumer, StreamEvent,
-    StreamProducer,
-};
+#[cfg(test)]
+use crate::StreamConfig;
+use crate::{EventMetadata, RdfPatch, StreamConsumer, StreamEvent, StreamProducer};
 
 /// Store change detector for monitoring RDF store changes
 pub struct StoreChangeDetector {
@@ -261,7 +261,7 @@ impl StoreChangeDetector {
                     self.start_polling_detection(*poll_interval).await
                 }
                 ChangeDetectionStrategy::EventSourcing { .. } => self.start_event_sourcing().await,
-                ChangeDetectionStrategy::Hybrid { primary, fallback } => {
+                ChangeDetectionStrategy::Hybrid { primary: _, fallback: _ } => {
                     self.start_hybrid_detection().await
                 }
             }
@@ -467,7 +467,7 @@ impl StoreChangeDetector {
             return Err(anyhow!("Invalid strategy for event sourcing"));
         };
 
-        let store = self.store.clone();
+        let _store = self.store.clone();
         let producer = self.producer.clone();
         let stats = self.stats.clone();
         let notifier = self.change_notifier.clone();
@@ -557,7 +557,7 @@ impl StoreChangeDetector {
             error!("Primary strategy failed: {}", e);
             stats.write().await.errors += 1;
             let _ = notifier.send(StoreChangeEvent::Error {
-                message: format!("Primary strategy failed: {}", e),
+                message: format!("Primary strategy failed: {e}"),
             });
         }
 
@@ -583,7 +583,7 @@ impl StoreChangeDetector {
                     error!("Fallback strategy failed: {}", e);
                     fallback_stats.write().await.errors += 1;
                     let _ = fallback_notifier.send(StoreChangeEvent::Error {
-                        message: format!("Fallback strategy failed: {}", e),
+                        message: format!("Fallback strategy failed: {e}"),
                     });
                 }
             }
@@ -848,7 +848,7 @@ impl StoreChangeDetector {
         use reqwest;
 
         let client = reqwest::Client::new();
-        let url = format!("{}/events?from={}&limit=100", event_store_url, from_id);
+        let url = format!("{event_store_url}/events?from={from_id}&limit=100");
 
         match client.get(&url).send().await {
             Ok(response) => {
@@ -997,7 +997,7 @@ struct UpdateSubscriber {
 
 /// Update channel types
 #[derive(Debug)]
-enum UpdateChannel {
+pub enum UpdateChannel {
     /// WebSocket connection
     WebSocket(mpsc::Sender<UpdateNotification>),
     /// Server-sent events
@@ -1127,7 +1127,7 @@ impl RealtimeUpdateManager {
                             || batch_timer.elapsed() > config.batch_timeout
                         {
                             Self::process_batch(
-                                batch.drain(..).collect(),
+                                mem::take(&mut batch),
                                 &subscribers,
                                 &filters,
                                 &config,
@@ -1141,7 +1141,7 @@ impl RealtimeUpdateManager {
                         // No event available
                         if !batch.is_empty() && batch_timer.elapsed() > config.batch_timeout {
                             Self::process_batch(
-                                batch.drain(..).collect(),
+                                mem::take(&mut batch),
                                 &subscribers,
                                 &filters,
                                 &config,
@@ -1158,7 +1158,7 @@ impl RealtimeUpdateManager {
                         // Timeout - check batch
                         if !batch.is_empty() && batch_timer.elapsed() > config.batch_timeout {
                             Self::process_batch(
-                                batch.drain(..).collect(),
+                                mem::take(&mut batch),
                                 &subscribers,
                                 &filters,
                                 &config,
@@ -1179,7 +1179,7 @@ impl RealtimeUpdateManager {
     async fn process_batch(
         events: Vec<StreamEvent>,
         subscribers: &Arc<RwLock<HashMap<String, UpdateSubscriber>>>,
-        filters: &Arc<RwLock<Vec<UpdateFilter>>>,
+        _filters: &Arc<RwLock<Vec<UpdateFilter>>>,
         config: &UpdateManagerConfig,
         stats: &Arc<RwLock<UpdateManagerStats>>,
     ) {
@@ -1191,7 +1191,7 @@ impl RealtimeUpdateManager {
         };
 
         let subscribers_guard = subscribers.read().await;
-        for (id, subscriber) in subscribers_guard.iter() {
+        for (_id, subscriber) in subscribers_guard.iter() {
             // Apply filters if enabled
             if config.enable_filtering && !subscriber.filters.is_empty() {
                 let filtered_changes: Vec<_> = notification
@@ -1297,7 +1297,7 @@ impl RealtimeUpdateManager {
     async fn send_to_subscriber(
         subscriber: &UpdateSubscriber,
         notification: UpdateNotification,
-        config: &UpdateManagerConfig,
+        _config: &UpdateManagerConfig,
         stats: &Arc<RwLock<UpdateManagerStats>>,
     ) {
         match &subscriber.channel {
@@ -1429,7 +1429,7 @@ pub mod tests {
         }
 
         async fn subscribe_changes(&self) -> Result<mpsc::Receiver<StoreChange>> {
-            let (tx, rx) = mpsc::channel(100);
+            let (_tx, rx) = mpsc::channel(100);
             Ok(rx)
         }
 

@@ -13,8 +13,12 @@ use uuid::Uuid;
 pub struct EmbeddingRequest {
     /// Entity ID to get embedding for
     pub entity_id: String,
+    /// Entity ID (alias for compatibility)
+    pub entity: String,
     /// Optional model ID to use
     pub model_id: Option<Uuid>,
+    /// Optional model version to use
+    pub model_version: Option<String>,
     /// Use cached result if available
     pub use_cache: Option<bool>,
 }
@@ -24,10 +28,16 @@ pub struct EmbeddingRequest {
 pub struct EmbeddingResponse {
     /// Entity ID
     pub entity_id: String,
+    /// Entity ID (alias for compatibility)
+    pub entity: String,
     /// Generated embedding vector
     pub embedding: Vector,
+    /// Embedding dimensions
+    pub dimensions: usize,
     /// Model ID used
     pub model_id: Uuid,
+    /// Model version used
+    pub model_version: String,
     /// Whether result came from cache
     pub from_cache: bool,
     /// Generation time in milliseconds
@@ -39,8 +49,14 @@ pub struct EmbeddingResponse {
 pub struct BatchEmbeddingRequest {
     /// List of entity IDs
     pub entity_ids: Vec<String>,
+    /// List of entities (alias for compatibility)
+    pub entities: Vec<String>,
     /// Optional model ID to use
     pub model_id: Option<Uuid>,
+    /// Optional model version to use
+    pub model_version: Option<String>,
+    /// Use cached result if available
+    pub use_cache: Option<bool>,
     /// Batch processing options
     pub options: Option<BatchOptions>,
 }
@@ -63,6 +79,8 @@ pub struct BatchEmbeddingResponse {
     pub total_time_ms: f64,
     /// Number of cache hits
     pub cache_hits: usize,
+    /// Number of cache misses
+    pub cache_misses: usize,
     /// Model ID used
     pub model_id: Uuid,
 }
@@ -164,6 +182,8 @@ pub struct TripleScoreRequest {
     pub object: String,
     /// Optional model ID to use
     pub model_id: Option<Uuid>,
+    /// Optional model version to use
+    pub model_version: Option<String>,
     /// Use cached result if available
     pub use_cache: Option<bool>,
 }
@@ -177,14 +197,20 @@ pub struct TripleScoreResponse {
     pub predicate: String,
     /// Object entity
     pub object: String,
+    /// Triple (subject, predicate, object)
+    pub triple: (String, String, String),
     /// Plausibility score
     pub score: f64,
     /// Model ID used
     pub model_id: Uuid,
+    /// Model version used
+    pub model_version: String,
     /// Whether result came from cache
     pub from_cache: bool,
     /// Computation time in milliseconds
     pub computation_time_ms: f64,
+    /// Scoring time in milliseconds
+    pub scoring_time_ms: f64,
 }
 
 /// Prediction request

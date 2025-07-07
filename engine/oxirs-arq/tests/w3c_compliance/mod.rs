@@ -222,7 +222,7 @@ impl TestSuiteRunner {
     /// Load expected results from file
     fn load_expected_results(&self, path: &Path) -> Result<Solution> {
         let content = fs::read_to_string(path)?;
-        
+
         // Determine format based on file extension
         match path.extension().and_then(|s| s.to_str()) {
             Some("srj") | Some("json") => self.parse_sparql_json_results(&content),
@@ -328,7 +328,7 @@ impl TestSuiteRunner {
     ) -> Result<()> {
         // Handle different test types
         let is_ordered = test.test_type.iter().any(|t| t.contains("OrderedResult"));
-        
+
         if is_ordered {
             // For ordered results, compare directly
             if actual.len() != expected.len() {
@@ -414,8 +414,8 @@ impl TestSuiteRunner {
         println!("\nW3C SPARQL Compliance Test Results:");
         println!("===================================");
         println!("Total tests:  {}", self.results.total);
-        println!("Passed:       {} ({}%)", 
-            self.results.passed, 
+        println!("Passed:       {} ({}%)",
+            self.results.passed,
             (self.results.passed * 100) / self.results.total.max(1)
         );
         println!("Failed:       {}", self.results.failed);

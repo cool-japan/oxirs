@@ -64,13 +64,27 @@ impl PerformanceAnalyticsEngine {
         }
 
         let mut monitor = self.real_time_monitor.lock().unwrap();
-        monitor.start()
+        
+        // Use tokio runtime to execute async method
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| crate::ShaclAiError::Performance(format!("Failed to create runtime: {}", e)))?;
+        
+        rt.block_on(async {
+            monitor.start().await.map(|_| ())
+        })
     }
 
     /// Stop real-time monitoring
     pub fn stop_monitoring(&self) -> crate::Result<()> {
         let mut monitor = self.real_time_monitor.lock().unwrap();
-        monitor.stop()
+        
+        // Use tokio runtime to execute async method
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| crate::ShaclAiError::Performance(format!("Failed to create runtime: {}", e)))?;
+        
+        rt.block_on(async {
+            monitor.stop().await
+        })
     }
 
     /// Get current performance statistics

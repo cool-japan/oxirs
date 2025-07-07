@@ -559,8 +559,8 @@ impl QuantumQueryOptimizer {
     /// Perform single annealing step
     async fn annealing_step(
         &self,
-        query_problem: &QueryOptimizationProblem,
-        temperature: f64,
+        _query_problem: &QueryOptimizationProblem,
+        _temperature: f64,
     ) -> Result<QuerySolution> {
         // Simplified annealing step implementation
         // In a real implementation, this would involve more sophisticated quantum operations
@@ -741,8 +741,8 @@ impl QuantumQueryOptimizer {
     /// Interpret measurement result as query solution
     fn interpret_measurement(
         &self,
-        query_problem: &QueryOptimizationProblem,
-        measurement: &MeasurementResult,
+        _query_problem: &QueryOptimizationProblem,
+        _measurement: &MeasurementResult,
     ) -> Result<QuerySolution> {
         // Convert qubit states to actual query optimization solution
         // This is problem-specific and would depend on the encoding scheme
@@ -752,8 +752,8 @@ impl QuantumQueryOptimizer {
     /// Calculate energy for a given configuration
     fn calculate_configuration_energy(
         &self,
-        query_problem: &QueryOptimizationProblem,
-        config: usize,
+        _query_problem: &QueryOptimizationProblem,
+        _config: usize,
     ) -> f64 {
         // Calculate the energy (cost) of a specific configuration
         // This would be based on the query optimization problem structure
@@ -761,7 +761,7 @@ impl QuantumQueryOptimizer {
     }
 
     /// Check if a state satisfies the search criteria
-    fn is_target_state(&self, query_problem: &QueryOptimizationProblem, state: usize) -> bool {
+    fn is_target_state(&self, _query_problem: &QueryOptimizationProblem, _state: usize) -> bool {
         // Determine if this state represents a good solution
         // This would be problem-specific
         false // Placeholder
@@ -1194,7 +1194,7 @@ impl QuantumQueryOptimizer {
         // Surface code parameters
         let code_distance = ((num_qubits as f64).sqrt() as usize).max(3);
         let syndrome_qubits = (code_distance - 1) * code_distance;
-        let data_qubits = code_distance * code_distance;
+        let _data_qubits = code_distance * code_distance;
 
         // Syndrome extraction for X and Z stabilizers
         let mut x_syndromes = vec![false; syndrome_qubits / 2];

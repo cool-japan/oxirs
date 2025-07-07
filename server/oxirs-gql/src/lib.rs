@@ -7,7 +7,7 @@
 
 use anyhow::Result;
 use oxirs_core::model::{
-    BlankNode, GraphName, Literal as OxiLiteral, NamedNode, Quad, Subject, Term, Triple, Variable,
+    BlankNode, GraphName, Literal as OxiLiteral, NamedNode, Quad, Subject, Term, Variable,
 };
 use oxirs_core::{ConcreteStore, Store};
 use std::sync::{Arc, Mutex};
@@ -58,7 +58,7 @@ impl RdfStore {
 
         match result {
             QueryResult::Select {
-                variables,
+                variables: _,
                 bindings,
             } => {
                 let mut solutions = Vec::new();
@@ -214,7 +214,7 @@ impl RdfStore {
         };
 
         let quad = Quad::new(subject, predicate, object, GraphName::DefaultGraph);
-        let mut store = self
+        let store = self
             .store
             .lock()
             .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
@@ -243,7 +243,7 @@ impl RdfStore {
         let quads = parser.parse_str_to_quads(&content)?;
 
         // Insert quads into store
-        let mut store = self
+        let store = self
             .store
             .lock()
             .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
@@ -388,7 +388,7 @@ impl GraphQLServer {
         }
     }
 
-    pub fn new_with_mock(store: Arc<MockStore>) -> Result<Self> {
+    pub fn new_with_mock(_store: Arc<MockStore>) -> Result<Self> {
         // For backward compatibility during transition
         let rdf_store = Arc::new(
             RdfStore::new()

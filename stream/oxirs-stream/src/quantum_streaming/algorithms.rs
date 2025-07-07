@@ -18,6 +18,12 @@ pub struct QuantumAlgorithmSuite {
     pub quantum_walk_graph: HashMap<String, Vec<String>>,
 }
 
+impl Default for QuantumAlgorithmSuite {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumAlgorithmSuite {
     /// Create a new quantum algorithm suite
     pub fn new() -> Self {
@@ -56,13 +62,13 @@ impl QuantumAlgorithmSuite {
                 predicate,
                 object,
                 ..
-            } => format!("{} {} {}", subject, predicate, object).contains(target_pattern),
+            } => format!("{subject} {predicate} {object}").contains(target_pattern),
             StreamEvent::TripleRemoved {
                 subject,
                 predicate,
                 object,
                 ..
-            } => format!("{} {} {}", subject, predicate, object).contains(target_pattern),
+            } => format!("{subject} {predicate} {object}").contains(target_pattern),
             _ => false,
         })
     }

@@ -3,7 +3,7 @@
 //! Definitions for different types of indexes and their positions.
 
 /// Index type specification for optimization
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IndexType {
     /// Primary SPOC index (Subject, Predicate, Object, Context)
     SPOC,
@@ -31,6 +31,15 @@ pub enum IndexType {
     PredicateObject,
     SubjectObject,
     FullText,
+    SubjectIndex,
+    PredicateIndex,
+    ObjectIndex,
+
+    // Legacy alias variants for compatibility
+    SubjectPredicateIndex,
+    PredicateObjectIndex,
+    SubjectObjectIndex,
+    FullIndex,
 
     // Advanced index types for enhanced optimization
     BTreeIndex(IndexPosition),
@@ -46,7 +55,7 @@ pub enum IndexType {
 }
 
 /// Index position specification
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum IndexPosition {
     Subject,
     Predicate,

@@ -217,7 +217,7 @@ pub mod data_loader {
         content.push_str("subject\tpredicate\tobject\n");
 
         for (subject, predicate, object) in triples {
-            content.push_str(&format!("{}\t{}\t{}\n", subject, predicate, object));
+            content.push_str(&format!("{subject}\t{predicate}\t{object}\n"));
         }
 
         fs::write(file_path, content)?;
@@ -238,7 +238,7 @@ pub mod data_loader {
                 "predicate": predicate,
                 "object": object
             });
-            writeln!(file, "{}", json)?;
+            writeln!(file, "{json}")?;
         }
 
         Ok(())
@@ -343,25 +343,27 @@ pub mod dataset_splitter {
         val_ratio: f64,
         seed: Option<u64>,
     ) -> Result<DatasetSplit> {
-        // Group triples by entities
-        let mut entity_triples: HashMap<String, Vec<(String, String, String)>> = HashMap::new();
+        // Group triples by entities with pre-allocated capacity for better performance
+        let mut entity_triples: HashMap<String, Vec<(String, String, String)>> =
+            HashMap::with_capacity(triples.len() / 2); // Estimate capacity
 
-        for triple in triples {
-            let entities = vec![&triple.0, &triple.2];
+        for triple in &triples {
+            let entities = [&triple.0, &triple.2];
             for entity in entities {
                 entity_triples
                     .entry(entity.clone())
-                    .or_default()
+                    .or_insert_with(Vec::new)
                     .push(triple.clone());
             }
         }
 
-        // Split entities first, then assign triples
+        // Split entities first, then assign triples - optimized allocation
         let entities: Vec<String> = entity_triples.keys().cloned().collect();
+        let dummy_string = "dummy".to_string();
         let entity_split = split_dataset(
             entities
                 .into_iter()
-                .map(|e| (e.clone(), "dummy".to_string(), "dummy".to_string()))
+                .map(|e| (e, dummy_string.clone(), dummy_string.clone()))
                 .collect(),
             train_ratio,
             val_ratio,
@@ -378,18 +380,19 @@ pub mod dataset_splitter {
         let test_entities: HashSet<String> =
             entity_split.test.into_iter().map(|(e, _, _)| e).collect();
 
-        // Assign triples based on entity membership
-        let mut train_triples = Vec::new();
-        let mut val_triples = Vec::new();
-        let mut test_triples = Vec::new();
+        // Assign triples based on entity membership with pre-allocated capacity
+        let estimated_capacity = triples.len() / 3;
+        let mut train_triples = Vec::with_capacity(estimated_capacity);
+        let mut val_triples = Vec::with_capacity(estimated_capacity);
+        let mut test_triples = Vec::with_capacity(estimated_capacity);
 
-        for (entity, triples) in entity_triples {
+        for (entity, entity_triple_list) in entity_triples {
             if train_entities.contains(&entity) {
-                train_triples.extend(triples);
+                train_triples.extend(entity_triple_list);
             } else if val_entities.contains(&entity) {
-                val_triples.extend(triples);
+                val_triples.extend(entity_triple_list);
             } else if test_entities.contains(&entity) {
-                test_triples.extend(triples);
+                test_triples.extend(entity_triple_list);
             }
         }
 
@@ -593,11 +596,16 @@ pub struct SimilarityStats {
 pub mod graph_analysis {
     use super::*;
 
-    /// Compute graph metrics for knowledge graph
+    /// Compute graph metrics for knowledge graph - optimized for performance
     pub fn compute_graph_metrics(triples: &[(String, String, String)]) -> GraphMetrics {
-        let mut entity_degrees: HashMap<String, usize> = HashMap::new();
-        let mut relation_counts: HashMap<String, usize> = HashMap::new();
-        let mut entities = HashSet::new();
+        // Pre-allocate with estimated capacity for better performance
+        let estimated_entities = triples.len(); // Conservative estimate
+        let estimated_relations = triples.len() / 10; // Rough estimate
+
+        let mut entity_degrees: HashMap<String, usize> = HashMap::with_capacity(estimated_entities);
+        let mut relation_counts: HashMap<String, usize> =
+            HashMap::with_capacity(estimated_relations);
+        let mut entities = HashSet::with_capacity(estimated_entities);
 
         for (subject, predicate, object) in triples {
             entities.insert(subject.clone());
@@ -1204,7 +1212,7 @@ pub mod convenience {
                     added_count += 1;
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to parse triple '{}': {}", triple_str, e);
+                    eprintln!("Warning: Failed to parse triple '{triple_str}': {e}");
                 }
             }
         }
@@ -1247,10 +1255,10 @@ pub mod convenience {
         let mut rng = thread_rng();
         let mut triples = Vec::new();
 
-        let entities: Vec<String> = (0..num_entities).map(|i| format!("entity_{}", i)).collect();
+        let entities: Vec<String> = (0..num_entities).map(|i| format!("entity_{i}")).collect();
 
         let relations: Vec<String> = (0..num_relations)
-            .map(|i| format!("relation_{}", i))
+            .map(|i| format!("relation_{i}"))
             .collect();
 
         // Generate random triples
@@ -1291,6 +1299,156 @@ pub mod convenience {
         );
 
         duration
+    }
+}
+
+/// Advanced performance utilities for embedding operations
+pub mod performance_utils {
+    use super::*;
+    use std::time::Instant;
+
+    /// Memory-efficient batch processor for large datasets
+    pub struct BatchProcessor<T> {
+        batch_size: usize,
+        current_batch: Vec<T>,
+        processor_fn: Box<dyn Fn(&[T]) -> Result<()> + Send + Sync>,
+    }
+
+    impl<T> BatchProcessor<T> {
+        pub fn new<F>(batch_size: usize, processor_fn: F) -> Self
+        where
+            F: Fn(&[T]) -> Result<()> + Send + Sync + 'static,
+        {
+            Self {
+                batch_size,
+                current_batch: Vec::with_capacity(batch_size),
+                processor_fn: Box::new(processor_fn),
+            }
+        }
+
+        pub fn add(&mut self, item: T) -> Result<()> {
+            self.current_batch.push(item);
+            if self.current_batch.len() >= self.batch_size {
+                return self.flush();
+            }
+            Ok(())
+        }
+
+        pub fn flush(&mut self) -> Result<()> {
+            if !self.current_batch.is_empty() {
+                (self.processor_fn)(&self.current_batch)?;
+                self.current_batch.clear();
+            }
+            Ok(())
+        }
+    }
+
+    /// Enhanced memory monitoring for embedding operations
+    #[derive(Debug, Clone)]
+    pub struct MemoryMonitor {
+        peak_usage: usize,
+        current_usage: usize,
+        allocations: usize,
+        deallocations: usize,
+    }
+
+    impl MemoryMonitor {
+        pub fn new() -> Self {
+            Self {
+                peak_usage: 0,
+                current_usage: 0,
+                allocations: 0,
+                deallocations: 0,
+            }
+        }
+
+        pub fn record_allocation(&mut self, size: usize) {
+            self.current_usage += size;
+            self.allocations += 1;
+            if self.current_usage > self.peak_usage {
+                self.peak_usage = self.current_usage;
+            }
+        }
+
+        pub fn record_deallocation(&mut self, size: usize) {
+            self.current_usage = self.current_usage.saturating_sub(size);
+            self.deallocations += 1;
+        }
+
+        pub fn peak_usage(&self) -> usize {
+            self.peak_usage
+        }
+
+        pub fn current_usage(&self) -> usize {
+            self.current_usage
+        }
+
+        pub fn allocation_count(&self) -> usize {
+            self.allocations
+        }
+    }
+
+    impl Default for MemoryMonitor {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+}
+
+/// Parallel processing utilities for embedding operations
+pub mod parallel_utils {
+    use super::*;
+    use rayon::prelude::*;
+
+    /// Parallel computation of embedding similarities
+    pub fn parallel_cosine_similarities(
+        query_embedding: &[f32],
+        candidate_embeddings: &[Vec<f32>],
+    ) -> Result<Vec<f32>> {
+        let similarities: Vec<f32> = candidate_embeddings
+            .par_iter()
+            .map(|embedding| oxirs_vec::similarity::cosine_similarity(query_embedding, embedding))
+            .collect();
+        Ok(similarities)
+    }
+
+    /// Parallel batch processing with configurable thread pool
+    pub fn parallel_batch_process<T, R, F>(
+        items: &[T],
+        batch_size: usize,
+        processor: F,
+    ) -> Result<Vec<R>>
+    where
+        T: Sync,
+        R: Send,
+        F: Fn(&[T]) -> Result<Vec<R>> + Sync,
+    {
+        let results: Result<Vec<Vec<R>>> = items
+            .par_chunks(batch_size)
+            .map(|chunk| processor(chunk))
+            .collect();
+
+        Ok(results?.into_iter().flatten().collect())
+    }
+
+    /// Parallel graph analysis with optimized memory usage
+    pub fn parallel_entity_frequencies(
+        triples: &[(String, String, String)],
+    ) -> HashMap<String, usize> {
+        let entity_counts: HashMap<String, usize> = triples
+            .par_iter()
+            .fold(HashMap::new, |mut acc, (subject, _predicate, object)| {
+                *acc.entry(subject.clone()).or_insert(0) += 1;
+                *acc.entry(object.clone()).or_insert(0) += 1;
+                acc
+            })
+            .reduce(HashMap::new, |mut acc1, acc2| {
+                for (entity, count) in acc2 {
+                    *acc1.entry(entity).or_insert(0) += count;
+                }
+                acc1
+            });
+        entity_counts
     }
 }
 

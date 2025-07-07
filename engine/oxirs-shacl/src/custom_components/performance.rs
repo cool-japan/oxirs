@@ -3,7 +3,6 @@
 //! This module provides comprehensive performance tracking, metrics collection,
 //! and analysis capabilities for custom constraint components.
 
-use crate::ConstraintComponentId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};

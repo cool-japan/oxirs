@@ -7,6 +7,10 @@ use crossbeam_epoch::{self as epoch, Atomic, Guard, Owned, Shared};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
+/// Type alias for compare-exchange result
+type CompareExchangeResult<'g, T> =
+    Result<Shared<'g, VersionedNode<T>>, (Shared<'g, VersionedNode<T>>, Owned<VersionedNode<T>>)>;
+
 /// A thread-local epoch tracker for safe memory reclamation
 pub struct EpochManager {
     /// The global epoch counter
@@ -91,8 +95,7 @@ impl<T> VersionedPointer<T> {
         current: Shared<'g, VersionedNode<T>>,
         new: Owned<VersionedNode<T>>,
         guard: &'g Guard,
-    ) -> Result<Shared<'g, VersionedNode<T>>, (Shared<'g, VersionedNode<T>>, Owned<VersionedNode<T>>)>
-    {
+    ) -> CompareExchangeResult<'g, T> {
         match self
             .ptr
             .compare_exchange(current, new, Ordering::Release, Ordering::Acquire, guard)

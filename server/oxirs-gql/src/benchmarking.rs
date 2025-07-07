@@ -5,11 +5,10 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::ast::Document;
 use crate::distributed_cache::{CacheConfig, GraphQLQueryCache};
@@ -314,14 +313,14 @@ impl PerformanceBenchmarkSuite {
         let mut response_times = Vec::new();
         let mut successful_requests = 0;
         let mut failed_requests = 0;
-        let mut total_bytes_sent = 0u64;
-        let mut total_bytes_received = 0u64;
+        let mut _total_bytes_sent = 0u64;
+        let mut _total_bytes_received = 0u64;
 
         let test_start = Instant::now();
 
         // Create concurrent workers
         let mut tasks = Vec::new();
-        for user_id in 0..self.config.concurrent_users {
+        for _user_id in 0..self.config.concurrent_users {
             let queries_clone = queries.clone();
             let strategy_clone = strategy.clone();
 
@@ -406,7 +405,7 @@ impl PerformanceBenchmarkSuite {
                 }
             }
             OptimizationStrategy::Quantum => {
-                if let Some(quantum_optimizer) = &self.quantum_optimizer {
+                if let Some(_quantum_optimizer) = &self.quantum_optimizer {
                     // Simulate quantum optimization (simplified)
                     Ok(serde_json::json!({"data": {"result": "quantum_optimized"}}))
                 } else {
@@ -439,8 +438,6 @@ impl PerformanceBenchmarkSuite {
 
     /// Generate test queries for a scenario
     fn generate_test_queries(&self, scenario: &TestScenario, count: usize) -> Vec<Document> {
-        use crate::ast::*;
-
         let mut queries = Vec::new();
 
         for i in 0..count {
@@ -600,14 +597,15 @@ impl PerformanceBenchmarkSuite {
 
         // Get cache statistics if available
         let cache_hit_rate = if let Some(cache) = &self.cache {
-            if let Ok(stats) = cache.get_stats().await {
-                if (stats.hits + stats.misses) > 0 {
-                    (stats.hits as f64 / (stats.hits + stats.misses) as f64) * 100.0
-                } else {
-                    0.0
+            match cache.get_stats().await {
+                Ok(stats) => {
+                    if (stats.hits + stats.misses) > 0 {
+                        (stats.hits as f64 / (stats.hits + stats.misses) as f64) * 100.0
+                    } else {
+                        0.0
+                    }
                 }
-            } else {
-                0.0
+                _ => 0.0,
             }
         } else {
             0.0

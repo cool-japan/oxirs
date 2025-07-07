@@ -14,7 +14,7 @@ use oxirs_core::{model::Term, Store};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use super::performance::{ComponentExecutionContext, ExecutionMetrics};
+use super::performance::ExecutionMetrics;
 use super::security::SecurityViolation;
 
 /// Custom constraint implementation
@@ -127,9 +127,8 @@ impl CustomConstraint {
                 ShaclError::ConstraintValidation("Pattern parameter required".to_string())
             })?;
 
-        let regex = regex::Regex::new(pattern).map_err(|e| {
-            ShaclError::ConstraintValidation(format!("Invalid regex pattern: {}", e))
-        })?;
+        let regex = regex::Regex::new(pattern)
+            .map_err(|e| ShaclError::ConstraintValidation(format!("Invalid regex pattern: {e}")))?;
 
         for value in &context.values {
             if let Term::Literal(lit) = value {
@@ -177,7 +176,7 @@ impl CustomConstraint {
                             if num < min_num {
                                 return Ok(ConstraintEvaluationResult::violated(
                                     Some(value.clone()),
-                                    Some(format!("Value {} is less than minimum {}", num, min_num)),
+                                    Some(format!("Value {num} is less than minimum {min_num}")),
                                 ));
                             }
                         }
@@ -188,10 +187,7 @@ impl CustomConstraint {
                             if num > max_num {
                                 return Ok(ConstraintEvaluationResult::violated(
                                     Some(value.clone()),
-                                    Some(format!(
-                                        "Value {} is greater than maximum {}",
-                                        num, max_num
-                                    )),
+                                    Some(format!("Value {num} is greater than maximum {max_num}")),
                                 ));
                             }
                         }
@@ -220,7 +216,7 @@ impl CustomConstraint {
                     if !self.is_valid_url(url_str) {
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
-                            Some(format!("'{}' is not a valid URL", url_str)),
+                            Some(format!("'{url_str}' is not a valid URL")),
                         ));
                     }
                 }
@@ -229,7 +225,7 @@ impl CustomConstraint {
                     if !self.is_valid_url(url_str) {
                         return Ok(ConstraintEvaluationResult::violated(
                             Some(value.clone()),
-                            Some(format!("'{}' is not a valid URL", url_str)),
+                            Some(format!("'{url_str}' is not a valid URL")),
                         ));
                     }
                 }
@@ -260,7 +256,7 @@ impl CustomConstraint {
                 if !regex.is_match(email) {
                     return Ok(ConstraintEvaluationResult::violated(
                         Some(value.clone()),
-                        Some(format!("'{}' is not a valid email address", email)),
+                        Some(format!("'{email}' is not a valid email address")),
                     ));
                 }
             } else {
@@ -347,8 +343,7 @@ impl CompositeConstraint {
                     Ok(ConstraintEvaluationResult::violated(
                         None,
                         Some(format!(
-                            "Multiple constraints ({}) satisfied in XOR composition",
-                            satisfied_count
+                            "Multiple constraints ({satisfied_count}) satisfied in XOR composition"
                         )),
                     ))
                 }
@@ -367,8 +362,7 @@ impl CompositeConstraint {
                             Ok(ConstraintEvaluationResult::violated(
                                 None,
                                 Some(format!(
-                                    "Only {} of {} constraints satisfied (majority required)",
-                                    satisfied_count, total_count
+                                    "Only {satisfied_count} of {total_count} constraints satisfied (majority required)"
                                 )),
                             ))
                         }
@@ -384,8 +378,7 @@ impl CompositeConstraint {
                         Ok(ConstraintEvaluationResult::satisfied())
                     }
                     _ => Err(ShaclError::Configuration(format!(
-                        "Unknown custom composition logic: {}",
-                        custom_logic
+                        "Unknown custom composition logic: {custom_logic}"
                     ))),
                 }
             }

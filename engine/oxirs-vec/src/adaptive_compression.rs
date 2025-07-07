@@ -5,12 +5,12 @@
 
 use crate::{
     compression::{create_compressor, CompressionMethod, VectorCompressor},
-    Vector, VectorData, VectorError,
+    Vector, VectorError,
 };
 use anyhow::Result;
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, Instant};
 
 // Add rand dependency for exploration
 extern crate rand;
@@ -375,7 +375,7 @@ impl VectorStats {
 
     /// Detect vector domain based on statistical patterns
     fn detect_domain(
-        values: &[f32],
+        _values: &[f32],
         entropy: f32,
         sparsity: f32,
         correlation: f32,
@@ -560,6 +560,12 @@ pub struct MultiLevelCompression {
     pub thresholds: Vec<f32>, // Quality thresholds for each level
 }
 
+impl Default for MultiLevelCompression {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiLevelCompression {
     pub fn new() -> Self {
         Self {
@@ -693,7 +699,7 @@ impl AdaptiveCompressor {
         vector: &Vector,
         method: &CompressionMethod,
     ) -> Result<Vec<u8>, VectorError> {
-        let method_key = format!("{:?}", method);
+        let method_key = format!("{method:?}");
         let compressor = self.get_or_create_compressor(method)?;
 
         let start_time = Instant::now();
@@ -798,7 +804,7 @@ impl AdaptiveCompressor {
         &self,
         method: &CompressionMethod,
     ) -> Result<Box<dyn VectorCompressor>, VectorError> {
-        let method_key = format!("{:?}", method);
+        let method_key = format!("{method:?}");
 
         {
             let cache = self.compressor_cache.read().unwrap();
@@ -813,7 +819,7 @@ impl AdaptiveCompressor {
 
         // Cache it (though we can't use it directly due to trait object limitations)
         {
-            let mut cache = self.compressor_cache.write().unwrap();
+            let _cache = self.compressor_cache.write().unwrap();
             // Note: This is a placeholder for caching logic
             // In practice, we might need to redesign this for trait objects
         }
@@ -855,7 +861,7 @@ impl AdaptiveCompressor {
     fn should_explore(&self) -> bool {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        rng.gen::<f32>() < self.exploration_rate
+        rng.r#gen::<f32>() < self.exploration_rate
     }
 
     fn get_alternative_method(&self, current: &CompressionMethod) -> CompressionMethod {
@@ -868,7 +874,7 @@ impl AdaptiveCompressor {
                     CompressionMethod::Pca { components: 16 }
                 }
             }
-            CompressionMethod::Pca { components } => CompressionMethod::Zstd { level: 6 },
+            CompressionMethod::Pca { components: _ } => CompressionMethod::Zstd { level: 6 },
             CompressionMethod::Zstd { level } => {
                 if *level < 15 {
                     CompressionMethod::Zstd { level: level + 3 }
@@ -916,6 +922,83 @@ impl AdaptiveCompressor {
 impl Default for AdaptiveCompressor {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Domain-specific compression profiles
+pub struct CompressionProfiles {
+    profiles: HashMap<VectorDomain, CompressionPriorities>,
+}
+
+impl Default for CompressionProfiles {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl CompressionProfiles {
+    pub fn new() -> Self {
+        let mut profiles = HashMap::new();
+
+        // Text embeddings: balance compression and quality
+        profiles.insert(
+            VectorDomain::TextEmbeddings,
+            CompressionPriorities {
+                compression_weight: 0.3,
+                speed_weight: 0.4,
+                accuracy_weight: 0.3,
+            },
+        );
+
+        // Image features: favor compression due to redundancy
+        profiles.insert(
+            VectorDomain::ImageFeatures,
+            CompressionPriorities {
+                compression_weight: 0.5,
+                speed_weight: 0.2,
+                accuracy_weight: 0.3,
+            },
+        );
+
+        // Knowledge graph: favor accuracy
+        profiles.insert(
+            VectorDomain::KnowledgeGraph,
+            CompressionPriorities {
+                compression_weight: 0.2,
+                speed_weight: 0.3,
+                accuracy_weight: 0.5,
+            },
+        );
+
+        // Time series: balance speed and accuracy
+        profiles.insert(
+            VectorDomain::TimeSeriesData,
+            CompressionPriorities {
+                compression_weight: 0.3,
+                speed_weight: 0.4,
+                accuracy_weight: 0.3,
+            },
+        );
+
+        // Audio features: favor compression
+        profiles.insert(
+            VectorDomain::AudioFeatures,
+            CompressionPriorities {
+                compression_weight: 0.4,
+                speed_weight: 0.3,
+                accuracy_weight: 0.3,
+            },
+        );
+
+        Self { profiles }
+    }
+
+    pub fn get_profile(&self, domain: &VectorDomain) -> CompressionPriorities {
+        self.profiles.get(domain).cloned().unwrap_or_default()
+    }
+
+    pub fn update_profile(&mut self, domain: VectorDomain, priorities: CompressionPriorities) {
+        self.profiles.insert(domain, priorities);
     }
 }
 
@@ -998,76 +1081,5 @@ mod tests {
         let stats = VectorStats::from_vectors(&vectors).unwrap();
         assert_eq!(stats.dimensions, 2);
         assert!(stats.mean > 0.0);
-    }
-}
-
-/// Domain-specific compression profiles
-pub struct CompressionProfiles {
-    profiles: HashMap<VectorDomain, CompressionPriorities>,
-}
-
-impl CompressionProfiles {
-    pub fn new() -> Self {
-        let mut profiles = HashMap::new();
-
-        // Text embeddings: balance compression and quality
-        profiles.insert(
-            VectorDomain::TextEmbeddings,
-            CompressionPriorities {
-                compression_weight: 0.3,
-                speed_weight: 0.4,
-                accuracy_weight: 0.3,
-            },
-        );
-
-        // Image features: favor compression due to redundancy
-        profiles.insert(
-            VectorDomain::ImageFeatures,
-            CompressionPriorities {
-                compression_weight: 0.5,
-                speed_weight: 0.2,
-                accuracy_weight: 0.3,
-            },
-        );
-
-        // Knowledge graph: favor accuracy
-        profiles.insert(
-            VectorDomain::KnowledgeGraph,
-            CompressionPriorities {
-                compression_weight: 0.2,
-                speed_weight: 0.3,
-                accuracy_weight: 0.5,
-            },
-        );
-
-        // Time series: balance speed and accuracy
-        profiles.insert(
-            VectorDomain::TimeSeriesData,
-            CompressionPriorities {
-                compression_weight: 0.3,
-                speed_weight: 0.4,
-                accuracy_weight: 0.3,
-            },
-        );
-
-        // Audio features: favor compression
-        profiles.insert(
-            VectorDomain::AudioFeatures,
-            CompressionPriorities {
-                compression_weight: 0.4,
-                speed_weight: 0.3,
-                accuracy_weight: 0.3,
-            },
-        );
-
-        Self { profiles }
-    }
-
-    pub fn get_profile(&self, domain: &VectorDomain) -> CompressionPriorities {
-        self.profiles.get(domain).cloned().unwrap_or_default()
-    }
-
-    pub fn update_profile(&mut self, domain: VectorDomain, priorities: CompressionPriorities) {
-        self.profiles.insert(domain, priorities);
     }
 }

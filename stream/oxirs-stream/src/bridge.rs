@@ -12,12 +12,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{broadcast, mpsc, RwLock};
+use tokio::sync::{broadcast, RwLock};
 use tokio::time::interval;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-
-use crate::{EventMetadata, StreamConfig, StreamConsumer, StreamEvent, StreamProducer};
 
 /// Message queue bridge manager
 pub struct MessageBridgeManager {
@@ -351,8 +349,10 @@ pub enum RuleAction {
 #[derive(Debug, Clone, PartialEq)]
 enum BridgeStatus {
     Active,
+    #[allow(dead_code)]
     Paused,
     Stopped,
+    #[allow(dead_code)]
     Failed { reason: String },
 }
 
@@ -388,7 +388,7 @@ impl Default for BridgeConfig {
 
 /// Bridge statistics
 #[derive(Debug, Clone, Default)]
-struct BridgeStatistics {
+pub struct BridgeStatistics {
     /// Messages received
     pub messages_received: u64,
     /// Messages sent
@@ -479,9 +479,9 @@ pub struct ExternalMessage {
 /// Routing engine
 struct RoutingEngine {
     /// Global routing rules
-    global_rules: Arc<RwLock<Vec<RoutingRule>>>,
+    _global_rules: Arc<RwLock<Vec<RoutingRule>>>,
     /// Bridge-specific rules cache
-    rule_cache: Arc<RwLock<HashMap<String, Vec<RoutingRule>>>>,
+    _rule_cache: Arc<RwLock<HashMap<String, Vec<RoutingRule>>>>,
 }
 
 impl MessageBridgeManager {
@@ -1057,8 +1057,8 @@ impl RoutingEngine {
     /// Create a new routing engine
     fn new() -> Self {
         Self {
-            global_rules: Arc::new(RwLock::new(Vec::new())),
-            rule_cache: Arc::new(RwLock::new(HashMap::new())),
+            _global_rules: Arc::new(RwLock::new(Vec::new())),
+            _rule_cache: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -1084,6 +1084,7 @@ impl RoutingEngine {
     }
 
     /// Evaluate a rule condition
+    #[allow(clippy::only_used_in_recursion)]
     fn evaluate_condition<'a>(
         &'a self,
         condition: &'a RuleCondition,

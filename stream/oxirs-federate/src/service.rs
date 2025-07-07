@@ -120,6 +120,8 @@ pub enum ServiceCapability {
     ProjectionPushdown,
     /// Service supports aggregation operations
     Aggregation,
+    /// Service supports vector similarity search
+    VectorSearch,
 }
 
 /// Authentication type enumeration
@@ -292,6 +294,14 @@ impl ServiceRegistry {
     /// Register a new federated service
     pub async fn register(&mut self, service: FederatedService) -> Result<()> {
         info!("Registering federated service: {}", service.id);
+
+        // Check if service already exists
+        if self.services.contains_key(&service.id) {
+            return Err(anyhow!(
+                "Service with ID '{}' already registered",
+                service.id
+            ));
+        }
 
         // Validate service configuration
         service.validate()?;
@@ -1532,7 +1542,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_capability_filtering() {
-        let mut registry = ServiceRegistry::new();
+        // Create registry with fast test configuration
+        let config = ServiceRegistryConfig {
+            require_healthy_on_register: false,
+            health_check_interval: Duration::from_secs(1),
+            service_timeout: Duration::from_millis(100), // Very short timeout for tests
+            max_retry_attempts: 1,
+            enable_capability_detection: false, // Disable to speed up tests
+            connection_pool_size: 1,
+            enable_rate_limiting: false,
+        };
+        let mut registry = ServiceRegistry::with_config(config);
 
         let sparql_service = FederatedService::new_sparql(
             "sparql-service".to_string(),
@@ -1546,7 +1566,7 @@ mod tests {
             "http://example.com/graphql".to_string(),
         );
 
-        // Note: These will fail health checks but we're testing capability filtering
+        // Register services with fast timeout - they won't be healthy but will be registered
         let _ = registry.register(sparql_service).await;
         let _ = registry.register(graphql_service).await;
 
@@ -1555,10 +1575,9 @@ mod tests {
         let graphql_services =
             registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
 
-        // Services may not register due to health check failures in test environment
-        // Focus on testing the filtering logic itself
-        assert!(sparql_services.len() <= 1);
-        assert!(graphql_services.len() <= 1);
+        // Test the actual filtering logic
+        assert_eq!(sparql_services.len(), 1);
+        assert_eq!(graphql_services.len(), 1);
     }
 
     #[tokio::test]

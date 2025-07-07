@@ -1,5 +1,5 @@
 //! PyO3 Python Bindings for OxiRS Rule Engine
-//! 
+//!
 //! This module provides comprehensive Python bindings for the OxiRS rule-based reasoning engine,
 //! enabling seamless integration with Python AI/ML pipelines and knowledge graph workflows.
 
@@ -76,42 +76,42 @@ impl PyRuleEngine {
     #[pyo3(signature = (config = None, **kwargs))]
     fn new(config: Option<&PyDict>, kwargs: Option<&PyDict>) -> PyResult<Self> {
         let mut reasoning_config = ReasoningConfig::default();
-        
+
         // Parse configuration from Python dict
         if let Some(config_dict) = config {
             if let Some(forward) = config_dict.get_item("enable_forward_chaining")? {
                 reasoning_config.enable_forward_chaining = forward.extract()?;
             }
-            
+
             if let Some(backward) = config_dict.get_item("enable_backward_chaining")? {
                 reasoning_config.enable_backward_chaining = backward.extract()?;
             }
-            
+
             if let Some(rdfs) = config_dict.get_item("enable_rdfs_reasoning")? {
                 reasoning_config.enable_rdfs_reasoning = rdfs.extract()?;
             }
-            
+
             if let Some(owl) = config_dict.get_item("enable_owl_reasoning")? {
                 reasoning_config.enable_owl_reasoning = owl.extract()?;
             }
-            
+
             if let Some(swrl) = config_dict.get_item("enable_swrl")? {
                 reasoning_config.enable_swrl = swrl.extract()?;
             }
-            
+
             if let Some(rete) = config_dict.get_item("enable_rete_network")? {
                 reasoning_config.enable_rete_network = rete.extract()?;
             }
-            
+
             if let Some(max_iter) = config_dict.get_item("max_iterations")? {
                 reasoning_config.max_iterations = max_iter.extract()?;
             }
-            
+
             if let Some(timeout_ms) = config_dict.get_item("timeout_ms")? {
                 let timeout: u64 = timeout_ms.extract()?;
                 reasoning_config.timeout = Some(Duration::from_millis(timeout));
             }
-            
+
             if let Some(debug) = config_dict.get_item("enable_debugging")? {
                 reasoning_config.enable_debugging = debug.extract()?;
             }
@@ -133,7 +133,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (rule_text, rule_format = "datalog", **kwargs))]
     fn add_rule(&self, rule_text: &str, rule_format: &str, kwargs: Option<&PyDict>) -> PyResult<()> {
         let mut engine = self.engine.write().unwrap();
-        
+
         engine.add_rule_from_text(rule_text, rule_format)
             .map_err(|e| PyErr::new::<RuleParsingError, _>(e.to_string()))?;
 
@@ -144,7 +144,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (file_path, rule_format = "datalog", **kwargs))]
     fn add_rules_from_file(&self, file_path: &str, rule_format: &str, kwargs: Option<&PyDict>) -> PyResult<usize> {
         let mut engine = self.engine.write().unwrap();
-        
+
         let rules_count = engine.load_rules_from_file(file_path, rule_format)
             .map_err(|e| PyErr::new::<RuleParsingError, _>(e.to_string()))?;
 
@@ -155,7 +155,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (facts, **kwargs))]
     fn add_facts(&self, facts: Vec<&str>, kwargs: Option<&PyDict>) -> PyResult<()> {
         let mut engine = self.engine.write().unwrap();
-        
+
         for fact_text in facts {
             engine.add_fact_from_text(fact_text)
                 .map_err(|e| PyErr::new::<ReasoningError, _>(e.to_string()))?;
@@ -169,7 +169,7 @@ impl PyRuleEngine {
     fn forward_chain(&self, kwargs: Option<&PyDict>) -> PyResult<PyForwardChainResult> {
         let start_time = Instant::now();
         let engine = self.engine.read().unwrap();
-        
+
         if !self.config.enable_forward_chaining {
             return Err(PyErr::new::<ReasoningError, _>("Forward chaining is disabled"));
         }
@@ -191,7 +191,7 @@ impl PyRuleEngine {
     fn backward_chain(&self, query: &str, kwargs: Option<&PyDict>) -> PyResult<PyBackwardChainResult> {
         let start_time = Instant::now();
         let engine = self.engine.read().unwrap();
-        
+
         if !self.config.enable_backward_chaining {
             return Err(PyErr::new::<ReasoningError, _>("Backward chaining is disabled"));
         }
@@ -213,7 +213,7 @@ impl PyRuleEngine {
     fn rdfs_reasoning(&self, kwargs: Option<&PyDict>) -> PyResult<PyRdfsInferenceResult> {
         let start_time = Instant::now();
         let engine = self.engine.read().unwrap();
-        
+
         if !self.config.enable_rdfs_reasoning {
             return Err(PyErr::new::<ReasoningError, _>("RDFS reasoning is disabled"));
         }
@@ -235,7 +235,7 @@ impl PyRuleEngine {
     fn owl_reasoning(&self, kwargs: Option<&PyDict>) -> PyResult<PyOwlInferenceResult> {
         let start_time = Instant::now();
         let engine = self.engine.read().unwrap();
-        
+
         if !self.config.enable_owl_reasoning {
             return Err(PyErr::new::<ReasoningError, _>("OWL reasoning is disabled"));
         }
@@ -257,7 +257,7 @@ impl PyRuleEngine {
     fn check_consistency(&self, kwargs: Option<&PyDict>) -> PyResult<PyConsistencyResult> {
         let start_time = Instant::now();
         let engine = self.engine.read().unwrap();
-        
+
         let result = engine.check_consistency()
             .map_err(|e| PyErr::new::<ConsistencyError, _>(e.to_string()))?;
 
@@ -275,7 +275,7 @@ impl PyRuleEngine {
     fn query(&self, query: &str, reasoning_type: &str, kwargs: Option<&PyDict>) -> PyResult<PyQueryResult> {
         let start_time = Instant::now();
         let engine = self.engine.read().unwrap();
-        
+
         let result = match reasoning_type {
             "forward" => engine.query_forward(query),
             "backward" => engine.query_backward(query),
@@ -312,7 +312,7 @@ impl PyRuleEngine {
     #[pyo3(signature = (format = "ntriples", **kwargs))]
     fn export_facts(&self, format: &str, kwargs: Option<&PyDict>) -> PyResult<String> {
         let engine = self.engine.read().unwrap();
-        
+
         let facts = engine.export_facts(format)
             .map_err(|e| PyErr::new::<ReasoningError, _>(e.to_string()))?;
 
@@ -928,7 +928,7 @@ fn parse_datalog_rule(rule_text: &str, kwargs: Option<&PyDict>) -> PyResult<PyRu
         body: vec!["premise(X)".to_string()],
         priority: 1.0,
     };
-    
+
     Ok(PyRule { rule })
 }
 
@@ -999,7 +999,7 @@ fn oxirs_rule(py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
     // Add version info
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
-    
+
     // Add feature information
     m.add("__features__", vec![
         "forward_chaining",

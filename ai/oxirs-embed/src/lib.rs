@@ -52,7 +52,7 @@
 //!
 //! // Train the model
 //! let stats = model.train(Some(100)).await?;
-//! println!("Training completed: {:?}", stats);
+//! println!("Training completed: {stats:?}");
 //! # Ok(())
 //! # }
 //! ```
@@ -292,7 +292,7 @@ impl Add for &Vector {
 
     fn add(self, other: &Vector) -> Vector {
         // Use the sophisticated vector addition from oxirs-vec
-        if let (Some(ref self_inner), Some(ref other_inner)) = (&self.inner, &other.inner) {
+        if let (Some(self_inner), Some(other_inner)) = (&self.inner, &other.inner) {
             if let Ok(result) = self_inner.add(other_inner) {
                 return Vector::from_vec_vector(result);
             }
@@ -318,7 +318,7 @@ impl Sub for &Vector {
 
     fn sub(self, other: &Vector) -> Vector {
         // Use the sophisticated vector subtraction from oxirs-vec
-        if let (Some(ref self_inner), Some(ref other_inner)) = (&self.inner, &other.inner) {
+        if let (Some(self_inner), Some(other_inner)) = (&self.inner, &other.inner) {
             if let Ok(result) = self_inner.subtract(other_inner) {
                 return Vector::from_vec_vector(result);
             }
@@ -721,7 +721,7 @@ pub mod quick_start {
             if s.starts_with("http://") || s.starts_with("https://") {
                 s.to_string()
             } else {
-                format!("http://example.org/{}", s)
+                format!("http://example.org/{s}")
             }
         };
 
@@ -778,11 +778,11 @@ pub mod quick_start {
         let mut triples = Vec::new();
 
         let entities: Vec<String> = (0..num_entities)
-            .map(|i| format!("http://example.org/entity_{}", i))
+            .map(|i| format!("http://example.org/entity_{i}"))
             .collect();
 
         let relations: Vec<String> = (0..num_relations)
-            .map(|i| format!("http://example.org/relation_{}", i))
+            .map(|i| format!("http://example.org/relation_{i}"))
             .collect();
 
         // Generate random triples (avoid self-loops)
@@ -815,10 +815,7 @@ pub mod quick_start {
         let duration = start.elapsed();
 
         println!(
-            "Performance test '{}': {} iterations in {:?} ({:.2} ops/sec)",
-            name,
-            iterations,
-            duration,
+            "Performance test '{name}': {iterations} iterations in {duration:?} ({:.2} ops/sec)",
             iterations as f64 / duration.as_secs_f64()
         );
 

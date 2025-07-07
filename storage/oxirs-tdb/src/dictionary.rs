@@ -3,7 +3,7 @@
 //! High-performance string dictionary implementation with automatic garbage collection,
 //! reference counting, and memory management for efficient RDF term storage.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock, Weak};
@@ -365,7 +365,7 @@ impl InnerDictionary {
 
     fn run_gc(&mut self) {
         let start_time = Instant::now();
-        let initial_count = self.entries.len();
+        let _initial_count = self.entries.len();
 
         let mut to_remove = Vec::new();
 
@@ -602,7 +602,6 @@ impl Clone for StringDictionary {
 mod tests {
     use super::*;
     use std::thread;
-    use std::time::Duration;
 
     #[test]
     fn test_basic_interning() {

@@ -9,10 +9,9 @@
 
 use crate::{similarity::SimilarityMetric, Vector};
 use anyhow::{anyhow, Result};
-use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
 
 /// Clustering algorithm types
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -548,7 +547,7 @@ impl ClusteringEngine {
                 total_distance += min_dist_sq;
             }
 
-            let target = rng.gen::<f32>() * total_distance;
+            let target = rng.r#gen::<f32>() * total_distance;
             let mut cumulative = 0.0;
 
             for (i, &dist) in distances.iter().enumerate() {
@@ -760,8 +759,8 @@ impl ClusteringEngine {
     fn update_distance_matrix(
         &self,
         distance_matrix: &mut Vec<Vec<f32>>,
-        clusters: &[Vec<usize>],
-        merged_cluster: usize,
+        _clusters: &[Vec<usize>],
+        _merged_cluster: usize,
         resources: &[(String, Vector)],
     ) -> Result<()> {
         // Simplified update - could be more efficient
@@ -778,7 +777,7 @@ impl ClusteringEngine {
     ) -> Result<ClusteringQualityMetrics> {
         // Simplified quality metrics - in practice these would be more sophisticated
         let mut within_cluster_ss = 0.0;
-        let mut silhouette_scores = Vec::new();
+        let silhouette_scores = Vec::new();
 
         for cluster in clusters {
             if cluster.members.len() > 1 {

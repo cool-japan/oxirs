@@ -58,6 +58,12 @@ pub struct UltraIndex {
     stats: Arc<IndexStats>,
 }
 
+impl Default for UltraIndex {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UltraIndex {
     /// Create a new ultra index
     pub fn new() -> Self {
@@ -83,25 +89,25 @@ impl UltraIndex {
         // Add to subject index
         self.subject_index
             .entry(quad.subject().clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(id);
 
         // Add to predicate index
         self.predicate_index
             .entry(quad.predicate().clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(id);
 
         // Add to object index
         self.object_index
             .entry(quad.object().clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(id);
 
         // Add to graph index
         self.graph_index
             .entry(quad.graph_name().clone())
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(id);
 
         // Update statistics
@@ -129,50 +135,62 @@ impl UltraIndex {
 
         // Intersect results from each bound term
         if let Some(s) = subject {
-            if let Some(ids_set) = self.subject_index.get(s) {
-                let ids: HashSet<u64> = ids_set.iter().cloned().collect();
-                result_ids = Some(match result_ids {
-                    Some(existing) => existing.intersection(&ids).cloned().collect(),
-                    None => ids,
-                });
-            } else {
-                return Vec::new(); // No matches
+            match self.subject_index.get(s) {
+                Some(ids_set) => {
+                    let ids: HashSet<u64> = ids_set.iter().cloned().collect();
+                    result_ids = Some(match result_ids {
+                        Some(existing) => existing.intersection(&ids).cloned().collect(),
+                        None => ids,
+                    });
+                }
+                _ => {
+                    return Vec::new(); // No matches
+                }
             }
         }
 
         if let Some(p) = predicate {
-            if let Some(ids_set) = self.predicate_index.get(p) {
-                let ids: HashSet<u64> = ids_set.iter().cloned().collect();
-                result_ids = Some(match result_ids {
-                    Some(existing) => existing.intersection(&ids).cloned().collect(),
-                    None => ids,
-                });
-            } else {
-                return Vec::new(); // No matches
+            match self.predicate_index.get(p) {
+                Some(ids_set) => {
+                    let ids: HashSet<u64> = ids_set.iter().cloned().collect();
+                    result_ids = Some(match result_ids {
+                        Some(existing) => existing.intersection(&ids).cloned().collect(),
+                        None => ids,
+                    });
+                }
+                _ => {
+                    return Vec::new(); // No matches
+                }
             }
         }
 
         if let Some(o) = object {
-            if let Some(ids_set) = self.object_index.get(o) {
-                let ids: HashSet<u64> = ids_set.iter().cloned().collect();
-                result_ids = Some(match result_ids {
-                    Some(existing) => existing.intersection(&ids).cloned().collect(),
-                    None => ids,
-                });
-            } else {
-                return Vec::new(); // No matches
+            match self.object_index.get(o) {
+                Some(ids_set) => {
+                    let ids: HashSet<u64> = ids_set.iter().cloned().collect();
+                    result_ids = Some(match result_ids {
+                        Some(existing) => existing.intersection(&ids).cloned().collect(),
+                        None => ids,
+                    });
+                }
+                _ => {
+                    return Vec::new(); // No matches
+                }
             }
         }
 
         if let Some(g) = graph_name {
-            if let Some(ids_set) = self.graph_index.get(g) {
-                let ids: HashSet<u64> = ids_set.iter().cloned().collect();
-                result_ids = Some(match result_ids {
-                    Some(existing) => existing.intersection(&ids).cloned().collect(),
-                    None => ids,
-                });
-            } else {
-                return Vec::new(); // No matches
+            match self.graph_index.get(g) {
+                Some(ids_set) => {
+                    let ids: HashSet<u64> = ids_set.iter().cloned().collect();
+                    result_ids = Some(match result_ids {
+                        Some(existing) => existing.intersection(&ids).cloned().collect(),
+                        None => ids,
+                    });
+                }
+                _ => {
+                    return Vec::new(); // No matches
+                }
             }
         }
 
@@ -209,10 +227,9 @@ impl UltraIndex {
     /// Get memory usage information
     pub fn memory_usage(&self) -> MemoryUsage {
         let arena_usage = {
-            if let Ok(arena) = self.arena.lock() {
-                arena.allocated_bytes()
-            } else {
-                0
+            match self.arena.lock() {
+                Ok(arena) => arena.allocated_bytes(),
+                _ => 0,
             }
         };
 
@@ -451,20 +468,20 @@ impl QuadIndex {
             IndexType::BTree | IndexType::Composite => {
                 self.btree_indexes
                     .entry(key)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(quad.clone());
             }
             IndexType::Hash => {
                 self.hash_indexes
                     .entry(key)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(quad.clone());
             }
             IndexType::FullText => {
                 // For full-text, we'd implement text processing here
                 self.btree_indexes
                     .entry(key)
-                    .or_insert_with(BTreeSet::new)
+                    .or_default()
                     .insert(quad.clone());
             }
         }
@@ -1001,9 +1018,9 @@ mod tests {
 
         // Add some quads
         for i in 0..100 {
-            let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{i}")).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
-            let object = Literal::new(&format!("object{}", i));
+            let object = Literal::new(format!("object{i}"));
             let quad = Quad::new(
                 subject,
                 predicate,

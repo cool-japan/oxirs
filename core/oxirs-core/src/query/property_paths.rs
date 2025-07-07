@@ -189,29 +189,29 @@ impl PropertyPath {
 impl fmt::Display for PropertyPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PropertyPath::Predicate(p) => write!(f, "{}", p),
-            PropertyPath::Inverse(p) => write!(f, "^{}", p),
-            PropertyPath::Sequence(l, r) => write!(f, "{}/{}", l, r),
-            PropertyPath::Alternative(l, r) => write!(f, "{}|{}", l, r),
-            PropertyPath::ZeroOrMore(p) => write!(f, "{}*", p),
-            PropertyPath::OneOrMore(p) => write!(f, "{}+", p),
-            PropertyPath::ZeroOrOne(p) => write!(f, "{}?", p),
+            PropertyPath::Predicate(p) => write!(f, "{p}"),
+            PropertyPath::Inverse(p) => write!(f, "^{p}"),
+            PropertyPath::Sequence(l, r) => write!(f, "{l}/{r}"),
+            PropertyPath::Alternative(l, r) => write!(f, "{l}|{r}"),
+            PropertyPath::ZeroOrMore(p) => write!(f, "{p}*"),
+            PropertyPath::OneOrMore(p) => write!(f, "{p}+"),
+            PropertyPath::ZeroOrOne(p) => write!(f, "{p}?"),
             PropertyPath::NegatedPropertySet(ps) => {
                 write!(f, "!(")?;
                 for (i, p) in ps.iter().enumerate() {
                     if i > 0 {
                         write!(f, "|")?;
                     }
-                    write!(f, "{}", p)?;
+                    write!(f, "{p}")?;
                 }
                 write!(f, ")")
             }
-            PropertyPath::FixedLength(p, n) => write!(f, "{}{{{}}}", p, n),
+            PropertyPath::FixedLength(p, n) => write!(f, "{p}{{{n}}}"),
             PropertyPath::RangeLength(p, min, max) => match max {
-                Some(m) => write!(f, "{}{{{},{}}}", p, min, m),
-                None => write!(f, "{}{{{},}}", p, min),
+                Some(m) => write!(f, "{p}{{{min},{m}}}"),
+                None => write!(f, "{p}{{{min},}}"),
             },
-            PropertyPath::Distinct(p) => write!(f, "DISTINCT({})", p),
+            PropertyPath::Distinct(p) => write!(f, "DISTINCT({p})"),
         }
     }
 }
@@ -297,6 +297,12 @@ pub struct PropertyPathEvaluator {
     distinct_paths: bool,
 }
 
+impl Default for PropertyPathEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PropertyPathEvaluator {
     /// Create a new evaluator with default settings
     pub fn new() -> Self {
@@ -344,6 +350,12 @@ pub struct PropertyPathOptimizer {
     decompose_enabled: bool,
 }
 
+impl Default for PropertyPathOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PropertyPathOptimizer {
     /// Create new optimizer
     pub fn new() -> Self {
@@ -363,6 +375,7 @@ impl PropertyPathOptimizer {
         self.optimize_recursive(path)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn optimize_recursive(&self, path: PropertyPath) -> PropertyPath {
         match path {
             // Optimize p/p to p{2}

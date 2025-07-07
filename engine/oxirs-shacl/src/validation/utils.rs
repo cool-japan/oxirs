@@ -1,7 +1,7 @@
 //! Utility functions for validation operations
 
 use crate::{Result, ShaclError};
-use oxirs_core::model::{Literal, NamedNode, Term};
+use oxirs_core::model::Term;
 use oxirs_core::RdfTerm;
 
 /// Format a term for use in SPARQL queries
@@ -45,7 +45,7 @@ pub fn term_to_sort_key(term: &Term) -> String {
         Term::Literal(literal) => {
             let base = format!("literal:{}", literal.value());
             if let Some(lang) = literal.language() {
-                format!("{}@{}", base, lang)
+                format!("{base}@{lang}")
             } else {
                 let datatype = literal.datatype();
                 format!("{}^^{}", base, datatype.as_str())
@@ -258,10 +258,10 @@ mod tests {
         assert_eq!(parse_numeric_value(&int_literal).unwrap(), 42.0);
 
         let float_literal = Term::Literal(Literal::new_typed(
-            "3.14",
+            "3.15",
             NamedNode::new("http://www.w3.org/2001/XMLSchema#float").unwrap(),
         ));
-        assert!((parse_numeric_value(&float_literal).unwrap() - 3.14).abs() < f64::EPSILON);
+        assert!((parse_numeric_value(&float_literal).unwrap() - 3.15).abs() < f64::EPSILON);
     }
 
     #[test]

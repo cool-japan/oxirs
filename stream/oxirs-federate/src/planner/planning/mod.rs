@@ -445,32 +445,8 @@ impl FederatedQueryPlanner {
                 if let Some(brace_end) = where_clause.rfind('}') {
                     let where_content = &where_clause[brace_start + 1..brace_end];
 
-                    // Extract triple patterns by splitting on '.' and parsing each triple
-                    let statements: Vec<&str> = where_content.split('.').collect();
-                    for statement in statements {
-                        let trimmed = statement.trim();
-                        if !trimmed.is_empty()
-                            && !trimmed.to_uppercase().contains("SERVICE")
-                            && !trimmed.starts_with('}')
-                            && !trimmed.starts_with('{')
-                            && trimmed.contains('?')
-                        {
-                            // Parse the triple pattern (subject predicate object)
-                            let parts: Vec<&str> = trimmed.split_whitespace().collect();
-                            if parts.len() >= 3 {
-                                let subject = parts[0].to_string();
-                                let predicate = parts[1].to_string();
-                                let object = parts[2..].join(" ").trim_end_matches('.').to_string();
-
-                                patterns.push(TriplePattern {
-                                    subject: Some(subject),
-                                    predicate: Some(predicate),
-                                    object: Some(object),
-                                    pattern_string: trimmed.to_string(),
-                                });
-                            }
-                        }
-                    }
+                    // Extract patterns from both regular WHERE clause and SERVICE blocks
+                    self.extract_patterns_recursive(where_content, &mut patterns);
                 }
             }
         }
@@ -503,6 +479,57 @@ impl FederatedQueryPlanner {
             complexity: query.len() as u64 / 10, // Simple complexity estimate
             estimated_cost: query.len() as u64,
         })
+    }
+
+    /// Recursively extract patterns from WHERE clause content, including SERVICE blocks
+    fn extract_patterns_recursive(&self, content: &str, patterns: &mut Vec<TriplePattern>) {
+        // Handle SERVICE blocks
+        let service_regex =
+            regex::Regex::new(r"SERVICE\s+(?:SILENT\s+)?<([^>]+)>\s*\{([^}]+)\}").unwrap();
+        let mut remaining_content = content.to_string();
+
+        // Extract patterns from SERVICE blocks
+        for captures in service_regex.captures_iter(content) {
+            let service_content = &captures[2];
+            // Recursively extract patterns from within the SERVICE block
+            self.extract_simple_patterns(service_content, patterns);
+
+            // Remove the SERVICE block from remaining content to avoid double-processing
+            remaining_content = remaining_content.replace(&captures[0], "");
+        }
+
+        // Extract patterns from remaining content (non-SERVICE patterns)
+        self.extract_simple_patterns(&remaining_content, patterns);
+    }
+
+    /// Extract simple triple patterns from a content string
+    fn extract_simple_patterns(&self, content: &str, patterns: &mut Vec<TriplePattern>) {
+        // Extract triple patterns by splitting on '.' and parsing each triple
+        let statements: Vec<&str> = content.split('.').collect();
+        for statement in statements {
+            let trimmed = statement.trim();
+            if !trimmed.is_empty()
+                && !trimmed.starts_with('}')
+                && !trimmed.starts_with('{')
+                && !trimmed.to_uppercase().starts_with("SERVICE")
+                && trimmed.contains('?')
+            {
+                // Parse the triple pattern (subject predicate object)
+                let parts: Vec<&str> = trimmed.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let subject = parts[0].to_string();
+                    let predicate = parts[1].to_string();
+                    let object = parts[2..].join(" ").trim_end_matches('.').to_string();
+
+                    patterns.push(TriplePattern {
+                        subject: Some(subject),
+                        predicate: Some(predicate),
+                        object: Some(object),
+                        pattern_string: trimmed.to_string(),
+                    });
+                }
+            }
+        }
     }
 
     /// Plan a SPARQL query execution across federated services

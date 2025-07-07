@@ -4,11 +4,11 @@
 //! enabling geographical distribution of RDF storage with intelligent replication,
 //! region-aware leader election, and optimized cross-region communication.
 
-use crate::discovery::{NodeInfo, NodeMetadata};
+use crate::discovery::NodeMetadata;
 use crate::raft::OxirsNodeId;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;

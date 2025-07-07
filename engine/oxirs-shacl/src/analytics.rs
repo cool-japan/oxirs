@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant, SystemTime};
+use std::time::{Duration, SystemTime};
 
 use oxirs_core::{model::Term, RdfTerm};
 
@@ -215,7 +215,7 @@ impl ConstraintPerformanceProfiler {
         let records = self
             .execution_records
             .entry(constraint_id.clone())
-            .or_insert_with(VecDeque::new);
+            .or_default();
         records.push_back(record.clone());
 
         // Maintain size limit
@@ -224,10 +224,7 @@ impl ConstraintPerformanceProfiler {
         }
 
         // Update performance statistics
-        let stats = self
-            .performance_stats
-            .entry(constraint_id)
-            .or_insert_with(ConstraintPerformanceStats::default);
+        let stats = self.performance_stats.entry(constraint_id).or_default();
         stats.update_with_execution(record);
 
         // Update global metrics
@@ -396,7 +393,7 @@ impl MLIntegrationEngine {
 
     fn update_with_session_data(&mut self, session: &ValidationSession) -> Result<()> {
         // Update models with new session data
-        for (_, model) in &mut self.models {
+        for model in self.models.values_mut() {
             model.update_with_session(session)?;
         }
         Ok(())
@@ -560,10 +557,7 @@ impl AnomalyDetector {
 
         // Get or create baseline for this constraint and extract values to avoid borrowing issues
         let (expected_execution_time, expected_memory_usage) = {
-            let baseline = self
-                .baselines
-                .entry(constraint_key.clone())
-                .or_insert_with(StatisticalBaseline::default);
+            let baseline = self.baselines.entry(constraint_key.clone()).or_default();
             (
                 baseline.expected_execution_time,
                 baseline.expected_memory_usage,
@@ -781,7 +775,7 @@ impl AnalyticsDataCollector {
                 };
 
                 serde_json::to_string_pretty(&export_data)
-                    .map_err(|e| ShaclError::ValidationEngine(format!("JSON export error: {}", e)))
+                    .map_err(|e| ShaclError::ValidationEngine(format!("JSON export error: {e}")))
             }
             AnalyticsExportFormat::Csv => {
                 // Simplified CSV export

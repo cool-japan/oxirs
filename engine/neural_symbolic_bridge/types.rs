@@ -406,7 +406,7 @@ impl CompletionCandidate {
         let mut properties = HashMap::new();
         properties.insert("completion".to_string(), self.candidate_value.clone());
         properties.insert("confidence".to_string(), self.confidence.to_string());
-        
+
         SymbolicMatch {
             resource_uri: format!("completion:{}", self.candidate_value),
             properties,
@@ -414,7 +414,7 @@ impl CompletionCandidate {
             certainty: self.confidence,
         }
     }
-    
+
     pub fn to_vector_match(&self) -> VectorMatch {
         VectorMatch {
             resource_uri: format!("completion:{}", self.candidate_value),

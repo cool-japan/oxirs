@@ -389,20 +389,23 @@ impl ShardManager {
         let shard_id = self.get_shard_for_triple(&triple);
 
         // Update local shard if we have it
-        if let Some(shard) = self.local_shards.get_mut(&shard_id) {
-            shard.insert(&triple);
+        match self.local_shards.get_mut(&shard_id) {
+            Some(shard) => {
+                shard.insert(&triple);
 
-            // Update statistics
-            if let Some(mut stats) = self.shard_stats.get_mut(&shard_id) {
-                stats.write_count += 1;
+                // Update statistics
+                if let Some(mut stats) = self.shard_stats.get_mut(&shard_id) {
+                    stats.write_count += 1;
+                }
+
+                // Update metadata
+                self.update_shard_metadata(shard_id, 1, 0);
             }
-
-            // Update metadata
-            self.update_shard_metadata(shard_id, 1, 0);
-        } else {
-            // Forward to remote shard
-            // In a real implementation, would send to remote node
-            return Err(anyhow!("Shard {} not available locally", shard_id));
+            _ => {
+                // Forward to remote shard
+                // In a real implementation, would send to remote node
+                return Err(anyhow!("Shard {} not available locally", shard_id));
+            }
         }
 
         Ok(())

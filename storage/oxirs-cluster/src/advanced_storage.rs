@@ -3,19 +3,18 @@
 //! Production-ready storage backend with atomic writes, crash recovery,
 //! corruption detection, and performance optimization for Raft consensus.
 
-use crate::network::LogEntry;
-use crate::raft::{OxirsNodeId, RdfApp, RdfCommand};
+use crate::raft::OxirsNodeId;
 use crate::serialization::{MessageSerializer, SerializationConfig};
 use crate::storage::{RaftState, SnapshotMetadata, WalEntry, WalOperation};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use lmdb::{Database, DatabaseFlags, Environment, EnvironmentFlags, Transaction, WriteFlags};
-use memmap2::{Mmap, MmapMut, MmapOptions};
+use lmdb::{Database, DatabaseFlags, Environment, Transaction, WriteFlags};
+use memmap2::{Mmap, MmapOptions};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -456,8 +455,8 @@ impl AdvancedStorageBackend {
         fs::create_dir_all(&env_path).await?;
 
         let environment = Environment::new()
-            .set_flags(EnvironmentFlags::NO_SUB_DIR)
             .set_max_readers(1024)
+            .set_max_dbs(16)
             .set_map_size(config.cache_size)
             .open(&env_path)?;
 
@@ -516,11 +515,11 @@ impl AdvancedStorageBackend {
                 WalOperation::WriteRaftState(state) => {
                     self.store_raft_state_internal(state).await?;
                 }
-                WalOperation::WriteAppState(app_state) => {
+                WalOperation::WriteAppState(_app_state) => {
                     // In a full implementation, we would restore application state
                     tracing::debug!("Recovered application state");
                 }
-                WalOperation::CreateSnapshot(metadata) => {
+                WalOperation::CreateSnapshot(_metadata) => {
                     // In a full implementation, we would restore snapshot metadata
                     tracing::debug!("Recovered snapshot metadata");
                 }

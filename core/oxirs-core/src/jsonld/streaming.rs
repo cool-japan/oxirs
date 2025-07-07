@@ -567,7 +567,9 @@ impl UltraStreamingJsonLdParser {
 #[derive(Debug)]
 struct ProcessingChunk {
     data: Vec<u8>,
+    #[allow(dead_code)]
     timestamp: Instant,
+    #[allow(dead_code)]
     sequence_id: usize,
 }
 
@@ -694,6 +696,7 @@ impl BufferPool {
         }
     }
 
+    #[allow(dead_code)]
     fn return_buffer(&self, mut buffer: ZeroCopyBuffer) {
         buffer.reset();
         let mut buffers = self.available_buffers.lock();

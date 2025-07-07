@@ -22,7 +22,10 @@ pub async fn embed_single(
 
     // Get model version
     let model_version = if let Some(version) = request.model_version {
-        version
+        match version.parse::<uuid::Uuid>() {
+            Ok(uuid) => uuid,
+            Err(_) => return Err(StatusCode::BAD_REQUEST),
+        }
     } else {
         // Use production version
         match get_production_model_version(&state).await {
@@ -38,21 +41,23 @@ pub async fn embed_single(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    // Create cached model wrapper
-    let cached_model = CachedEmbeddingModel::new(
-        Box::new(model.as_ref()), // This is not ideal - in real implementation would clone or use Arc
-        Arc::clone(&state.cache_manager),
-    );
-
-    // Generate embedding
+    // Generate embedding with caching
     let use_cache = request.use_cache.unwrap_or(true);
     let (embedding, from_cache) = if use_cache {
-        match cached_model.get_entity_embedding_cached(&request.entity) {
-            Ok(emb) => (
-                emb,
-                state.cache_manager.get_embedding(&request.entity).is_some(),
-            ),
-            Err(_) => return Err(StatusCode::INTERNAL_SERVER_ERROR),
+        // Check cache first
+        if let Some(cached_embedding) = state.cache_manager.get_embedding(&request.entity) {
+            (cached_embedding, true)
+        } else {
+            // Cache miss - get from model and cache result
+            match model.get_entity_embedding(&request.entity) {
+                Ok(emb) => {
+                    state
+                        .cache_manager
+                        .put_embedding(request.entity.clone(), emb.clone());
+                    (emb, false)
+                }
+                Err(_) => return Err(StatusCode::NOT_FOUND),
+            }
         }
     } else {
         match model.get_entity_embedding(&request.entity) {
@@ -63,11 +68,14 @@ pub async fn embed_single(
 
     let generation_time = start_time.elapsed().as_millis() as f64;
 
+    let dimensions = embedding.dimensions;
     let response = EmbeddingResponse {
+        entity_id: request.entity_id.clone(),
         entity: request.entity,
-        embedding: embedding.values,
-        dimensions: embedding.dimensions,
-        model_version,
+        embedding: embedding,
+        dimensions: dimensions,
+        model_id: request.model_id.unwrap_or(model_version),
+        model_version: model_version.to_string(),
         from_cache,
         generation_time_ms: generation_time,
     };
@@ -90,7 +98,10 @@ pub async fn embed_batch(
 
     // Get model version
     let model_version = if let Some(version) = request.model_version {
-        version
+        match version.parse::<uuid::Uuid>() {
+            Ok(uuid) => uuid,
+            Err(_) => return Err(StatusCode::BAD_REQUEST),
+        }
     } else {
         match get_production_model_version(&state).await {
             Ok(version) => version,
@@ -105,9 +116,6 @@ pub async fn embed_batch(
         None => return Err(StatusCode::NOT_FOUND),
     };
 
-    let cached_model =
-        CachedEmbeddingModel::new(Box::new(model.as_ref()), Arc::clone(&state.cache_manager));
-
     let use_cache = request.use_cache.unwrap_or(true);
     let mut embeddings = Vec::new();
     let mut cache_hits = 0;
@@ -118,17 +126,22 @@ pub async fn embed_batch(
         let entity_start = std::time::Instant::now();
 
         let (embedding, from_cache) = if use_cache {
-            let had_cache = state.cache_manager.get_embedding(&entity).is_some();
-            match cached_model.get_entity_embedding_cached(&entity) {
-                Ok(emb) => {
-                    if had_cache {
-                        cache_hits += 1;
-                    } else {
+            // Check cache first
+            if let Some(cached_embedding) = state.cache_manager.get_embedding(&entity) {
+                cache_hits += 1;
+                (cached_embedding, true)
+            } else {
+                // Cache miss - get from model and cache result
+                match model.get_entity_embedding(&entity) {
+                    Ok(emb) => {
+                        state
+                            .cache_manager
+                            .put_embedding(entity.clone(), emb.clone());
                         cache_misses += 1;
+                        (emb, false)
                     }
-                    (emb, had_cache)
+                    Err(_) => continue, // Skip failed embeddings
                 }
-                Err(_) => continue, // Skip failed embeddings
             }
         } else {
             match model.get_entity_embedding(&entity) {
@@ -142,11 +155,14 @@ pub async fn embed_batch(
 
         let generation_time = entity_start.elapsed().as_millis() as f64;
 
+        let dimensions = embedding.dimensions;
         embeddings.push(EmbeddingResponse {
+            entity_id: entity.clone(),
             entity: entity.clone(),
-            embedding: embedding.values,
-            dimensions: embedding.dimensions,
-            model_version,
+            embedding: embedding,
+            dimensions: dimensions,
+            model_id: request.model_id.unwrap_or(model_version),
+            model_version: model_version.to_string(),
             from_cache,
             generation_time_ms: generation_time,
         });
@@ -159,6 +175,7 @@ pub async fn embed_batch(
         total_time_ms: total_time,
         cache_hits,
         cache_misses,
+        model_id: request.model_id.unwrap_or(model_version),
     };
 
     Ok(Json(response))

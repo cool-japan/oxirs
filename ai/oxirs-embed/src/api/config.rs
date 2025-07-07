@@ -32,6 +32,8 @@ pub struct ApiConfig {
     pub port: u16,
     /// Request timeout in seconds
     pub timeout_seconds: u64,
+    /// Request timeout in seconds (alias for axum)
+    pub request_timeout_secs: u64,
     /// Maximum batch size for bulk operations
     pub max_batch_size: usize,
     /// Rate limiting configuration
@@ -50,6 +52,7 @@ impl Default for ApiConfig {
             host: "0.0.0.0".to_string(),
             port: 8080,
             timeout_seconds: 30,
+            request_timeout_secs: 30,
             max_batch_size: 1000,
             rate_limit: RateLimitConfig::default(),
             auth: AuthConfig::default(),

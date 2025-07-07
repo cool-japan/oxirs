@@ -173,7 +173,7 @@ impl GpuBenchmark {
 
         BenchmarkResult {
             name: name.to_string(),
-            iterations: iterations,
+            iterations,
             successful_iterations: times.len(),
             errors,
             total_time,

@@ -3,7 +3,7 @@
 //! This module implements an AI-driven query caching system that learns from query patterns
 //! and proactively caches frequently used queries for enhanced performance.
 
-use anyhow::{anyhow, Result};
+// anyhow::Result used with full path in function signatures
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
@@ -12,8 +12,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::ast::{Definition, Document, FragmentDefinition, OperationDefinition, Selection, Value};
-use crate::distributed_cache::{CacheConfig, DistributedCache, GraphQLQueryCache};
+use crate::ast::{Definition, Document, FragmentDefinition, OperationDefinition, Value};
+use crate::distributed_cache::{CacheConfig, GraphQLQueryCache};
 
 /// Configuration for intelligent query caching
 #[derive(Debug, Clone)]
@@ -213,12 +213,12 @@ impl QueryPattern {
         let complexity_similarity =
             1.0 - ((self.complexity_score - other.complexity_score).abs() / 20.0).min(1.0);
 
-        (type_similarity * 0.3
+        type_similarity * 0.3
             + field_similarity * 0.2
             + depth_similarity * 0.2
             + args_similarity * 0.1
             + fragments_similarity * 0.1
-            + complexity_similarity * 0.1)
+            + complexity_similarity * 0.1
     }
 }
 
@@ -353,7 +353,10 @@ impl IntelligentQueryCache {
         }
     }
 
-    pub async fn with_distributed_cache(mut self, cache_config: CacheConfig) -> Result<Self> {
+    pub async fn with_distributed_cache(
+        mut self,
+        cache_config: CacheConfig,
+    ) -> anyhow::Result<Self> {
         let distributed_cache = Arc::new(GraphQLQueryCache::new(cache_config).await?);
         self.distributed_cache = Some(distributed_cache);
         Ok(self)
@@ -439,7 +442,7 @@ impl IntelligentQueryCache {
         variables: &HashMap<String, Value>,
         result: Value,
         doc: &Document,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         let cache_key = self.generate_cache_key(query, variables);
         let pattern = QueryPattern::from_document(doc);
 
@@ -563,7 +566,7 @@ impl IntelligentQueryCache {
     }
 
     /// Get cache statistics
-    pub async fn get_statistics(&self) -> Result<HashMap<String, serde_json::Value>> {
+    pub async fn get_statistics(&self) -> anyhow::Result<HashMap<String, serde_json::Value>> {
         let mut stats = HashMap::new();
 
         let cache_entries = self.cache_entries.read().await;
@@ -620,7 +623,7 @@ impl IntelligentQueryCache {
             return Vec::new();
         }
 
-        let pattern_history = self.pattern_history.read().await;
+        let _pattern_history = self.pattern_history.read().await;
         let usage_stats = self.usage_stats.read().await;
 
         // Find patterns that occur frequently and might be requested soon

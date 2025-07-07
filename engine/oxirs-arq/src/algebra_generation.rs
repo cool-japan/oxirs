@@ -286,7 +286,7 @@ impl AlgebraGenerator {
             return Err(anyhow!("No patterns to join"));
         }
 
-        let mut remaining_patterns = patterns;
+        let remaining_patterns = patterns;
         let mut candidates: Vec<JoinCandidate> = Vec::new();
 
         // Create initial candidates from individual patterns
@@ -443,7 +443,7 @@ impl AlgebraGenerator {
     }
 
     /// Reorder joins in existing algebra
-    fn reorder_joins(&self, algebra: Algebra, patterns: &[TriplePattern]) -> Result<Algebra> {
+    fn reorder_joins(&self, _algebra: Algebra, patterns: &[TriplePattern]) -> Result<Algebra> {
         // For now, use greedy reordering
         self.generate_greedy_joins(patterns.to_vec())
     }
@@ -550,7 +550,7 @@ impl AlgebraGenerator {
                 // Cost based on number of patterns
                 let base_cost = patterns.len() as f64;
                 Ok(JoinCost::new(
-                    (1000 * patterns.len()),
+                    1000 * patterns.len(),
                     base_cost,
                     base_cost,
                     base_cost * 0.1,

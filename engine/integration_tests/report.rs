@@ -78,7 +78,7 @@ impl ModuleTestResult {
         }
         self.execution_time += result.execution_time;
         self.test_results.push(result);
-        
+
         // Recalculate average performance score
         self.average_performance_score = self.test_results.iter()
             .map(|r| r.performance_score)

@@ -3,13 +3,11 @@
 //! This module provides basic functionality for processing RDF data
 //! and converting it to rule atoms.
 
-use crate::rdf_integration::{NamespaceManager, RdfRuleAtom, RdfTerm};
+use crate::rdf_integration::NamespaceManager;
 use crate::{RuleAtom, Term as RuleTerm};
 use anyhow::{anyhow, Result};
-use oxirs_core::model::{BlankNode, Literal, NamedNode, Quad, Term, Triple, Variable};
-use oxirs_core::{OxirsError, Store};
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use oxirs_core::model::{BlankNode, Literal, NamedNode, Quad, Term};
+use oxirs_core::Store;
 use std::sync::Arc;
 
 /// Simple RDF triple for parsing
@@ -184,6 +182,7 @@ impl SimpleRdfProcessor {
     }
 
     /// Add triple to store
+    #[allow(dead_code)]
     fn add_triple_to_store(&self, triple: &SimpleTriple) -> Result<()> {
         // Create proper RDF terms
         let subject: oxirs_core::Subject = if triple.subject.starts_with("_:") {
@@ -228,7 +227,7 @@ impl SimpleRdfProcessor {
 
     /// Process Turtle data (simplified - only handles basic prefixes)
     pub fn process_turtle(&mut self, data: &str) -> Result<Vec<RuleAtom>> {
-        let mut atoms = Vec::new();
+        let atoms = Vec::new();
 
         // First pass: extract prefixes
         for line in data.lines() {

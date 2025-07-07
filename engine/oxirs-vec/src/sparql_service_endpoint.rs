@@ -4,12 +4,10 @@
 //! custom function registration, and advanced SPARQL integration features.
 
 use crate::{
-    embeddings::{EmbeddableContent, EmbeddingManager, EmbeddingStrategy},
     sparql_integration::{
-        CustomVectorFunction, PerformanceMonitor, VectorServiceArg, VectorServiceConfig,
-        VectorServiceResult,
+        CustomVectorFunction, PerformanceMonitor, VectorServiceArg, VectorServiceResult,
     },
-    Vector, VectorStore,
+    Vector,
 };
 use anyhow::{anyhow, Result};
 use parking_lot::RwLock;
@@ -96,6 +94,12 @@ pub struct ServiceEndpointManager {
     load_balancer: LoadBalancer,
     health_checker: HealthChecker,
     performance_monitor: PerformanceMonitor,
+}
+
+impl Default for ServiceEndpointManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ServiceEndpointManager {
@@ -226,7 +230,7 @@ impl ServiceEndpointManager {
         loop {
             match self.try_execute(endpoint, query).await {
                 Ok(result) => return Ok(result),
-                Err(e) if attempt < endpoint.retry_config.max_retries => {
+                Err(_e) if attempt < endpoint.retry_config.max_retries => {
                     attempt += 1;
 
                     // Wait before retry
@@ -256,7 +260,7 @@ impl ServiceEndpointManager {
         // In a real implementation, this would make HTTP requests to the endpoint
 
         match &query.operation {
-            FederatedOperation::KNNSearch { vector, k, .. } => {
+            FederatedOperation::KNNSearch { .. } => {
                 // Simulate KNN search result
                 Ok(PartialSearchResult {
                     endpoint_uri: endpoint.endpoint_uri.clone(),

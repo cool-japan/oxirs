@@ -8,7 +8,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+#[cfg(test)]
+use std::time::UNIX_EPOCH;
+use std::time::{Duration, SystemTime};
 use tokio::sync::RwLock;
 
 /// Vector clock for tracking causality in distributed operations
@@ -407,7 +409,7 @@ impl ConflictResolver {
             }
 
             // Clear conflicts
-            (RdfOperation::Clear { graph: g1 }, _) | (_, RdfOperation::Clear { graph: g1 }) => {
+            (RdfOperation::Clear { graph: _g1 }, _) | (_, RdfOperation::Clear { graph: _g1 }) => {
                 let clear_op = if matches!(op1.operation, RdfOperation::Clear { .. }) {
                     op1.clone()
                 } else {

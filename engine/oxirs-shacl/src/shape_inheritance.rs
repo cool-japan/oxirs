@@ -6,7 +6,7 @@
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
-use oxirs_core::model::{NamedNode, Term};
+use oxirs_core::model::Term;
 
 use crate::{constraints::Constraint, ConstraintComponentId, Result, ShaclError, Shape, ShapeId};
 
@@ -17,7 +17,7 @@ pub enum InheritanceType {
     SubClass,
     /// Shape composition via sh:and
     AndComposition,
-    /// Shape union via sh:or  
+    /// Shape union via sh:or
     OrComposition,
     /// Shape exclusion via sh:not
     NotComposition,
@@ -54,7 +54,7 @@ pub struct InheritanceRelation {
 }
 
 /// Shape metadata for organization and documentation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ShapeMetadata {
     /// Human-readable label
     pub label: Option<String>,
@@ -76,23 +76,6 @@ pub struct ShapeMetadata {
     pub created: Option<String>,
     /// Last modification date
     pub modified: Option<String>,
-}
-
-impl Default for ShapeMetadata {
-    fn default() -> Self {
-        Self {
-            label: None,
-            comment: None,
-            group: None,
-            priority: 0,
-            deactivated: false,
-            tags: Vec::new(),
-            version: None,
-            author: None,
-            created: None,
-            modified: None,
-        }
-    }
 }
 
 /// Shape inheritance manager
@@ -177,19 +160,13 @@ impl ShapeInheritanceManager {
 
     /// Deactivate a shape
     pub fn deactivate_shape(&mut self, shape_id: &ShapeId) {
-        let metadata = self
-            .metadata_cache
-            .entry(shape_id.clone())
-            .or_insert_with(ShapeMetadata::default);
+        let metadata = self.metadata_cache.entry(shape_id.clone()).or_default();
         metadata.deactivated = true;
     }
 
     /// Activate a shape
     pub fn activate_shape(&mut self, shape_id: &ShapeId) {
-        let metadata = self
-            .metadata_cache
-            .entry(shape_id.clone())
-            .or_insert_with(ShapeMetadata::default);
+        let metadata = self.metadata_cache.entry(shape_id.clone()).or_default();
         metadata.deactivated = false;
     }
 
@@ -424,7 +401,7 @@ impl ShapeInheritanceManager {
                 for (constraint_id, constraint) in &parent_shape.constraints {
                     constraint_sources
                         .entry(constraint_id.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push((parent_shape_id.clone(), constraint.clone()));
                 }
             }
@@ -468,7 +445,7 @@ impl ShapeInheritanceManager {
                 for constraint_id in parent_shape.constraints.keys() {
                     constraint_sources
                         .entry(constraint_id.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(parent_shape_id.clone());
                 }
             }
@@ -478,8 +455,7 @@ impl ShapeInheritanceManager {
         for (constraint_id, sources) in &constraint_sources {
             if sources.len() > 1 {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Constraint conflict detected for '{}' in shapes: {:?}",
-                    constraint_id, sources
+                    "Constraint conflict detected for '{constraint_id}' in shapes: {sources:?}"
                 )));
             }
         }
@@ -508,13 +484,13 @@ impl ShapeInheritanceManager {
         let mut rec_stack = HashSet::new();
 
         for relation in &self.inheritance_relations {
-            if !visited.contains(&relation.source_shape) {
-                if self.has_cycle_util(&relation.source_shape, &mut visited, &mut rec_stack)? {
-                    return Err(ShaclError::ShapeParsing(format!(
-                        "Inheritance cycle detected involving shape: {}",
-                        relation.source_shape
-                    )));
-                }
+            if !visited.contains(&relation.source_shape)
+                && self.has_cycle_util(&relation.source_shape, &mut visited, &mut rec_stack)?
+            {
+                return Err(ShaclError::ShapeParsing(format!(
+                    "Inheritance cycle detected involving shape: {}",
+                    relation.source_shape
+                )));
             }
         }
 
@@ -612,10 +588,7 @@ impl ShapeInheritanceManager {
                         }
                         for (constraint_id, constraint) in &shape.constraints {
                             composed_constraints.insert(
-                                ConstraintComponentId::new(format!(
-                                    "{}_{}",
-                                    shape_id, constraint_id
-                                )),
+                                ConstraintComponentId::new(format!("{shape_id}_{constraint_id}")),
                                 constraint.clone(),
                             );
                         }
@@ -645,7 +618,7 @@ impl ShapeInheritanceManager {
                         if !self.is_shape_deactivated(shape_id) {
                             for (constraint_id, constraint) in &shape.constraints {
                                 composed_constraints.insert(
-                                    ConstraintComponentId::new(format!("NOT_{}", constraint_id)),
+                                    ConstraintComponentId::new(format!("NOT_{constraint_id}")),
                                     constraint.clone(),
                                 );
                             }
@@ -655,8 +628,7 @@ impl ShapeInheritanceManager {
             }
             _ => {
                 return Err(ShaclError::ShapeParsing(format!(
-                    "Unsupported composition type: {:?}",
-                    composition_type
+                    "Unsupported composition type: {composition_type:?}"
                 )));
             }
         }

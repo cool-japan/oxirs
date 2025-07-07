@@ -381,7 +381,7 @@ impl ImmutableStorage {
         };
 
         // Verify all blocks
-        for (hash, _metadata) in &blocks.metadata {
+        for hash in blocks.metadata.keys() {
             report.total_blocks += 1;
 
             if let Ok(block) = self.load_block(&blocks, hash).await {
@@ -636,13 +636,13 @@ impl ImmutableStorage {
     /// Compress block data
     fn compress_block(&self, block: &Block) -> Result<Vec<u8>, OxirsError> {
         let serialized = bincode::serialize(block)?;
-        Ok(zstd::encode_all(&serialized[..], 3)?)
+        zstd::encode_all(&serialized[..], 3).map_err(Into::into)
     }
 
     /// Decompress block data
     fn decompress_block(&self, data: &[u8]) -> Result<Block, OxirsError> {
         let decompressed = zstd::decode_all(data)?;
-        Ok(bincode::deserialize(&decompressed)?)
+        bincode::deserialize(&decompressed).map_err(Into::into)
     }
 }
 

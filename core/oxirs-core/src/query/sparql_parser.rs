@@ -439,7 +439,7 @@ impl AdvancedSparqlParser {
         }
 
         Ok(Token::Variable {
-            name: format!("{}{}", prefix, name),
+            name: format!("{}{prefix, name}"),
             line,
             column,
         })

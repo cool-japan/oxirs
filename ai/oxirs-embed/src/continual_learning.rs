@@ -585,17 +585,17 @@ impl ContinualLearningModel {
             network_columns: {
                 let mut rng = rand::thread_rng();
                 vec![Array2::from_shape_fn((dimensions, dimensions), |_| {
-                    rng.gen::<f32>() * 0.1
+                    rng.r#gen::<f32>() * 0.1
                 })]
             },
             lateral_connections: Vec::new(),
             generator: Some({
                 let mut rng = rand::thread_rng();
-                Array2::from_shape_fn((dimensions, dimensions), |_| rng.gen::<f32>() * 0.1)
+                Array2::from_shape_fn((dimensions, dimensions), |_| rng.r#gen::<f32>() * 0.1)
             }),
             discriminator: Some({
                 let mut rng = rand::thread_rng();
-                Array2::from_shape_fn((dimensions, dimensions), |_| rng.gen::<f32>() * 0.1)
+                Array2::from_shape_fn((dimensions, dimensions), |_| rng.r#gen::<f32>() * 0.1)
             }),
             entities: HashMap::new(),
             relations: HashMap::new(),
@@ -676,7 +676,7 @@ impl ContinualLearningModel {
             self.embeddings = {
                 let mut rng = rand::thread_rng();
                 Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
-                    (rng.gen::<f32>() - 0.5) * 0.1
+                    (rng.r#gen::<f32>() - 0.5) * 0.1
                 })
             };
             self.synaptic_importance = Array2::zeros((output_dim, input_dim));
