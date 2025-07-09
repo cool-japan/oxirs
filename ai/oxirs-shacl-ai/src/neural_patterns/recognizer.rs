@@ -22,9 +22,8 @@ use super::{
     hierarchies::PatternHierarchyAnalyzer,
     learning::NeuralPatternLearner,
     types::{
-        AttentionAnalysisResult, AttentionConfig as TypesAttentionConfig,
-        CorrelationAnalysisConfig, CorrelationAnalysisResult, CorrelationType, NeuralPatternConfig,
-        PatternCorrelation, PatternHierarchy,
+        AttentionAnalysisResult,
+        CorrelationAnalysisConfig, CorrelationAnalysisResult, CorrelationType, NeuralPatternConfig, PatternHierarchy,
     },
 };
 
@@ -476,8 +475,7 @@ impl NeuralPatternRecognizer {
             Ok(composite)
         } else {
             Err(
-                ShaclAiError::ProcessingError("No patterns available for composition".to_string())
-                    .into(),
+                ShaclAiError::ProcessingError("No patterns available for composition".to_string()),
             )
         }
     }
@@ -495,12 +493,11 @@ impl NeuralPatternRecognizer {
         if let Some(first_pattern) = patterns.first() {
             let merged = first_pattern
                 .clone()
-                .with_id(format!("merged_{}_{}", pattern1_id, pattern2_id));
+                .with_id(format!("merged_{pattern1_id}_{pattern2_id}"));
             Ok(merged)
         } else {
             Err(
-                ShaclAiError::ProcessingError("No patterns available for merging".to_string())
-                    .into(),
+                ShaclAiError::ProcessingError("No patterns available for merging".to_string()),
             )
         }
     }
@@ -738,6 +735,12 @@ pub struct CacheStatistics {
     pub hit_ratio: f64,
 }
 
+impl Default for MemoryManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryManager {
     /// Create new memory manager
     pub fn new() -> Self {
@@ -777,7 +780,7 @@ impl MemoryManager {
     }
 
     /// Return a pattern to the pool
-    pub async fn return_pattern(&mut self, mut pattern: Pattern) {
+    pub async fn return_pattern(&mut self, pattern: Pattern) {
         let mut pool = self.pattern_pool.write().await;
 
         if pool.available_patterns.len() < pool.max_pool_size {
@@ -868,6 +871,12 @@ impl MemoryManager {
     }
 }
 
+impl Default for MemoryTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MemoryTracker {
     /// Create new memory tracker
     pub fn new() -> Self {
@@ -921,6 +930,12 @@ impl GCConfig {
     }
 }
 
+impl Default for PatternPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternPool {
     /// Create new pattern pool
     pub fn new() -> Self {
@@ -929,6 +944,12 @@ impl PatternPool {
             pool_stats: PoolStatistics::default(),
             max_pool_size: 1000, // Default max pool size
         }
+    }
+}
+
+impl Default for BatchProcessingOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

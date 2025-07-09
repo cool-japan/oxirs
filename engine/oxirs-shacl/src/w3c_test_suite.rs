@@ -399,7 +399,7 @@ impl W3cTestSuiteRunner {
                 }
                 Err(e) => {
                     // Log error but continue with other manifests
-                    eprintln!("Warning: Failed to load manifest {}: {}", manifest_path, e);
+                    eprintln!("Warning: Failed to load manifest {manifest_path}: {e}");
                 }
             }
         }
@@ -420,7 +420,7 @@ impl W3cTestSuiteRunner {
         // In a real implementation, this would use HTTP client to fetch the manifest
         // and parse the RDF content to extract test cases
 
-        self.create_manifest_for_category(&manifest_url.to_string())
+        self.create_manifest_for_category(manifest_url.as_ref())
     }
 
     /// Load local manifests (placeholder for local files)
@@ -908,7 +908,7 @@ impl W3cTestSuiteRunner {
                     test_entry: test_entry.clone(),
                     status: TestStatus::Error,
                     actual_result: None,
-                    error_message: Some(format!("Failed to create test store: {}", e)),
+                    error_message: Some(format!("Failed to create test store: {e}")),
                     execution_time_ms: start_time.elapsed().as_millis() as u64,
                     compliance: ComplianceAssessment {
                         compliant: false,
@@ -934,7 +934,7 @@ impl W3cTestSuiteRunner {
                     test_entry: test_entry.clone(),
                     status: TestStatus::Error,
                     actual_result: None,
-                    error_message: Some(format!("Test execution failed: {}", e)),
+                    error_message: Some(format!("Test execution failed: {e}")),
                     execution_time_ms: start_time.elapsed().as_millis() as u64,
                     compliance: ComplianceAssessment {
                         compliant: false,
@@ -992,7 +992,7 @@ impl W3cTestSuiteRunner {
         if let Some(expected_count) = test_entry.expected_result.violation_count {
             for i in 0..expected_count {
                 // Create placeholder violations for testing
-                let focus_node_iri = NamedNode::new(&format!("http://example.org/test#{}", i))
+                let focus_node_iri = NamedNode::new(format!("http://example.org/test#{i}"))
                     .map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e))?;
                 let property_iri = NamedNode::new("http://example.org/property")
                     .map_err(|e| anyhow::anyhow!("Invalid IRI: {}", e))?;
@@ -1004,7 +1004,7 @@ impl W3cTestSuiteRunner {
                     source_shape: ShapeId::from(format!("Test shape {}", test_entry.id)),
                     source_constraint_component: ConstraintComponentId::from("test-constraint"),
                     result_severity: Severity::Violation,
-                    result_message: Some(format!("Test violation {}", i)),
+                    result_message: Some(format!("Test violation {i}")),
                     details: HashMap::new(),
                     nested_results: Vec::new(),
                 };
@@ -1066,8 +1066,7 @@ impl W3cTestSuiteRunner {
                 });
                 score -= score_penalty;
                 notes.push(format!(
-                    "Violation count mismatch: expected {}, got {}",
-                    expected_count, actual_count
+                    "Violation count mismatch: expected {expected_count}, got {actual_count}"
                 ));
             }
         }
@@ -1103,14 +1102,13 @@ impl W3cTestSuiteRunner {
                 issues.push(ComplianceIssue {
                     issue_type: ComplianceIssueType::IncorrectViolationDetails,
                     description: format!(
-                        "Expected violation for focus node '{}' not found",
-                        expected_focus
+                        "Expected violation for focus node '{expected_focus}' not found"
                     ),
                     severity: ComplianceIssueSeverity::Major,
                     suggested_fix: Some("Check violation detail generation".to_string()),
                 });
                 score -= 0.2;
-                notes.push(format!("Missing expected violation: {}", expected_focus));
+                notes.push(format!("Missing expected violation: {expected_focus}"));
             }
         }
 

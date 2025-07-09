@@ -57,7 +57,7 @@ impl SecretManager {
         // Ensure secrets directory exists with restricted permissions
         if !secrets_dir.exists() {
             fs::create_dir_all(&secrets_dir).map_err(|e| {
-                CliError::config_error(format!("Cannot create secrets directory: {}", e))
+                CliError::config_error(format!("Cannot create secrets directory: {e}"))
             })?;
 
             // Set restrictive permissions (700 - owner only)
@@ -189,10 +189,10 @@ impl SecretManager {
     pub fn delete_secret(&mut self, name: &str) -> CliResult<()> {
         self.cache.remove(name);
 
-        let path = self.secrets_dir.join(format!("{}.secret", name));
+        let path = self.secrets_dir.join(format!("{name}.secret"));
         if path.exists() {
             fs::remove_file(path)
-                .map_err(|e| CliError::config_error(format!("Cannot delete secret: {}", e)))?;
+                .map_err(|e| CliError::config_error(format!("Cannot delete secret: {e}")))?;
         }
 
         Ok(())
@@ -272,7 +272,7 @@ impl SecretManager {
 
         // Serialize secret
         let plaintext = serde_json::to_vec(secret)
-            .map_err(|e| CliError::config_error(format!("Cannot serialize secret: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot serialize secret: {e}")))?;
 
         // Encrypt using AES-GCM
         let key = aead::UnboundKey::new(&aead::AES_256_GCM, key)
@@ -286,9 +286,9 @@ impl SecretManager {
             .map_err(|_| CliError::config_error("Encryption failed"))?;
 
         // Write to file
-        let path = self.secrets_dir.join(format!("{}.secret", name));
+        let path = self.secrets_dir.join(format!("{name}.secret"));
         let mut file = File::create(&path)
-            .map_err(|e| CliError::config_error(format!("Cannot create secret file: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot create secret file: {e}")))?;
 
         // Set restrictive permissions
         #[cfg(unix)]
@@ -300,7 +300,7 @@ impl SecretManager {
         }
 
         file.write_all(&ciphertext)
-            .map_err(|e| CliError::config_error(format!("Cannot write secret: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot write secret: {e}")))?;
 
         Ok(())
     }
@@ -315,13 +315,13 @@ impl SecretManager {
             .ok_or_else(|| CliError::config_error("No decryption key available"))?;
 
         // Read encrypted data
-        let path = self.secrets_dir.join(format!("{}.secret", name));
+        let path = self.secrets_dir.join(format!("{name}.secret"));
         let mut file = File::open(&path)
-            .map_err(|_| CliError::config_error(format!("Secret '{}' not found", name)))?;
+            .map_err(|_| CliError::config_error(format!("Secret '{name}' not found")))?;
 
         let mut ciphertext = Vec::new();
         file.read_to_end(&mut ciphertext)
-            .map_err(|e| CliError::config_error(format!("Cannot read secret: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot read secret: {e}")))?;
 
         // Decrypt using AES-GCM
         let key = aead::UnboundKey::new(&aead::AES_256_GCM, key)
@@ -336,7 +336,7 @@ impl SecretManager {
 
         // Deserialize secret
         serde_json::from_slice(plaintext)
-            .map_err(|e| CliError::config_error(format!("Cannot deserialize secret: {}", e)))
+            .map_err(|e| CliError::config_error(format!("Cannot deserialize secret: {e}")))
     }
 
     /// Load secret metadata without decrypting the value
@@ -422,7 +422,7 @@ pub mod credentials {
 
         if let Ok(creds_json) = manager.get_secret(&secret_name) {
             serde_json::from_str(&creds_json)
-                .map_err(|e| CliError::config_error(format!("Invalid credentials format: {}", e)))
+                .map_err(|e| CliError::config_error(format!("Invalid credentials format: {e}")))
         } else {
             Ok(EndpointCredentials {
                 url: url.to_string(),
@@ -440,7 +440,7 @@ pub mod credentials {
     ) -> CliResult<()> {
         let secret_name = format!("endpoint_{}", creds.url.replace(['/', ':'], "_"));
         let creds_json = serde_json::to_string(creds)
-            .map_err(|e| CliError::config_error(format!("Cannot serialize credentials: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot serialize credentials: {e}")))?;
 
         manager.set_secret(
             &secret_name,

@@ -14,34 +14,17 @@
 //! - Deliberate attention mechanism control
 //! - Mindful validation strategy selection and adaptation
 
-use async_trait::async_trait;
-use dashmap::DashMap;
-use nalgebra::{DMatrix, DVector, Vector3};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
+use std::time::{Duration, SystemTime};
+use tokio::sync::RwLock;
+use tokio::time::interval;
+use tracing::{debug, info, warn};
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
 
-use crate::biological_neural_integration::BiologicalNeuralIntegrator;
-use crate::consciousness_validation::{
-    ConsciousnessLevel, ConsciousnessValidator, EmotionalContext,
-};
-use crate::evolutionary_neural_architecture::EvolutionaryNeuralArchitecture;
-use crate::neuromorphic_validation::NeuromorphicValidationNetwork;
-use crate::quantum_neuromorphic_fusion::QuantumNeuromorphicFusion;
-use crate::swarm_neuromorphic_networks::SwarmNeuromorphicNetwork;
+use crate::consciousness_validation::ConsciousnessLevel;
 use crate::{Result, ShaclAiError};
 
 /// Consciousness-guided neuroplasticity system for intentional neural adaptation
@@ -269,7 +252,7 @@ impl ConsciousnessGuidedNeuroplasticity {
             consciousness_level_achieved: awareness_assessment.consciousness_level,
             plasticity_control_effectiveness: plasticity_control.effectiveness_score,
             meta_learning_improvements: meta_learning_results.improvement_metrics,
-            self_evolution_progress: SelfEvolutionProgress::default(),
+            self_evolution_progress: SelfEvolutionProgress,
             memory_consolidation_efficiency: memory_consolidation.consolidation_efficiency,
             attention_optimization_gains: attention_adjustment.optimization_gains,
             overall_adaptation_success: feedback_integration.adaptation_success_score,
@@ -856,14 +839,14 @@ impl Default for ConsciousnessPlasticityConfig {
             learning_objectives: vec![LearningObjective::default()],
             consciousness_goals: vec![ConsciousnessGoal::default()],
             awareness_config: AwarenessConfig::default(),
-            meta_awareness_config: MetaAwarenessConfig::default(),
-            plasticity_config: PlasticityConfig::default(),
-            meta_learning_config: MetaLearningConfig::default(),
-            memory_consolidation_config: MemoryConsolidationConfig::default(),
-            attention_control_config: AttentionControlConfig::default(),
-            strategy_selection_config: StrategySelectionConfig::default(),
-            adaptation_monitoring_config: AdaptationMonitoringConfig::default(),
-            feedback_integration_config: FeedbackIntegrationConfig::default(),
+            meta_awareness_config: MetaAwarenessConfig,
+            plasticity_config: PlasticityConfig,
+            meta_learning_config: MetaLearningConfig,
+            memory_consolidation_config: MemoryConsolidationConfig,
+            attention_control_config: AttentionControlConfig,
+            strategy_selection_config: StrategySelectionConfig,
+            adaptation_monitoring_config: AdaptationMonitoringConfig,
+            feedback_integration_config: FeedbackIntegrationConfig,
             consciousness_coherence_requirements: CoherenceRequirements::default(),
             effectiveness_thresholds: EffectivenessThresholds::default(),
         }
@@ -907,6 +890,12 @@ pub struct ConsciousnessPlasticityMetrics {
     pub memory_consolidation_efficiency: f64,
     pub attention_optimization_effectiveness: f64,
     pub overall_system_consciousness: f64,
+}
+
+impl Default for ConsciousnessPlasticityMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConsciousnessPlasticityMetrics {
@@ -1022,15 +1011,15 @@ pub struct AwarenessConfig {
 
 impl AwarenessConfig {
     fn create_assessors(&self) -> Vec<NeuralAwarenessAssessor> {
-        vec![NeuralAwarenessAssessor::default(); 3]
+        vec![NeuralAwarenessAssessor; 3]
     }
 
     fn create_monitors(&self) -> Vec<ConsciousnessMonitor> {
-        vec![ConsciousnessMonitor::default(); 2]
+        vec![ConsciousnessMonitor; 2]
     }
 
     fn create_integrators(&self) -> Vec<AwarenessIntegrator> {
-        vec![AwarenessIntegrator::default(); 2]
+        vec![AwarenessIntegrator; 2]
     }
 }
 
@@ -1042,22 +1031,22 @@ pub struct PlasticityConfig;
 
 impl PlasticityConfig {
     fn create_modulators(&self) -> Vec<PlasticityModulator> {
-        vec![PlasticityModulator::default(); 3]
+        vec![PlasticityModulator; 3]
     }
 
     fn create_controllers(&self) -> Vec<SynapticController> {
-        vec![SynapticController::default(); 2]
+        vec![SynapticController; 2]
     }
 
     fn create_coordinators(&self) -> Vec<AdaptationCoordinator> {
-        vec![AdaptationCoordinator::default(); 2]
+        vec![AdaptationCoordinator; 2]
     }
 
     fn create_strategies(&self) -> HashMap<String, PlasticityStrategy> {
         let mut strategies = HashMap::new();
-        strategies.insert("default".to_string(), PlasticityStrategy::default());
-        strategies.insert("aggressive".to_string(), PlasticityStrategy::default());
-        strategies.insert("conservative".to_string(), PlasticityStrategy::default());
+        strategies.insert("default".to_string(), PlasticityStrategy);
+        strategies.insert("aggressive".to_string(), PlasticityStrategy);
+        strategies.insert("conservative".to_string(), PlasticityStrategy);
         strategies
     }
 }
@@ -1370,7 +1359,7 @@ impl MetaLearningSystem {
     }
 
     async fn initialize_meta_learning(&mut self) -> Result<MetaLearningInitResult> {
-        Ok(MetaLearningInitResult::default())
+        Ok(MetaLearningInitResult)
     }
 
     async fn apply_meta_learning_optimization(
@@ -1394,7 +1383,7 @@ impl SelfDirectedEvolutionCoordinator {
     }
 
     async fn initialize_self_evolution(&mut self) -> Result<SelfEvolutionInitResult> {
-        Ok(SelfEvolutionInitResult::default())
+        Ok(SelfEvolutionInitResult)
     }
 
     async fn guide_self_directed_evolution(
@@ -1415,7 +1404,7 @@ impl ConsciousMemoryConsolidationManager {
     }
 
     async fn initialize_memory_consolidation(&mut self) -> Result<MemoryConsolidationInitResult> {
-        Ok(MemoryConsolidationInitResult::default())
+        Ok(MemoryConsolidationInitResult)
     }
 
     async fn consolidate_memories_consciously(
@@ -1442,7 +1431,7 @@ impl ConsciousAttentionController {
     }
 
     async fn initialize_attention_control(&mut self) -> Result<AttentionControlInitResult> {
-        Ok(AttentionControlInitResult::default())
+        Ok(AttentionControlInitResult)
     }
 
     async fn adjust_attention_consciously(
@@ -1489,7 +1478,7 @@ impl NeuralAdaptationMonitor {
     }
 
     async fn start_adaptation_monitoring(&mut self) -> Result<AdaptationMonitoringInitResult> {
-        Ok(AdaptationMonitoringInitResult::default())
+        Ok(AdaptationMonitoringInitResult)
     }
 
     async fn cleanup_monitoring_data(&mut self) -> Result<()> {

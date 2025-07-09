@@ -184,7 +184,7 @@ impl PerformanceMonitor {
             AlgebraTermPattern::Literal(_) => "LIT",
         };
 
-        format!("{}:{}:{}", s_type, p_type, o_type)
+        format!("{s_type}:{p_type}:{o_type}")
     }
 
     /// Update aggregated performance metrics
@@ -206,15 +206,13 @@ impl PerformanceMonitor {
             let p95_idx = (execution_times.len() as f64 * 0.95) as usize;
             let p99_idx = (execution_times.len() as f64 * 0.99) as usize;
 
-            self.aggregated_metrics.p95_execution_time_ms = execution_times
+            self.aggregated_metrics.p95_execution_time_ms = *execution_times
                 .get(p95_idx.min(execution_times.len() - 1))
-                .unwrap_or(&0.0)
-                .clone();
+                .unwrap_or(&0.0);
 
-            self.aggregated_metrics.p99_execution_time_ms = execution_times
+            self.aggregated_metrics.p99_execution_time_ms = *execution_times
                 .get(p99_idx.min(execution_times.len() - 1))
-                .unwrap_or(&0.0)
-                .clone();
+                .unwrap_or(&0.0);
         }
 
         // Calculate success rate

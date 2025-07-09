@@ -261,7 +261,7 @@ impl SecurityPolicyManager {
     }
 
     /// Execute query with additional safety measures
-    fn execute_query_safely(&self, query: &str, context: &SecurityContext) -> Result<QueryResult> {
+    fn execute_query_safely(&self, _query: &str, _context: &SecurityContext) -> Result<QueryResult> {
         // Placeholder implementation - in practice would integrate with actual SPARQL engine
         // with sandboxing, resource limits, and monitoring
 
@@ -454,11 +454,11 @@ impl SecurityPolicy {
         match &self.applicable_users {
             PolicyScope::AllUsers => true,
             PolicyScope::SpecificUsers(users) => users.contains(&user_id.to_string()),
-            PolicyScope::UserGroups(groups) => {
+            PolicyScope::UserGroups(_groups) => {
                 // In practice, would check if user belongs to any of these groups
                 false
             }
-            PolicyScope::RoleBasedAccess(roles) => {
+            PolicyScope::RoleBasedAccess(_roles) => {
                 // In practice, would check user roles
                 false
             }

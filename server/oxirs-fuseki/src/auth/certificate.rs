@@ -4,11 +4,10 @@ use super::types::{AuthResult, CertificateAuth, User};
 use crate::config::SecurityConfig;
 use crate::error::{FusekiError, FusekiResult};
 use chrono::{DateTime, Utc};
-use der_parser::oid::Oid;
 use oid_registry::{OID_X509_EXT_EXTENDED_KEY_USAGE, OID_X509_EXT_KEY_USAGE};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{debug, error, warn};
+use tracing::{debug, warn};
 use x509_parser::pem;
 use x509_parser::prelude::*;
 
@@ -25,7 +24,7 @@ impl CertificateAuthService {
     /// Authenticate user using X.509 client certificate
     pub async fn authenticate_certificate(&self, cert_data: &[u8]) -> FusekiResult<AuthResult> {
         let (_, cert) = X509Certificate::from_der(cert_data)
-            .map_err(|e| FusekiError::authentication(format!("Invalid certificate: {}", e)))?;
+            .map_err(|e| FusekiError::authentication(format!("Invalid certificate: {e}")))?;
 
         // Validate certificate chain and trust
         if !self.validate_certificate_trust(&cert).await? {
@@ -36,9 +35,9 @@ impl CertificateAuthService {
         // Check certificate validity period
         let now = Utc::now();
         let not_before = DateTime::from_timestamp(cert.validity().not_before.timestamp(), 0)
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
         let not_after = DateTime::from_timestamp(cert.validity().not_after.timestamp(), 0)
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
 
         if now < not_before || now > not_after {
             warn!("Certificate is expired or not yet valid");
@@ -136,8 +135,7 @@ impl CertificateAuthService {
                     }
                     Err(e) => {
                         return Err(FusekiError::authentication(format!(
-                            "Failed to parse PEM certificate contents from {:?}: {}",
-                            trust_store_path, e
+                            "Failed to parse PEM certificate contents from {trust_store_path:?}: {e}"
                         )));
                     }
                 }
@@ -150,8 +148,7 @@ impl CertificateAuthService {
                     }
                     Err(e) => {
                         return Err(FusekiError::authentication(format!(
-                            "Failed to parse DER certificate from {:?}: {}",
-                            trust_store_path, e
+                            "Failed to parse DER certificate from {trust_store_path:?}: {e}"
                         )));
                     }
                 }
@@ -169,11 +166,11 @@ impl CertificateAuthService {
         // This is a simplified approach until proper DER access is available
         let serial = format!("{:x}", cert.serial);
         let subject = cert.subject().to_string();
-        let combined = format!("{}:{}", serial, subject);
+        let combined = format!("{serial}:{subject}");
 
         let fingerprint = Sha256::digest(combined.as_bytes())
             .iter()
-            .map(|b| format!("{:02X}", b))
+            .map(|b| format!("{b:02X}"))
             .collect::<Vec<_>>()
             .join(":");
 
@@ -192,7 +189,7 @@ impl CertificateAuthService {
         if pattern.contains('*') {
             let regex_pattern = pattern.replace('*', ".*");
             let regex = regex::Regex::new(&regex_pattern).map_err(|e| {
-                FusekiError::configuration(format!("Invalid issuer pattern: {}", e))
+                FusekiError::configuration(format!("Invalid issuer pattern: {e}"))
             })?;
             Ok(regex.is_match(issuer_dn))
         } else {
@@ -224,9 +221,9 @@ impl CertificateAuthService {
         let fingerprint = self.compute_certificate_fingerprint(cert)?;
 
         let not_before = DateTime::from_timestamp(cert.validity().not_before.timestamp(), 0)
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
         let not_after = DateTime::from_timestamp(cert.validity().not_after.timestamp(), 0)
-            .unwrap_or_else(|| Utc::now());
+            .unwrap_or_else(Utc::now);
 
         // Extract key usage
         let mut key_usage = Vec::new();
@@ -329,7 +326,6 @@ impl CertificateAuthService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{CertificateConfig, CertificateUserMapping, CertificateValidationLevel};
     use std::sync::Arc;
 
     #[test]

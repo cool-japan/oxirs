@@ -5,7 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Duration;
 
 /// Orchestration engine
 #[derive(Debug)]
@@ -14,6 +13,12 @@ pub struct OrchestrationEngine {
     cluster_config: ClusterConfig,
     service_mesh: Option<ServiceMeshConfig>,
     ingress_controller: IngressController,
+}
+
+impl Default for OrchestrationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OrchestrationEngine {
@@ -183,6 +188,12 @@ pub enum ServiceMeshType {
 pub struct IngressController {
     controller_type: IngressControllerType,
     configuration: IngressConfig,
+}
+
+impl Default for IngressController {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl IngressController {

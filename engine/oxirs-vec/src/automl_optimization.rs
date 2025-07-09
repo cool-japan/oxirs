@@ -222,16 +222,20 @@ pub struct AutoMLOptimizer {
     trial_history: Arc<RwLock<Vec<TrialResult>>>,
     best_trial: Arc<RwLock<Option<TrialResult>>>,
     optimization_state: Arc<Mutex<OptimizationState>>,
+    #[allow(dead_code)]
     analytics_engine: Arc<Mutex<VectorAnalyticsEngine>>,
+    #[allow(dead_code)]
     benchmark_engine: Arc<Mutex<BenchmarkSuite>>,
 }
 
 /// Internal optimization state
 #[derive(Debug)]
 struct OptimizationState {
+    #[allow(dead_code)]
     current_trial: usize,
     early_stopping_counter: usize,
     best_score: f32,
+    #[allow(dead_code)]
     pareto_frontier: Vec<TrialResult>,
     active_trials: HashMap<String, Instant>,
 }
@@ -311,8 +315,10 @@ impl AutoMLOptimizer {
 
                     if primary_score > best_score {
                         best_score = primary_score;
-                        let mut best_trial = self.best_trial.write().unwrap();
-                        *best_trial = Some(trial_result.clone());
+                        {
+                            let mut best_trial = self.best_trial.write().unwrap();
+                            *best_trial = Some(trial_result.clone());
+                        } // Drop the mutex guard before await
 
                         // Reset early stopping counter
                         let mut state = self.optimization_state.lock().await;
@@ -935,9 +941,11 @@ mod tests {
         ];
 
         // Use a very short optimization time for testing
-        let mut config = AutoMLConfig::default();
-        config.max_optimization_time = Duration::from_secs(1);
-        config.trials_per_config = 1;
+        let config = AutoMLConfig {
+            max_optimization_time: Duration::from_secs(1),
+            trials_per_config: 1,
+            ..Default::default()
+        };
 
         let optimizer = AutoMLOptimizer::new(config).unwrap();
         let results = optimizer

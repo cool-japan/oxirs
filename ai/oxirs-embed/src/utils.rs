@@ -263,8 +263,7 @@ pub mod data_loader {
             _ => {
                 // Try to auto-detect based on content
                 eprintln!(
-                    "Warning: Unknown file extension '{}', attempting auto-detection",
-                    extension
+                    "Warning: Unknown file extension '{extension}', attempting auto-detection"
                 );
 
                 // Try TSV first (most common)
@@ -352,7 +351,7 @@ pub mod dataset_splitter {
             for entity in entities {
                 entity_triples
                     .entry(entity.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(triple.clone());
             }
         }
@@ -810,6 +809,12 @@ pub mod performance_benchmark {
         lap_times: Vec<Duration>,
     }
 
+    impl Default for PrecisionTimer {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl PrecisionTimer {
         pub fn new() -> Self {
             Self {
@@ -1170,7 +1175,7 @@ pub mod convenience {
 
     /// Parse a triple from a simple string format "subject predicate object"
     pub fn parse_triple_from_string(triple_str: &str) -> Result<Triple> {
-        let parts: Vec<&str> = triple_str.trim().split_whitespace().collect();
+        let parts: Vec<&str> = triple_str.split_whitespace().collect();
         if parts.len() != 3 {
             return Err(anyhow!(
                 "Invalid triple format. Expected 'subject predicate object', got: '{}'",
@@ -1219,12 +1224,6 @@ pub mod convenience {
         Ok(added_count)
     }
 
-    /// Create a quick biomedical model with default settings
-    #[cfg(feature = "biomedical")]
-    pub fn create_biomedical_model() -> crate::BiomedicalEmbedding {
-        let config = crate::BiomedicalEmbeddingConfig::default();
-        crate::BiomedicalEmbedding::new(config)
-    }
 
     /// Quick function to compute similarity between two embedding vectors
     pub fn cosine_similarity(a: &[f64], b: &[f64]) -> Result<f64> {
@@ -1282,7 +1281,7 @@ pub mod convenience {
         operation: F,
     ) -> std::time::Duration
     where
-        F: Fn() -> (),
+        F: Fn(),
     {
         let start = std::time::Instant::now();
         for _ in 0..iterations {
@@ -1305,13 +1304,15 @@ pub mod convenience {
 /// Advanced performance utilities for embedding operations
 pub mod performance_utils {
     use super::*;
-    use std::time::Instant;
+
+    /// Type alias for batch processor function
+    type ProcessorFn<T> = Box<dyn Fn(&[T]) -> Result<()> + Send + Sync>;
 
     /// Memory-efficient batch processor for large datasets
     pub struct BatchProcessor<T> {
         batch_size: usize,
         current_batch: Vec<T>,
-        processor_fn: Box<dyn Fn(&[T]) -> Result<()> + Send + Sync>,
+        processor_fn: ProcessorFn<T>,
     }
 
     impl<T> BatchProcessor<T> {
@@ -1421,11 +1422,11 @@ pub mod parallel_utils {
     where
         T: Sync,
         R: Send,
-        F: Fn(&[T]) -> Result<Vec<R>> + Sync,
+        F: Fn(&[T]) -> Result<Vec<R>> + Sync + Send,
     {
         let results: Result<Vec<Vec<R>>> = items
             .par_chunks(batch_size)
-            .map(|chunk| processor(chunk))
+            .map(processor)
             .collect();
 
         Ok(results?.into_iter().flatten().collect())

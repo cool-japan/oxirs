@@ -135,7 +135,7 @@ impl RealTimeVectorUpdater {
         index: Arc<RwLock<dyn VectorIndex + Send + Sync>>,
         config: RealTimeConfig,
     ) -> Result<Self> {
-        let (shutdown_tx, shutdown_rx) = watch::channel(false);
+        let (shutdown_tx, _shutdown_rx) = watch::channel(false);
 
         let updater = Self {
             config: config.clone(),

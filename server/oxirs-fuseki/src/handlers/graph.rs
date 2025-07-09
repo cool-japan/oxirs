@@ -12,7 +12,6 @@
 //! - Default and named graph operations
 
 use crate::{
-    auth::{AuthUser, Permission},
     error::{FusekiError, FusekiResult},
     server::AppState,
     store::Store,
@@ -29,7 +28,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Graph Store protocol parameters
 #[derive(Debug, Deserialize)]
@@ -94,8 +93,7 @@ pub async fn graph_store_handler(
         Method::DELETE => handle_graph_delete(&state.store, &graph_uri).await?,
         _ => {
             return Err(FusekiError::method_not_allowed(format!(
-                "Method {} not supported for Graph Store",
-                method
+                "Method {method} not supported for Graph Store"
             )));
         }
     };
@@ -341,8 +339,7 @@ fn get_content_type(headers: &HeaderMap) -> FusekiResult<String> {
         ct if ct.starts_with("application/trig") => Ok(rdf_content_types::TRIG.to_string()),
         ct if ct.starts_with("text/n3") => Ok(rdf_content_types::N3.to_string()),
         _ => Err(FusekiError::bad_request(format!(
-            "Unsupported RDF content type: {}",
-            content_type
+            "Unsupported RDF content type: {content_type}"
         ))),
     }
 }
@@ -351,10 +348,10 @@ fn get_content_type(headers: &HeaderMap) -> FusekiResult<String> {
 async fn read_rdf_body(body: Body, content_type: &str) -> FusekiResult<String> {
     let body_bytes = axum::body::to_bytes(body, usize::MAX)
         .await
-        .map_err(|e| FusekiError::bad_request(format!("Failed to read request body: {}", e)))?;
+        .map_err(|e| FusekiError::bad_request(format!("Failed to read request body: {e}")))?;
 
     let rdf_data = String::from_utf8(body_bytes.to_vec())
-        .map_err(|e| FusekiError::bad_request(format!("Invalid UTF-8 in RDF data: {}", e)))?;
+        .map_err(|e| FusekiError::bad_request(format!("Invalid UTF-8 in RDF data: {e}")))?;
 
     if rdf_data.trim().is_empty() {
         return Err(FusekiError::bad_request("Empty RDF data"));
@@ -437,7 +434,7 @@ async fn retrieve_graph_from_store(
             // Return mock data for named graph
             match format {
                 ct if ct == rdf_content_types::TURTLE => {
-                    Ok(format!("# Graph: {}\n<http://example.org/subject> <http://example.org/predicate> \"object\" .", uri))
+                    Ok(format!("# Graph: {uri}\n<http://example.org/subject> <http://example.org/predicate> \"object\" ."))
                 }
                 ct if ct == rdf_content_types::N_TRIPLES => {
                     Ok("<http://example.org/subject> <http://example.org/predicate> \"object\" .".to_string())

@@ -8,14 +8,11 @@ mod r#impl;
 
 pub use r#impl::*;
 
-// Import necessary types for tests
-use crate::{EmbeddingModel, ModelConfig, Vector};
-use anyhow::Result;
-use ndarray::Array1;
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{EmbeddingModel, ModelConfig};
+    use ndarray::Array1;
 
     #[test]
     fn test_cross_modal_config_default() {

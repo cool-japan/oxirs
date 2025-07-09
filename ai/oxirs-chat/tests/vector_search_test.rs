@@ -1,10 +1,8 @@
-use oxirs_chat::rag::{QueryContext, QueryIntent, RAGConfig, RAGSystem, SimpleEmbeddingModel};
+use oxirs_chat::rag::{RAGConfig, RAGSystem, SimpleEmbeddingModel};
 use oxirs_core::{ConcreteStore, Literal, NamedNode, Store, Triple};
-use oxirs_embed::EmbeddingModel;
 use oxirs_vec::{
     index::AdvancedVectorIndex,
     index::{DistanceMetric, IndexConfig, IndexType},
-    VectorIndex,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -75,8 +73,7 @@ async fn test_embedding_model() {
         let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
         assert!(
             (norm - 1.0).abs() < 0.1,
-            "Embedding should be approximately normalized, got norm: {}",
-            norm
+            "Embedding should be approximately normalized, got norm: {norm}"
         );
     }
 
@@ -128,7 +125,7 @@ async fn test_vector_search_similarity() {
         let metadata = HashMap::new();
         vector_index
             .add(
-                format!("id_{}", i),
+                format!("id_{i}"),
                 embedding.clone(),
                 triple.clone(),
                 metadata,
@@ -198,19 +195,18 @@ async fn test_rag_system_with_vector_index() {
                         .map(|t| t.len())
                         .unwrap_or(0);
                     println!(
-                        "✅ Knowledge retrieval succeeded, found {} triples",
-                        triple_count
+                        "✅ Knowledge retrieval succeeded, found {triple_count} triples"
                     );
                     // Don't require non-empty results - the simple embedding model may not find good matches
                 }
                 Err(e) => {
-                    println!("⚠️  Knowledge retrieval failed: {}", e);
+                    println!("⚠️  Knowledge retrieval failed: {e}");
                     // Don't fail the test - this might be due to missing dependencies
                 }
             }
         }
         Err(e) => {
-            println!("⚠️  RAG system creation failed: {}", e);
+            println!("⚠️  RAG system creation failed: {e}");
             // Don't fail the test - this might be due to missing dependencies
         }
     }
@@ -218,7 +214,7 @@ async fn test_rag_system_with_vector_index() {
 
 #[tokio::test]
 async fn test_cosine_similarity() {
-    use oxirs_vec::VectorIndex;
+    
 
     let dimension = 4;
     let config = IndexConfig {
@@ -280,12 +276,12 @@ async fn test_cosine_similarity() {
 
 // Helper function to create test triples
 fn create_test_triple(subject: &str, predicate: &str, object: &str) -> Triple {
-    let s = NamedNode::new(&format!("http://example.org/{}", subject)).unwrap();
-    let p = NamedNode::new(&format!("http://example.org/{}", predicate)).unwrap();
+    let s = NamedNode::new(format!("http://example.org/{subject}")).unwrap();
+    let p = NamedNode::new(format!("http://example.org/{predicate}")).unwrap();
     let o = if object.chars().all(|c| c.is_alphabetic()) {
         // Create a named node for alphabetic objects
         oxirs_core::model::Object::from(
-            NamedNode::new(&format!("http://example.org/{}", object)).unwrap(),
+            NamedNode::new(format!("http://example.org/{object}")).unwrap(),
         )
     } else {
         // Create a literal for other objects

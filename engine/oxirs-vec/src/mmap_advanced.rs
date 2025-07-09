@@ -590,7 +590,7 @@ impl NumaVectorAllocator {
             return vec![0u8; size];
         }
 
-        let target_node = node.unwrap_or_else(|| {
+        let _target_node = node.unwrap_or_else(|| {
             // Round-robin allocation across NUMA nodes
             let idx = self.current_node.fetch_add(1, Ordering::Relaxed) % self.numa_nodes.len();
             self.numa_nodes[idx]
@@ -610,7 +610,7 @@ impl NumaVectorAllocator {
             return vec;
         }
 
-        let target_node = node.unwrap_or_else(|| {
+        let _target_node = node.unwrap_or_else(|| {
             // Use current CPU's NUMA node for better locality
             self.preferred_node()
         });

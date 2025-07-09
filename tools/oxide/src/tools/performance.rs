@@ -4,10 +4,7 @@
 //! capabilities for the Oxide CLI toolkit, enabling real-time performance analysis,
 //! resource utilization tracking, and benchmark comparisons.
 
-use crate::{
-    cli::{error::CliError, output::OutputFormatter},
-    config::OxideConfig,
-};
+use crate::cli::{error::CliError, output::OutputFormatter};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -17,7 +14,7 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use sysinfo::{Cpu, System};
+use sysinfo::System;
 use tokio::time::interval;
 use tracing::{debug, info, warn};
 
@@ -271,8 +268,7 @@ impl PerformanceMonitor {
         }
 
         Err(CliError::profile_error(format!(
-            "Profiling session '{}' not found",
-            session_id
+            "Profiling session '{session_id}' not found"
         )))
     }
 
@@ -308,8 +304,7 @@ impl PerformanceMonitor {
         }
 
         Err(CliError::profile_error(format!(
-            "Profiling session '{}' not found",
-            session_id
+            "Profiling session '{session_id}' not found"
         )))
     }
 
@@ -685,7 +680,7 @@ pub async fn monitor_performance_command(
 
         // Run until interrupted
         tokio::signal::ctrl_c().await.map_err(|e| {
-            CliError::profile_error(format!("Failed to wait for interrupt signal: {}", e))
+            CliError::profile_error(format!("Failed to wait for interrupt signal: {e}"))
         })?;
 
         println!("Performance monitoring stopped.");

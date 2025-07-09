@@ -1,7 +1,7 @@
 //! Context-aware cost adjustment for neural cost estimation
 
 use super::{core::QueryExecutionContext, types::*};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Context-aware cost adjuster
 #[derive(Debug)]
@@ -51,6 +51,12 @@ pub struct AdjustmentStatistics {
     pub average_adjustment_factor: f64,
     pub improvement_score: f64,
     pub pattern_match_rate: f64,
+}
+
+impl Default for ContextAwareCostAdjuster {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContextAwareCostAdjuster {

@@ -22,6 +22,7 @@ pub struct StreamingExecutor {
     config: StreamingConfig,
     memory_monitor: MemoryMonitor,
     spill_manager: Arc<Mutex<SpillManager>>,
+    #[allow(dead_code)]
     temp_dir: TempDir,
     active_streams: HashMap<String, Box<dyn DataStream>>,
     execution_stats: StreamingStats,
@@ -164,10 +165,12 @@ pub struct StreamingHashJoin {
     hash_table: HashMap<String, Vec<Solution>>,
     memory_monitor: Arc<MemoryMonitor>,
     spill_manager: Arc<Mutex<SpillManager>>,
+    #[allow(dead_code)]
     config: StreamingConfig,
     left_exhausted: bool,
     current_batch: Option<Vec<Solution>>,
     spilled_partitions: Vec<String>, // Spill IDs for partitioned hash tables
+    #[allow(dead_code)]
     current_spill_index: usize,
 }
 
@@ -178,8 +181,11 @@ pub struct StreamingSortMergeJoin {
     join_variables: Vec<Variable>,
     left_buffer: VecDeque<Solution>,
     right_buffer: VecDeque<Solution>,
+    #[allow(dead_code)]
     memory_monitor: Arc<MemoryMonitor>,
+    #[allow(dead_code)]
     spill_manager: Arc<Mutex<SpillManager>>,
+    #[allow(dead_code)]
     config: StreamingConfig,
 }
 
@@ -347,7 +353,7 @@ impl StreamingSortMergeJoin {
 
             match (left_val, right_val) {
                 (Some(left_term), Some(right_term)) => {
-                    let cmp = format!("{:?}", left_term).cmp(&format!("{:?}", right_term));
+                    let cmp = format!("{left_term:?}").cmp(&format!("{right_term:?}"));
                     if cmp != std::cmp::Ordering::Equal {
                         return cmp;
                     }
@@ -366,7 +372,7 @@ impl StreamingSortMergeJoin {
             .iter()
             .map(|var| {
                 Self::get_solution_value(solution, var)
-                    .map(|term| format!("{:?}", term))
+                    .map(|term| format!("{term:?}"))
                     .unwrap_or_else(|| "NULL".to_string())
             })
             .collect::<Vec<_>>()
@@ -414,12 +420,19 @@ impl StreamingSortMergeJoin {
 
 /// Streaming aggregation operator
 pub struct StreamingAggregation {
+    #[allow(dead_code)]
     input_stream: Box<dyn DataStream>,
+    #[allow(dead_code)]
     group_variables: Vec<Variable>,
+    #[allow(dead_code)]
     aggregation_functions: Vec<AggregationFunction>,
+    #[allow(dead_code)]
     partial_results: HashMap<String, AggregationState>,
+    #[allow(dead_code)]
     memory_monitor: Arc<MemoryMonitor>,
+    #[allow(dead_code)]
     spill_manager: Arc<Mutex<SpillManager>>,
+    #[allow(dead_code)]
     config: StreamingConfig,
 }
 
@@ -446,18 +459,27 @@ pub struct AggregationState {
 
 /// Memory-mapped file stream for large datasets
 pub struct MemoryMappedStream {
+    #[allow(dead_code)]
     file_path: PathBuf,
+    #[allow(dead_code)]
     current_position: usize,
+    #[allow(dead_code)]
     total_size: usize,
+    #[allow(dead_code)]
     batch_size: usize,
+    #[allow(dead_code)]
     stats: StreamStats,
 }
 
 /// Compressed spill file stream
 pub struct CompressedSpillStream {
+    #[allow(dead_code)]
     file_path: PathBuf,
+    #[allow(dead_code)]
     reader: Option<Box<dyn BufRead>>,
+    #[allow(dead_code)]
     batch_size: usize,
+    #[allow(dead_code)]
     stats: StreamStats,
 }
 
@@ -592,6 +614,7 @@ impl StreamingExecutor {
     }
 
     /// Create streaming minus operation
+    #[allow(dead_code)]
     fn create_streaming_minus(
         &mut self,
         left: Box<dyn DataStream>,
@@ -606,6 +629,7 @@ impl StreamingExecutor {
     }
 
     /// Create streaming projection
+    #[allow(dead_code)]
     fn create_streaming_projection(
         &mut self,
         input: Box<dyn DataStream>,
@@ -615,6 +639,7 @@ impl StreamingExecutor {
     }
 
     /// Create streaming selection
+    #[allow(dead_code)]
     fn create_streaming_selection(
         &mut self,
         input: Box<dyn DataStream>,
@@ -624,6 +649,7 @@ impl StreamingExecutor {
     }
 
     /// Create streaming sort
+    #[allow(dead_code)]
     fn create_streaming_sort(
         &mut self,
         input: Box<dyn DataStream>,
@@ -669,7 +695,7 @@ impl StreamingExecutor {
         for pattern in &ordered_patterns[1..] {
             let pattern_stream = self.create_pattern_stream(pattern)?;
             let join_variables =
-                self.find_join_variables_between_streams(&result_stream, &pattern_stream)?;
+                self.find_join_variables_between_streams(result_stream.as_ref(), pattern_stream.as_ref())?;
             result_stream =
                 self.create_streaming_join(result_stream, pattern_stream, join_variables)?;
         }
@@ -731,8 +757,8 @@ impl StreamingExecutor {
     /// Find join variables between two streams
     fn find_join_variables_between_streams(
         &self,
-        _left_stream: &Box<dyn DataStream>,
-        _right_stream: &Box<dyn DataStream>,
+        _left_stream: &dyn DataStream,
+        _right_stream: &dyn DataStream,
     ) -> Result<Vec<Variable>> {
         // Simplified - in practice would analyze stream schemas
         // For now return empty vector indicating cartesian product
@@ -903,11 +929,13 @@ impl MemoryMonitor {
         inner.current_usage = inner.current_usage.saturating_sub(size);
     }
 
+    #[allow(dead_code)]
     fn should_spill(&self, threshold: f64) -> bool {
         let inner = self.inner.lock().unwrap();
         inner.current_usage as f64 > inner.max_allowed as f64 * threshold
     }
 
+    #[allow(dead_code)]
     fn get_usage_percentage(&self) -> f64 {
         let inner = self.inner.lock().unwrap();
         inner.current_usage as f64 / inner.max_allowed as f64
@@ -943,7 +971,7 @@ impl SpillManager {
 
     fn spill_data<T: Serialize>(&mut self, data: &T, data_type: SpillDataType) -> Result<String> {
         self.spill_counter += 1;
-        let spill_id = format!("spill_{}", self.spill_counter);
+        let spill_id = format!("spill_{c}", c = self.spill_counter);
         let file_path = self.spill_directory.join(format!("{spill_id}.bin"));
 
         let start_time = Instant::now();
@@ -1093,7 +1121,7 @@ impl DataStream for StreamingHashJoin {
 
                     self.hash_table
                         .entry(key)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(solution);
                 }
             }
@@ -1153,7 +1181,7 @@ impl StreamingHashJoin {
             .iter()
             .map(|var| {
                 Self::get_solution_value(solution, var)
-                    .map(|term| format!("{:?}", term))
+                    .map(|term| format!("{term:?}"))
                     .unwrap_or_else(|| "NULL".to_string())
             })
             .collect::<Vec<_>>()
@@ -1229,6 +1257,7 @@ impl StreamingHashJoin {
     }
 
     /// Load spilled hash table partition back into memory
+    #[allow(dead_code)]
     fn load_spilled_partition(&mut self, spill_id: &str) -> Result<HashMap<String, Vec<Solution>>> {
         let partition: HashMap<String, Vec<Solution>> =
             self.spill_manager.lock().unwrap().read_spill(spill_id)?;
@@ -1289,11 +1318,14 @@ impl DataStream for StreamingUnion {
 pub struct StreamingMinus {
     left: Box<dyn DataStream>,
     right: Box<dyn DataStream>,
+    #[allow(dead_code)]
     memory_monitor: Arc<MemoryMonitor>,
+    #[allow(dead_code)]
     spill_manager: Arc<Mutex<SpillManager>>,
 }
 
 impl StreamingMinus {
+    #[allow(dead_code)]
     fn new(
         left: Box<dyn DataStream>,
         right: Box<dyn DataStream>,
@@ -1411,6 +1443,7 @@ pub struct StreamingProjection {
 }
 
 impl StreamingProjection {
+    #[allow(dead_code)]
     fn new(input: Box<dyn DataStream>, variables: Vec<Variable>) -> Self {
         Self { input, variables }
     }
@@ -1460,6 +1493,7 @@ pub struct StreamingSelection {
 }
 
 impl StreamingSelection {
+    #[allow(dead_code)]
     fn new(input: Box<dyn DataStream>, condition: crate::algebra::Expression) -> Self {
         Self { input, condition }
     }
@@ -1610,6 +1644,7 @@ impl StreamingSelection {
 pub struct StreamingSort {
     input: Box<dyn DataStream>,
     sort_variables: Vec<Variable>,
+    #[allow(dead_code)]
     memory_monitor: Arc<MemoryMonitor>,
     spill_manager: Arc<Mutex<SpillManager>>,
     config: StreamingConfig,
@@ -1619,6 +1654,7 @@ pub struct StreamingSort {
 }
 
 impl StreamingSort {
+    #[allow(dead_code)]
     fn new(
         input: Box<dyn DataStream>,
         sort_variables: Vec<Variable>,
@@ -1722,7 +1758,7 @@ impl StreamingSort {
 
             match (a_val, b_val) {
                 (Some(a_term), Some(b_term)) => {
-                    let cmp = format!("{:?}", a_term).cmp(&format!("{:?}", b_term));
+                    let cmp = format!("{a_term:?}").cmp(&format!("{b_term:?}"));
                     if cmp != std::cmp::Ordering::Equal {
                         return cmp;
                     }
@@ -1831,7 +1867,7 @@ impl StreamingPatternScan {
 
             for var in self.pattern.variables() {
                 let value = Term::Iri(
-                    NamedNode::new(&format!("http://example.org/resource_{i}")).unwrap(),
+                    NamedNode::new(format!("http://example.org/resource_{i}")).unwrap(),
                 );
                 binding.insert(var, value);
             }
@@ -1976,7 +2012,7 @@ impl BufferedPatternScan {
 
             for var in self.pattern.variables() {
                 let value =
-                    Term::Iri(NamedNode::new(&format!("http://example.org/item_{i}")).unwrap());
+                    Term::Iri(NamedNode::new(format!("http://example.org/item_{i}")).unwrap());
                 binding.insert(var, value);
             }
 
@@ -2045,7 +2081,7 @@ mod tests {
 
     #[test]
     fn test_memory_monitor() {
-        let mut monitor = MemoryMonitor::new(1000);
+        let monitor = MemoryMonitor::new(1000);
 
         assert!(monitor.allocate(500, "test"));
         assert_eq!(monitor.get_current_usage(), 500);

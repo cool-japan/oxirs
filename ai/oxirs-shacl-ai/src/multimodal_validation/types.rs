@@ -2,16 +2,12 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::path::Path;
 use std::time::{Duration, SystemTime};
 
-use base64::{engine::general_purpose, Engine as _};
 use serde::{Deserialize, Serialize};
 use url::Url;
-use uuid::Uuid;
 
-use oxirs_core::model::{BlankNode, Literal, NamedNode, Object, Term, Triple};
-use oxirs_shacl::{Severity, ValidationViolation};
+use oxirs_shacl::ValidationViolation;
 
 /// Types of content that can be validated
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -107,6 +103,7 @@ pub struct MultiModalContent {
 
 /// Metadata for content
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ContentMetadata {
     /// MIME type
     pub mime_type: Option<String>,
@@ -130,22 +127,6 @@ pub struct ContentMetadata {
     pub properties: HashMap<String, String>,
 }
 
-impl Default for ContentMetadata {
-    fn default() -> Self {
-        Self {
-            mime_type: None,
-            size: None,
-            created_at: None,
-            modified_at: None,
-            author: None,
-            title: None,
-            description: None,
-            language: None,
-            encoding: None,
-            properties: HashMap::new(),
-        }
-    }
-}
 
 /// Result of content analysis
 #[derive(Debug, Clone)]

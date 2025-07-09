@@ -9,9 +9,9 @@ use std::{
     collections::VecDeque,
     time::{Duration, SystemTime},
 };
-use tracing::{debug, warn};
+use tracing::debug;
 
-use crate::{analytics::types::*, types::*, Message, MessageRole};
+use crate::{analytics::types::*, Message};
 
 /// Anomaly detection component for conversation analytics
 pub struct AnomalyDetector {
@@ -194,8 +194,7 @@ impl AnomalyDetector {
                     return Ok(Some(ConversationAnomaly {
                         anomaly_type: AnomalyType::LowQualityResponses,
                         description: format!(
-                            "Response confidence {:.2} is below acceptable threshold",
-                            confidence
+                            "Response confidence {confidence:.2} is below acceptable threshold"
                         ),
                         severity: AnomalySeverity::Medium,
                         detected_at: SystemTime::now(),
@@ -392,8 +391,7 @@ impl AnomalyDetector {
                 return Ok(Some(ConversationAnomaly {
                     anomaly_type: AnomalyType::ConfidenceCollapse,
                     description: format!(
-                        "Confidence collapse detected: average confidence {:.2}",
-                        avg_confidence
+                        "Confidence collapse detected: average confidence {avg_confidence:.2}"
                     ),
                     severity: AnomalySeverity::High,
                     detected_at: SystemTime::now(),
@@ -418,8 +416,7 @@ impl AnomalyDetector {
                 return Ok(Some(ConversationAnomaly {
                     anomaly_type: AnomalyType::RepeatedErrors,
                     description: format!(
-                        "Repeated errors detected: {} out of last 3 responses",
-                        error_count
+                        "Repeated errors detected: {error_count} out of last 3 responses"
                     ),
                     severity: AnomalySeverity::High,
                     detected_at: SystemTime::now(),

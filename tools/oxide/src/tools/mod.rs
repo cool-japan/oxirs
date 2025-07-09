@@ -88,7 +88,7 @@ impl ToolStats {
     }
 
     pub fn print_summary(&self, tool_name: &str) {
-        println!("\n{} completed:", tool_name);
+        println!("\n{tool_name} completed:");
         println!("  Duration: {:.3}s", self.duration.as_secs_f64());
         println!("  Items processed: {}", self.items_processed);
         if self.errors > 0 {

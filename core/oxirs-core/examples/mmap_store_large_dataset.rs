@@ -253,8 +253,7 @@ fn demonstrate_queries(store: &MmapStore) -> Result<()> {
 
         let elapsed = start.elapsed();
         println!(
-            "  Graph contains {} quads (counted in {:?})",
-            count, elapsed
+            "  Graph contains {count} quads (counted in {elapsed:?})"
         );
     }
 

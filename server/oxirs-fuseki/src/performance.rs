@@ -8,20 +8,18 @@
 //! - Memory and resource monitoring
 
 use crate::{
-    config::{CacheConfig, PerformanceConfig},
+    config::PerformanceConfig,
     error::{FusekiError, FusekiResult},
-    metrics::MetricsService,
 };
 use lru::LruCache;
 use moka::future::Cache;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 /// Cache key for query results
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -216,7 +214,7 @@ impl PerformanceService {
     #[instrument(skip(self))]
     pub async fn get_prepared_query(&self, query_hash: &str) -> Option<PreparedQuery> {
         let mut cache = self.prepared_cache.write().await;
-        if let Some(mut prepared) = cache.get_mut(query_hash) {
+        if let Some(prepared) = cache.get_mut(query_hash) {
             prepared.last_used = Instant::now();
             prepared.use_count += 1;
             debug!("Prepared query cache hit for hash: {}", query_hash);
@@ -570,8 +568,8 @@ impl PerformanceService {
     /// Quantum-inspired cost adjustment based on system superposition
     async fn quantum_cost_adjustment(&self, query: &str) -> f64 {
         // Quantum superposition of cost states
-        let cost_states = vec![0.8, 1.0, 1.2, 1.5]; // Different possible cost multipliers
-        let probabilities = vec![0.1, 0.6, 0.25, 0.05]; // Quantum probabilities
+        let cost_states = [0.8, 1.0, 1.2, 1.5]; // Different possible cost multipliers
+        let probabilities = [0.1, 0.6, 0.25, 0.05]; // Quantum probabilities
 
         // Calculate expected value from quantum superposition
         let quantum_expectation: f64 = cost_states
@@ -648,19 +646,19 @@ impl PerformanceService {
     }
 
     fn create_left_deep_join_plan(&self, query: &str) -> String {
-        format!("/* Left-deep plan */ {}", query)
+        format!("/* Left-deep plan */ {query}")
     }
 
     fn create_right_deep_join_plan(&self, query: &str) -> String {
-        format!("/* Right-deep plan */ {}", query)
+        format!("/* Right-deep plan */ {query}")
     }
 
     fn create_bushy_join_plan(&self, query: &str) -> String {
-        format!("/* Bushy plan */ {}", query)
+        format!("/* Bushy plan */ {query}")
     }
 
     fn create_star_join_plan(&self, query: &str) -> String {
-        format!("/* Star plan */ {}", query)
+        format!("/* Star plan */ {query}")
     }
 
     fn apply_quantum_interference(&self, plans: &[String]) -> String {
@@ -696,15 +694,15 @@ impl PerformanceService {
     }
 
     fn apply_join_reordering_nn(&self, query: &str, _pattern: &QueryPattern) -> String {
-        format!("/* NN-optimized joins */ {}", query)
+        format!("/* NN-optimized joins */ {query}")
     }
 
     fn optimize_filter_placement_nn(&self, query: &str, _pattern: &QueryPattern) -> String {
-        format!("/* NN-optimized filters */ {}", query)
+        format!("/* NN-optimized filters */ {query}")
     }
 
     fn optimize_projection_nn(&self, query: &str, _pattern: &QueryPattern) -> String {
-        format!("/* NN-optimized projection */ {}", query)
+        format!("/* NN-optimized projection */ {query}")
     }
 
     async fn update_neural_weights(&self, _original: &str, _optimized: &str, _dataset: &str) {

@@ -7,8 +7,8 @@ use super::ToolResult;
 /// Run UUID generation
 pub async fn run(count: usize, format: String) -> ToolResult {
     println!("UUID Generator");
-    println!("Count: {}", count);
-    println!("Format: {}", format);
+    println!("Count: {count}");
+    println!("Format: {format}");
 
     // Validate format
     let supported_formats = ["uuid", "urn", "bnode"];
@@ -31,12 +31,12 @@ pub async fn run(count: usize, format: String) -> ToolResult {
         if count > 1 {
             println!("{:3}: {}", i + 1, formatted_uuid);
         } else {
-            println!("{}", formatted_uuid);
+            println!("{formatted_uuid}");
         }
     }
 
     if count > 1 {
-        println!("\nGenerated {} UUIDs", count);
+        println!("\nGenerated {count} UUIDs");
     }
 
     Ok(())
@@ -72,7 +72,7 @@ fn generate_uuid() -> String {
 fn format_uuid(uuid: &str, format: &str) -> String {
     match format {
         "uuid" => uuid.to_string(),
-        "urn" => format!("urn:uuid:{}", uuid),
+        "urn" => format!("urn:uuid:{uuid}"),
         "bnode" => format!("_:uuid{}", uuid.replace('-', "")),
         _ => uuid.to_string(), // Fallback
     }

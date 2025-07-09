@@ -7,7 +7,7 @@
 use crate::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use ndarray::{Array1, Array2};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -15,6 +15,7 @@ use uuid::Uuid;
 
 /// Configuration for causal representation learning
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct CausalRepresentationConfig {
     pub base_config: ModelConfig,
     /// Causal discovery configuration
@@ -29,18 +30,6 @@ pub struct CausalRepresentationConfig {
     pub disentanglement_config: DisentanglementConfig,
 }
 
-impl Default for CausalRepresentationConfig {
-    fn default() -> Self {
-        Self {
-            base_config: ModelConfig::default(),
-            causal_discovery: CausalDiscoveryConfig::default(),
-            scm_config: StructuralCausalModelConfig::default(),
-            intervention_config: InterventionConfig::default(),
-            counterfactual_config: CounterfactualConfig::default(),
-            disentanglement_config: DisentanglementConfig::default(),
-        }
-    }
-}
 
 /// Causal discovery configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -847,7 +836,7 @@ impl CausalRepresentationModel {
             // Compute loss (negative log-likelihood + acyclicity constraint)
             let data_loss = self.compute_likelihood_loss(&weights)?;
             let acyclicity_loss = self.compute_acyclicity_constraint(&weights);
-            let total_loss = data_loss + acyclicity_loss;
+            let _total_loss = data_loss + acyclicity_loss;
 
             // Simple gradient descent step (in practice would use proper optimization)
             weights *= 0.99; // Simple decay
@@ -869,7 +858,7 @@ impl CausalRepresentationModel {
     }
 
     /// Test independence between two variables
-    fn independence_test(&self, var1: &str, var2: &str, conditioning_set: &[&str]) -> Result<bool> {
+    fn independence_test(&self, var1: &str, var2: &str, _conditioning_set: &[&str]) -> Result<bool> {
         // Extract data for variables
         let data1: Vec<f32> = self
             .observational_data
@@ -980,7 +969,7 @@ impl CausalRepresentationModel {
 
     /// Compute BIC score for current graph
     fn compute_bic_score(&self) -> Result<f32> {
-        let n_samples = self.observational_data.len() as f32;
+        let _n_samples = self.observational_data.len() as f32;
         let n_variables = self.causal_graph.variables.len() as f32;
         let n_edges = self.causal_graph.adjacency.sum();
 
@@ -999,9 +988,9 @@ impl CausalRepresentationModel {
         for data_point in &self.observational_data {
             let mut point_likelihood = 0.0;
 
-            for (var, &value) in data_point {
+            for &value in data_point.values() {
                 // Simple Gaussian likelihood
-                let variance = 1.0; // Assume unit variance
+                let variance: f32 = 1.0; // Assume unit variance
                 point_likelihood += -0.5 * (value * value / variance + variance.ln());
             }
 
@@ -1068,7 +1057,7 @@ impl CausalRepresentationModel {
     /// Fit a structural equation
     fn fit_structural_equation(&self, equation: &mut StructuralEquation) -> Result<()> {
         // Simple linear regression
-        let mut X = Vec::new();
+        let mut x = Vec::new();
         let mut y = Vec::new();
 
         for data_point in &self.observational_data {
@@ -1086,19 +1075,19 @@ impl CausalRepresentationModel {
                 }
 
                 if all_parents_present {
-                    X.push(parent_values);
+                    x.push(parent_values);
                     y.push(target_value);
                 }
             }
         }
 
-        if !X.is_empty() && !X[0].is_empty() {
+        if !x.is_empty() && !x[0].is_empty() {
             // Simple least squares solution
-            let n_samples = X.len();
-            let n_features = X[0].len();
+            let n_samples = x.len();
+            let n_features = x[0].len();
 
             // Convert to matrices
-            let X_matrix = Array2::from_shape_fn((n_samples, n_features), |(i, j)| X[i][j]);
+            let x_matrix = Array2::from_shape_fn((n_samples, n_features), |(i, j)| x[i][j]);
             let y_vector = Array1::from_vec(y);
 
             // Solve normal equations: (X^T X)^{-1} X^T y
@@ -1109,8 +1098,8 @@ impl CausalRepresentationModel {
                 let mut denominator = 0.0;
 
                 for i in 0..n_samples {
-                    numerator += X_matrix[[i, j]] * y_vector[i];
-                    denominator += X_matrix[[i, j]] * X_matrix[[i, j]];
+                    numerator += x_matrix[[i, j]] * y_vector[i];
+                    denominator += x_matrix[[i, j]] * x_matrix[[i, j]];
                 }
 
                 if denominator > 0.0 {
@@ -1168,7 +1157,7 @@ impl CausalRepresentationModel {
         query: &CounterfactualQuery,
     ) -> Result<HashMap<String, f32>> {
         // Step 1: Abduction - infer latent variables from factual evidence
-        let latent_values = self.abduction(&query.factual_evidence)?;
+        let _latent_values = self.abduction(&query.factual_evidence)?;
 
         // Step 2: Action - apply intervention
         let intervened_values = self.intervene(&query.intervention)?;
@@ -1196,7 +1185,7 @@ impl CausalRepresentationModel {
         let mut latent_values = Array1::zeros(latent_dim);
 
         // Use evidence to infer latent values (simplified)
-        for (i, (var, &value)) in evidence.iter().enumerate() {
+        for (i, (_var, &value)) in evidence.iter().enumerate() {
             if i < latent_dim {
                 latent_values[i] = value;
             }
@@ -1222,7 +1211,7 @@ impl CausalRepresentationModel {
         {
             let parents = self.causal_graph.get_parents(var_idx);
 
-            explanation.push_str(&format!("The value of {} is caused by:\n", query_var));
+            explanation.push_str(&format!("The value of {query_var} is caused by:\n"));
 
             for &parent_idx in &parents {
                 let parent_var = &self.causal_graph.variables[parent_idx];
@@ -1230,8 +1219,7 @@ impl CausalRepresentationModel {
 
                 if let Some(&parent_value) = evidence.get(parent_var) {
                     explanation.push_str(&format!(
-                        "- {} (value: {:.2}, causal strength: {:.2})\n",
-                        parent_var, parent_value, causal_strength
+                        "- {parent_var} (value: {parent_value:.2}, causal strength: {causal_strength:.2})\n"
                     ));
                 }
             }
@@ -1253,7 +1241,7 @@ impl CausalRepresentationModel {
     /// Learn beta-VAE representations
     fn learn_beta_vae(&mut self) -> Result<()> {
         let num_factors = self.config.disentanglement_config.num_factors;
-        let beta = self.config.disentanglement_config.beta;
+        let _beta = self.config.disentanglement_config.beta;
 
         // Initialize latent factors
         self.latent_factors =
@@ -1388,7 +1376,7 @@ impl EmbeddingModel for CausalRepresentationModel {
         }
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(embedding) = self.variable_embeddings.get(relation) {
             Ok(Vector::new(embedding.to_vec()))
         } else {
@@ -1396,7 +1384,7 @@ impl EmbeddingModel for CausalRepresentationModel {
         }
     }
 
-    fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
+    fn score_triple(&self, subject: &str, _predicate: &str, object: &str) -> Result<f64> {
         // Use causal relationships for scoring
         if let (Some(subject_idx), Some(object_idx)) = (
             self.causal_graph

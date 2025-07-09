@@ -32,7 +32,7 @@ impl Exporter for SVGExporter {
         // Write to file
         tokio::fs::write(output_path, svg_content)
             .await
-            .map_err(|e| ShaclAiError::Visualization(format!("Failed to write SVG file: {}", e)))?;
+            .map_err(|e| ShaclAiError::Visualization(format!("Failed to write SVG file: {e}")))?;
 
         tracing::info!(
             "Exported visualization {} to SVG: {:?}",
@@ -90,7 +90,7 @@ impl Exporter for PNGExporter {
 
         tokio::fs::write(output_path, placeholder_data)
             .await
-            .map_err(|e| ShaclAiError::Visualization(format!("Failed to write PNG file: {}", e)))?;
+            .map_err(|e| ShaclAiError::Visualization(format!("Failed to write PNG file: {e}")))?;
 
         tracing::info!(
             "Exported visualization {} to PNG: {:?}",
@@ -130,7 +130,7 @@ impl Exporter for HTMLExporter {
         tokio::fs::write(output_path, html_content)
             .await
             .map_err(|e| {
-                ShaclAiError::Visualization(format!("Failed to write HTML file: {}", e))
+                ShaclAiError::Visualization(format!("Failed to write HTML file: {e}"))
             })?;
 
         tracing::info!(
@@ -225,7 +225,7 @@ impl Exporter for PDFExporter {
 
         tokio::fs::write(output_path, placeholder_data)
             .await
-            .map_err(|e| ShaclAiError::Visualization(format!("Failed to write PDF file: {}", e)))?;
+            .map_err(|e| ShaclAiError::Visualization(format!("Failed to write PDF file: {e}")))?;
 
         tracing::info!(
             "Exported visualization {} to PDF: {:?}",
@@ -260,13 +260,13 @@ pub struct JSONExporter;
 impl Exporter for JSONExporter {
     async fn export(&self, visualization: &VisualizationOutput, output_path: &Path) -> Result<()> {
         let json_content = serde_json::to_string_pretty(visualization).map_err(|e| {
-            ShaclAiError::Visualization(format!("Failed to serialize to JSON: {}", e))
+            ShaclAiError::Visualization(format!("Failed to serialize to JSON: {e}"))
         })?;
 
         tokio::fs::write(output_path, json_content)
             .await
             .map_err(|e| {
-                ShaclAiError::Visualization(format!("Failed to write JSON file: {}", e))
+                ShaclAiError::Visualization(format!("Failed to write JSON file: {e}"))
             })?;
 
         tracing::info!(
@@ -315,7 +315,7 @@ impl ExportManager {
         output_dir: &Path,
     ) -> Result<std::path::PathBuf> {
         let exporter = self.exporters.get(&format).ok_or_else(|| {
-            ShaclAiError::Visualization(format!("No exporter for format {:?}", format))
+            ShaclAiError::Visualization(format!("No exporter for format {format:?}"))
         })?;
 
         let file_name = format!(

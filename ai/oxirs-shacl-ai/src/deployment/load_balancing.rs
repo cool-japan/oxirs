@@ -16,6 +16,12 @@ pub struct LoadBalancingManager {
     traffic_routing: TrafficRouting,
 }
 
+impl Default for LoadBalancingManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LoadBalancingManager {
     pub fn new() -> Self {
         Self {
@@ -133,21 +139,13 @@ pub enum HealthCheckType {
 
 /// Traffic routing
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TrafficRouting {
     pub routing_rules: Vec<RoutingRule>,
     pub canary_deployments: Vec<CanaryDeployment>,
     pub blue_green_config: Option<BlueGreenConfig>,
 }
 
-impl Default for TrafficRouting {
-    fn default() -> Self {
-        Self {
-            routing_rules: vec![],
-            canary_deployments: vec![],
-            blue_green_config: None,
-        }
-    }
-}
 
 /// Routing rule
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -9,8 +9,6 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::neural_patterns::NeuralPattern;
-use crate::patterns::PatternType;
 use crate::{Result, ShaclAiError};
 
 /// Advanced neural architecture for shape learning
@@ -494,15 +492,15 @@ impl AdvancedNeuralManager {
     ) -> Result<()> {
         let mut architectures = self.architectures.write().await;
         let architecture = architectures.get_mut(name).ok_or_else(|| {
-            ShaclAiError::Configuration(format!("Architecture {} not found", name))
+            ShaclAiError::Configuration(format!("Architecture {name} not found"))
         })?;
 
         // Cache training data
         {
             let mut cache = self.training_cache.write().await;
-            cache.insert(format!("{}_training", name), training_data.clone());
+            cache.insert(format!("{name}_training"), training_data.clone());
             if let Some(val_data) = &validation_data {
-                cache.insert(format!("{}_validation", name), val_data.clone());
+                cache.insert(format!("{name}_validation"), val_data.clone());
             }
         }
 

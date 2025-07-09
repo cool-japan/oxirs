@@ -15,4 +15,3 @@ pub mod synthetic_minds;
 // Re-export main types
 pub use core::*;
 pub use processing::*;
-pub use synthetic_minds::*;

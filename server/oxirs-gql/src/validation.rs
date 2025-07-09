@@ -64,6 +64,12 @@ pub struct ValidationResult {
     pub depth: usize,
 }
 
+impl Default for ValidationResult {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValidationResult {
     pub fn new() -> Self {
         Self {
@@ -207,7 +213,7 @@ impl QueryValidator {
             if let Some(ref op_name) = operation.name {
                 if !allowed_ops.contains(op_name) {
                     return Ok(result.with_error(ValidationError::new(
-                        format!("Operation '{}' is not allowed", op_name),
+                        format!("Operation '{op_name}' is not allowed"),
                         ValidationRule::OperationNotAllowed,
                     )));
                 }
@@ -589,6 +595,7 @@ impl QueryValidator {
 
 /// Context for validation operations
 struct ValidationContext {
+    #[allow(dead_code)]
     schema: Schema,
     fragments: HashMap<String, crate::ast::FragmentDefinition>,
 }

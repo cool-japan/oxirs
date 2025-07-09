@@ -288,3 +288,373 @@ pub mod owl {
     pub static DIFFERENT_FROM: Lazy<NamedNode> =
         Lazy::new(|| NamedNode::new_unchecked(format!("{NAMESPACE}differentFrom")));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rdf_namespace() {
+        assert_eq!(
+            rdf::NAMESPACE,
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+        );
+    }
+
+    #[test]
+    fn test_rdf_vocabulary() {
+        assert_eq!(
+            rdf::TYPE.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type"
+        );
+        assert_eq!(
+            rdf::PROPERTY.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#Property"
+        );
+        assert_eq!(
+            rdf::RESOURCE.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#Resource"
+        );
+        assert_eq!(
+            rdf::STATEMENT.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement"
+        );
+        assert_eq!(
+            rdf::SUBJECT.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#subject"
+        );
+        assert_eq!(
+            rdf::PREDICATE.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#predicate"
+        );
+        assert_eq!(
+            rdf::OBJECT.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#object"
+        );
+        assert_eq!(
+            rdf::LIST.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#List"
+        );
+        assert_eq!(
+            rdf::FIRST.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#first"
+        );
+        assert_eq!(
+            rdf::REST.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest"
+        );
+        assert_eq!(
+            rdf::NIL.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil"
+        );
+        assert_eq!(
+            rdf::LANG_STRING.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "rdf-12")]
+    fn test_rdf_12_vocabulary() {
+        assert_eq!(
+            rdf::DIR_LANG_STRING.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#dirLangString"
+        );
+    }
+
+    #[test]
+    fn test_xsd_namespace() {
+        assert_eq!(xsd::NAMESPACE, "http://www.w3.org/2001/XMLSchema#");
+    }
+
+    #[test]
+    fn test_xsd_basic_datatypes() {
+        assert_eq!(
+            xsd::STRING.as_str(),
+            "http://www.w3.org/2001/XMLSchema#string"
+        );
+        assert_eq!(
+            xsd::BOOLEAN.as_str(),
+            "http://www.w3.org/2001/XMLSchema#boolean"
+        );
+        assert_eq!(
+            xsd::INTEGER.as_str(),
+            "http://www.w3.org/2001/XMLSchema#integer"
+        );
+        assert_eq!(
+            xsd::DECIMAL.as_str(),
+            "http://www.w3.org/2001/XMLSchema#decimal"
+        );
+        assert_eq!(
+            xsd::DOUBLE.as_str(),
+            "http://www.w3.org/2001/XMLSchema#double"
+        );
+        assert_eq!(
+            xsd::FLOAT.as_str(),
+            "http://www.w3.org/2001/XMLSchema#float"
+        );
+    }
+
+    #[test]
+    fn test_xsd_date_time_datatypes() {
+        assert_eq!(
+            xsd::DATE.as_str(),
+            "http://www.w3.org/2001/XMLSchema#date"
+        );
+        assert_eq!(
+            xsd::TIME.as_str(),
+            "http://www.w3.org/2001/XMLSchema#time"
+        );
+        assert_eq!(
+            xsd::DATE_TIME.as_str(),
+            "http://www.w3.org/2001/XMLSchema#dateTime"
+        );
+        assert_eq!(
+            xsd::DURATION.as_str(),
+            "http://www.w3.org/2001/XMLSchema#duration"
+        );
+        assert_eq!(
+            xsd::YEAR_MONTH_DURATION.as_str(),
+            "http://www.w3.org/2001/XMLSchema#yearMonthDuration"
+        );
+        assert_eq!(
+            xsd::DAY_TIME_DURATION.as_str(),
+            "http://www.w3.org/2001/XMLSchema#dayTimeDuration"
+        );
+    }
+
+    #[test]
+    fn test_xsd_gregorian_datatypes() {
+        assert_eq!(
+            xsd::G_YEAR.as_str(),
+            "http://www.w3.org/2001/XMLSchema#gYear"
+        );
+        assert_eq!(
+            xsd::G_YEAR_MONTH.as_str(),
+            "http://www.w3.org/2001/XMLSchema#gYearMonth"
+        );
+        assert_eq!(
+            xsd::G_MONTH.as_str(),
+            "http://www.w3.org/2001/XMLSchema#gMonth"
+        );
+        assert_eq!(
+            xsd::G_MONTH_DAY.as_str(),
+            "http://www.w3.org/2001/XMLSchema#gMonthDay"
+        );
+        assert_eq!(
+            xsd::G_DAY.as_str(),
+            "http://www.w3.org/2001/XMLSchema#gDay"
+        );
+    }
+
+    #[test]
+    fn test_xsd_binary_datatypes() {
+        assert_eq!(
+            xsd::BASE64_BINARY.as_str(),
+            "http://www.w3.org/2001/XMLSchema#base64Binary"
+        );
+        assert_eq!(
+            xsd::HEX_BINARY.as_str(),
+            "http://www.w3.org/2001/XMLSchema#hexBinary"
+        );
+    }
+
+    #[test]
+    fn test_xsd_integer_datatypes() {
+        assert_eq!(
+            xsd::LONG.as_str(),
+            "http://www.w3.org/2001/XMLSchema#long"
+        );
+        assert_eq!(xsd::INT.as_str(), "http://www.w3.org/2001/XMLSchema#int");
+        assert_eq!(
+            xsd::SHORT.as_str(),
+            "http://www.w3.org/2001/XMLSchema#short"
+        );
+        assert_eq!(
+            xsd::BYTE.as_str(),
+            "http://www.w3.org/2001/XMLSchema#byte"
+        );
+        assert_eq!(
+            xsd::UNSIGNED_LONG.as_str(),
+            "http://www.w3.org/2001/XMLSchema#unsignedLong"
+        );
+        assert_eq!(
+            xsd::UNSIGNED_INT.as_str(),
+            "http://www.w3.org/2001/XMLSchema#unsignedInt"
+        );
+        assert_eq!(
+            xsd::UNSIGNED_SHORT.as_str(),
+            "http://www.w3.org/2001/XMLSchema#unsignedShort"
+        );
+        assert_eq!(
+            xsd::UNSIGNED_BYTE.as_str(),
+            "http://www.w3.org/2001/XMLSchema#unsignedByte"
+        );
+    }
+
+    #[test]
+    fn test_xsd_special_integer_datatypes() {
+        assert_eq!(
+            xsd::POSITIVE_INTEGER.as_str(),
+            "http://www.w3.org/2001/XMLSchema#positiveInteger"
+        );
+        assert_eq!(
+            xsd::NON_NEGATIVE_INTEGER.as_str(),
+            "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+        );
+        assert_eq!(
+            xsd::NEGATIVE_INTEGER.as_str(),
+            "http://www.w3.org/2001/XMLSchema#negativeInteger"
+        );
+        assert_eq!(
+            xsd::NON_POSITIVE_INTEGER.as_str(),
+            "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+        );
+    }
+
+    #[test]
+    fn test_xsd_string_datatypes() {
+        assert_eq!(
+            xsd::NORMALIZED_STRING.as_str(),
+            "http://www.w3.org/2001/XMLSchema#normalizedString"
+        );
+        assert_eq!(
+            xsd::TOKEN.as_str(),
+            "http://www.w3.org/2001/XMLSchema#token"
+        );
+        assert_eq!(
+            xsd::LANGUAGE.as_str(),
+            "http://www.w3.org/2001/XMLSchema#language"
+        );
+    }
+
+    #[test]
+    fn test_xsd_misc_datatypes() {
+        assert_eq!(
+            xsd::ANY_URI.as_str(),
+            "http://www.w3.org/2001/XMLSchema#anyURI"
+        );
+        // Note: xsd::LANG_STRING should actually point to RDF namespace
+        assert_eq!(
+            xsd::LANG_STRING.as_str(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
+        );
+    }
+
+    #[test]
+    fn test_rdfs_namespace() {
+        assert_eq!(rdfs::NAMESPACE, "http://www.w3.org/2000/01/rdf-schema#");
+    }
+
+    #[test]
+    fn test_rdfs_vocabulary() {
+        assert_eq!(
+            rdfs::CLASS.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#Class"
+        );
+        assert_eq!(
+            rdfs::SUB_CLASS_OF.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#subClassOf"
+        );
+        assert_eq!(
+            rdfs::SUB_PROPERTY_OF.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#subPropertyOf"
+        );
+        assert_eq!(
+            rdfs::DOMAIN.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#domain"
+        );
+        assert_eq!(
+            rdfs::RANGE.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#range"
+        );
+        assert_eq!(
+            rdfs::LABEL.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#label"
+        );
+        assert_eq!(
+            rdfs::COMMENT.as_str(),
+            "http://www.w3.org/2000/01/rdf-schema#comment"
+        );
+    }
+
+    #[test]
+    fn test_owl_namespace() {
+        assert_eq!(owl::NAMESPACE, "http://www.w3.org/2002/07/owl#");
+    }
+
+    #[test]
+    fn test_owl_vocabulary() {
+        assert_eq!(
+            owl::CLASS.as_str(),
+            "http://www.w3.org/2002/07/owl#Class"
+        );
+        assert_eq!(
+            owl::OBJECT_PROPERTY.as_str(),
+            "http://www.w3.org/2002/07/owl#ObjectProperty"
+        );
+        assert_eq!(
+            owl::DATATYPE_PROPERTY.as_str(),
+            "http://www.w3.org/2002/07/owl#DatatypeProperty"
+        );
+        assert_eq!(
+            owl::FUNCTIONAL_PROPERTY.as_str(),
+            "http://www.w3.org/2002/07/owl#FunctionalProperty"
+        );
+        assert_eq!(
+            owl::INVERSE_FUNCTIONAL_PROPERTY.as_str(),
+            "http://www.w3.org/2002/07/owl#InverseFunctionalProperty"
+        );
+        assert_eq!(
+            owl::SAME_AS.as_str(),
+            "http://www.w3.org/2002/07/owl#sameAs"
+        );
+        assert_eq!(
+            owl::DIFFERENT_FROM.as_str(),
+            "http://www.w3.org/2002/07/owl#differentFrom"
+        );
+    }
+
+    #[test]
+    fn test_lazy_static_initialization() {
+        // Test that lazy statics are properly initialized and reused
+        let type1 = &*rdf::TYPE;
+        let type2 = &*rdf::TYPE;
+        assert!(std::ptr::eq(type1, type2)); // Should be same instance
+
+        let string1 = &*xsd::STRING;
+        let string2 = &*xsd::STRING;
+        assert!(std::ptr::eq(string1, string2)); // Should be same instance
+    }
+
+    #[test]
+    fn test_vocabularies_contain_no_trailing_spaces() {
+        // Ensure none of the vocabulary IRIs have trailing spaces
+        assert!(!rdf::TYPE.as_str().contains(' '));
+        assert!(!xsd::STRING.as_str().contains(' '));
+        assert!(!rdfs::CLASS.as_str().contains(' '));
+        assert!(!owl::CLASS.as_str().contains(' '));
+    }
+
+    #[test]
+    fn test_namespace_consistency() {
+        // Test that all RDF vocabulary items start with RDF namespace
+        assert!(rdf::TYPE.as_str().starts_with(rdf::NAMESPACE));
+        assert!(rdf::PROPERTY.as_str().starts_with(rdf::NAMESPACE));
+        assert!(rdf::LIST.as_str().starts_with(rdf::NAMESPACE));
+
+        // Test that all XSD vocabulary items start with XSD namespace
+        assert!(xsd::STRING.as_str().starts_with(xsd::NAMESPACE));
+        assert!(xsd::INTEGER.as_str().starts_with(xsd::NAMESPACE));
+        // Exception: xsd::LANG_STRING should point to RDF namespace
+        assert!(xsd::LANG_STRING.as_str().starts_with(rdf::NAMESPACE));
+
+        // Test that all RDFS vocabulary items start with RDFS namespace
+        assert!(rdfs::CLASS.as_str().starts_with(rdfs::NAMESPACE));
+        assert!(rdfs::LABEL.as_str().starts_with(rdfs::NAMESPACE));
+
+        // Test that all OWL vocabulary items start with OWL namespace
+        assert!(owl::CLASS.as_str().starts_with(owl::NAMESPACE));
+        assert!(owl::SAME_AS.as_str().starts_with(owl::NAMESPACE));
+    }
+}

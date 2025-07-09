@@ -1,8 +1,7 @@
 //! Unit tests for service registry and management
 
-use oxirs_federate::service::{AuthType, RateLimit, ServiceAuthConfig, ServiceMetadata};
+use oxirs_federate::service::{AuthType, RateLimit, ServiceAuthConfig};
 use oxirs_federate::*;
-use std::collections::HashSet;
 use std::time::Duration;
 
 #[tokio::test]
@@ -283,9 +282,9 @@ async fn test_registry_statistics() {
     // Register multiple services with fast timeout
     for i in 1..=3 {
         let service = FederatedService::new_sparql(
-            format!("stats-test-{}", i),
-            format!("Stats Test {}", i),
-            format!("http://example.com/sparql{}", i),
+            format!("stats-test-{i}"),
+            format!("Stats Test {i}"),
+            format!("http://example.com/sparql{i}"),
         );
         let _ = registry.register(service).await;
     }

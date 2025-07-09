@@ -502,15 +502,15 @@ impl CapabilityAssessor {
                 if let (Some(username), Some(password)) =
                     (&auth.credentials.username, &auth.credentials.password)
                 {
-                    let credentials = format!("{}:{}", username, password);
+                    let credentials = format!("{username}:{password}");
                     let encoded = encode(credentials.as_bytes());
-                    let auth_value = format!("Basic {}", encoded);
+                    let auth_value = format!("Basic {encoded}");
                     headers.insert("Authorization", HeaderValue::from_str(&auth_value)?);
                 }
             }
             AuthType::Bearer => {
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert("Authorization", HeaderValue::from_str(&auth_value)?);
                 }
             }

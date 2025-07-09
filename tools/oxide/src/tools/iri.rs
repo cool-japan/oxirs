@@ -12,31 +12,31 @@ pub async fn run(
     normalize: bool,
 ) -> ToolResult {
     println!("IRI Processor");
-    println!("Input IRI: {}", iri);
+    println!("Input IRI: {iri}");
 
     if validate {
         match utils::validate_iri(&iri) {
             Ok(valid_iri) => {
                 println!("✓ IRI is valid");
                 if valid_iri != iri {
-                    println!("  Normalized: {}", valid_iri);
+                    println!("  Normalized: {valid_iri}");
                 }
             }
             Err(e) => {
-                println!("✗ IRI is invalid: {}", e);
-                return Err(format!("Invalid IRI: {}", e).into());
+                println!("✗ IRI is invalid: {e}");
+                return Err(format!("Invalid IRI: {e}").into());
             }
         }
     }
 
     if normalize {
         let normalized = normalize_iri(&iri)?;
-        println!("Normalized IRI: {}", normalized);
+        println!("Normalized IRI: {normalized}");
     }
 
     if let Some(base) = resolve {
         let resolved = resolve_iri(&iri, &base)?;
-        println!("Resolved IRI: {}", resolved);
+        println!("Resolved IRI: {resolved}");
     }
 
     // Additional IRI analysis
@@ -81,7 +81,7 @@ fn decode_unnecessary_percent_encoding(iri: &str) -> String {
                 let hex2 = chars.peek().copied();
                 if let Some(h2) = hex2 {
                     chars.next();
-                    let hex_str = format!("{}{}", h1, h2);
+                    let hex_str = format!("{h1}{h2}");
                     if let Ok(byte) = u8::from_str_radix(&hex_str, 16) {
                         let decoded_char = byte as char;
                         // Only decode unreserved characters
@@ -157,7 +157,7 @@ fn normalize_scheme_and_host(iri: &str) -> ToolResult<String> {
                 Ok(format!("{}:{}//{}", scheme, &rest[..3], authority))
             }
         } else {
-            Ok(format!("{}{}", scheme, rest))
+            Ok(format!("{scheme}{rest}"))
         }
     } else {
         Ok(iri.to_string())
@@ -184,7 +184,7 @@ fn remove_default_port(iri: &str) -> String {
                         || after_port.starts_with('?')
                         || after_port.starts_with('#')
                     {
-                        return format!("{}{}{}", scheme, before_port, after_port);
+                        return format!("{scheme}{before_port}{after_port}");
                     }
                 }
             }
@@ -218,8 +218,7 @@ fn normalize_path(iri: &str) -> String {
 
                 let normalized_path = normalize_path_segments(path);
                 return format!(
-                    "{}{}{}{}",
-                    scheme_and_colon, authority, normalized_path, query_and_fragment
+                    "{scheme_and_colon}{authority}{normalized_path}{query_and_fragment}"
                 );
             }
         } else {
@@ -234,8 +233,7 @@ fn normalize_path(iri: &str) -> String {
 
             let normalized_path = normalize_path_segments(path);
             return format!(
-                "{}{}{}",
-                scheme_and_colon, normalized_path, query_and_fragment
+                "{scheme_and_colon}{normalized_path}{query_and_fragment}"
             );
         }
     }
@@ -320,7 +318,7 @@ fn resolve_iri(iri: &str, base: &str) -> ToolResult<String> {
         } else {
             base
         };
-        return Ok(format!("{}{}", base_without_query, iri));
+        return Ok(format!("{base_without_query}{iri}"));
     }
 
     if iri.starts_with('#') {
@@ -330,7 +328,7 @@ fn resolve_iri(iri: &str, base: &str) -> ToolResult<String> {
         } else {
             base
         };
-        return Ok(format!("{}{}", base_without_fragment, iri));
+        return Ok(format!("{base_without_fragment}{iri}"));
     }
 
     // Relative path reference
@@ -341,7 +339,7 @@ fn resolve_iri(iri: &str, base: &str) -> ToolResult<String> {
         "/"
     };
 
-    let combined_path = format!("{}{}", base_dir, iri);
+    let combined_path = format!("{base_dir}{iri}");
     let normalized_path = normalize_path_segments(&combined_path);
 
     Ok(format!(
@@ -407,7 +405,7 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
     // Basic component extraction
     if let Some(scheme_end) = iri.find(':') {
         let scheme = &iri[..scheme_end];
-        println!("Scheme: {}", scheme);
+        println!("Scheme: {scheme}");
 
         let rest = &iri[scheme_end + 1..];
 
@@ -422,34 +420,34 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
                 .unwrap_or(authority_part.len());
 
             let authority = &authority_part[..authority_end];
-            println!("Authority: {}", authority);
+            println!("Authority: {authority}");
 
             // Parse authority components
             if let Some(at_pos) = authority.find('@') {
                 let userinfo = &authority[..at_pos];
                 let host_and_port = &authority[at_pos + 1..];
-                println!("  Userinfo: {}", userinfo);
+                println!("  Userinfo: {userinfo}");
 
                 if let Some(colon_pos) = host_and_port.rfind(':') {
                     let host = &host_and_port[..colon_pos];
                     let port = &host_and_port[colon_pos + 1..];
-                    println!("  Host: {}", host);
-                    println!("  Port: {}", port);
+                    println!("  Host: {host}");
+                    println!("  Port: {port}");
                 } else {
-                    println!("  Host: {}", host_and_port);
+                    println!("  Host: {host_and_port}");
                 }
             } else if let Some(colon_pos) = authority.rfind(':') {
                 // Check if this is actually a port (not IPv6)
                 let potential_port = &authority[colon_pos + 1..];
                 if potential_port.chars().all(|c| c.is_ascii_digit()) {
                     let host = &authority[..colon_pos];
-                    println!("  Host: {}", host);
-                    println!("  Port: {}", potential_port);
+                    println!("  Host: {host}");
+                    println!("  Port: {potential_port}");
                 } else {
-                    println!("  Host: {}", authority);
+                    println!("  Host: {authority}");
                 }
             } else {
-                println!("  Host: {}", authority);
+                println!("  Host: {authority}");
             }
 
             // Path component
@@ -463,7 +461,7 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
 
                 if path_end > 0 {
                     let path = &path_and_rest[..path_end];
-                    println!("Path: {}", path);
+                    println!("Path: {path}");
                 }
 
                 // Query component
@@ -474,13 +472,13 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
                         .unwrap_or(path_and_rest.len());
 
                     let query = &path_and_rest[query_start + 1..query_end];
-                    println!("Query: {}", query);
+                    println!("Query: {query}");
                 }
 
                 // Fragment component
                 if let Some(fragment_start) = path_and_rest.find('#') {
                     let fragment = &path_and_rest[fragment_start + 1..];
-                    println!("Fragment: {}", fragment);
+                    println!("Fragment: {fragment}");
                 }
             }
         } else {
@@ -492,7 +490,7 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
 
             if path_end > 0 {
                 let path = &rest[..path_end];
-                println!("Path: {}", path);
+                println!("Path: {path}");
             }
 
             // Query and fragment handling similar to above
@@ -503,12 +501,12 @@ fn analyze_iri(iri: &str) -> ToolResult<()> {
                     .unwrap_or(rest.len());
 
                 let query = &rest[query_start + 1..query_end];
-                println!("Query: {}", query);
+                println!("Query: {query}");
             }
 
             if let Some(fragment_start) = rest.find('#') {
                 let fragment = &rest[fragment_start + 1..];
-                println!("Fragment: {}", fragment);
+                println!("Fragment: {fragment}");
             }
         }
 

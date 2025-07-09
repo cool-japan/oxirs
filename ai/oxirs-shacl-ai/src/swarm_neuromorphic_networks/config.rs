@@ -74,6 +74,7 @@ pub enum EnergyConsumptionModel {
 
 /// Swarm intelligence configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct SwarmIntelligenceConfig {
     /// Particle swarm optimization parameters
     pub pso_config: PSOConfig,
@@ -85,16 +86,6 @@ pub struct SwarmIntelligenceConfig {
     pub fish_schooling_config: FishSchoolingConfig,
 }
 
-impl Default for SwarmIntelligenceConfig {
-    fn default() -> Self {
-        Self {
-            pso_config: PSOConfig::default(),
-            aco_config: ACOConfig::default(),
-            bee_config: BeeAlgorithmConfig::default(),
-            fish_schooling_config: FishSchoolingConfig::default(),
-        }
-    }
-}
 
 /// Particle Swarm Optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -283,21 +274,13 @@ pub enum RecoveryStrategy {
 
 /// Bio-inspired optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct BioOptimizationConfig {
     pub genetic_algorithm_config: GeneticAlgorithmConfig,
     pub neural_evolution_config: NeuralEvolutionConfig,
     pub evolutionary_programming_config: EvolutionaryProgrammingConfig,
 }
 
-impl Default for BioOptimizationConfig {
-    fn default() -> Self {
-        Self {
-            genetic_algorithm_config: GeneticAlgorithmConfig::default(),
-            neural_evolution_config: NeuralEvolutionConfig::default(),
-            evolutionary_programming_config: EvolutionaryProgrammingConfig::default(),
-        }
-    }
-}
 
 /// Genetic algorithm configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

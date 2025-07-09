@@ -43,6 +43,7 @@ impl Default for PerformanceTestConfig {
 
 impl PerformanceTestConfig {
     /// Create config for full performance testing (use via environment variable)
+    #[allow(dead_code)]
     fn full_performance() -> Self {
         Self {
             event_count: 100_000,
@@ -56,6 +57,7 @@ impl PerformanceTestConfig {
     }
 
     /// Get config based on environment - full performance if OXIRS_FULL_PERF_TEST=1
+    #[allow(dead_code)]
     fn from_env() -> Self {
         if std::env::var("OXIRS_FULL_PERF_TEST").unwrap_or_default() == "1" {
             Self::full_performance()
@@ -75,6 +77,12 @@ pub struct PerformanceMetrics {
     pub latencies: Vec<Duration>,
     pub throughput_samples: Vec<f64>,
     pub test_duration: Duration,
+}
+
+impl Default for PerformanceMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceMetrics {
@@ -135,12 +143,12 @@ impl PerformanceMetrics {
 fn create_performance_test_events(count: usize, batch_id: usize) -> Vec<StreamEvent> {
     (0..count)
         .map(|i| {
-            let event_id = format!("perf_{}_{}", batch_id, i);
+            let event_id = format!("perf_{batch_id}_{i}");
             StreamEvent::TripleAdded {
-                subject: format!("http://perf.test/subject_{}", i),
+                subject: format!("http://perf.test/subject_{i}"),
                 predicate: "http://perf.test/predicate".to_string(),
-                object: format!("\"Performance test data {}\"", i),
-                graph: Some(format!("http://perf.test/graph_{}", batch_id)),
+                object: format!("\"Performance test data {i}\""),
+                graph: Some(format!("http://perf.test/graph_{batch_id}")),
                 metadata: EventMetadata {
                     event_id: event_id.clone(),
                     timestamp: Utc::now(),
@@ -156,7 +164,7 @@ fn create_performance_test_events(count: usize, batch_id: usize) -> Vec<StreamEv
                         props.insert("test_type".to_string(), "performance".to_string());
                         props
                     },
-                    checksum: Some(format!("checksum_{}", event_id)),
+                    checksum: Some(format!("checksum_{event_id}")),
                 },
             }
         })
@@ -165,9 +173,10 @@ fn create_performance_test_events(count: usize, batch_id: usize) -> Vec<StreamEv
 
 /// Create optimized stream configuration for performance testing
 fn create_performance_stream_config(backend: StreamBackendType) -> StreamConfig {
+    let test_id = Uuid::new_v4();
     StreamConfig {
         backend,
-        topic: format!("perf-test-{}", Uuid::new_v4()),
+        topic: format!("perf-test-{test_id}"),
         batch_size: 100,       // Large batches for throughput
         flush_interval_ms: 10, // Fast flushing for low latency
         max_connections: 20,
@@ -261,7 +270,7 @@ mod throughput_tests {
         );
 
         if let Some(p99) = metrics.latency_p99() {
-            println!("  P99 latency: {:?}", p99);
+            println!("  P99 latency: {p99:?}");
         }
 
         // Verify performance targets (adjusted for test scale)
@@ -283,8 +292,7 @@ mod throughput_tests {
         );
         assert!(
             metrics.average_throughput() >= min_throughput,
-            "Throughput should be >= {} events/sec",
-            min_throughput
+            "Throughput should be >= {min_throughput} events/sec"
         );
 
         Ok(())
@@ -463,12 +471,12 @@ mod latency_tests {
             let start = Instant::now();
 
             let event = StreamEvent::TripleAdded {
-                subject: format!("http://latency.test/subject_{}", i),
+                subject: format!("http://latency.test/subject_{i}"),
                 predicate: "http://latency.test/predicate".to_string(),
-                object: format!("\"Latency test data {}\"", i),
+                object: format!("\"Latency test data {i}\""),
                 graph: None,
                 metadata: EventMetadata {
-                    event_id: format!("latency_test_{}", i),
+                    event_id: format!("latency_test_{i}"),
                     timestamp: Utc::now(),
                     source: "latency_test".to_string(),
                     user: None,
@@ -514,11 +522,11 @@ mod latency_tests {
             let p99 = latencies[(count * 99) / 100];
             let max = latencies[count - 1];
 
-            println!("End-to-End Latency Results (n={}):", count);
-            println!("  P50: {:?}", p50);
-            println!("  P95: {:?}", p95);
-            println!("  P99: {:?}", p99);
-            println!("  Max: {:?}", max);
+            println!("End-to-End Latency Results (n={count}):");
+            println!("  P50: {p50:?}");
+            println!("  P95: {p95:?}");
+            println!("  P99: {p99:?}");
+            println!("  Max: {max:?}");
 
             // Verify latency targets (relaxed for memory backend)
             assert!(
@@ -580,12 +588,12 @@ mod latency_tests {
             let start = Instant::now();
 
             let event = StreamEvent::TripleAdded {
-                subject: format!("http://kafka.latency.test/subject_{}", i),
+                subject: format!("http://kafka.latency.test/subject_{i}"),
                 predicate: "http://kafka.latency.test/predicate".to_string(),
-                object: format!("\"Kafka latency test data {}\"", i),
+                object: format!("\"Kafka latency test data {i}\""),
                 graph: None,
                 metadata: EventMetadata {
-                    event_id: format!("kafka_latency_test_{}", i),
+                    event_id: format!("kafka_latency_test_{i}"),
                     timestamp: Utc::now(),
                     source: "kafka_latency_test".to_string(),
                     user: None,
@@ -620,10 +628,10 @@ mod latency_tests {
             let p95 = latencies[(count * 95) / 100];
             let p99 = latencies[(count * 99) / 100];
 
-            println!("Kafka Latency Under Load Results (n={}):", count);
-            println!("  P50: {:?}", p50);
-            println!("  P95: {:?}", p95);
-            println!("  P99: {:?}", p99);
+            println!("Kafka Latency Under Load Results (n={count}):");
+            println!("  P50: {p50:?}");
+            println!("  P95: {p95:?}");
+            println!("  P99: {p99:?}");
 
             // Kafka under load should still maintain reasonable latencies
             assert!(
@@ -712,8 +720,7 @@ mod scalability_tests {
 
             assert!(
                 max_producer_throughput >= single_producer_throughput * min_improvement_factor,
-                "Should see at least modest throughput improvement with many producers (memory backend has lock contention). Single: {}, Max: {}",
-                single_producer_throughput, max_producer_throughput
+                "Should see at least modest throughput improvement with many producers (memory backend has lock contention). Single: {single_producer_throughput}, Max: {max_producer_throughput}"
             );
         }
 
@@ -741,12 +748,12 @@ mod scalability_tests {
 
             for i in 0..test_count {
                 let event = StreamEvent::TripleAdded {
-                    subject: format!("http://size.test/subject_{}", i),
+                    subject: format!("http://size.test/subject_{i}"),
                     predicate: "http://size.test/predicate".to_string(),
-                    object: format!("\"{}\"", large_data),
+                    object: format!("\"{large_data}\""),
                     graph: None,
                     metadata: EventMetadata {
-                        event_id: format!("size_test_{}_{}", size, i),
+                        event_id: format!("size_test_{size}_{i}"),
                         timestamp: Utc::now(),
                         source: "size_test".to_string(),
                         user: None,
@@ -775,8 +782,7 @@ mod scalability_tests {
             let bytes_per_second = (received * size) as f64 / duration.as_secs_f64();
 
             println!(
-                "Message size: {} bytes, Throughput: {:.0} msg/sec, {:.0} bytes/sec",
-                size, throughput, bytes_per_second
+                "Message size: {size} bytes, Throughput: {throughput:.0} msg/sec, {bytes_per_second:.0} bytes/sec"
             );
 
             results.push((size, throughput, bytes_per_second));
@@ -789,8 +795,7 @@ mod scalability_tests {
         for (size, throughput, _) in &results {
             assert!(
                 *throughput > 0.0,
-                "Should handle messages of size {} bytes",
-                size
+                "Should handle messages of size {size} bytes"
             );
         }
 
@@ -807,7 +812,7 @@ mod scalability_tests {
 
         for &partitions in &partition_counts {
             // This would require creating Kafka topics with different partition counts
-            let topic_name = format!("partition-scale-test-{}", partitions);
+            let topic_name = format!("partition-scale-test-{partitions}");
 
             let config = create_performance_stream_config(StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
@@ -865,11 +870,11 @@ mod reliability_tests {
 
         // Send events with unique IDs
         for i in 0..test_count {
-            let event_id = format!("reliability_test_{}", i);
+            let event_id = format!("reliability_test_{i}");
             let event = StreamEvent::TripleAdded {
-                subject: format!("http://reliability.test/subject_{}", i),
+                subject: format!("http://reliability.test/subject_{i}"),
                 predicate: "http://reliability.test/predicate".to_string(),
-                object: format!("\"Reliability test data {}\"", i),
+                object: format!("\"Reliability test data {i}\""),
                 graph: None,
                 metadata: EventMetadata {
                     event_id: event_id.clone(),
@@ -895,15 +900,14 @@ mod reliability_tests {
 
         for _ in 0..test_count {
             match timeout(Duration::from_millis(10), consumer.consume()).await {
-                Ok(Ok(Some(event))) => match event {
-                    StreamEvent::TripleAdded { metadata, .. } => {
-                        if received_events.contains_key(&metadata.event_id) {
-                            duplicates += 1;
+                Ok(Ok(Some(event))) => {
+                    if let StreamEvent::TripleAdded { metadata, .. } = event {
+                        if let std::collections::hash_map::Entry::Vacant(e) = received_events.entry(metadata.event_id) {
+                            e.insert(true);
                         } else {
-                            received_events.insert(metadata.event_id, true);
+                            duplicates += 1;
                         }
                     }
-                    _ => {}
                 },
                 _ => {
                     break;
@@ -921,8 +925,8 @@ mod reliability_tests {
         let duplicate_rate = duplicates as f64 / received_count as f64;
 
         println!("Reliability Test Results:");
-        println!("  Events sent: {}", sent_count);
-        println!("  Events received: {}", received_count);
+        println!("  Events sent: {sent_count}");
+        println!("  Events received: {received_count}");
         println!("  Delivery rate: {:.4}%", delivery_rate * 100.0);
         println!("  Duplicate rate: {:.4}%", duplicate_rate * 100.0);
 
@@ -941,7 +945,7 @@ mod reliability_tests {
         if !missing_events.is_empty() {
             println!("Missing events: {}", missing_events.len());
             for event_id in missing_events.iter().take(10) {
-                println!("  Missing: {}", event_id);
+                println!("  Missing: {event_id}");
             }
         }
 
@@ -991,7 +995,7 @@ mod reliability_tests {
             }
         }
 
-        println!("Received {} events after recovery", received_count);
+        println!("Received {received_count} events after recovery");
         assert!(received_count > 0, "Should receive events after recovery");
 
         producer.close().await?;
@@ -1027,10 +1031,8 @@ mod reliability_tests {
 
             if i % 100 == 0 {
                 println!(
-                    "Sent {} events, {} successful, {} failed",
-                    i + 1,
-                    successful_sends,
-                    failed_sends
+                    "Sent {} events, {successful_sends} successful, {failed_sends} failed",
+                    i + 1
                 );
             }
         }
@@ -1046,10 +1048,10 @@ mod reliability_tests {
         }
 
         println!("Backpressure Test Results:");
-        println!("  Send duration: {:?}", send_duration);
-        println!("  Successful sends: {}", successful_sends);
-        println!("  Failed sends: {}", failed_sends);
-        println!("  Received count: {}", received_count);
+        println!("  Send duration: {send_duration:?}");
+        println!("  Successful sends: {successful_sends}");
+        println!("  Failed sends: {failed_sends}");
+        println!("  Received count: {received_count}");
 
         // System should handle backpressure gracefully
         assert!(
@@ -1122,7 +1124,7 @@ mod resource_usage_tests {
             }
 
             if batch % (batch_count / 5).max(1) == 0 {
-                println!("Processed batch {}/{}", batch, batch_count);
+                println!("Processed batch {batch}/{batch_count}");
             }
         }
 

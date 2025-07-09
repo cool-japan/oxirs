@@ -316,7 +316,7 @@ impl RdfVectorIntegration {
     ) -> Result<Vec<RdfVectorSearchResult>> {
         // Create a temporary literal term for text search
         let literal = Literal::new_simple_literal(query_text);
-        let query_term = Term::Literal(literal);
+        let _query_term = Term::Literal(literal);
 
         // For text search, we would typically generate an embedding
         // This is a simplified version - in practice, you'd use an embedding model
@@ -563,7 +563,7 @@ impl RdfVectorIntegration {
         let mut vector_data = vec![0.0; dimension];
 
         // Simple word-based embedding generation
-        for (i, word) in words.iter().enumerate() {
+        for word in words.iter() {
             let word_hash = {
                 use std::collections::hash_map::DefaultHasher;
                 let mut hasher = DefaultHasher::new();

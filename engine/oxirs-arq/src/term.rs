@@ -100,6 +100,7 @@ enum ParsedValue {
     DateTime(i64), // Unix timestamp in nanoseconds
     Date(i32),     // Days since epoch
     Time(i64),     // Nanoseconds since midnight
+    #[allow(dead_code)]
     Duration(i64), // Duration in nanoseconds
     Binary(Vec<u8>),
     Other,
@@ -226,47 +227,47 @@ impl LiteralValue {
                 let b = match value {
                     "true" | "1" => true,
                     "false" | "0" => false,
-                    _ => bail!("Invalid boolean value: {}", value),
+                    _ => bail!("Invalid boolean value: {value}"),
                 };
                 ParsedValue::Boolean(b)
             }
             xsd::INTEGER | xsd::LONG | xsd::INT | xsd::SHORT | xsd::BYTE => {
                 let i = value
                     .parse::<i64>()
-                    .map_err(|_| anyhow!("Invalid integer value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid integer value: {value}"))?;
                 ParsedValue::Integer(i)
             }
             xsd::DECIMAL => {
                 let d = value
                     .parse::<f64>()
-                    .map_err(|_| anyhow!("Invalid decimal value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid decimal value: {value}"))?;
                 ParsedValue::Decimal(OrderedFloat(d))
             }
             xsd::FLOAT => {
                 let f = value
                     .parse::<f32>()
-                    .map_err(|_| anyhow!("Invalid float value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid float value: {value}"))?;
                 ParsedValue::Float(OrderedFloat(f))
             }
             xsd::DOUBLE => {
                 let d = value
                     .parse::<f64>()
-                    .map_err(|_| anyhow!("Invalid double value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid double value: {value}"))?;
                 ParsedValue::Double(OrderedFloat(d))
             }
             xsd::DATE_TIME | xsd::DATE_TIME_STAMP => {
                 let dt = DateTime::parse_from_rfc3339(value)
-                    .map_err(|_| anyhow!("Invalid dateTime value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid dateTime value: {value}"))?;
                 ParsedValue::DateTime(dt.timestamp_nanos_opt().unwrap_or(0))
             }
             xsd::DATE => {
                 let date = NaiveDate::parse_from_str(value, "%Y-%m-%d")
-                    .map_err(|_| anyhow!("Invalid date value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid date value: {value}"))?;
                 ParsedValue::Date(date.num_days_from_ce())
             }
             xsd::TIME => {
                 let time = NaiveTime::parse_from_str(value, "%H:%M:%S%.f")
-                    .map_err(|_| anyhow!("Invalid time value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid time value: {value}"))?;
                 ParsedValue::Time(
                     time.num_seconds_from_midnight() as i64 * 1_000_000_000
                         + time.nanosecond() as i64,
@@ -274,13 +275,13 @@ impl LiteralValue {
             }
             xsd::HEX_BINARY => {
                 let bytes = hex::decode(value)
-                    .map_err(|_| anyhow!("Invalid hexBinary value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid hexBinary value: {value}"))?;
                 ParsedValue::Binary(bytes)
             }
             xsd::BASE64_BINARY => {
                 let bytes = base64::engine::general_purpose::STANDARD
                     .decode(value)
-                    .map_err(|_| anyhow!("Invalid base64Binary value: {}", value))?;
+                    .map_err(|_| anyhow!("Invalid base64Binary value: {value}"))?;
                 ParsedValue::Binary(bytes)
             }
             _ => ParsedValue::Other,
@@ -315,10 +316,10 @@ impl LiteralValue {
                 } else if let Ok(d) = s.parse::<f64>() {
                     Ok(NumericValue::Double(d))
                 } else {
-                    bail!("Cannot convert string '{}' to numeric", s)
+                    bail!("Cannot convert string '{s}' to numeric")
                 }
             }
-            _ => bail!("Cannot convert {} to numeric", self.datatype),
+            _ => bail!("Cannot convert {dt} to numeric", dt = self.datatype),
         }
     }
 
@@ -359,10 +360,10 @@ impl NumericValue {
             (Float(a), Integer(b)) => (Float(*a), Float(*b as f64)),
             (Float(a), Decimal(b)) => (Float(*a), Float(*b)),
             (Float(a), Float(b)) => (Float(*a), Float(*b)),
-            (Float(a), Double(b)) => (Double(*a as f64), Double(*b)),
+            (Float(a), Double(b)) => (Double(*a), Double(*b)),
             (Double(a), Integer(b)) => (Double(*a), Double(*b as f64)),
             (Double(a), Decimal(b)) => (Double(*a), Double(*b)),
-            (Double(a), Float(b)) => (Double(*a), Double(*b as f64)),
+            (Double(a), Float(b)) => (Double(*a), Double(*b)),
             (Double(a), Double(b)) => (Double(*a), Double(*b)),
         }
     }
@@ -575,10 +576,10 @@ pub fn matches_pattern(pattern: &Term, term: &Term, bindings: &mut BindingContex
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Term::Iri(iri) => write!(f, "<{}>", iri),
-            Term::BlankNode(id) => write!(f, "_:{}", id),
-            Term::Literal(lit) => write!(f, "{}", lit),
-            Term::Variable(var) => write!(f, "?{}", var),
+            Term::Iri(iri) => write!(f, "<{iri}>"),
+            Term::BlankNode(id) => write!(f, "_{id}"),
+            Term::Literal(lit) => write!(f, "{lit}"),
+            Term::Variable(var) => write!(f, "?{var}"),
             Term::QuotedTriple(triple) => {
                 write!(
                     f,
@@ -586,7 +587,7 @@ impl fmt::Display for Term {
                     triple.subject, triple.predicate, triple.object
                 )
             }
-            Term::PropertyPath(path) => write!(f, "{}", path),
+            Term::PropertyPath(path) => write!(f, "{path}"),
         }
     }
 }
@@ -595,9 +596,9 @@ impl fmt::Display for LiteralValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "\"{}\"", self.lexical_form)?;
         if let Some(lang) = &self.language_tag {
-            write!(f, "@{}", lang)?;
+            write!(f, "@{lang}")?;
         } else if self.datatype != xsd::STRING {
-            write!(f, "^^<{}>", self.datatype)?;
+            write!(f, "^^<{dt}>", dt = self.datatype)?;
         }
         Ok(())
     }
@@ -812,7 +813,7 @@ mod tests {
         assert!(matches!(int_lit, Term::Literal(_)));
 
         let bool_lit = Term::typed_literal("true", xsd::BOOLEAN).unwrap();
-        assert_eq!(bool_lit.effective_boolean_value().unwrap(), true);
+        assert!(bool_lit.effective_boolean_value().unwrap());
 
         let date_lit = Term::typed_literal("2023-01-01", xsd::DATE).unwrap();
         assert!(matches!(date_lit, Term::Literal(_)));

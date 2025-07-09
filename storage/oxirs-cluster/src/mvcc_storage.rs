@@ -65,13 +65,13 @@ impl IndexKey {
     /// Convert to storage key
     pub fn to_storage_key(&self) -> String {
         match self {
-            IndexKey::Subject(s) => format!("s:{}", s),
-            IndexKey::Predicate(p) => format!("p:{}", p),
-            IndexKey::Object(o) => format!("o:{}", o),
-            IndexKey::SubjectPredicate(s, p) => format!("sp:{}:{}", s, p),
-            IndexKey::PredicateObject(p, o) => format!("po:{}:{}", p, o),
-            IndexKey::SubjectObject(s, o) => format!("so:{}:{}", s, o),
-            IndexKey::Triple(s, p, o) => format!("spo:{}:{}:{}", s, p, o),
+            IndexKey::Subject(s) => format!("s:{s}"),
+            IndexKey::Predicate(p) => format!("p:{p}"),
+            IndexKey::Object(o) => format!("o:{o}"),
+            IndexKey::SubjectPredicate(s, p) => format!("sp:{s}:{p}"),
+            IndexKey::PredicateObject(p, o) => format!("po:{p}:{o}"),
+            IndexKey::SubjectObject(s, o) => format!("so:{s}:{o}"),
+            IndexKey::Triple(s, p, o) => format!("spo:{s}:{p}:{o}"),
         }
     }
 }
@@ -82,6 +82,12 @@ pub struct MVCCIndex {
     primary_index: Arc<DashMap<IndexKey, BTreeMap<HLCTimestamp, HashSet<String>>>>,
     /// Reverse index: Triple key -> IndexKeys
     reverse_index: Arc<DashMap<String, HashSet<IndexKey>>>,
+}
+
+impl Default for MVCCIndex {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MVCCIndex {
@@ -114,16 +120,16 @@ impl MVCCIndex {
         for key in &index_keys {
             self.primary_index
                 .entry(key.clone())
-                .or_insert_with(BTreeMap::new)
+                .or_default()
                 .entry(timestamp)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(triple_key.to_string());
         }
 
         // Update reverse index
         self.reverse_index
             .entry(triple_key.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .extend(index_keys);
     }
 
@@ -373,8 +379,8 @@ impl MVCCStorage {
     /// Run compaction based on configured strategy
     pub async fn compact(&self) -> Result<CompactionResult> {
         let start_time = std::time::Instant::now();
-        let mut versions_removed = 0;
-        let mut keys_processed = 0;
+        let versions_removed = 0;
+        let keys_processed = 0;
 
         match self.compaction_strategy {
             CompactionStrategy::None => {
@@ -385,18 +391,18 @@ impl MVCCStorage {
                     keys_processed: 0,
                 });
             }
-            CompactionStrategy::KeepLatest(n) => {
+            CompactionStrategy::KeepLatest(_n) => {
                 // Keep only the latest N versions
                 // This would be implemented by calling MVCC manager's internal methods
                 warn!("KeepLatest compaction not yet implemented");
             }
-            CompactionStrategy::TimeBasedRetention(retention) => {
+            CompactionStrategy::TimeBasedRetention(_retention) => {
                 // Remove versions older than retention period
                 warn!("TimeBasedRetention compaction not yet implemented");
             }
             CompactionStrategy::Hybrid {
-                max_versions,
-                retention_period,
+                max_versions: _,
+                retention_period: _,
             } => {
                 // Hybrid compaction
                 warn!("Hybrid compaction not yet implemented");
@@ -448,13 +454,13 @@ pub struct CompactionResult {
 /// MVCC storage backend trait implementation
 #[async_trait]
 impl StorageBackend for MVCCStorage {
-    async fn create_shard(&self, shard_id: ShardId) -> Result<()> {
+    async fn create_shard(&self, _shard_id: ShardId) -> Result<()> {
         // For MVCC storage, shards are logical partitions
         // No physical creation needed
         Ok(())
     }
 
-    async fn delete_shard(&self, shard_id: ShardId) -> Result<()> {
+    async fn delete_shard(&self, _shard_id: ShardId) -> Result<()> {
         // Mark all triples in the shard as deleted
         // This would be implemented via a shard-wide deletion marker
         Ok(())
@@ -507,7 +513,7 @@ impl StorageBackend for MVCCStorage {
         Ok((count * 100) as u64) // Estimate 100 bytes per triple
     }
 
-    async fn get_shard_triple_count(&self, shard_id: ShardId) -> Result<usize> {
+    async fn get_shard_triple_count(&self, _shard_id: ShardId) -> Result<usize> {
         // Count triples in the shard
         // This would need proper implementation with shard filtering
         let stats = self.mvcc.get_statistics().await;
@@ -539,7 +545,7 @@ impl StorageBackend for MVCCStorage {
         self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
             .await?;
 
-        let prefix = format!("shard:{}:", shard_id);
+        let prefix = format!("shard:{shard_id}:");
         let results = self.mvcc.scan_prefix(&tx_id, &prefix).await?;
 
         let mut triples = Vec::new();
@@ -571,7 +577,7 @@ impl StorageBackend for MVCCStorage {
         self.begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
             .await?;
 
-        let deletion_marker_key = format!("shard:{}:__MARKED_FOR_DELETION__", shard_id);
+        let deletion_marker_key = format!("shard:{shard_id}:__MARKED_FOR_DELETION__");
         let marker_triple = Triple::new(
             Subject::NamedNode(NamedNode::new("urn:oxirs:shard:deleted").unwrap()),
             Predicate::NamedNode(NamedNode::new("urn:oxirs:prop:deletionMarker").unwrap()),

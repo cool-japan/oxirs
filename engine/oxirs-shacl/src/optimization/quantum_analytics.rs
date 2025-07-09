@@ -399,7 +399,7 @@ impl QuantumPerformanceAnalytics {
     /// Calculate cosmic alignment of performance patterns
     fn calculate_cosmic_alignment(
         &self,
-        performance_data: &HashMap<ConstraintComponentId, Duration>,
+        _performance_data: &HashMap<ConstraintComponentId, Duration>,
     ) -> f64 {
         // Implementation of cosmic alignment calculation
         // This involves analyzing how well the performance patterns align with universal harmony

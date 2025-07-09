@@ -1,7 +1,7 @@
 //! Self-modification engine implementation
 
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Self-modification engine
 #[derive(Debug)]

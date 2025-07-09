@@ -158,6 +158,7 @@ pub struct AdvancedCache {
 struct AccessPattern {
     access_times: VecDeque<Instant>,
     frequency: f64,
+    #[allow(dead_code)]
     last_prediction: Option<Instant>,
 }
 
@@ -189,6 +190,7 @@ impl AccessPattern {
         self.frequency = self.access_times.len() as f64;
     }
 
+    #[allow(dead_code)]
     fn predict_next_access(&self) -> Option<Instant> {
         if self.access_times.len() < 2 {
             return None;
@@ -225,12 +227,12 @@ impl DependencyGraph {
     fn add_dependency(&mut self, cache_key: &str, dependency: &str) {
         self.dependencies
             .entry(cache_key.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(dependency.to_string());
 
         self.dependents
             .entry(dependency.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(cache_key.to_string());
     }
 
@@ -255,9 +257,13 @@ impl DependencyGraph {
 /// Cache warming task
 #[derive(Debug, Clone)]
 struct WarmingTask {
+    #[allow(dead_code)]
     cache_key: String,
+    #[allow(dead_code)]
     query: String,
+    #[allow(dead_code)]
     variables: HashMap<String, serde_json::Value>,
+    #[allow(dead_code)]
     priority: u8,
     scheduled_time: Instant,
 }

@@ -5,7 +5,7 @@
 //! through multiple cognitive frameworks including logical, emotional, spatial,
 //! temporal, causal, and other reasoning dimensions.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Multi-dimensional reasoning engine that processes queries across cognitive dimensions
@@ -228,6 +228,12 @@ pub struct EthicalReasoning;
 pub struct ProbabilisticReasoning;
 
 // Implementation stubs for key functionality
+impl Default for MultiDimensionalReasoner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiDimensionalReasoner {
     pub fn new() -> Self {
         // Simplified implementation - full version in original file
@@ -303,6 +309,12 @@ impl ContextualMemory {
         if self.episodes.len() > self.capacity {
             self.episodes.remove(0);
         }
+    }
+}
+
+impl Default for MetacognitiveMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

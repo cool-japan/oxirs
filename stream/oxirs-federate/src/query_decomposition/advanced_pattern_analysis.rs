@@ -8,21 +8,19 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use ndarray::{Array1, Array2};
 use rand::prelude::*;
-use rand::rngs::StdRng;
-use rand::{thread_rng, SeedableRng};
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::{
     planner::planning::{FilterExpression, TriplePattern},
     service::ServiceCapability,
     service_optimizer::types::{
-        HistoricalQueryData, MLSourcePrediction, PatternFeatures, QueryContext, QueryFeatures,
-        ServiceOptimizerConfig, SimilarQuery,
+        HistoricalQueryData, MLSourcePrediction, PatternFeatures,
     },
     FederatedService,
 };
@@ -42,6 +40,12 @@ pub struct ConsciousnessAnalysis {
 pub struct ConsciousnessPatternEngine {
     pub(crate) analysis_depth: usize,
     pub(crate) pattern_cache: HashMap<String, String>,
+}
+
+impl Default for ConsciousnessPatternEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConsciousnessPatternEngine {
@@ -75,7 +79,7 @@ impl ConsciousnessPatternEngine {
         filters: &[FilterExpression],
         services: &[&FederatedService],
     ) -> Result<ConsciousnessAnalysis> {
-        use anyhow::Result;
+        
 
         // Simplified consciousness analysis
         let consciousness_score = patterns.len() as f64 * 0.1;
@@ -102,6 +106,12 @@ impl ConsciousnessPatternEngine {
 pub struct NeuralPerformancePredictor {
     pub(crate) model_weights: Vec<f64>,
     pub(crate) prediction_cache: HashMap<String, f64>,
+}
+
+impl Default for NeuralPerformancePredictor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NeuralPerformancePredictor {
@@ -146,6 +156,12 @@ impl NeuralPerformancePredictor {
 pub struct AdaptivePatternCache {
     pub(crate) cache_entries: HashMap<String, CachedPatternAnalysis>,
     pub(crate) max_size: usize,
+}
+
+impl Default for AdaptivePatternCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AdaptivePatternCache {
@@ -663,28 +679,24 @@ impl AdvancedPatternAnalyzer {
         if pattern
             .predicate
             .as_ref()
-            .map_or(false, |p| p.contains("geo:"))
-        {
-            if service
+            .is_some_and(|p| p.contains("geo:"))
+            && service
                 .capabilities
                 .contains(&ServiceCapability::Geospatial)
             {
                 score += 0.3;
             }
-        }
 
         if pattern
             .object
             .as_ref()
-            .map_or(false, |o| o.contains("\"") && o.len() > 20)
-        {
-            if service
+            .is_some_and(|o| o.contains("\"") && o.len() > 20)
+            && service
                 .capabilities
                 .contains(&ServiceCapability::FullTextSearch)
             {
                 score += 0.2;
             }
-        }
 
         score
     }
@@ -958,9 +970,9 @@ impl AdvancedPatternAnalyzer {
 
         recommendations.push(ExecutionRecommendation {
             recommendation_type: RecommendationType::ExecutionStrategy,
-            description: format!("Use {:?} execution strategy", strategy),
+            description: format!("Use {strategy:?} execution strategy"),
             confidence: 0.8,
-            parameters: HashMap::from([("strategy".to_string(), format!("{:?}", strategy))]),
+            parameters: HashMap::from([("strategy".to_string(), format!("{strategy:?}"))]),
         });
 
         // Timeout recommendation
@@ -1176,9 +1188,7 @@ impl AdvancedPatternAnalyzer {
     }
 
     fn calculate_join_complexity(&self, variables: &HashMap<String, Vec<usize>>) -> f64 {
-        variables
-            .iter()
-            .map(|(_, patterns)| (patterns.len() * patterns.len()) as f64)
+        variables.values().map(|patterns| (patterns.len() * patterns.len()) as f64)
             .sum()
     }
 
@@ -1204,8 +1214,7 @@ impl AdvancedPatternAnalyzer {
 
         match best_service {
             Some((service_id, score)) => {
-                format!("Service '{}' scored {:.2} based on capability match, data patterns, and performance history", 
-                       service_id, score)
+                format!("Service '{service_id}' scored {score:.2} based on capability match, data patterns, and performance history")
             }
             None => "No suitable services found".to_string(),
         }
@@ -1243,7 +1252,7 @@ impl AdvancedPatternAnalyzer {
         quantum_insights: &QuantumPatternInsights,
         pattern_idx: usize,
     ) -> PatternFeatures {
-        let pattern_key = format!("pattern_{}", pattern_idx);
+        let pattern_key = format!("pattern_{pattern_idx}");
         if let Some(enhancement) = quantum_insights.pattern_enhancements.get(&pattern_key) {
             // Convert enhanced_complexity to PatternComplexity enum
             if enhancement.enhanced_complexity < 0.3 {
@@ -1270,7 +1279,7 @@ impl AdvancedPatternAnalyzer {
         consciousness_analysis: &ConsciousnessPatternAnalysis,
         pattern_idx: usize,
     ) -> PatternFeatures {
-        let pattern_key = format!("pattern_{}", pattern_idx);
+        let pattern_key = format!("pattern_{pattern_idx}");
         if let Some(consciousness_score) = consciousness_analysis
             .pattern_consciousness_scores
             .get(&pattern_key)
@@ -1622,6 +1631,12 @@ pub struct MLOptimizationModel {
     training_data: Vec<HistoricalQueryData>,
 }
 
+impl Default for MLOptimizationModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MLOptimizationModel {
     pub fn new() -> Self {
         Self {
@@ -1682,6 +1697,12 @@ pub struct QuantumPatternOptimizer {
     superposition_weights: Array1<f64>,
 }
 
+impl Default for QuantumPatternOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumPatternOptimizer {
     pub fn new() -> Self {
         Self {
@@ -1722,7 +1743,7 @@ impl QuantumPatternOptimizer {
 
         // Calculate pattern entanglement benefits
         for (i, pattern) in patterns.iter().enumerate() {
-            let pattern_key = format!("pattern_{}", i);
+            let pattern_key = format!("pattern_{i}");
             let enhancement = self
                 .calculate_quantum_enhancement(pattern, patterns, i)
                 .await;
@@ -1881,6 +1902,12 @@ pub struct QuantumOptimizationState {
     pub current_coherence: f64,
     pub entanglement_strength: f64,
     pub superposition_level: f64,
+}
+
+impl Default for QuantumOptimizationState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QuantumOptimizationState {

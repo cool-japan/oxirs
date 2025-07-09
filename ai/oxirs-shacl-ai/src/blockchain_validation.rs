@@ -4,25 +4,17 @@
 //! enabling decentralized validation, immutable audit trails, smart contract-based constraints,
 //! and consensus-driven validation outcomes across distributed blockchain networks.
 
-use std::collections::{HashMap, VecDeque};
-use std::fmt;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
+use tokio::sync::{broadcast, Mutex, RwLock};
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{
-    constraints::*, Shape, ShapeId, ValidationConfig, ValidationReport, ValidationViolation,
-};
+use oxirs_core::Store;
+use oxirs_shacl::Shape;
 
-use crate::neural_patterns::NeuralPattern;
-use crate::quality::QualityAssessor;
 use crate::{Result, ShaclAiError};
 
 /// Blockchain validation engine for decentralized SHACL validation
@@ -476,8 +468,7 @@ impl BlockchainValidator {
         }
 
         Err(ShaclAiError::BlockchainTimeout(format!(
-            "Consensus not reached after {} attempts for transaction {}",
-            max_attempts, transaction_id
+            "Consensus not reached after {max_attempts} attempts for transaction {transaction_id}"
         )))
     }
 
@@ -530,7 +521,7 @@ impl BlockchainValidator {
         connectors
             .get(network)
             .ok_or_else(|| {
-                ShaclAiError::NotFound(format!("Network connector not found: {}", network))
+                ShaclAiError::NotFound(format!("Network connector not found: {network}"))
             })
             .map(|c| c.clone_box())
     }
@@ -543,7 +534,7 @@ impl BlockchainValidator {
         managers
             .get(contract_type)
             .ok_or_else(|| {
-                ShaclAiError::NotFound(format!("Contract manager not found: {}", contract_type))
+                ShaclAiError::NotFound(format!("Contract manager not found: {contract_type}"))
             })
             .map(|m| m.clone_box())
     }
@@ -553,7 +544,7 @@ impl BlockchainValidator {
         engines
             .get(engine_type)
             .ok_or_else(|| {
-                ShaclAiError::NotFound(format!("Consensus engine not found: {}", engine_type))
+                ShaclAiError::NotFound(format!("Consensus engine not found: {engine_type}"))
             })
             .map(|e| e.clone_box())
     }
@@ -563,7 +554,7 @@ impl BlockchainValidator {
         protocols
             .get(protocol_name)
             .ok_or_else(|| {
-                ShaclAiError::NotFound(format!("Privacy protocol not found: {}", protocol_name))
+                ShaclAiError::NotFound(format!("Privacy protocol not found: {protocol_name}"))
             })
             .map(|p| p.clone_box())
     }
@@ -1087,6 +1078,12 @@ pub struct ValidationStorage {
     results: HashMap<String, Vec<BlockchainValidationResult>>,
 }
 
+impl Default for ValidationStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValidationStorage {
     pub fn new() -> Self {
         Self {
@@ -1110,6 +1107,12 @@ impl ValidationStorage {
 #[derive(Debug)]
 pub struct CrossChainBridge {
     active_bridges: HashMap<String, String>,
+}
+
+impl Default for CrossChainBridge {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CrossChainBridge {
@@ -1138,6 +1141,12 @@ impl CrossChainBridge {
 
 #[derive(Debug)]
 pub struct EthereumConnector;
+
+impl Default for EthereumConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl EthereumConnector {
     pub fn new() -> Self {
@@ -1234,6 +1243,12 @@ impl BlockchainConnector for EthereumConnector {
 // Simplified implementations for other blockchain networks
 #[derive(Debug)]
 pub struct PolygonConnector;
+impl Default for PolygonConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PolygonConnector {
     pub fn new() -> Self {
         Self
@@ -1310,6 +1325,12 @@ impl BlockchainConnector for PolygonConnector {
 // Placeholder implementations for other networks
 #[derive(Debug)]
 pub struct ArbitrumConnector;
+impl Default for ArbitrumConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArbitrumConnector {
     pub fn new() -> Self {
         Self
@@ -1384,6 +1405,12 @@ impl BlockchainConnector for ArbitrumConnector {
 
 #[derive(Debug)]
 pub struct OptimismConnector;
+impl Default for OptimismConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimismConnector {
     pub fn new() -> Self {
         Self
@@ -1458,6 +1485,12 @@ impl BlockchainConnector for OptimismConnector {
 
 #[derive(Debug)]
 pub struct AvalancheConnector;
+impl Default for AvalancheConnector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AvalancheConnector {
     pub fn new() -> Self {
         Self
@@ -1535,6 +1568,12 @@ impl BlockchainConnector for AvalancheConnector {
 #[derive(Debug)]
 pub struct SolidityContractManager;
 
+impl Default for SolidityContractManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SolidityContractManager {
     pub fn new() -> Self {
         Self
@@ -1582,6 +1621,12 @@ impl SmartContractManager for SolidityContractManager {
 // Placeholder implementations for other contract types
 #[derive(Debug)]
 pub struct VyperContractManager;
+impl Default for VyperContractManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VyperContractManager {
     pub fn new() -> Self {
         Self
@@ -1619,6 +1664,12 @@ impl SmartContractManager for VyperContractManager {
 
 #[derive(Debug)]
 pub struct CairoContractManager;
+impl Default for CairoContractManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CairoContractManager {
     pub fn new() -> Self {
         Self
@@ -1658,6 +1709,12 @@ impl SmartContractManager for CairoContractManager {
 
 #[derive(Debug)]
 pub struct ProofOfValidationConsensus;
+
+impl Default for ProofOfValidationConsensus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ProofOfValidationConsensus {
     pub fn new() -> Self {
@@ -1700,6 +1757,12 @@ impl ConsensusEngine for ProofOfValidationConsensus {
 // Placeholder consensus implementations
 #[derive(Debug)]
 pub struct DelegatedValidationConsensus;
+impl Default for DelegatedValidationConsensus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DelegatedValidationConsensus {
     pub fn new() -> Self {
         Self
@@ -1731,6 +1794,12 @@ impl ConsensusEngine for DelegatedValidationConsensus {
 
 #[derive(Debug)]
 pub struct FederatedConsensus;
+impl Default for FederatedConsensus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FederatedConsensus {
     pub fn new() -> Self {
         Self
@@ -1764,6 +1833,12 @@ impl ConsensusEngine for FederatedConsensus {
 
 #[derive(Debug)]
 pub struct ZkSnarksProtocol;
+
+impl Default for ZkSnarksProtocol {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ZkSnarksProtocol {
     pub fn new() -> Self {
@@ -1807,6 +1882,12 @@ impl PrivacyProtocol for ZkSnarksProtocol {
 // Placeholder privacy protocol implementations
 #[derive(Debug)]
 pub struct ZkStarksProtocol;
+impl Default for ZkStarksProtocol {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ZkStarksProtocol {
     pub fn new() -> Self {
         Self
@@ -1843,6 +1924,12 @@ impl PrivacyProtocol for ZkStarksProtocol {
 
 #[derive(Debug)]
 pub struct HomomorphicProtocol;
+impl Default for HomomorphicProtocol {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HomomorphicProtocol {
     pub fn new() -> Self {
         Self
@@ -1881,11 +1968,11 @@ impl PrivacyProtocol for HomomorphicProtocol {
 
 impl ShaclAiError {
     pub fn BlockchainTimeout(message: String) -> Self {
-        ShaclAiError::Configuration(format!("Blockchain timeout: {}", message))
+        ShaclAiError::Configuration(format!("Blockchain timeout: {message}"))
     }
 
     pub fn NotFound(message: String) -> Self {
-        ShaclAiError::Configuration(format!("Not found: {}", message))
+        ShaclAiError::Configuration(format!("Not found: {message}"))
     }
 }
 

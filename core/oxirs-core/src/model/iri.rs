@@ -50,7 +50,9 @@ impl NamedNode {
     ///
     /// This applies IRI normalization before validation.
     pub fn new_normalized(iri: impl Into<String>) -> Result<Self, OxirsError> {
-        Ok(Self::new_from_iri(Iri::parse(iri.into())?))
+        let iri_str = iri.into();
+        let normalized = normalize_iri(&iri_str)?;
+        Ok(Self::new_from_iri(Iri::parse(normalized)?))
     }
 
     /// Builds an RDF [IRI](https://www.w3.org/TR/rdf11-concepts/#dfn-iri) from a string.
@@ -306,6 +308,131 @@ impl<'de> serde::Deserialize<'de> for NamedNode {
         let iri = String::deserialize(deserializer)?;
         Self::new(iri).map_err(serde::de::Error::custom)
     }
+}
+
+/// Normalize an IRI string according to RFC 3987 and RDF specifications
+fn normalize_iri(iri: &str) -> Result<String, OxirsError> {
+    // Simple approach: normalize scheme and host to lowercase
+    let mut result = String::new();
+    let mut in_scheme = true;
+    let mut in_authority = false;
+    let mut after_scheme = false;
+    let mut slash_count = 0;
+    
+    for ch in iri.chars() {
+        if in_scheme && ch == ':' {
+            result.push(ch.to_ascii_lowercase());
+            in_scheme = false;
+            after_scheme = true;
+        } else if in_scheme {
+            result.push(ch.to_ascii_lowercase());
+        } else if after_scheme && ch == '/' {
+            result.push(ch);
+            slash_count += 1;
+            if slash_count == 2 {
+                in_authority = true;
+                after_scheme = false;
+            }
+        } else if in_authority && (ch == '/' || ch == '?' || ch == '#') {
+            result.push(ch);
+            in_authority = false;
+        } else if in_authority {
+            result.push(ch.to_ascii_lowercase());
+        } else {
+            result.push(ch);
+        }
+    }
+    
+    // Normalize percent encoding
+    result = normalize_percent_encoding(&result);
+    
+    // Normalize path
+    if result.contains("./") {
+        result = normalize_path_in_iri(&result);
+    }
+    
+    Ok(result)
+}
+
+/// Normalize path segments in full IRI by resolving . and .. segments
+fn normalize_path_in_iri(iri: &str) -> String {
+    // Find the path part of the IRI
+    let (prefix, path_and_after) = if let Some(pos) = iri.find("://") {
+        if let Some(path_start) = iri[pos + 3..].find('/') {
+            let path_start_abs = pos + 3 + path_start;
+            iri.split_at(path_start_abs)
+        } else {
+            return iri.to_string();
+        }
+    } else {
+        return iri.to_string();
+    };
+    
+    // Split path from query/fragment
+    let (path_part, query_fragment) = if let Some(query_pos) = path_and_after.find('?') {
+        path_and_after.split_at(query_pos)
+    } else if let Some(fragment_pos) = path_and_after.find('#') {
+        path_and_after.split_at(fragment_pos)
+    } else {
+        (path_and_after, "")
+    };
+    
+    // Normalize the path part
+    let normalized_path = normalize_path_segments(path_part);
+    
+    format!("{prefix}{normalized_path}{query_fragment}")
+}
+
+/// Normalize path segments by resolving . and .. segments
+fn normalize_path_segments(path: &str) -> String {
+    if path.is_empty() {
+        return String::new();
+    }
+    
+    let segments: Vec<&str> = path.split('/').collect();
+    let mut normalized_segments = Vec::new();
+    
+    for segment in segments {
+        match segment {
+            "." => {
+                // Skip current directory
+                continue;
+            }
+            ".." => {
+                // Go up one directory
+                if !normalized_segments.is_empty() && normalized_segments.last() != Some(&"") {
+                    normalized_segments.pop();
+                }
+            }
+            _ => {
+                normalized_segments.push(segment);
+            }
+        }
+    }
+    
+    normalized_segments.join("/")
+}
+
+/// Normalize percent encoding to uppercase
+fn normalize_percent_encoding(s: &str) -> String {
+    let mut result = String::new();
+    let mut chars = s.chars().peekable();
+    
+    while let Some(ch) = chars.next() {
+        if ch == '%' {
+            if let (Some(hex1), Some(hex2)) = (chars.next(), chars.next()) {
+                result.push('%');
+                result.push(hex1.to_ascii_uppercase());
+                result.push(hex2.to_ascii_uppercase());
+            } else {
+                result.push(ch);
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+    
+    result
 }
 
 #[cfg(test)]

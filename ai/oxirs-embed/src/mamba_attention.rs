@@ -141,7 +141,7 @@ impl MambaBlock {
 
     /// Forward pass through Mamba block
     pub fn forward(&mut self, x: &Array2<f32>) -> Result<Array2<f32>> {
-        let (batch_size, seq_len) = x.dim();
+        let (_batch_size, _seq_len) = x.dim();
 
         // Input projection and activation
         let x_norm = self.norm.forward(x)?;
@@ -213,7 +213,7 @@ impl MambaBlock {
     fn selective_ssm(&mut self, x: &Array2<f32>, z: &Array2<f32>) -> Result<Array2<f32>> {
         let (batch_size, seq_len) = x.dim();
         let d_state = self.config.d_state;
-        let d_inner = self.config.d_inner;
+        let _d_inner = self.config.d_inner;
 
         // Compute delta (time steps)
         let delta = self.compute_delta(x)?;
@@ -249,7 +249,7 @@ impl MambaBlock {
 
     /// Compute time steps (delta)
     fn compute_delta(&self, x: &Array2<f32>) -> Result<Array2<f32>> {
-        let (batch_size, seq_len) = x.dim();
+        let (_batch_size, _seq_len) = x.dim();
 
         // Project input to delta space
         let delta_proj = x.dot(&self.dt_proj.t());
@@ -411,7 +411,7 @@ impl MambaEmbedding {
     /// Convert triples to sequence format for Mamba processing
     fn triples_to_sequence(&self, triples: &[crate::Triple]) -> Result<Array2<f32>> {
         let seq_len = triples.len();
-        let d_model = self.mamba_config.d_model;
+        let _d_model = self.mamba_config.d_model;
 
         let mut sequence = Array2::zeros((1, seq_len));
 
@@ -449,7 +449,7 @@ impl MambaEmbedding {
     /// Create context sequence for selective processing
     fn create_context_sequence(&self, entity: &str, context: &[String]) -> Result<Array2<f32>> {
         let seq_len = context.len() + 1; // +1 for the target entity
-        let d_model = self.mamba_config.d_model;
+        let _d_model = self.mamba_config.d_model;
 
         let mut sequence = Array2::zeros((1, seq_len));
 
@@ -559,13 +559,13 @@ impl crate::EmbeddingModel for MambaEmbedding {
 
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector> {
         if !self.is_trained {
-            return Err(crate::EmbeddingError::ModelNotTrained.into());
+            return Err(EmbeddingError::ModelNotTrained.into());
         }
 
         let entity_idx =
             self.entities
                 .get(entity)
-                .ok_or_else(|| crate::EmbeddingError::EntityNotFound {
+                .ok_or_else(|| EmbeddingError::EntityNotFound {
                     entity: entity.to_string(),
                 })?;
 
@@ -573,13 +573,13 @@ impl crate::EmbeddingModel for MambaEmbedding {
         Ok(Vector::new(embedding.to_vec()))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
-            return Err(crate::EmbeddingError::ModelNotTrained.into());
+            return Err(EmbeddingError::ModelNotTrained.into());
         }
 
         let relation_idx = self.relations.get(relation).ok_or_else(|| {
-            crate::EmbeddingError::RelationNotFound {
+            EmbeddingError::RelationNotFound {
                 relation: relation.to_string(),
             }
         })?;
@@ -590,7 +590,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let s_emb = self.get_entity_embedding(subject)?;
-        let p_emb = self.get_relation_embedding(predicate)?;
+        let p_emb = self.getrelation_embedding(predicate)?;
         let o_emb = self.get_entity_embedding(object)?;
 
         // Simplified scoring using Mamba-processed representations
@@ -613,7 +613,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if let Ok(score) = self.score_triple(subject, predicate, entity) {
                 predictions.push((entity.clone(), score));
             }
@@ -633,7 +633,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if let Ok(score) = self.score_triple(entity, predicate, object) {
                 predictions.push((entity.clone(), score));
             }
@@ -653,7 +653,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             if let Ok(score) = self.score_triple(subject, relation, object) {
                 predictions.push((relation.clone(), score));
             }
@@ -682,8 +682,8 @@ impl crate::EmbeddingModel for MambaEmbedding {
         use std::io::Write;
 
         // Create the full path for the Mamba model
-        let model_path = format!("{}.mamba", path);
-        let metadata_path = format!("{}.mamba.metadata.json", path);
+        let model_path = format!("{path}.mamba");
+        let metadata_path = format!("{path}.mamba.metadata.json");
 
         // Serialize the model state - convert entity and relation mappings
         let entity_data: std::collections::HashMap<String, usize> = self.entities.clone();
@@ -758,7 +758,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
         use std::io::Read;
 
         // Determine the full path
-        let model_path = format!("{}.mamba", path);
+        let model_path = format!("{path}.mamba");
 
         // Read and deserialize model data
         let mut file = File::open(&model_path)?;
@@ -1003,7 +1003,7 @@ impl crate::EmbeddingModel for MambaEmbedding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EmbeddingModel, NamedNode, Triple};
+    use crate::EmbeddingModel;
     use nalgebra::Complex;
 
     #[test]

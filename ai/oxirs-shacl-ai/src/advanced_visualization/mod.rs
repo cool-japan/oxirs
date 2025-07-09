@@ -39,7 +39,7 @@ pub use exporters::{
     ExportManager, Exporter, HTMLExporter, JSONExporter, PDFExporter, PNGExporter, SVGExporter,
 };
 
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Create a default advanced visualization engine
 pub fn create_default_engine() -> AdvancedVisualizationEngine {

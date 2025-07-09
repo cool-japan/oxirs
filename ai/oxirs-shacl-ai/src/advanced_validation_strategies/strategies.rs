@@ -1,7 +1,7 @@
 //! Basic validation strategies
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
@@ -15,6 +15,12 @@ use super::types::*;
 #[derive(Debug)]
 pub struct OptimizedSequentialStrategy {
     parameters: HashMap<String, f64>,
+}
+
+impl Default for OptimizedSequentialStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl OptimizedSequentialStrategy {
@@ -121,6 +127,12 @@ pub struct ParallelValidationStrategy {
     parameters: HashMap<String, f64>,
 }
 
+impl Default for ParallelValidationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ParallelValidationStrategy {
     pub fn new() -> Self {
         let mut parameters = HashMap::new();
@@ -219,6 +231,12 @@ impl ValidationStrategy for ParallelValidationStrategy {
 #[derive(Debug)]
 pub struct IncrementalValidationStrategy {
     parameters: HashMap<String, f64>,
+}
+
+impl Default for IncrementalValidationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl IncrementalValidationStrategy {
@@ -321,6 +339,12 @@ pub struct CachedValidationStrategy {
     parameters: HashMap<String, f64>,
 }
 
+impl Default for CachedValidationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CachedValidationStrategy {
     pub fn new() -> Self {
         let mut parameters = HashMap::new();
@@ -405,7 +429,7 @@ impl ValidationStrategy for CachedValidationStrategy {
         let data_size = context.data_characteristics.total_triples;
         
         // Good for medium-sized datasets
-        if data_size >= 1000 && data_size <= 50000 {
+        if (1000..=50000).contains(&data_size) {
             0.85
         } else if data_size <= 75000 {
             0.70

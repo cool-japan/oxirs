@@ -488,7 +488,7 @@ impl GNNEmbedding {
                 .map(|&s| (s - max_score).exp())
                 .collect();
             let sum_exp = exp_scores.iter().sum::<f32>();
-            let attention_weights: Vec<f32> = exp_scores.iter().map(|&e| e / sum_exp).collect();
+            let attention_weights: Vec<f32> = exp_scores.iter().copied().map(|e| e / sum_exp).collect();
 
             // Apply attention with proper output dimensions
             let output_dim = layer.weight_matrix.shape()[1];
@@ -707,7 +707,7 @@ impl EmbeddingModel for GNNEmbedding {
             })
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }

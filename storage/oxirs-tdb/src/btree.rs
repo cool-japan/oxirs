@@ -102,6 +102,9 @@ pub struct BTreeStats {
     pub cache_misses: u64,
 }
 
+/// Type alias for the complex node storage type
+type NodeStorage<K, V> = Arc<RwLock<Vec<Option<BTreeNode<K, V>>>>>;
+
 /// B+ Tree implementation
 pub struct BTree<K, V>
 where
@@ -109,7 +112,7 @@ where
     V: Clone + Debug,
 {
     root: Option<NodeId>,
-    nodes: Arc<RwLock<Vec<Option<BTreeNode<K, V>>>>>,
+    nodes: NodeStorage<K, V>,
     next_node_id: NodeId,
     config: BTreeConfig,
     stats: BTreeStats,

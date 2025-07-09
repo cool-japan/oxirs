@@ -148,7 +148,7 @@ impl EmbeddingModel for ContextualEmbeddingModel {
             .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", entity))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         self.relations.get(relation)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Relation not found: {}", relation))
@@ -235,8 +235,8 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         use std::io::Write;
         
         // Create the full path including model metadata
-        let model_path = format!("{}.contextual", path);
-        let metadata_path = format!("{}.metadata.json", path);
+        let model_path = format!("{path}.contextual");
+        let metadata_path = format!("{path}.metadata.json");
         
         // Serialize the model configuration and state
         let model_data = serde_json::json!({
@@ -282,7 +282,7 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         use std::io::Read;
         
         // Determine the full path
-        let model_path = format!("{}.contextual", path);
+        let model_path = format!("{path}.contextual");
         
         // Read and deserialize model data
         let mut file = File::open(&model_path)?;

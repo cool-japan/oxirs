@@ -127,21 +127,12 @@ pub enum ReteNode {
 }
 
 /// Join condition for beta nodes
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct JoinCondition {
     /// Variable constraints between left and right tokens
     pub constraints: Vec<(String, String)>,
     /// Additional filters
     pub filters: Vec<String>,
-}
-
-impl Default for JoinCondition {
-    fn default() -> Self {
-        Self {
-            constraints: Vec::new(),
-            filters: Vec::new(),
-        }
-    }
 }
 
 /// RETE network implementation
@@ -271,7 +262,7 @@ impl ReteNetwork {
 
     /// Create an alpha node for pattern matching
     fn create_alpha_node(&mut self, pattern: RuleAtom, _parent: NodeId) -> Result<NodeId> {
-        println!("Creating alpha node for pattern: {:?}", pattern);
+        println!("Creating alpha node for pattern: {pattern:?}");
 
         // Check if alpha node already exists for this pattern
         let pattern_key = self.pattern_key(&pattern);
@@ -491,14 +482,15 @@ impl ReteNetwork {
     }
 
     /// Generate a key for a term
+    #[allow(clippy::only_used_in_recursion)]
     fn term_key(&self, term: &Term) -> String {
         match term {
-            Term::Variable(v) => format!("?{}", v),
-            Term::Constant(c) => format!("c:{}", c),
-            Term::Literal(l) => format!("l:{}", l),
+            Term::Variable(v) => format!("?{v}"),
+            Term::Constant(c) => format!("c:{c}"),
+            Term::Literal(l) => format!("l:{l}"),
             Term::Function { name, args } => {
                 let arg_keys: Vec<String> = args.iter().map(|arg| self.term_key(arg)).collect();
-                format!("f:{}({})", name, arg_keys.join(","))
+                format!("f:{name}({})", arg_keys.join(","))
             }
         }
     }
@@ -724,7 +716,7 @@ impl ReteNetwork {
                 children,
             }) => {
                 // Handle beta join
-                let joined_tokens = self.perform_beta_join(node_id, token, &join_condition)?;
+                let joined_tokens = self.perform_beta_join(node_id, token, join_condition)?;
                 for joined_token in joined_tokens {
                     for &child_id in &children {
                         let new_facts = self.propagate_token(child_id, joined_token.clone())?;
@@ -755,8 +747,7 @@ impl ReteNetwork {
         join_condition: &JoinCondition,
     ) -> Result<Vec<Token>> {
         println!(
-            "perform_beta_join called with beta_id={}, token={:?}",
-            beta_id, token
+            "perform_beta_join called with beta_id={beta_id}, token={token:?}"
         );
         // Check if we have an enhanced beta node
         if self.enhanced_beta_nodes.contains_key(&beta_id) {
@@ -803,7 +794,7 @@ impl ReteNetwork {
                 joined_tokens.len()
             );
             for (i, token) in joined_tokens.iter().enumerate() {
-                println!("  Joined token {}: {:?}", i, token);
+                println!("  Joined token {i}: {token:?}");
             }
             Ok(joined_tokens)
         } else {
@@ -813,8 +804,7 @@ impl ReteNetwork {
 
             let mut joined_tokens = Vec::new();
             println!(
-                "Using fallback beta join implementation, is_left_token: {}",
-                is_left_token
+                "Using fallback beta join implementation, is_left_token: {is_left_token}"
             );
 
             if is_left_token {
@@ -823,7 +813,7 @@ impl ReteNetwork {
                     let (_, right_memory) = self.beta_memory.get(&beta_id).ok_or_else(|| {
                         anyhow::anyhow!("Beta memory not found for node {}", beta_id)
                     })?;
-                    right_memory.iter().cloned().collect()
+                    right_memory.to_vec()
                 };
 
                 // Add token to left memory
@@ -835,14 +825,14 @@ impl ReteNetwork {
                 }
 
                 // Now perform joins
-                println!("Left token: {:?}", token);
+                println!("Left token: {token:?}");
                 println!("Available right tokens: {} tokens", right_tokens.len());
                 for (i, right_token) in right_tokens.iter().enumerate() {
-                    println!("  Right token {}: {:?}", i, right_token);
-                    if self.satisfies_join_condition(&token, &right_token, join_condition)? {
+                    println!("  Right token {i}: {right_token:?}");
+                    if self.satisfies_join_condition(&token, right_token, join_condition)? {
                         println!("    Join condition satisfied! Creating joined token...");
-                        let joined = self.join_tokens(&token, &right_token)?;
-                        println!("    Joined token: {:?}", joined);
+                        let joined = self.join_tokens(&token, right_token)?;
+                        println!("    Joined token: {joined:?}");
                         joined_tokens.push(joined);
                     } else {
                         println!("    Join condition NOT satisfied");
@@ -854,7 +844,7 @@ impl ReteNetwork {
                     let (left_memory, _) = self.beta_memory.get(&beta_id).ok_or_else(|| {
                         anyhow::anyhow!("Beta memory not found for node {}", beta_id)
                     })?;
-                    left_memory.iter().cloned().collect()
+                    left_memory.to_vec()
                 };
 
                 // Add token to right memory
@@ -867,14 +857,14 @@ impl ReteNetwork {
                 }
 
                 // Now perform joins
-                println!("Right token: {:?}", token);
+                println!("Right token: {token:?}");
                 println!("Available left tokens: {} tokens", left_tokens.len());
                 for (i, left_token) in left_tokens.iter().enumerate() {
-                    println!("  Left token {}: {:?}", i, left_token);
-                    if self.satisfies_join_condition(&left_token, &token, join_condition)? {
+                    println!("  Left token {i}: {left_token:?}");
+                    if self.satisfies_join_condition(left_token, &token, join_condition)? {
                         println!("    Join condition satisfied! Creating joined token...");
-                        let joined = self.join_tokens(&left_token, &token)?;
-                        println!("    Joined token: {:?}", joined);
+                        let joined = self.join_tokens(left_token, &token)?;
+                        println!("    Joined token: {joined:?}");
                         joined_tokens.push(joined);
                     } else {
                         println!("    Join condition NOT satisfied");
@@ -902,7 +892,7 @@ impl ReteNetwork {
                 joined_tokens.len()
             );
             for (i, token) in joined_tokens.iter().enumerate() {
-                println!("  Fallback joined token {}: {:?}", i, token);
+                println!("  Fallback joined token {i}: {token:?}");
             }
             Ok(joined_tokens)
         }
@@ -917,8 +907,7 @@ impl ReteNetwork {
         }) = self.nodes.get(&beta_id)
         {
             println!(
-                "is_left_token: beta_id={}, left_parent={}, right_parent={}",
-                beta_id, left_parent, right_parent
+                "is_left_token: beta_id={beta_id}, left_parent={left_parent}, right_parent={right_parent}"
             );
 
             // Check the variable bindings to determine which side this token came from
@@ -928,8 +917,8 @@ impl ReteNetwork {
             let has_z = token.bindings.contains_key("Z");
 
             println!(
-                "Token bindings: {:?}, has_X: {}, has_Z: {}",
-                token.bindings, has_x, has_z
+                "Token bindings: {:?}, has_X: {has_x}, has_Z: {has_z}",
+                token.bindings
             );
 
             if has_x && !has_z {
@@ -944,7 +933,7 @@ impl ReteNetwork {
                 // If we can't determine from bindings, fall back to pattern matching
                 if let Some(last_fact) = token.facts.last() {
                     println!("Cannot determine from bindings, checking patterns...");
-                    println!("Checking fact: {:?}", last_fact);
+                    println!("Checking fact: {last_fact:?}");
 
                     // Get the patterns to check priority
                     let left_pattern = self.nodes.get(left_parent).and_then(|node| {
@@ -964,17 +953,15 @@ impl ReteNetwork {
 
                     if let (Some(left_pattern), Some(right_pattern)) = (left_pattern, right_pattern)
                     {
-                        println!("Left pattern: {:?}", left_pattern);
-                        println!("Right pattern: {:?}", right_pattern);
+                        println!("Left pattern: {left_pattern:?}");
+                        println!("Right pattern: {right_pattern:?}");
 
                         // Check right pattern first to give it priority
-                        if let Some(_) =
-                            self.unify_atoms(right_pattern, last_fact, &HashMap::new())?
+                        if (self.unify_atoms(right_pattern, last_fact, &HashMap::new())?).is_some()
                         {
                             println!("Fact matches right pattern - returning false");
                             return Ok(false);
-                        } else if let Some(_) =
-                            self.unify_atoms(left_pattern, last_fact, &HashMap::new())?
+                        } else if (self.unify_atoms(left_pattern, last_fact, &HashMap::new())?).is_some()
                         {
                             println!("Fact matches left pattern - returning true");
                             return Ok(true);
@@ -1229,6 +1216,7 @@ impl ReteNetwork {
     }
 
     /// Substitute variables in a term
+    #[allow(clippy::only_used_in_recursion)]
     fn substitute_term(&self, term: &Term, substitution: &Substitution) -> Term {
         match term {
             Term::Variable(var) => substitution

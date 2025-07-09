@@ -99,6 +99,12 @@ impl Default for RecommendationModels {
 #[derive(Debug)]
 pub struct PerformanceRecommender;
 
+impl Default for PerformanceRecommender {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceRecommender {
     pub fn new() -> Self {
         Self
@@ -116,6 +122,12 @@ impl PerformanceRecommender {
 /// Quality recommender
 #[derive(Debug)]
 pub struct QualityRecommender;
+
+impl Default for QualityRecommender {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl QualityRecommender {
     pub fn new() -> Self {
@@ -135,6 +147,12 @@ impl QualityRecommender {
 #[derive(Debug)]
 pub struct OptimizationRecommender;
 
+impl Default for OptimizationRecommender {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizationRecommender {
     pub fn new() -> Self {
         Self
@@ -144,6 +162,12 @@ impl OptimizationRecommender {
 /// Shape recommender
 #[derive(Debug)]
 pub struct ShapeRecommender;
+
+impl Default for ShapeRecommender {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ShapeRecommender {
     pub fn new() -> Self {
@@ -155,6 +179,12 @@ impl ShapeRecommender {
 #[derive(Debug)]
 pub struct ConfigurationRecommender;
 
+impl Default for ConfigurationRecommender {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfigurationRecommender {
     pub fn new() -> Self {
         Self
@@ -164,6 +194,12 @@ impl ConfigurationRecommender {
 /// Scoring engine for recommendations
 #[derive(Debug)]
 pub struct ScoringEngine;
+
+impl Default for ScoringEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ScoringEngine {
     pub fn new() -> Self {
@@ -175,6 +211,12 @@ impl ScoringEngine {
 #[derive(Debug)]
 pub struct FeedbackProcessor;
 
+impl Default for FeedbackProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FeedbackProcessor {
     pub fn new() -> Self {
         Self
@@ -184,6 +226,12 @@ impl FeedbackProcessor {
 /// Knowledge base for recommendations
 #[derive(Debug)]
 pub struct RecommendationKnowledgeBase;
+
+impl Default for RecommendationKnowledgeBase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl RecommendationKnowledgeBase {
     pub fn new() -> Self {

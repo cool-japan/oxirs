@@ -4,7 +4,7 @@
 //! including product catalogs, organizational knowledge, employee skill embeddings, and
 //! recommendation systems for business applications.
 
-use crate::{EmbeddingModel, Vector};
+use crate::Vector;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -782,8 +782,8 @@ impl EnterpriseKnowledgeAnalyzer {
         info!("Generating product embedding for: {}", product_id);
 
         // Get product information (would come from product database)
-        let name = format!("Product_{}", product_id);
-        let description = format!("Description for product {}", product_id);
+        let name = format!("Product_{product_id}");
+        let description = format!("Description for product {product_id}");
         let category = "Electronics".to_string();
         let subcategories = vec!["Smartphones".to_string(), "Mobile".to_string()];
 
@@ -890,7 +890,7 @@ impl EnterpriseKnowledgeAnalyzer {
         info!("Generating employee embedding for: {}", employee_id);
 
         // Get employee information (would come from HR database)
-        let name = format!("Employee_{}", employee_id);
+        let name = format!("Employee_{employee_id}");
         let job_title = "Software Engineer".to_string();
         let department = "Engineering".to_string();
         let team = "Backend Team".to_string();
@@ -995,7 +995,7 @@ impl EnterpriseKnowledgeAnalyzer {
         info!("Generating customer embedding for: {}", customer_id);
 
         // Get customer information (would come from CRM database)
-        let name = format!("Customer_{}", customer_id);
+        let name = format!("Customer_{customer_id}");
         let segment = CustomerSegment::Regular;
 
         // Generate purchase history
@@ -1147,7 +1147,7 @@ impl EnterpriseKnowledgeAnalyzer {
     /// Optimize team composition for a project
     pub async fn optimize_team_composition(
         &self,
-        project_id: &str,
+        _project_id: &str,
         required_skills: &[String],
     ) -> Result<Vec<String>> {
         let employees = self.employee_embeddings.read().unwrap();

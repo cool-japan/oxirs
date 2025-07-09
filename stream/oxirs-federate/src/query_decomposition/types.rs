@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::{
-    planner::{ExecutionPlan, FilterExpression, QueryInfo, TriplePattern},
+    planner::{ExecutionPlan, FilterExpression, TriplePattern},
     FederatedService,
 };
 
@@ -80,6 +80,12 @@ pub struct QueryGraph {
     pub variable_nodes: HashMap<String, NodeIndex>,
     pub pattern_nodes: Vec<NodeIndex>,
     pub filter_nodes: Vec<NodeIndex>,
+}
+
+impl Default for QueryGraph {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryGraph {
@@ -187,6 +193,12 @@ pub struct QueryComponent {
     pub filters: Vec<FilterExpression>,
 }
 
+impl Default for QueryComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryComponent {
     pub fn new() -> Self {
         Self {
@@ -240,6 +252,12 @@ pub struct CostEstimator {
     join_cost_factor: f64,
 }
 
+impl Default for CostEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CostEstimator {
     pub fn new() -> Self {
         Self {
@@ -283,7 +301,7 @@ impl CostEstimator {
         // Add pattern complexity cost
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
-            .filter(|p| p.as_ref().map_or(false, |s| s.starts_with('?')))
+            .filter(|p| p.as_ref().is_some_and(|s| s.starts_with('?')))
             .count();
 
         cost += match var_count {

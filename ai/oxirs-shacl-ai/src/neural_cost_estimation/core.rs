@@ -1,32 +1,13 @@
 //! Core neural cost estimation engine implementation
 
 use crate::{
-    ml::{GraphData, ModelError, ModelMetrics},
-    neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
-    neural_transformer_pattern_integration::{
-        NeuralTransformerConfig, NeuralTransformerPatternIntegration,
-    },
-    quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
-    realtime_adaptive_query_optimizer::{
-        AdaptiveOptimizerConfig, OptimizationPlanType, PerformanceMetrics, QueryPerformanceRecord,
-    },
     Result, ShaclAiError,
 };
 
-use ndarray::{Array1, Array2, Array3, Array4, Axis};
-use oxirs_core::{
-    model::{Term, Variable},
-    query::{
-        algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
-        pattern_optimizer::{
-            IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
-        },
-    },
-    OxirsError, Store,
-};
-use std::collections::{HashMap, HashSet, VecDeque};
+use ndarray::{Array1, Array2};
+use oxirs_core::query::algebra::AlgebraTriplePattern;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime};
 
 use super::{
     config::*, context::ContextAwareCostAdjuster, deep_predictor::DeepCostPredictor,
@@ -121,8 +102,7 @@ impl NeuralCostEstimationEngine {
             _ => {
                 return Err(ShaclAiError::DataProcessing(
                     "Failed to lock feature extractor".to_string(),
-                )
-                .into());
+                ));
             }
         };
 
@@ -133,8 +113,7 @@ impl NeuralCostEstimationEngine {
             _ => {
                 return Err(ShaclAiError::DataProcessing(
                     "Failed to lock deep network".to_string(),
-                )
-                .into());
+                ));
             }
         };
 
@@ -178,8 +157,7 @@ impl NeuralCostEstimationEngine {
             _ => {
                 return Err(ShaclAiError::DataProcessing(
                     "Failed to lock feature extractor".to_string(),
-                )
-                .into());
+                ));
             }
         };
 
@@ -237,8 +215,7 @@ impl NeuralCostEstimationEngine {
             _ => {
                 return Err(ShaclAiError::DataProcessing(
                     "Failed to lock deep network".to_string(),
-                )
-                .into());
+                ));
             }
         };
 

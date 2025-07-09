@@ -1,21 +1,19 @@
 //! Optimization engine implementation
 
 use indexmap::IndexMap;
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
 use oxirs_core::{
-    model::{Literal, NamedNode, Term, Triple},
+    model::NamedNode,
     Store,
 };
 
 use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Shape, ShapeId, Target,
-    ValidationConfig, ValidationReport,
+    Constraint, ConstraintComponentId, Shape, ShapeId, Target, ValidationReport,
 };
 
-use crate::{patterns::Pattern, Result, ShaclAiError};
+use crate::Result;
 
 use super::{config::OptimizationConfig, types::*};
 
@@ -970,8 +968,7 @@ impl OptimizationEngine {
             let bottleneck = PerformanceBottleneck {
                 bottleneck_type: BottleneckType::Memory,
                 description: format!(
-                    "High memory usage detected: peak {:.1}MB, average {:.1}MB",
-                    max_memory, avg_memory
+                    "High memory usage detected: peak {max_memory:.1}MB, average {avg_memory:.1}MB"
                 ),
                 severity,
                 impact_score,
@@ -1014,7 +1011,7 @@ impl OptimizationEngine {
 
                     constraint_failures
                         .entry(constraint_type.to_string())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(timing);
                 }
             }
@@ -1041,8 +1038,7 @@ impl OptimizationEngine {
                 let bottleneck = PerformanceBottleneck {
                     bottleneck_type: BottleneckType::Constraint,
                     description: format!(
-                        "Slow constraint type '{}' with average execution time of {:.1}ms",
-                        constraint_type, avg_timing
+                        "Slow constraint type '{constraint_type}' with average execution time of {avg_timing:.1}ms"
                     ),
                     severity,
                     impact_score: (avg_timing / 100.0).min(1.0),
@@ -1075,7 +1071,7 @@ impl OptimizationEngine {
                     let timing = 25.0; // Simulated timing
                     shape_performance
                         .entry(shape_id.as_str().to_string())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(timing);
                 }
             }
@@ -1102,8 +1098,7 @@ impl OptimizationEngine {
                 let bottleneck = PerformanceBottleneck {
                     bottleneck_type: BottleneckType::ExecutionTime,
                     description: format!(
-                        "Slow shape '{}' with average execution time of {:.1}ms (max: {:.1}ms)",
-                        shape_id, avg_timing, max_timing
+                        "Slow shape '{shape_id}' with average execution time of {avg_timing:.1}ms (max: {max_timing:.1}ms)"
                     ),
                     severity,
                     impact_score: (avg_timing / 200.0).min(1.0),
@@ -1373,7 +1368,7 @@ impl OptimizationEngine {
         let mut hasher = DefaultHasher::new();
         shapes.len().hash(&mut hasher);
         for shape in shapes {
-            &shape.id.as_str().hash(&mut hasher);
+            shape.id.as_str().hash(&mut hasher);
         }
         format!("shapes_opt_{}", hasher.finish())
     }

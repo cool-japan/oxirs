@@ -13,14 +13,13 @@ pub mod node;
 pub mod partition;
 pub mod raft;
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::{
-    error::{FusekiError, FusekiResult},
+    error::FusekiResult,
     store::Store,
 };
 

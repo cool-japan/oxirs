@@ -4,7 +4,7 @@
 //! featuring intuitive decision making, memory formation, and adaptive learning mechanisms
 //! that mimic neural processes to achieve optimal query performance.
 
-use crate::error::{FusekiError, FusekiResult};
+use crate::error::FusekiResult;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Consciousness configuration for query processing
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -240,7 +240,7 @@ impl MemoryPattern {
         self.last_accessed = Utc::now();
         self.frequency += 1;
         // Strengthen memory through access
-        self.strength = (self.strength + 0.1).min(1.0);
+        self.strength = (self.strength + 0.1).clamp(0.0, 1.0);
     }
 
     /// Check if memory should be consolidated
@@ -271,6 +271,12 @@ pub struct PerformanceMetrics {
     pub satisfaction_score: f64,
     /// Number of samples
     pub sample_count: u32,
+}
+
+impl Default for PerformanceMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceMetrics {
@@ -621,8 +627,8 @@ impl ConsciousnessProcessor {
             .count() as f64
             / features.patterns.len().max(1) as f64;
 
-        let similarity = (1.0 - complexity_diff) * 0.3 + pattern_overlap * 0.7;
-        similarity
+        
+        (1.0 - complexity_diff) * 0.3 + pattern_overlap * 0.7
     }
 
     /// Apply optimization from memory pattern

@@ -74,6 +74,7 @@ pub enum RdfResponse {
 
 /// Raft application data
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Default)]
 pub struct RdfApp {
     /// In-memory triple store for demonstration
     /// In production, this would interface with oxirs-tdb
@@ -86,16 +87,6 @@ pub struct RdfApp {
     pub deleted_shards: BTreeSet<crate::shard::ShardId>,
 }
 
-impl Default for RdfApp {
-    fn default() -> Self {
-        Self {
-            triples: BTreeSet::new(),
-            transactions: BTreeMap::new(),
-            shards: BTreeMap::new(),
-            deleted_shards: BTreeSet::new(),
-        }
-    }
-}
 
 impl RdfApp {
     /// Apply a command to the state machine
@@ -136,7 +127,7 @@ impl RdfApp {
                         tx_id: tx_id.clone(),
                     }
                 } else {
-                    RdfResponse::Error(format!("Transaction {} not found", tx_id))
+                    RdfResponse::Error(format!("Transaction {tx_id} not found"))
                 }
             }
             RdfCommand::RollbackTransaction { tx_id } => {
@@ -145,7 +136,7 @@ impl RdfApp {
                         tx_id: tx_id.clone(),
                     }
                 } else {
-                    RdfResponse::Error(format!("Transaction {} not found", tx_id))
+                    RdfResponse::Error(format!("Transaction {tx_id} not found"))
                 }
             }
             RdfCommand::AddNode { node_id, address } => {
@@ -222,7 +213,7 @@ impl RdfApp {
             triple.object().to_string(),
         );
 
-        let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
+        let shard = self.shards.entry(shard_id).or_default();
         shard.insert(triple_tuple);
     }
 
@@ -307,7 +298,7 @@ impl RdfApp {
         shard_id: crate::shard::ShardId,
         triples: Vec<oxirs_core::model::Triple>,
     ) {
-        let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
+        let shard = self.shards.entry(shard_id).or_default();
         for triple in triples {
             let triple_tuple = (
                 triple.subject().to_string(),
@@ -332,7 +323,7 @@ impl RdfApp {
         shard_id: crate::shard::ShardId,
         triples: Vec<oxirs_core::model::Triple>,
     ) {
-        let shard = self.shards.entry(shard_id).or_insert_with(BTreeSet::new);
+        let shard = self.shards.entry(shard_id).or_default();
         for triple in triples {
             let triple_tuple = (
                 triple.subject().to_string(),

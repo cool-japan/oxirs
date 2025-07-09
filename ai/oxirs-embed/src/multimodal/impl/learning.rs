@@ -1,6 +1,5 @@
 //! Few-shot learning and meta-learning components for multi-modal embeddings
 
-use super::encoders::*;
 use super::model::MultiModalEmbedding;
 use anyhow::{anyhow, Result};
 use ndarray::{Array1, Array2};
@@ -251,7 +250,7 @@ impl FewShotLearning {
 
             label_embeddings
                 .entry(label.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(combined_emb);
         }
 
@@ -322,7 +321,7 @@ impl FewShotLearning {
                 let loss_grad = &predicted - &target;
 
                 // Accumulate gradients
-                for (layer_name, _) in &task_params {
+                for layer_name in task_params.keys() {
                     let grad = self.compute_layer_gradient(&input_emb, &loss_grad, layer_name)?;
                     *gradients
                         .entry(layer_name.clone())
@@ -574,7 +573,7 @@ impl FewShotLearning {
             .unwrap_or((0, &0.0));
 
         // Convert index to label
-        let label = format!("class_{}", max_idx);
+        let label = format!("class_{max_idx}");
         let confidence = 1.0 / (1.0 + (-max_val).exp()); // Sigmoid
 
         Ok((label, confidence))
@@ -587,9 +586,9 @@ impl FewShotLearning {
                 // Update outer loop parameters based on task performance
                 let mut meta_gradients = HashMap::new();
 
-                for task in tasks {
+                for _task in tasks {
                     // Simulate task-specific adaptation
-                    for (layer_name, _) in &self.maml_components.outer_loop_params {
+                    for layer_name in self.maml_components.outer_loop_params.keys() {
                         let grad = Array2::from_shape_fn((128, 128), |(_, _)| {
                             (rand::random::<f32>() - 0.5) * 0.01
                         });
@@ -608,9 +607,9 @@ impl FewShotLearning {
             }
             MetaAlgorithm::Reptile => {
                 // Reptile meta-update
-                for task in tasks {
+                for _task in tasks {
                     // Simulate task adaptation and update toward adapted parameters
-                    for (layer_name, params) in &mut self.maml_components.outer_loop_params {
+                    for params in self.maml_components.outer_loop_params.values_mut() {
                         let update = Array2::from_shape_fn(params.dim(), |(_, _)| {
                             (rand::random::<f32>() - 0.5) * 0.001
                         });
@@ -620,7 +619,7 @@ impl FewShotLearning {
             }
             _ => {
                 // For prototypical networks, update feature extractor
-                for (layer_name, params) in &mut self.prototypical_network.feature_extractor {
+                for params in self.prototypical_network.feature_extractor.values_mut() {
                     let update = Array2::from_shape_fn(params.dim(), |(_, _)| {
                         (rand::random::<f32>() - 0.5) * 0.001
                     });

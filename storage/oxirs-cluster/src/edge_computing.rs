@@ -462,6 +462,7 @@ pub struct EdgeComputingManager {
     /// Network condition monitor
     network_monitor: Arc<NetworkConditionMonitor>,
     /// Data placement optimizer
+    #[allow(dead_code)]
     placement_optimizer: Arc<DataPlacementOptimizer>,
     /// Edge cache manager
     cache_manager: Arc<EdgeCacheManager>,
@@ -676,6 +677,12 @@ pub enum ConsistencyLevel {
     Session,
     /// Monotonic read consistency
     MonotonicRead,
+}
+
+impl Default for EdgeComputingManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EdgeComputingManager {
@@ -1194,6 +1201,12 @@ impl EdgeComputingManager {
     }
 }
 
+impl Default for NetworkConditionMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkConditionMonitor {
     pub fn new() -> Self {
         Self {
@@ -1227,6 +1240,12 @@ impl NetworkConditionMonitor {
 
     pub async fn get_current_condition(&self, device_id: &str) -> Result<Option<NetworkCondition>> {
         Ok(self.conditions.read().await.get(device_id).cloned())
+    }
+}
+
+impl Default for DataPlacementOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1274,6 +1293,12 @@ impl DataPlacementOptimizer {
         data_id: &str,
     ) -> Option<PlacementRecommendation> {
         self.placement_cache.read().await.get(data_id).cloned()
+    }
+}
+
+impl Default for EdgeCacheManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

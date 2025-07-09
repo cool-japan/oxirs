@@ -631,7 +631,7 @@ impl VectorStoreTrait for VectorStoreWrapper {
     }
 
     fn len(&self) -> usize {
-        let store = self.store.read();
+        let _store = self.store.read();
         // VectorStore doesn't have a direct len method, so we'll use a fallback
         0 // This would need to be implemented properly
     }
@@ -900,10 +900,10 @@ impl IntegratedVectorStore {
     /// SPARQL-integrated vector search
     pub fn sparql_vector_search(
         &self,
-        query: &str,
+        _query: &str,
         bindings: &HashMap<String, String>,
     ) -> Result<Vec<HashMap<String, String>>> {
-        let sparql_service = self.sparql_service.read();
+        let _sparql_service = self.sparql_service.read();
         // This would integrate with the SPARQL service to execute vector-enhanced queries
         // For now, return placeholder results
         Ok(vec![bindings.clone()])
@@ -1139,7 +1139,7 @@ impl TransactionManager {
 
     pub fn abort_transaction(&self, transaction_id: TransactionId) -> Result<()> {
         let mut active_txns = self.active_transactions.write();
-        let transaction = active_txns
+        let _transaction = active_txns
             .remove(&transaction_id)
             .ok_or_else(|| anyhow!("Transaction not found: {}", transaction_id))?;
 

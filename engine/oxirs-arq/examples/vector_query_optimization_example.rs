@@ -7,7 +7,7 @@
 use anyhow::Result;
 use oxirs_arq::{
     algebra::{Term, TriplePattern},
-    executor::{Dataset, QueryExecutor},
+    executor::{QueryExecutor},
     integrated_query_planner::IntegratedPlannerConfig,
     vector_query_optimizer::{
         IndexAccuracyStats, IndexPerformanceStats, VectorDistanceMetric, VectorIndexInfo,

@@ -4,17 +4,18 @@
 //! neural learning with symbolic reasoning, logic-based constraints,
 //! and knowledge-guided embeddings.
 
-use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use ndarray::{s, Array1, Array2, Array3, Axis};
+use chrono::Utc;
+use ndarray::{Array1, Array2, Array3};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Configuration for neural-symbolic integration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NeuralSymbolicConfig {
     pub base_config: ModelConfig,
     /// Symbolic reasoning configuration
@@ -29,18 +30,6 @@ pub struct NeuralSymbolicConfig {
     pub constraint_config: ConstraintSatisfactionConfig,
 }
 
-impl Default for NeuralSymbolicConfig {
-    fn default() -> Self {
-        Self {
-            base_config: ModelConfig::default(),
-            symbolic_config: SymbolicReasoningConfig::default(),
-            logic_config: LogicIntegrationConfig::default(),
-            knowledge_config: KnowledgeIntegrationConfig::default(),
-            architecture_config: NeuroSymbolicArchitectureConfig::default(),
-            constraint_config: ConstraintSatisfactionConfig::default(),
-        }
-    }
-}
 
 /// Symbolic reasoning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -951,7 +940,7 @@ impl NeuralSymbolicModel {
                 ActivationFunction::Sigmoid => activation.mapv(|x| 1.0 / (1.0 + (-x).exp())),
                 ActivationFunction::Tanh => activation.mapv(|x| x.tanh()),
                 ActivationFunction::GELU => {
-                    activation.mapv(|x| x * 0.5 * (1.0 + (x * 0.7978845608).tanh()))
+                    activation.mapv(|x| x * 0.5 * (1.0 + (x * 0.797_884_6).tanh()))
                 }
                 ActivationFunction::Swish => activation.mapv(|x| x * (1.0 / (1.0 + (-x).exp()))),
                 ActivationFunction::LogicActivation => activation.mapv(|x| (x.tanh() + 1.0) / 2.0), // Maps to [0,1]
@@ -968,7 +957,7 @@ impl NeuralSymbolicModel {
 
         // Ground neural input to symbolic facts
         for (i, &value) in input.iter().enumerate() {
-            let symbol = format!("input_{}", i);
+            let symbol = format!("input_{i}");
             symbolic_state.insert(symbol, value);
         }
 
@@ -998,7 +987,7 @@ impl NeuralSymbolicModel {
         // Convert back to vector
         let mut output = Array1::zeros(input.len());
         for (i, symbol) in (0..input.len())
-            .map(|i| format!("output_{}", i))
+            .map(|i| format!("output_{i}"))
             .enumerate()
         {
             if let Some(&value) = inferred_facts.get(&symbol) {
@@ -1048,7 +1037,7 @@ impl NeuralSymbolicModel {
         // Convert output to symbolic facts
         let mut facts = HashMap::new();
         for (i, &value) in output.iter().enumerate() {
-            facts.insert(format!("output_{}", i), value);
+            facts.insert(format!("output_{i}"), value);
         }
 
         // Evaluate constraints and adjust output
@@ -1058,7 +1047,7 @@ impl NeuralSymbolicModel {
             // If constraint is not satisfied, adjust output
             if constraint_satisfaction < 0.8 {
                 let adjustment_factor = (0.8 - constraint_satisfaction) * weight * 0.1;
-                output *= (1.0 - adjustment_factor);
+                output *= 1.0 - adjustment_factor;
             }
         }
 
@@ -1070,16 +1059,16 @@ impl NeuralSymbolicModel {
         // Simple rule learning algorithm
         let mut candidate_rules = Vec::new();
 
-        for (i, (input, output)) in examples.iter().enumerate() {
+        for (input, output) in examples.iter() {
             // Create candidate rules based on input-output patterns
             for j in 0..input.len() {
                 for k in 0..output.len() {
                     if input[j] > 0.5 && output[k] > 0.5 {
                         // Create rule: input_j -> output_k
-                        let antecedent = LogicalFormula::new_atom(format!("input_{}", j));
-                        let consequent = LogicalFormula::new_atom(format!("output_{}", k));
+                        let antecedent = LogicalFormula::new_atom(format!("input_{j}"));
+                        let consequent = LogicalFormula::new_atom(format!("output_{k}"));
                         let rule =
-                            KnowledgeRule::new(format!("rule_{}_{}", j, k), antecedent, consequent);
+                            KnowledgeRule::new(format!("rule_{j}_{k}"), antecedent, consequent);
                         candidate_rules.push(rule);
                     }
                 }
@@ -1094,7 +1083,7 @@ impl NeuralSymbolicModel {
             for (input, output) in examples {
                 let mut facts = HashMap::new();
                 for (i, &value) in input.iter().enumerate() {
-                    facts.insert(format!("input_{}", i), value);
+                    facts.insert(format!("input_{i}"), value);
                 }
 
                 if let Some((predicate, predicted_value)) = rule.apply(&facts) {
@@ -1138,7 +1127,7 @@ impl NeuralSymbolicModel {
         let constraint_loss = {
             let mut facts = HashMap::new();
             for (i, &value) in predictions.iter().enumerate() {
-                facts.insert(format!("output_{}", i), value);
+                facts.insert(format!("output_{i}"), value);
             }
 
             let mut total_violation = 0.0;
@@ -1155,7 +1144,7 @@ impl NeuralSymbolicModel {
         let rule_loss = {
             let mut facts = HashMap::new();
             for (i, &value) in predictions.iter().enumerate() {
-                facts.insert(format!("input_{}", i), value);
+                facts.insert(format!("input_{i}"), value);
             }
 
             let mut total_inconsistency = 0.0;
@@ -1194,7 +1183,7 @@ impl NeuralSymbolicModel {
         // Ground input to facts
         let mut facts = HashMap::new();
         for (i, &value) in input.iter().enumerate() {
-            facts.insert(format!("input_{}", i), value);
+            facts.insert(format!("input_{i}"), value);
         }
 
         // Find activated rules
@@ -1220,7 +1209,7 @@ impl NeuralSymbolicModel {
         let mut constraint_violations = Vec::new();
         let mut prediction_facts = HashMap::new();
         for (i, &value) in prediction.iter().enumerate() {
-            prediction_facts.insert(format!("output_{}", i), value);
+            prediction_facts.insert(format!("output_{i}"), value);
         }
 
         for constraint in &self.constraints {
@@ -1234,8 +1223,7 @@ impl NeuralSymbolicModel {
             explanation.push_str("\nConstraint Violations:\n");
             for (i, violation) in constraint_violations.iter().enumerate() {
                 explanation.push_str(&format!(
-                    "- Constraint {}: satisfaction = {:.2}\n",
-                    i, violation
+                    "- Constraint {i}: satisfaction = {violation:.2}\n"
                 ));
             }
         }
@@ -1280,7 +1268,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
             .or_insert(next_relation_id);
 
         // Create symbolic representation
-        let rule_id = format!("{}_{}", subject_str, predicate_str);
+        let rule_id = format!("{subject_str}_{predicate_str}");
         let antecedent = LogicalFormula::new_atom(subject_str);
         let consequent = LogicalFormula::new_atom(object_str);
         let rule = KnowledgeRule::new(rule_id, antecedent, consequent);
@@ -1356,7 +1344,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
         Err(anyhow!("Entity not found: {}", entity))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(&relation_id) = self.relations.get(relation) {
             // Generate embedding from neural-symbolic integration
             let input = Array1::from_shape_fn(self.config.base_config.dimensions, |i| {
@@ -1374,7 +1362,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
         Err(anyhow!("Relation not found: {}", relation))
     }
 
-    fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
+    fn score_triple(&self, subject: &str, predicate: &str, _object: &str) -> Result<f64> {
         // Use symbolic reasoning for scoring
         let mut facts = HashMap::new();
         facts.insert(subject.to_string(), 1.0);
@@ -1400,7 +1388,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != subject {
                 let score = self.score_triple(subject, predicate, entity)?;
                 scores.push((entity.clone(), score));
@@ -1421,7 +1409,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != object {
                 let score = self.score_triple(entity, predicate, object)?;
                 scores.push((entity.clone(), score));
@@ -1442,7 +1430,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             let score = self.score_triple(subject, relation, object)?;
             scores.push((relation.clone(), score));
         }

@@ -17,6 +17,12 @@ pub struct QuantumEnhancedStrategy {
     parameters: HashMap<String, f64>,
 }
 
+impl Default for QuantumEnhancedStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumEnhancedStrategy {
     pub fn new() -> Self {
         let mut parameters = HashMap::new();
@@ -104,9 +110,9 @@ impl ValidationStrategy for QuantumEnhancedStrategy {
         let complexity = context.shape_characteristics.dependency_graph_complexity;
         
         // Quantum strategy is optimized for large datasets (10k-10M triples)
-        let size_confidence: f64 = if data_size >= 10000 && data_size <= 10000000 {
+        let size_confidence: f64 = if (10000..=10000000).contains(&data_size) {
             0.95
-        } else if data_size >= 1000 && data_size < 10000 {
+        } else if (1000..10000).contains(&data_size) {
             0.75
         } else if data_size > 10000000 {
             0.85
@@ -131,6 +137,12 @@ impl ValidationStrategy for QuantumEnhancedStrategy {
 #[derive(Debug)]
 pub struct NeuromorphicValidationStrategy {
     parameters: HashMap<String, f64>,
+}
+
+impl Default for NeuromorphicValidationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NeuromorphicValidationStrategy {
@@ -239,6 +251,12 @@ pub struct BayesianUncertaintyStrategy {
     parameters: HashMap<String, f64>,
 }
 
+impl Default for BayesianUncertaintyStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BayesianUncertaintyStrategy {
     pub fn new() -> Self {
         let mut parameters = HashMap::new();
@@ -345,6 +363,12 @@ impl ValidationStrategy for BayesianUncertaintyStrategy {
 #[derive(Debug)]
 pub struct RealTimeAdaptiveStrategy {
     parameters: HashMap<String, f64>,
+}
+
+impl Default for RealTimeAdaptiveStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RealTimeAdaptiveStrategy {
@@ -456,7 +480,7 @@ impl ValidationStrategy for RealTimeAdaptiveStrategy {
         };
         
         // Size adjustment for optimal range
-        let size_adjustment: f64 = if triple_count >= 1000 && triple_count <= 100000 {
+        let size_adjustment: f64 = if (1000..=100000).contains(&triple_count) {
             0.0  // No penalty for optimal size
         } else if triple_count < 1000 {
             -0.05  // Small penalty for very small datasets

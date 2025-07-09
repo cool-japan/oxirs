@@ -905,7 +905,7 @@ impl RedisCache {
             .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
 
-        let pattern = format!("{}*", prefix);
+        let pattern = format!("{prefix}*");
         let keys: Vec<String> = conn
             .keys(pattern)
             .await

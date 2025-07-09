@@ -26,6 +26,12 @@ struct NeuralExplainerConfig {
     gradient_analysis: bool,
 }
 
+impl Default for NeuralDecisionExplainer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NeuralDecisionExplainer {
     pub fn new() -> Self {
         Self {
@@ -87,6 +93,12 @@ pub struct PatternRecognitionExplainer {
     pattern_library: Vec<String>,
 }
 
+impl Default for PatternRecognitionExplainer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternRecognitionExplainer {
     pub fn new() -> Self {
         Self {
@@ -140,6 +152,12 @@ pub struct ValidationReasoningExplainer {
     rule_engine: String,
 }
 
+impl Default for ValidationReasoningExplainer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValidationReasoningExplainer {
     pub fn new() -> Self {
         Self {
@@ -184,6 +202,12 @@ pub struct QuantumPatternExplainer {
     quantum_states: usize,
 }
 
+impl Default for QuantumPatternExplainer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumPatternExplainer {
     pub fn new() -> Self {
         Self { quantum_states: 8 }
@@ -224,6 +248,12 @@ impl ExplanationGenerator for QuantumPatternExplainer {
 #[derive(Debug, Clone)]
 pub struct AdaptationLogicExplainer {
     adaptation_history: Vec<String>,
+}
+
+impl Default for AdaptationLogicExplainer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AdaptationLogicExplainer {

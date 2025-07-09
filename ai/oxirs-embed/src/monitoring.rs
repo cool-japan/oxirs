@@ -8,14 +8,14 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 /// Comprehensive performance metrics for embedding systems
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PerformanceMetrics {
     /// Request latency metrics
     pub latency: LatencyMetrics,
@@ -367,19 +367,6 @@ impl Default for ExportConfig {
     }
 }
 
-impl Default for PerformanceMetrics {
-    fn default() -> Self {
-        Self {
-            latency: LatencyMetrics::default(),
-            throughput: ThroughputMetrics::default(),
-            resources: ResourceMetrics::default(),
-            quality: QualityMetrics::default(),
-            errors: ErrorMetrics::default(),
-            cache: CacheMetrics::default(),
-            drift: DriftMetrics::default(),
-        }
-    }
-}
 
 impl Default for LatencyMetrics {
     fn default() -> Self {
@@ -635,10 +622,7 @@ impl PerformanceMonitor {
             .or_insert(0) += 1;
 
         // Update error type counters
-        match error_event.severity {
-            ErrorSeverity::Critical => metrics.errors.critical_errors += 1,
-            _ => {}
-        }
+        if let ErrorSeverity::Critical = error_event.severity { metrics.errors.critical_errors += 1 }
 
         if error_event.error_type.contains("timeout") {
             metrics.errors.timeout_errors += 1;
@@ -931,8 +915,7 @@ impl PerformanceMonitor {
             quality_score,
             metrics,
             assessment_details: format!(
-                "Quality assessment completed with score: {:.3}",
-                quality_score
+                "Quality assessment completed with score: {quality_score:.3}"
             ),
         }
     }
@@ -963,7 +946,7 @@ impl PerformanceMonitor {
         if latency_ms > self.config.alert_thresholds.max_p95_latency_ms {
             self.send_alert(Alert {
                 alert_type: AlertType::HighLatency,
-                message: format!("High latency detected: {:.2}ms", latency_ms),
+                message: format!("High latency detected: {latency_ms:.2}ms"),
                 severity: AlertSeverity::Warning,
                 timestamp: Utc::now(),
                 metrics: HashMap::from([
@@ -983,7 +966,7 @@ impl PerformanceMonitor {
         if throughput_rps < self.config.alert_thresholds.min_throughput_rps {
             self.send_alert(Alert {
                 alert_type: AlertType::LowThroughput,
-                message: format!("Low throughput detected: {:.2} req/s", throughput_rps),
+                message: format!("Low throughput detected: {throughput_rps:.2} req/s"),
                 severity: AlertSeverity::Warning,
                 timestamp: Utc::now(),
                 metrics: HashMap::from([
@@ -1126,7 +1109,6 @@ impl AlertHandler for SlackAlertHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
 
     #[tokio::test]
     async fn test_performance_monitor_creation() {

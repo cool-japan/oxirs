@@ -1,11 +1,10 @@
 //! Deep neural network cost predictor
 
-use ndarray::{Array1, Array2, Array3, Array4, Axis};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use ndarray::{Array1, Array2, Axis};
+use std::time::{Duration, SystemTime};
 
 use super::{config::*, types::*};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Deep neural network for cost prediction
 #[derive(Debug)]

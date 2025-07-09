@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
-use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, info, warn};
+use tokio::sync::RwLock;
+use tracing::{debug, info};
 
-use crate::planner::planning::types::{FilterExpression, QueryInfo, QueryType, TriplePattern};
+use crate::planner::planning::types::{QueryInfo, QueryType, TriplePattern};
 
 /// Test configuration for federation testing
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -224,7 +224,7 @@ impl TestInfrastructure {
 
     /// Create a mock SPARQL service
     async fn create_mock_sparql_service(&self, index: usize) -> Result<MockSparqlService> {
-        let service_id = format!("mock-sparql-service-{}", index);
+        let service_id = format!("mock-sparql-service-{index}");
         let endpoint_url = format!("http://localhost:{}/sparql", 8080 + index);
 
         let mut capabilities = HashSet::new();
@@ -263,7 +263,7 @@ impl TestInfrastructure {
 
     /// Create a mock GraphQL service
     async fn create_mock_graphql_service(&self, index: usize) -> Result<MockGraphQLService> {
-        let service_id = format!("mock-graphql-service-{}", index);
+        let service_id = format!("mock-graphql-service-{index}");
         let endpoint_url = format!("http://localhost:{}/graphql", 9080 + index);
 
         let schema = self.generate_mock_graphql_schema(index);
@@ -381,19 +381,19 @@ input CreateCommentInput {
             // Person data
             for i in 0..self.config.test_data_size / 4 {
                 triples.push(MockTriple {
-                    subject: format!("http://example.org/person/{}", i),
+                    subject: format!("http://example.org/person/{i}"),
                     predicate: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                     object: "http://xmlns.com/foaf/0.1/Person".to_string(),
                     graph: None,
                 });
                 triples.push(MockTriple {
-                    subject: format!("http://example.org/person/{}", i),
+                    subject: format!("http://example.org/person/{i}"),
                     predicate: "http://xmlns.com/foaf/0.1/name".to_string(),
-                    object: format!("\"Person {}\"", i),
+                    object: format!("\"Person {i}\""),
                     graph: None,
                 });
                 triples.push(MockTriple {
-                    subject: format!("http://example.org/person/{}", i),
+                    subject: format!("http://example.org/person/{i}"),
                     predicate: "http://xmlns.com/foaf/0.1/age".to_string(),
                     object: format!("{}", 20 + (i % 60)),
                     graph: None,
@@ -403,15 +403,15 @@ input CreateCommentInput {
             // Organization data
             for i in 0..self.config.test_data_size / 8 {
                 triples.push(MockTriple {
-                    subject: format!("http://example.org/org/{}", i),
+                    subject: format!("http://example.org/org/{i}"),
                     predicate: "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                     object: "http://www.w3.org/ns/org#Organization".to_string(),
                     graph: None,
                 });
                 triples.push(MockTriple {
-                    subject: format!("http://example.org/org/{}", i),
+                    subject: format!("http://example.org/org/{i}"),
                     predicate: "http://www.w3.org/2000/01/rdf-schema#label".to_string(),
-                    object: format!("\"Organization {}\"", i),
+                    object: format!("\"Organization {i}\""),
                     graph: None,
                 });
             }
@@ -421,9 +421,9 @@ input CreateCommentInput {
                 let person_id = i % (self.config.test_data_size / 4);
                 let org_id = i % (self.config.test_data_size / 8);
                 triples.push(MockTriple {
-                    subject: format!("http://example.org/person/{}", person_id),
+                    subject: format!("http://example.org/person/{person_id}"),
                     predicate: "http://www.w3.org/ns/org#memberOf".to_string(),
-                    object: format!("http://example.org/org/{}", org_id),
+                    object: format!("http://example.org/org/{org_id}"),
                     graph: None,
                 });
             }

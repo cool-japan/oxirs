@@ -781,7 +781,7 @@ impl RdfStore {
         } else if sparql.to_uppercase().starts_with("DESCRIBE") {
             self.execute_describe_query(sparql)
         } else {
-            Err(OxirsError::Query(format!("Unsupported SPARQL query type: {}", sparql)))
+            Err(OxirsError::Query(format!("Unsupported SPARQL query type: {sparql}")))
         }
     }
 
@@ -805,20 +805,20 @@ impl RdfStore {
                     
                     // Bind variables based on the pattern
                     if let Some(var) = &pattern.subject {
-                        if var.starts_with('?') {
-                            binding.bind(var[1..].to_string(), Term::from(quad.subject().clone()));
+                        if let Some(var_name) = var.strip_prefix('?') {
+                            binding.bind(var_name.to_string(), Term::from(quad.subject().clone()));
                         }
                     }
                     
                     if let Some(var) = &pattern.predicate {
-                        if var.starts_with('?') {
-                            binding.bind(var[1..].to_string(), Term::from(quad.predicate().clone()));
+                        if let Some(var_name) = var.strip_prefix('?') {
+                            binding.bind(var_name.to_string(), Term::from(quad.predicate().clone()));
                         }
                     }
                     
                     if let Some(var) = &pattern.object {
-                        if var.starts_with('?') {
-                            binding.bind(var[1..].to_string(), Term::from(quad.object().clone()));
+                        if let Some(var_name) = var.strip_prefix('?') {
+                            binding.bind(var_name.to_string(), Term::from(quad.object().clone()));
                         }
                     }
                     
@@ -909,8 +909,8 @@ impl RdfStore {
                 let select_clause = &sparql[select_start + 6..where_start];
                 
                 for token in select_clause.split_whitespace() {
-                    if token.starts_with('?') {
-                        variables.push(token[1..].to_string());
+                    if let Some(var_name) = token.strip_prefix('?') {
+                        variables.push(var_name.to_string());
                     }
                 }
             }
@@ -977,13 +977,13 @@ impl RdfStore {
     /// Query quads by pattern (helper method for SPARQL execution)
     fn query_quads_by_pattern(&self, pattern: &SimpleTriplePattern) -> Result<Vec<Quad>> {
         match &self.backend {
-            StorageBackend::UltraMemory(index, arena) => {
+            StorageBackend::UltraMemory(index, _arena) => {
                 let mut results = Vec::new();
                 
                 // Convert pattern to quad pattern
-                let subject_filter = pattern.subject.as_ref().map(|s| s.as_str());
-                let predicate_filter = pattern.predicate.as_ref().map(|p| p.as_str());
-                let object_filter = pattern.object.as_ref().map(|o| o.as_str());
+                let _subject_filter = pattern.subject.as_deref();
+                let _predicate_filter = pattern.predicate.as_deref();
+                let _object_filter = pattern.object.as_deref();
                 
                 // Query the ultra index using find_quads method
                 // Convert string filters to proper types
@@ -1255,8 +1255,8 @@ impl RdfStore {
         if s.starts_with('<') && s.ends_with('>') {
             let iri = &s[1..s.len()-1];
             NamedNode::new(iri).ok().map(Subject::NamedNode)
-        } else if s.starts_with("_:") {
-            BlankNode::new(&s[2..]).ok().map(Subject::BlankNode)
+        } else if let Some(blank_id) = s.strip_prefix("_:") {
+            BlankNode::new(blank_id).ok().map(Subject::BlankNode)
         } else {
             None
         }
@@ -1277,8 +1277,8 @@ impl RdfStore {
         if o.starts_with('<') && o.ends_with('>') {
             let iri = &o[1..o.len()-1];
             NamedNode::new(iri).ok().map(Object::NamedNode)
-        } else if o.starts_with("_:") {
-            BlankNode::new(&o[2..]).ok().map(Object::BlankNode)
+        } else if let Some(blank_id) = o.strip_prefix("_:") {
+            BlankNode::new(blank_id).ok().map(Object::BlankNode)
         } else if o.starts_with('"') {
             // Simple literal parsing - more sophisticated parsing would be needed for real use
             let literal_content = &o[1..o.len()-1];

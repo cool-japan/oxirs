@@ -8,7 +8,7 @@
 
 use anyhow::{anyhow, Result};
 use oxirs_core::{
-    model::{NamedNode, Object, Quad, Subject, Triple},
+    model::NamedNode,
     Store,
 };
 use serde::{Deserialize, Serialize};
@@ -319,18 +319,18 @@ impl GraphExplorer {
         if let Ok(schema_info) = self.get_schema_info(entity).await {
             // Suggest related classes
             for class in &schema_info.classes {
-                suggestions.push(format!("Find all instances of {}", class));
-                suggestions.push(format!("Find subclasses of {}", class));
+                suggestions.push(format!("Find all instances of {class}"));
+                suggestions.push(format!("Find subclasses of {class}"));
             }
 
             // Suggest functional properties
             for prop in &schema_info.functional_properties {
-                suggestions.push(format!("Find the {} of {}", prop, entity));
+                suggestions.push(format!("Find the {prop} of {entity}"));
             }
 
             // Suggest based on domain/range restrictions
             for domain in &schema_info.domain_restrictions {
-                suggestions.push(format!("Find entities in domain {}", domain));
+                suggestions.push(format!("Find entities in domain {domain}"));
             }
         }
 
@@ -629,7 +629,7 @@ impl GraphExplorer {
         }
 
         // Find entities with similar properties
-        for (property, _values) in &entity_properties {
+        for property in entity_properties.keys() {
             let similar_by_property = self.find_entities_with_property(property).await?;
             for similar_entity in similar_by_property {
                 if similar_entity != entity {
@@ -727,7 +727,7 @@ impl GraphExplorer {
             if !self.is_valid_entity(entity).await? {
                 validation_result
                     .errors
-                    .push(format!("Unknown entity: {}", entity));
+                    .push(format!("Unknown entity: {entity}"));
                 validation_result.is_valid = false;
             }
         }
@@ -739,8 +739,7 @@ impl GraphExplorer {
                 .await?;
             if !domain_range_valid {
                 validation_result.warnings.push(format!(
-                    "Property {} may have domain/range mismatch",
-                    property
+                    "Property {property} may have domain/range mismatch"
                 ));
             }
         }
@@ -826,11 +825,10 @@ impl GraphExplorer {
                 title: format!("Valid properties for {}", self.simplify_uri(class)),
                 description: "Properties that can be used with this class".to_string(),
                 sparql_template: format!(
-                    "SELECT ?property WHERE {{ ?instance rdf:type <{}> . ?instance ?property ?value }}",
-                    class
+                    "SELECT ?property WHERE {{ ?instance rdf:type <{class}> . ?instance ?property ?value }}"
                 ),
                 confidence: 0.9,
-                schema_rationale: format!("Based on class definition for {}", class),
+                schema_rationale: format!("Based on class definition for {class}"),
             });
         }
 
@@ -849,9 +847,9 @@ impl GraphExplorer {
                 suggestion_type: GuidanceType::TypeConstraint,
                 title: format!("Filter by type {}", self.simplify_uri(class)),
                 description: "Add type constraint to improve query precision".to_string(),
-                sparql_template: format!("?entity rdf:type <{}> .", class),
+                sparql_template: format!("?entity rdf:type <{class}> ."),
                 confidence: 0.8,
-                schema_rationale: format!("Entity belongs to class {}", class),
+                schema_rationale: format!("Entity belongs to class {class}"),
             });
         }
 
@@ -872,7 +870,7 @@ impl GraphExplorer {
                         suggestion_type: GuidanceType::CardinalityAwareness,
                         title: format!("Single-valued property {}", self.simplify_uri(property)),
                         description: "This property has maximum cardinality 1".to_string(),
-                        sparql_template: format!("?entity <{}> ?value", property),
+                        sparql_template: format!("?entity <{property}> ?value"),
                         confidence: 0.85,
                         schema_rationale: "Based on cardinality constraint".to_string(),
                     });
@@ -902,7 +900,7 @@ impl GraphExplorer {
             });
         }
 
-        if schema_info.functional_properties.len() > 0 {
+        if !schema_info.functional_properties.is_empty() {
             guidance.push(QueryGuidance {
                 suggestion_type: GuidanceType::BestPractice,
                 title: "Use functional properties for efficiency".to_string(),
@@ -932,11 +930,10 @@ impl GraphExplorer {
                 title: format!("Check disjoint class {}", self.simplify_uri(disjoint_class)),
                 description: "Ensure entity doesn't belong to disjoint classes".to_string(),
                 sparql_template: format!(
-                    "FILTER NOT EXISTS {{ ?entity rdf:type <{}> }}",
-                    disjoint_class
+                    "FILTER NOT EXISTS {{ ?entity rdf:type <{disjoint_class}> }}"
                 ),
                 confidence: 0.8,
-                schema_rationale: format!("Class disjointness constraint with {}", disjoint_class),
+                schema_rationale: format!("Class disjointness constraint with {disjoint_class}"),
             });
         }
 
@@ -995,8 +992,7 @@ impl GraphExplorer {
                 if let Some(min) = min_card {
                     if actual_count < *min {
                         issues.push(format!(
-                            "Property {} has {} values, minimum required: {}",
-                            property, actual_count, min
+                            "Property {property} has {actual_count} values, minimum required: {min}"
                         ));
                     }
                 }
@@ -1004,8 +1000,7 @@ impl GraphExplorer {
                 if let Some(max) = max_card {
                     if actual_count > *max {
                         issues.push(format!(
-                            "Property {} has {} values, maximum allowed: {}",
-                            property, actual_count, max
+                            "Property {property} has {actual_count} values, maximum allowed: {max}"
                         ));
                     }
                 }
@@ -1064,7 +1059,7 @@ impl GraphExplorer {
     async fn get_shapes_for_class(&self, class: &str) -> Result<Vec<ShaclShape>> {
         // This would query SHACL shapes that target this class
         Ok(vec![ShaclShape {
-            shape_id: format!("{}Shape", class),
+            shape_id: format!("{class}Shape"),
             target_class: Some(class.to_string()),
             property_shapes: vec![],
             constraints: vec![],
@@ -1137,10 +1132,8 @@ impl GraphExplorer {
     async fn is_functional_property(&self, property: &str) -> Result<bool> {
         // Check if property is declared as functional in the ontology
         // This would query the schema/ontology for functional property declarations
-        let functional_properties = vec![
-            "http://xmlns.com/foaf/0.1/name",
-            "http://purl.org/dc/elements/1.1/title",
-        ];
+        let functional_properties = ["http://xmlns.com/foaf/0.1/name",
+            "http://purl.org/dc/elements/1.1/title"];
         Ok(functional_properties.contains(&property))
     }
 

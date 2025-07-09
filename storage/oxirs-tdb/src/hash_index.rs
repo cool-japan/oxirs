@@ -54,7 +54,7 @@ impl HashIndexConfig {
     pub fn crc32_hash(data: &[u8]) -> u64 {
         let mut hash = 0u32;
         for &byte in data {
-            hash = hash ^ (byte as u32);
+            hash ^= byte as u32;
             for _ in 0..8 {
                 if hash & 1 == 1 {
                     hash = (hash >> 1) ^ 0xEDB88320;
@@ -293,7 +293,7 @@ where
         let hash_result = hasher.finish();
 
         // Apply configured hash function to the bytes
-        let key_bytes = format!("{:?}", key).as_bytes().to_vec();
+        let key_bytes = format!("{key:?}").as_bytes().to_vec();
         (self.config.hash_function)(&key_bytes) ^ hash_result
     }
 
@@ -360,7 +360,7 @@ where
 
     /// Remove a key-value pair
     pub fn remove(&mut self, key: &K) -> Option<V> {
-        let hash = self.hash_key(&key);
+        let hash = self.hash_key(key);
         let bucket_idx = self.bucket_index(hash);
 
         let result = {

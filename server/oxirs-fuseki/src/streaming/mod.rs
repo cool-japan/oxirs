@@ -14,7 +14,7 @@ pub mod pipeline;
 
 use crate::error::FusekiResult;
 use async_trait::async_trait;
-use oxirs_core::{Dataset, Quad, Triple};
+use oxirs_core::{Quad, Triple};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{mpsc, RwLock};
@@ -22,6 +22,7 @@ use url::Url;
 
 /// Streaming configuration
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct StreamingConfig {
     /// Enable Kafka integration
     pub kafka: Option<KafkaConfig>,
@@ -33,16 +34,6 @@ pub struct StreamingConfig {
     pub pipeline: PipelineConfig,
 }
 
-impl Default for StreamingConfig {
-    fn default() -> Self {
-        Self {
-            kafka: None,
-            nats: None,
-            cdc: CDCConfig::default(),
-            pipeline: PipelineConfig::default(),
-        }
-    }
-}
 
 /// Kafka configuration
 #[derive(Debug, Clone)]
@@ -228,7 +219,7 @@ pub enum RDFEvent {
 /// Serialization helpers for RDF types
 mod triple_serde {
     use super::*;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserialize, Deserializer, Serializer};
 
     pub fn serialize<S>(triple: &Triple, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -308,13 +299,13 @@ mod triple_serde {
                 let subject = if subject.starts_with("_:") {
                     Subject::BlankNode(
                         BlankNode::new(&subject[2..])
-                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if subject.starts_with('<') && subject.ends_with('>') {
                     let iri = &subject[1..subject.len() - 1];
                     Subject::NamedNode(
                         NamedNode::new(iri)
-                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {e}")))?,
                     )
                 } else {
                     return Err(de::Error::custom("Invalid subject format"));
@@ -324,7 +315,7 @@ mod triple_serde {
                 let predicate = if predicate.starts_with('<') && predicate.ends_with('>') {
                     let iri = &predicate[1..predicate.len() - 1];
                     NamedNode::new(iri)
-                        .map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
+                        .map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {e}")))?
                 } else {
                     return Err(de::Error::custom("Invalid predicate format"));
                 };
@@ -333,13 +324,13 @@ mod triple_serde {
                 let object = if object.starts_with("_:") {
                     Term::BlankNode(
                         BlankNode::new(&object[2..])
-                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if object.starts_with('<') && object.ends_with('>') {
                     let iri = &object[1..object.len() - 1];
                     Term::NamedNode(
                         NamedNode::new(iri)
-                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {e}")))?,
                     )
                 } else if object.starts_with('"') {
                     // Parse literal (simplified - just treat as string for now)
@@ -363,7 +354,7 @@ mod triple_serde {
 
 mod quad_serde {
     use super::*;
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use serde::{Deserializer, Serializer};
 
     pub fn serialize<S>(quad: &Quad, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -446,13 +437,13 @@ mod quad_serde {
                 let subject = if subject.starts_with("_:") {
                     Subject::BlankNode(
                         BlankNode::new(&subject[2..])
-                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if subject.starts_with('<') && subject.ends_with('>') {
                     let iri = &subject[1..subject.len() - 1];
                     Subject::NamedNode(
                         NamedNode::new(iri)
-                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {e}")))?,
                     )
                 } else {
                     return Err(de::Error::custom("Invalid subject format"));
@@ -462,7 +453,7 @@ mod quad_serde {
                 let predicate = if predicate.starts_with('<') && predicate.ends_with('>') {
                     let iri = &predicate[1..predicate.len() - 1];
                     NamedNode::new(iri)
-                        .map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {}", e)))?
+                        .map_err(|e| de::Error::custom(format!("Invalid predicate IRI: {e}")))?
                 } else {
                     return Err(de::Error::custom("Invalid predicate format"));
                 };
@@ -471,13 +462,13 @@ mod quad_serde {
                 let object = if object.starts_with("_:") {
                     Term::BlankNode(
                         BlankNode::new(&object[2..])
-                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if object.starts_with('<') && object.ends_with('>') {
                     let iri = &object[1..object.len() - 1];
                     Term::NamedNode(
                         NamedNode::new(iri)
-                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid IRI: {e}")))?,
                     )
                 } else if object.starts_with('"') {
                     // Parse literal (simplified - just treat as string for now)
@@ -492,12 +483,12 @@ mod quad_serde {
                     let iri = &graph_name[1..graph_name.len() - 1];
                     GraphName::NamedNode(
                         NamedNode::new(iri)
-                            .map_err(|e| de::Error::custom(format!("Invalid graph IRI: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid graph IRI: {e}")))?,
                     )
                 } else if graph_name.starts_with("_:") {
                     GraphName::BlankNode(
                         BlankNode::new(&graph_name[2..])
-                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {}", e)))?,
+                            .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else {
                     return Err(de::Error::custom("Invalid graph name format"));

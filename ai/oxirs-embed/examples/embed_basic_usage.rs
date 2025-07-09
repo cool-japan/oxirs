@@ -213,7 +213,7 @@ impl EmbeddingModel for SimpleTransE {
         }
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> anyhow::Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> anyhow::Result<Vector> {
         if let Some(&id) = self.relation_to_id.get(relation) {
             let embedding = &self.relation_embeddings[id];
             let values: Vec<f32> = embedding.iter().map(|&x| x as f32).collect();
@@ -460,8 +460,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("✅ Bob embedding: {} dimensions", bob_emb.values.len());
 
     // Test relation embeddings
-    let knows_emb = model.get_relation_embedding("knows")?;
-    let likes_emb = model.get_relation_embedding("likes")?;
+    let knows_emb = model.getrelation_embedding("knows")?;
+    let likes_emb = model.getrelation_embedding("likes")?;
     println!(
         "✅ 'knows' embedding: {} dimensions",
         knows_emb.values.len()

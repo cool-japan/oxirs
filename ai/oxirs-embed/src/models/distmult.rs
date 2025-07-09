@@ -453,7 +453,7 @@ impl EmbeddingModel for DistMult {
         Ok(ndarray_to_vector(&embedding))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.embeddings_initialized {
             return Err(anyhow!("Model not trained"));
         }

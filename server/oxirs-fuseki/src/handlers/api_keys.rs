@@ -20,7 +20,6 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
@@ -507,7 +506,7 @@ fn generate_api_key() -> String {
         })
         .collect();
 
-    format!("{}{}", PREFIX, key)
+    format!("{PREFIX}{key}")
 }
 
 fn hash_api_key(api_key: &str) -> FusekiResult<String> {

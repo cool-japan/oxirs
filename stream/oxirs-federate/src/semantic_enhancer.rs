@@ -540,6 +540,12 @@ pub struct SourceStats {
     pub quality_score: f64,
 }
 
+impl Default for SemanticEnhancer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SemanticEnhancer {
     /// Create new semantic enhancer
     pub fn new() -> Self {

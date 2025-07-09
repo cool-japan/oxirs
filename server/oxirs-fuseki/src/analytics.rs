@@ -13,17 +13,17 @@
 //! - Pattern recognition and anomaly detection
 //! - Predictive analytics using machine learning
 
+#[allow(unused_imports)] // FusekiError is used in linear_regression_forecast
 use crate::error::{FusekiError, FusekiResult};
 use crate::store::Store;
-use async_trait::async_trait;
 use chrono::{DateTime, Duration, Timelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{BTreeMap, HashMap, VecDeque},
+    collections::{HashMap, VecDeque},
     sync::Arc,
 };
 use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, info, instrument};
 
 /// Time-series analytics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -332,7 +332,7 @@ impl AnalyticsEngine {
                 metadata: None,
             });
 
-            current_time = current_time + interval;
+            current_time += interval;
 
             // Respect limit
             if let Some(limit) = query.limit {
@@ -971,7 +971,7 @@ mod tests {
                 };
 
                 if z_score > threshold {
-                    let confidence = (z_score / (threshold * 2.0)).min(1.0);
+                    let confidence = (z_score / (threshold * 2.0)).clamp(0.0, 1.0);
                     let severity = match z_score {
                         z if z > threshold * 2.0 => AnomalySeverity::Critical,
                         z if z > threshold * 1.5 => AnomalySeverity::High,
@@ -1124,8 +1124,9 @@ mod tests {
                     .map(|y| y + z_score * std_error)
                     .collect();
 
+                let confidence_level_percent = (confidence_level * 100.0) as u32;
                 confidence_intervals.insert(
-                    format!("{}%", (confidence_level * 100.0) as u32),
+                    format!("{confidence_level_percent}%"),
                     (lower_bounds, upper_bounds),
                 );
             }

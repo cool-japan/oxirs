@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use oxirs_core::{model::NamedNode, Store};
-use oxirs_shacl::{Shape, ValidationReport};
+use oxirs_core::Store;
+use oxirs_shacl::Shape;
 
 use crate::{
     ai_orchestrator::{
@@ -17,13 +17,12 @@ use crate::{
     },
     analytics::AnalyticsEngine,
     learning::ShapeLearner,
-    ml::{ModelEnsemble, ShapeLearningModel},
     neural_patterns::{types::NeuralPatternConfig, NeuralPatternRecognizer},
     optimization::OptimizationEngine,
     patterns::PatternAnalyzer,
     prediction::ValidationPredictor,
     quality::QualityAssessor,
-    Result, ShaclAiError,
+    Result,
 };
 
 /// Comprehensive AI orchestrator for SHACL shape learning

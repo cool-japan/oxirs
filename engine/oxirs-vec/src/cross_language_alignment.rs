@@ -670,15 +670,15 @@ impl CrossLanguageAligner {
 
         // Simple identity matrix as baseline (in practice, would use proper linear algebra)
         let mut matrix = vec![vec![0.0; dim]; dim];
-        for i in 0..dim {
-            matrix[i][i] = 1.0;
+        for (i, row) in matrix.iter_mut().enumerate().take(dim) {
+            row[i] = 1.0;
         }
 
         // Add small random perturbations to simulate learned transformation
-        for i in 0..dim {
-            for j in 0..dim {
+        for (i, row) in matrix.iter_mut().enumerate().take(dim) {
+            for (j, row_val) in row.iter_mut().enumerate().take(dim) {
                 if i != j {
-                    matrix[i][j] = (i as f32 * j as f32 * 0.001) % 0.1 - 0.05;
+                    *row_val = (i as f32 * j as f32 * 0.001) % 0.1 - 0.05;
                 }
             }
         }

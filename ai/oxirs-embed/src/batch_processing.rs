@@ -448,7 +448,7 @@ impl BatchProcessingManager {
     /// Process a batch job
     async fn process_job(
         &self,
-        mut job: BatchJob,
+        job: BatchJob,
         model: Arc<dyn EmbeddingModel + Send + Sync>,
     ) -> Result<BatchProcessingResult> {
         let start_time = Instant::now();
@@ -794,7 +794,7 @@ impl BatchProcessingManager {
         // Save checkpoint to disk
         let checkpoint_path = self
             .persistence_dir
-            .join(format!("checkpoint_{}.json", job_id));
+            .join(format!("checkpoint_{job_id}.json"));
         let checkpoint_json = serde_json::to_string_pretty(&checkpoint)?;
         fs::write(checkpoint_path, checkpoint_json).await?;
 
@@ -929,6 +929,7 @@ impl Clone for BatchProcessingManager {
 
 /// Result of processing a single chunk
 #[derive(Debug)]
+#[allow(dead_code)]
 struct ChunkResult {
     chunk_idx: usize,
     successful: usize,

@@ -1,6 +1,8 @@
 //! # OxiRS Vector Search
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented querying.
+
+#![allow(dead_code)]
 //!
 //! This crate provides comprehensive vector search capabilities for knowledge graphs,
 //! enabling semantic similarity searches, AI-augmented SPARQL queries, and hybrid
@@ -79,6 +81,7 @@ pub mod opq;
 pub mod oxirs_arq_integration;
 pub mod performance_insights;
 pub mod pq;
+pub mod pytorch;
 pub mod quantum_search;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
@@ -93,6 +96,7 @@ pub mod sparse;
 pub mod storage_optimizations;
 pub mod store_integration;
 pub mod structured_vectors;
+pub mod tensorflow;
 pub mod tree_indices;
 pub mod word2vec;
 
@@ -226,6 +230,10 @@ pub use performance_insights::{
     QueryStatistics as InsightsQueryStatistics, ReportFormat, VectorStatistics,
 };
 pub use pq::{PQConfig, PQIndex, PQStats};
+pub use pytorch::{
+    ArchitectureType, CompileMode, DeviceManager, PyTorchConfig, PyTorchDevice, PyTorchEmbedder,
+    PyTorchModelManager, PyTorchModelMetadata, PyTorchTokenizer,
+};
 pub use quantum_search::{
     QuantumSearchConfig, QuantumSearchResult, QuantumSearchStatistics, QuantumState,
     QuantumVectorSearch,
@@ -280,6 +288,11 @@ pub use storage_optimizations::{
 pub use structured_vectors::{
     ConfidenceScoredVector, HierarchicalVector, NamedDimensionVector, TemporalVector,
     WeightedDimensionVector,
+};
+pub use tensorflow::{
+    OptimizationLevel, PreprocessingPipeline as TensorFlowPreprocessingPipeline, ServerConfig, SessionConfig, TensorDataType,
+    TensorFlowConfig, TensorFlowDevice, TensorFlowEmbedder, TensorFlowModelInfo,
+    TensorFlowModelServer, TensorSpec,
 };
 pub use tree_indices::{
     BallTree, CoverTree, KdTree, RandomProjectionTree, TreeIndex, TreeIndexConfig, TreeType, VpTree,
@@ -436,6 +449,7 @@ impl Vector {
     }
 
     /// Convert f32 to f16 representation (simplified)
+    #[allow(dead_code)]
     fn f32_to_f16(value: f32) -> u16 {
         // Simplified f16 conversion - in practice, use proper IEEE 754 half-precision
         let bits = value.to_bits();
@@ -754,7 +768,7 @@ pub trait VectorIndex: Send + Sync {
         &mut self,
         id: VectorId,
         vector: Vector,
-        metadata: Option<HashMap<String, String>>,
+        _metadata: Option<HashMap<String, String>>,
     ) -> Result<()> {
         // Default implementation that delegates to insert
         self.insert(id, vector)
@@ -978,8 +992,8 @@ impl VectorStore {
 
     /// Search for similar resources using text query
     pub fn similarity_search(&self, query: &str, limit: usize) -> Result<Vec<(String, f32)>> {
-        let query_vector = if let Some(ref embedding_manager) = self.embedding_manager {
-            let embeddable_content = embeddings::EmbeddableContent::Text(query.to_string());
+        let query_vector = if let Some(ref _embedding_manager) = self.embedding_manager {
+            let _embeddable_content = embeddings::EmbeddableContent::Text(query.to_string());
             // We need a mutable reference, but we only have an immutable one
             // For now, generate a fallback vector
             self.generate_fallback_vector(query)

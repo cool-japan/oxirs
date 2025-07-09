@@ -185,7 +185,7 @@ impl ReasoningTaskEvaluator {
     }
 
     /// Evaluate a model on reasoning tasks
-    pub async fn evaluate(&self, model: &dyn EmbeddingModel) -> Result<ReasoningEvaluationResults> {
+    pub async fn evaluate(&self, _model: &dyn EmbeddingModel) -> Result<ReasoningEvaluationResults> {
         info!("Starting reasoning task evaluation");
 
         // Placeholder implementation
@@ -214,14 +214,14 @@ pub mod utils {
 
     /// Generate reasoning tasks from rules
     pub fn generate_reasoning_tasks(
-        rules: &[ReasoningRule],
-        num_tasks: usize,
+        _rules: &[ReasoningRule],
+        _num_tasks: usize,
     ) -> Vec<ReasoningChain> {
         Vec::new()
     }
 
     /// Compute reasoning chain similarity
-    pub fn compute_chain_similarity(chain1: &ReasoningChain, chain2: &ReasoningChain) -> f64 {
+    pub fn compute_chain_similarity(_chain1: &ReasoningChain, _chain2: &ReasoningChain) -> f64 {
         0.0
     }
 }

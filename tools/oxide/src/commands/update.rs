@@ -8,7 +8,7 @@ use std::time::Instant;
 
 /// Execute SPARQL update against a dataset
 pub async fn run(dataset: String, update: String, file: bool) -> CommandResult {
-    println!("Executing SPARQL update on dataset '{}'", dataset);
+    println!("Executing SPARQL update on dataset '{dataset}'");
 
     // Load update from file or use directly
     let sparql_update = if file {
@@ -23,7 +23,7 @@ pub async fn run(dataset: String, update: String, file: bool) -> CommandResult {
 
     println!("Update:");
     println!("---");
-    println!("{}", sparql_update);
+    println!("{sparql_update}");
     println!("---");
 
     // Load dataset configuration or use dataset path directly
@@ -40,8 +40,7 @@ pub async fn run(dataset: String, update: String, file: bool) -> CommandResult {
         Store::open(&dataset_path)?
     } else {
         return Err(format!(
-            "Dataset '{}' not found. Use 'oxide init' to create a dataset.",
-            dataset
+            "Dataset '{dataset}' not found. Use 'oxide init' to create a dataset."
         )
         .into());
     };

@@ -9,7 +9,7 @@ use tracing::{debug, warn};
 
 use crate::{FederatedService, ServiceCapability, ServiceRegistry};
 
-use super::{cost_estimation::*, pattern_analysis::*, types::*};
+use super::types::*;
 
 impl QueryDecomposer {
     /// Generate candidate execution plans for a component
@@ -684,7 +684,7 @@ impl QueryDecomposer {
     ) -> bool {
         [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
-            .any(|term| term.as_ref().map_or(false, |t| t == variable))
+            .any(|term| term.as_ref().is_some_and(|t| t == variable))
     }
 
     /// Find best service for center patterns in star join
@@ -846,7 +846,7 @@ impl QueryDecomposer {
         let mut groups = Vec::new();
         let mut visited = std::collections::HashSet::new();
 
-        for (&pattern_idx, _) in dependency_graph {
+        for &pattern_idx in dependency_graph.keys() {
             if !visited.contains(&pattern_idx) {
                 let mut group = Vec::new();
                 self.collect_connected_patterns(

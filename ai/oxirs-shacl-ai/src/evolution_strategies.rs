@@ -4,13 +4,13 @@
 //! while maintaining compatibility and providing smooth migration paths.
 
 use crate::version_control::{
-    ChangeType, CompatibilityLevel, ImpactAnalysis, MigrationComplexity, MigrationStrategy,
+    ChangeType, CompatibilityLevel, ImpactAnalysis, MigrationComplexity,
     ShapeChange, ShapeVersion, ShapeVersionControl,
 };
-use crate::{ShaclAiError, Shape};
+use crate::ShaclAiError;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Evolution strategy for introducing changes gradually
@@ -659,7 +659,7 @@ impl ShapeEvolutionManager {
 
         let compatibility_layers = if has_breaking_changes {
             vec![CompatibilityLayer {
-                name: format!("v{} to v{} compatibility", from_version, to_version),
+                name: format!("v{from_version} to v{to_version} compatibility"),
                 from_version: from_version.clone(),
                 to_version: to_version.clone(),
                 transformation_rules: self.create_transformation_rules(changes),
@@ -686,7 +686,7 @@ impl ShapeEvolutionManager {
             .iter()
             .enumerate()
             .map(|(i, change)| TransformationRule {
-                rule_id: format!("rule_{}", i),
+                rule_id: format!("rule_{i}"),
                 source_constraint: change.old_value.clone().unwrap_or_default(),
                 target_constraint: change.new_value.clone().unwrap_or_default(),
                 transformation_type: match change.change_type {

@@ -101,7 +101,7 @@ impl ServiceOptimizer {
         };
 
         // Extract patterns and filters from the SERVICE clause
-        let mut patterns = service_clause.patterns.clone();
+        let patterns = service_clause.patterns.clone();
         let mut local_filters = service_clause.filters.clone();
 
         // Apply filter pushdown
@@ -361,26 +361,26 @@ impl ServiceOptimizer {
 
     /// Optimize patterns specifically for Wikidata
     fn optimize_for_wikidata(&self, patterns: Vec<TriplePattern>) -> Vec<TriplePattern> {
-        let optimized = patterns;
+        
 
         // Wikidata-specific optimizations
         // 1. Use HINT:Query optimizer hints
         // 2. Prefer wdt: properties over full statements
         // 3. Use SERVICE wikibase:label for labels
 
-        optimized
+        patterns
     }
 
     /// Optimize patterns specifically for DBpedia
     fn optimize_for_dbpedia(&self, patterns: Vec<TriplePattern>) -> Vec<TriplePattern> {
-        let optimized = patterns;
+        
 
         // DBpedia-specific optimizations
         // 1. Use indexed properties first
         // 2. Avoid expensive property paths
         // 3. Leverage DBpedia's category system
 
-        optimized
+        patterns
     }
 
     /// Determine execution strategy for a service
@@ -773,7 +773,7 @@ impl ServiceOptimizer {
         // Simple heuristic: more variables = more complex
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
-            .filter(|term| term.as_ref().map_or(false, |t| t.starts_with('?')))
+            .filter(|term| term.as_ref().is_some_and(|t| t.starts_with('?')))
             .count();
 
         match var_count {

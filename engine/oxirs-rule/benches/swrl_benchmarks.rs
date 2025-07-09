@@ -16,7 +16,7 @@ fn generate_swrl_rules(count: usize) -> Vec<SwrlRule> {
 
     for i in 0..count {
         rules.push(SwrlRule {
-            id: format!("swrl_rule_{}", i),
+            id: format!("swrl_rule_{i}"),
             body: vec![
                 SwrlAtom::Class {
                     class_predicate: "http://example.org/Person".to_string(),
@@ -31,7 +31,7 @@ fn generate_swrl_rules(count: usize) -> Vec<SwrlRule> {
                 },
             ],
             head: vec![SwrlAtom::Class {
-                class_predicate: format!("http://example.org/Adult{}", i),
+                class_predicate: format!("http://example.org/Adult{i}"),
                 argument: SwrlArgument::Variable("x".to_string()),
             }],
             metadata: HashMap::new(),
@@ -134,7 +134,7 @@ fn generate_swrl_facts(size: usize) -> Vec<RuleAtom> {
     for i in 0..size {
         // Person type
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant(
                 "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
             ),
@@ -143,27 +143,27 @@ fn generate_swrl_facts(size: usize) -> Vec<RuleAtom> {
 
         // Age property
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant("http://example.org/hasAge".to_string()),
             object: Term::Literal((18 + i % 50).to_string()),
         });
 
         // Name property
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant("http://example.org/hasName".to_string()),
-            object: Term::Literal(format!("Person Number {}", i)),
+            object: Term::Literal(format!("Person Number {i}")),
         });
 
         // Height and weight for complex rules
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant("http://example.org/hasHeight".to_string()),
             object: Term::Literal(format!("{:.2}", 1.60 + (i as f64 * 0.001))),
         });
 
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant("http://example.org/hasWeight".to_string()),
             object: Term::Literal(format!("{:.1}", 60.0 + (i as f64 * 0.5))),
         });
@@ -185,7 +185,7 @@ fn benchmark_swrl_execution(c: &mut Criterion) {
             group.bench_with_input(
                 BenchmarkId::new(
                     "rule_execution",
-                    format!("{}facts_{}rules", fact_size, rule_count),
+                    format!("{fact_size}facts_{rule_count}rules"),
                 ),
                 &(facts, rules),
                 |b, (facts, rules)| {
@@ -273,11 +273,10 @@ fn benchmark_builtin_predicates(c: &mut Criterion) {
                 // Create and execute rules for each operation
                 for (op_name, args) in &operations {
                     let rule = SwrlRule {
-                        id: format!("{}_test", op_name),
+                        id: format!("{op_name}_test"),
                         body: vec![SwrlAtom::Builtin {
                             builtin_predicate: format!(
-                                "http://www.w3.org/2003/11/swrlb#{}",
-                                op_name
+                                "http://www.w3.org/2003/11/swrlb#{op_name}"
                             ),
                             arguments: args
                                 .iter()
@@ -309,7 +308,7 @@ fn benchmark_swrl_overhead(c: &mut Criterion) {
 
     // Test engine creation overhead
     group.bench_function("engine_creation", |b| {
-        b.iter(|| SwrlEngine::new());
+        b.iter(SwrlEngine::new);
     });
 
     // Test rule addition overhead

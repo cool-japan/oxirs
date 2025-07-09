@@ -1,9 +1,8 @@
 //! Supporting types for the optimization engine
 
 use crate::{
-    shape::{AiShape, PropertyConstraint},
-    shape_management::{OptimizationOpportunity, PerformanceProfile},
-    Result, ShaclAiError,
+    shape::AiShape,
+    shape_management::PerformanceProfile,
 };
 use std::collections::HashMap;
 use std::time::Duration;

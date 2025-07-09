@@ -604,7 +604,7 @@ impl ShapeVersionRegistry {
     }
 
     /// Validate individual constraint
-    fn validate_constraint(&self, constraint: &Constraint) -> Result<()> {
+    fn validate_constraint(&self, _constraint: &Constraint) -> Result<()> {
         // Implement constraint validation logic
         Ok(())
     }
@@ -636,7 +636,7 @@ impl ShapeVersionRegistry {
         let mut result = CompatibilityResult::new();
 
         // Compare constraints
-        for (old_constraint_id, old_constraint) in &old_shape.constraints {
+        for (old_constraint_id, _old_constraint) in &old_shape.constraints {
             if !new_shape.constraints.contains_key(old_constraint_id) {
                 result.add_issue(CompatibilityIssue {
                     issue_type: CompatibilityIssueType::ConstraintRemoved,
@@ -647,7 +647,7 @@ impl ShapeVersionRegistry {
         }
 
         // Check for new constraints (may break existing valid data)
-        for (new_constraint_id, new_constraint) in &new_shape.constraints {
+        for (new_constraint_id, _new_constraint) in &new_shape.constraints {
             if !old_shape.constraints.contains_key(new_constraint_id) {
                 result.add_issue(CompatibilityIssue {
                     issue_type: CompatibilityIssueType::ConstraintAdded,
@@ -680,7 +680,7 @@ impl ShapeVersionRegistry {
     }
 
     /// Generate migration paths automatically
-    fn generate_migration_paths(&self, version_id: &ShapeVersionId) -> Result<()> {
+    fn generate_migration_paths(&self, _version_id: &ShapeVersionId) -> Result<()> {
         // This would implement automatic migration path generation
         // based on shape differences and predefined migration rules
         Ok(())
@@ -690,7 +690,7 @@ impl ShapeVersionRegistry {
     fn execute_migration_step(
         &self,
         step: &MigrationStep,
-        data_store: &dyn Store,
+        _data_store: &dyn Store,
     ) -> Result<MigrationStepResult> {
         // Implement migration step execution
         Ok(MigrationStepResult {

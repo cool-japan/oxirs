@@ -3,7 +3,7 @@
 //! Provides dynamic model adaptation capabilities for continuous learning
 //! and real-time performance optimization based on user interactions.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
@@ -12,7 +12,8 @@ use std::{
 };
 use tokio::sync::{Mutex, RwLock};
 
-use super::types::{LLMRequest, LLMResponse, Priority, Usage, UseCase};
+use super::types::{LLMRequest, LLMResponse};
+use crate::llm::{UseCase, Priority, Usage};
 
 /// Real-time adaptation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

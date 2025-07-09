@@ -12,7 +12,7 @@ use crate::{
     store::Store,
     streaming::{CDCConfig, RDFEvent, StreamingManager},
 };
-use oxirs_core::{Dataset, Quad, Triple};
+use oxirs_core::{Quad, Triple};
 
 /// CDC listener trait for intercepting store operations
 #[async_trait::async_trait]

@@ -6,10 +6,9 @@
 use oxirs_star::model::*;
 use oxirs_star::parser::{StarFormat, StarParser};
 use oxirs_star::serializer::StarSerializer;
-use oxirs_star::{StarQuad, StarTerm, StarTriple};
+use oxirs_star::{StarTerm, StarTriple};
 use proptest::prelude::*;
 use proptest::test_runner::TestRunner;
-use std::collections::HashSet;
 
 /// Strategy for generating potentially problematic strings
 fn problematic_string_strategy() -> impl Strategy<Value = String> {
@@ -183,7 +182,7 @@ mod tests {
                     prop_assert!(triple.validate().is_ok());
 
                     // Should be serializable
-                    let serialized = format!("{}", triple);
+                    let serialized = format!("{triple}");
                     prop_assert!(!serialized.is_empty());
 
                     // Should contain quoted triples for nested structures
@@ -214,7 +213,7 @@ mod tests {
                     },
                     Err(error) => {
                         // Error should be informative
-                        let error_msg = format!("{}", error);
+                        let error_msg = format!("{error}");
                         prop_assert!(!error_msg.is_empty());
                         prop_assert!(error_msg.len() < 1000); // Reasonable error message length
                     }
@@ -271,8 +270,8 @@ mod tests {
             object in "[\\p{L}\\p{N}\\p{P}\\p{S}\\s]+"
         ) {
             // Test Unicode character handling in various positions
-            let s_iri = format!("http://example.org/{}", subject);
-            let p_iri = format!("http://example.org/{}", predicate);
+            let s_iri = format!("http://example.org/{subject}");
+            let p_iri = format!("http://example.org/{predicate}");
 
             let s_term = StarTerm::iri(&s_iri);
             let p_term = StarTerm::iri(&p_iri);
@@ -285,12 +284,12 @@ mod tests {
                 prop_assert!(triple.validate().is_ok());
 
                 // Serialization should preserve Unicode
-                let serialized = format!("{}", triple);
+                let serialized = format!("{triple}");
                 prop_assert!(serialized.contains(&subject) || serialized.contains(&predicate));
                 prop_assert!(serialized.contains(&object));
 
                 // Round-trip through string representation
-                let display_format = format!("{}", triple);
+                let display_format = format!("{triple}");
                 prop_assert!(!display_format.is_empty());
             }
         }
@@ -303,9 +302,9 @@ mod tests {
 
             for i in 0..operations {
                 let triple = StarTriple::new(
-                    StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                    StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                     StarTerm::iri("http://example.org/predicate").unwrap(),
-                    StarTerm::literal(&format!("value{}", i)).unwrap(),
+                    StarTerm::literal(&format!("value{i}")).unwrap(),
                 );
 
                 // Insert
@@ -323,6 +322,7 @@ mod tests {
             // Graph should maintain consistency
             prop_assert!(graph.len() <= operations);
             // (graph.len() is always >= 0 by type invariant)
+            prop_assert!(operation_count >= 0); // Operations should be tracked correctly
 
             // Should be able to clear efficiently
             graph.clear();
@@ -342,9 +342,9 @@ mod tests {
             // Simulate mixed read/write operations
             for i in 0..operations {
                 let triple = StarTriple::new(
-                    StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                    StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                     StarTerm::iri(&format!("http://example.org/p{}", i % 10)).unwrap(),
-                    StarTerm::literal(&format!("value{}", i)).unwrap(),
+                    StarTerm::literal(&format!("value{i}")).unwrap(),
                 );
 
                 // Writers add data
@@ -425,22 +425,20 @@ mod tests {
     fn test_null_byte_handling() {
         // Null bytes should be handled gracefully
         let result = StarTerm::literal("value\0with\0nulls");
-        match result {
-            Ok(term) => assert!(term.is_literal()),
-            Err(_) => (), // Acceptable to reject
-        }
+        if let Ok(term) = result {
+            assert!(term.is_literal());
+        } // Acceptable to reject
     }
 
     #[test]
     fn test_extremely_long_iri() {
         let very_long_path = "a".repeat(1_000); // Reduced for performance
-        let long_iri = format!("http://example.org/{}", very_long_path);
+        let long_iri = format!("http://example.org/{very_long_path}");
 
         let result = StarTerm::iri(&long_iri);
-        match result {
-            Ok(term) => assert!(term.is_named_node()),
-            Err(_) => (), // Acceptable to reject very long IRIs
-        }
+        if let Ok(term) = result {
+            assert!(term.is_named_node());
+        } // Acceptable to reject very long IRIs
     }
 
     #[test]

@@ -9,7 +9,7 @@
 //! - User satisfaction measurement
 
 use crate::types::Message;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -400,8 +400,8 @@ impl MessageAnalyticsEngine {
         for window in messages.windows(2) {
             let similarity = self
                 .calculate_semantic_similarity(
-                    &window[0].content.to_text(),
-                    &window[1].content.to_text(),
+                    window[0].content.to_text(),
+                    window[1].content.to_text(),
                 )
                 .await?;
             coherence_scores.push(similarity);
@@ -461,6 +461,12 @@ pub struct IntentClassifier {
     intent_patterns: HashMap<Intent, Vec<String>>,
 }
 
+impl Default for IntentClassifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IntentClassifier {
     pub fn new() -> Self {
         let mut intent_patterns = HashMap::new();
@@ -518,8 +524,8 @@ impl IntentClassifier {
                     score += 1.0;
                 }
             }
-            score = score / patterns.len() as f32;
-            intent_scores.insert(format!("{:?}", intent), score);
+            score /= patterns.len() as f32;
+            intent_scores.insert(format!("{intent:?}"), score);
         }
 
         // Find primary intent
@@ -552,6 +558,12 @@ impl IntentClassifier {
 pub struct SentimentAnalyzer {
     positive_words: Vec<String>,
     negative_words: Vec<String>,
+}
+
+impl Default for SentimentAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SentimentAnalyzer {
@@ -616,6 +628,12 @@ impl SentimentAnalyzer {
 /// Complexity scorer
 pub struct ComplexityScorer;
 
+impl Default for ComplexityScorer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ComplexityScorer {
     pub fn new() -> Self {
         Self
@@ -653,6 +671,12 @@ impl ComplexityScorer {
 /// Confidence tracker
 pub struct ConfidenceTracker;
 
+impl Default for ConfidenceTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConfidenceTracker {
     pub fn new() -> Self {
         Self
@@ -681,6 +705,12 @@ impl ConfidenceTracker {
 /// Success evaluator
 pub struct SuccessEvaluator;
 
+impl Default for SuccessEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SuccessEvaluator {
     pub fn new() -> Self {
         Self
@@ -707,6 +737,12 @@ impl SuccessEvaluator {
 
 /// Quality assessor
 pub struct QualityAssessor;
+
+impl Default for QualityAssessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl QualityAssessor {
     pub fn new() -> Self {

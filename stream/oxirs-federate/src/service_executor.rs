@@ -4,29 +4,24 @@
 //! variable binding propagation, result streaming, cross-service joins, and optimization.
 
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
-use futures::{stream, Stream, StreamExt, TryStreamExt};
+use futures::StreamExt;
 use reqwest::{
-    header::{HeaderMap, HeaderValue, ACCEPT, AUTHORIZATION, CONTENT_TYPE},
-    Client, Response,
+    header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
+    Client,
 };
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::pin::Pin;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock, Semaphore};
-use tokio::time::timeout;
-use tracing::{debug, error, info, instrument, warn};
+use tokio::sync::Semaphore;
+use tracing::{debug, error, instrument, warn};
 
 use crate::{
     cache::FederationCache,
     executor::{
         QueryResultData, SparqlBinding, SparqlHead, SparqlResults, SparqlResultsData, SparqlValue,
     },
-    service::{FederatedService, ServiceCapability},
-    service_optimizer::{OptimizedServiceClause, ServiceExecutionStrategy},
-    ServiceRegistry,
+    service::FederatedService,
+    service_optimizer::OptimizedServiceClause,
 };
 
 /// Advanced SERVICE clause executor
@@ -92,7 +87,7 @@ impl ServiceExecutor {
         );
 
         // Generate cache key
-        let cache_key = format!("service:{}:query:{}", service_id, query);
+        let cache_key = format!("service:{service_id}:query:{query}");
 
         // Check cache first
         if let Some(cached) = self.cache.get_service_result(&cache_key).await {
@@ -146,7 +141,7 @@ impl ServiceExecutor {
             let values_clause = self.build_values_clause(chunk);
             let base_query =
                 self.build_query_from_patterns(&service_clause.patterns, &service_clause.filters);
-            let enhanced_query = format!("{}\n{}", base_query, values_clause);
+            let enhanced_query = format!("{base_query}\n{values_clause}");
 
             let batch_result = self
                 .execute_single_query(&service.endpoint, &enhanced_query)
@@ -178,7 +173,7 @@ impl ServiceExecutor {
         let mut values_clause = format!(
             "VALUES ({}) {{",
             vars.iter()
-                .map(|v| format!("?{}", v))
+                .map(|v| format!("?{v}"))
                 .collect::<Vec<_>>()
                 .join(" ")
         );
@@ -241,7 +236,7 @@ impl ServiceExecutor {
             attempt += 1;
 
             // Get service info (this would come from service registry in real implementation)
-            let endpoint = format!("http://localhost:3030/{}/sparql", service_id); // Mock endpoint
+            let endpoint = format!("http://localhost:3030/{service_id}/sparql"); // Mock endpoint
 
             match self.execute_single_query(&endpoint, query).await {
                 Ok(result) => return Ok(result),
@@ -304,11 +299,11 @@ impl ServiceExecutor {
             // Insert before final closing brace
             let mut modified_query = query.trim_end().to_string();
             modified_query.pop(); // Remove final '}'
-            modified_query.push_str(&format!("\n  {}\n}}", values_clause));
+            modified_query.push_str(&format!("\n  {values_clause}\n}}"));
             Ok(modified_query)
         } else {
             // Append to end
-            Ok(format!("{} {}", query, values_clause))
+            Ok(format!("{query} {values_clause}"))
         }
     }
 
@@ -400,6 +395,12 @@ impl ServiceExecutor {
 #[derive(Debug)]
 pub struct JoinExecutor {
     config: JoinExecutorConfig,
+}
+
+impl Default for JoinExecutor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JoinExecutor {
@@ -608,7 +609,7 @@ impl JoinExecutor {
         for batch in bind_side.results.bindings.chunks(batch_size) {
             // Convert batch to SparqlBinding format for VALUES clause injection
             let sparql_bindings: Vec<SparqlBinding> =
-                batch.iter().map(|binding| binding.clone()).collect();
+                batch.iter().cloned().collect();
 
             // Execute query with bindings (this would call the remote service)
             // For now, simulate by filtering the query_side results

@@ -9,7 +9,7 @@ use super::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Decision tree for shape learning
 #[derive(Debug)]
@@ -162,7 +162,7 @@ impl DecisionTreeLearner {
         let importance = best_gain * n_samples as f64;
         *self
             .feature_importance
-            .entry(format!("feature_{}", best_feature))
+            .entry(format!("feature_{best_feature}"))
             .or_insert(0.0) += importance;
 
         Some(node)
@@ -390,7 +390,7 @@ impl DecisionTreeLearner {
 
             // Left branch (<=)
             path.push(RuleCondition {
-                feature: format!("feature_{}", feature_idx),
+                feature: format!("feature_{feature_idx}"),
                 operator: ComparisonOperator::LessThanOrEqual,
                 value: serde_json::json!(threshold),
             });
@@ -401,7 +401,7 @@ impl DecisionTreeLearner {
 
             // Right branch (>)
             path.push(RuleCondition {
-                feature: format!("feature_{}", feature_idx),
+                feature: format!("feature_{feature_idx}"),
                 operator: ComparisonOperator::GreaterThan,
                 value: serde_json::json!(threshold),
             });

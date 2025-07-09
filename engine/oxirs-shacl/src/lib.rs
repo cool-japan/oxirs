@@ -1209,7 +1209,7 @@ impl Validator {
                     // Add imported shapes
                     for shape in import_result.shapes {
                         if let Err(e) = self.add_shape(shape) {
-                            warnings.push(format!("Failed to add imported shape: {}", e));
+                            warnings.push(format!("Failed to add imported shape: {e}"));
                         } else {
                             total_count += 1;
                         }

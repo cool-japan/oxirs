@@ -1,17 +1,11 @@
 //! Session management and chat functionality
 
-use crate::messages::{Message, MessageRole};
-use crate::types::*;
-use anyhow::Result;
+use crate::messages::Message;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    sync::Arc,
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 /// Session configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +146,12 @@ pub struct TopicTracker {
     pub topic_history: Vec<TopicTransition>,
     pub confidence_threshold: f32,
     pub max_topics: usize,
+}
+
+impl Default for TopicTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TopicTracker {

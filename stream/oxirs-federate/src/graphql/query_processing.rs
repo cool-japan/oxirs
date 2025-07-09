@@ -153,7 +153,7 @@ impl GraphQLFederation {
         // Create steps for entity resolution if needed
         for entity_req in entity_requirements {
             steps.push(ExecutionStep {
-                step_id: format!("entity_resolution_{}", step_counter),
+                step_id: format!("entity_resolution_{step_counter}"),
                 step_type: StepType::EntityResolution,
                 service_id: Some(entity_req.service_id.clone()),
                 query_fragment: format!(
@@ -172,7 +172,7 @@ impl GraphQLFederation {
         for (service_id, fields) in &field_ownership.service_to_fields {
             if !fields.is_empty() {
                 steps.push(ExecutionStep {
-                    step_id: format!("service_query_{}", step_counter),
+                    step_id: format!("service_query_{step_counter}"),
                     step_type: StepType::GraphQLQuery,
                     service_id: Some(service_id.clone()),
                     query_fragment: fields.join(", "),
@@ -417,7 +417,7 @@ impl GraphQLFederation {
         if let Some(start) = field_str.find('{') {
             if let Some(end) = field_str.rfind('}') {
                 let nested_content = &field_str[start + 1..end];
-                return self.parse_selection_set(&format!("{{{}}}", nested_content));
+                return self.parse_selection_set(&format!("{{{nested_content}}}"));
             }
         }
         Ok(Vec::new())
@@ -531,7 +531,7 @@ impl GraphQLFederation {
             let operation_name = query
                 .operation_name
                 .as_ref()
-                .map(|name| format!(" {}", name))
+                .map(|name| format!(" {name}"))
                 .unwrap_or_default();
 
             // Create service-specific selections
@@ -605,7 +605,7 @@ impl GraphQLFederation {
 
             // Add alias if present
             if let Some(alias) = &selection.alias {
-                field_str.push_str(&format!("{}: ", alias));
+                field_str.push_str(&format!("{alias}: "));
             }
 
             // Add field name
@@ -624,15 +624,15 @@ impl GraphQLFederation {
             // Add nested selections if present
             if !selection.selection_set.is_empty() {
                 field_str.push_str(" {");
-                formatted.push(format!("{}{}", indent, field_str));
+                formatted.push(format!("{indent}{field_str}"));
 
                 let nested_formatted =
                     self.format_selections(&selection.selection_set, indent_level + 1);
                 formatted.extend(nested_formatted);
 
-                formatted.push(format!("{}}}", indent));
+                formatted.push(format!("{indent}}}"));
             } else {
-                formatted.push(format!("{}{}", indent, field_str));
+                formatted.push(format!("{indent}{field_str}"));
             }
         }
 
@@ -642,7 +642,7 @@ impl GraphQLFederation {
     /// Format a JSON value as GraphQL literal
     fn format_value(&self, value: &serde_json::Value) -> String {
         match value {
-            serde_json::Value::String(s) => format!("\"{}\"", s),
+            serde_json::Value::String(s) => format!("\"{s}\""),
             serde_json::Value::Number(n) => n.to_string(),
             serde_json::Value::Bool(b) => b.to_string(),
             serde_json::Value::Null => "null".to_string(),
@@ -783,7 +783,7 @@ impl GraphQLFederation {
             Err(e) => {
                 errors.push(SchemaValidationError {
                     error_type: SchemaErrorType::InvalidDirective, // Using closest available type
-                    message: format!("Query parsing failed: {}", e),
+                    message: format!("Query parsing failed: {e}"),
                     location: None,
                 });
                 return Ok(errors);
@@ -796,7 +796,7 @@ impl GraphQLFederation {
             Err(e) => {
                 errors.push(SchemaValidationError {
                     error_type: SchemaErrorType::TypeNotFound,
-                    message: format!("Could not create unified schema: {}", e),
+                    message: format!("Could not create unified schema: {e}"),
                     location: None,
                 });
                 return Ok(errors);

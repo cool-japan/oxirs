@@ -11,8 +11,7 @@ use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
 use crate::{
-    ml::{GraphData, LearnedShape, ModelError, ModelMetrics, NodeFeatures},
-    neural_patterns::{NeuralPattern, NeuralPatternConfig},
+    ml::{LearnedShape, ModelMetrics},
     patterns::Pattern,
     Result, ShaclAiError,
 };
@@ -550,7 +549,7 @@ impl MetaLearner {
             let pattern_type = self.get_pattern_type(pattern);
             class_patterns
                 .entry(pattern_type)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(pattern);
         }
 
@@ -702,7 +701,7 @@ impl MetaLearner {
         let mut ensemble_parameters = HashMap::new();
 
         if let Some(first_model) = models.first() {
-            for (param_name, _) in &first_model.adapted_parameters {
+            for param_name in first_model.adapted_parameters.keys() {
                 let mut weighted_param = vec![0.0; 64]; // Default size
 
                 for (model, weight) in models.iter().zip(&normalized_weights) {
@@ -804,7 +803,7 @@ impl MetaLearner {
         // Simplified gradient computation
         let mut gradients = HashMap::new();
 
-        for (name, _param) in _parameters {
+        for name in _parameters.keys() {
             // In a real implementation, this would compute actual gradients
             gradients.insert(name.clone(), vec![0.01; 64]);
         }

@@ -111,13 +111,13 @@ pub fn format_duration(duration: std::time::Duration) -> String {
     let millis = duration.subsec_millis();
 
     if hours > 0 {
-        format!("{}h {}m {}s", hours, minutes, seconds)
+        format!("{hours}h {minutes}m {seconds}s")
     } else if minutes > 0 {
         format!("{}m {}.{}s", minutes, seconds, millis / 100)
     } else if seconds > 0 {
         format!("{}.{}s", seconds, millis / 100)
     } else {
-        format!("{}ms", millis)
+        format!("{millis}ms")
     }
 }
 
@@ -203,7 +203,7 @@ pub fn url_decode(input: &str) -> Result<String, String> {
                     .next()
                     .ok_or("Invalid URL encoding: incomplete hex sequence")?;
 
-                let hex_str = format!("{}{}", hex1, hex2);
+                let hex_str = format!("{hex1}{hex2}");
                 let byte = u8::from_str_radix(&hex_str, 16)
                     .map_err(|_| "Invalid URL encoding: invalid hex sequence")?;
 
@@ -259,10 +259,10 @@ impl ProgressIndicator {
             match total {
                 Some(total) if total > 0 => {
                     let percent = (current as f64 / total as f64 * 100.0) as u8;
-                    print!("\rProgress: {}/{} ({}%)", current, total, percent);
+                    print!("\rProgress: {current}/{total} ({percent}%)");
                 }
                 _ => {
-                    print!("\rProcessed: {}", current);
+                    print!("\rProcessed: {current}");
                 }
             }
             io::stdout().flush().unwrap_or(());
@@ -271,7 +271,7 @@ impl ProgressIndicator {
     }
 
     pub fn finish(&self, total: usize) {
-        println!("\rCompleted: {} items", total);
+        println!("\rCompleted: {total} items");
     }
 }
 

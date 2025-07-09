@@ -561,7 +561,7 @@ impl AdaptiveCompression {
             if let Ok(score) = self.benchmark_algorithm(algorithm, sample_data) {
                 self.performance_history
                     .entry(algorithm)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(score);
 
                 // Keep only recent samples
@@ -669,9 +669,11 @@ mod tests {
         ];
 
         for algorithm in algorithms {
-            let mut config = SerializationConfig::default();
-            config.compression = algorithm;
-            config.compression_threshold = 0; // Always compress
+            let config = SerializationConfig {
+                compression: algorithm,
+                compression_threshold: 0, // Always compress
+                ..Default::default()
+            };
 
             let mut serializer = MessageSerializer::with_config(config);
             let message = TestMessage {
@@ -714,8 +716,10 @@ mod tests {
 
     #[test]
     fn test_checksum_verification() {
-        let mut config = SerializationConfig::default();
-        config.enable_checksums = true;
+        let config = SerializationConfig {
+            enable_checksums: true,
+            ..Default::default()
+        };
 
         let mut serializer = MessageSerializer::with_config(config);
         let message = TestMessage {
@@ -759,8 +763,10 @@ mod tests {
 
     #[test]
     fn test_metrics_collection() {
-        let mut config = SerializationConfig::default();
-        config.enable_metrics = true;
+        let config = SerializationConfig {
+            enable_metrics: true,
+            ..Default::default()
+        };
 
         let mut serializer = MessageSerializer::with_config(config);
         let message = TestMessage {

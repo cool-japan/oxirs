@@ -145,7 +145,7 @@ impl CliContext {
             return Ok(true); // Non-interactive mode assumes yes
         }
 
-        print!("{} [y/N]: ", prompt);
+        print!("{prompt} [y/N]: ");
         io::stdout().flush()?;
 
         let mut input = String::new();
@@ -156,7 +156,7 @@ impl CliContext {
 
     /// Prompt user for input
     pub fn prompt(&self, prompt: &str) -> io::Result<String> {
-        print!("{}: ", prompt);
+        print!("{prompt}: ");
         io::stdout().flush()?;
 
         let mut input = String::new();

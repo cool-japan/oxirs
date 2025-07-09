@@ -24,11 +24,6 @@ pub enum NegativeSamplingStrategy {
     Adversarial,
 }
 
-impl Default for NegativeSamplingStrategy {
-    fn default() -> Self {
-        NegativeSamplingStrategy::Random
-    }
-}
 
 /// Training configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -665,7 +660,7 @@ impl DefaultTrainer {
         
         let subject_vec: Vec<_> = subjects.into_iter().collect();
         let object_vec: Vec<_> = objects.into_iter().collect();
-        let relation_vec: Vec<_> = relations.into_iter().collect();
+        let _relation_vec: Vec<_> = relations.into_iter().collect();
         
         // Generate negative samples by corruption
         for _ in 0..num_negatives {
@@ -814,8 +809,8 @@ impl DefaultTrainer {
                     let sum_exp: f32 = exp_scores.iter().sum();
                     
                     // Cross entropy for positive examples
-                    for i in 0..positive_scores.len() {
-                        let prob = exp_scores[i] / sum_exp;
+                    for &exp_score in exp_scores.iter().take(positive_scores.len()) {
+                        let prob = exp_score / sum_exp;
                         total_loss -= prob.ln();
                     }
                     
@@ -883,9 +878,9 @@ impl DefaultTrainer {
         for test_triple in test_triples {
             // Head prediction: given (?, r, t), predict h
             let head_rank = self.compute_entity_rank(
-                &test_triple.subject(),
-                &test_triple.predicate(),
-                &test_triple.object(),
+                test_triple.subject(),
+                test_triple.predicate(),
+                test_triple.object(),
                 &entity_vec,
                 model,
                 true, // predict head
@@ -893,9 +888,9 @@ impl DefaultTrainer {
 
             // Tail prediction: given (h, r, ?), predict t  
             let tail_rank = self.compute_entity_rank(
-                &test_triple.subject(),
-                &test_triple.predicate(),
-                &test_triple.object(),
+                test_triple.subject(),
+                test_triple.predicate(),
+                test_triple.object(),
                 &entity_vec,
                 model,
                 false, // predict tail
@@ -952,7 +947,7 @@ impl DefaultTrainer {
                     Object::QuotedTriple(qt) => Subject::QuotedTriple(qt.clone()),
                 };
                 
-                let candidate_triple = Triple::new(
+                let _candidate_triple = Triple::new(
                     candidate_subject.clone(),
                     predicate.clone(),
                     correct_object.clone(),
@@ -967,7 +962,7 @@ impl DefaultTrainer {
         } else {
             // Predict tail: score all (h, r, e) combinations
             for entity in all_entities {
-                let candidate_triple = Triple::new(
+                let _candidate_triple = Triple::new(
                     correct_subject.clone(),
                     predicate.clone(),
                     entity.clone(),

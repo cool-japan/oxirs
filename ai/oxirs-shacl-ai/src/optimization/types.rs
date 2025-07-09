@@ -4,11 +4,10 @@
 //! used across the optimization engine modules.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::shape::{AiShape, PropertyConstraint};
-use crate::shape_management::{OptimizationOpportunity, PerformanceProfile};
+use crate::shape_management::OptimizationOpportunity;
 use oxirs_shacl::{Shape, ShapeId, ValidationReport};
 
 /// Optimized validation strategy

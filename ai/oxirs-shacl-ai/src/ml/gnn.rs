@@ -5,8 +5,8 @@
 //! Graph Attention Networks (GAT), and Graph Isomorphism Networks (GIN).
 
 use super::{
-    EdgeFeatures, GlobalFeatures, GraphData, GraphFeatures, LearnedConstraint, LearnedShape,
-    ModelError, ModelMetrics, ModelParams, NodeFeatures, ShapeLearningModel, ShapeTrainingData,
+    GraphData, LearnedConstraint, LearnedShape,
+    ModelError, ModelMetrics, ModelParams, ShapeLearningModel, ShapeTrainingData,
 };
 
 use ndarray::{Array2, Array3, Axis};
@@ -678,7 +678,7 @@ impl GraphNeuralNetwork {
         let mut output = ah.dot(&layer.weight);
 
         if let Some(bias) = &layer.bias {
-            output = output + bias;
+            output += bias;
         }
 
         Ok(output)
@@ -742,7 +742,7 @@ impl GraphNeuralNetwork {
         let mut output = self_transformed + neighbor_transformed;
 
         if let Some(bias) = &layer.bias {
-            output = output + bias;
+            output += bias;
         }
 
         // L2 normalize
@@ -959,7 +959,7 @@ impl GraphNeuralNetwork {
                 let r = relation_embeddings.row(j);
                 let t = entity_embeddings.row(j); // Simplified: use same entity as tail
 
-                let diff = &h + &r - &t;
+                let diff = &h + &r - t;
                 let norm = diff.mapv(|x| x * x).sum().sqrt();
                 scores[[i, j]] = -norm;
             }
@@ -1320,7 +1320,7 @@ impl GraphNeuralNetwork {
                         }
                         "datatype" => {
                             let datatypes =
-                                vec!["xsd:string", "xsd:integer", "xsd:boolean", "xsd:date"];
+                                ["xsd:string", "xsd:integer", "xsd:boolean", "xsd:date"];
                             if max_idx < datatypes.len() {
                                 parameters.insert(
                                     "value".to_string(),
@@ -1336,16 +1336,16 @@ impl GraphNeuralNetwork {
                     constraints.push(LearnedConstraint {
                         constraint_type: constraint_type.clone(),
                         parameters,
-                        confidence: constraint_confidence as f64,
+                        confidence: constraint_confidence,
                         support: 0.8, // Placeholder
                     });
                 }
             }
 
             learned_shapes.push(LearnedShape {
-                shape_id: format!("learned_shape_{}", shape_idx),
+                shape_id: format!("learned_shape_{shape_idx}"),
                 constraints,
-                confidence: *shape_confidence as f64,
+                confidence: *shape_confidence,
                 feature_importance: HashMap::new(),
             });
         }
@@ -1515,7 +1515,7 @@ impl ShapeLearningModel for GraphNeuralNetwork {
     }
 
     fn evaluate(&self, test_data: &ShapeTrainingData) -> Result<ModelMetrics, ModelError> {
-        let mut metrics = ModelMetrics {
+        let metrics = ModelMetrics {
             accuracy: 0.0,
             precision: 0.0,
             recall: 0.0,

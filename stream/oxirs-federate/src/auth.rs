@@ -377,8 +377,7 @@ impl AuthManager {
                 identity: None,
                 token: None,
                 error: Some(format!(
-                    "Authentication method {:?} not supported",
-                    auth_method
+                    "Authentication method {auth_method:?} not supported"
                 )),
                 required_actions: vec![],
             });
@@ -680,8 +679,8 @@ impl AuthManager {
         if let AuthCredentials::Service { service_id, secret } = credentials {
             if secret == &self.config.service_auth_key {
                 let identity = Identity {
-                    user_id: format!("service:{}", service_id),
-                    username: format!("Service {}", service_id),
+                    user_id: format!("service:{service_id}"),
+                    username: format!("Service {service_id}"),
                     email: None,
                     roles: ["service"].into_iter().map(String::from).collect(),
                     permissions: [
@@ -800,7 +799,7 @@ impl AuthManager {
                 let user_id = extract_saml_attribute(assertion, "NameID").unwrap_or_else(|| "saml_user".to_string());
                 
                 let identity = Identity {
-                    user_id: format!("saml:{}", user_id),
+                    user_id: format!("saml:{user_id}"),
                     username: extract_saml_attribute(assertion, "displayName").unwrap_or_else(|| "SAML User".to_string()),
                     email: extract_saml_attribute(assertion, "email"),
                     roles: ["user"].into_iter().map(String::from).collect(),
@@ -1014,9 +1013,9 @@ pub struct AuthStatistics {
 fn extract_saml_attribute(assertion: &str, attribute_name: &str) -> Option<String> {
     // Simple XML parsing - in a real implementation, use a proper XML parser
     let patterns = [
-        format!("<saml:AttributeValue>{}</saml:AttributeValue>", attribute_name),
-        format!("<AttributeValue>{}</AttributeValue>", attribute_name),
-        format!("{}=\"([^\"]+)\"", attribute_name),
+        format!("<saml:AttributeValue>{attribute_name}</saml:AttributeValue>"),
+        format!("<AttributeValue>{attribute_name}</AttributeValue>"),
+        format!("{attribute_name}=\"([^\"]+)\""),
     ];
     
     for pattern in &patterns {

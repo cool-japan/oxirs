@@ -10,17 +10,9 @@ pub mod reusability;
 pub mod version_control;
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::{Duration, Instant};
+use std::sync::atomic::AtomicUsize;
 
-use oxirs_core::{model::Term, Store};
-use oxirs_shacl::{Shape, ShapeId, ValidationReport};
 
-use crate::{
-    shape::{PropertyConstraint, Shape as AiShape, ShapeMetrics},
-    Result, ShaclAiError,
-};
 
 // Re-export important types
 pub use collaboration::*;
@@ -256,7 +248,7 @@ impl std::fmt::Display for OptimizationType {
             OptimizationType::PropertyGrouping => write!(f, "property_grouping"),
             OptimizationType::RedundancyRemoval => write!(f, "redundancy_removal"),
             OptimizationType::PerformanceOptimization => write!(f, "performance_optimization"),
-            OptimizationType::Custom(name) => write!(f, "custom_{}", name),
+            OptimizationType::Custom(name) => write!(f, "custom_{name}"),
         }
     }
 }

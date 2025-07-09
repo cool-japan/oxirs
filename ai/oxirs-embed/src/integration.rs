@@ -67,7 +67,7 @@ impl VectorStoreBridge {
                 }
                 Err(e) => {
                     warn!("Failed to get embedding for entity {}: {}", entity, e);
-                    sync_stats.errors.push(format!("Entity {}: {}", entity, e));
+                    sync_stats.errors.push(format!("Entity {entity}: {e}"));
                 }
             }
         }
@@ -75,7 +75,7 @@ impl VectorStoreBridge {
         // Sync relation embeddings
         let relations = model.get_relations();
         for relation in &relations {
-            match model.get_relation_embedding(relation) {
+            match model.getrelation_embedding(relation) {
                 Ok(_embedding) => {
                     let uri = self.generate_relation_uri(relation);
                     self.relation_mappings.insert(relation.clone(), uri);
@@ -85,7 +85,7 @@ impl VectorStoreBridge {
                     warn!("Failed to get embedding for relation {}: {}", relation, e);
                     sync_stats
                         .errors
-                        .push(format!("Relation {}: {}", relation, e));
+                        .push(format!("Relation {relation}: {e}"));
                 }
             }
         }
@@ -360,7 +360,7 @@ impl SparqlIntegration {
             suggestions.push(QuerySuggestion {
                 suggestion_type: SuggestionType::SimilarEntity,
                 original: entity.clone(),
-                suggested: format!("similar_to_{}", entity),
+                suggested: format!("similar_to_{entity}"),
                 confidence: 0.8,
             });
         }
@@ -370,7 +370,7 @@ impl SparqlIntegration {
             suggestions.push(QuerySuggestion {
                 suggestion_type: SuggestionType::SimilarRelation,
                 original: relation.clone(),
-                suggested: format!("similar_to_{}", relation),
+                suggested: format!("similar_to_{relation}"),
                 confidence: 0.7,
             });
         }
@@ -459,6 +459,12 @@ pub struct PersonalizationEngine {
     preference_weights: PreferenceWeights,
 }
 
+impl Default for PersonalizationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PersonalizationEngine {
     pub fn new() -> Self {
         Self {
@@ -537,7 +543,7 @@ impl PersonalizationEngine {
         // Add to interaction history
         self.interaction_history
             .entry(user_id.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(interaction.clone());
 
         // Update user profile
@@ -716,6 +722,12 @@ pub struct MultilingualSupport {
     language_models: HashMap<String, LanguageModel>,
 }
 
+impl Default for MultilingualSupport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultilingualSupport {
     pub fn new() -> Self {
         Self {
@@ -749,7 +761,7 @@ impl MultilingualSupport {
             return Ok(text.to_string());
         }
 
-        let cache_key = format!("{}:{}:{}", source_lang, target_lang, text);
+        let cache_key = format!("{source_lang}:{target_lang}:{text}");
         if let Some(cached) = self.translation_cache.get(&cache_key) {
             return Ok(cached.clone());
         }
@@ -757,10 +769,10 @@ impl MultilingualSupport {
         // Mock translation implementation
         // In practice, this would call a translation service
         let translated = match target_lang {
-            "es" => format!("[ES] {}", text),
-            "fr" => format!("[FR] {}", text),
-            "de" => format!("[DE] {}", text),
-            "zh" => format!("[ZH] {}", text),
+            "es" => format!("[ES] {text}"),
+            "fr" => format!("[FR] {text}"),
+            "de" => format!("[DE] {text}"),
+            "zh" => format!("[ZH] {text}"),
             _ => format!("[{}] {}", target_lang.to_uppercase(), text),
         };
 
@@ -859,11 +871,11 @@ impl MultilingualSupport {
 
             // Mock entity alignment - in practice would use knowledge bases
             let aligned_entity = match target_lang.as_str() {
-                "es" => format!("{}_es", entity),
-                "fr" => format!("{}_fr", entity),
-                "de" => format!("{}_de", entity),
-                "zh" => format!("{}_zh", entity),
-                _ => format!("{}_{}", entity, target_lang),
+                "es" => format!("{entity}_es"),
+                "fr" => format!("{entity}_fr"),
+                "de" => format!("{entity}_de"),
+                "zh" => format!("{entity}_zh"),
+                _ => format!("{entity}_{target_lang}"),
             };
 
             alignments.insert(target_lang.clone(), aligned_entity);

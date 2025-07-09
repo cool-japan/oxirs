@@ -121,7 +121,7 @@ impl Neuron {
 
         // Adjust bias for stability
         self.bias += -activity_diff * 0.001;
-        self.bias = self.bias.max(-0.5).min(0.5);
+        self.bias = self.bias.clamp(-0.5, 0.5);
     }
 }
 
@@ -167,7 +167,7 @@ impl Synapse {
         }
 
         // Weight bounds
-        self.weight = self.weight.max(-2.0).min(2.0);
+        self.weight = self.weight.clamp(-2.0, 2.0);
 
         // Synaptic plasticity decay
         self.plasticity *= 0.999;
@@ -432,7 +432,7 @@ impl NeuromorphicQueryProcessor {
         let operations = ["query", "mutation", "subscription", "fragment"];
         for op in &operations {
             features.insert(
-                format!("has_{}", op),
+                format!("has_{op}"),
                 if query.to_lowercase().contains(op) {
                     1.0
                 } else {
@@ -445,7 +445,7 @@ impl NeuromorphicQueryProcessor {
         let field_patterns = ["user", "order", "product", "id", "name", "email"];
         for pattern in &field_patterns {
             features.insert(
-                format!("field_{}", pattern),
+                format!("field_{pattern}"),
                 query.to_lowercase().matches(pattern).count() as f64,
             );
         }

@@ -101,6 +101,7 @@ pub struct ServiceMetadata {
 
 /// Service health status
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub enum ServiceHealth {
     /// Service is healthy and accepting requests
     Healthy,
@@ -109,14 +110,10 @@ pub enum ServiceHealth {
     /// Service is unhealthy and circuit is open
     Unhealthy,
     /// Health status unknown
+    #[default]
     Unknown,
 }
 
-impl Default for ServiceHealth {
-    fn default() -> Self {
-        ServiceHealth::Unknown
-    }
-}
 
 /// Service capabilities for query planning
 #[derive(Debug, Clone, Default)]

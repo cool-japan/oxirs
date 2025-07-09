@@ -28,9 +28,9 @@ impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "\"{}\"", self.value)?;
         if let Some(lang) = &self.language {
-            write!(f, "@{}", lang)?;
+            write!(f, "@{lang}")?;
         } else if let Some(dt) = &self.datatype {
-            write!(f, "^^{}", dt)?;
+            write!(f, "^^{dt}")?;
         }
         Ok(())
     }
@@ -85,16 +85,16 @@ pub enum Term {
 impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Term::Variable(v) => write!(f, "?{}", v),
-            Term::Iri(iri) => write!(f, "{}", iri),
-            Term::Literal(lit) => write!(f, "{}", lit),
-            Term::BlankNode(id) => write!(f, "_:{}", id),
+            Term::Variable(v) => write!(f, "?{v}"),
+            Term::Iri(iri) => write!(f, "{iri}"),
+            Term::Literal(lit) => write!(f, "{lit}"),
+            Term::BlankNode(id) => write!(f, "_:{id}"),
             Term::QuotedTriple(triple) => write!(
                 f,
                 "<<{} {} {}>>",
                 triple.subject, triple.predicate, triple.object
             ),
-            Term::PropertyPath(path) => write!(f, "{}", path),
+            Term::PropertyPath(path) => write!(f, "{path}"),
         }
     }
 }
@@ -474,8 +474,9 @@ pub enum Algebra {
 }
 
 /// Join algorithm hints
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum JoinAlgorithm {
+    #[default]
     HashJoin,
     SortMergeJoin,
     NestedLoopJoin,
@@ -484,10 +485,11 @@ pub enum JoinAlgorithm {
 }
 
 /// Filter placement hints
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum FilterPlacement {
     Early,   // Push down as much as possible
     Late,    // Keep at current level
+    #[default]
     Optimal, // Let optimizer decide
 }
 
@@ -502,16 +504,18 @@ pub struct ServiceCapabilities {
 }
 
 /// Projection types
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ProjectionType {
+    #[default]
     Standard,
     Streaming,
     Cached,
 }
 
 /// Sort algorithms
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum SortAlgorithm {
+    #[default]
     QuickSort,
     MergeSort,
     HeapSort,
@@ -519,24 +523,27 @@ pub enum SortAlgorithm {
 }
 
 /// Grouping algorithms
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum GroupingAlgorithm {
+    #[default]
     HashGrouping,
     SortGrouping,
     StreamingGrouping,
 }
 
 /// Materialization strategies
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum MaterializationStrategy {
     InMemory,
     Disk,
+    #[default]
     Adaptive,
 }
 
 /// Parallelism types
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ParallelismType {
+    #[default]
     DataParallel,
     PipelineParallel,
     Hybrid,
@@ -563,7 +570,7 @@ pub struct Statistics {
 }
 
 /// Optimization hints for algebra nodes
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct OptimizationHints {
     /// Preferred join algorithm
     pub join_algorithm: Option<JoinAlgorithm>,
@@ -707,21 +714,21 @@ impl PropertyPathPattern {
 impl fmt::Display for PropertyPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PropertyPath::Iri(iri) => write!(f, "{}", iri),
-            PropertyPath::Variable(var) => write!(f, "?{}", var),
-            PropertyPath::Inverse(path) => write!(f, "^{}", path),
-            PropertyPath::Sequence(left, right) => write!(f, "{}/{}", left, right),
-            PropertyPath::Alternative(left, right) => write!(f, "{}|{}", left, right),
-            PropertyPath::ZeroOrMore(path) => write!(f, "{}*", path),
-            PropertyPath::OneOrMore(path) => write!(f, "{} +", path),
-            PropertyPath::ZeroOrOne(path) => write!(f, "{}?", path),
+            PropertyPath::Iri(iri) => write!(f, "{iri}"),
+            PropertyPath::Variable(var) => write!(f, "?{var}"),
+            PropertyPath::Inverse(path) => write!(f, "^{path}"),
+            PropertyPath::Sequence(left, right) => write!(f, "{left}/{right}"),
+            PropertyPath::Alternative(left, right) => write!(f, "{left}|{right}"),
+            PropertyPath::ZeroOrMore(path) => write!(f, "{path}*"),
+            PropertyPath::OneOrMore(path) => write!(f, "{path} +"),
+            PropertyPath::ZeroOrOne(path) => write!(f, "{path}?"),
             PropertyPath::NegatedPropertySet(paths) => {
                 write!(f, "!(")?;
                 for (i, path) in paths.iter().enumerate() {
                     if i > 0 {
                         write!(f, "|")?
                     }
-                    write!(f, "{}", path)?;
+                    write!(f, "{path}")?;
                 }
                 write!(f, ")")
             }
@@ -1045,17 +1052,7 @@ macro_rules! literal {
     };
 }
 
-impl Default for FilterPlacement {
-    fn default() -> Self {
-        FilterPlacement::Optimal
-    }
-}
 
-impl Default for ProjectionType {
-    fn default() -> Self {
-        ProjectionType::Standard
-    }
-}
 
 impl Default for ServiceCapabilities {
     fn default() -> Self {
@@ -1069,35 +1066,10 @@ impl Default for ServiceCapabilities {
     }
 }
 
-impl Default for JoinAlgorithm {
-    fn default() -> Self {
-        JoinAlgorithm::HashJoin
-    }
-}
 
-impl Default for SortAlgorithm {
-    fn default() -> Self {
-        SortAlgorithm::QuickSort
-    }
-}
 
-impl Default for GroupingAlgorithm {
-    fn default() -> Self {
-        GroupingAlgorithm::HashGrouping
-    }
-}
 
-impl Default for MaterializationStrategy {
-    fn default() -> Self {
-        MaterializationStrategy::Adaptive
-    }
-}
 
-impl Default for ParallelismType {
-    fn default() -> Self {
-        ParallelismType::DataParallel
-    }
-}
 
 impl Literal {
     /// Create a new literal with value only
@@ -1256,18 +1228,6 @@ impl Literal {
     }
 }
 
-impl Default for OptimizationHints {
-    fn default() -> Self {
-        Self {
-            join_algorithm: None,
-            filter_placement: FilterPlacement::default(),
-            materialization: MaterializationStrategy::default(),
-            parallelism: None,
-            preferred_indexes: Vec::new(),
-            statistics: None,
-        }
-    }
-}
 
 impl Default for Statistics {
     fn default() -> Self {
@@ -1485,10 +1445,8 @@ fn estimate_filter_selectivity(condition: &Expression) -> f64 {
             "isIRI" | "isLiteral" | "isBlank" => 0.3, // Type checks
             _ => 0.5,                                 // Default
         },
-        Expression::Unary { op, .. } => match op {
-            UnaryOperator::Not => 0.5, // Invert selectivity (simplified)
-            _ => 0.5,
-        },
+        Expression::Unary { op: UnaryOperator::Not, .. } => 0.5, // Invert selectivity (simplified)
+        Expression::Unary { .. } => 0.5,
         _ => 0.5, // Default selectivity
     }
 }

@@ -1,7 +1,7 @@
 //! Supporting types for advanced validation strategies
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 
 use super::config::*;
@@ -166,6 +166,12 @@ pub struct ContextPattern;
 #[derive(Debug)]
 pub struct SemanticAnalyzer;
 
+impl Default for SemanticAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         Self
@@ -174,6 +180,12 @@ impl SemanticAnalyzer {
 
 #[derive(Debug)]
 pub struct DomainKnowledgeBase;
+
+impl Default for DomainKnowledgeBase {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DomainKnowledgeBase {
     pub fn new() -> Self {
@@ -187,6 +199,12 @@ pub struct ExplanationModel;
 #[derive(Debug)]
 pub struct NaturalLanguageGenerator;
 
+impl Default for NaturalLanguageGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NaturalLanguageGenerator {
     pub fn new() -> Self {
         Self
@@ -198,6 +216,12 @@ pub struct UncertaintyModel;
 
 #[derive(Debug)]
 pub struct CalibrationData;
+
+impl Default for CalibrationData {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CalibrationData {
     pub fn new() -> Self {

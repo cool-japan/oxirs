@@ -225,7 +225,7 @@ impl SecureSparqlExecutor {
         execution_result: &SecureExecutionResult,
         constraint: &SparqlConstraint,
         context: &ConstraintContext,
-        store: &dyn Store,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // In a full implementation, this would interpret the SPARQL results
         // and convert them to constraint evaluation results

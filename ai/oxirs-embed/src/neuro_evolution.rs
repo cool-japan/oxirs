@@ -10,10 +10,7 @@
 //! - Hardware-aware architecture search with efficiency constraints
 //! - Progressive complexity evolution with diversity preservation
 
-use crate::{EmbeddingError, EmbeddingModel, ModelConfig, Vector};
 use anyhow::Result;
-use async_trait::async_trait;
-use ndarray::{Array1, Array2, Array3, Axis};
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -855,7 +852,7 @@ impl PerformanceMetrics {
 }
 
 /// Architecture complexity metrics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ArchitectureComplexity {
     pub parameters: usize,
     pub flops: usize,
@@ -864,17 +861,6 @@ pub struct ArchitectureComplexity {
     pub width: usize,
 }
 
-impl Default for ArchitectureComplexity {
-    fn default() -> Self {
-        Self {
-            parameters: 0,
-            flops: 0,
-            memory_mb: 0,
-            depth: 0,
-            width: 0,
-        }
-    }
-}
 
 /// Population of neural architectures
 #[derive(Debug, Clone)]
@@ -984,7 +970,7 @@ impl Population {
                 // Crossover
                 let parent1 = self.tournament_selection(config, &mut rng);
                 let parent2 = self.tournament_selection(config, &mut rng);
-                let (mut child1, mut child2) = parent1.crossover(&parent2, &mut rng);
+                let (mut child1, mut child2) = parent1.crossover(parent2, &mut rng);
 
                 // Mutation
                 child1.mutate(config, &mut rng);

@@ -4,11 +4,11 @@
 //! capabilities for SHACL shapes.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     shape::{PropertyConstraint, Shape as AiShape},
-    Result, ShaclAiError,
+    Result,
 };
 use oxirs_shacl::ShapeId;
 
@@ -368,6 +368,12 @@ pub enum ReusePreference {
     CustomOnly,
 }
 
+impl Default for TemplateEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemplateEngine {
     pub fn new() -> Self {
         Self {
@@ -375,6 +381,12 @@ impl TemplateEngine {
             template_categories: HashMap::new(),
             usage_statistics: HashMap::new(),
         }
+    }
+}
+
+impl Default for TemplateEvaluator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -388,6 +400,12 @@ impl TemplateEvaluator {
     }
 }
 
+impl Default for InheritanceResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InheritanceResolver {
     pub fn new() -> Self {
         Self {
@@ -395,6 +413,12 @@ impl InheritanceResolver {
             resolution_cache: HashMap::new(),
             conflict_handlers: Vec::new(),
         }
+    }
+}
+
+impl Default for PatternIndex {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

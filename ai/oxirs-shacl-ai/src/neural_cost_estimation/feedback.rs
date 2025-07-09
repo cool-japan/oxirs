@@ -3,7 +3,7 @@
 use oxirs_core::query::algebra::AlgebraTriplePattern;
 
 use super::{core::QueryExecutionContext, types::*};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Real-time feedback processor
 #[derive(Debug)]
@@ -36,6 +36,12 @@ pub struct FeedbackMetrics {
     pub average_error: f64,
     pub error_trend: f64,
     pub adaptation_count: usize,
+}
+
+impl Default for RealTimeFeedbackProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RealTimeFeedbackProcessor {

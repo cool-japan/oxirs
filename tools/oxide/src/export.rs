@@ -132,7 +132,7 @@ impl Exporter {
         match self.config.format {
             ExportFormat::Turtle => {
                 if let Some(base) = &self.config.base_uri {
-                    writeln!(writer, "@base <{}> .", base)?;
+                    writeln!(writer, "@base <{base}> .")?;
                 }
                 writeln!(writer, "# Exported in Turtle format")?;
                 writeln!(writer, "# TODO: Implement actual RDF serialization")?;
@@ -154,7 +154,7 @@ impl Exporter {
             }
             ExportFormat::TriG => {
                 if let Some(base) = &self.config.base_uri {
-                    writeln!(writer, "@base <{}> .", base)?;
+                    writeln!(writer, "@base <{base}> .")?;
                 }
                 writeln!(writer, "# Exported in TriG format")?;
                 writeln!(writer, "# TODO: Implement actual RDF serialization")?;

@@ -585,7 +585,7 @@ impl EcosystemBenchmarkSuite {
                 // Create many events to test memory usage
                 for i in 0..1000 {
                     let _event = Event::SparqlUpdate {
-                        query: format!("INSERT DATA {{ <http://example.org/subject{}> <http://example.org/predicate> \"Memory test\" }}", i),
+                        query: format!("INSERT DATA {{ <http://example.org/subject{i}> <http://example.org/predicate> \"Memory test\" }}"),
                         operation_type: SparqlOperationType::Insert,
                         metadata: EventMetadata {
                             event_id: Uuid::new_v4().to_string(),
@@ -645,7 +645,7 @@ impl EcosystemBenchmarkSuite {
                 let mut events_sent = 0u64;
                 for i in 0..1000 {
                     let _event = Event::SparqlUpdate {
-                        query: format!("INSERT DATA {{ <http://example.org/subject{}> <http://example.org/predicate> \"Scale test\" }}", i),
+                        query: format!("INSERT DATA {{ <http://example.org/subject{i}> <http://example.org/predicate> \"Scale test\" }}"),
                         operation_type: SparqlOperationType::Insert,
                         metadata: EventMetadata {
                             event_id: Uuid::new_v4().to_string(),

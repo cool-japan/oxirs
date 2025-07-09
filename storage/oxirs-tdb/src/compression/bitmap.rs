@@ -91,9 +91,8 @@ impl BitmapWAHEncoder {
             if word & 0x80000000 != 0 {
                 // Run of 1s
                 let run_length = (word & 0x7FFFFFFF) as usize;
-                for _ in 0..run_length {
-                    bits.push(true);
-                }
+                let current_len = bits.len();
+                bits.resize(current_len + run_length, true);
             } else if word & 0x40000000 != 0 {
                 // Literal word
                 let literal = word & 0x3FFFFFFF;
@@ -103,9 +102,8 @@ impl BitmapWAHEncoder {
             } else {
                 // Run of 0s
                 let run_length = word as usize;
-                for _ in 0..run_length {
-                    bits.push(false);
-                }
+                let current_len = bits.len();
+                bits.resize(current_len + run_length, false);
             }
         }
 

@@ -5,27 +5,19 @@
 //! heuristics to achieve optimal validation performance and accuracy.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant, SystemTime};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Quad, Term, Triple},
-    Graph, Store,
-};
+use oxirs_core::Store;
 
-use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
-    Target, ValidationConfig, ValidationReport, Validator,
-};
 
 use crate::{
-    advanced_validation_strategies::{AdvancedValidationConfig, ValidationContext},
+    advanced_validation_strategies::ValidationContext,
     neural_patterns::{NeuralPatternConfig, NeuralPatternRecognizer},
-    quantum_consciousness_synthesis::QuantumConsciousnessProcessor,
-    validation_performance::{PerformanceConfig, ValidationPerformanceOptimizer},
+    validation_performance::PerformanceConfig,
     Result, ShaclAiError,
 };
 
@@ -489,7 +481,7 @@ impl SophisticatedValidationOptimizer {
         context: &OptimizationContext,
     ) -> Result<Option<OptimizationResult>> {
         let cache = self.optimization_cache.read().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to acquire cache read lock: {}", e))
+            ShaclAiError::Optimization(format!("Failed to acquire cache read lock: {e}"))
         })?;
 
         let cache_key = self.generate_cache_key(context);
@@ -727,7 +719,7 @@ impl SophisticatedValidationOptimizer {
         result: &OptimizationResult,
     ) -> Result<()> {
         let mut cache = self.optimization_cache.write().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to acquire cache write lock: {}", e))
+            ShaclAiError::Optimization(format!("Failed to acquire cache write lock: {e}"))
         })?;
 
         let cache_key = self.generate_cache_key(context);
@@ -740,7 +732,7 @@ impl SophisticatedValidationOptimizer {
     /// Update performance monitoring
     async fn update_performance_monitoring(&self, result: &OptimizationResult) -> Result<()> {
         let mut monitor = self.performance_monitor.lock().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to acquire performance monitor lock: {}", e))
+            ShaclAiError::Optimization(format!("Failed to acquire performance monitor lock: {e}"))
         })?;
 
         monitor.record_optimization_result(result);
@@ -916,6 +908,12 @@ pub struct OptimizationResults {
     pub diversity_metric: f64,
 }
 
+impl Default for OptimizationResults {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizationResults {
     pub fn new() -> Self {
         Self {
@@ -1058,6 +1056,12 @@ impl CacheEntry {
     }
 }
 
+impl Default for OptimizationCache {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizationCache {
     pub fn new() -> Self {
         Self {
@@ -1078,6 +1082,12 @@ impl OptimizationCache {
 }
 
 // Implement new() methods for optimizers
+impl Default for QuantumValidationOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumValidationOptimizer {
     pub fn new() -> Self {
         Self {
@@ -1087,6 +1097,12 @@ impl QuantumValidationOptimizer {
             quantum_entanglement_network: QuantumEntanglementNetwork::new(),
             quantum_measurement_system: QuantumMeasurementSystem::new(),
         }
+    }
+}
+
+impl Default for NeuralValidationOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1102,6 +1118,12 @@ impl NeuralValidationOptimizer {
     }
 }
 
+impl Default for EvolutionaryValidationOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EvolutionaryValidationOptimizer {
     pub fn new() -> Self {
         Self {
@@ -1111,6 +1133,12 @@ impl EvolutionaryValidationOptimizer {
             ant_colony_optimizer: AntColonyOptimizer::new(),
             simulated_annealing: SimulatedAnnealing::new(),
         }
+    }
+}
+
+impl Default for MultiObjectiveOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1126,6 +1154,12 @@ impl MultiObjectiveOptimizer {
     }
 }
 
+impl Default for AdaptiveLearningOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdaptiveLearningOptimizer {
     pub fn new() -> Self {
         Self {
@@ -1135,6 +1169,12 @@ impl AdaptiveLearningOptimizer {
             transfer_learner: TransferLearner::new(),
             continual_learner: ContinualLearner::new(),
         }
+    }
+}
+
+impl Default for RealTimeOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1207,6 +1247,12 @@ impl RealTimeOptimizer {
     }
 }
 
+impl Default for OptimizationPerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptimizationPerformanceMonitor {
     pub fn new() -> Self {
         Self {
@@ -1234,6 +1280,12 @@ impl OptimizationPerformanceMonitor {
 #[derive(Debug)]
 pub struct QuantumOptimizationStrategy;
 
+impl Default for QuantumOptimizationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumOptimizationStrategy {
     pub fn new() -> Self {
         Self
@@ -1256,6 +1308,12 @@ impl OptimizationStrategy for QuantumOptimizationStrategy {
 
 #[derive(Debug)]
 pub struct NeuralOptimizationStrategy;
+
+impl Default for NeuralOptimizationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl NeuralOptimizationStrategy {
     pub fn new() -> Self {
@@ -1281,6 +1339,12 @@ impl OptimizationStrategy for NeuralOptimizationStrategy {
 #[derive(Debug)]
 pub struct EvolutionaryOptimizationStrategy;
 
+impl Default for EvolutionaryOptimizationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EvolutionaryOptimizationStrategy {
     pub fn new() -> Self {
         Self
@@ -1304,6 +1368,12 @@ impl OptimizationStrategy for EvolutionaryOptimizationStrategy {
 
 #[derive(Debug)]
 pub struct HybridOptimizationStrategy;
+
+impl Default for HybridOptimizationStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl HybridOptimizationStrategy {
     pub fn new() -> Self {
@@ -1331,6 +1401,12 @@ macro_rules! impl_placeholder_types {
         $(
             #[derive(Debug)]
             pub struct $type_name;
+
+            impl Default for $type_name {
+                fn default() -> Self {
+                    Self::new()
+                }
+            }
 
             impl $type_name {
                 pub fn new() -> Self {
@@ -1381,6 +1457,12 @@ pub struct AccessPattern;
 
 #[derive(Debug)]
 pub struct CacheStatistics;
+
+impl Default for CacheStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CacheStatistics {
     pub fn new() -> Self {

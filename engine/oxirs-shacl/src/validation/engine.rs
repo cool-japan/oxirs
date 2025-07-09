@@ -242,7 +242,7 @@ impl<'a> ValidationEngine<'a> {
         let mut report = ValidationReport::new();
 
         // Validate each active shape
-        for (shape_id, shape) in self.shapes {
+        for (_shape_id, shape) in self.shapes {
             if shape.is_active() {
                 let shape_result = self.validate_shape(store, shape, None)?;
                 report.merge_result(shape_result);
@@ -378,7 +378,7 @@ impl<'a> ValidationEngine<'a> {
         } else {
             // Validate against explicit targets
             for target in &shape.targets {
-                eprintln!("DEBUG validate_shape: processing target {:?}", target);
+                eprintln!("DEBUG validate_shape: processing target {target:?}");
                 let target_nodes = self
                     .target_selector
                     .select_targets(store, target, graph_name)?;
@@ -389,8 +389,7 @@ impl<'a> ValidationEngine<'a> {
 
                 for (i, node) in target_nodes.iter().enumerate() {
                     eprintln!(
-                        "DEBUG validate_shape: validating target node[{}] = {:?}",
-                        i, node
+                        "DEBUG validate_shape: validating target node[{i}] = {node:?}"
                     );
                     let node_result =
                         self.validate_node_against_shape(store, shape, node, graph_name)?;
@@ -504,10 +503,9 @@ impl<'a> ValidationEngine<'a> {
                 component_id.as_str(),
                 shape.id.as_str()
             );
-            eprintln!("DEBUG validate_constraints: constraint = {:?}", constraint);
+            eprintln!("DEBUG validate_constraints: constraint = {constraint:?}");
             eprintln!(
-                "DEBUG validate_constraints: focus_node = {:?}, values = {:?}",
-                focus_node, values
+                "DEBUG validate_constraints: focus_node = {focus_node:?}, values = {values:?}"
             );
 
             // Create constraint context
@@ -518,8 +516,7 @@ impl<'a> ValidationEngine<'a> {
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
             eprintln!(
-                "DEBUG validate_constraints: constraint result = {:?}",
-                constraint_result
+                "DEBUG validate_constraints: constraint result = {constraint_result:?}"
             );
 
             match constraint_result {

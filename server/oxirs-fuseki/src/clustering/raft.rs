@@ -1,21 +1,20 @@
 //! Raft consensus protocol implementation
 
-use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
     sync::{mpsc, Mutex, RwLock},
-    time::{interval, sleep},
+    time::interval,
 };
 
 use crate::{
     clustering::RaftConfig,
-    error::{FusekiError, FusekiResult},
+    error::FusekiResult,
     store::Store,
 };
 

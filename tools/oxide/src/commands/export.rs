@@ -18,17 +18,16 @@ pub async fn run(
         dataset,
         file.display()
     );
-    println!("Output format: {}", format);
+    println!("Output format: {format}");
 
     if let Some(g) = &graph {
-        println!("Source graph: {}", g);
+        println!("Source graph: {g}");
     }
 
     // Validate format
     if !is_supported_export_format(&format) {
         return Err(format!(
-            "Unsupported export format '{}'. Supported formats: turtle, ntriples, rdfxml, jsonld, trig, nquads",
-            format
+            "Unsupported export format '{format}'. Supported formats: turtle, ntriples, rdfxml, jsonld, trig, nquads"
         ).into());
     }
 
@@ -56,8 +55,7 @@ pub async fn run(
         Store::open(&dataset_path)?
     } else {
         return Err(format!(
-            "Dataset '{}' not found. Use 'oxide init' to create a dataset.",
-            dataset
+            "Dataset '{dataset}' not found. Use 'oxide init' to create a dataset."
         )
         .into());
     };
@@ -73,7 +71,7 @@ pub async fn run(
 
     // Report statistics
     println!("Export completed in {:.2} seconds", duration.as_secs_f64());
-    println!("Triples exported: {}", triple_count);
+    println!("Triples exported: {triple_count}");
     println!("Output file: {}", file.display());
     println!(
         "Average rate: {:.0} triples/second",
@@ -143,8 +141,7 @@ ex:subject2 rdf:type ex:Class2 ;
         }
         _ => {
             return Err(format!(
-                "Export format '{}' serialization not yet implemented",
-                format
+                "Export format '{format}' serialization not yet implemented"
             )
             .into());
         }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 use super::core::QuantumPattern;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Quantum Supremacy Detection and Verification
 #[derive(Debug, Clone, Serialize, Deserialize)]

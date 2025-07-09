@@ -268,10 +268,7 @@ impl ParallelQueryExecutor {
             let results: Vec<Binding> = solution
                 .par_iter()
                 .flat_map(|binding| {
-                    match self.extend_binding_with_pattern(binding, pattern, dataset) {
-                        Ok(extensions) => extensions,
-                        Err(_) => vec![],
-                    }
+                    self.extend_binding_with_pattern(binding, pattern, dataset).unwrap_or_default()
                 })
                 .collect();
             Ok(results)
@@ -551,7 +548,7 @@ impl ParallelQueryExecutor {
                 // Create a deterministic string representation of the binding
                 let mut key_parts: Vec<String> = binding
                     .iter()
-                    .map(|(var, term)| format!("{}={}", var, term))
+                    .map(|(var, term)| format!("{var}={term}"))
                     .collect();
                 key_parts.sort(); // Ensure consistent ordering
                 let key = key_parts.join("||");
@@ -693,7 +690,7 @@ impl ParallelQueryExecutor {
 
         // Parallel aggregation - convert DashMap to Vec for parallel iteration
         let groups_vec: Vec<(Vec<AlgebraTerm>, Vec<Binding>)> =
-            groups.into_iter().map(|(k, v)| (k, v)).collect();
+            groups.into_iter().collect();
 
         let result: Vec<Binding> = groups_vec
             .into_par_iter()
@@ -968,6 +965,7 @@ impl ParallelQueryExecutor {
     }
 
     /// Execute sequence path in parallel (p1/p2)
+    #[allow(clippy::too_many_arguments)]
     fn execute_parallel_sequence_path(
         &self,
         subject: &AlgebraTerm,
@@ -1023,6 +1021,7 @@ impl ParallelQueryExecutor {
     }
 
     /// Execute alternative path in parallel (p1|p2)
+    #[allow(clippy::too_many_arguments)]
     fn execute_parallel_alternative_path(
         &self,
         subject: &AlgebraTerm,
@@ -1071,6 +1070,7 @@ impl ParallelQueryExecutor {
     }
 
     /// Execute transitive closure in parallel (p+ or p*)
+    #[allow(clippy::too_many_arguments)]
     fn execute_parallel_transitive_closure(
         &self,
         subject: &AlgebraTerm,
@@ -1100,7 +1100,7 @@ impl ParallelQueryExecutor {
                 .par_iter()
                 .flat_map(|current_node| {
                     // Find all nodes reachable in one step
-                    let next_var = Variable::new(&format!("?__next_{depth}")).unwrap();
+                    let next_var = Variable::new(format!("?__next_{depth}")).unwrap();
                     let next_term = AlgebraTerm::Variable(next_var.clone());
 
                     let mut local_stats = ExecutionStats::new();
@@ -1320,7 +1320,7 @@ impl ParallelQueryExecutor {
             // Create a comparable representation of the binding
             let binding_key: Vec<_> = binding
                 .iter()
-                .map(|(k, v)| (k.clone(), format!("{:?}", v)))
+                .map(|(k, v)| (k.clone(), format!("{v:?}")))
                 .collect();
 
             if seen.insert(binding_key) {
@@ -1469,6 +1469,7 @@ impl ParallelQueryExecutor {
 pub struct ParallelScanIterator<'a> {
     dataset: &'a dyn Dataset,
     pattern: TriplePattern,
+    #[allow(dead_code)]
     chunk_size: usize,
 }
 
@@ -1615,7 +1616,7 @@ impl<T: Send + Sync> WorkStealingQueue<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Literal, Term, Variable};
+    use crate::algebra::{Literal, Term, Variable};
 
     #[test]
     fn test_parallel_executor_creation() {

@@ -7,14 +7,14 @@
 //! - Continual learning to prevent catastrophic forgetting
 //! - Advanced optimization with adaptive learning rates
 
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2, Axis};
 use rand::Rng;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::{ml::ModelMetrics, patterns::Pattern, Result, ShaclAiError};
+use crate::{ml::ModelMetrics, patterns::Pattern, Result};
 
-use super::types::{ActivationFunction, CorrelationType, NeuralPatternConfig, ScheduleType};
+use super::types::{ActivationFunction, CorrelationType, NeuralPatternConfig};
 
 /// Neural pattern learning engine for discovering complex pattern relationships
 #[derive(Debug)]
@@ -60,6 +60,7 @@ pub struct OptimizerState {
 
 /// Training history and metrics
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct TrainingHistory {
     /// Loss values per epoch
     pub loss_history: Vec<f64>,
@@ -73,17 +74,6 @@ pub struct TrainingHistory {
     pub epoch_times: Vec<std::time::Duration>,
 }
 
-impl Default for TrainingHistory {
-    fn default() -> Self {
-        Self {
-            loss_history: Vec::new(),
-            accuracy_history: Vec::new(),
-            validation_loss_history: Vec::new(),
-            learning_rate_history: Vec::new(),
-            epoch_times: Vec::new(),
-        }
-    }
-}
 
 impl NeuralPatternLearner {
     /// Create new neural pattern learner
@@ -289,7 +279,7 @@ impl NeuralPatternLearner {
         let mut attention_outputs = Vec::new();
 
         for head in 0..num_heads {
-            let head_name = format!("attention_head_{}", head);
+            let head_name = format!("attention_head_{head}");
             if let Some(attention_weights) = self.weights.attention_weights.get(&head_name) {
                 let head_output =
                     self.compute_attention_head(embeddings, attention_weights, head_dim)?;
@@ -309,7 +299,7 @@ impl NeuralPatternLearner {
 
         // Apply residual connection if enabled
         if self.config.enable_residual_connections {
-            concatenated = concatenated + embeddings;
+            concatenated += embeddings;
         }
 
         Ok(concatenated)
@@ -433,7 +423,7 @@ impl NeuralPatternLearner {
         let mut attention_outputs = Vec::new();
 
         for head in 0..self.config.attention_heads {
-            let head_name = format!("attention_head_{}", head);
+            let head_name = format!("attention_head_{head}");
             if let Some(weights) = self.weights.attention_weights.get(&head_name) {
                 // Compute Q, K, V for this head
                 let q = pattern_embeddings.dot(weights);
@@ -526,16 +516,16 @@ impl NeuralPatternLearner {
 
         // Compute sample mean
         for predictions in &predictions_samples {
-            mean_predictions = mean_predictions + predictions;
+            mean_predictions += predictions;
         }
-        mean_predictions = mean_predictions / num_samples as f64;
+        mean_predictions /= num_samples as f64;
 
         // Compute sample variance
         for predictions in &predictions_samples {
             let diff = predictions - &mean_predictions;
-            var_predictions = var_predictions + &diff.mapv(|x| x * x);
+            var_predictions += &diff.mapv(|x| x * x);
         }
-        var_predictions = var_predictions / (num_samples - 1) as f64;
+        var_predictions /= (num_samples - 1) as f64;
 
         Ok((mean_predictions, var_predictions))
     }
@@ -880,7 +870,7 @@ impl NeuralPatternLearner {
 
         // Add attention head gradients
         for head in 0..self.config.attention_heads {
-            let head_name = format!("attention_head_{}", head);
+            let head_name = format!("attention_head_{head}");
             let head_dim = embedding_dim / self.config.attention_heads;
             gradients.insert(head_name, Array2::zeros((head_dim, head_dim)));
         }
@@ -913,7 +903,7 @@ impl NeuralPatternLearner {
         let predictions = self.forward_pass(patterns).await?;
 
         // TODO: Convert network outputs to correlation predictions
-        let mut correlations = HashMap::new();
+        let correlations = HashMap::new();
 
         Ok(correlations)
     }
@@ -927,7 +917,7 @@ impl NetworkWeights {
 
         let mut attention_weights = HashMap::new();
         for head in 0..config.attention_heads {
-            let head_name = format!("attention_head_{}", head);
+            let head_name = format!("attention_head_{head}");
             let head_dim = config.embedding_dim / config.attention_heads;
             attention_weights.insert(head_name, Self::xavier_init(head_dim, head_dim));
         }

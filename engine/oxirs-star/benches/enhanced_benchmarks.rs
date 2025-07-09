@@ -9,7 +9,6 @@ use oxirs_star::{
     parser::{StarFormat, StarParser},
     serializer::StarSerializer,
     store::StarStore,
-    StarConfig,
 };
 use std::time::Duration;
 
@@ -57,7 +56,7 @@ fn benchmark_serialization_structures(c: &mut Criterion) {
 
         for format in [StarFormat::NTriplesStar, StarFormat::TurtleStar] {
             group.bench_with_input(
-                BenchmarkId::new(format!("{}/{:?}", name, format), triple_count),
+                BenchmarkId::new(format!("{name}/{format:?}"), triple_count),
                 graph,
                 |b, graph| {
                     let serializer = StarSerializer::new();
@@ -168,7 +167,8 @@ fn benchmark_memory_efficiency(c: &mut Criterion) {
         let graph = generate_large_mixed_graph(5000);
         b.iter(|| {
             let store = StarStore::new();
-            black_box(store.from_graph(&graph).unwrap());
+            store.from_graph(&graph).unwrap();
+            black_box(());
             store
         })
     });
@@ -176,7 +176,10 @@ fn benchmark_memory_efficiency(c: &mut Criterion) {
     // Benchmark store optimization
     group.bench_function("store_optimization", |b| {
         let store = setup_fragmented_store(5000);
-        b.iter(|| black_box(store.optimize().unwrap()))
+        b.iter(|| {
+            store.optimize().unwrap();
+            black_box(())
+        })
     });
 
     group.finish();
@@ -202,12 +205,12 @@ fn benchmark_concurrent_operations(c: &mut Criterion) {
                             let store_clone = std::sync::Arc::clone(&store);
                             std::thread::spawn(move || {
                                 for i in 0..operations_per_thread {
+                                    let idx = i % 1000;
                                     let subject = StarTerm::iri(&format!(
-                                        "http://example.org/subject{}",
-                                        i % 1000
+                                        "http://example.org/subject{idx}"
                                     ))
                                     .unwrap();
-                                    black_box(store_clone.query_triples(
+                                    let _ = black_box(store_clone.query_triples(
                                         Some(&subject),
                                         None,
                                         None,
@@ -236,7 +239,7 @@ fn generate_nested_turtle_star(depth: usize, count: usize) -> String {
 
     for i in 0..count {
         let triple = generate_nested_triple_string(depth, i);
-        data.push_str(&format!("{} .\n", triple));
+        data.push_str(&format!("{triple} .\n"));
     }
 
     data
@@ -244,10 +247,10 @@ fn generate_nested_turtle_star(depth: usize, count: usize) -> String {
 
 fn generate_nested_triple_string(depth: usize, id: usize) -> String {
     if depth == 0 {
-        format!("ex:s{} ex:p{} ex:o{}", id, id, id)
+        format!("ex:s{id} ex:p{id} ex:o{id}")
     } else {
         let inner = generate_nested_triple_string(depth - 1, id);
-        format!("<<{}>> ex:meta{} \"{}\"", inner, depth, depth)
+        format!("<<{inner}>> ex:meta{depth} \"{depth}\"")
     }
 }
 
@@ -256,9 +259,9 @@ fn generate_flat_graph(size: usize) -> StarGraph {
 
     for i in 0..size {
         let triple = StarTriple::new(
-            StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
+            StarTerm::iri(&format!("http://example.org/subject{i}")).unwrap(),
             StarTerm::iri("http://example.org/predicate").unwrap(),
-            StarTerm::literal(&format!("{}", i)).unwrap(),
+            StarTerm::literal(&format!("{i}")).unwrap(),
         );
         graph.insert(triple).unwrap();
     }
@@ -271,9 +274,9 @@ fn generate_quoted_heavy_graph(size: usize) -> StarGraph {
 
     for i in 0..size {
         let inner = StarTriple::new(
-            StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+            StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
-            StarTerm::literal(&format!("{}", i)).unwrap(),
+            StarTerm::literal(&format!("{i}")).unwrap(),
         );
 
         let quoted = StarTriple::new(
@@ -295,9 +298,9 @@ fn generate_mixed_graph(size: usize) -> StarGraph {
         if i % 3 == 0 {
             // Quoted triple
             let inner = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                 StarTerm::iri("http://example.org/p").unwrap(),
-                StarTerm::literal(&format!("{}", i)).unwrap(),
+                StarTerm::literal(&format!("{i}")).unwrap(),
             );
 
             let quoted = StarTriple::new(
@@ -310,9 +313,9 @@ fn generate_mixed_graph(size: usize) -> StarGraph {
         } else {
             // Regular triple
             let triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                 StarTerm::iri("http://example.org/p").unwrap(),
-                StarTerm::literal(&format!("{}", i)).unwrap(),
+                StarTerm::literal(&format!("{i}")).unwrap(),
             );
 
             graph.insert(triple).unwrap();
@@ -327,17 +330,17 @@ fn generate_deep_nested_graph(size: usize) -> StarGraph {
 
     for i in 0..size {
         let mut current = StarTriple::new(
-            StarTerm::iri(&format!("http://example.org/base{}", i)).unwrap(),
+            StarTerm::iri(&format!("http://example.org/base{i}")).unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
-            StarTerm::literal(&format!("{}", i)).unwrap(),
+            StarTerm::literal(&format!("{i}")).unwrap(),
         );
 
         // Create nested structure
         for depth in 0..3 {
             current = StarTriple::new(
                 StarTerm::quoted_triple(current),
-                StarTerm::iri(&format!("http://example.org/level{}", depth)).unwrap(),
-                StarTerm::literal(&format!("depth{}", depth)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/level{depth}")).unwrap(),
+                StarTerm::literal(&format!("depth{depth}")).unwrap(),
             );
         }
 
@@ -356,16 +359,16 @@ fn generate_large_mixed_graph(size: usize) -> StarGraph {
             0 => {
                 // Simple triple
                 let triple = StarTriple::new(
-                    StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                    StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                     StarTerm::iri("http://example.org/p").unwrap(),
-                    StarTerm::literal(&format!("{}", i)).unwrap(),
+                    StarTerm::literal(&format!("{i}")).unwrap(),
                 );
                 graph.insert(triple).unwrap();
             }
             1 => {
                 // Quoted triple
                 let inner = StarTriple::new(
-                    StarTerm::iri(&format!("http://example.org/alice{}", i)).unwrap(),
+                    StarTerm::iri(&format!("http://example.org/alice{i}")).unwrap(),
                     StarTerm::iri("http://example.org/age").unwrap(),
                     StarTerm::literal("25").unwrap(),
                 );
@@ -381,7 +384,7 @@ fn generate_large_mixed_graph(size: usize) -> StarGraph {
             2 => {
                 // Blank node triple
                 let triple = StarTriple::new(
-                    StarTerm::blank_node(&format!("b{}", i)).unwrap(),
+                    StarTerm::blank_node(&format!("b{i}")).unwrap(),
                     StarTerm::iri("http://example.org/type").unwrap(),
                     StarTerm::iri("http://example.org/Thing").unwrap(),
                 );
@@ -390,18 +393,18 @@ fn generate_large_mixed_graph(size: usize) -> StarGraph {
             3 => {
                 // Literal with language
                 let triple = StarTriple::new(
-                    StarTerm::iri(&format!("http://example.org/doc{}", i)).unwrap(),
+                    StarTerm::iri(&format!("http://example.org/doc{i}")).unwrap(),
                     StarTerm::iri("http://example.org/title").unwrap(),
-                    StarTerm::literal_with_language(&format!("Title {}", i), "en").unwrap(),
+                    StarTerm::literal_with_language(&format!("Title {i}"), "en").unwrap(),
                 );
                 graph.insert(triple).unwrap();
             }
             _ => {
                 // Quad with named graph
                 let quad = StarQuad::new(
-                    StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+                    StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                     StarTerm::iri("http://example.org/p").unwrap(),
-                    StarTerm::literal(&format!("{}", i)).unwrap(),
+                    StarTerm::literal(&format!("{i}")).unwrap(),
                     Some(StarTerm::iri(&format!("http://example.org/graph{}", i % 10)).unwrap()),
                 );
                 graph.insert_quad(quad).unwrap();
@@ -417,9 +420,9 @@ fn setup_indexed_store(size: usize) -> StarStore {
 
     for i in 0..size {
         let triple = StarTriple::new(
-            StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
+            StarTerm::iri(&format!("http://example.org/subject{i}")).unwrap(),
             StarTerm::iri("http://example.org/predicate").unwrap(),
-            StarTerm::literal(&format!("{}", i)).unwrap(),
+            StarTerm::literal(&format!("{i}")).unwrap(),
         );
         store.insert(&triple).unwrap();
     }
@@ -441,8 +444,8 @@ fn setup_quoted_store(size: usize) -> StarStore {
         for d in 0..depth {
             current = StarTriple::new(
                 StarTerm::quoted_triple(current),
-                StarTerm::iri(&format!("http://example.org/meta{}", d)).unwrap(),
-                StarTerm::literal(&format!("level{}", d)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/meta{d}")).unwrap(),
+                StarTerm::literal(&format!("level{d}")).unwrap(),
             );
         }
 
@@ -458,9 +461,9 @@ fn setup_fragmented_store(size: usize) -> StarStore {
     // Insert and remove to create fragmentation
     for i in 0..size * 2 {
         let triple = StarTriple::new(
-            StarTerm::iri(&format!("http://example.org/s{}", i)).unwrap(),
+            StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
             StarTerm::iri("http://example.org/p").unwrap(),
-            StarTerm::literal(&format!("{}", i)).unwrap(),
+            StarTerm::literal(&format!("{i}")).unwrap(),
         );
         store.insert(&triple).unwrap();
 

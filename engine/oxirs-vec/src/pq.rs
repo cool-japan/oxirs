@@ -1004,7 +1004,7 @@ impl VectorIndex for PQIndex {
         Ok(results)
     }
 
-    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+    fn get_vector(&self, _uri: &str) -> Option<&Vector> {
         // PQ doesn't store original vectors, only codes
         // Would need to decode, but that returns an approximation
         None
@@ -1192,10 +1192,12 @@ mod tests {
 
     #[test]
     fn test_pq_symmetric_distance() {
-        let mut config = PQConfig::default();
-        config.enable_symmetric_distance = true;
-        config.n_subquantizers = 2;
-        config.n_centroids = 4;
+        let config = PQConfig {
+            enable_symmetric_distance: true,
+            n_subquantizers: 2,
+            n_centroids: 4,
+            ..Default::default()
+        };
 
         let mut index = PQIndex::new(config);
 
@@ -1268,15 +1270,19 @@ mod tests {
         assert!(config.validate().is_ok());
 
         // Test invalid residual config
-        let mut invalid_config = PQConfig::default();
-        invalid_config.enable_residual_quantization = true;
-        invalid_config.residual_levels = 0;
+        let invalid_config = PQConfig {
+            enable_residual_quantization: true,
+            residual_levels: 0,
+            ..Default::default()
+        };
         assert!(invalid_config.validate().is_err());
 
         // Test invalid multi-codebook config
-        let mut invalid_config = PQConfig::default();
-        invalid_config.enable_multi_codebook = true;
-        invalid_config.num_codebooks = 1;
+        let invalid_config = PQConfig {
+            enable_multi_codebook: true,
+            num_codebooks: 1,
+            ..Default::default()
+        };
         assert!(invalid_config.validate().is_err());
     }
 }

@@ -270,7 +270,7 @@ impl ShapeValidator {
         &self,
         constraint: &crate::Constraint,
         shape_map: &HashMap<ShapeId, &Shape>,
-        depth: usize,
+        _depth: usize,
     ) -> Result<()> {
         match constraint {
             Constraint::Node(node_constraint) => {

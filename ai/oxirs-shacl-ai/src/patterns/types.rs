@@ -2,7 +2,6 @@
 
 use oxirs_core::model::{NamedNode, Triple};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Pattern recognition and analysis result
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -455,6 +454,12 @@ pub struct PatternModelState {
     pub loss: f64,
     pub training_epochs: usize,
     pub last_training: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+impl Default for PatternModelState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PatternModelState {

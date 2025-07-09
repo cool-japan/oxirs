@@ -9,8 +9,7 @@ use super::{
 };
 
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::hash::Hash;
+use std::collections::{HashMap, HashSet};
 
 /// Association rule learner for shape discovery
 #[derive(Debug)]
@@ -266,7 +265,7 @@ impl AssociationRuleLearner {
                     tree.nodes[current_node].children.insert(item, new_idx);
                     tree.header_table
                         .entry(item)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(new_idx);
                     current_node = new_idx;
                 }
@@ -299,7 +298,7 @@ impl AssociationRuleLearner {
             for &item in &transaction.items {
                 vertical_db
                     .entry(item)
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert(tid);
             }
         }
@@ -332,7 +331,7 @@ impl AssociationRuleLearner {
                 let union: HashSet<usize> = itemsets[i].union(&itemsets[j]).cloned().collect();
                 if union.len() == k {
                     // Check if all subsets are frequent (pruning)
-                    if !self.config.pruning_enabled || self.all_subsets_frequent(&union, &itemsets)
+                    if !self.config.pruning_enabled || self.all_subsets_frequent(&union, itemsets)
                     {
                         candidates.push(union);
                     }
@@ -472,13 +471,13 @@ impl AssociationRuleLearner {
 
             // Add node type as item
             if let Some(node_type) = &node.node_type {
-                let item_id = self.get_or_create_item_id(&format!("type:{}", node_type));
+                let item_id = self.get_or_create_item_id(&format!("type:{node_type}"));
                 items.insert(item_id);
             }
 
             // Add node properties
             for (prop, value) in &node.properties {
-                let item_str = format!("prop:{}={:.2}", prop, value);
+                let item_str = format!("prop:{prop}={value:.2}");
                 let item_id = self.get_or_create_item_id(&item_str);
                 items.insert(item_id);
             }

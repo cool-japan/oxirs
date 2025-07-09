@@ -8,10 +8,9 @@ use crate::error_handling::{
     repair::RepairSuggestionEngine,
     types::{ErrorType, RepairSuggestion, RepairType, SmartErrorAnalysis},
 };
-use crate::{Result, ShaclAiError};
+use crate::Result;
 use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
-use std::collections::HashMap;
 
 /// Intelligent error handling system for SHACL validation
 #[derive(Debug)]
@@ -178,8 +177,7 @@ impl IntelligentErrorHandler {
 
         if missing_property_violations > 0 {
             root_causes.push(format!(
-                "Missing required properties detected in {} violations - likely incomplete data ingestion",
-                missing_property_violations
+                "Missing required properties detected in {missing_property_violations} violations - likely incomplete data ingestion"
             ));
         }
 
@@ -199,8 +197,7 @@ impl IntelligentErrorHandler {
 
         if type_mismatch_violations > 0 {
             root_causes.push(format!(
-                "Data type mismatches in {} violations - possible data transformation errors",
-                type_mismatch_violations
+                "Data type mismatches in {type_mismatch_violations} violations - possible data transformation errors"
             ));
         }
 
@@ -220,8 +217,7 @@ impl IntelligentErrorHandler {
 
         if pattern_violations > 0 {
             root_causes.push(format!(
-                "Pattern constraint violations in {} cases - data format inconsistencies",
-                pattern_violations
+                "Pattern constraint violations in {pattern_violations} cases - data format inconsistencies"
             ));
         }
 

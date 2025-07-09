@@ -107,6 +107,19 @@ pub struct WebSocketConnection {
     pub authenticated: Arc<RwLock<bool>>,
 }
 
+/// Authentication method for WebSocket connections
+#[derive(Debug, Clone)]
+pub enum AuthenticationMethod {
+    /// No authentication required
+    None,
+    /// Bearer token authentication
+    BearerToken { valid_tokens: Vec<String> },
+    /// API key authentication
+    ApiKey { valid_keys: Vec<String> },
+    /// JWT token authentication (simplified validation)
+    JWT { secret: String },
+}
+
 /// Subscription manager configuration
 #[derive(Debug, Clone)]
 pub struct SubscriptionConfig {
@@ -116,6 +129,7 @@ pub struct SubscriptionConfig {
     pub subscription_timeout: Duration,
     pub enable_authentication: bool,
     pub max_execution_frequency: Duration,
+    pub auth_method: AuthenticationMethod,
 }
 
 impl Default for SubscriptionConfig {
@@ -127,6 +141,7 @@ impl Default for SubscriptionConfig {
             subscription_timeout: Duration::from_secs(300),
             enable_authentication: false,
             max_execution_frequency: Duration::from_millis(100),
+            auth_method: AuthenticationMethod::None,
         }
     }
 }
@@ -297,12 +312,33 @@ impl SubscriptionManager {
         message: SubscriptionMessage,
     ) -> Result<()> {
         match message {
-            SubscriptionMessage::ConnectionInit { payload: _ } => {
-                // TODO: Handle authentication if enabled
+            SubscriptionMessage::ConnectionInit { payload } => {
+                // Handle authentication if enabled
+                let is_authenticated = if self.config.enable_authentication {
+                    let auth_result = self.authenticate_connection(payload).await?;
+                    
+                    if !auth_result {
+                        let error = SubscriptionMessage::ConnectionError {
+                            payload: Some(serde_json::json!({
+                                "message": "Authentication failed",
+                                "code": "AUTH_FAILED"
+                            })),
+                        };
+                        self.send_message(connection, &error).await?;
+                        return Ok(());
+                    }
+                    auth_result
+                } else {
+                    // If authentication is disabled, automatically authenticate
+                    true
+                };
+
+                // Set authentication status
+                *connection.authenticated.write().unwrap() = is_authenticated;
+
+                // Send acknowledgment
                 let ack = SubscriptionMessage::ConnectionAck;
                 self.send_message(connection, &ack).await?;
-
-                *connection.authenticated.write().unwrap() = true;
             }
 
             SubscriptionMessage::Start { id, payload } => {
@@ -729,6 +765,89 @@ impl SubscriptionManager {
             } else {
                 active_subscriptions.len() as f64 / connections.len() as f64
             },
+        }
+    }
+
+    /// Authenticate a WebSocket connection based on the provided payload
+    async fn authenticate_connection(&self, payload: Option<serde_json::Value>) -> Result<bool> {
+        if !self.config.enable_authentication {
+            return Ok(true);
+        }
+
+        let payload = match payload {
+            Some(p) => p,
+            None => {
+                debug!("No authentication payload provided");
+                return Ok(false);
+            }
+        };
+
+        match &self.config.auth_method {
+            AuthenticationMethod::None => Ok(true),
+            
+            AuthenticationMethod::BearerToken { valid_tokens } => {
+                if let Some(token) = payload.get("authorization")
+                    .or_else(|| payload.get("Authorization"))
+                    .and_then(|v| v.as_str()) {
+                    
+                    // Remove "Bearer " prefix if present
+                    let token = token.strip_prefix("Bearer ").unwrap_or(token);
+                    
+                    if valid_tokens.contains(&token.to_string()) {
+                        info!("WebSocket connection authenticated with Bearer token");
+                        Ok(true)
+                    } else {
+                        warn!("Invalid Bearer token provided");
+                        Ok(false)
+                    }
+                } else {
+                    warn!("No authorization token found in payload");
+                    Ok(false)
+                }
+            }
+            
+            AuthenticationMethod::ApiKey { valid_keys } => {
+                if let Some(api_key) = payload.get("apiKey")
+                    .or_else(|| payload.get("api_key"))
+                    .and_then(|v| v.as_str()) {
+                    
+                    if valid_keys.contains(&api_key.to_string()) {
+                        info!("WebSocket connection authenticated with API key");
+                        Ok(true)
+                    } else {
+                        warn!("Invalid API key provided");
+                        Ok(false)
+                    }
+                } else {
+                    warn!("No API key found in payload");
+                    Ok(false)
+                }
+            }
+            
+            AuthenticationMethod::JWT { secret: _ } => {
+                // Simplified JWT validation - in production, use a proper JWT library
+                if let Some(jwt) = payload.get("jwt")
+                    .or_else(|| payload.get("token"))
+                    .and_then(|v| v.as_str()) {
+                    
+                    // Basic JWT structure validation (header.payload.signature)
+                    let parts: Vec<&str> = jwt.split('.').collect();
+                    if parts.len() == 3 {
+                        // In a real implementation, you would:
+                        // 1. Decode and verify the signature
+                        // 2. Check expiration
+                        // 3. Validate claims
+                        info!("WebSocket connection authenticated with JWT (basic validation)");
+                        Ok(true)
+                    } else {
+                        warn!("Invalid JWT format");
+                        Ok(false)
+                    }
+                } else {
+                    warn!("No JWT token found in payload");
+                    Ok(false)
+                }
+            }
         }
     }
 }

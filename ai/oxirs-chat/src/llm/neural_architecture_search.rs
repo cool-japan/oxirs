@@ -319,6 +319,12 @@ pub struct ArchitectureOptimizer {
     search_history: Arc<RwLock<Vec<(ModelArchitecture, f32)>>>,
 }
 
+impl Default for ArchitectureSearch {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArchitectureSearch {
     /// Create new architecture search engine
     pub fn new() -> Self {
@@ -468,7 +474,7 @@ impl ArchitectureSearch {
         // Generate diverse initial architectures
         for i in 0..10 {
             let architecture = ModelArchitecture {
-                architecture_id: format!("arch_{}_{}", search_id, i),
+                architecture_id: format!("arch_{search_id}_{i}"),
                 layers: Self::generate_random_layers(i),
                 connections: Vec::new(),
                 hyperparameters: ArchitectureHyperparameters {
@@ -512,7 +518,7 @@ impl ArchitectureSearch {
 
         // Add embedding layer
         layers.push(LayerConfig {
-            layer_id: format!("embedding_{}", seed),
+            layer_id: format!("embedding_{seed}"),
             layer_type: LayerType::Embedding,
             parameters: LayerParameters {
                 hidden_size: Some(768),
@@ -530,7 +536,7 @@ impl ArchitectureSearch {
         // Add transformer blocks
         for i in 1..=6 {
             layers.push(LayerConfig {
-                layer_id: format!("transformer_{}_{}", seed, i),
+                layer_id: format!("transformer_{seed}_{i}"),
                 layer_type: LayerType::TransformerBlock,
                 parameters: LayerParameters {
                     hidden_size: Some(768),
@@ -547,6 +553,12 @@ impl ArchitectureSearch {
         }
 
         layers
+    }
+}
+
+impl Default for ArchitectureEvaluator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -606,6 +618,12 @@ impl ArchitectureEvaluator {
     }
 }
 
+impl Default for ArchitectureOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ArchitectureOptimizer {
     /// Create new architecture optimizer
     pub fn new() -> Self {
@@ -625,7 +643,7 @@ impl ArchitectureOptimizer {
         // Generate 3 candidates per iteration
         for i in 0..3 {
             let candidate = ModelArchitecture {
-                architecture_id: format!("candidate_{}_{}", iteration, i),
+                architecture_id: format!("candidate_{iteration}_{i}"),
                 layers: vec![], // Simplified for mock
                 connections: vec![],
                 hyperparameters: ArchitectureHyperparameters {

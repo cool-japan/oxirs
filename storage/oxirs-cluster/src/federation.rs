@@ -16,6 +16,7 @@ use tracing::{debug, info, warn};
 #[derive(Debug)]
 pub struct CrossClusterFederation {
     /// Local cluster ID
+    #[allow(dead_code)]
     cluster_id: String,
     /// Remote cluster registry
     remote_clusters: Arc<RwLock<HashMap<String, RemoteCluster>>>,
@@ -150,12 +151,16 @@ pub enum ConnectionQuality {
 #[derive(Debug)]
 pub struct FederatedLoadBalancer {
     /// Load balancing strategy
+    #[allow(dead_code)]
     strategy: LoadBalancingStrategy,
     /// Node performance tracking
+    #[allow(dead_code)]
     node_metrics: Arc<DashMap<String, NodePerformanceMetrics>>,
     /// Request routing history
+    #[allow(dead_code)]
     routing_history: Arc<RwLock<Vec<RoutingDecision>>>,
     /// Adaptive learning model
+    #[allow(dead_code)]
     ml_predictor: Arc<RwLock<Option<PerformancePredictor>>>,
 }
 
@@ -219,10 +224,13 @@ pub struct ActualPerformance {
 #[derive(Debug)]
 pub struct PerformancePredictor {
     /// Training data history
+    #[allow(dead_code)]
     training_data: Vec<TrainingExample>,
     /// Feature weights (simple linear model)
+    #[allow(dead_code)]
     feature_weights: HashMap<String, f64>,
     /// Model accuracy metrics
+    #[allow(dead_code)]
     accuracy_metrics: AccuracyMetrics,
 }
 
@@ -267,6 +275,7 @@ pub struct FederationResultMetadata {
 pub struct ClientPool {
     clients: DashMap<String, reqwest::Client>,
     semaphore: Arc<Semaphore>,
+    #[allow(dead_code)]
     max_connections_per_cluster: usize,
 }
 
@@ -619,6 +628,12 @@ pub struct RoutingPlan {
     pub confidence: f64,
 }
 
+impl Default for FederatedLoadBalancer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FederatedLoadBalancer {
     pub fn new() -> Self {
         Self {
@@ -631,7 +646,7 @@ impl FederatedLoadBalancer {
 
     pub async fn create_routing_plan(
         &self,
-        query: &str,
+        _query: &str,
         clusters: &[String],
     ) -> Result<Vec<RoutingPlan>> {
         let mut routing_plans = Vec::new();
@@ -640,8 +655,8 @@ impl FederatedLoadBalancer {
             // For now, create a simple routing plan
             routing_plans.push(RoutingPlan {
                 cluster_id: cluster_id.clone(),
-                node_id: format!("{}-node-1", cluster_id),
-                endpoint_url: format!("http://{}.cluster.local/sparql", cluster_id),
+                node_id: format!("{cluster_id}-node-1"),
+                endpoint_url: format!("http://{cluster_id}.cluster.local/sparql"),
                 estimated_cost: 1.0,
                 confidence: 0.8,
             });
@@ -718,8 +733,8 @@ mod tests {
         // assert!(!client2.danger_accept_invalid_certs());
 
         // Just verify we have valid clients
-        assert!(format!("{:?}", client1).contains("Client"));
-        assert!(format!("{:?}", client2).contains("Client"));
+        assert!(format!("{client1:?}").contains("Client"));
+        assert!(format!("{client2:?}").contains("Client"));
     }
 
     #[tokio::test]

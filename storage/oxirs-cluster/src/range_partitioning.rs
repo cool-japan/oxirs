@@ -85,22 +85,16 @@ impl Range {
     /// Check if this range overlaps with another range
     pub fn overlaps(&self, other: &Range) -> bool {
         // If either range is unbounded on the side that matters, they overlap
-        match (&self.start, &other.end) {
-            (Some(s1), Some(e2)) => {
-                if s1 >= e2 {
-                    return false;
-                }
+        if let (Some(s1), Some(e2)) = (&self.start, &other.end) {
+            if s1 >= e2 {
+                return false;
             }
-            _ => {}
         }
 
-        match (&other.start, &self.end) {
-            (Some(s2), Some(e1)) => {
-                if s2 >= e1 {
-                    return false;
-                }
+        if let (Some(s2), Some(e1)) = (&other.start, &self.end) {
+            if s2 >= e1 {
+                return false;
             }
-            _ => {}
         }
 
         true
@@ -157,9 +151,9 @@ impl Display for Range {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match (&self.start, &self.end) {
             (None, None) => write!(f, "(-∞, +∞)"),
-            (Some(start), None) => write!(f, "[{}, +∞)", start),
-            (None, Some(end)) => write!(f, "(-∞, {})", end),
-            (Some(start), Some(end)) => write!(f, "[{}, {})", start, end),
+            (Some(start), None) => write!(f, "[{start}, +∞)"),
+            (None, Some(end)) => write!(f, "(-∞, {end})"),
+            (Some(start), Some(end)) => write!(f, "[{start}, {end})"),
         }
     }
 }
@@ -460,8 +454,8 @@ impl RangePartitionManager {
             ));
         }
 
-        let left_partition_id = format!("{}-left", operation_id);
-        let right_partition_id = format!("{}-right", operation_id);
+        let left_partition_id = format!("{operation_id}-left");
+        let right_partition_id = format!("{operation_id}-right");
 
         // Create split operation
         let split_op = SplitOperation {
@@ -530,7 +524,7 @@ impl RangePartitionManager {
             });
         }
 
-        let target_partition_id = format!("{}-merged", operation_id);
+        let target_partition_id = format!("{operation_id}-merged");
 
         // Create merge operation
         let merge_op = MergeOperation {

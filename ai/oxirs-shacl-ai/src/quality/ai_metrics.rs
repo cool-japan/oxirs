@@ -7,15 +7,15 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
 
-use oxirs_core::{model::Term, Store};
+use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
 use super::extended_dimensions::{
-    ConceptCoherence, CorrelationAnalysis, DistributionAnalysis, EntropyCalculation,
-    InformationContentMeasure, KnowledgeCompleteness, LogicalConsistency, OutlierDetectionResult,
-    RedundancyAssessment, RelationshipValidity, SemanticDensity, TaxonomyConsistency,
+    CorrelationAnalysis, DistributionAnalysis, EntropyCalculation,
+    InformationContentMeasure, OutlierDetectionResult,
+    RedundancyAssessment,
 };
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// AI-powered quality metrics engine
 #[derive(Debug)]
@@ -141,6 +141,7 @@ pub struct AdvancedSemanticMetrics {
 
 /// Machine learning predictions for quality
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct MachineLearningPredictions {
     pub quality_score_prediction: QualityScorePrediction,
     pub issue_likelihood: IssueLikelihood,
@@ -1188,17 +1189,6 @@ impl Default for AdvancedSemanticMetrics {
     }
 }
 
-impl Default for MachineLearningPredictions {
-    fn default() -> Self {
-        Self {
-            quality_score_prediction: QualityScorePrediction::default(),
-            issue_likelihood: IssueLikelihood::default(),
-            performance_prediction: PerformancePrediction::default(),
-            degradation_forecast: DegradationForecast::default(),
-            intervention_recommendations: InterventionRecommendations::default(),
-        }
-    }
-}
 
 impl QualityModels {
     fn new() -> Self {

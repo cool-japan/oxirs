@@ -27,7 +27,6 @@ use tokio::{
     sync::{RwLock, Semaphore},
     time::timeout,
 };
-use url::Url;
 
 /// Federated query optimizer for distributed SPARQL execution
 pub struct FederatedQueryOptimizer {
@@ -519,8 +518,7 @@ impl FederatedQueryOptimizer {
                 futures.push(health_check);
             } else if !pattern.is_silent {
                 return Err(FusekiError::bad_request(format!(
-                    "Unknown endpoint: {}",
-                    endpoint_url
+                    "Unknown endpoint: {endpoint_url}"
                 )));
             }
         }
@@ -531,6 +529,12 @@ impl FederatedQueryOptimizer {
         }
 
         Ok(())
+    }
+}
+
+impl Default for EndpointRegistry {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -553,7 +557,7 @@ impl EndpointRegistry {
         let client = ClientBuilder::new()
             .timeout(Duration::from_millis(5000))
             .build()
-            .map_err(|e| FusekiError::internal(format!("Client error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Client error: {e}")))?;
 
         let start = Instant::now();
         let response = client
@@ -594,7 +598,7 @@ impl EndpointRegistry {
                         success_count: 0,
                     },
                 );
-                Err(FusekiError::internal(format!("Health check failed: {}", e)))
+                Err(FusekiError::internal(format!("Health check failed: {e}")))
             }
         }
     }
@@ -602,6 +606,12 @@ impl EndpointRegistry {
     /// Discover endpoints from catalogs
     pub async fn discover_endpoints(&self) -> FusekiResult<Vec<EndpointInfo>> {
         self.discovery.discover_from_catalogs().await
+    }
+}
+
+impl Default for EndpointDiscovery {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -621,6 +631,12 @@ impl EndpointDiscovery {
         // Placeholder for actual discovery implementation
         // Would parse VOID descriptions, SPARQL Service Descriptions, etc.
         Ok(vec![])
+    }
+}
+
+impl Default for QueryPlanner {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -704,7 +720,7 @@ impl QueryPlanner {
         // Create fragments for each SERVICE pattern
         for (idx, pattern) in service_patterns.iter().enumerate() {
             fragments.push(QueryFragment {
-                fragment_id: format!("service_{}", idx),
+                fragment_id: format!("service_{idx}"),
                 sparql: pattern.pattern.clone(),
                 target_endpoints: vec![pattern.service_url.clone()],
                 dependencies: vec![],
@@ -722,6 +738,12 @@ impl QueryPlanner {
         }
 
         Ok(fragments)
+    }
+}
+
+impl Default for JoinOrderOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -772,7 +794,7 @@ impl JoinOrderOptimizer {
                     operation: JoinOperation::HashJoin,
                     left_source: fragments[i].fragment_id.clone(),
                     right_source: fragments[i + 1].fragment_id.clone(),
-                    output_destination: format!("join_{}", i),
+                    output_destination: format!("join_{i}"),
                 });
             }
         }
@@ -785,12 +807,24 @@ impl JoinOrderOptimizer {
     }
 }
 
+impl Default for JoinCostModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JoinCostModel {
     pub fn new() -> Self {
         Self {
             latency_map: DashMap::new(),
             bandwidth_map: DashMap::new(),
         }
+    }
+}
+
+impl Default for CostEstimator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -850,12 +884,24 @@ impl CostEstimator {
     }
 }
 
+impl Default for QueryHistory {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryHistory {
     pub fn new() -> Self {
         Self {
             executions: Vec::new(),
             patterns: HashMap::new(),
         }
+    }
+}
+
+impl Default for CardinalityEstimator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -893,12 +939,24 @@ impl CardinalityEstimator {
     }
 }
 
+impl Default for FederationStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FederationStatistics {
     pub fn new() -> Self {
         Self {
             query_stats: HashMap::new(),
             endpoint_stats: HashMap::new(),
         }
+    }
+}
+
+impl Default for FederatedExecutor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -987,7 +1045,7 @@ impl FederatedExecutor {
             .body(query.to_string())
             .send()
             .await
-            .map_err(|e| FusekiError::internal(format!("Request failed: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Request failed: {e}")))?;
 
         if !response.status().is_success() {
             return Err(FusekiError::bad_request(format!(
@@ -999,7 +1057,7 @@ impl FederatedExecutor {
         let json: serde_json::Value = response
             .json()
             .await
-            .map_err(|e| FusekiError::internal(format!("JSON parse error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("JSON parse error: {e}")))?;
 
         // Parse SPARQL results
         let bindings = self.parse_sparql_results(json)?;
@@ -1050,6 +1108,12 @@ impl FederatedExecutor {
     }
 }
 
+impl Default for ClientPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClientPool {
     pub fn new() -> Self {
         Self {
@@ -1068,7 +1132,7 @@ impl ClientPool {
             .pool_max_idle_per_host(self.max_connections_per_endpoint)
             .timeout(Duration::from_secs(30))
             .build()
-            .map_err(|e| FusekiError::internal(format!("Client creation failed: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Client creation failed: {e}")))?;
 
         self.clients
             .insert(endpoint_url.to_string(), client.clone());
@@ -1112,7 +1176,7 @@ impl ExecutionStrategy for ParallelExecutionStrategy {
             for endpoint in &fragment.target_endpoints {
                 let fragment_clone = fragment.clone();
                 let endpoint_clone = endpoint.clone();
-                let executor_clone = executor.clone();
+                let executor_clone = executor;
 
                 futures.push(async move {
                     executor_clone
@@ -1206,7 +1270,7 @@ impl ExecutionStrategy for AdaptiveExecutionStrategy {
                 for endpoint in &fragment.target_endpoints {
                     let fragment_clone = fragment.clone();
                     let endpoint_clone = endpoint.clone();
-                    let executor_clone = executor.clone();
+                    let executor_clone = executor;
 
                     futures.push(async move {
                         executor_clone
@@ -1231,6 +1295,12 @@ impl ExecutionStrategy for AdaptiveExecutionStrategy {
 
         // Merge results
         ResultMerger::new().merge_results(all_results).await
+    }
+}
+
+impl Default for ResultMerger {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

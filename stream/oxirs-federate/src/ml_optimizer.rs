@@ -648,6 +648,12 @@ pub struct MLStatistics {
     pub cache_hit_improvement: f64,
 }
 
+impl Default for MLOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MLOptimizer {
     /// Create new ML optimizer
     pub fn new() -> Self {

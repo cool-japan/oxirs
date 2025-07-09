@@ -1,4 +1,3 @@
-use crate::llm::manager::LLMManager;
 use crate::llm::types::{ChatMessage, ChatRole, LLMRequest, LLMResponse, Priority, Usage, UseCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -556,7 +555,7 @@ impl PerformanceOptimizer {
             let request = LLMRequest {
                 messages: vec![ChatMessage {
                     role: ChatRole::User,
-                    content: format!("Test prompt {} for benchmarking performance", i),
+                    content: format!("Test prompt {i} for benchmarking performance"),
                     metadata: None,
                 }],
                 max_tokens: Some(100),
@@ -1114,6 +1113,12 @@ pub struct CompressionEngine {
     total_compression_time: Duration,
 }
 
+impl Default for CompressionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompressionEngine {
     pub fn new() -> Self {
         Self {
@@ -1152,6 +1157,12 @@ impl CompressionEngine {
 
 pub struct PrefetchEngine {
     prefetch_cache: HashMap<String, Vec<LLMRequest>>,
+}
+
+impl Default for PrefetchEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PrefetchEngine {

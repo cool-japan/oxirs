@@ -204,7 +204,7 @@ impl AdaptiveDictionary {
         if !self.id_to_string.is_empty() {
             let avg_length: f64 = self.id_to_string.values().map(|v| v.len()).sum::<usize>() as f64
                 / self.id_to_string.len() as f64;
-            stats.insert("avg_entry_length".to_string(), format!("{:.2}", avg_length));
+            stats.insert("avg_entry_length".to_string(), format!("{avg_length:.2}"));
         }
 
         stats

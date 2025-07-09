@@ -5,7 +5,7 @@ use oxirs_vec::{
     sparql_integration::{
         SparqlVectorService, VectorServiceArg, VectorServiceConfig, VectorServiceResult,
     },
-    Vector, VectorStore,
+    Vector,
 };
 
 #[test]
@@ -92,9 +92,8 @@ fn test_vec_similarity_function() {
             // With hash-based embeddings, we can't guarantee semantic similarity
             // Just verify we get a number between -1 and 1
             assert!(
-                similarity >= -1.0 && similarity <= 1.0,
-                "Similarity should be between -1 and 1, got: {}",
-                similarity
+                (-1.0..=1.0).contains(&similarity),
+                "Similarity should be between -1 and 1, got: {similarity}"
             );
         }
         _ => panic!("Expected Number result"),
@@ -115,9 +114,8 @@ fn test_vec_similarity_function() {
             // With hash-based embeddings, we can't guarantee semantic similarity
             // Just verify we get a number between -1 and 1
             assert!(
-                similarity >= -1.0 && similarity <= 1.0,
-                "Similarity should be between -1 and 1, got: {}",
-                similarity
+                (-1.0..=1.0).contains(&similarity),
+                "Similarity should be between -1 and 1, got: {similarity}"
             );
         }
         _ => panic!("Expected Number result"),

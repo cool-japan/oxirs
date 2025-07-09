@@ -3,7 +3,7 @@
 use axum::{
     extract::{ws::WebSocket, Path, Query, State, WebSocketUpgrade},
     http::{header, HeaderValue, Method, StatusCode},
-    response::{IntoResponse, Response},
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
@@ -14,7 +14,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 use tokio::sync::{broadcast, RwLock};
 use tower::ServiceBuilder;
@@ -25,7 +25,7 @@ use tower_http::{
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use crate::{ChatSession, Message, MessageRole, OxiRSChat, ThreadInfo};
+use crate::{MessageRole, OxiRSChat, ThreadInfo};
 
 /// Server state shared across handlers
 #[derive(Clone)]
@@ -843,71 +843,56 @@ async fn metrics_handler() -> Result<String, StatusCode> {
         .as_millis();
 
     metrics.push(format!(
-        "oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions\"}} 150 {}",
-        timestamp
+        "oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions\"}} 150 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_requests_total{{method=\"GET\",endpoint=\"/api/sessions\"}} 45 {}",
-        timestamp
+        "oxirs_chat_requests_total{{method=\"GET\",endpoint=\"/api/sessions\"}} 45 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions/messages\"}} 320 {}",
-        timestamp
+        "oxirs_chat_requests_total{{method=\"POST\",endpoint=\"/api/sessions/messages\"}} 320 {timestamp}"
     ));
 
-    metrics.push(format!("oxirs_chat_sessions_active 12 {}", timestamp));
-    metrics.push(format!("oxirs_chat_messages_total 1250 {}", timestamp));
+    metrics.push(format!("oxirs_chat_sessions_active 12 {timestamp}"));
+    metrics.push(format!("oxirs_chat_messages_total 1250 {timestamp}"));
 
     metrics.push(format!(
-        "oxirs_chat_response_time_seconds_bucket{{le=\"0.1\"}} 45 {}",
-        timestamp
+        "oxirs_chat_response_time_seconds_bucket{{le=\"0.1\"}} 45 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_response_time_seconds_bucket{{le=\"0.5\"}} 120 {}",
-        timestamp
+        "oxirs_chat_response_time_seconds_bucket{{le=\"0.5\"}} 120 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_response_time_seconds_bucket{{le=\"1.0\"}} 180 {}",
-        timestamp
+        "oxirs_chat_response_time_seconds_bucket{{le=\"1.0\"}} 180 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_response_time_seconds_bucket{{le=\"2.0\"}} 195 {}",
-        timestamp
+        "oxirs_chat_response_time_seconds_bucket{{le=\"2.0\"}} 195 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_response_time_seconds_bucket{{le=\"+Inf\"}} 200 {}",
-        timestamp
+        "oxirs_chat_response_time_seconds_bucket{{le=\"+Inf\"}} 200 {timestamp}"
     ));
 
     metrics.push(format!(
-        "oxirs_chat_sparql_queries_total{{status=\"success\"}} 85 {}",
-        timestamp
+        "oxirs_chat_sparql_queries_total{{status=\"success\"}} 85 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_sparql_queries_total{{status=\"failed\"}} 5 {}",
-        timestamp
+        "oxirs_chat_sparql_queries_total{{status=\"failed\"}} 5 {timestamp}"
     ));
 
     metrics.push(format!(
-        "oxirs_chat_llm_requests_total{{provider=\"openai\",model=\"gpt-4\"}} 120 {}",
-        timestamp
+        "oxirs_chat_llm_requests_total{{provider=\"openai\",model=\"gpt-4\"}} 120 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_llm_requests_total{{provider=\"anthropic\",model=\"claude-3-opus\"}} 80 {}",
-        timestamp
+        "oxirs_chat_llm_requests_total{{provider=\"anthropic\",model=\"claude-3-opus\"}} 80 {timestamp}"
     ));
 
     metrics.push(format!(
-        "oxirs_chat_errors_total{{type=\"validation\"}} 3 {}",
-        timestamp
+        "oxirs_chat_errors_total{{type=\"validation\"}} 3 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_errors_total{{type=\"llm_timeout\"}} 2 {}",
-        timestamp
+        "oxirs_chat_errors_total{{type=\"llm_timeout\"}} 2 {timestamp}"
     ));
     metrics.push(format!(
-        "oxirs_chat_errors_total{{type=\"sparql_generation\"}} 1 {}",
-        timestamp
+        "oxirs_chat_errors_total{{type=\"sparql_generation\"}} 1 {timestamp}"
     ));
 
     Ok(metrics.join("\n"))

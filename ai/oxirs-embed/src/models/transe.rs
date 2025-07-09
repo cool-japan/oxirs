@@ -477,7 +477,7 @@ impl EmbeddingModel for TransE {
         Ok(ndarray_to_vector(&embedding))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.embeddings_initialized {
             return Err(anyhow!("Model not trained"));
         }
@@ -717,7 +717,7 @@ mod tests {
         ));
 
         // Test custom margin
-        let mut model_margin = TransE::with_margin(base_config.clone(), 2.0);
+        let model_margin = TransE::with_margin(base_config.clone(), 2.0);
         assert_eq!(model_margin.margin(), 2.0);
 
         // Add same triples to all models

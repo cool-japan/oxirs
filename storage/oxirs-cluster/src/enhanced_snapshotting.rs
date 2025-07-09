@@ -12,10 +12,9 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info};
 
@@ -241,7 +240,7 @@ impl EnhancedSnapshotManager {
 
         // Write chunks to disk
         for (i, chunk) in chunks.iter().enumerate() {
-            let chunk_path = snapshot_dir.join(format!("chunk_{:06}.dat", i));
+            let chunk_path = snapshot_dir.join(format!("chunk_{i:06}.dat"));
             let mut writer = AtomicFileWriter::new(&chunk_path).await?;
             writer.write_all(chunk).await?;
             writer.commit().await?;
@@ -360,7 +359,7 @@ impl EnhancedSnapshotManager {
         let mut all_data = Vec::with_capacity(metadata.base.size as usize);
 
         for i in 0..metadata.total_chunks {
-            let chunk_path = snapshot_dir.join(format!("chunk_{:06}.dat", i));
+            let chunk_path = snapshot_dir.join(format!("chunk_{i:06}.dat"));
             let chunk_data = tokio::fs::read(&chunk_path).await?;
 
             // Verify chunk checksum
@@ -467,7 +466,7 @@ impl EnhancedSnapshotManager {
         // For now, we'll simulate the transfer by reading the chunks
 
         for i in 0..metadata.total_chunks {
-            let chunk_path = snapshot_dir.join(format!("chunk_{:06}.dat", i));
+            let chunk_path = snapshot_dir.join(format!("chunk_{i:06}.dat"));
             let chunk_data = tokio::fs::read(&chunk_path).await?;
 
             // Simulate network delay
@@ -554,7 +553,7 @@ impl EnhancedSnapshotManager {
     /// Create incremental snapshot data
     async fn create_incremental_snapshot(
         &self,
-        app_state: &RdfApp,
+        _app_state: &RdfApp,
         options: &SnapshotOptions,
     ) -> Result<SnapshotDiff> {
         // In a real implementation, this would compare against the base snapshot

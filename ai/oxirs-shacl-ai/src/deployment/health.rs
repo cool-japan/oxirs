@@ -19,6 +19,12 @@ pub struct HealthMonitor {
     circuit_breaker: CircuitBreaker,
 }
 
+impl Default for HealthMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HealthMonitor {
     pub fn new() -> Self {
         Self {

@@ -8,7 +8,7 @@ pub mod config;
 pub mod message;
 
 // Re-export commonly used types
-pub use backend::KafkaBackend;
+pub use backend::{KafkaBackend, ConsumerId, ConsumerMetrics, MessageCallback, PartitionAssignment};
 pub use config::{
     KafkaAcks, KafkaCompressionType, KafkaProducerConfig, KafkaProducerStats, KafkaSecurityConfig,
     PartitionStrategy, SaslConfig, SaslMechanism, SchemaRegistryConfig, SecurityProtocol,
@@ -18,3 +18,6 @@ pub use message::KafkaEvent;
 
 // Type alias for producer (KafkaBackend acts as the producer)
 pub type KafkaProducer = KafkaBackend;
+
+// Type alias for consumer (KafkaBackend acts as the consumer manager)
+pub type KafkaConsumer = KafkaBackend;

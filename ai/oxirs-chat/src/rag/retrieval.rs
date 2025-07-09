@@ -3,17 +3,15 @@
 //! Implements semantic search, graph traversal, hybrid retrieval,
 //! and intelligent document ranking and filtering.
 
-use super::quantum::{QuantumRanker, QuantumSearchResult};
+use super::quantum::QuantumRanker;
 use super::types::*;
-use anyhow::{anyhow, Result};
-use async_trait::async_trait;
+use anyhow::Result;
 use oxirs_core::Store;
-use oxirs_vec::{SearchResult as VectorSearchResult, Vector, VectorIndex};
-use serde::{Deserialize, Serialize};
+use oxirs_vec::{Vector, VectorIndex};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Multi-stage retrieval engine
 pub struct MultiStageRetrieval {
@@ -196,6 +194,12 @@ pub struct SemanticRetriever {
     embedding_cache: Arc<RwLock<HashMap<String, Vec<f32>>>>,
 }
 
+impl Default for SemanticRetriever {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SemanticRetriever {
     pub fn new() -> Self {
         Self {
@@ -223,7 +227,7 @@ impl SemanticRetriever {
                 SearchResult::new(
                     RagDocument::new(
                         id.clone(),
-                        format!("Content for document {}", id),
+                        format!("Content for document {id}"),
                         "vector_index".to_string(),
                     ),
                     score.into(),
@@ -268,6 +272,12 @@ impl SemanticRetriever {
 /// Graph-based retrieval using SPARQL queries
 pub struct GraphRetriever {
     query_cache: Arc<RwLock<HashMap<String, Vec<SearchResult>>>>,
+}
+
+impl Default for GraphRetriever {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GraphRetriever {
@@ -344,6 +354,12 @@ pub struct HybridRetriever {
     fusion_weights: HashMap<String, f64>,
 }
 
+impl Default for HybridRetriever {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HybridRetriever {
     pub fn new() -> Self {
         let mut weights = HashMap::new();
@@ -393,13 +409,13 @@ impl HybridRetriever {
             .map(|(i, &keyword)| {
                 SearchResult::new(
                     RagDocument::new(
-                        format!("keyword_result_{}", i),
-                        format!("Document containing keyword: {}", keyword),
+                        format!("keyword_result_{i}"),
+                        format!("Document containing keyword: {keyword}"),
                         "keyword_search".to_string(),
                     ),
                     0.7 - (i as f64 * 0.1),
                 )
-                .add_relevance_factor(format!("keyword_match: {}", keyword))
+                .add_relevance_factor(format!("keyword_match: {keyword}"))
             })
             .collect();
 
@@ -412,7 +428,7 @@ impl HybridRetriever {
         vector_index: &Arc<dyn VectorIndex>,
     ) -> Result<Vec<SearchResult>> {
         // Enhanced semantic search with query expansion
-        let expanded_query = format!("{} related context information", query);
+        let expanded_query = format!("{query} related context information");
 
         // Use semantic retriever logic (simplified)
         let semantic_retriever = SemanticRetriever::new();

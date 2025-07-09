@@ -3,7 +3,6 @@
 //! This module contains the fundamental types, enums, and configuration
 //! structures used throughout the analytics system.
 
-use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,

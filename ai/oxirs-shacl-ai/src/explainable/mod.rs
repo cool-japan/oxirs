@@ -21,21 +21,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{
-    constraints::*, Shape, ShapeId, ValidationConfig, ValidationReport, ValidationViolation,
-};
+use oxirs_core::Store;
 
-use crate::neural_patterns::{NeuralPattern, NeuralPatternRecognizer};
-use crate::quantum_neural_patterns::{QuantumNeuralPatternRecognizer, QuantumPattern};
-use crate::self_adaptive_ai::{AdaptationResult, PerformanceMetrics};
 use crate::{Result, ShaclAiError};
 
 /// Explainable AI engine for providing interpretability and transparency
@@ -125,8 +114,7 @@ impl ExplainableAI {
             Ok(generator.clone_box())
         } else {
             Err(
-                ShaclAiError::Configuration(format!("Explanation generator '{}' not found", name))
-                    .into(),
+                ShaclAiError::Configuration(format!("Explanation generator '{name}' not found")),
             )
         }
     }
@@ -141,10 +129,8 @@ impl ExplainableAI {
             Ok(analyzer.clone_box())
         } else {
             Err(ShaclAiError::Configuration(format!(
-                "Interpretability analyzer '{}' not found",
-                name
-            ))
-            .into())
+                "Interpretability analyzer '{name}' not found"
+            )))
         }
     }
 
@@ -267,6 +253,12 @@ impl ExplainableAI {
 #[derive(Debug, Clone)]
 pub struct SimpleDecisionTracker {
     history: Vec<DecisionContext>,
+}
+
+impl Default for SimpleDecisionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimpleDecisionTracker {

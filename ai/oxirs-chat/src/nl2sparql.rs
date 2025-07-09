@@ -4,7 +4,7 @@
 //! with validation, optimization, and explanation features.
 
 use anyhow::{anyhow, Result};
-use handlebars::{Handlebars, Template};
+use handlebars::Handlebars;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -12,19 +12,19 @@ use std::{
     fs,
     path::Path,
     sync::Arc,
-    time::Duration,
 };
 use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info, warn};
 
 use crate::{
     llm::{ChatMessage, ChatRole, LLMManager, LLMRequest, Priority, UseCase},
-    rag::{ExtractedEntity, ExtractedRelationship, QueryContext, QueryIntent},
+    rag::QueryContext,
 };
-use oxirs_core::{query::QueryResult, Store};
+use oxirs_core::Store;
 
 /// NL2SPARQL system configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NL2SPARQLConfig {
     pub generation: GenerationConfig,
     pub templates: TemplateConfig,
@@ -33,17 +33,6 @@ pub struct NL2SPARQLConfig {
     pub explanation: ExplanationConfig,
 }
 
-impl Default for NL2SPARQLConfig {
-    fn default() -> Self {
-        Self {
-            generation: GenerationConfig::default(),
-            templates: TemplateConfig::default(),
-            validation: ValidationConfig::default(),
-            optimization: OptimizationConfig::default(),
-            explanation: ExplanationConfig::default(),
-        }
-    }
-}
 
 /// Generation strategy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -516,7 +505,7 @@ impl NL2SPARQLSystem {
                                 let mut string_binding = HashMap::new();
                                 for var in binding.variables() {
                                     if let Some(term) = binding.get(var) {
-                                        string_binding.insert(var.clone(), format!("{}", term));
+                                        string_binding.insert(var.clone(), format!("{term}"));
                                     }
                                 }
                                 bindings.push(string_binding);
@@ -543,7 +532,7 @@ impl NL2SPARQLSystem {
                                 quad_binding
                                     .insert("object".to_string(), format!("{}", quad.object()));
                                 let graph = quad.graph_name();
-                                quad_binding.insert("graph".to_string(), format!("{}", graph));
+                                quad_binding.insert("graph".to_string(), format!("{graph}"));
                                 quad_binding.insert("quad_index".to_string(), index.to_string());
                                 bindings.push(quad_binding);
                             }
@@ -848,14 +837,14 @@ LIMIT {{limit}}
         let template = self.select_template(query_context)?;
 
         // Extract parameters from the query
-        let parameters = self.extract_parameters(&template, query_context)?;
+        let parameters = self.extract_parameters(template, query_context)?;
 
         // Fill template with parameters
-        let sparql_query = self.fill_template(&template, &parameters)?;
+        let sparql_query = self.fill_template(template, &parameters)?;
 
         // Calculate confidence based on template quality and parameter extraction
         let confidence =
-            self.calculate_template_confidence(&template, &parameters, query_context)?;
+            self.calculate_template_confidence(template, &parameters, query_context)?;
 
         Ok(SPARQLGenerationResult {
             query: sparql_query,
@@ -896,8 +885,7 @@ LIMIT {{limit}}
                 .map(|msg| msg.content.as_str())
                 .unwrap_or("Unknown query");
             let user_message = format!(
-                "Convert this natural language query to SPARQL: {}",
-                query_text
+                "Convert this natural language query to SPARQL: {query_text}"
             );
 
             let llm_request = LLMRequest {
@@ -1046,11 +1034,11 @@ LIMIT {{limit}}
             for entity in entity_group {
                 // Treat all entities as potential subjects/objects
                 if entity.starts_with("http") || entity.starts_with("urn:") {
-                    subjects.push(format!("<{}>", entity));
+                    subjects.push(format!("<{entity}>"));
                 } else {
-                    objects.push(format!("\"{}\"", entity));
+                    objects.push(format!("\"{entity}\""));
                 }
-                parameters.insert(format!("entity_{}", entity), entity.clone());
+                parameters.insert(format!("entity_{entity}"), entity.clone());
             }
         }
 
@@ -1086,8 +1074,7 @@ LIMIT {{limit}}
             });
 
             format!(
-                "SELECT (COUNT(*) AS ?count) WHERE {{\n  {} {} {} .\n}}",
-                subject_var, predicate, object_var
+                "SELECT (COUNT(*) AS ?count) WHERE {{\n  {subject_var} {predicate} {object_var} .\n}}"
             )
         } else if ask_query {
             // Generate ASK query
@@ -1096,8 +1083,7 @@ LIMIT {{limit}}
             let object = if objects.is_empty() { "?o" } else { &objects[0] };
 
             format!(
-                "ASK {{\n  {} {} {} .\n}}",
-                subject, predicate, object
+                "ASK {{\n  {subject} {predicate} {object} .\n}}"
             )
         } else {
             // Generate basic SELECT query
@@ -1178,7 +1164,7 @@ LIMIT {{limit}}
                     step_type: ReasoningStepType::EntityExtraction,
                     description: "Analyzed natural language for query patterns".to_string(),
                     input: query_text.clone(),
-                    output: format!("Detected: select={}, count={}, ask={}", select_query, count_query, ask_query),
+                    output: format!("Detected: select={select_query}, count={count_query}, ask={ask_query}"),
                     confidence: 0.8,
                 },
                 ReasoningStep {
@@ -1388,12 +1374,11 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         let method_description = match result.generation_method {
             GenerationMethod::Template(ref template_name) => {
                 format!(
-                    "Selected template-based generation using template: {}",
-                    template_name
+                    "Selected template-based generation using template: {template_name}"
                 )
             }
             GenerationMethod::LLM(ref model_name) => {
-                format!("Selected LLM-based generation using model: {}", model_name)
+                format!("Selected LLM-based generation using model: {model_name}")
             }
             GenerationMethod::Hybrid => {
                 "Selected hybrid approach combining template and LLM generation".to_string()
@@ -1414,7 +1399,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
             let parameters_description = result
                 .parameters
                 .iter()
-                .map(|(k, v)| format!("{}: {}", k, v))
+                .map(|(k, v)| format!("{k}: {v}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
@@ -1484,7 +1469,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
 
         // Generate natural language explanation
         let natural_language = self
-            .generate_natural_language_explanation(query_text, &result, &reasoning_steps)
+            .generate_natural_language_explanation(query_text, result, &reasoning_steps)
             .await?;
 
         Ok(QueryExplanation {
@@ -1504,7 +1489,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
     ) -> Result<String> {
         let mut explanation = String::new();
 
-        explanation.push_str(&format!("For your query '{}', I:\n\n", query_text));
+        explanation.push_str(&format!("For your query '{query_text}', I:\n\n"));
 
         for (i, step) in reasoning_steps.iter().enumerate() {
             explanation.push_str(&format!("{}. {}\n", i + 1, step.description));
@@ -1545,7 +1530,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         let mut confidence_factors = Vec::new();
 
         // Factor 1: Template specificity (0.6-1.0)
-        let specificity_score = if template.parameters.len() > 0 {
+        let specificity_score = if !template.parameters.is_empty() {
             0.6 + (template.parameters.len() as f32 * 0.1).min(0.4)
         } else {
             0.6
@@ -1605,7 +1590,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
 
         let base_confidence =
             confidence_factors.iter().sum::<f32>() / confidence_factors.len() as f32;
-        let template_bonus = if template.examples.len() > 0 {
+        let template_bonus = if !template.examples.is_empty() {
             0.05
         } else {
             0.0
@@ -1685,6 +1670,12 @@ pub struct SPARQLValidator {
     common_prefixes: HashMap<String, String>,
 }
 
+impl Default for SPARQLValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SPARQLValidator {
     pub fn new() -> Self {
         let mut syntax_patterns = HashMap::new();
@@ -1749,7 +1740,7 @@ impl SPARQLValidator {
     pub fn validate(&self, query: &str) -> Result<ValidationResult> {
         let mut syntax_errors = Vec::new();
         let mut semantic_warnings = Vec::new();
-        let mut schema_issues = Vec::new();
+        let schema_issues = Vec::new();
         let mut suggestions = Vec::new();
 
         // Basic syntax validation
@@ -1813,8 +1804,7 @@ impl SPARQLValidator {
         if open_braces != close_braces {
             syntax_errors.push(SyntaxError {
                 message: format!(
-                    "Unbalanced braces: {} open, {} close",
-                    open_braces, close_braces
+                    "Unbalanced braces: {open_braces} open, {close_braces} close"
                 ),
                 position: None,
                 error_type: SyntaxErrorType::InvalidSyntax,
@@ -1912,10 +1902,10 @@ impl SPARQLValidator {
                 ));
             } else if !declared_prefixes.contains(prefix) {
                 syntax_errors.push(SyntaxError {
-                    message: format!("Undeclared prefix: {}", prefix),
+                    message: format!("Undeclared prefix: {prefix}"),
                     position: None,
                     error_type: SyntaxErrorType::UnknownPrefix,
-                    suggestion: Some(format!("Declare prefix {} or use full IRI", prefix)),
+                    suggestion: Some(format!("Declare prefix {prefix} or use full IRI")),
                 });
             }
         }
@@ -1971,6 +1961,12 @@ struct OptimizationRule {
     replacement: String,
     description: String,
     estimated_improvement: f32,
+}
+
+impl Default for SPARQLOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SPARQLOptimizer {

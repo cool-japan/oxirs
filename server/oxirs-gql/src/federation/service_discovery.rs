@@ -154,16 +154,16 @@ impl ServiceDiscovery {
             .build()
             .expect("Failed to create HTTP client");
 
-        let discovery = Self {
+        
+
+        Self {
             config,
             services: Arc::new(RwLock::new(HashMap::new())),
             backends: Vec::new(),
             event_handlers: Arc::new(RwLock::new(Vec::new())),
             http_client,
             health_checks: Arc::new(Mutex::new(HashMap::new())),
-        };
-
-        discovery
+        }
     }
 
     /// Add a service discovery backend

@@ -178,9 +178,10 @@ impl QueryOptimizer {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", document).hash(&mut hasher);
-        format!("{:?}", variables).hash(&mut hasher);
-        format!("query_{}", hasher.finish())
+        format!("{document:?}").hash(&mut hasher);
+        format!("{variables:?}").hash(&mut hasher);
+        let finish = hasher.finish();
+        format!("query_{finish}")
     }
 
     /// Optimize field selections for batching
@@ -235,7 +236,7 @@ impl QueryOptimizer {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", document).hash(&mut hasher);
+        format!("{document:?}").hash(&mut hasher);
         hasher.finish()
     }
 
@@ -293,6 +294,7 @@ impl QueryOptimizer {
 
 /// Query complexity analyzer
 pub struct ComplexityAnalyzer {
+    #[allow(dead_code)]
     config: OptimizationConfig,
 }
 
@@ -406,6 +408,7 @@ impl ComplexityAnalyzer {
 
 /// Query planner for optimizing SPARQL generation
 pub struct QueryPlanner {
+    #[allow(dead_code)]
     config: OptimizationConfig,
 }
 
@@ -457,7 +460,7 @@ impl QueryPlanner {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", document).hash(&mut hasher);
+        format!("{document:?}").hash(&mut hasher);
         hasher.finish()
     }
 
@@ -578,7 +581,7 @@ impl QueryPlanner {
         let select_vars: Vec<String> = field_analysis
             .field_names
             .iter()
-            .map(|name| format!("?{}", name))
+            .map(|name| format!("?{name}"))
             .collect();
 
         if select_vars.is_empty() {
@@ -616,14 +619,14 @@ impl QueryPlanner {
 
         // Add filter conditions
         for condition in &field_analysis.filter_conditions {
-            where_patterns.push(format!("FILTER({})", condition));
+            where_patterns.push(format!("FILTER({condition})"));
         }
 
         sparql_parts.push(format!("WHERE {{ {} }}", where_patterns.join(" . ")));
 
         // Add optimization hints as comments
         for hint in hints {
-            sparql_parts.push(format!("# HINT: {}", hint));
+            sparql_parts.push(format!("# HINT: {hint}"));
         }
 
         // Add LIMIT if suggested

@@ -334,7 +334,7 @@ impl CompletionProvider for CommandCompletionProvider {
                 if context.current_word.starts_with('-') {
                     for opt in &cmd_info.options {
                         if let Some(short) = opt.short {
-                            let short_opt = format!("-{}", short);
+                            let short_opt = format!("-{short}");
                             if short_opt.starts_with(&context.current_word) {
                                 completions.push(CompletionItem {
                                     replacement: short_opt.clone(),
@@ -441,7 +441,7 @@ fn complete_files(prefix: &str, extensions: Option<&Vec<String>>) -> Vec<Complet
             }
 
             if path.is_dir() {
-                let display = format!("{}/", name_str);
+                let display = format!("{name_str}/");
                 completions.push(CompletionItem {
                     replacement: display.clone(),
                     display,
@@ -493,7 +493,7 @@ fn complete_directories(prefix: &str) -> Vec<CompletionItem> {
                 let name_str = name.to_string_lossy();
 
                 if name_str.starts_with(dir_prefix) {
-                    let display = format!("{}/", name_str);
+                    let display = format!("{name_str}/");
                     completions.push(CompletionItem {
                         replacement: display.clone(),
                         display,
@@ -512,7 +512,7 @@ fn complete_directories(prefix: &str) -> Vec<CompletionItem> {
 fn complete_datasets(prefix: &str) -> Vec<CompletionItem> {
     // Try to load configuration and get actual dataset names
     let datasets = if let Ok(mut config_manager) = crate::config::ConfigManager::new() {
-        if let Ok(_) = config_manager.load_profile("default") {
+        if config_manager.load_profile("default").is_ok() {
             if let Ok(config) = config_manager.get_config() {
                 // Get dataset names from configuration
                 config.datasets.keys().cloned().collect::<Vec<_>>()

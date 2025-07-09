@@ -1,44 +1,27 @@
 //! Utility types and functions for quantum neural patterns
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
 /// Gate count analyzer for circuit complexity
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct GateCountAnalyzer {
     pub total_gates: usize,
     pub gate_types: HashMap<String, usize>,
     pub depth_analysis: Option<String>,
 }
 
-impl Default for GateCountAnalyzer {
-    fn default() -> Self {
-        Self {
-            total_gates: 0,
-            gate_types: HashMap::new(),
-            depth_analysis: None,
-        }
-    }
-}
 
 /// Circuit depth analyzer
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct CircuitDepthAnalyzer {
     pub total_depth: usize,
     pub critical_path: Vec<String>,
     pub parallelization_opportunities: Vec<String>,
 }
 
-impl Default for CircuitDepthAnalyzer {
-    fn default() -> Self {
-        Self {
-            total_depth: 0,
-            critical_path: Vec::new(),
-            parallelization_opportunities: Vec::new(),
-        }
-    }
-}
 
 /// Connectivity analyzer for quantum hardware
 #[derive(Debug, Clone)]
@@ -60,6 +43,7 @@ impl Default for ConnectivityAnalyzer {
 
 /// Random circuit benchmark results
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct RandomCircuitBenchmark {
     pub circuit_depth: usize,
     pub num_qubits: usize,
@@ -67,16 +51,6 @@ pub struct RandomCircuitBenchmark {
     pub execution_times: Vec<Duration>,
 }
 
-impl Default for RandomCircuitBenchmark {
-    fn default() -> Self {
-        Self {
-            circuit_depth: 0,
-            num_qubits: 0,
-            fidelity_scores: Vec::new(),
-            execution_times: Vec::new(),
-        }
-    }
-}
 
 /// Verification protocol for quantum computations
 #[derive(Debug, Clone)]
@@ -98,19 +72,12 @@ impl Default for VerificationProtocol {
 
 /// Von Neumann entropy calculator
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct VonNeumannEntropyCalculator {
     pub entropy_values: Vec<f64>,
     pub subsystem_entropies: HashMap<String, f64>,
 }
 
-impl Default for VonNeumannEntropyCalculator {
-    fn default() -> Self {
-        Self {
-            entropy_values: Vec::new(),
-            subsystem_entropies: HashMap::new(),
-        }
-    }
-}
 
 /// Rényi entropy calculator
 #[derive(Debug, Clone)]
@@ -270,88 +237,49 @@ impl Default for CliffordDataRegressor {
 
 /// Circuit complexity analyzer aggregator
 #[derive(Debug)]
+#[derive(Default)]
 pub struct CircuitComplexityAnalyzer {
     pub gate_count_analyzer: GateCountAnalyzer,
     pub depth_analyzer: CircuitDepthAnalyzer,
     pub connectivity_analyzer: ConnectivityAnalyzer,
 }
 
-impl Default for CircuitComplexityAnalyzer {
-    fn default() -> Self {
-        Self {
-            gate_count_analyzer: GateCountAnalyzer::default(),
-            depth_analyzer: CircuitDepthAnalyzer::default(),
-            connectivity_analyzer: ConnectivityAnalyzer::default(),
-        }
-    }
-}
 
 /// Quantum benchmarking suite
 #[derive(Debug)]
+#[derive(Default)]
 pub struct QuantumBenchmarkSuite {
     pub random_circuit_benchmarks: Vec<RandomCircuitBenchmark>,
     pub verification_protocols: Vec<VerificationProtocol>,
 }
 
-impl Default for QuantumBenchmarkSuite {
-    fn default() -> Self {
-        Self {
-            random_circuit_benchmarks: Vec::new(),
-            verification_protocols: Vec::new(),
-        }
-    }
-}
 
 /// Entanglement entropy calculator aggregator
 #[derive(Debug)]
+#[derive(Default)]
 pub struct EntanglementEntropyCalculator {
     pub von_neumann_entropy: VonNeumannEntropyCalculator,
     pub renyi_entropy: RenyiEntropyCalculator,
     pub schmidt_decomposition: SchmidtDecomposer,
 }
 
-impl Default for EntanglementEntropyCalculator {
-    fn default() -> Self {
-        Self {
-            von_neumann_entropy: VonNeumannEntropyCalculator::default(),
-            renyi_entropy: RenyiEntropyCalculator::default(),
-            schmidt_decomposition: SchmidtDecomposer::default(),
-        }
-    }
-}
 
 /// Quantum volume estimator
 #[derive(Debug)]
+#[derive(Default)]
 pub struct QuantumVolumeEstimator {
     pub ideal_simulator: IdealQuantumSimulator,
     pub noise_model: QuantumNoiseModel,
     pub volume_metrics: VolumeMetrics,
 }
 
-impl Default for QuantumVolumeEstimator {
-    fn default() -> Self {
-        Self {
-            ideal_simulator: IdealQuantumSimulator::default(),
-            noise_model: QuantumNoiseModel::default(),
-            volume_metrics: VolumeMetrics::default(),
-        }
-    }
-}
 
 /// Quantum error mitigator
 #[derive(Debug)]
+#[derive(Default)]
 pub struct QuantumErrorMitigator {
     pub zero_noise_extrapolation: ZeroNoiseExtrapolator,
     pub symmetry_verification: SymmetryVerifier,
     pub clifford_data_regression: CliffordDataRegressor,
 }
 
-impl Default for QuantumErrorMitigator {
-    fn default() -> Self {
-        Self {
-            zero_noise_extrapolation: ZeroNoiseExtrapolator::default(),
-            symmetry_verification: SymmetryVerifier::default(),
-            clifford_data_regression: CliffordDataRegressor::default(),
-        }
-    }
-}

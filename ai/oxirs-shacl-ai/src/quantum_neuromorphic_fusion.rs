@@ -14,35 +14,16 @@
 //! - Quantum-enhanced synaptic plasticity
 //! - Hybrid quantum-classical optimization algorithms
 
-use async_trait::async_trait;
-use dashmap::DashMap;
-use nalgebra::{Complex, DMatrix, DVector, Vector3};
-use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
+use std::time::{Duration, SystemTime};
+use tokio::sync::RwLock;
+use tokio::time::interval;
+use tracing::{debug, info};
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
 
-use crate::biological_neural_integration::{
-    BiologicalNeuralIntegrator, BiologicalValidationContext,
-};
-use crate::evolutionary_neural_architecture::EvolutionaryNeuralArchitecture;
-use crate::neuromorphic_validation::{NeuromorphicValidationNetwork, SpikeEvent};
-use crate::quantum_consciousness_entanglement::QuantumConsciousnessEntanglement;
-use crate::quantum_neural_patterns::QuantumPattern;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Quantum neuromorphic fusion system for hybrid quantum-biological processing
 #[derive(Debug)]
@@ -263,8 +244,8 @@ impl QuantumNeuromorphicFusion {
             .await;
 
         Ok(QuantumBiologicalValidationResult {
-            quantum_validation_results: QuantumValidationResults::default(),
-            biological_validation_results: BiologicalValidationResults::default(),
+            quantum_validation_results: QuantumValidationResults,
+            biological_validation_results: BiologicalValidationResults,
             hybrid_coherence_level: decoherence_mitigation.coherence_level,
             entanglement_fidelity: entanglement_setup.entanglement_fidelity,
             tunneling_efficiency: tunneling_processing.tunneling_efficiency,
@@ -858,7 +839,7 @@ impl BiologicalQuantumEntanglementCoordinator {
         pairs: &[BiologicalQuantumEntanglementPair],
     ) -> Result<BellStateDistribution> {
         // Analyze the distribution of Bell states
-        Ok(BellStateDistribution::default()) // Placeholder implementation
+        Ok(BellStateDistribution) // Placeholder implementation
     }
 }
 
@@ -896,19 +877,19 @@ pub struct QuantumFusionConfig {
 impl Default for QuantumFusionConfig {
     fn default() -> Self {
         Self {
-            quantum_config: QuantumProcessingConfig::default(),
-            biological_config: BiologicalProcessingConfig::default(),
-            interface_config: InterfaceConfig::default(),
-            sync_config: SynchronizationConfig::default(),
-            optimization_config: OptimizationConfig::default(),
+            quantum_config: QuantumProcessingConfig,
+            biological_config: BiologicalProcessingConfig,
+            interface_config: InterfaceConfig,
+            sync_config: SynchronizationConfig,
+            optimization_config: OptimizationConfig,
             coherence_config: CoherenceConfig::default(),
-            coherence_optimization_config: CoherenceOptimizationConfig::default(),
-            entanglement_config: EntanglementConfig::default(),
+            coherence_optimization_config: CoherenceOptimizationConfig,
+            entanglement_config: EntanglementConfig,
             optimization_interval_ms: 10000, // 10 seconds
             min_coherence_threshold: 0.7,
             min_entanglement_fidelity: 0.85,
-            error_correction_params: ErrorCorrectionParams::default(),
-            decoherence_mitigation_params: DecoherenceMitigationParams::default(),
+            error_correction_params: ErrorCorrectionParams,
+            decoherence_mitigation_params: DecoherenceMitigationParams,
         }
     }
 }
@@ -951,6 +932,12 @@ pub struct QuantumFusionMetrics {
     pub decoherence_mitigation_effectiveness: f64,
     pub hybrid_processing_efficiency: f64,
     pub quantum_biological_correlation_strength: f64,
+}
+
+impl Default for QuantumFusionMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QuantumFusionMetrics {
@@ -1048,15 +1035,15 @@ pub struct CoherenceConfig {
 
 impl CoherenceConfig {
     fn create_monitors(&self) -> Vec<CoherenceMonitor> {
-        vec![CoherenceMonitor::default(); 3]
+        vec![CoherenceMonitor; 3]
     }
 
     fn create_controllers(&self) -> Vec<CoherenceController> {
-        vec![CoherenceController::default(); 2]
+        vec![CoherenceController; 2]
     }
 
     fn create_predictors(&self) -> Vec<DecoherencePredictor> {
-        vec![DecoherencePredictor::default(); 2]
+        vec![DecoherencePredictor; 2]
     }
 }
 
@@ -1068,19 +1055,19 @@ pub struct EntanglementConfig;
 
 impl EntanglementConfig {
     fn create_generators(&self) -> Vec<BiologicalQuantumEntanglementGenerator> {
-        vec![BiologicalQuantumEntanglementGenerator::default(); 2]
+        vec![BiologicalQuantumEntanglementGenerator; 2]
     }
 
     fn create_managers(&self) -> Vec<EntanglementManager> {
-        vec![EntanglementManager::default(); 2]
+        vec![EntanglementManager; 2]
     }
 
     fn create_fidelity_monitors(&self) -> Vec<EntanglementFidelityMonitor> {
-        vec![EntanglementFidelityMonitor::default(); 3]
+        vec![EntanglementFidelityMonitor; 3]
     }
 
     fn create_bell_controllers(&self) -> Vec<BellStateController> {
-        vec![BellStateController::default(); 2]
+        vec![BellStateController; 2]
     }
 }
 
@@ -1099,11 +1086,11 @@ impl QuantumProcessingSubsystem {
     }
 
     async fn initialize(&mut self) -> Result<QuantumSubsystemInit> {
-        Ok(QuantumSubsystemInit::default())
+        Ok(QuantumSubsystemInit)
     }
 
     async fn measure_quantum_state(&mut self) -> Result<QuantumMeasurement> {
-        Ok(QuantumMeasurement::default())
+        Ok(QuantumMeasurement)
     }
 }
 
@@ -1116,11 +1103,11 @@ impl BiologicalProcessingSubsystem {
     }
 
     async fn initialize(&mut self) -> Result<BiologicalSubsystemInit> {
-        Ok(BiologicalSubsystemInit::default())
+        Ok(BiologicalSubsystemInit)
     }
 
     async fn measure_biological_state(&mut self) -> Result<BiologicalMeasurement> {
-        Ok(BiologicalMeasurement::default())
+        Ok(BiologicalMeasurement)
     }
 
     async fn adjust_for_quantum_coherence(&mut self) -> Result<()> {
@@ -1141,7 +1128,7 @@ impl QuantumBiologicalInterface {
         _quantum_init: &QuantumSubsystemInit,
         _biological_init: &BiologicalSubsystemInit,
     ) -> Result<InterfaceInit> {
-        Ok(InterfaceInit::default())
+        Ok(InterfaceInit)
     }
 
     async fn analyze_quantum_biological_coherence(
@@ -1162,7 +1149,7 @@ impl QuantumBiologicalStateSynchronizer {
     }
 
     async fn start_synchronization(&mut self) -> Result<SynchronizationInit> {
-        Ok(SynchronizationInit::default())
+        Ok(SynchronizationInit)
     }
 }
 
@@ -1175,7 +1162,7 @@ impl HybridPerformanceOptimizer {
     }
 
     async fn initialize(&mut self) -> Result<OptimizerInit> {
-        Ok(OptimizerInit::default())
+        Ok(OptimizerInit)
     }
 
     async fn calculate_quantum_advantage(
@@ -1230,7 +1217,7 @@ impl DecoherencePredictor {
         &self,
         _measurements: &[CoherenceMeasurement],
     ) -> Result<DecoherencePrediction> {
-        Ok(DecoherencePrediction::default())
+        Ok(DecoherencePrediction)
     }
 }
 
@@ -1486,7 +1473,7 @@ impl QuantumTunnelingProcessor {
     }
 
     async fn initialize_tunneling_system(&mut self) -> Result<TunnelingSystemInitResult> {
-        Ok(TunnelingSystemInitResult::default())
+        Ok(TunnelingSystemInitResult)
     }
 
     async fn process_validation_through_tunneling(
@@ -1513,14 +1500,14 @@ impl SuperpositionValidationEngine {
     }
 
     async fn initialize_superposition_engine(&mut self) -> Result<SuperpositionEngineInitResult> {
-        Ok(SuperpositionEngineInitResult::default())
+        Ok(SuperpositionEngineInitResult)
     }
 
     async fn prepare_validation_superposition(
         &mut self,
         _context: &QuantumBiologicalValidationContext,
     ) -> Result<QuantumPreparation> {
-        Ok(QuantumPreparation::default())
+        Ok(QuantumPreparation)
     }
 }
 
@@ -1533,7 +1520,7 @@ impl QuantumBiologicalErrorCorrector {
     }
 
     async fn initialize_error_correction(&mut self) -> Result<ErrorCorrectionInitResult> {
-        Ok(ErrorCorrectionInitResult::default())
+        Ok(ErrorCorrectionInitResult)
     }
 
     async fn correct_biological_quantum_errors(
@@ -1579,7 +1566,7 @@ impl HybridQuantumClassicalOptimizer {
         _plasticity: &PlasticityEnhancement,
         _context: &QuantumBiologicalValidationContext,
     ) -> Result<OptimizationResults> {
-        Ok(OptimizationResults::default())
+        Ok(OptimizationResults)
     }
 }
 
@@ -1592,7 +1579,7 @@ impl QuantumDecoherenceManager {
     }
 
     async fn start_decoherence_monitoring(&mut self) -> Result<DecoherenceMonitoringInitResult> {
-        Ok(DecoherenceMonitoringInitResult::default())
+        Ok(DecoherenceMonitoringInitResult)
     }
 
     async fn mitigate_decoherence_effects(

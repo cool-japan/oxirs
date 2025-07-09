@@ -92,14 +92,18 @@ mod instant_serde {
 
 /// Join optimization for federated queries
 pub struct JoinOptimizer {
+    #[allow(dead_code)]
     cost_model: CostModel,
 }
 
 /// Cost model for query planning
 #[derive(Debug, Clone)]
 pub struct CostModel {
+    #[allow(dead_code)]
     network_latency_ms: f64,
+    #[allow(dead_code)]
     transfer_cost_per_mb: f64,
+    #[allow(dead_code)]
     local_processing_cost: f64,
 }
 
@@ -339,6 +343,12 @@ impl DatasetFederation {
             indexes: vec!["spo".to_string()], // Default assumption
             last_updated: Instant::now(),
         })
+    }
+}
+
+impl Default for JoinOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

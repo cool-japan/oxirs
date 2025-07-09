@@ -5,9 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use crate::{Result, ShaclAiError};
 use oxirs_shacl::ShapeId;
 
 /// Collaboration engine for managing collaborative shape development
@@ -370,6 +369,12 @@ impl CollaborationEngine {
     }
 }
 
+impl Default for AccessControlManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AccessControlManager {
     pub fn new() -> Self {
         Self {
@@ -377,6 +382,12 @@ impl AccessControlManager {
             role_definitions: HashMap::new(),
             shape_access: HashMap::new(),
         }
+    }
+}
+
+impl Default for WorkflowEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -390,6 +401,12 @@ impl WorkflowEngine {
     }
 }
 
+impl Default for NotificationSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NotificationSystem {
     pub fn new() -> Self {
         Self {
@@ -397,6 +414,12 @@ impl NotificationSystem {
             notification_queue: Vec::new(),
             delivery_channels: HashMap::new(),
         }
+    }
+}
+
+impl Default for ConflictResolver {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -15,10 +15,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, RwLock};
-use tracing::{debug, error, info, warn};
+use tokio::sync::RwLock;
+use tracing::{debug, info, warn};
 use url::Url;
-use uuid::Uuid;
 
 /// Service registry for managing federated endpoints
 #[derive(Debug)]
@@ -395,6 +394,12 @@ pub struct RegistryStats {
     pub last_health_check: Option<DateTime<Utc>>,
 }
 
+impl Default for ServiceRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceRegistry {
     /// Create a new service registry with default configuration
     pub fn new() -> Self {
@@ -665,29 +670,302 @@ impl ServiceRegistry {
         &self,
         endpoint: &SparqlEndpoint,
     ) -> Result<SparqlCapabilities> {
-        // TODO: Implement comprehensive capability detection
-        // For now, return basic capabilities
-        Ok(SparqlCapabilities {
-            sparql_version: SparqlVersion::V11,
-            result_formats: vec![
-                "application/sparql-results+json".to_string(),
-                "application/sparql-results+xml".to_string(),
-            ]
-            .into_iter()
-            .collect(),
-            graph_formats: vec!["text/turtle".to_string(), "application/rdf+xml".to_string()]
-                .into_iter()
-                .collect(),
-            custom_functions: HashSet::new(),
-            max_query_complexity: Some(1000),
-            supports_federation: true,
-            supports_update: false,
-            supports_named_graphs: true,
-            supports_full_text_search: false,
-            supports_geospatial: false,
-            supports_rdf_star: false,
-            service_description: None,
+        debug!("Detecting capabilities for SPARQL endpoint: {}", endpoint.url);
+        
+        let mut capabilities = SparqlCapabilities::default();
+        let endpoint_url = endpoint.url.to_string();
+        
+        // 1. Detect SPARQL version by testing specific features
+        capabilities.sparql_version = self.detect_sparql_version(&endpoint_url).await?;
+        
+        // 2. Test supported result formats
+        capabilities.result_formats = self.detect_result_formats(&endpoint_url).await?;
+        
+        // 3. Test supported graph formats (for data loading)
+        capabilities.graph_formats = self.detect_graph_formats(&endpoint_url).await?;
+        
+        // 4. Detect SPARQL UPDATE support
+        capabilities.supports_update = self.test_update_support(&endpoint_url).await?;
+        
+        // 5. Test for named graph support
+        capabilities.supports_named_graphs = self.test_named_graph_support(&endpoint_url).await?;
+        
+        // 6. Test for federation support (SERVICE clause)
+        capabilities.supports_federation = self.test_federation_support(&endpoint_url).await?;
+        
+        // 7. Test for full-text search capabilities
+        capabilities.supports_full_text_search = self.test_fulltext_support(&endpoint_url).await?;
+        
+        // 8. Test for geospatial capabilities
+        capabilities.supports_geospatial = self.test_geospatial_support(&endpoint_url).await?;
+        
+        // 9. Test for RDF-star support
+        capabilities.supports_rdf_star = self.test_rdf_star_support(&endpoint_url).await?;
+        
+        // 10. Discover custom functions
+        capabilities.custom_functions = self.discover_custom_functions(&endpoint_url).await?;
+        
+        // 11. Try to retrieve service description
+        capabilities.service_description = self.fetch_service_description(&endpoint_url).await.ok();
+        
+        // 12. Estimate query complexity limits
+        capabilities.max_query_complexity = self.estimate_query_complexity_limit(&endpoint_url).await.ok();
+        
+        info!("Capability detection completed for {}: {:?}", endpoint.url, capabilities);
+        Ok(capabilities)
+    }
+
+    /// Detect SPARQL version by testing specific features
+    async fn detect_sparql_version(&self, endpoint_url: &str) -> Result<SparqlVersion> {
+        // Test SPARQL 1.2 features first (IF/COALESCE functions)
+        let sparql_12_query = "SELECT (IF(true, 'yes', 'no') AS ?test) WHERE {}";
+        if self.test_sparql_query(endpoint_url, sparql_12_query).await.is_ok() {
+            return Ok(SparqlVersion::V12);
+        }
+        
+        // Test SPARQL 1.1 features (EXISTS/NOT EXISTS)
+        let sparql_11_query = "SELECT ?s WHERE { ?s ?p ?o . FILTER EXISTS { ?s ?p ?o } }";
+        if self.test_sparql_query(endpoint_url, sparql_11_query).await.is_ok() {
+            return Ok(SparqlVersion::V11);
+        }
+        
+        // Default to SPARQL 1.0
+        Ok(SparqlVersion::V10)
+    }
+    
+    /// Test different result formats
+    async fn detect_result_formats(&self, endpoint_url: &str) -> Result<HashSet<String>> {
+        let mut formats = HashSet::new();
+        let test_query = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1";
+        
+        let format_types = vec![
+            "application/sparql-results+json",
+            "application/sparql-results+xml", 
+            "text/csv",
+            "text/tab-separated-values",
+            "application/json",
+        ];
+        
+        for format in format_types {
+            if self.test_result_format(endpoint_url, test_query, format).await.is_ok() {
+                formats.insert(format.to_string());
+            }
+        }
+        
+        // Ensure at least JSON is supported (fallback)
+        if formats.is_empty() {
+            formats.insert("application/sparql-results+json".to_string());
+        }
+        
+        Ok(formats)
+    }
+    
+    /// Test supported graph formats
+    async fn detect_graph_formats(&self, _endpoint_url: &str) -> Result<HashSet<String>> {
+        // Most SPARQL endpoints support these common formats
+        let mut formats = HashSet::new();
+        formats.insert("text/turtle".to_string());
+        formats.insert("application/rdf+xml".to_string());
+        formats.insert("text/n3".to_string());
+        formats.insert("application/n-triples".to_string());
+        Ok(formats)
+    }
+    
+    /// Test SPARQL UPDATE support
+    async fn test_update_support(&self, endpoint_url: &str) -> Result<bool> {
+        // Try a safe INSERT DATA operation (should fail gracefully if not supported)
+        let update_query = "INSERT DATA { <http://example.org/test> <http://example.org/test> \"test\" }";
+        let update_url = format!("{}update", endpoint_url.trim_end_matches('/'));
+        
+        let response = self.http_client
+            .post(&update_url)
+            .header("Content-Type", "application/sparql-update")
+            .body(update_query)
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await;
+            
+        match response {
+            Ok(resp) => Ok(resp.status().is_success() || resp.status().as_u16() == 400), // 400 might indicate syntax support but operation failed
+            Err(_) => Ok(false),
+        }
+    }
+    
+    /// Test named graph support
+    async fn test_named_graph_support(&self, endpoint_url: &str) -> Result<bool> {
+        let query = "SELECT ?g WHERE { GRAPH ?g { ?s ?p ?o } } LIMIT 1";
+        Ok(self.test_sparql_query(endpoint_url, query).await.is_ok())
+    }
+    
+    /// Test federation support (SERVICE clause)
+    async fn test_federation_support(&self, endpoint_url: &str) -> Result<bool> {
+        // Test if SERVICE clause is recognized (may fail due to endpoint availability but should parse)
+        let query = "SELECT ?s WHERE { SERVICE <http://dbpedia.org/sparql> { ?s ?p ?o } } LIMIT 1";
+        let result = self.test_sparql_query(endpoint_url, query).await;
+        
+        // Accept both success and certain types of failures that indicate parsing worked
+        match result {
+            Ok(_) => Ok(true),
+            Err(e) => {
+                let error_msg = e.to_string().to_lowercase();
+                // If error mentions "service" but not "syntax", likely supports federation
+                Ok(error_msg.contains("service") && !error_msg.contains("syntax") && !error_msg.contains("parse"))
+            }
+        }
+    }
+    
+    /// Test full-text search capabilities
+    async fn test_fulltext_support(&self, endpoint_url: &str) -> Result<bool> {
+        // Test common full-text search patterns
+        let lucene_query = "SELECT ?s WHERE { ?s <http://jena.apache.org/text#query> \"test\" }";
+        if self.test_sparql_query(endpoint_url, lucene_query).await.is_ok() {
+            return Ok(true);
+        }
+        
+        let virtuoso_query = "SELECT ?s WHERE { ?s ?p ?o . ?o bif:contains \"test\" }";
+        if self.test_sparql_query(endpoint_url, virtuoso_query).await.is_ok() {
+            return Ok(true);
+        }
+        
+        Ok(false)
+    }
+    
+    /// Test geospatial capabilities
+    async fn test_geospatial_support(&self, endpoint_url: &str) -> Result<bool> {
+        // Test common geospatial functions
+        let geo_query = "SELECT ?s WHERE { ?s <http://www.opengis.net/ont/geosparql#asWKT> ?geo }";
+        if self.test_sparql_query(endpoint_url, geo_query).await.is_ok() {
+            return Ok(true);
+        }
+        
+        let virtuoso_geo = "SELECT ?s WHERE { ?s ?p ?o . FILTER(bif:st_within(?o, bif:st_point(0, 0), 10)) }";
+        if self.test_sparql_query(endpoint_url, virtuoso_geo).await.is_ok() {
+            return Ok(true);
+        }
+        
+        Ok(false)
+    }
+    
+    /// Test RDF-star support
+    async fn test_rdf_star_support(&self, endpoint_url: &str) -> Result<bool> {
+        let rdf_star_query = "SELECT ?s WHERE { <<?s ?p ?o>> ?meta ?value }";
+        Ok(self.test_sparql_query(endpoint_url, rdf_star_query).await.is_ok())
+    }
+    
+    /// Discover custom functions available
+    async fn discover_custom_functions(&self, endpoint_url: &str) -> Result<HashSet<String>> {
+        let mut functions = HashSet::new();
+        
+        // Try to get function list via service description
+        let sd_query = r#"
+            SELECT DISTINCT ?function WHERE {
+                ?service <http://www.w3.org/ns/sparql-service-description#extensionFunction> ?function
+            }
+        "#;
+        
+        if let Ok(response) = self.test_sparql_query(endpoint_url, sd_query).await {
+            // Parse response to extract function URIs (simplified)
+            // In a real implementation, you'd parse the JSON/XML response properly
+            debug!("Found custom functions via service description");
+        }
+        
+        // Test for common extensions
+        let common_functions = vec![
+            "http://jena.apache.org/text#query",
+            "http://www.openlinksw.com/schemas/bif#contains",
+            "http://www.opengis.net/def/function/geosparql/",
+        ];
+        
+        for func in common_functions {
+            // Try a simple query using the function (may fail but shows if it's recognized)
+            let test_query = format!("SELECT ?x WHERE {{ ?x <{func}> ?y }}");
+            if self.test_sparql_query(endpoint_url, &test_query).await.is_ok() {
+                functions.insert(func.to_string());
+            }
+        }
+        
+        Ok(functions)
+    }
+    
+    /// Fetch service description if available
+    async fn fetch_service_description(&self, endpoint_url: &str) -> Result<ServiceDescription> {
+        let sd_query = r#"
+            SELECT ?defaultGraph ?namedGraph ?language ?propertyFunction WHERE {
+                OPTIONAL { ?service <http://www.w3.org/ns/sparql-service-description#defaultGraph> ?defaultGraph }
+                OPTIONAL { ?service <http://www.w3.org/ns/sparql-service-description#namedGraph> ?namedGraph }
+                OPTIONAL { ?service <http://www.w3.org/ns/sparql-service-description#languageExtension> ?language }
+                OPTIONAL { ?service <http://www.w3.org/ns/sparql-service-description#propertyFeature> ?propertyFunction }
+            }
+        "#;
+        
+        let _response = self.test_sparql_query(endpoint_url, sd_query).await?;
+        
+        // For now, return empty service description
+        // In a real implementation, parse the response to extract actual values
+        Ok(ServiceDescription {
+            default_graphs: vec![],
+            named_graphs: vec![],
+            languages: vec!["SPARQL".to_string()],
+            property_functions: vec![],
         })
+    }
+    
+    /// Estimate query complexity limit by testing increasingly complex queries
+    async fn estimate_query_complexity_limit(&self, endpoint_url: &str) -> Result<u32> {
+        let base_query = "SELECT ?s WHERE { ?s ?p ?o ";
+        let mut complexity = 10;
+        
+        // Test with increasing numbers of triple patterns
+        for i in 1..=10 {
+            let mut query = base_query.to_string();
+            for j in 0..i * 10 {
+                query.push_str(&format!(". ?s{j} ?p{j} ?o{j} "));
+            }
+            query.push_str("} LIMIT 1");
+            
+            if self.test_sparql_query(endpoint_url, &query).await.is_err() {
+                break;
+            }
+            complexity = i * 100;
+        }
+        
+        Ok(complexity)
+    }
+    
+    /// Helper method to test a SPARQL query
+    async fn test_sparql_query(&self, endpoint_url: &str, query: &str) -> Result<String> {
+        let response = self.http_client
+            .post(endpoint_url)
+            .header("Content-Type", "application/sparql-query")
+            .header("Accept", "application/sparql-results+json")
+            .body(query.to_string())
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            Ok(response.text().await?)
+        } else {
+            Err(anyhow!("Query failed: {}", response.status()))
+        }
+    }
+    
+    /// Helper method to test a specific result format
+    async fn test_result_format(&self, endpoint_url: &str, query: &str, format: &str) -> Result<String> {
+        let response = self.http_client
+            .post(endpoint_url)
+            .header("Content-Type", "application/sparql-query")
+            .header("Accept", format)
+            .body(query.to_string())
+            .timeout(Duration::from_secs(5))
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            Ok(response.text().await?)
+        } else {
+            Err(anyhow!("Format {} not supported", format))
+        }
     }
 
     /// Introspect GraphQL service
@@ -695,18 +973,280 @@ impl ServiceRegistry {
         &self,
         service: &GraphQLService,
     ) -> Result<(GraphQLCapabilities, Option<String>)> {
-        // TODO: Implement comprehensive GraphQL introspection
-        // For now, return basic capabilities
-        let capabilities = GraphQLCapabilities {
-            graphql_version: "June 2018".to_string(),
-            supports_subscriptions: false,
-            max_query_depth: Some(10),
-            max_query_complexity: Some(1000),
-            introspection_enabled: true,
-            federation_version: Some("v1.0".to_string()),
+        info!("Introspecting GraphQL service: {}", service.url);
+        
+        let mut capabilities = GraphQLCapabilities::default();
+        let endpoint_url = service.url.to_string();
+        
+        // 1. Check if introspection is enabled and get schema
+        let schema = match self.fetch_graphql_schema(&endpoint_url).await {
+            Ok(schema) => {
+                capabilities.introspection_enabled = true;
+                Some(schema)
+            }
+            Err(_) => {
+                capabilities.introspection_enabled = false;
+                warn!("GraphQL introspection disabled for {}", service.url);
+                None
+            }
         };
+        
+        if let Some(ref schema_content) = schema {
+            // 2. Detect GraphQL specification version
+            capabilities.graphql_version = self.detect_graphql_version(schema_content).await;
+            
+            // 3. Check for subscription support
+            capabilities.supports_subscriptions = self.detect_subscription_support(schema_content).await;
+            
+            // 4. Detect federation version from directives
+            capabilities.federation_version = self.detect_federation_version(schema_content).await;
+            
+            // 5. Estimate query limits
+            if let Ok(depth) = self.estimate_max_query_depth(&endpoint_url).await {
+                capabilities.max_query_depth = Some(depth);
+            }
+            
+            if let Ok(complexity) = self.estimate_max_query_complexity(&endpoint_url).await {
+                capabilities.max_query_complexity = Some(complexity);
+            }
+        }
+        
+        info!("GraphQL introspection completed for {}: {:?}", service.url, capabilities);
+        Ok((capabilities, schema))
+    }
 
-        Ok((capabilities, None))
+    /// Fetch GraphQL schema using introspection
+    async fn fetch_graphql_schema(&self, endpoint_url: &str) -> Result<String> {
+        let introspection_query = r#"
+        query IntrospectionQuery {
+            __schema {
+                queryType { name }
+                mutationType { name }
+                subscriptionType { name }
+                types {
+                    ...FullType
+                }
+                directives {
+                    name
+                    description
+                    locations
+                    args {
+                        ...InputValue
+                    }
+                }
+            }
+        }
+        
+        fragment FullType on __Type {
+            kind
+            name
+            description
+            fields(includeDeprecated: true) {
+                name
+                description
+                args {
+                    ...InputValue
+                }
+                type {
+                    ...TypeRef
+                }
+                isDeprecated
+                deprecationReason
+            }
+            inputFields {
+                ...InputValue
+            }
+            interfaces {
+                ...TypeRef
+            }
+            enumValues(includeDeprecated: true) {
+                name
+                description
+                isDeprecated
+                deprecationReason
+            }
+            possibleTypes {
+                ...TypeRef
+            }
+        }
+        
+        fragment InputValue on __InputValue {
+            name
+            description
+            type { ...TypeRef }
+            defaultValue
+        }
+        
+        fragment TypeRef on __Type {
+            kind
+            name
+            ofType {
+                kind
+                name
+                ofType {
+                    kind
+                    name
+                    ofType {
+                        kind
+                        name
+                        ofType {
+                            kind
+                            name
+                            ofType {
+                                kind
+                                name
+                                ofType {
+                                    kind
+                                    name
+                                    ofType {
+                                        kind
+                                        name
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        "#;
+        
+        let request_body = serde_json::json!({
+            "query": introspection_query
+        });
+        
+        let response = self.http_client
+            .post(endpoint_url)
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .json(&request_body)
+            .timeout(Duration::from_secs(10))
+            .send()
+            .await?;
+            
+        if response.status().is_success() {
+            Ok(response.text().await?)
+        } else {
+            Err(anyhow!("GraphQL introspection failed: {}", response.status()))
+        }
+    }
+    
+    /// Detect GraphQL specification version from schema features
+    async fn detect_graphql_version(&self, schema: &str) -> String {
+        // Check for GraphQL 2021 features (like @oneOf directive)
+        if schema.contains("@oneOf") || schema.contains("__DirectiveLocation.ARGUMENT_DEFINITION") {
+            return "October 2021".to_string();
+        }
+        
+        // Check for GraphQL 2020 features  
+        if schema.contains("@specifiedBy") || schema.contains("__DirectiveLocation.SCALAR") {
+            return "June 2020".to_string();
+        }
+        
+        // Check for GraphQL 2018 features (interfaces implementing interfaces)
+        if schema.contains("interfaces") && schema.contains("__Type") {
+            return "June 2018".to_string();
+        }
+        
+        // Default to 2015 spec
+        "October 2015".to_string()
+    }
+    
+    /// Detect subscription support from schema
+    async fn detect_subscription_support(&self, schema: &str) -> bool {
+        schema.contains("subscriptionType") && !schema.contains("\"subscriptionType\": null")
+    }
+    
+    /// Detect federation version from schema directives
+    async fn detect_federation_version(&self, schema: &str) -> Option<String> {
+        if schema.contains("@federation__") || schema.contains("_service") {
+            if schema.contains("@shareable") || schema.contains("@inaccessible") {
+                return Some("v2.0".to_string());
+            } else if schema.contains("@key") || schema.contains("@external") {
+                return Some("v1.0".to_string());
+            }
+        }
+        None
+    }
+    
+    /// Estimate maximum query depth by testing increasingly deep queries
+    async fn estimate_max_query_depth(&self, endpoint_url: &str) -> Result<u32> {
+        for depth in 1u32..=20u32 {
+            // Create a deeply nested query
+            let mut query = String::from("query { __schema { ");
+            for _ in 0..depth {
+                query.push_str("types { ");
+            }
+            query.push_str("name");
+            for _ in 0..depth {
+                query.push_str(" }");
+            }
+            query.push_str(" } }");
+            
+            let request_body = serde_json::json!({
+                "query": query
+            });
+            
+            let response = self.http_client
+                .post(endpoint_url)
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await;
+                
+            match response {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        return Ok(depth.saturating_sub(1));
+                    }
+                    let text = resp.text().await.unwrap_or_default();
+                    if text.contains("error") && text.contains("depth") {
+                        return Ok(depth.saturating_sub(1));
+                    }
+                }
+                Err(_) => return Ok(depth.saturating_sub(1)),
+            }
+        }
+        Ok(20) // Default if no limit found
+    }
+    
+    /// Estimate maximum query complexity by testing increasingly complex queries
+    async fn estimate_max_query_complexity(&self, endpoint_url: &str) -> Result<u32> {
+        for complexity in &[10, 50, 100, 500, 1000, 5000] {
+            // Create a query with many fields to test complexity limits
+            let mut query = String::from("query { __schema { types { name kind description ");
+            for i in 0..*complexity/10 {
+                query.push_str(&format!("field{i}: name "));
+            }
+            query.push_str("} } }");
+            
+            let request_body = serde_json::json!({
+                "query": query
+            });
+            
+            let response = self.http_client
+                .post(endpoint_url)
+                .header("Content-Type", "application/json")
+                .json(&request_body)
+                .timeout(Duration::from_secs(5))
+                .send()
+                .await;
+                
+            match response {
+                Ok(resp) => {
+                    if !resp.status().is_success() {
+                        return Ok(*complexity);
+                    }
+                    let text = resp.text().await.unwrap_or_default();
+                    if text.contains("error") && (text.contains("complexity") || text.contains("too complex")) {
+                        return Ok(*complexity);
+                    }
+                }
+                Err(_) => return Ok(*complexity),
+            }
+        }
+        Ok(5000) // Default if no limit found
     }
 
     /// Start health monitoring
@@ -774,7 +1314,7 @@ impl ServiceRegistry {
             .post(endpoint.url.clone())
             .header("Content-Type", "application/sparql-query")
             .header("Accept", "application/sparql-results+json")
-            .body(query)
+            .body(query.to_string())
             .send()
             .await
         {

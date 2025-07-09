@@ -2,7 +2,6 @@
 
 use crate::auth::types::{Permission, User};
 use crate::config::UserConfig;
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 /// Permission checker for validating user access

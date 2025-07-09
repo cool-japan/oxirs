@@ -179,6 +179,7 @@ pub struct PluginMetadata {
 /// Type converter trait for custom types
 pub trait TypeConverter: Send + Sync + Debug {
     /// Source type
+    #[allow(clippy::wrong_self_convention)]
     fn from_type(&self) -> &str;
 
     /// Target type
@@ -546,7 +547,7 @@ impl ExtensionRegistry {
     /// Convert value from one type to another
     pub fn convert_value(&self, value: &Value, target_type: &str) -> Result<Value> {
         let source_type = value.type_name();
-        let key = format!("{}:{}", source_type, target_type);
+        let key = format!("{source_type}:{target_type}");
 
         let converters = self
             .type_converters

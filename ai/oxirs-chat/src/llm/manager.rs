@@ -202,6 +202,12 @@ pub struct UsageTracker {
     provider_usage: HashMap<String, ProviderUsage>,
 }
 
+impl Default for UsageTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UsageTracker {
     pub fn new() -> Self {
         Self {
@@ -220,7 +226,7 @@ impl UsageTracker {
         let provider_stats = self
             .provider_usage
             .entry(provider.to_string())
-            .or_insert_with(|| ProviderUsage::new());
+            .or_insert_with(ProviderUsage::new);
 
         provider_stats.requests += 1;
         provider_stats.tokens += tokens;
@@ -233,6 +239,12 @@ pub struct ProviderUsage {
     pub requests: usize,
     pub tokens: usize,
     pub cost: f64,
+}
+
+impl Default for ProviderUsage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProviderUsage {
@@ -490,7 +502,7 @@ impl LLMManager {
             .get(&provider_name)
             .ok_or_else(|| anyhow!("Provider {} not found", provider_name))?;
 
-        let mut response = provider.generate(model, &request).await?;
+        let response = provider.generate(model, &request).await?;
 
         // Track usage
         {
@@ -511,7 +523,7 @@ impl LLMManager {
             .messages
             .iter()
             .map(|m| m.content.as_str())
-            .chain(request.system_prompt.as_ref().map(|s| s.as_str()))
+            .chain(request.system_prompt.as_deref())
             .collect::<Vec<_>>()
             .join(" ");
 
@@ -757,9 +769,9 @@ impl EnhancedLLMManager {
                     let session_guard = session_arc.lock().await;
 
                     // Save session to file
-                    let session_file = path.join(format!("{}.session", session_id));
+                    let session_file = path.join(format!("{session_id}.session"));
 
-                    match Self::save_session_to_file(&*session_guard, &session_file).await {
+                    match Self::save_session_to_file(&session_guard, &session_file).await {
                         Ok(_) => debug!("Saved session: {}", session_id),
                         Err(e) => error!("Failed to save session {}: {}", session_id, e),
                     }
@@ -889,7 +901,7 @@ impl EnhancedLLMManager {
                         anyhow!("Failed to serialize session {}: {}", session_id, e)
                     })?;
 
-                    let session_file = backup_dir.join(format!("{}.json", session_id));
+                    let session_file = backup_dir.join(format!("{session_id}.json"));
                     match tokio::fs::write(&session_file, &session_data).await {
                         Ok(_) => {
                             successful_backups += 1;

@@ -216,6 +216,7 @@ impl Word2VecEmbeddingGenerator {
         file.read_to_end(&mut buffer)?;
 
         // Parse binary format
+        #[allow(unused_assignments)]
         let mut pos = 0;
 
         // Read header
@@ -577,7 +578,7 @@ impl Word2VecEmbeddingGenerator {
         word_embeddings: &[(String, Vec<f32>)],
         method: AggregationMethod,
     ) -> Vec<f32> {
-        let original_method = self.config.aggregation;
+        let _original_method = self.config.aggregation;
         let mut config_clone = self.config.clone();
         config_clone.aggregation = method;
 

@@ -6,10 +6,8 @@
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    sync::{atomic::AtomicU64, Arc},
-    time::{Duration, Instant},
+    time::Duration,
 };
-use tokio::sync::RwLock;
 
 /// LLM Provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

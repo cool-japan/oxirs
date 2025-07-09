@@ -46,7 +46,7 @@ pub struct CachedResult {
 }
 
 /// Query execution strategy
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum ExecutionStrategy {
     /// Always use serial execution
     Serial,
@@ -55,20 +55,17 @@ pub enum ExecutionStrategy {
     /// Use streaming execution for large results
     Streaming,
     /// Adaptive strategy based on query characteristics
+    #[default]
     Adaptive,
-}
-
-impl Default for ExecutionStrategy {
-    fn default() -> Self {
-        ExecutionStrategy::Adaptive
-    }
 }
 
 /// Advanced Query executor with parallel and streaming capabilities
 pub struct QueryExecutor {
     context: ExecutionContext,
+    #[allow(dead_code)]
     function_registry: FunctionRegistry,
     parallel_executor: Option<Arc<parallel::ParallelExecutor>>,
+    #[allow(dead_code)]
     result_cache: Arc<RwLock<HashMap<String, CachedResult>>>,
     execution_strategy: ExecutionStrategy,
 }
@@ -474,6 +471,7 @@ impl QueryExecutor {
     }
 
     /// Estimate query complexity
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_complexity(&self, algebra: &Algebra) -> usize {
         match algebra {
             Algebra::Bgp(patterns) => patterns.len(),
@@ -489,6 +487,7 @@ impl QueryExecutor {
     }
 
     /// Estimate result cardinality
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_cardinality(&self, algebra: &Algebra) -> usize {
         match algebra {
             Algebra::Bgp(patterns) => patterns.len() * 1000, // Rough estimate
@@ -641,7 +640,7 @@ impl QueryExecutor {
             }
             groups
                 .entry(group_key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(binding);
         }
 
@@ -846,7 +845,7 @@ impl QueryExecutor {
                         let string_value = match value {
                             crate::algebra::Term::Literal(lit) => lit.value,
                             crate::algebra::Term::Iri(iri) => iri.to_string(),
-                            crate::algebra::Term::BlankNode(bn) => format!("_:{bn}"),
+                            crate::algebra::Term::BlankNode(bn) => format!("_{bn}"),
                             _ => value.to_string(),
                         };
                         values.push(string_value);
@@ -972,7 +971,7 @@ impl QueryExecutor {
                 .iter()
                 .filter_map(|var| binding.get(var).map(|term| ((*var).clone(), term.clone())))
                 .collect();
-            hash_table.entry(key).or_insert_with(Vec::new).push(binding);
+            hash_table.entry(key).or_default().push(binding);
         }
 
         // Probe with shared variables as keys
@@ -1341,10 +1340,8 @@ impl QueryExecutor {
                 "http://www.w3.org/2001/XMLSchema#string" => !literal.value.is_empty(),
                 _ => !literal.value.is_empty(), // Default: non-empty strings are truthy
             }
-        } else if literal.language.is_some() {
-            !literal.value.is_empty() // Language-tagged strings
         } else {
-            !literal.value.is_empty() // Simple literals
+            !literal.value.is_empty() // Language-tagged strings and simple literals
         }
     }
 
@@ -1705,6 +1702,7 @@ impl QueryExecutor {
     }
 
     /// Create sample binding for pattern
+    #[allow(dead_code)]
     fn create_sample_binding(&self, pattern: &crate::algebra::TriplePattern) -> Result<Solution> {
         let mut solution = Solution::new();
         let mut binding = crate::algebra::Binding::new();

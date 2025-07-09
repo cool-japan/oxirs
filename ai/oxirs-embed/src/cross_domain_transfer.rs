@@ -424,7 +424,7 @@ impl CrossDomainTransferManager {
                     &relation_alignments,
                 )
                 .await?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         // Calculate overall quality
@@ -648,8 +648,8 @@ impl CrossDomainTransferManager {
                     if shift_magnitude > 0.3 {
                         shifts.push(SemanticShift {
                             concept: source_entity.clone(),
-                            source_meaning: format!("Source domain context: {}", source_entity),
-                            target_meaning: format!("Target domain context: {}", target_entity),
+                            source_meaning: format!("Source domain context: {source_entity}"),
+                            target_meaning: format!("Target domain context: {target_entity}"),
                             shift_magnitude,
                             impact: shift_magnitude * 0.5, // Simplified impact calculation
                         });
@@ -1053,7 +1053,7 @@ impl CrossDomainTransferManager {
 
         // Test retention of source domain knowledge
         for entity in source_entities.iter().take(sample_size) {
-            if let Ok(source_embedding) = source.model.get_entity_embedding(entity) {
+            if let Ok(_source_embedding) = source.model.get_entity_embedding(entity) {
                 // Simulate post-adaptation embedding quality degradation
                 let target_entities = self.extract_entities_from_triples(&target.training_data);
                 let domain_overlap = target_entities.contains(entity);
@@ -1179,7 +1179,7 @@ impl CrossDomainTransferManager {
     }
 
     /// Helper: Get source domain neighbors
-    fn get_source_neighbors(&self, entity: &str, source: &DomainModel) -> Vec<String> {
+    fn get_source_neighbors(&self, _entity: &str, source: &DomainModel) -> Vec<String> {
         // Get related entities from source domain
         let relations = source.model.get_relations();
         relations.into_iter().take(5).collect()
@@ -1234,7 +1234,7 @@ pub struct TransferUtils;
 impl TransferUtils {
     /// Create domain characteristics from triples
     pub fn analyze_domain_from_triples(
-        domain_id: String,
+        _domain_id: String,
         triples: &[(String, String, String)],
     ) -> DomainCharacteristics {
         let mut entities = HashSet::new();

@@ -14,36 +14,19 @@
 //! - Intergalactic consciousness bridging
 //! - Cosmic radiation pattern analysis
 
-use async_trait::async_trait;
 use dashmap::DashMap;
-use nalgebra::{DMatrix, DVector, Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::{E, PI};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::f64::consts::PI;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationReport};
 
-use crate::collective_consciousness::{
-    CollectiveConsciousnessNetwork, ConsciousnessAgent, ConsciousnessId,
-};
-use crate::consciousness_validation::{
-    ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext,
-};
-use crate::quantum_consciousness_entanglement::{
-    EntanglementPair, QuantumConsciousnessEntanglement,
-};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Cosmic scale processing system for galaxy-wide validation
 #[derive(Debug)]
@@ -551,7 +534,7 @@ impl CosmicScaleProcessor {
         // Use galactic coordinate system
         let r = (system_id as f64 / self.config.target_stellar_systems as f64) * 50000.0; // 50,000 light-years radius
         let theta = (system_id as f64 * 2.0 * PI * 1.618) % (2.0 * PI); // Golden ratio spiral
-        let z = ((system_id as f64).sin() * 1000.0); // Vertical displacement
+        let z = (system_id as f64).sin() * 1000.0; // Vertical displacement
 
         Ok(StellarCoordinates {
             galactic_radius_ly: r,
@@ -569,7 +552,7 @@ impl CosmicScaleProcessor {
         // Use cosmic coordinate system
         let distance_mpc = (galaxy_index as f64 + 1.0) * 10.0; // 10 Mpc spacing
         let right_ascension = (galaxy_index as f64 * 2.0 * PI / 12.0) % (2.0 * PI);
-        let declination = ((galaxy_index as f64).sin() * PI / 4.0);
+        let declination = (galaxy_index as f64).sin() * PI / 4.0;
 
         Ok(IntergalacticCoordinates {
             distance_mpc,

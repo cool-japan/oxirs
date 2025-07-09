@@ -264,6 +264,7 @@ impl LinearRegressionModel {
 pub struct MLQueryOptimizer {
     config: MLOptimizerConfig,
     base_optimizer: QueryOptimizer,
+    #[allow(dead_code)]
     performance_tracker: Arc<PerformanceTracker>,
     execution_time_model: Arc<RwLock<LinearRegressionModel>>,
     memory_model: Arc<RwLock<LinearRegressionModel>>,

@@ -1,6 +1,6 @@
 //! Enhanced real-time monitoring functionality with advanced metrics and alerting
 
-use crate::performance_analytics::{config::MonitoringConfig, types::PerformanceMetric};
+use crate::performance_analytics::config::MonitoringConfig;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};

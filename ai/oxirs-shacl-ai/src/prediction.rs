@@ -3,19 +3,19 @@
 //! This module implements AI-powered prediction of validation outcomes and performance.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use oxirs_core::{
-    model::{Literal, NamedNode, Term, Triple},
+    model::Term,
     RdfTerm, Store,
 };
 
 use oxirs_shacl::{
-    constraints::*, Constraint, Severity, Shape, ShapeId, ValidationConfig, ValidationReport,
+    Constraint, Shape, ValidationConfig, ValidationReport,
 };
 
-use crate::{patterns::Pattern, ModelTrainingResult, Result, ShaclAiError};
+use crate::{ModelTrainingResult, Result, ShaclAiError};
 
 /// Training data for prediction models
 #[derive(Debug, Clone)]
@@ -202,7 +202,7 @@ impl ValidationPredictor {
         tracing::info!("Training validation prediction model");
 
         let start_time = std::time::Instant::now();
-        let mut success = true;
+        let success = true;
         let mut accuracy = 0.0;
         let mut loss = 0.0;
         let epochs_trained = self.config.model_params.history_window_size;
@@ -844,7 +844,7 @@ impl ValidationPredictor {
 
     /// Count recursive patterns in shapes
     fn count_recursive_patterns(&self, shapes: &[Shape]) -> usize {
-        let mut recursive_count = 0;
+        let recursive_count = 0;
 
         for shape in shapes {
             // Check if shape references itself in constraints
@@ -1092,7 +1092,7 @@ impl ValidationPredictor {
         let mut hasher = DefaultHasher::new();
 
         // Hash store identifier (simplified)
-        format!("{:p}", store).hash(&mut hasher);
+        format!("{store:p}").hash(&mut hasher);
 
         // Hash shapes
         for shape in shapes {
@@ -1134,7 +1134,7 @@ impl ValidationPredictor {
 
         let query_engine = QueryEngine::new();
         let result = query_engine.query(query, store).map_err(|e| {
-            ShaclAiError::ValidationPrediction(format!("Prediction query failed: {}", e))
+            ShaclAiError::ValidationPrediction(format!("Prediction query failed: {e}"))
         })?;
 
         Ok(result)

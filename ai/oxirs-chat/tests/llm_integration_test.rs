@@ -20,7 +20,7 @@ async fn test_llm_manager_initialization() {
 
     match &manager {
         Ok(_) => println!("✅ LLM Manager created successfully"),
-        Err(e) => println!("❌ LLM Manager creation failed: {}", e),
+        Err(e) => println!("❌ LLM Manager creation failed: {e}"),
     }
 
     assert!(
@@ -154,7 +154,7 @@ async fn test_openai_api_integration() {
             );
         }
         Err(e) => {
-            println!("⚠️  OpenAI API test failed: {}", e);
+            println!("⚠️  OpenAI API test failed: {e}");
             // Don't fail the test - API might be down or have rate limits
         }
     }
@@ -196,7 +196,7 @@ async fn test_anthropic_api_integration() {
             );
         }
         Err(e) => {
-            println!("⚠️  Anthropic API test failed: {}", e);
+            println!("⚠️  Anthropic API test failed: {e}");
             // Don't fail the test - API might be down or have rate limits
         }
     }

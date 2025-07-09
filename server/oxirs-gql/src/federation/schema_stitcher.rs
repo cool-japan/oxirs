@@ -26,6 +26,7 @@ struct CachedSchema {
     /// The actual schema
     schema: Schema,
     /// Schema version from the service
+    #[allow(dead_code)]
     version: Option<String>,
     /// Timestamp when schema was cached
     cached_at: chrono::DateTime<chrono::Utc>,
@@ -364,7 +365,7 @@ impl SchemaStitcher {
                 // Don't prefix introspection types
                 type_name.clone()
             } else {
-                format!("{}_{}", namespace, type_name)
+                format!("{namespace}_{type_name}")
             };
 
             // Check for conflicts

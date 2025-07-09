@@ -356,7 +356,7 @@ impl AsyncStreamingManager {
             };
 
             // Send to stream
-            if let Err(_) = handle.data_sender.send(compressed_data).await {
+            if (handle.data_sender.send(compressed_data).await).is_err() {
                 warn!("Failed to send data to stream {}, removing", stream_id);
                 // Stream is closed, remove it
                 drop(streams);
@@ -387,7 +387,7 @@ impl AsyncStreamingManager {
         }
 
         // Also send to broadcast channel
-        if let Err(_) = self.data_sender.send(data) {
+        if self.data_sender.send(data).is_err() {
             warn!("No broadcast subscribers");
         }
 
@@ -571,7 +571,9 @@ pub struct AdaptiveStream {
     control_receiver: mpsc::Receiver<StreamControl>,
     handle: StreamHandle,
     compression_manager: Arc<AsyncMutex<CompressionManager>>,
+    #[allow(dead_code)]
     metrics_collector: Arc<AsyncMutex<MetricsCollector>>,
+    #[allow(dead_code)]
     config: StreamingConfig,
     buffer: VecDeque<StreamData>,
     paused: bool,
@@ -678,8 +680,10 @@ impl Stream for AdaptiveStream {
 /// Stream multiplexer for handling multiple streams efficiently
 #[derive(Debug)]
 pub struct StreamMultiplexer {
+    #[allow(dead_code)]
     config: StreamingConfig,
     registered_streams: HashMap<String, StreamPriority>,
+    #[allow(dead_code)]
     multiplexing_enabled: bool,
 }
 
@@ -716,6 +720,7 @@ impl StreamMultiplexer {
 /// Backpressure controller
 #[derive(Debug)]
 pub struct BackpressureController {
+    #[allow(dead_code)]
     config: StreamingConfig,
     monitoring_enabled: bool,
 }
@@ -762,6 +767,7 @@ impl BackpressureController {
 /// Compression manager
 #[derive(Debug)]
 pub struct CompressionManager {
+    #[allow(dead_code)]
     config: CompressionConfig,
     compression_level: u8,
 }
@@ -787,8 +793,10 @@ impl CompressionManager {
 /// Priority scheduler
 #[derive(Debug)]
 pub struct PriorityScheduler {
+    #[allow(dead_code)]
     config: PriorityConfig,
     stream_priorities: HashMap<String, StreamPriority>,
+    #[allow(dead_code)]
     priority_queues: Vec<VecDeque<String>>,
 }
 
@@ -826,6 +834,12 @@ impl PriorityScheduler {
 #[derive(Debug)]
 pub struct MetricsCollector {
     collected_metrics: HashMap<String, StreamMetrics>,
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsCollector {

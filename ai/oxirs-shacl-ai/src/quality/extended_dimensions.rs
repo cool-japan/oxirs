@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
 
-use oxirs_core::{model::Term, Store};
+use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Extended quality dimensions assessor
 #[derive(Debug)]
@@ -85,6 +85,7 @@ pub struct MultiDimensionalQualityAssessment {
 
 /// Intrinsic quality assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct IntrinsicQualityAssessment {
     pub accuracy: QualityDimensionResult,
     pub consistency: QualityDimensionResult,
@@ -96,6 +97,7 @@ pub struct IntrinsicQualityAssessment {
 
 /// Contextual quality assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ContextualQualityAssessment {
     pub relevance: QualityDimensionResult,
     pub timeliness: QualityDimensionResult,
@@ -1144,31 +1146,7 @@ impl Default for ExtendedQualityDimensionsAssessor {
 
 // Default implementations for assessment results
 
-impl Default for IntrinsicQualityAssessment {
-    fn default() -> Self {
-        Self {
-            accuracy: QualityDimensionResult::default(),
-            consistency: QualityDimensionResult::default(),
-            completeness: QualityDimensionResult::default(),
-            validity: QualityDimensionResult::default(),
-            precision: QualityDimensionResult::default(),
-            currency: QualityDimensionResult::default(),
-        }
-    }
-}
 
-impl Default for ContextualQualityAssessment {
-    fn default() -> Self {
-        Self {
-            relevance: QualityDimensionResult::default(),
-            timeliness: QualityDimensionResult::default(),
-            accessibility: QualityDimensionResult::default(),
-            compliance: QualityDimensionResult::default(),
-            security: QualityDimensionResult::default(),
-            usability: QualityDimensionResult::default(),
-        }
-    }
-}
 
 impl Default for StatisticalQualityMeasures {
     fn default() -> Self {

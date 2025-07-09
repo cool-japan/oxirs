@@ -270,8 +270,10 @@ pub enum ValidationErrorType {
 #[derive(Debug, Clone)]
 pub struct QueryAnalyzer {
     /// Statistics collector for cardinality estimation
+    #[allow(dead_code)]
     statistics: Option<StatisticsCollector>,
     /// Cost model for optimization decisions
+    #[allow(dead_code)]
     cost_model: Option<CostModel>,
     /// Whether to enable type inference
     pub enable_type_inference: bool,
@@ -509,6 +511,7 @@ impl QueryAnalyzer {
     }
 
     /// Collect variables from an expression
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_variables_from_expression(
         &self,
         expr: &Expression,
@@ -623,6 +626,7 @@ impl QueryAnalyzer {
     }
 
     /// Recursively extract BGP patterns
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_bgp_patterns_recursive(&self, algebra: &Algebra, patterns: &mut Vec<TriplePattern>) {
         match algebra {
             Algebra::Bgp(bgp_patterns) => {
@@ -806,6 +810,7 @@ impl QueryAnalyzer {
     }
 
     /// Check if expression contains aggregate function
+    #[allow(clippy::only_used_in_recursion)]
     fn contains_aggregate_function(&self, expr: &Expression) -> bool {
         match expr {
             Expression::Function { name, .. } => {
@@ -900,7 +905,7 @@ impl QueryAnalyzer {
         &self,
         _algebra: &Algebra,
         _variable_types: &HashMap<Variable, VariableType>,
-        _type_errors: &mut Vec<TypeError>,
+        _type_errors: &mut [TypeError],
     ) -> Result<()> {
         // Implementation for detecting type errors
         // This is a placeholder for more sophisticated type checking
@@ -912,7 +917,7 @@ impl QueryAnalyzer {
         &self,
         _algebra: &Algebra,
         _variable_types: &HashMap<Variable, VariableType>,
-        _type_warnings: &mut Vec<TypeWarning>,
+        _type_warnings: &mut [TypeWarning],
     ) -> Result<()> {
         // Implementation for detecting type warnings
         // This is a placeholder
@@ -1039,6 +1044,7 @@ impl QueryAnalyzer {
     }
 
     /// Estimate query complexity
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_query_complexity(&self, algebra: &Algebra) -> f64 {
         match algebra {
             Algebra::Bgp(patterns) => patterns.len() as f64,
@@ -1102,7 +1108,7 @@ impl QueryAnalyzer {
     fn check_invalid_aggregates(
         &self,
         _algebra: &Algebra,
-        _errors: &mut Vec<ValidationError>,
+        _errors: &mut [ValidationError],
     ) -> Result<()> {
         // Implementation for aggregate validation
         // This is a placeholder
@@ -1113,7 +1119,7 @@ impl QueryAnalyzer {
     fn check_semantic_consistency(
         &self,
         _algebra: &Algebra,
-        _errors: &mut Vec<ValidationError>,
+        _errors: &mut [ValidationError],
     ) -> Result<()> {
         // Implementation for semantic consistency checks
         // This is a placeholder

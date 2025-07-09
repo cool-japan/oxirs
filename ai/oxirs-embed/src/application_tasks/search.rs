@@ -126,7 +126,7 @@ impl SearchEvaluator {
     pub fn add_relevance_judgment(&mut self, judgment: RelevanceJudgment) {
         self.query_relevance
             .entry(judgment.query.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(judgment);
     }
 
@@ -155,7 +155,7 @@ impl SearchEvaluator {
         // Calculate aggregate metrics
         for metric in &self.metrics {
             let score = self.calculate_search_metric(metric, &per_query_results)?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         // Analyze query performance
@@ -284,7 +284,7 @@ impl SearchEvaluator {
         }
 
         // Calculate ideal DCG
-        let mut ideal_relevance: Vec<u8> = relevance_scores.iter().cloned().collect();
+        let mut ideal_relevance: Vec<u8> = relevance_scores.to_vec();
         ideal_relevance.sort_by(|a, b| b.cmp(a));
 
         let mut idcg = 0.0;

@@ -13,7 +13,7 @@ use super::population::{ArchitecturePopulationManager, EvolutionStrategyCoordina
 use super::search_engine::NeuralArchitectureSearchEngine;
 use super::self_modification::SelfModificationEngine;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Evolutionary neural architecture system for self-designing networks
 #[derive(Debug)]

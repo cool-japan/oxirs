@@ -7,14 +7,14 @@
 //! - Analogical reasoning for pattern matching
 //! - Temporal reasoning for time-sensitive queries
 
-use crate::rag::{AssembledContext, RagSearchResult};
+use crate::rag::AssembledContext;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use oxirs_core::model::triple::Triple;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use tracing::{debug, info, warn};
+use std::collections::HashMap;
+use tracing::{debug, info};
 
 /// Configuration for advanced reasoning
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -354,12 +354,12 @@ impl AdvancedReasoningEngine {
         for depth in 0..self.config.max_inference_depth {
             if let Some(new_conclusion) = self.apply_modus_ponens(&current_premises)? {
                 let step = ReasoningStep {
-                    step_id: format!("deductive_step_{}", depth),
+                    step_id: format!("deductive_step_{depth}"),
                     reasoning_type: ReasoningType::Deductive,
                     premise_triples: current_premises.clone(),
                     conclusion_triple: Some(new_conclusion.clone()),
                     confidence: 0.9 - (depth as f64 * 0.1),
-                    explanation: format!("Applied deductive inference at depth {}", depth),
+                    explanation: format!("Applied deductive inference at depth {depth}"),
                     timestamp: Utc::now(),
                 };
                 steps.push(step);
@@ -415,7 +415,7 @@ impl AdvancedReasoningEngine {
         // Build causal chain step by step
         for (i, triple) in causal_triples.iter().enumerate() {
             let step = ReasoningStep {
-                step_id: format!("causal_step_{}", i),
+                step_id: format!("causal_step_{i}"),
                 reasoning_type: ReasoningType::Causal,
                 premise_triples: vec![triple.clone()],
                 conclusion_triple: None, // Will be derived from causal inference
@@ -477,7 +477,7 @@ impl AdvancedReasoningEngine {
         let mut steps = Vec::new();
         for (i, triple) in sorted_triples.iter().enumerate() {
             let step = ReasoningStep {
-                step_id: format!("temporal_step_{}", i),
+                step_id: format!("temporal_step_{i}"),
                 reasoning_type: ReasoningType::Temporal,
                 premise_triples: vec![triple.clone()],
                 conclusion_triple: None,
@@ -524,7 +524,7 @@ impl AdvancedReasoningEngine {
         let mut steps = Vec::new();
         for (i, triple) in analogical_candidates.iter().enumerate() {
             let step = ReasoningStep {
-                step_id: format!("analogical_step_{}", i),
+                step_id: format!("analogical_step_{i}"),
                 reasoning_type: ReasoningType::Analogical,
                 premise_triples: vec![triple.clone()],
                 conclusion_triple: None,

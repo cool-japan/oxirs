@@ -123,10 +123,21 @@ pub enum Permission {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MfaStatus {
     pub enabled: bool,
+    pub enrolled_methods: Vec<MfaMethodInfo>,
     pub backup_codes_remaining: u8,
     pub last_used: Option<DateTime<Utc>>,
     pub expires_at: Option<DateTime<Utc>>,
     pub message: String,
+}
+
+/// MFA method information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MfaMethodInfo {
+    pub method_type: MfaType,
+    pub identifier: String, // Phone number, email, or device name
+    pub enrolled_at: DateTime<Utc>,
+    pub last_used: Option<DateTime<Utc>>,
+    pub enabled: bool,
 }
 
 /// JWT token claims
@@ -147,6 +158,9 @@ pub struct MfaSecrets {
     pub backup_codes: Vec<String>,
     pub recovery_codes: Vec<String>,
     pub hardware_tokens: Vec<String>,
+    pub sms_phone: Option<String>,
+    pub mfa_email: Option<String>,
+    pub webauthn_challenges: HashMap<String, String>,
 }
 
 /// User session information

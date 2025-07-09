@@ -1,7 +1,6 @@
 //! Query coordination for distributed execution
 
-use async_trait::async_trait;
-use futures::{future::join_all, stream, StreamExt};
+use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -15,7 +14,6 @@ use crate::{
     error::{FusekiError, FusekiResult},
     store::Store,
 };
-use oxirs_core::{Quad, Triple};
 
 /// Serializable query result for distributed operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -312,8 +310,7 @@ impl QueryCoordinator {
         if successful_count < required_responses {
             return Err(FusekiError::Internal {
                 message: format!(
-                    "Write failed: only {} of {} required responses succeeded",
-                    successful_count, required_responses
+                    "Write failed: only {successful_count} of {required_responses} required responses succeeded"
                 ),
             });
         }

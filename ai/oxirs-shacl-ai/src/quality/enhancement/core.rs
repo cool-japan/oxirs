@@ -3,14 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use oxirs_core::{model::Term, Store};
-use oxirs_shacl::{Shape, ValidationReport};
 
-use crate::quality::{
-    AiQualityMetricsResult, IssueDetectionResult, MultiDimensionalQualityAssessment, QualityReport,
-    QualitySnapshot,
-};
-use crate::{Result, ShaclAiError};
+use crate::quality::QualityReport;
+use crate::Result;
 
 /// Quality enhancement recommendations engine
 #[derive(Debug)]
@@ -80,6 +75,7 @@ pub enum EnhancementStrategy {
 
 /// Recommendation models for different enhancement types
 #[derive(Debug)]
+#[derive(Default)]
 pub struct RecommendationModels {
     pub data_enhancement_model: Option<DataEnhancementModel>,
     pub process_optimization_model: Option<ProcessOptimizationModel>,
@@ -324,17 +320,6 @@ impl Default for QualityEnhancementEngine {
     }
 }
 
-impl Default for RecommendationModels {
-    fn default() -> Self {
-        Self {
-            data_enhancement_model: None,
-            process_optimization_model: None,
-            automation_model: None,
-            impact_prediction_model: None,
-            cost_benefit_model: None,
-        }
-    }
-}
 
 impl Default for EnhancementStatistics {
     fn default() -> Self {

@@ -49,7 +49,7 @@ pub async fn run(action: ConfigAction) -> CommandResult {
 
                 let content = fs::read_to_string(config_path)?;
                 println!("---");
-                println!("{}", content);
+                println!("{content}");
                 println!("---");
             } else {
                 println!("Showing default configuration:");

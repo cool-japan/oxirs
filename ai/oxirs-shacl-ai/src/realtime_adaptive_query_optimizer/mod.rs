@@ -9,31 +9,22 @@ pub mod performance;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use crate::{
-    ml::{GraphData, ModelError, ModelMetrics},
-    neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
     neural_transformer_pattern_integration::{
         NeuralTransformerConfig, NeuralTransformerPatternIntegration,
     },
-    optimization::OptimizationEngine,
     quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
-    Result, ShaclAiError,
+    Result,
 };
 
-use ndarray::{Array1, Array2, Array3, Axis};
-use oxirs_core::{
-    model::{Term, Variable},
-    query::{
-        algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
+use oxirs_core::query::{
+        algebra::AlgebraTriplePattern,
         pattern_optimizer::{
-            IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
+            IndexStats, IndexType, PatternOptimizer,
         },
-    },
-    OxirsError, Store,
-};
-use serde::{Deserialize, Serialize};
+    };
 
 // Re-export main types
 pub use caching::{AccessPattern, AdaptivePlanCache, CacheStatistics, CachedPlan};

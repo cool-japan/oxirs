@@ -4,20 +4,20 @@ use crate::config::MonitoringConfig;
 use crate::error::{FusekiError, FusekiResult};
 use axum::{
     extract::State,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
     routing::get,
     Json, Router,
 };
 use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 #[cfg(feature = "metrics")]
-use prometheus::{Encoder, Registry, TextEncoder};
+use prometheus::{Registry, TextEncoder};
 
 /// Metrics service for collecting and exposing application metrics
 #[derive(Clone)]
@@ -578,7 +578,7 @@ impl MetricsService {
             "memory".to_string(),
             CheckResult {
                 status: memory_status,
-                message: format!("Memory usage: {:.1}%", memory_percent),
+                message: format!("Memory usage: {memory_percent:.1}%"),
                 duration_ms: start_time.elapsed().as_millis() as u64,
                 timestamp: current_timestamp(),
             },
@@ -609,7 +609,7 @@ impl MetricsService {
         let metric_families = self.prometheus_registry.gather();
 
         encoder.encode_to_string(&metric_families).map_err(|e| {
-            FusekiError::internal(format!("Failed to encode Prometheus metrics: {}", e))
+            FusekiError::internal(format!("Failed to encode Prometheus metrics: {e}"))
         })
     }
 
@@ -681,11 +681,11 @@ fn format_duration(duration: Duration) -> String {
     let secs = seconds % 60;
 
     if hours > 0 {
-        format!("{}h {}m {}s", hours, minutes, secs)
+        format!("{hours}h {minutes}m {secs}s")
     } else if minutes > 0 {
-        format!("{}m {}s", minutes, secs)
+        format!("{minutes}m {secs}s")
     } else {
-        format!("{}s", secs)
+        format!("{secs}s")
     }
 }
 
@@ -695,7 +695,7 @@ fn current_timestamp() -> String {
         .duration_since(UNIX_EPOCH)
         .map(|d| {
             chrono::DateTime::from_timestamp(d.as_secs() as i64, 0)
-                .unwrap_or_else(|| chrono::Utc::now())
+                .unwrap_or_else(chrono::Utc::now)
                 .to_rfc3339()
         })
         .unwrap_or_else(|_| chrono::Utc::now().to_rfc3339())

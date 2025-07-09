@@ -7,6 +7,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Through
 use oxirs_federate::distributed_tracing::QueryContext; // Fix QueryContext import
 use oxirs_federate::executor::types::{ExecutionStatus, QueryResultData, StepResult};
 use oxirs_federate::planner::planning::types::StepType;
+use oxirs_federate::cache::QueryResultCache;
+use oxirs_federate::source_selection::{AdvancedSourceSelector, SourceSelectionConfig, TriplePattern};
 use oxirs_federate::*;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -24,9 +26,9 @@ fn bench_service_registration(c: &mut Criterion) {
                 // Register 100 services
                 for i in 0..100 {
                     let service = FederatedService::new_sparql(
-                        format!("service-{}", i),
-                        format!("Test Service {}", i),
-                        format!("http://example.com/sparql/{}", i),
+                        format!("service-{i}"),
+                        format!("Test Service {i}"),
+                        format!("http://example.com/sparql/{i}"),
                     );
                     registry.register(service).await.unwrap();
                 }
@@ -97,9 +99,9 @@ fn bench_source_selection(c: &mut Criterion) {
                 // Create 1000 services with different capabilities
                 for i in 0..1000 {
                     let mut service = FederatedService::new_sparql(
-                        format!("service-{}", i),
-                        format!("Test Service {}", i),
-                        format!("http://example.com/sparql/{}", i),
+                        format!("service-{i}"),
+                        format!("Test Service {i}"),
+                        format!("http://example.com/sparql/{i}"),
                     );
 
                     // Add random capabilities
@@ -123,12 +125,19 @@ fn bench_source_selection(c: &mut Criterion) {
                 let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
                 let query_info = planner.analyze_sparql(query).await.unwrap();
 
-                // TODO: Fix method name - select_sources doesn't exist
-                // planner
-                //     .select_sources(&query_info, &registry)
-                //     .await
-                //     .unwrap()
-                query_info // Return something for now
+                // Use AdvancedSourceSelector for source selection
+                let selector = AdvancedSourceSelector::new(SourceSelectionConfig::default());
+                let patterns = vec![TriplePattern {
+                    subject: "?s".to_string(),
+                    predicate: "?p".to_string(),
+                    object: "?o".to_string(),
+                    graph: None,
+                }];
+                
+                selector
+                    .select_sources(&patterns, &[], &registry)
+                    .await
+                    .unwrap()
             })
         });
     });
@@ -150,11 +159,29 @@ fn bench_caching_performance(c: &mut Criterion) {
             |b, &size| {
                 b.iter(|| {
                     rt.block_on(async {
-                        let cache = FederationCache::new(); // Fix method name
+                        let cache = FederationCache::new();
 
-                        // TODO: Fix cache benchmark - type issues with QueryResultCache
-                        // Placeholder for cache operations
-                        let hits = size;
+                        // Perform cache operations
+                        let mut hits = 0;
+                        
+                        for i in 0..size {
+                            let query_hash = format!("query-{i}");
+                            
+                            // Try to get from cache (should miss)
+                            if cache.get_query_result(&query_hash).await.is_some() {
+                                hits += 1;
+                            }
+                            
+                            // Put a result in cache
+                            let sparql_result = create_sample_sparql_result(i, 1);
+                            let cached_result = QueryResultCache::Sparql(sparql_result);
+                            cache.put_query_result(&query_hash, cached_result, None).await;
+                            
+                            // Try to get from cache again (should hit)
+                            if cache.get_query_result(&query_hash).await.is_some() {
+                                hits += 1;
+                            }
+                        }
 
                         hits
                     })
@@ -189,13 +216,13 @@ fn bench_result_integration(c: &mut Criterion) {
                         for i in 0..count {
                             let result = create_sample_sparql_result(i, 10); // 10 bindings per result
                             let step_result = StepResult {
-                                step_id: format!("step-{}", i),
+                                step_id: format!("step-{i}"),
                                 step_type: StepType::ServiceQuery,
                                 status: ExecutionStatus::Success,
                                 data: Some(QueryResultData::Sparql(result)),
                                 error: None,
                                 execution_time: Duration::from_millis(10),
-                                service_id: Some(format!("service-{}", i)),
+                                service_id: Some(format!("service-{i}")),
                                 memory_used: 1024,
                                 result_size: 10,
                                 success: true,
@@ -278,9 +305,9 @@ fn bench_request_batching(c: &mut Criterion) {
 
                         for i in 0..size {
                             let request = BatchableRequest {
-                                id: format!("req-{}", i),
+                                id: format!("req-{i}"),
                                 service_id: "test-service".to_string(),
-                                query: format!("SELECT ?s ?p ?o WHERE {{ ?s ?p ?o{} }}", i),
+                                query: format!("SELECT ?s ?p ?o WHERE {{ ?s ?p ?o{i} }}"),
                                 variables: None,
                                 priority: RequestPriority::Normal,
                                 timestamp: std::time::Instant::now(),
@@ -324,7 +351,7 @@ fn bench_distributed_tracing(c: &mut Criterion) {
                 let mut span_ids = Vec::new();
                 for i in 0..10 {
                     let span = tracer
-                        .create_span(&trace, &format!("operation-{}", i), "bench-service", None)
+                        .create_span(&trace, &format!("operation-{i}"), "bench-service", None)
                         .await
                         .unwrap();
                     span_ids.push(span.span_id);
@@ -371,7 +398,7 @@ fn create_sample_sparql_result(offset: usize, binding_count: usize) -> SparqlRes
             "o".to_string(),
             SparqlValue {
                 value_type: "literal".to_string(),
-                value: format!("Object {}", i),
+                value: format!("Object {i}"),
                 datatype: Some("http://www.w3.org/2001/XMLSchema#string".to_string()),
                 lang: None,
             },

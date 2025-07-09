@@ -191,6 +191,12 @@ pub struct RequestBatcher {
     batch_scheduler_handle: Option<tokio::task::JoinHandle<()>>,
 }
 
+impl Default for RequestBatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RequestBatcher {
     /// Create a new request batcher
     pub fn new() -> Self {

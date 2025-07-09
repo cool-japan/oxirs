@@ -4,7 +4,7 @@ use super::adaptation::RealTimeFinetuning;
 use super::config::CrossModalConfig;
 use super::encoders::{AlignmentNetwork, KGEncoder, TextEncoder};
 use super::learning::FewShotLearning;
-use crate::{EmbeddingModel, ModelStats, NamedNode, TrainingStats, Vector};
+use crate::{EmbeddingModel, ModelStats, TrainingStats, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
@@ -174,11 +174,10 @@ impl MultiModalEmbedding {
         self.kg_embeddings
             .insert(entity.to_string(), kg_embedding_raw); // Store raw, not encoded
         self.unified_embeddings
-            .insert(format!("{}|{}", text, entity), unified_embedding.clone());
+            .insert(format!("{text}|{entity}"), unified_embedding.clone());
 
         println!(
-            "Generated unified embedding with alignment score: {:.3}",
-            alignment_score
+            "Generated unified embedding with alignment score: {alignment_score:.3}"
         );
 
         Ok(unified_embedding)
@@ -327,8 +326,7 @@ impl MultiModalEmbedding {
         adaptation_loss /= transfer_pairs.len() as f32;
 
         println!(
-            "Cross-domain transfer loss ({} -> {}): {:.3}",
-            source_domain, target_domain, adaptation_loss
+            "Cross-domain transfer loss ({source_domain} -> {target_domain}): {adaptation_loss:.3}"
         );
 
         Ok(adaptation_loss)
@@ -378,7 +376,7 @@ impl MultiModalEmbedding {
     }
 
     /// Add few-shot learning capability
-    pub fn with_few_shot_learning(mut self, _few_shot_config: FewShotLearning) -> Self {
+    pub fn with_few_shot_learning(self, _few_shot_config: FewShotLearning) -> Self {
         // Store few-shot learning configuration (would need to add field to struct)
         // For now, we'll just return self as the integration would require struct changes
         self
@@ -397,7 +395,7 @@ impl MultiModalEmbedding {
     }
 
     /// Add real-time fine-tuning capability
-    pub fn with_real_time_finetuning(mut self, _rt_config: RealTimeFinetuning) -> Self {
+    pub fn with_real_time_finetuning(self, _rt_config: RealTimeFinetuning) -> Self {
         // Store real-time fine-tuning configuration
         // For now, we'll just return self as the integration would require struct changes
         self
@@ -504,8 +502,7 @@ impl EmbeddingModel for MultiModalEmbedding {
 
             if epoch % 10 == 0 {
                 println!(
-                    "Multi-modal training epoch {}: Loss = {:.6}",
-                    epoch, epoch_loss
+                    "Multi-modal training epoch {epoch}: Loss = {epoch_loss:.6}"
                 );
             }
 
@@ -521,7 +518,7 @@ impl EmbeddingModel for MultiModalEmbedding {
             epochs_completed: epochs,
             final_loss: loss_history.last().copied().unwrap_or(0.0),
             training_time_seconds: training_time,
-            convergence_achieved: loss_history.last().map_or(false, |&loss| loss < 0.001),
+            convergence_achieved: loss_history.last().is_some_and(|&loss| loss < 0.001),
             loss_history,
         };
 
@@ -547,7 +544,7 @@ impl EmbeddingModel for MultiModalEmbedding {
         }
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(embedding) = self.kg_embeddings.get(relation) {
             Ok(Vector::from_array1(embedding))
         } else {
@@ -557,7 +554,7 @@ impl EmbeddingModel for MultiModalEmbedding {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let predicate_emb = self.get_relation_embedding(predicate)?;
+        let predicate_emb = self.getrelation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // Multi-modal scoring combines KG and text information

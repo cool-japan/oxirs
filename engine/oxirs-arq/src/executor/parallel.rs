@@ -36,7 +36,8 @@ pub enum ParallelStrategy {
 
 /// Work item for parallel execution
 #[derive(Debug, Clone)]
-struct WorkItem {
+pub struct WorkItem {
+    #[allow(dead_code)]
     id: usize,
     algebra: Algebra,
     solutions: Vec<Solution>,
@@ -46,9 +47,12 @@ struct WorkItem {
 /// Work priority for scheduling
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum WorkPriority {
+    #[allow(dead_code)]
     Low = 0,
     Normal = 1,
+    #[allow(dead_code)]
     High = 2,
+    #[allow(dead_code)]
     Critical = 3,
 }
 
@@ -131,6 +135,7 @@ pub struct ParallelExecutor {
     hash_join: Arc<CacheFriendlyHashJoin>,
     /// Memory pools for different object types
     solution_pool: Arc<MemoryPool<Vec<Solution>>>,
+    #[allow(dead_code)]
     binding_pool: Arc<MemoryPool<HashMap<Variable, Term>>>,
 }
 
@@ -509,7 +514,6 @@ impl ParallelExecutor {
         self.thread_pool.scope(|scope| {
             for thread_id in 0..self.config.max_threads {
                 let queue = &work_queue;
-                let patterns = patterns;
                 scope.spawn(move |_| {
                     self.worker_thread(thread_id, queue, patterns);
                 });
@@ -808,7 +812,7 @@ impl ParallelExecutor {
         for binding in solution {
             for var in join_vars {
                 if let Some(term) = binding.get(var) {
-                    format!("{:?}", term).hash(&mut hasher);
+                    format!("{term:?}").hash(&mut hasher);
                 }
             }
         }
@@ -823,6 +827,7 @@ impl ParallelExecutor {
     }
 
     /// Estimate algebra complexity for strategy selection
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_algebra_complexity(&self, algebra: &Algebra) -> usize {
         match algebra {
             Algebra::Bgp(patterns) => patterns.len(),
@@ -977,7 +982,6 @@ impl Default for ParallelStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra;
     use crate::executor::config::ThreadPoolConfig;
     use oxirs_core::model::NamedNode;
 
@@ -1042,7 +1046,7 @@ mod tests {
         );
         let right = vec![vec![right_binding]];
 
-        let (results, stats) = executor.execute_union_parallel(left, right).unwrap();
+        let (results, _stats) = executor.execute_union_parallel(left, right).unwrap();
         assert_eq!(results.len(), 2);
         // execution_time.as_millis() is always >= 0 by type invariant (u128)
     }

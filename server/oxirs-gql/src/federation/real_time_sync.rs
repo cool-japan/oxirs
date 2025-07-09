@@ -359,6 +359,7 @@ impl RealTimeSchemaSynchronizer {
     }
 
     /// Perform incremental synchronization
+    #[allow(dead_code)]
     async fn perform_incremental_sync(&self) -> Result<()> {
         debug!("Performing incremental sync");
 
@@ -558,10 +559,10 @@ impl RealTimeSchemaSynchronizer {
         // Simple conflict detection - type name collisions
         let mut type_names: HashMap<String, Vec<String>> = HashMap::new();
 
-        for (service_id, _schema) in service_schemas {
+        for service_id in service_schemas.keys() {
             // In a real implementation, we'd parse the schema and extract type names
             // For now, we'll use a simplified approach
-            let type_name = format!("{}Type", service_id);
+            let type_name = format!("{service_id}Type");
             type_names
                 .entry(type_name)
                 .or_default()
@@ -574,7 +575,7 @@ impl RealTimeSchemaSynchronizer {
                     conflict_id: uuid::Uuid::new_v4().to_string(),
                     services,
                     conflict_type: ConflictType::TypeNameCollision,
-                    description: format!("Type name collision detected for: {}", type_name),
+                    description: format!("Type name collision detected for: {type_name}"),
                     possible_resolutions: vec![
                         ConflictResolution::MergeFields,
                         ConflictResolution::PriorityBased,
@@ -685,6 +686,7 @@ impl RealTimeSchemaSynchronizer {
     }
 
     /// Calculate schema hash
+    #[allow(dead_code)]
     fn calculate_schema_hash(&self, schema: &SchemaVersion) -> String {
         self.calculate_schema_hash_from_content(&schema.schema_content)
     }

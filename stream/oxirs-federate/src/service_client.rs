@@ -151,7 +151,7 @@ impl SparqlClient {
                 match self.ensure_fresh_oauth2_token(auth).await {
                     Ok(Some(fresh_token)) => {
                         let mut headers = self.build_headers(false)?;
-                        let auth_value = format!("Bearer {}", fresh_token);
+                        let auth_value = format!("Bearer {fresh_token}");
                         headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                         headers
                     }
@@ -208,10 +208,10 @@ impl SparqlClient {
                 )));
             }
 
-            Ok(response
+            response
                 .json::<SparqlResults>()
                 .await
-                .map_err(|e| backoff::Error::permanent(anyhow::Error::from(e)))?)
+                .map_err(|e| backoff::Error::permanent(anyhow::Error::from(e)))
         })
         .await;
 
@@ -301,15 +301,15 @@ impl SparqlClient {
                 if let (Some(username), Some(password)) =
                     (&auth.credentials.username, &auth.credentials.password)
                 {
-                    let credentials = format!("{}:{}", username, password);
+                    let credentials = format!("{username}:{password}");
                     let encoded = encode(credentials.as_bytes());
-                    let auth_value = format!("Basic {}", encoded);
+                    let auth_value = format!("Basic {encoded}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
             AuthType::Bearer => {
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
@@ -322,7 +322,7 @@ impl SparqlClient {
                 // For OAuth2, we need to check token freshness in the query methods
                 // For now, use the existing token if available
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
@@ -671,15 +671,15 @@ impl GraphQLClient {
                 if let (Some(username), Some(password)) =
                     (&auth.credentials.username, &auth.credentials.password)
                 {
-                    let credentials = format!("{}:{}", username, password);
+                    let credentials = format!("{username}:{password}");
                     let encoded = encode(credentials.as_bytes());
-                    let auth_value = format!("Basic {}", encoded);
+                    let auth_value = format!("Basic {encoded}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
             AuthType::Bearer => {
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }
@@ -690,7 +690,7 @@ impl GraphQLClient {
             }
             AuthType::OAuth2 => {
                 if let Some(token) = &auth.credentials.token {
-                    let auth_value = format!("Bearer {}", token);
+                    let auth_value = format!("Bearer {token}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
             }

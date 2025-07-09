@@ -20,19 +20,18 @@ pub async fn run(
 
     println!("RDF I/O Tool (riot)");
     println!("Input files: {}", input.len());
-    println!("Output format: {}", output_format);
+    println!("Output format: {output_format}");
 
     if !utils::is_supported_output_format(&output_format) {
         return Err(format!(
-            "Unsupported output format '{}'. Supported: turtle, ntriples, rdfxml, jsonld, trig, nquads",
-            output_format
+            "Unsupported output format '{output_format}'. Supported: turtle, ntriples, rdfxml, jsonld, trig, nquads"
         ).into());
     }
 
     if let Some(ref base_uri) = base {
-        println!("Base URI: {}", base_uri);
+        println!("Base URI: {base_uri}");
         // Validate base URI
-        utils::validate_iri(base_uri).map_err(|e| format!("Invalid base URI: {}", e))?;
+        utils::validate_iri(base_uri).map_err(|e| format!("Invalid base URI: {e}"))?;
     }
 
     if validate {
@@ -40,7 +39,7 @@ pub async fn run(
     } else if count {
         println!("Mode: Count triples/quads");
     } else {
-        println!("Mode: Convert to {}", output_format);
+        println!("Mode: Convert to {output_format}");
     }
 
     let mut total_triples = 0;
@@ -62,12 +61,11 @@ pub async fn run(
         let input_format = syntax
             .clone()
             .unwrap_or_else(|| utils::detect_rdf_format(input_file));
-        println!("  Input format: {}", input_format);
+        println!("  Input format: {input_format}");
 
         if !utils::is_supported_input_format(&input_format) {
             eprintln!(
-                "  Warning: Unsupported input format '{}', skipping",
-                input_format
+                "  Warning: Unsupported input format '{input_format}', skipping"
             );
             stats.warnings += 1;
             continue;
@@ -104,7 +102,7 @@ pub async fn run(
                 }
             }
             Err(e) => {
-                eprintln!("  Error processing file: {}", e);
+                eprintln!("  Error processing file: {e}");
                 stats.errors += 1;
                 continue;
             }
@@ -114,16 +112,16 @@ pub async fn run(
     // Output results
     if validate {
         println!("\nValidation Results:");
-        println!("  Total triples/quads: {}", total_triples);
+        println!("  Total triples/quads: {total_triples}");
         if total_errors > 0 {
-            println!("  Total errors: {}", total_errors);
-            return Err(format!("Validation failed with {} errors", total_errors).into());
+            println!("  Total errors: {total_errors}");
+            return Err(format!("Validation failed with {total_errors} errors").into());
         } else {
             println!("  All files are valid");
         }
     } else if count {
         println!("\nCount Results:");
-        println!("  Total triples/quads: {}", total_triples);
+        println!("  Total triples/quads: {total_triples}");
     } else {
         // Write output
         if !all_output.is_empty() {
@@ -241,13 +239,13 @@ fn parse_rdf_content(
             match parse_turtle_content(content, base_uri) {
                 Ok(parsed_triples) => triples.extend(parsed_triples),
                 Err(e) => {
-                    eprintln!("    Turtle parsing error: {}", e);
+                    eprintln!("    Turtle parsing error: {e}");
                     errors += 1;
                 }
             }
         }
         _ => {
-            return Err(format!("Parsing for format '{}' not yet implemented", format).into());
+            return Err(format!("Parsing for format '{format}' not yet implemented").into());
         }
     }
 
@@ -372,7 +370,7 @@ fn parse_ntriples_term(term: &str) -> Result<String, String> {
         // Literal (simplified parsing)
         Ok(term.to_string())
     } else {
-        Err(format!("Invalid N-Triples term: {}", term))
+        Err(format!("Invalid N-Triples term: {term}"))
     }
 }
 
@@ -451,7 +449,7 @@ fn serialize_rdf_content(triples: &[RdfTriple], format: &str) -> ToolResult<Stri
         }
         _ => {
             return Err(
-                format!("Serialization for format '{}' not yet implemented", format).into(),
+                format!("Serialization for format '{format}' not yet implemented").into(),
             );
         }
     }

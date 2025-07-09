@@ -65,8 +65,7 @@ fn detect_format(file_path: &PathBuf) -> Result<ExportFormat, Box<dyn std::error
 
     // Default to Turtle if unable to detect
     eprintln!(
-        "Warning: Unable to detect format for {:?}, assuming Turtle",
-        file_path
+        "Warning: Unable to detect format for {file_path:?}, assuming Turtle"
     );
     Ok(ExportFormat::Turtle)
 }
@@ -80,7 +79,7 @@ fn parse_output_format(format_str: &str) -> Result<ExportFormat, Box<dyn std::er
         "jsonld" | "json-ld" | "json" => Ok(ExportFormat::JsonLd),
         "trig" => Ok(ExportFormat::TriG),
         "nquads" | "nq" => Ok(ExportFormat::NQuads),
-        _ => Err(format!("Unsupported format: {}", format_str).into()),
+        _ => Err(format!("Unsupported format: {format_str}").into()),
     }
 }
 
@@ -141,8 +140,7 @@ fn read_rdf_file(file_path: &PathBuf) -> Result<Vec<RdfTriple>, Box<dyn std::err
         _ => {
             // For other formats, return a placeholder
             eprintln!(
-                "Warning: Full parsing for {:?} format not implemented, creating placeholder",
-                format
+                "Warning: Full parsing for {format:?} format not implemented, creating placeholder"
             );
             triples.push(RdfTriple {
                 subject: format!("<file://{}>", file_path.display()),
@@ -198,10 +196,10 @@ fn write_concatenated_output<W: Write>(
 pub async fn run(files: Vec<PathBuf>, format: String, output: Option<PathBuf>) -> ToolResult {
     println!("RDF Concatenation Tool");
     println!("Input files: {}", files.len());
-    println!("Output format: {}", format);
+    println!("Output format: {format}");
 
     if !utils::is_supported_output_format(&format) {
-        return Err(format!("Unsupported output format: {}", format).into());
+        return Err(format!("Unsupported output format: {format}").into());
     }
 
     // Parse output format
@@ -213,7 +211,7 @@ pub async fn run(files: Vec<PathBuf>, format: String, output: Option<PathBuf>) -
 
     for file_path in &files {
         if !file_path.exists() {
-            eprintln!("Warning: File {:?} does not exist, skipping", file_path);
+            eprintln!("Warning: File {file_path:?} does not exist, skipping");
             continue;
         }
 
@@ -222,12 +220,12 @@ pub async fn run(files: Vec<PathBuf>, format: String, output: Option<PathBuf>) -
                 let count = triples.len();
                 total_triples += count;
                 all_triples.extend(triples);
-                println!("Read {} triples from {:?}", count, file_path);
+                println!("Read {count} triples from {file_path:?}");
             }
             Err(e) => {
-                eprintln!("Error reading {:?}: {}", file_path, e);
+                eprintln!("Error reading {file_path:?}: {e}");
                 if files.len() == 1 {
-                    return Err(e.into());
+                    return Err(e);
                 }
                 // Continue with other files if multiple files
             }
@@ -238,14 +236,14 @@ pub async fn run(files: Vec<PathBuf>, format: String, output: Option<PathBuf>) -
         return Err("No RDF data found in input files".into());
     }
 
-    println!("Total triples collected: {}", total_triples);
+    println!("Total triples collected: {total_triples}");
 
     // Write output
     match output {
         Some(output_path) => {
             let file = File::create(&output_path)?;
             write_concatenated_output(&all_triples, output_format, file)?;
-            println!("Concatenated data written to {:?}", output_path);
+            println!("Concatenated data written to {output_path:?}");
         }
         None => {
             let stdout = io::stdout();

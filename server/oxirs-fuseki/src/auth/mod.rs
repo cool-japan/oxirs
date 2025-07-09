@@ -11,7 +11,7 @@
 //! - Session management
 //! - Role-based access control
 
-use crate::config::{JwtConfig, LdapConfig, OAuthConfig, SecurityConfig, UserConfig};
+use crate::config::{JwtConfig, LdapConfig, SecurityConfig, UserConfig};
 use crate::error::{FusekiError, FusekiResult};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -358,6 +358,39 @@ impl AuthService {
         Ok(true)
     }
 
+    /// Store MFA email for user
+    pub async fn store_mfa_email(&self, username: &str, email: &str) -> FusekiResult<()> {
+        // TODO: Implement MFA email storage in user profile
+        info!("Storing MFA email for user: {}", username);
+        Ok(())
+    }
+
+    /// Get user's SMS phone number
+    pub async fn get_user_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
+        // TODO: Implement SMS phone retrieval from user profile
+        Ok(Some("+1-555-0123".to_string())) // Placeholder
+    }
+
+    /// Get user's MFA email
+    pub async fn get_user_mfa_email(&self, username: &str) -> FusekiResult<Option<String>> {
+        // TODO: Implement MFA email retrieval from user profile
+        Ok(Some("user@example.com".to_string())) // Placeholder
+    }
+
+    /// Store WebAuthn challenge
+    pub async fn store_webauthn_challenge(&self, username: &str, challenge: &str) -> FusekiResult<()> {
+        // TODO: Implement WebAuthn challenge storage
+        info!("Storing WebAuthn challenge for user: {}", username);
+        Ok(())
+    }
+
+    /// Store SMS phone number for user
+    pub async fn store_sms_phone(&self, username: &str, phone: &str) -> FusekiResult<()> {
+        // TODO: Implement SMS phone storage in user profile
+        info!("Storing SMS phone for user: {}", username);
+        Ok(())
+    }
+
     /// Update MFA challenge (placeholder)
     pub async fn update_mfa_challenge(
         &self,
@@ -373,6 +406,7 @@ impl AuthService {
         // TODO: Implement MFA status retrieval
         Ok(MfaStatus {
             enabled: false,
+            enrolled_methods: vec![],
             backup_codes_remaining: 0,
             last_used: None,
             expires_at: None,
@@ -406,11 +440,6 @@ impl AuthService {
         Ok(())
     }
 
-    /// Store SMS phone number (placeholder)
-    pub async fn store_sms_phone(&self, _username: &str, _phone: &str) -> FusekiResult<()> {
-        // TODO: Implement SMS phone storage
-        Ok(())
-    }
 
     /// Cleanup LDAP cache
     pub async fn cleanup_ldap_cache(&self) {
@@ -446,9 +475,8 @@ impl From<User> for AuthUser {
 
 /// Axum extractor implementation for AuthUser
 use axum::{
-    extract::{FromRequestParts, State},
+    extract::FromRequestParts,
     http::{request::Parts, StatusCode},
-    RequestPartsExt,
 };
 use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
 

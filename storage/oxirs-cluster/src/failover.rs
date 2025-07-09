@@ -107,7 +107,8 @@ pub enum FailoverEvent {
 
 /// Node state tracking for failover decisions
 #[derive(Debug, Clone)]
-struct NodeState {
+pub struct NodeState {
+    #[allow(dead_code)]
     node_id: OxirsNodeId,
     health: NodeHealthLevel,
     last_seen: Instant,
@@ -275,7 +276,7 @@ impl FailoverManager {
         let health_monitor = self.health_monitor.clone();
         let node_states = self.node_states.clone();
         let event_sender = self.event_sender.clone();
-        let config = self.config.clone();
+        let _config = self.config.clone();
         let running = self.running.clone();
 
         tokio::spawn(async move {
@@ -822,7 +823,7 @@ impl FailoverManager {
         let new_leader = self.select_best_leader_candidate(&candidates).await?;
 
         // Step 4: Initiate leader election timeout
-        let election_timeout = self.config.leader_election_timeout;
+        let _election_timeout = self.config.leader_election_timeout;
         let election_start = Instant::now();
 
         // Step 5: Simulate consensus-based leader election

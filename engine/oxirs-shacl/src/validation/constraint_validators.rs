@@ -133,9 +133,9 @@ pub struct ClassConstraintValidator;
 impl ConstraintValidator for ClassConstraintValidator {
     fn validate(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         context: &ConstraintContext,
-        graph_name: Option<&str>,
+        _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
         for value in &context.values {
             // Check if the value is an instance of the required class

@@ -125,7 +125,7 @@ impl RuleEngineProfiler {
 
     /// Start timing an operation
     pub fn start_operation(&mut self, operation_name: &str) {
-        debug!("Starting operation: {}", operation_name);
+        debug!("Starting operation: {operation_name}");
         self.operation_stack
             .push((operation_name.to_string(), Instant::now()));
     }
@@ -135,7 +135,7 @@ impl RuleEngineProfiler {
         if let Some((name, start_time)) = self.operation_stack.pop() {
             if name == operation_name {
                 let duration = start_time.elapsed();
-                debug!("Completed operation '{}' in {:?}", operation_name, duration);
+                debug!("Completed operation '{operation_name}' in {duration:?}");
 
                 self.operation_timings
                     .entry(operation_name.to_string())
@@ -143,12 +143,11 @@ impl RuleEngineProfiler {
                     .push(duration);
             } else {
                 warn!(
-                    "Operation stack mismatch: expected '{}', got '{}'",
-                    name, operation_name
+                    "Operation stack mismatch: expected '{name}', got '{operation_name}'"
                 );
             }
         } else {
-            warn!("No operation to end for '{}'", operation_name);
+            warn!("No operation to end for '{operation_name}'");
         }
     }
 
@@ -159,7 +158,7 @@ impl RuleEngineProfiler {
         let estimated_memory = self.estimate_memory_usage();
         self.memory_snapshots
             .push((label.to_string(), estimated_memory));
-        debug!("Memory snapshot '{}': {} bytes", label, estimated_memory);
+        debug!("Memory snapshot '{label}': {estimated_memory} bytes");
     }
 
     /// Estimate current memory usage (simplified implementation)
@@ -203,22 +202,22 @@ impl RuleEngineProfiler {
         // Check thresholds and generate warnings
         if rule_loading_time.as_millis() > self.thresholds.max_rule_loading_time as u128 {
             warnings.push(format!(
-                "Rule loading time ({:?}) exceeds threshold ({}ms)",
-                rule_loading_time, self.thresholds.max_rule_loading_time
+                "Rule loading time ({rule_loading_time:?}) exceeds threshold ({}ms)",
+                self.thresholds.max_rule_loading_time
             ));
         }
 
         if forward_chaining_time.as_millis() > self.thresholds.max_forward_chaining_time as u128 {
             warnings.push(format!(
-                "Forward chaining time ({:?}) exceeds threshold ({}ms)",
-                forward_chaining_time, self.thresholds.max_forward_chaining_time
+                "Forward chaining time ({forward_chaining_time:?}) exceeds threshold ({}ms)",
+                self.thresholds.max_forward_chaining_time
             ));
         }
 
         if backward_chaining_time.as_millis() > self.thresholds.max_backward_chaining_time as u128 {
             warnings.push(format!(
-                "Backward chaining time ({:?}) exceeds threshold ({}ms)",
-                backward_chaining_time, self.thresholds.max_backward_chaining_time
+                "Backward chaining time ({backward_chaining_time:?}) exceeds threshold ({}ms)",
+                self.thresholds.max_backward_chaining_time
             ));
         }
 
@@ -232,8 +231,8 @@ impl RuleEngineProfiler {
 
         if peak_memory > self.thresholds.max_memory_usage * 1024 * 1024 {
             warnings.push(format!(
-                "Peak memory usage ({} bytes) exceeds threshold ({} MB)",
-                peak_memory, self.thresholds.max_memory_usage
+                "Peak memory usage ({peak_memory} bytes) exceeds threshold ({} MB)",
+                self.thresholds.max_memory_usage
             ));
         }
 
@@ -347,9 +346,9 @@ impl PerformanceTestHarness {
         facts: Vec<RuleAtom>,
     ) -> PerformanceMetrics {
         info!(
-            "Starting comprehensive performance test with {} rules and {} facts",
-            rules.len(),
-            facts.len()
+            "Starting comprehensive performance test with {rule_count} rules and {fact_count} facts",
+            rule_count = rules.len(),
+            fact_count = facts.len()
         );
 
         let mut engine = RuleEngine::new();
@@ -371,7 +370,7 @@ impl PerformanceTestHarness {
             engine.forward_chain(&facts).unwrap_or_default()
         });
 
-        info!("Forward chaining derived {} facts", derived_facts.len());
+        info!("Forward chaining derived {derived_fact_count} facts", derived_fact_count = derived_facts.len());
 
         // Test backward chaining performance (if we have a goal)
         if let Some(goal) = facts.first() {
@@ -381,7 +380,7 @@ impl PerformanceTestHarness {
         }
 
         let metrics = self.profiler.generate_report();
-        info!("Performance test completed in {:?}", metrics.total_time);
+        info!("Performance test completed in {total_time:?}", total_time = metrics.total_time);
 
         metrics
     }
@@ -389,8 +388,7 @@ impl PerformanceTestHarness {
     /// Run a memory stress test
     pub fn run_memory_stress_test(&mut self, scale_factor: usize) -> PerformanceMetrics {
         info!(
-            "Starting memory stress test with scale factor {}",
-            scale_factor
+            "Starting memory stress test with scale factor {scale_factor}"
         );
 
         let mut engine = RuleEngine::new();
@@ -438,7 +436,7 @@ impl PerformanceTestHarness {
                 predicate: Term::Constant(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                 ),
-                object: Term::Constant(format!("http://example.org/Type{val}", val = i % 100)),
+                object: Term::Constant(format!("http://example.org/Type{}", i % 100)),
             });
         }
 
@@ -457,7 +455,7 @@ impl PerformanceTestHarness {
                     predicate: Term::Constant(
                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                     ),
-                    object: Term::Constant(format!("http://example.org/Type{val}", val = i % 100)),
+                    object: Term::Constant(format!("http://example.org/Type{}", i % 100)),
                 }],
                 head: vec![RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
@@ -607,7 +605,7 @@ mod tests {
         // Test with large number of facts (should use parallel)
         let large_facts: Vec<RuleAtom> = (0..10)
             .map(|i| RuleAtom::Triple {
-                subject: Term::Constant(format!("item{}", i)),
+                subject: Term::Constant(format!("item{i}")),
                 predicate: Term::Constant("input".to_string()),
                 object: Term::Constant("value".to_string()),
             })
@@ -665,7 +663,7 @@ mod tests {
         assert!(benchmark.full_reasoning_time > Duration::new(0, 0));
         assert!(benchmark.facts_derived > 0);
 
-        println!("Benchmark results: {}", benchmark);
+        println!("Benchmark results: {benchmark}");
     }
 
     #[test]
@@ -769,7 +767,7 @@ impl ParallelRuleEngine {
                     metrics.rule_loading_time += start_time.elapsed();
                 }
 
-                info!("Added {} rules to parallel engine", rules.len());
+                info!("Added {rule_count} rules to parallel engine", rule_count = rules.len());
                 Ok(())
             }
             _ => Err("Failed to acquire rule storage lock".to_string()),
@@ -848,7 +846,7 @@ impl ParallelRuleEngine {
         derived_facts: Arc<Mutex<Vec<RuleAtom>>>,
         _metrics: Arc<Mutex<PerformanceMetrics>>,
     ) {
-        debug!("Worker thread {} starting forward chaining", thread_id);
+        debug!("Worker thread {thread_id} starting forward chaining");
 
         // Create local rule engine for this worker
         let mut local_engine = RuleEngine::new();
@@ -885,7 +883,7 @@ impl ParallelRuleEngine {
                     );
                 }
                 Err(e) => {
-                    warn!("Worker thread {} failed: {}", thread_id, e);
+                    warn!("Worker thread {thread_id} failed: {e}");
                 }
             }
         }
@@ -1022,7 +1020,7 @@ impl IncrementalReasoningEngine {
 
         // Identify which rules are affected by the new facts
         let affected_rules = self.identify_affected_rules(&new_facts)?;
-        info!("Identified {} affected rules", affected_rules.len());
+        info!("Identified {rule_count} affected rules", rule_count = affected_rules.len());
 
         // Perform incremental reasoning only on affected rules
         let new_derived_facts = self.reason_incrementally(new_facts, affected_rules)?;
@@ -1159,7 +1157,7 @@ impl IncrementalReasoningEngine {
                             derived_facts.extend(new_derived);
                         }
                         Err(e) => {
-                            warn!("Failed to apply rule '{}': {}", rule_name, e);
+                            warn!("Failed to apply rule '{rule_name}': {e}");
                         }
                     }
                 }
@@ -1315,7 +1313,7 @@ impl IncrementalReasoningEngine {
             facts_derived: incremental_results.len(),
         };
 
-        info!("Benchmark results: {:?}", results);
+        info!("Benchmark results: {results:?}");
         Ok(results)
     }
 }

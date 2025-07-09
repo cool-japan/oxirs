@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 use tracing;
 
 use super::core::QuantumPattern;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Variational Quantum Eigensolver for Pattern Learning
 #[derive(Debug, Clone)]
@@ -107,10 +107,8 @@ impl VariationalQuantumEigensolver {
             if (i >> control) & 1 == 1 {
                 let target_flipped = i ^ (1 << target);
                 if target_flipped < n_states {
-                    let temp = pattern.quantum_state.amplitudes[i];
-                    pattern.quantum_state.amplitudes[i] =
-                        pattern.quantum_state.amplitudes[target_flipped];
-                    pattern.quantum_state.amplitudes[target_flipped] = temp;
+                    let i = i;
+                    pattern.quantum_state.amplitudes.swap(i, target_flipped);
                 }
             }
         }

@@ -85,11 +85,11 @@ impl ServiceOptimizer {
         if pattern
             .subject
             .as_ref()
-            .map_or(false, |s| s.starts_with('?'))
+            .is_some_and(|s| s.starts_with('?'))
             && pattern
                 .object
                 .as_ref()
-                .map_or(false, |o| o.starts_with('?'))
+                .is_some_and(|o| o.starts_with('?'))
         {
             predicted_size *= 2.0; // More variables = more results
         }
@@ -418,7 +418,7 @@ impl ServiceOptimizer {
 
         // Factor in error rate
         if let Some(error_rate) = service.performance.error_rate {
-            reliability_score *= (1.0 - error_rate);
+            reliability_score *= 1.0 - error_rate;
         }
 
         Ok(reliability_score.min(1.0))
@@ -782,7 +782,9 @@ impl ServiceOptimizer {
         let local_hour = ((hour as i32) + primary_timezone_offset).rem_euclid(24) as u32;
 
         // Peak hours typically have more network congestion
-        let congestion_factor = match local_hour {
+        
+
+        match local_hour {
             0..=5 => 0.8,   // Night: lower congestion
             6..=8 => 1.3,   // Morning peak
             9..=11 => 1.1,  // Business hours
@@ -791,9 +793,7 @@ impl ServiceOptimizer {
             18..=20 => 1.5, // Evening peak
             21..=23 => 1.0, // Evening
             _ => 1.0,
-        };
-
-        congestion_factor
+        }
     }
 
     /// Estimate service timezone offset (simplified heuristic)
@@ -1152,21 +1152,21 @@ impl ServiceOptimizer {
         if pattern
             .subject
             .as_ref()
-            .map_or(false, |s| s.starts_with('?'))
+            .is_some_and(|s| s.starts_with('?'))
         {
             cost += 5.0;
         }
         if pattern
             .predicate
             .as_ref()
-            .map_or(false, |p| p.starts_with('?'))
+            .is_some_and(|p| p.starts_with('?'))
         {
             cost += 10.0; // Predicate variables are very expensive
         }
         if pattern
             .object
             .as_ref()
-            .map_or(false, |o| o.starts_with('?'))
+            .is_some_and(|o| o.starts_with('?'))
         {
             cost += 5.0;
         }
@@ -1217,21 +1217,21 @@ impl ServiceOptimizer {
         if pattern
             .subject
             .as_ref()
-            .map_or(false, |s| s.starts_with('?'))
+            .is_some_and(|s| s.starts_with('?'))
         {
             complexity_score += 1;
         }
         if pattern
             .predicate
             .as_ref()
-            .map_or(false, |p| p.starts_with('?'))
+            .is_some_and(|p| p.starts_with('?'))
         {
             complexity_score += 2; // Predicate variables are more complex
         }
         if pattern
             .object
             .as_ref()
-            .map_or(false, |o| o.starts_with('?'))
+            .is_some_and(|o| o.starts_with('?'))
         {
             complexity_score += 1;
         }

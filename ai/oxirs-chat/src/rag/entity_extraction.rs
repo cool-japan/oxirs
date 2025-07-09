@@ -8,6 +8,12 @@ use super::*;
 /// Entity extractor for identifying entities and relationships in queries
 pub struct EntityExtractor;
 
+impl Default for EntityExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EntityExtractor {
     pub fn new() -> Self {
         Self
@@ -59,7 +65,7 @@ impl EntityExtractor {
   ]
 }}
 
-Query: "{}"
+Query: "{query}"
 
 Focus on:
 - Named entities (people, places, organizations, concepts)
@@ -67,8 +73,7 @@ Focus on:
 - Technical terms and domain-specific concepts
 - Only extract explicit entities mentioned in the query
 
-JSON Response:"#,
-            query
+JSON Response:"#
         );
 
         // Initialize LLM manager
@@ -192,7 +197,7 @@ JSON Response:"#,
 
         for (i, word) in words.iter().enumerate() {
             // Look for capitalized words (potential proper nouns)
-            if word.chars().next().map_or(false, |c| c.is_uppercase()) && word.len() > 2 {
+            if word.chars().next().is_some_and(|c| c.is_uppercase()) && word.len() > 2 {
                 // Skip common question words
                 if !self.is_stop_word(&word.to_lowercase()) {
                     entities.push(ExtractedEntity {

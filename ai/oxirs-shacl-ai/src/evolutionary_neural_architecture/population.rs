@@ -3,7 +3,7 @@
 use super::types::*;
 // ParentSelection and OffspringGeneration are now imported via super::types::*
 use super::core::FitnessEvaluations;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Architecture population manager
 #[derive(Debug)]

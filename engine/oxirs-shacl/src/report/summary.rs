@@ -297,7 +297,7 @@ impl ValidationAnalysis {
 
     fn generate_quality_insights(
         summary: &ValidationSummary,
-        violations: &[ValidationViolation],
+        _violations: &[ValidationViolation],
     ) -> Vec<QualityInsight> {
         let mut insights = Vec::new();
 

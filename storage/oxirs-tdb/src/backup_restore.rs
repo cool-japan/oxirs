@@ -340,6 +340,7 @@ pub struct BackupRestoreManager {
     /// Backup metadata storage
     backup_metadata: Arc<RwLock<HashMap<String, BackupMetadata>>>,
     /// Active backup/restore operations
+    #[allow(dead_code)]
     active_operations: Arc<RwLock<HashMap<String, BackupProgress>>>,
     /// Compression engine
     compressor: AdaptiveCompressor,
@@ -788,6 +789,7 @@ impl BackupRestoreManager {
     }
 
     /// Collect all database files
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_all_files(
         &self,
         database_path: &Path,
@@ -899,8 +901,7 @@ impl BackupRestoreManager {
         let random_component = hasher.finish() & 0xFFFF; // Use lower 16 bits for compactness
 
         format!(
-            "{}_{:x}_{:x}_{:04x}",
-            prefix, timestamp_nanos, counter, random_component
+            "{prefix}_{timestamp_nanos:x}_{counter:x}_{random_component:04x}"
         )
     }
 

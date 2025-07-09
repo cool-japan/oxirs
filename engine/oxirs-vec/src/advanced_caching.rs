@@ -11,10 +11,14 @@ use crate::Vector;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, RwLock};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
+
+/// Type alias for complex tag index structure
+type TagIndex = Arc<RwLock<HashMap<String, HashMap<String, Vec<CacheKey>>>>>;
 
 /// Cache eviction policy
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -156,11 +160,14 @@ impl CacheKey {
         self
     }
 
-    pub fn to_string(&self) -> String {
+}
+
+impl fmt::Display for CacheKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref variant) = self.variant {
-            format!("{}:{}:{}", self.namespace, self.key, variant)
+            write!(f, "{}:{}:{}", self.namespace, self.key, variant)
         } else {
-            format!("{}:{}", self.namespace, self.key)
+            write!(f, "{}:{}", self.namespace, self.key)
         }
     }
 }
@@ -853,6 +860,7 @@ impl PersistentCache {
 pub struct MultiLevelCache {
     memory_cache: Arc<RwLock<MemoryCache>>,
     persistent_cache: Option<Arc<PersistentCache>>,
+    #[allow(dead_code)]
     config: CacheConfig,
     stats: Arc<RwLock<MultiLevelCacheStats>>,
 }
@@ -1016,7 +1024,7 @@ impl MultiLevelCache {
 /// Cache invalidation utilities with indexing support
 pub struct CacheInvalidator {
     cache: Arc<MultiLevelCache>,
-    tag_index: Arc<RwLock<HashMap<String, HashMap<String, Vec<CacheKey>>>>>, // tag_key -> tag_value -> keys
+    tag_index: TagIndex, // tag_key -> tag_value -> keys
     namespace_index: Arc<RwLock<HashMap<String, Vec<CacheKey>>>>,            // namespace -> keys
 }
 
@@ -1483,8 +1491,7 @@ impl CacheAnalyzer {
         // Calculate performance score (weighted combination of metrics)
         let performance_score =
             (hit_ratio * 0.4 + (1.0 - memory_utilization) * 0.3 + persistent_hit_ratio * 0.3)
-                .max(0.0)
-                .min(1.0);
+                .clamp(0.0, 1.0);
 
         CacheAnalysisReport {
             memory_utilization,

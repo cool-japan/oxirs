@@ -26,8 +26,8 @@ pub async fn run(
     }
 
     if let Some(ref graph_uri) = graph {
-        println!("Target graph: {}", graph_uri);
-        utils::validate_iri(graph_uri).map_err(|e| format!("Invalid graph URI: {}", e))?;
+        println!("Target graph: {graph_uri}");
+        utils::validate_iri(graph_uri).map_err(|e| format!("Invalid graph URI: {e}"))?;
     }
 
     // Check if dataset location exists or create it
@@ -77,7 +77,7 @@ pub async fn run(
         println!("  Size: {}", utils::format_file_size(file_size));
 
         let format = utils::detect_rdf_format(file);
-        println!("  Format: {}", format);
+        println!("  Format: {format}");
 
         let file_start = Instant::now();
         let result = load_file(&location, file, &format, graph.as_deref())?;
@@ -96,7 +96,7 @@ pub async fn run(
 
         if result.triples_loaded > 0 {
             let rate = result.triples_loaded as f64 / file_duration.as_secs_f64();
-            println!("  Rate: {:.0} triples/second", rate);
+            println!("  Rate: {rate:.0} triples/second");
         }
 
         if let Some(ref mut indicator) = progress_indicator {
@@ -113,15 +113,15 @@ pub async fn run(
     // Final statistics
     println!("\n=== Load Complete ===");
     println!("Total files processed: {}", files.len());
-    println!("Total triples loaded: {}", total_triples);
+    println!("Total triples loaded: {total_triples}");
     if total_errors > 0 {
-        println!("Total errors: {}", total_errors);
+        println!("Total errors: {total_errors}");
     }
     println!("Total duration: {}", utils::format_duration(total_duration));
 
     if total_triples > 0 {
         let overall_rate = total_triples as f64 / total_duration.as_secs_f64();
-        println!("Overall rate: {:.0} triples/second", overall_rate);
+        println!("Overall rate: {overall_rate:.0} triples/second");
     }
 
     if stats {
@@ -132,7 +132,7 @@ pub async fn run(
     tool_stats.print_summary("TDB Loader");
 
     if total_errors > 0 {
-        return Err(format!("Load completed with {} errors", total_errors).into());
+        return Err(format!("Load completed with {total_errors} errors").into());
     }
 
     Ok(())
@@ -221,13 +221,13 @@ fn parse_rdf_for_loading(content: &str, format: &str) -> ToolResult<(Vec<LoadTri
             match parse_turtle_for_loading(content) {
                 Ok(parsed_triples) => triples.extend(parsed_triples),
                 Err(e) => {
-                    eprintln!("    Turtle parsing error: {}", e);
+                    eprintln!("    Turtle parsing error: {e}");
                     errors += 1;
                 }
             }
         }
         _ => {
-            return Err(format!("Loading format '{}' not yet implemented", format).into());
+            return Err(format!("Loading format '{format}' not yet implemented").into());
         }
     }
 

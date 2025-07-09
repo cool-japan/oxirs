@@ -5,7 +5,7 @@
 
 use crate::error::{FusekiError, FusekiResult};
 use futures::future::BoxFuture;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
@@ -282,6 +282,12 @@ pub struct PathStatistics {
     pub optimization_failures: u64,
     pub path_frequency: HashMap<String, u64>,
     pub strategy_effectiveness: HashMap<String, f64>,
+}
+
+impl Default for AdvancedPropertyPathOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AdvancedPropertyPathOptimizer {
@@ -576,7 +582,7 @@ impl AdvancedPropertyPathOptimizer {
             PathRewrite::Replace(new_pattern) => Ok(new_pattern.clone()),
             PathRewrite::UseIndex(index_name) => {
                 // Create a custom pattern that represents index usage
-                Ok(PathPattern::Property(format!("INDEX:{}", index_name)))
+                Ok(PathPattern::Property(format!("INDEX:{index_name}")))
             }
             PathRewrite::Materialize => {
                 // Wrap the pattern to indicate materialization
@@ -846,7 +852,7 @@ impl AdvancedPropertyPathOptimizer {
         let index_info = self.index_info.read().await;
         Ok(index_info
             .path_indexes
-            .contains_key(&format!("{}+", predicate)))
+            .contains_key(&format!("{predicate}+")))
     }
 
     /// Find best available index for path
@@ -1148,11 +1154,11 @@ impl AdvancedPropertyPathOptimizer {
 
         match strategy {
             PathExecutionStrategy::IndexLookup { index_name } => {
-                hints.push(format!("Using index: {}", index_name));
+                hints.push(format!("Using index: {index_name}"));
             }
             PathExecutionStrategy::BidirectionalMeet { meet_point } => {
                 if let Some(point) = meet_point {
-                    hints.push(format!("Bidirectional search meeting at depth {}", point));
+                    hints.push(format!("Bidirectional search meeting at depth {point}"));
                 }
             }
             PathExecutionStrategy::ParallelAlternatives => {

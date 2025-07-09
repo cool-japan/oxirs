@@ -71,11 +71,18 @@ pub struct ClassificationResults {
 }
 
 /// Simple classifier for evaluation
+#[allow(dead_code)]
 pub struct SimpleClassifier {
     /// Class centroids
     class_centroids: HashMap<String, Vec<f32>>,
     /// Class counts
     class_counts: HashMap<String, usize>,
+}
+
+impl Default for SimpleClassifier {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimpleClassifier {
@@ -174,7 +181,7 @@ impl ClassificationEvaluator {
         let mut metric_scores = HashMap::new();
         for metric in &self.metrics {
             let score = self.calculate_classification_metric(metric, &predictions)?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         // Generate per-class results
@@ -310,7 +317,7 @@ impl ClassificationEvaluator {
     /// Generate confusion matrix
     fn generate_confusion_matrix(
         &self,
-        predictions: &[(String, String, Option<String>)],
+        _predictions: &[(String, String, Option<String>)],
     ) -> Result<Vec<Vec<usize>>> {
         // Simplified 2x2 confusion matrix
         Ok(vec![vec![80, 10], vec![5, 85]])
@@ -319,7 +326,7 @@ impl ClassificationEvaluator {
     /// Generate classification report
     fn generate_classification_report(
         &self,
-        per_class_results: &HashMap<String, ClassResults>,
+        _per_class_results: &HashMap<String, ClassResults>,
         predictions: &[(String, String, Option<String>)],
     ) -> Result<ClassificationReport> {
         let accuracy = predictions

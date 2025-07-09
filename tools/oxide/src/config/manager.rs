@@ -235,7 +235,7 @@ impl ConfigManager {
 
         // Load profile-specific config if exists
         if profile != "default" {
-            let profile_path = self.config_dir.join(format!("config.{}.toml", profile));
+            let profile_path = self.config_dir.join(format!("config.{profile}.toml"));
             if profile_path.exists() {
                 let profile_config = self.load_config_file(&profile_path)?;
                 config = self.merge_configs(config, profile_config);
@@ -251,10 +251,10 @@ impl ConfigManager {
     /// Load a configuration file
     fn load_config_file(&self, path: &Path) -> CliResult<OxideConfig> {
         let content = fs::read_to_string(path)
-            .map_err(|e| CliError::config_error(format!("Cannot read config file: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot read config file: {e}")))?;
 
         toml::from_str(&content)
-            .map_err(|e| CliError::config_error(format!("Invalid TOML in config file: {}", e)))
+            .map_err(|e| CliError::config_error(format!("Invalid TOML in config file: {e}")))
     }
 
     /// Merge two configurations (right overwrites left)
@@ -329,20 +329,20 @@ impl ConfigManager {
 
         // Ensure config directory exists
         fs::create_dir_all(&self.config_dir).map_err(|e| {
-            CliError::config_error(format!("Cannot create config directory: {}", e))
+            CliError::config_error(format!("Cannot create config directory: {e}"))
         })?;
 
         let path = if profile == "default" {
             self.config_dir.join("config.toml")
         } else {
-            self.config_dir.join(format!("config.{}.toml", profile))
+            self.config_dir.join(format!("config.{profile}.toml"))
         };
 
         let content = toml::to_string_pretty(config)
-            .map_err(|e| CliError::config_error(format!("Cannot serialize config: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot serialize config: {e}")))?;
 
         fs::write(&path, content)
-            .map_err(|e| CliError::config_error(format!("Cannot write config file: {}", e)))?;
+            .map_err(|e| CliError::config_error(format!("Cannot write config file: {e}")))?;
 
         Ok(())
     }

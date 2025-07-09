@@ -6,8 +6,7 @@
 use crate::error::{FusekiError, FusekiResult};
 use serde_json::Value;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap};
-use tracing::{debug, info};
+use std::collections::HashMap;
 
 /// Result of an aggregation operation
 #[derive(Debug, Clone)]
@@ -99,6 +98,12 @@ pub struct SampleAggregate {
     value: Option<Value>,
 }
 
+impl Default for SampleAggregate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SampleAggregate {
     pub fn new() -> Self {
         Self { value: None }
@@ -142,6 +147,12 @@ impl AggregateFunction for SampleAggregate {
 #[derive(Debug, Clone)]
 pub struct MedianAggregate {
     values: Vec<f64>,
+}
+
+impl Default for MedianAggregate {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MedianAggregate {
@@ -206,6 +217,12 @@ impl AggregateFunction for MedianAggregate {
 #[derive(Debug, Clone)]
 pub struct ModeAggregate {
     value_counts: HashMap<String, usize>,
+}
+
+impl Default for ModeAggregate {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ModeAggregate {
@@ -474,6 +491,12 @@ pub struct CountDistinctAggregate {
     values: std::collections::HashSet<String>,
 }
 
+impl Default for CountDistinctAggregate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CountDistinctAggregate {
     pub fn new() -> Self {
         Self {
@@ -549,8 +572,7 @@ impl AggregationFactory {
             }
             "COUNT_DISTINCT" => Ok(Box::new(CountDistinctAggregate::new())),
             _ => Err(FusekiError::bad_request(format!(
-                "Unknown aggregation function: {}",
-                function_name
+                "Unknown aggregation function: {function_name}"
             ))),
         }
     }
@@ -582,6 +604,12 @@ pub struct EnhancedAggregationProcessor {
     aggregates: HashMap<String, Box<dyn AggregateFunction>>,
 }
 
+impl Default for EnhancedAggregationProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedAggregationProcessor {
     pub fn new() -> Self {
         Self {
@@ -607,8 +635,7 @@ impl EnhancedAggregationProcessor {
             aggregate.add_value(value)
         } else {
             Err(FusekiError::internal(format!(
-                "Unknown aggregation alias: {}",
-                alias
+                "Unknown aggregation alias: {alias}"
             )))
         }
     }

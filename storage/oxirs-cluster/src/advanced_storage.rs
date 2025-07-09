@@ -143,7 +143,7 @@ impl AtomicFile {
     }
 
     /// Commit the atomic write operation
-    fn commit(mut self) -> Result<()> {
+    fn commit(self) -> Result<()> {
         if matches!(self.sync_mode, WalSyncMode::Sync | WalSyncMode::FullSync) {
             self.file.sync_all()?;
         }
@@ -346,6 +346,7 @@ impl WriteAheadLog {
 #[derive(Debug)]
 struct MmapStorage {
     _file: File,
+    #[allow(dead_code)]
     mmap: Mmap,
 }
 
@@ -359,6 +360,7 @@ impl MmapStorage {
     }
 
     /// Read data from memory-mapped region
+    #[allow(dead_code)]
     fn read(&self, offset: usize, length: usize) -> Result<&[u8]> {
         if offset + length > self.mmap.len() {
             return Err(anyhow!("Read beyond end of memory-mapped file"));
@@ -367,6 +369,7 @@ impl MmapStorage {
     }
 
     /// Get total size of memory-mapped region
+    #[allow(dead_code)]
     fn len(&self) -> usize {
         self.mmap.len()
     }
@@ -420,6 +423,7 @@ impl<K: Clone + std::hash::Hash + Eq, V: Clone> LruCache<K, V> {
         }
     }
 
+    #[allow(dead_code)]
     fn len(&self) -> usize {
         self.map.len()
     }
@@ -699,8 +703,7 @@ impl AdvancedStorageBackend {
 
         // Write snapshot file atomically
         let snapshot_path = self.config.data_dir.join(format!(
-            "snapshot-{}-{}.dat",
-            last_included_index, last_included_term
+            "snapshot-{last_included_index}-{last_included_term}.dat"
         ));
 
         let mut atomic_file = AtomicFile::create(snapshot_path, self.config.wal_sync_mode)?;
@@ -708,7 +711,7 @@ impl AdvancedStorageBackend {
         atomic_file.commit()?;
 
         // Store metadata in database (complete all DB operations first)
-        let key = format!("snapshot-{}-{}", last_included_index, last_included_term);
+        let key = format!("snapshot-{last_included_index}-{last_included_term}");
         {
             let serialized_metadata = {
                 let mut serializer = self.serializer.lock().await;
@@ -758,7 +761,7 @@ impl AdvancedStorageBackend {
         last_included_index: u64,
         last_included_term: u64,
     ) -> Result<Option<Vec<u8>>> {
-        let key = format!("snapshot-{}-{}", last_included_index, last_included_term);
+        let key = format!("snapshot-{last_included_index}-{last_included_term}");
 
         // Try cache first
         let metadata = {
@@ -813,8 +816,7 @@ impl AdvancedStorageBackend {
 
         // Load snapshot data from file
         let snapshot_path = self.config.data_dir.join(format!(
-            "snapshot-{}-{}.dat",
-            last_included_index, last_included_term
+            "snapshot-{last_included_index}-{last_included_term}.dat"
         ));
 
         if !snapshot_path.exists() {
@@ -1067,7 +1069,7 @@ mod tests {
         let (storage, temp_dir) = create_test_storage().await;
 
         let data = b"test data";
-        let metadata = storage.create_snapshot(1, 1, vec![1], data).await.unwrap();
+        let _metadata = storage.create_snapshot(1, 1, vec![1], data).await.unwrap();
 
         // Corrupt the snapshot file
         let snapshot_path = temp_dir.path().join("snapshot-1-1.dat");

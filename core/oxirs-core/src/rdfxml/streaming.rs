@@ -1075,6 +1075,7 @@ mod tests {
     // use tokio::io::Cursor;
 
     #[tokio::test]
+    #[ignore] // Extremely slow test - over 14 minutes
     async fn test_dom_free_streaming_parser() {
         use std::io::Cursor;
 

@@ -111,7 +111,7 @@ fn basic_rule_engine_example() -> Result<()> {
 
     println!("Family facts:");
     for fact in &family_facts {
-        println!("  {:?}", fact);
+        println!("  {fact:?}");
     }
 
     // Perform forward chaining
@@ -128,7 +128,7 @@ fn basic_rule_engine_example() -> Result<()> {
                 (subject, predicate, object)
             {
                 if p == "ancestor" {
-                    println!("  Derived: {} is ancestor of {}", s, o);
+                    println!("  Derived: {s} is ancestor of {o}");
                 }
             }
         }
@@ -144,7 +144,7 @@ fn basic_rule_engine_example() -> Result<()> {
 
     engine.add_facts(family_facts);
     let can_prove = engine.backward_chain(&goal)?;
-    println!("  Can prove john is ancestor of sue: {}", can_prove);
+    println!("  Can prove john is ancestor of sue: {can_prove}");
 
     println!();
     Ok(())
@@ -193,7 +193,7 @@ fn debugging_example() -> Result<()> {
     let _results = debug_engine.debug_forward_chain(&test_facts)?;
 
     // Show debug information
-    println!("Debug trace entries: {}", debug_engine.get_trace().len());
+    println!("Debug trace entries: {trace_count}", trace_count = debug_engine.get_trace().len());
 
     let metrics = debug_engine.get_metrics();
     println!("Performance metrics:");
@@ -207,7 +207,7 @@ fn debugging_example() -> Result<()> {
     // Generate and show debug report
     println!("\n📊 Debug Report:");
     let report = debug_engine.generate_debug_report();
-    println!("{}", report);
+    println!("{report}");
 
     Ok(())
 }
@@ -270,8 +270,8 @@ fn rdfs_reasoning_example() -> Result<()> {
             if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
                 (subject, predicate, object)
             {
-                let short_pred = p.split('#').last().unwrap_or(p);
-                println!("  {} {} {}", s, short_pred, o);
+                let short_pred = p.split('#').next_back().unwrap_or(p);
+                println!("  {s} {short_pred} {o}");
             }
         }
     }
@@ -292,8 +292,8 @@ fn rdfs_reasoning_example() -> Result<()> {
             {
                 // Skip input facts, show only inferred ones
                 if !rdfs_facts.contains(fact) {
-                    let short_pred = p.split('#').last().unwrap_or(p);
-                    println!("  Inferred: {} {} {}", s, short_pred, o);
+                    let short_pred = p.split('#').next_back().unwrap_or(p);
+                    println!("  Inferred: {s} {short_pred} {o}");
                 }
             }
         }
@@ -369,8 +369,8 @@ fn owl_reasoning_example() -> Result<()> {
             if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
                 (subject, predicate, object)
             {
-                let short_pred = p.split('#').last().unwrap_or(p);
-                println!("  {} {} {}", s, short_pred, o);
+                let short_pred = p.split('#').next_back().unwrap_or(p);
+                println!("  {s} {short_pred} {o}");
             }
         }
     }
@@ -391,8 +391,8 @@ fn owl_reasoning_example() -> Result<()> {
             {
                 // Skip input facts, show only inferred ones
                 if !owl_facts.contains(fact) {
-                    let short_pred = p.split('#').last().unwrap_or(p);
-                    println!("  Inferred: {} {} {}", s, short_pred, o);
+                    let short_pred = p.split('#').next_back().unwrap_or(p);
+                    println!("  Inferred: {s} {short_pred} {o}");
                 }
             }
         }
@@ -508,8 +508,8 @@ fn swrl_reasoning_example() -> Result<()> {
             if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
                 (subject, predicate, object)
             {
-                let short_pred = p.split('#').last().unwrap_or(p);
-                println!("  {} {} {}", s, short_pred, o);
+                let short_pred = p.split('#').next_back().unwrap_or(p);
+                println!("  {s} {short_pred} {o}");
             }
         }
     }
@@ -530,8 +530,8 @@ fn swrl_reasoning_example() -> Result<()> {
             {
                 // Skip input facts, show only inferred ones
                 if !swrl_facts.contains(fact) {
-                    let short_pred = p.split('#').last().unwrap_or(p);
-                    println!("  Inferred: {} {} {}", s, short_pred, o);
+                    let short_pred = p.split('#').next_back().unwrap_or(p);
+                    println!("  Inferred: {s} {short_pred} {o}");
                 }
             }
         }
@@ -552,15 +552,15 @@ fn performance_analysis_example() -> Result<()> {
     // Add multiple rules for performance testing
     for i in 0..10 {
         debug_engine.engine.add_rule(Rule {
-            name: format!("perf_rule_{}", i),
+            name: format!("perf_rule_{i}"),
             body: vec![RuleAtom::Triple {
                 subject: Term::Variable("X".to_string()),
-                predicate: Term::Constant(format!("input_{}", i)),
+                predicate: Term::Constant(format!("input_{i}")),
                 object: Term::Variable("Y".to_string()),
             }],
             head: vec![RuleAtom::Triple {
                 subject: Term::Variable("X".to_string()),
-                predicate: Term::Constant(format!("output_{}", i)),
+                predicate: Term::Constant(format!("output_{i}")),
                 object: Term::Variable("Y".to_string()),
             }],
         });
@@ -571,17 +571,17 @@ fn performance_analysis_example() -> Result<()> {
     for i in 0..1000 {
         for j in 0..10 {
             large_facts.push(RuleAtom::Triple {
-                subject: Term::Constant(format!("entity_{}", i)),
-                predicate: Term::Constant(format!("input_{}", j)),
-                object: Term::Constant(format!("value_{}_{}", i, j)),
+                subject: Term::Constant(format!("entity_{i}")),
+                predicate: Term::Constant(format!("input_{j}")),
+                object: Term::Constant(format!("value_{i}_{j}")),
             });
         }
     }
 
     println!(
-        "Processing {} facts with {} rules...",
-        large_facts.len(),
-        10
+        "Processing {fact_count} facts with {rule_count} rules...",
+        fact_count = large_facts.len(),
+        rule_count = 10
     );
 
     // Execute with performance monitoring
@@ -592,7 +592,7 @@ fn performance_analysis_example() -> Result<()> {
     // Display performance metrics
     let metrics = debug_engine.get_metrics();
     println!("\n📊 Performance Results:");
-    println!("  Total execution time: {:?}", total_time);
+    println!("  Total execution time: {total_time:?}");
     println!("  Facts processed: {}", metrics.facts_processed);
     println!("  Facts derived: {}", metrics.facts_derived);
     println!("  Memory peak: {} bytes", metrics.memory_peak);
@@ -603,19 +603,19 @@ fn performance_analysis_example() -> Result<()> {
     rule_times.sort_by(|a, b| b.1.cmp(a.1));
     for (rule, time) in rule_times.iter().take(5) {
         let count = metrics.rule_execution_counts.get(*rule).unwrap_or(&0);
-        println!("    {}: {:?} ({} executions)", rule, time, count);
+        println!("    {rule}: {time:?} ({count} executions)");
     }
 
     // Show throughput
     let throughput = metrics.facts_processed as f64 / total_time.as_secs_f64();
-    println!("  Throughput: {:.0} facts/second", throughput);
+    println!("  Throughput: {throughput:.0} facts/second");
 
     // Check for performance issues
     let conflicts = debug_engine.get_conflicts();
     if !conflicts.is_empty() {
         println!("\n⚠️  Performance issues detected:");
         for conflict in conflicts {
-            println!("    {}", conflict.resolution_suggestion);
+            println!("    {resolution_suggestion}", resolution_suggestion = conflict.resolution_suggestion);
         }
     } else {
         println!("\n✅ No performance issues detected");

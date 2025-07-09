@@ -3,12 +3,12 @@
 //! This module implements sophisticated optimization strategies for nested queries,
 //! including query rewriting, materialization, and execution planning.
 
-use crate::error::{FusekiError, FusekiResult};
+use crate::error::FusekiResult;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::debug;
 
 /// Advanced subquery optimizer with multiple optimization strategies
 #[derive(Debug, Clone)]
@@ -352,6 +352,12 @@ pub struct CacheStatistics {
     pub average_entry_lifetime_seconds: f64,
 }
 
+impl Default for AdvancedSubqueryOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdvancedSubqueryOptimizer {
     pub fn new() -> Self {
         Self {
@@ -376,8 +382,8 @@ impl AdvancedSubqueryOptimizer {
         let mut rewrites_applied = Vec::new();
 
         for subquery in &subqueries {
-            if let Some(rewrite) = self.rewrite_engine.find_applicable_rewrite(&subquery)? {
-                optimized_query = self.apply_rewrite(&optimized_query, &subquery, &rewrite)?;
+            if let Some(rewrite) = self.rewrite_engine.find_applicable_rewrite(subquery)? {
+                optimized_query = self.apply_rewrite(&optimized_query, subquery, &rewrite)?;
                 rewrites_applied.push(rewrite);
             }
         }
@@ -451,7 +457,7 @@ impl AdvancedSubqueryOptimizer {
                 // Find the matching closing brace
                 if let Some(subquery_content) = self.extract_balanced_braces(&query[abs_brace_start..]) {
                     subqueries.push(SubqueryInfo {
-                        id: format!("subquery_{}", pos),
+                        id: format!("subquery_{pos}"),
                         query_text: subquery_content.clone(),
                         subquery_type,
                         is_correlated: self.detect_correlation(&subquery_content, query),
@@ -526,51 +532,39 @@ impl AdvancedSubqueryOptimizer {
         if let Some(where_start) = query_lower.find("where") {
             let where_clause = &query[where_start..];
 
-            // Find subquery patterns within braces
-            let mut brace_count = 0;
-            let mut start_pos = None;
-            let chars: Vec<char> = where_clause.chars().collect();
-
-            for (i, &ch) in chars.iter().enumerate() {
-                match ch {
-                    '{' => {
-                        if brace_count == 0 {
-                            start_pos = Some(i + 1);
-                        }
-                        brace_count += 1;
-                    }
-                    '}' => {
-                        brace_count -= 1;
-                        if brace_count == 0 && start_pos.is_some() {
-                            let start = start_pos.unwrap();
-                            let subquery_text = chars[start..i]
-                                .iter()
-                                .collect::<String>()
-                                .trim()
-                                .to_string();
-
-                            // Check if this is actually a SELECT subquery
-                            if subquery_text.to_lowercase().contains("select") {
-                                subqueries.push(SubqueryInfo {
-                                    id: format!("subquery_{}", subqueries.len()),
-                                    query_text: subquery_text.clone(),
-                                    subquery_type: SubqueryType::From,
-                                    is_correlated: false, // Simple check - could be enhanced
-                                    outer_vars: self.extract_variables(&subquery_text),
-                                    estimated_size: 100, // Default estimate
-                                    estimated_selectivity: 0.1, // Default selectivity
-                                    estimated_cost: 1.0,
-                                    filter_count: 0,
-                                    join_count: 1,
-                                    outer_cardinality: 1000,
-                                    dependencies: Vec::new(),
-                                });
-                            }
-                            start_pos = None;
+            // Find subquery patterns within braces - look for { SELECT patterns specifically
+            let mut chars = where_clause.chars().peekable();
+            let mut pos = 0;
+            
+            while let Some(ch) = chars.next() {
+                if ch == '{' {
+                    // Found an opening brace, check if it contains SELECT
+                    let remaining: String = chars.clone().collect();
+                    
+                    // Extract the content until the matching closing brace
+                    if let Some(subquery_content) = self.extract_balanced_braces(&where_clause[pos..]) {
+                        let subquery_text = subquery_content.trim();
+                        
+                        // Check if this is actually a SELECT subquery
+                        if subquery_text.to_lowercase().contains("select") {
+                            subqueries.push(SubqueryInfo {
+                                id: format!("subquery_{}", subqueries.len()),
+                                query_text: subquery_text.to_string(),
+                                subquery_type: SubqueryType::From,
+                                is_correlated: self.detect_correlation(subquery_text, query),
+                                outer_vars: self.extract_variables(subquery_text),
+                                estimated_size: 100, // Default estimate
+                                estimated_selectivity: 0.1, // Default selectivity
+                                estimated_cost: 1.0,
+                                filter_count: 0,
+                                join_count: 1,
+                                outer_cardinality: 1000,
+                                dependencies: Vec::new(),
+                            });
                         }
                     }
-                    _ => {}
                 }
+                pos += ch.len_utf8();
             }
         }
 
@@ -714,15 +708,43 @@ impl AdvancedSubqueryOptimizer {
 
     /// Detect if a subquery is correlated with the outer query
     fn detect_correlation(&self, subquery: &str, outer_query: &str) -> bool {
-        let subquery_vars = self.extract_variables(subquery);
-        
         // Extract variables from the outer query (excluding the subquery itself)
         let outer_query_without_subquery = outer_query.replace(subquery, "");
         let outer_vars = self.extract_variables(&outer_query_without_subquery);
-
-        // Check if any variables from the subquery are referenced in the outer query
-        // This indicates correlation
-        subquery_vars.iter().any(|var| outer_vars.contains(var))
+        
+        // Extract variables that are SELECT-ed (projected) by the subquery
+        let subquery_projected_vars = if let Some(select_pos) = subquery.to_lowercase().find("select") {
+            let select_part = &subquery[select_pos..];
+            if let Some(where_pos) = select_part.to_lowercase().find("where") {
+                let select_clause = &select_part[..where_pos];
+                self.extract_variables(select_clause)
+            } else {
+                self.extract_variables(select_part)
+            }
+        } else {
+            Vec::new()
+        };
+        
+        // Get only the truly outer variables (not projected by the subquery)
+        let truly_outer_vars: Vec<_> = outer_vars.iter()
+            .filter(|var| !subquery_projected_vars.contains(var))
+            .collect();
+        
+        // True correlation: subquery references variables from truly outer scope
+        // Look for truly outer variables used within the subquery WHERE clause
+        let subquery_lower = subquery.to_lowercase();
+        if let Some(where_pos) = subquery_lower.find("where") {
+            let subquery_where = &subquery[where_pos..];
+            
+            // Check if any truly outer variables are referenced in subquery WHERE clause
+            truly_outer_vars.iter().any(|var| {
+                let var_pattern = format!("?{var}");
+                subquery_where.contains(&var_pattern)
+            })
+        } else {
+            // No WHERE clause means no correlation possible
+            false
+        }
     }
 
     fn apply_rewrite(
@@ -882,6 +904,12 @@ impl AdvancedSubqueryOptimizer {
     }
 }
 
+impl Default for SubqueryRewriteEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SubqueryRewriteEngine {
     pub fn new() -> Self {
         let rules = Self::create_default_rules();
@@ -1035,6 +1063,12 @@ impl SubqueryRewriteEngine {
     }
 }
 
+impl Default for SubqueryCostEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SubqueryCostEstimator {
     pub fn new() -> Self {
         Self {
@@ -1075,6 +1109,12 @@ impl SubqueryCostEstimator {
         let join_cost = subquery.join_count as f64 * self.operation_costs.join_cost_per_pair;
 
         scan_cost + filter_cost + join_cost
+    }
+}
+
+impl Default for MaterializationManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1219,6 +1259,12 @@ impl MaterializationManager {
     }
 }
 
+impl Default for ExecutionStrategySelector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExecutionStrategySelector {
     pub fn new() -> Self {
         Self {
@@ -1273,6 +1319,12 @@ impl ExecutionStrategySelector {
     }
 }
 
+impl Default for PatternMatcher {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternMatcher {
     pub fn new() -> Self {
         Self {
@@ -1285,6 +1337,12 @@ impl PatternMatcher {
     }
 }
 
+impl Default for CardinalityEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CardinalityEstimator {
     pub fn new() -> Self {
         Self {
@@ -1294,12 +1352,24 @@ impl CardinalityEstimator {
     }
 }
 
+impl Default for SelectivityEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SelectivityEstimator {
     pub fn new() -> Self {
         Self {
             filter_selectivities: HashMap::new(),
             default_selectivity: 0.3,
         }
+    }
+}
+
+impl Default for HistoricalStats {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

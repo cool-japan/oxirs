@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 /// Configuration for continual learning
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ContinualLearningConfig {
     pub base_config: ModelConfig,
     /// Memory management configuration
@@ -30,18 +31,6 @@ pub struct ContinualLearningConfig {
     pub replay_config: ReplayConfig,
 }
 
-impl Default for ContinualLearningConfig {
-    fn default() -> Self {
-        Self {
-            base_config: ModelConfig::default(),
-            memory_config: MemoryConfig::default(),
-            regularization_config: RegularizationConfig::default(),
-            architecture_config: ArchitectureConfig::default(),
-            task_config: TaskConfig::default(),
-            replay_config: ReplayConfig::default(),
-        }
-    }
-}
 
 /// Memory management configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -564,7 +553,7 @@ impl ContinualLearningModel {
     /// Create new continual learning model
     pub fn new(config: ContinualLearningConfig) -> Self {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut _rng = rand::thread_rng();
 
         let model_id = Uuid::new_v4();
         let dimensions = config.base_config.dimensions;
@@ -665,7 +654,8 @@ impl ContinualLearningModel {
             TaskDetection::Automatic
         ) && self.detect_task_boundary(&data)?
         {
-            let new_task_id = format!("task_{}", self.task_history.len() + 1);
+            let task_num = self.task_history.len() + 1;
+            let new_task_id = format!("task_{task_num}");
             self.start_task(new_task_id.clone(), "automatic".to_string())?;
         }
 
@@ -830,7 +820,7 @@ impl ContinualLearningModel {
         &mut self,
         data: Array1<f32>,
         target: Array1<f32>,
-        task_id: String,
+        _task_id: String,
     ) -> Result<()> {
         // Compute gradients
         let gradients = self.compute_gradients(&data, &target)?;
@@ -1091,13 +1081,13 @@ impl ContinualLearningModel {
     /// Generative replay
     async fn generative_replay(&mut self) -> Result<()> {
         if let Some(ref generator) = self.generator {
-            let replay_batch_size = (self.config.replay_config.replay_ratio * 32.0) as usize;
-            let generator_clone = generator.clone();
+            let _replay_batch_size = (self.config.replay_config.replay_ratio * 32.0) as usize;
+            let _generator_clone = generator.clone();
 
             // Drop the immutable borrow by exiting the if let scope
         }
 
-        if let Some(generator) = self.generator.as_ref().map(|g| g.clone()) {
+        if let Some(generator) = self.generator.clone() {
             let replay_batch_size = (self.config.replay_config.replay_ratio * 32.0) as usize;
 
             for _ in 0..replay_batch_size {
@@ -1121,7 +1111,7 @@ impl ContinualLearningModel {
     /// Compute EWC state for current task
     fn compute_ewc_state(&mut self) -> Result<()> {
         if let Some(ref current_task) = self.current_task {
-            let dimensions = self.config.base_config.dimensions;
+            let _dimensions = self.config.base_config.dimensions;
             let mut fisher_information = Array2::zeros(self.embeddings.dim());
 
             // Compute Fisher Information Matrix
@@ -1340,7 +1330,8 @@ impl EmbeddingModel for ContinualLearningModel {
 
             // Simulate task switching
             if epoch % 5 == 0 && epoch > 0 {
-                let task_id = format!("task_{}", epoch / 5);
+                let task_num = epoch / 5;
+                let task_id = format!("task_{task_num}");
                 self.start_task(task_id, "training".to_string())?;
             }
 
@@ -1376,7 +1367,7 @@ impl EmbeddingModel for ContinualLearningModel {
         Err(anyhow!("Entity not found: {}", entity))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(&relation_id) = self.relations.get(relation) {
             if relation_id < self.embeddings.nrows() {
                 let embedding = self.embeddings.row(relation_id);
@@ -1388,7 +1379,7 @@ impl EmbeddingModel for ContinualLearningModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let predicate_emb = self.get_relation_embedding(predicate)?;
+        let predicate_emb = self.getrelation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // Simple TransE-style scoring
@@ -1411,7 +1402,7 @@ impl EmbeddingModel for ContinualLearningModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != subject {
                 let score = self.score_triple(subject, predicate, entity)?;
                 scores.push((entity.clone(), score));
@@ -1432,7 +1423,7 @@ impl EmbeddingModel for ContinualLearningModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != object {
                 let score = self.score_triple(entity, predicate, object)?;
                 scores.push((entity.clone(), score));
@@ -1453,7 +1444,7 @@ impl EmbeddingModel for ContinualLearningModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             let score = self.score_triple(subject, relation, object)?;
             scores.push((relation.clone(), score));
         }

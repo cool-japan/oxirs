@@ -212,7 +212,7 @@ impl PerformanceMonitor {
             interval.tick().await;
 
             if let Err(e) = self.collect_metrics().await {
-                eprintln!("Error collecting metrics: {}", e);
+                eprintln!("Error collecting metrics: {e}");
             }
 
             self.analyze_and_alert().await;
@@ -247,7 +247,7 @@ impl PerformanceMonitor {
         // In production, this would query the actual node
         // For demonstration, we generate realistic metrics
 
-        let base_latency = Duration::from_millis(10 + (node_id as u64 * 2));
+        let base_latency = Duration::from_millis(10 + (node_id * 2));
         let operations_per_second = 1000.0 + (node_id as f64 * 50.0);
 
         Ok(NodeMetrics {
@@ -436,7 +436,7 @@ impl PerformanceMonitor {
     /// Send an alert
     fn send_alert(&self, alert: PerformanceAlert) {
         if let Err(e) = self.alert_sender.send(alert.clone()) {
-            eprintln!("Failed to send alert: {}", e);
+            eprintln!("Failed to send alert: {e}");
         }
 
         // Store alert in metrics
@@ -573,13 +573,13 @@ mod tests {
     #[tokio::test]
     async fn test_performance_monitor_creation() {
         let thresholds = PerformanceThresholds::default();
-        let (monitor, mut alert_receiver) = PerformanceMonitor::new(thresholds);
+        let (monitor, _alert_receiver) = PerformanceMonitor::new(thresholds);
 
         // Test that monitor can collect metrics
         monitor.collect_metrics().await.unwrap();
 
         let metrics = monitor.get_metrics();
-        assert!(metrics.node_metrics.len() > 0);
+        assert!(!metrics.node_metrics.is_empty());
     }
 
     #[test]

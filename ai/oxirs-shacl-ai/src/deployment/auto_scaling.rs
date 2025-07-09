@@ -15,6 +15,12 @@ pub struct AutoScalingEngine {
     custom_scalers: Vec<CustomScaler>,
 }
 
+impl Default for AutoScalingEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AutoScalingEngine {
     pub fn new() -> Self {
         Self {
@@ -31,6 +37,12 @@ impl AutoScalingEngine {
 pub struct HorizontalPodAutoscaler {
     metrics: Vec<ScalingMetric>,
     behavior: ScalingBehavior,
+}
+
+impl Default for HorizontalPodAutoscaler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl HorizontalPodAutoscaler {
@@ -138,6 +150,12 @@ pub struct VerticalPodAutoscaler {
     resource_policy: VpaResourcePolicy,
 }
 
+impl Default for VerticalPodAutoscaler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VerticalPodAutoscaler {
     pub fn new() -> Self {
         Self {
@@ -215,6 +233,12 @@ pub enum ResourceName {
 pub struct ClusterAutoscaler {
     node_groups: Vec<NodeGroup>,
     scaling_config: ClusterScalingConfig,
+}
+
+impl Default for ClusterAutoscaler {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ClusterAutoscaler {

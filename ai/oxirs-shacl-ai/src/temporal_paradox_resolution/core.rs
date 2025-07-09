@@ -3,12 +3,10 @@
 //! This module contains the main engine for temporal paradox resolution
 //! and core validation result types.
 
-use crate::ai_orchestrator::AiOrchestrator;
 use crate::ShaclAiError;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
 use super::{causality::CausalityLoopDetector, timeline::*, types::*};
 

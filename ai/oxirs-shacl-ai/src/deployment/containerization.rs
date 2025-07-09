@@ -16,6 +16,12 @@ pub struct ContainerizationEngine {
     runtime_manager: RuntimeManager,
 }
 
+impl Default for ContainerizationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContainerizationEngine {
     pub fn new() -> Self {
         Self {
@@ -89,6 +95,12 @@ pub struct ImageBuilder {
     optimization_config: ImageOptimizationConfig,
 }
 
+impl Default for ImageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImageBuilder {
     pub fn new() -> Self {
         Self {
@@ -147,6 +159,12 @@ pub struct RuntimeManager {
     runtime_config: RuntimeConfig,
 }
 
+impl Default for RuntimeManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RuntimeManager {
     pub fn new() -> Self {
         Self {
@@ -167,21 +185,13 @@ pub enum ContainerRuntime {
 
 /// Runtime configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct RuntimeConfig {
     pub resource_limits: ResourceLimits,
     pub security_context: SecurityContext,
     pub networking: NetworkingConfig,
 }
 
-impl Default for RuntimeConfig {
-    fn default() -> Self {
-        Self {
-            resource_limits: ResourceLimits::default(),
-            security_context: SecurityContext::default(),
-            networking: NetworkingConfig::default(),
-        }
-    }
-}
 
 /// Security context
 #[derive(Debug, Clone, Serialize, Deserialize)]

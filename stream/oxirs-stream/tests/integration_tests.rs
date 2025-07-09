@@ -60,9 +60,10 @@ fn create_test_events(count: usize) -> Vec<StreamEvent> {
 
 /// Test stream configuration
 fn create_test_stream_config(backend: StreamBackendType) -> StreamConfig {
+    let test_id = Uuid::new_v4();
     StreamConfig {
         backend,
-        topic: format!("test-topic-{}", Uuid::new_v4()),
+        topic: format!("test-topic-{test_id}"),
         batch_size: 10,
         flush_interval_ms: 1000,
         max_connections: 5,
@@ -220,7 +221,7 @@ mod memory_backend_tests {
         }
         let publish_duration = start.elapsed();
 
-        println!("Published {} events in {:?}", event_count, publish_duration);
+        println!("Published {event_count} events in {publish_duration:?}");
 
         // Measure consume throughput
         let start = std::time::Instant::now();
@@ -238,8 +239,7 @@ mod memory_backend_tests {
         let consume_duration = start.elapsed();
 
         println!(
-            "Consumed {} events in {:?}",
-            received_count, consume_duration
+            "Consumed {received_count} events in {consume_duration:?}"
         );
 
         assert_eq!(received_count, event_count);
@@ -882,8 +882,7 @@ mod performance_tests {
 
         let publish_throughput = event_count as f64 / publish_duration.as_secs_f64();
         println!(
-            "Publish throughput: {:.0} events/second",
-            publish_throughput
+            "Publish throughput: {publish_throughput:.0} events/second"
         );
 
         // Benchmark consuming
@@ -903,8 +902,7 @@ mod performance_tests {
 
         let consume_throughput = consumed_count as f64 / consume_duration.as_secs_f64();
         println!(
-            "Consume throughput: {:.0} events/second",
-            consume_throughput
+            "Consume throughput: {consume_throughput:.0} events/second"
         );
 
         // Verify performance targets
@@ -974,7 +972,7 @@ mod performance_tests {
         let p95 = latencies[(latencies.len() * 95) / 100];
         let p99 = latencies[(latencies.len() * 99) / 100];
 
-        println!("Latency P50: {:?}, P95: {:?}, P99: {:?}", p50, p95, p99);
+        println!("Latency P50: {p50:?}, P95: {p95:?}, P99: {p99:?}");
 
         // Verify latency targets (for memory backend)
         assert!(

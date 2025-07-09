@@ -419,7 +419,7 @@ impl QueryExecutor {
 
         // Convert to JSON value and handle nested selections
         self.complete_value(
-            &field_type,
+            field_type,
             &field_value,
             &field.selection_set,
             context,

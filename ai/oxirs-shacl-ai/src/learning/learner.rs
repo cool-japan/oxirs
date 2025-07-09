@@ -1,20 +1,19 @@
 //! Core shape learning implementation
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tracing;
 
 use oxirs_core::{
-    model::{Literal, NamedNode, Term, Triple},
+    model::NamedNode,
     RdfTerm, Store,
 };
 
 use oxirs_shacl::{
-    constraints::*, shapes::ShapeFactory, Constraint, ConstraintComponentId, PropertyPath,
-    Severity, Shape, ShapeId, ShapeType, Target, ValidationReport,
+    Constraint, ConstraintComponentId, Shape, ShapeId, Target,
 };
 
 use crate::{
-    ml::reinforcement::{Action, RLAlgorithm, RLConfig, ReinforcementLearner},
+    ml::reinforcement::{RLConfig, ReinforcementLearner},
     patterns::{Pattern, PatternType},
     Result, ShaclAiError,
 };
@@ -24,7 +23,7 @@ use super::performance::{
     PatternStatistics,
 };
 use super::types::{
-    LearningConfig, LearningQueryResult, LearningStatistics, ShapeTrainingData, TemporalPatterns,
+    LearningConfig, LearningQueryResult, LearningStatistics, ShapeTrainingData,
 };
 
 /// Shape learning engine for automatic constraint discovery
@@ -55,7 +54,7 @@ impl ShapeLearner {
             config
                 .rl_config
                 .clone()
-                .map(|rl_config| ReinforcementLearner::new(rl_config))
+                .map(ReinforcementLearner::new)
         } else {
             None
         };
@@ -178,7 +177,7 @@ impl ShapeLearner {
                 break;
             }
 
-            match self.learn_shape_for_class(store, &class, graph_name.as_deref()) {
+            match self.learn_shape_for_class(store, &class, graph_name) {
                 Ok(shape) => {
                     shapes.push(shape);
                     successful_count += 1;

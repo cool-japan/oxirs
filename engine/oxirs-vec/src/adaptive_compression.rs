@@ -320,7 +320,7 @@ impl VectorStats {
             return 0.5; // Neutral value
         }
 
-        let sample_size = (n / 10).max(5).min(50);
+        let sample_size = (n / 10).clamp(5, 50);
         let min_val = values.iter().fold(f32::INFINITY, |a, &b| a.min(b));
         let max_val = values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 

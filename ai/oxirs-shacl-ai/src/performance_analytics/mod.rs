@@ -17,7 +17,6 @@ pub use alerts::*;
 pub use config::*;
 pub use dashboard::*;
 pub use engine::*;
-pub use metrics::*;
 pub use monitoring::*;
 pub use optimization::*;
 pub use types::*;

@@ -5,7 +5,7 @@
 //! resilient methods and robust aggregation techniques.
 
 use super::config::AggregationStrategy;
-use super::participant::{LocalUpdate, PrivacyMetrics};
+use super::participant::LocalUpdate;
 use anyhow::Result;
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
@@ -153,9 +153,9 @@ impl AggregationEngine {
         let mut aggregated = HashMap::new();
 
         if let Some(first_update) = updates.first() {
-            for (param_name, _) in &first_update.parameter_updates {
+            for param_name in first_update.parameter_updates.keys() {
                 // Collect all parameter values for this parameter
-                let mut param_matrices: Vec<&Array2<f32>> = updates
+                let param_matrices: Vec<&Array2<f32>> = updates
                     .iter()
                     .filter_map(|update| update.parameter_updates.get(param_name))
                     .collect();

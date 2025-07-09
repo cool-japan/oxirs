@@ -216,7 +216,7 @@ pub mod helpers {
             .and_then(|n| n.to_str())
             .unwrap_or("file");
 
-        ProgressBuilder::new(format!("Downloading {}", filename))
+        ProgressBuilder::new(format!("Downloading {filename}"))
             .with_total(total_bytes)
             .bytes_style()
             .build()
@@ -246,7 +246,7 @@ pub mod helpers {
 
     /// Create a multi-file import progress
     pub fn import_progress(file: &str, current: usize, total: usize) -> ProgressBar {
-        ProgressBuilder::new(format!("Importing ({}/{}) {}", current, total, file))
+        ProgressBuilder::new(format!("Importing ({current}/{total}) {file}"))
             .spinner_style()
             .build()
     }
@@ -285,7 +285,7 @@ impl ProgressCallback for ProgressBar {
     }
 
     fn error(&self, message: &str) {
-        self.abandon_with_message(format!("Error: {}", message));
+        self.abandon_with_message(format!("Error: {message}"));
     }
 }
 

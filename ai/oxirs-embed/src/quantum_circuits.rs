@@ -8,8 +8,7 @@
 //! - Quantum Feature Maps and Kernels
 
 use anyhow::{anyhow, Result};
-use ndarray::{Array1, Array2, Array3, Axis};
-use rand::Rng;
+use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -481,9 +480,9 @@ impl VariationalQuantumEigensolver {
         let mut param_idx = 0;
 
         // Create hardware-efficient ansatz
-        for layer in 0..ansatz_depth {
+        for _layer in 0..ansatz_depth {
             // RY rotations
-            for qubit in 0..num_qubits {
+            for _qubit in 0..num_qubits {
                 ansatz.add_parameterized_gate(QuantumGate::RY(0.0), vec![param_idx]);
                 parameters.push(0.1 * rand::random::<f64>());
                 param_idx += 1;
@@ -495,7 +494,7 @@ impl VariationalQuantumEigensolver {
             }
 
             // RZ rotations
-            for qubit in 0..num_qubits {
+            for _qubit in 0..num_qubits {
                 ansatz.add_parameterized_gate(QuantumGate::RZ(0.0), vec![param_idx]);
                 parameters.push(0.1 * rand::random::<f64>());
                 param_idx += 1;
@@ -668,7 +667,7 @@ impl QuantumApproximateOptimization {
         let mut circuit = QuantumCircuit::new(self.num_qubits);
 
         // Initial superposition
-        for qubit in 0..self.num_qubits {
+        for _qubit in 0..self.num_qubits {
             circuit.add_gate(QuantumGate::H);
         }
 
@@ -691,7 +690,7 @@ impl QuantumApproximateOptimization {
 
             // Mixer unitary e^(-i*β*H_M)
             let beta = self.beta_params[layer];
-            for qubit in 0..self.num_qubits {
+            for _qubit in 0..self.num_qubits {
                 circuit.add_gate(QuantumGate::RX(2.0 * beta));
             }
         }
@@ -732,7 +731,7 @@ impl QuantumApproximateOptimization {
             let shift = 0.1;
 
             // Compute gradients for beta parameters
-            for i in 0..self.depth {
+            for (i, grad) in beta_gradients.iter_mut().enumerate().take(self.depth) {
                 // Forward shift
                 self.beta_params[i] += shift;
                 let cost_plus = self.compute_cost()?;
@@ -744,11 +743,11 @@ impl QuantumApproximateOptimization {
                 // Restore original value
                 self.beta_params[i] += shift;
 
-                beta_gradients[i] = (cost_plus - cost_minus) / (2.0 * shift);
+                *grad = (cost_plus - cost_minus) / (2.0 * shift);
             }
 
             // Compute gradients for gamma parameters
-            for i in 0..self.depth {
+            for (i, grad) in gamma_gradients.iter_mut().enumerate().take(self.depth) {
                 // Forward shift
                 self.gamma_params[i] += shift;
                 let cost_plus = self.compute_cost()?;
@@ -760,7 +759,7 @@ impl QuantumApproximateOptimization {
                 // Restore original value
                 self.gamma_params[i] += shift;
 
-                gamma_gradients[i] = (cost_plus - cost_minus) / (2.0 * shift);
+                *grad = (cost_plus - cost_minus) / (2.0 * shift);
             }
 
             // Update parameters (minimize cost)
@@ -941,6 +940,12 @@ pub struct QuantumErrorCorrection {
     pub mitigation_strategies: Vec<ErrorMitigationStrategy>,
 }
 
+impl Default for QuantumErrorCorrection {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Error mitigation strategies
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorMitigationStrategy {
@@ -1033,7 +1038,7 @@ impl QuantumErrorCorrection {
             return Ok(()); // Don't apply corrections if confidence is too low
         }
 
-        for (i, correction) in syndrome.corrections.iter().enumerate() {
+        for correction in syndrome.corrections.iter() {
             match correction {
                 QuantumGate::Z => {
                     // Apply phase correction
@@ -1151,27 +1156,27 @@ impl CoherenceTimeManager {
     }
 
     /// Apply coherence decay to quantum state
-    pub fn apply_coherence_decay(&self, state_vector: &mut Vec<Complex>) -> Result<()> {
+    pub fn apply_coherence_decay(&self, state_vector: &mut [Complex]) -> Result<()> {
         let num_qubits = (state_vector.len() as f64).log2() as usize;
 
         for qubit in 0..num_qubits {
             let coherence_factor = self.calculate_coherence_factor(qubit);
 
             // Apply amplitude damping (T1 process)
-            for i in 0..state_vector.len() {
+            for (i, amplitude) in state_vector.iter_mut().enumerate() {
                 let bit = (i >> qubit) & 1;
                 if bit == 1 {
                     // Excited state decays
-                    state_vector[i] = state_vector[i] * coherence_factor;
+                    *amplitude = *amplitude * coherence_factor;
                 }
             }
 
             // Apply dephasing (T2 process) by adding random phase
             if coherence_factor < 1.0 {
                 let phase_noise = (1.0 - coherence_factor) * rand::random::<f64>() * PI;
-                for i in 0..state_vector.len() {
+                for amplitude in state_vector.iter_mut() {
                     let phase_factor = Complex::new(phase_noise.cos(), phase_noise.sin());
-                    state_vector[i] = state_vector[i] * phase_factor;
+                    *amplitude = *amplitude * phase_factor;
                 }
             }
         }
@@ -1707,7 +1712,7 @@ mod tests {
         let mut error_correction = QuantumErrorCorrection::new();
 
         // Create a test state vector with some error
-        let mut state_vector = vec![
+        let state_vector = vec![
             Complex::new(0.7, 0.0), // |00⟩ - slightly denormalized
             Complex::new(0.0, 0.0), // |01⟩
             Complex::new(0.7, 0.0), // |10⟩ - slightly denormalized

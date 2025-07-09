@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Trait for text content validation
 #[async_trait]

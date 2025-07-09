@@ -43,6 +43,12 @@ impl AdaptiveCompressor {
 
         // Analyze data characteristics
         let stats = self.analyze_data(sample_data);
+        
+        // Check if compression is beneficial based on threshold
+        if stats.repetition_ratio < self.threshold && stats.sparsity < self.threshold {
+            // Data doesn't meet compression threshold, use simple algorithm
+            return AdvancedCompressionType::RunLength;
+        }
 
         // Decision tree based on data characteristics
         if stats.sparsity > 0.9 {
@@ -344,7 +350,7 @@ impl AdaptiveCompressor {
                 encoder.decompress(&temp_compressed)
             }
             AdvancedCompressionType::Adaptive => {
-                return Err(anyhow!("Recursive adaptive compression not allowed"));
+                Err(anyhow!("Recursive adaptive compression not allowed"))
             }
         }
     }

@@ -198,7 +198,7 @@ impl ResultIntegrator {
                                                 merged_data.insert(key.clone(), merged_value);
                                             } else {
                                                 federation_errors.push(FederationError::SchemaConflict {
-                                                    conflict: format!("Cannot merge field '{}' from multiple services", key),
+                                                    conflict: format!("Cannot merge field '{key}' from multiple services"),
                                                 });
                                             }
                                         }
@@ -206,8 +206,7 @@ impl ResultIntegrator {
                                             federation_errors.push(
                                                 FederationError::SchemaConflict {
                                                     conflict: format!(
-                                                        "Field '{}' exists in multiple services",
-                                                        key
+                                                        "Field '{key}' exists in multiple services"
                                                     ),
                                                 },
                                             );

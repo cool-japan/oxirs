@@ -1597,7 +1597,7 @@ impl SlackNotificationChannel {
 
 impl NotificationChannel for SlackNotificationChannel {
     fn send_notification(&self, alert: &Alert) -> Result<()> {
-        let payload = serde_json::json!({
+        let _payload = serde_json::json!({
             "text": format!("🚨 Alert: {}", alert.message),
             "attachments": [{
                 "color": match alert.severity {
@@ -1663,7 +1663,7 @@ impl WebhookNotificationChannel {
 
 impl NotificationChannel for WebhookNotificationChannel {
     fn send_notification(&self, alert: &Alert) -> Result<()> {
-        let payload = serde_json::to_value(alert)?;
+        let _payload = serde_json::to_value(alert)?;
 
         // In a real implementation, would send HTTP POST
         tracing::info!(

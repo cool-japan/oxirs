@@ -6,13 +6,19 @@ use std::time::Duration;
 
 use super::traits::*;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Audio format validator
 #[derive(Debug)]
 pub struct AudioFormatValidator {
     supported_formats: Vec<String>,
     max_file_size: usize,
+}
+
+impl Default for AudioFormatValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AudioFormatValidator {
@@ -150,6 +156,12 @@ pub struct SpeechRecognitionValidator {
     target_language: Option<String>,
 }
 
+impl Default for SpeechRecognitionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpeechRecognitionValidator {
     pub fn new() -> Self {
         Self {
@@ -271,6 +283,12 @@ pub struct MusicAnalysisValidator {
     analyze_genre: bool,
 }
 
+impl Default for MusicAnalysisValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MusicAnalysisValidator {
     pub fn new() -> Self {
         Self {
@@ -369,6 +387,12 @@ pub struct AudioQualityValidator {
     min_bitrate: u32,
     min_duration: Duration,
     max_duration: Duration,
+}
+
+impl Default for AudioQualityValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AudioQualityValidator {

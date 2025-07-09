@@ -166,7 +166,7 @@ impl FederatedQueryPlanner {
                 timeout: recommendations.suggested_timeout,
                 retry_config: self.config.default_retry_config.as_ref().map(|rc| {
                     crate::planner::planning::types::RetryConfig {
-                        max_attempts: rc.max_attempts as usize,
+                        max_attempts: rc.max_attempts,
                         initial_delay: rc.initial_delay,
                         max_delay: rc.max_delay,
                         backoff_multiplier: rc.backoff_multiplier,
@@ -189,7 +189,7 @@ impl FederatedQueryPlanner {
                     timeout: recommendations.suggested_timeout,
                     retry_config: self.config.default_retry_config.as_ref().map(|rc| {
                         crate::planner::planning::types::RetryConfig {
-                            max_attempts: rc.max_attempts as usize,
+                            max_attempts: rc.max_attempts,
                             initial_delay: rc.initial_delay,
                             max_delay: rc.max_delay,
                             backoff_multiplier: rc.backoff_multiplier,
@@ -262,7 +262,7 @@ impl FederatedQueryPlanner {
             timeout: std::time::Duration::from_secs(30),
             retry_config: self.config.default_retry_config.as_ref().map(|rc| {
                 crate::planner::planning::types::RetryConfig {
-                    max_attempts: rc.max_attempts as usize,
+                    max_attempts: rc.max_attempts,
                     initial_delay: rc.initial_delay,
                     max_delay: rc.max_delay,
                     backoff_multiplier: rc.backoff_multiplier,
@@ -640,7 +640,7 @@ impl FederatedQueryPlanner {
         // Analyze patterns to detect specific capability requirements
         for pattern in &query_info.patterns {
             // Check for geospatial patterns
-            if pattern.predicate.as_ref().map_or(false, |p| {
+            if pattern.predicate.as_ref().is_some_and(|p| {
                 p.contains("geo:") || p.contains("wgs84") || p.contains("geof:")
             }) || pattern.pattern_string.contains("geo:")
             {
@@ -648,7 +648,7 @@ impl FederatedQueryPlanner {
             }
 
             // Check for full-text search patterns
-            if pattern.predicate.as_ref().map_or(false, |p| {
+            if pattern.predicate.as_ref().is_some_and(|p| {
                 p.contains("pf:") || p.contains("text:") || p.contains("lucene:")
             }) {
                 capabilities.push(crate::ServiceCapability::FullTextSearch);

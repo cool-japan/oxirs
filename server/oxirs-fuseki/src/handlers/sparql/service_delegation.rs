@@ -10,7 +10,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 /// SERVICE delegation manager
 #[derive(Debug, Clone)]
@@ -201,6 +201,12 @@ pub struct LoadBalancer {
     round_robin_index: std::sync::Arc<std::sync::atomic::AtomicUsize>,
 }
 
+impl Default for ServiceDelegationManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceDelegationManager {
     pub fn new() -> Self {
         Self {
@@ -298,8 +304,7 @@ impl ServiceDelegationManager {
 
         // Reconstruct the SERVICE clause
         Ok(format!(
-            "SERVICE <{}> {{ {} }}",
-            service_url, optimized_inner
+            "SERVICE <{service_url}> {{ {optimized_inner} }}"
         ))
     }
 
@@ -436,7 +441,7 @@ impl ServiceDelegationManager {
         use_cache: bool,
     ) -> FusekiResult<ServiceQueryResponse> {
         // Generate cache key
-        let cache_key = format!("{}:{}", service_url, query);
+        let cache_key = format!("{service_url}:{query}");
 
         // Check cache first if enabled
         if use_cache {
@@ -559,6 +564,12 @@ impl ServiceDelegationManager {
     pub async fn cleanup_cache(&self) {
         let mut cache = self.query_cache.write().await;
         cache.cleanup_expired();
+    }
+}
+
+impl Default for ParallelServiceExecutor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -734,6 +745,12 @@ impl ParallelServiceExecutor {
     }
 }
 
+impl Default for ServiceResultMerger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceResultMerger {
     pub fn new() -> Self {
         Self {
@@ -860,6 +877,12 @@ impl ServiceResultMerger {
     }
 }
 
+impl Default for EndpointDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EndpointDiscovery {
     pub fn new() -> Self {
         Self {
@@ -965,6 +988,12 @@ impl EndpointDiscovery {
             response_time_avg: None,
             last_checked: None,
         })
+    }
+}
+
+impl Default for HealthMonitor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1264,13 +1293,13 @@ impl LoadBalancer {
 
     /// Update endpoint weight
     pub fn set_endpoint_weight(&mut self, url: String, weight: f64) {
-        self.endpoint_weights.insert(url, weight.max(0.0).min(10.0));
+        self.endpoint_weights.insert(url, weight.clamp(0.0, 10.0));
     }
 
     /// Update endpoint health score
     pub fn set_endpoint_health_score(&mut self, url: String, score: f64) {
         self.endpoint_health_scores
-            .insert(url, score.max(0.0).min(1.0));
+            .insert(url, score.clamp(0.0, 1.0));
     }
 
     /// Get endpoint statistics

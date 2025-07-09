@@ -4,21 +4,21 @@
 //! with the federated query processing system. It enables cross-service semantic
 //! search, embedding-based query optimization, and vector similarity joins.
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use oxirs_vec::{
     federated_search::{FederatedSearchConfig, FederatedVectorSearch},
     similarity::SimilarityMetric,
-    Vector, VectorError,
+    Vector,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::{
-    service::{ServiceCapability, ServiceMetadata, ServiceRegistry, ServiceType},
-    FederatedService, ServicePerformance,
+    service::ServiceRegistry,
+    FederatedService,
 };
 
 /// Configuration for vector similarity federation

@@ -11,19 +11,15 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use uuid::Uuid;
 
 use crate::{
     forecasting_models::{TimeSeries, TimeSeriesDataPoint},
-    optimization_engine::PerformanceMetrics,
-    quality::QualityReport,
-    shape::Shape,
     Result, ShaclAiError,
 };
 
 use oxirs_core::Store;
-use oxirs_shacl::{ValidationConfig, ValidationReport};
 
 /// Main system monitoring engine
 #[derive(Debug)]
@@ -800,7 +796,7 @@ impl SystemMonitor {
         self.metrics_collector
             .lock()
             .map_err(|e| {
-                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {}", e))
+                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {e}"))
             })?
             .add_performance_metric(metric)?;
 
@@ -817,7 +813,7 @@ impl SystemMonitor {
         self.metrics_collector
             .lock()
             .map_err(|e| {
-                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {}", e))
+                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {e}"))
             })?
             .add_quality_metric(metric)?;
 
@@ -832,7 +828,7 @@ impl SystemMonitor {
         self.metrics_collector
             .lock()
             .map_err(|e| {
-                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {}", e))
+                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {e}"))
             })?
             .add_error_metric(metric)?;
 
@@ -845,7 +841,7 @@ impl SystemMonitor {
     /// Get current monitoring dashboard
     pub fn get_dashboard(&self) -> Result<MonitoringDashboard> {
         let dashboard = self.dashboard.read().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to read dashboard: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to read dashboard: {e}"))
         })?;
 
         Ok(dashboard.clone())
@@ -854,7 +850,7 @@ impl SystemMonitor {
     /// Get active alerts
     pub fn get_active_alerts(&self) -> Result<Vec<Alert>> {
         let alert_manager = self.alert_manager.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {e}"))
         })?;
 
         Ok(alert_manager.get_active_alerts())
@@ -863,7 +859,7 @@ impl SystemMonitor {
     /// Get system health status
     pub fn get_system_health(&self) -> Result<SystemHealth> {
         let health_checker = self.health_checker.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {e}"))
         })?;
 
         Ok(health_checker.get_overall_health())
@@ -872,7 +868,7 @@ impl SystemMonitor {
     /// Run health checks
     pub fn run_health_checks(&self) -> Result<Vec<HealthCheckResult>> {
         let mut health_checker = self.health_checker.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {e}"))
         })?;
 
         health_checker.run_all_checks()
@@ -883,7 +879,7 @@ impl SystemMonitor {
         self.metrics_collector
             .lock()
             .map_err(|e| {
-                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {}", e))
+                ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {e}"))
             })?
             .add_custom_metric(name, metric)?;
 
@@ -895,7 +891,7 @@ impl SystemMonitor {
         self.alert_manager
             .lock()
             .map_err(|e| {
-                ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {}", e))
+                ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {e}"))
             })?
             .add_alert_rule(rule)?;
 
@@ -905,11 +901,11 @@ impl SystemMonitor {
     /// Get monitoring statistics
     pub fn get_statistics(&self) -> Result<MonitoringStatistics> {
         let metrics_collector = self.metrics_collector.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock metrics collector: {e}"))
         })?;
 
         let alert_manager = self.alert_manager.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {e}"))
         })?;
 
         Ok(MonitoringStatistics {
@@ -964,7 +960,7 @@ impl SystemMonitor {
     /// Setup default health checks
     fn setup_default_health_checks(&self) -> Result<()> {
         let mut health_checker = self.health_checker.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {e}"))
         })?;
 
         // Add default health checks
@@ -994,7 +990,7 @@ impl SystemMonitor {
     /// Setup default alert rules
     fn setup_default_alert_rules(&self) -> Result<()> {
         let mut alert_manager = self.alert_manager.lock().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {}", e))
+            ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {e}"))
         })?;
 
         // Add default alert rules
@@ -1078,7 +1074,7 @@ impl MetricsCollector {
     fn add_custom_metric(&mut self, name: String, metric: CustomMetric) -> Result<()> {
         self.custom_metrics
             .entry(name)
-            .or_insert_with(VecDeque::new)
+            .or_default()
             .push_back(metric);
         Ok(())
     }

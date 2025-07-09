@@ -1,13 +1,13 @@
 //! Authentication and user management handlers
 
 use crate::{
-    auth::{AuthResult, AuthService, AuthUser, LoginRequest, LoginResponse, Permission, User},
+    auth::{AuthResult, AuthUser, LoginRequest, LoginResponse, Permission},
     config::UserConfig,
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
 use axum::{
-    extract::{Query, State},
+    extract::State,
     http::{
         header::{AUTHORIZATION, SET_COOKIE},
         HeaderMap, StatusCode,
@@ -15,9 +15,8 @@ use axum::{
     response::{IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 /// User registration request
 #[derive(Debug, Deserialize)]
@@ -454,8 +453,7 @@ pub async fn delete_user_handler(
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(FusekiError::not_found(format!(
-            "User '{}' not found",
-            username
+            "User '{username}' not found"
         )))
     }
 }
@@ -528,7 +526,7 @@ fn validate_user_registration(request: &RegisterUserRequest) -> FusekiResult<()>
 
     for role in &request.roles {
         if !is_valid_role(role) {
-            return Err(FusekiError::bad_request(format!("Invalid role: {}", role)));
+            return Err(FusekiError::bad_request(format!("Invalid role: {role}")));
         }
     }
 

@@ -1,16 +1,14 @@
 use anyhow::Result;
 use async_trait::async_trait;
-use chrono;
 use oxirs_chat::llm::config::ProviderConfig;
 use oxirs_chat::llm::providers::LLMProvider;
-use oxirs_chat::llm::types::{LLMRequest, LLMResponse, LLMResponseStream, Priority, Usage};
-use oxirs_chat::llm::{LLMConfig, LLMManager};
+use oxirs_chat::llm::types::{LLMRequest, LLMResponse, LLMResponseStream, Usage};
+use oxirs_chat::llm::LLMConfig;
 use oxirs_chat::*;
 use oxirs_core::{ConcreteStore, Store};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::TempDir;
-use tokio;
 use uuid::Uuid;
 
 /// Mock LLM provider for testing
@@ -35,8 +33,7 @@ impl LLMProvider for MockLLMProvider {
         let response_content = format!(
             "Mock response to: {}",
             request
-                .messages
-                .get(0)
+                .messages.first()
                 .map(|m| m.content.as_str())
                 .unwrap_or("")
         );
@@ -118,6 +115,12 @@ pub struct TestLLMManager {
     mock_provider: MockLLMProvider,
 }
 
+impl Default for TestLLMManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestLLMManager {
     pub fn new() -> Self {
         Self {
@@ -158,7 +161,7 @@ async fn test_session_creation_and_persistence() {
     {
         let mut session_guard = session.lock().await;
         // Create a test LLM manager
-        let mut test_llm_manager = TestLLMManager::new();
+        let test_llm_manager = TestLLMManager::new();
 
         // For testing, we'll simulate the process_message functionality
         // Since we can't use the real process_message without modifying the Session struct
@@ -255,7 +258,7 @@ async fn test_session_backup_and_restore() {
 
     // Create store and manager
     let store = Arc::new(ConcreteStore::new().expect("Failed to create store"));
-    let mut manager = ChatManager::with_persistence(store.clone(), &persistence_path)
+    let manager = ChatManager::with_persistence(store.clone(), &persistence_path)
         .await
         .expect("Failed to create chat manager");
 

@@ -1,7 +1,7 @@
 //! Multi-objective optimization implementation
 
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Multi-objective optimizer
 #[derive(Debug)]

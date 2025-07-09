@@ -5,10 +5,7 @@
 //! personalization options.
 
 use crate::ModelConfig;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use uuid::Uuid;
 
 /// Configuration for federated learning
 #[derive(Debug, Clone, Serialize, Deserialize)]

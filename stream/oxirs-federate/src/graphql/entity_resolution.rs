@@ -278,7 +278,7 @@ impl GraphQLFederation {
         let selection_fields = first_entity.required_fields.join(" ");
 
         // Simple implementation - could be enhanced for batching
-        Ok(format!("{{ {} }}", selection_fields))
+        Ok(format!("{{ {selection_fields} }}"))
     }
 
     /// Analyze dependencies between entities
@@ -360,7 +360,7 @@ impl GraphQLFederation {
 
             let fut = async move {
                 let entity_refs: Vec<&EntityReference> =
-                    service_entities_owned.iter().map(|e| *e).collect();
+                    service_entities_owned.iter().copied().collect();
                 self_ref
                     .resolve_service_entity_batch(
                         &service_id_owned,
@@ -460,7 +460,7 @@ impl GraphQLFederation {
             ("Product", "sku") => serde_json::Value::String("SKU-789".to_string()),
             ("Order", "id") => serde_json::Value::String("order-999".to_string()),
             (_, "id") => serde_json::Value::String(format!("{}-id", entity_type.to_lowercase())),
-            (_, field) => serde_json::Value::String(format!("mock-{}", field)),
+            (_, field) => serde_json::Value::String(format!("mock-{field}")),
         }
     }
 
@@ -502,14 +502,13 @@ impl GraphQLFederation {
             r#"
             query($_representations: [_Any!]!) {{
                 _entities(representations: $_representations) {{
-                    ... on {} {{
+                    ... on {typename} {{
                         id
                         # Additional fields would be specified based on requirements
                     }}
                 }}
             }}
-            "#,
-            typename
+            "#
         );
 
         Ok(query)
@@ -562,8 +561,7 @@ impl GraphQLFederation {
             // For now, create a basic query structure - this should be enhanced
             // to properly build GraphQL _entities queries from EntityReference data
             let entities_query = format!(
-                "query {{ _entities(representations: [{{ __typename: \"{}\" }}]) {{ ... on {} {{ id }} }} }}",
-                typename, typename
+                "query {{ _entities(representations: [{{ __typename: \"{typename}\" }}]) {{ ... on {typename} {{ id }} }} }}"
             );
 
             // Execute query against service (mock implementation)
@@ -733,7 +731,7 @@ impl GraphQLFederation {
         // Combine all entity data into a unified response
         let mut combined_data = serde_json::Map::new();
 
-        for (_service_id, entities) in resolved_entities {
+        for entities in resolved_entities.values() {
             for entity in entities {
                 // Merge entity fields into response based on query structure
                 self.merge_entity_into_response(&mut combined_data, entity, original_query)?;
@@ -898,7 +896,7 @@ impl GraphQLFederation {
         }
 
         // Process field ownership
-        for (field_name, _field_def) in &schema.queries {
+        for field_name in schema.queries.keys() {
             composed.field_ownership.insert(
                 field_name.clone(),
                 FieldOwnershipType::Owned(service_id.to_string()),

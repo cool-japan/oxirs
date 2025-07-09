@@ -493,7 +493,7 @@ impl GraphQLFederation {
         let operation_name = original_query
             .operation_name
             .as_ref()
-            .map(|name| format!(" {}", name))
+            .map(|name| format!(" {name}"))
             .unwrap_or_default();
 
         // Build subscription with service-specific fields
@@ -803,7 +803,7 @@ impl GraphQLFederation {
                                 sdl.push_str(&self.generate_enum_type_sdl(type_def)?);
                             }
                             "SCALAR" => {
-                                sdl.push_str(&format!("scalar {}\n\n", type_name));
+                                sdl.push_str(&format!("scalar {type_name}\n\n"));
                             }
                             _ => {}
                         }
@@ -821,7 +821,7 @@ impl GraphQLFederation {
             .as_str()
             .ok_or_else(|| anyhow!("Missing type name"))?;
 
-        let mut sdl = format!("type {} ", type_name);
+        let mut sdl = format!("type {type_name} ");
 
         // Add directives (simplified - would need more sophisticated parsing)
         if let Some(description) = type_def["description"].as_str() {
@@ -837,7 +837,7 @@ impl GraphQLFederation {
             for field in fields {
                 if let Some(field_name) = field["name"].as_str() {
                     let field_type = self.extract_type_name_from_field(field)?;
-                    sdl.push_str(&format!("  {}: {}\n", field_name, field_type));
+                    sdl.push_str(&format!("  {field_name}: {field_type}\n"));
                 }
             }
         }
@@ -852,14 +852,14 @@ impl GraphQLFederation {
             .as_str()
             .ok_or_else(|| anyhow!("Missing type name"))?;
 
-        let mut sdl = format!("interface {} {{\n", type_name);
+        let mut sdl = format!("interface {type_name} {{\n");
 
         // Add fields
         if let Some(fields) = type_def["fields"].as_array() {
             for field in fields {
                 if let Some(field_name) = field["name"].as_str() {
                     let field_type = self.extract_type_name_from_field(field)?;
-                    sdl.push_str(&format!("  {}: {}\n", field_name, field_type));
+                    sdl.push_str(&format!("  {field_name}: {field_type}\n"));
                 }
             }
         }
@@ -874,13 +874,13 @@ impl GraphQLFederation {
             .as_str()
             .ok_or_else(|| anyhow!("Missing type name"))?;
 
-        let mut sdl = format!("enum {} {{\n", type_name);
+        let mut sdl = format!("enum {type_name} {{\n");
 
         // Add enum values
         if let Some(enum_values) = type_def["enumValues"].as_array() {
             for enum_value in enum_values {
                 if let Some(value_name) = enum_value["name"].as_str() {
-                    sdl.push_str(&format!("  {}\n", value_name));
+                    sdl.push_str(&format!("  {value_name}\n"));
                 }
             }
         }
@@ -900,11 +900,11 @@ impl GraphQLFederation {
             match kind {
                 "NON_NULL" => {
                     let inner_type = self.extract_type_name_recursive(&type_ref["ofType"])?;
-                    Ok(format!("{}!", inner_type))
+                    Ok(format!("{inner_type}!"))
                 }
                 "LIST" => {
                     let inner_type = self.extract_type_name_recursive(&type_ref["ofType"])?;
-                    Ok(format!("[{}]", inner_type))
+                    Ok(format!("[{inner_type}]"))
                 }
                 _ => {
                     if let Some(name) = type_ref["name"].as_str() {

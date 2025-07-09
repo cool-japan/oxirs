@@ -231,7 +231,7 @@ impl HuggingFaceEmbeddingProvider {
 
             let mut request_builder = self
                 .client
-                .post(&format!(
+                .post(format!(
                     "https://api-inference.huggingface.co/pipeline/feature-extraction/{}",
                     self.model
                 ))
@@ -240,7 +240,7 @@ impl HuggingFaceEmbeddingProvider {
 
             if let Some(ref api_key) = self.api_key {
                 request_builder =
-                    request_builder.header("Authorization", format!("Bearer {}", api_key));
+                    request_builder.header("Authorization", format!("Bearer {api_key}"));
             }
 
             let response = request_builder.send().await?;
@@ -438,7 +438,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         Ok(EmbedVector::new(embedding))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<EmbedVector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<EmbedVector> {
         let embedding = self.text_to_embedding(relation);
         Ok(EmbedVector::new(embedding))
     }

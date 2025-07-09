@@ -145,43 +145,43 @@ impl CliError {
     pub fn user_message(&self) -> String {
         match &self.kind {
             CliErrorKind::InvalidArguments(msg) => {
-                format!("Invalid arguments: {}", msg)
+                format!("Invalid arguments: {msg}")
             }
             CliErrorKind::NotFound(resource) => {
-                format!("Not found: {}", resource)
+                format!("Not found: {resource}")
             }
             CliErrorKind::PermissionDenied(resource) => {
-                format!("Permission denied: {}", resource)
+                format!("Permission denied: {resource}")
             }
             CliErrorKind::InvalidFormat(msg) => {
-                format!("Invalid format: {}", msg)
+                format!("Invalid format: {msg}")
             }
             CliErrorKind::NetworkError(msg) => {
-                format!("Network error: {}", msg)
+                format!("Network error: {msg}")
             }
             CliErrorKind::ConfigError(msg) => {
-                format!("Configuration error: {}", msg)
+                format!("Configuration error: {msg}")
             }
             CliErrorKind::ValidationError(msg) => {
-                format!("Validation error: {}", msg)
+                format!("Validation error: {msg}")
             }
             CliErrorKind::IoError(err) => {
-                format!("IO error: {}", err)
+                format!("IO error: {err}")
             }
             CliErrorKind::ProfileError(msg) => {
-                format!("Performance error: {}", msg)
+                format!("Performance error: {msg}")
             }
             CliErrorKind::SerializationError(msg) => {
-                format!("Serialization error: {}", msg)
+                format!("Serialization error: {msg}")
             }
             CliErrorKind::Unimplemented(feature) => {
-                format!("Feature not implemented: {}", feature)
+                format!("Feature not implemented: {feature}")
             }
             CliErrorKind::UnknownFormat(msg) => {
-                format!("Unknown format: {}", msg)
+                format!("Unknown format: {msg}")
             }
             CliErrorKind::Other(msg) => {
-                format!("Error: {}", msg)
+                format!("Error: {msg}")
             }
         }
     }
@@ -195,7 +195,7 @@ impl CliError {
 
         // Context if available
         if let Some(ref context) = self.context {
-            output.push_str(&format!("\nContext: {}\n", context));
+            output.push_str(&format!("\nContext: {context}\n"));
         }
 
         // Suggestions if available
@@ -209,8 +209,7 @@ impl CliError {
         // Error code for documentation
         if let Some(ref code) = self.code {
             output.push_str(&format!(
-                "\nFor more information, see: https://oxirs.io/docs/errors/{}\n",
-                code
+                "\nFor more information, see: https://oxirs.io/docs/errors/{code}\n"
             ));
         }
 
@@ -305,7 +304,7 @@ pub mod helpers {
             CliError::validation_error(error).with_context("Failed to parse SPARQL query");
 
         if let Some(line_num) = line {
-            err = err.with_context(format!("Error at line {}", line_num));
+            err = err.with_context(format!("Error at line {line_num}"));
         }
 
         err.with_suggestions(vec![
@@ -320,7 +319,7 @@ pub mod helpers {
     /// Create an error for connection issues
     pub fn connection_error(endpoint: &str, error: &str) -> CliError {
         CliError::new(CliErrorKind::NetworkError(error.to_string()))
-            .with_context(format!("Failed to connect to: {}", endpoint))
+            .with_context(format!("Failed to connect to: {endpoint}"))
             .with_suggestions(vec![
                 "Check if the endpoint is reachable".to_string(),
                 "Verify the URL is correct".to_string(),
@@ -332,7 +331,7 @@ pub mod helpers {
 
     /// Create an error for dataset not found
     pub fn dataset_not_found_error(name: &str) -> CliError {
-        CliError::not_found(format!("Dataset '{}'", name))
+        CliError::not_found(format!("Dataset '{name}'"))
             .with_context("The specified dataset does not exist")
             .with_suggestions(vec![
                 format!("Create the dataset with: oxide init {}", name),
@@ -345,7 +344,7 @@ pub mod helpers {
     /// Create an error for permission issues
     pub fn permission_error(path: &Path, operation: &str) -> CliError {
         CliError::permission_denied(path.display().to_string())
-            .with_context(format!("Cannot {} file/directory", operation))
+            .with_context(format!("Cannot {operation} file/directory"))
             .with_suggestions(vec![
                 format!("Check permissions: ls -la {}", path.display()),
                 "Run with appropriate permissions (sudo if necessary)".to_string(),
@@ -357,10 +356,9 @@ pub mod helpers {
     /// Create an error for timeout
     pub fn timeout_error(operation: &str, timeout_secs: u64) -> CliError {
         CliError::new(CliErrorKind::Other(format!(
-            "Operation timed out after {}s",
-            timeout_secs
+            "Operation timed out after {timeout_secs}s"
         )))
-        .with_context(format!("Timeout while: {}", operation))
+        .with_context(format!("Timeout while: {operation}"))
         .with_suggestions(vec![
             format!("Increase timeout with: --timeout {}", timeout_secs * 2),
             "Check if the server is responding".to_string(),
@@ -373,8 +371,7 @@ pub mod helpers {
     /// Create an error for incompatible versions
     pub fn version_mismatch_error(expected: &str, found: &str) -> CliError {
         CliError::new(CliErrorKind::Other(format!(
-            "Version mismatch: expected {}, found {}",
-            expected, found
+            "Version mismatch: expected {expected}, found {found}"
         )))
         .with_context("Incompatible dataset or file version")
         .with_suggestions(vec![
@@ -391,10 +388,9 @@ pub mod helpers {
     /// Create an error for missing dependencies
     pub fn missing_dependency_error(dependency: &str, feature: &str) -> CliError {
         CliError::new(CliErrorKind::Other(format!(
-            "Missing dependency: {}",
-            dependency
+            "Missing dependency: {dependency}"
         )))
-        .with_context(format!("Required for: {}", feature))
+        .with_context(format!("Required for: {feature}"))
         .with_suggestions(vec![
             format!("Install {} to enable this feature", dependency),
             "Check the documentation for installation instructions".to_string(),
@@ -405,7 +401,7 @@ pub mod helpers {
 
     /// Create an error for configuration issues with specific field
     pub fn config_field_error(field: &str, value: &str, expected: &str) -> CliError {
-        CliError::config_error(format!("Invalid value '{}' for field '{}'", value, field))
+        CliError::config_error(format!("Invalid value '{value}' for field '{field}'"))
             .with_context("Configuration validation failed")
             .with_suggestions(vec![
                 format!("Expected: {}", expected),

@@ -27,7 +27,7 @@ impl SchemaIntrospection {
     pub fn get_types(&self) -> Vec<TypeIntrospection> {
         let mut types = Vec::new();
 
-        for (_, gql_type) in &self.schema.types {
+        for gql_type in self.schema.types.values() {
             types.push(TypeIntrospection::new(
                 gql_type.clone(),
                 Arc::clone(&self.schema),
@@ -456,7 +456,7 @@ impl InputValueIntrospection {
         self.arg.default_value.as_ref().map(|value| {
             // Serialize the value to a GraphQL string representation
             match value {
-                Value::StringValue(s) => format!("\"{}\"", s),
+                Value::StringValue(s) => format!("\"{s}\""),
                 Value::IntValue(i) => i.to_string(),
                 Value::FloatValue(f) => f.to_string(),
                 Value::BooleanValue(b) => b.to_string(),
@@ -483,7 +483,7 @@ impl InputValueIntrospection {
 
     fn serialize_value_string(&self, value: &Value) -> String {
         match value {
-            Value::StringValue(s) => format!("\"{}\"", s),
+            Value::StringValue(s) => format!("\"{s}\""),
             Value::IntValue(i) => i.to_string(),
             Value::FloatValue(f) => f.to_string(),
             Value::BooleanValue(b) => b.to_string(),

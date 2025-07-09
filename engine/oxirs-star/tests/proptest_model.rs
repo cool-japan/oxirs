@@ -89,7 +89,7 @@ fn quoted_triple_term_strategy(depth: u32) -> BoxedStrategy<StarTerm> {
             non_quoted_star_term_strategy().boxed(),
             // Quoted triple (less common to control nesting)
             triple_strategy_with_depth(depth - 1)
-                .prop_map(|triple| StarTerm::quoted_triple(triple))
+                .prop_map(StarTerm::quoted_triple)
                 .boxed(),
         ]
         .boxed()
@@ -104,7 +104,7 @@ fn triple_strategy_with_depth(depth: u32) -> impl Strategy<Value = StarTriple> {
         let subject = prop_oneof![
             subject_term_strategy().boxed(),
             triple_strategy_with_depth(depth - 1)
-                .prop_map(|t| StarTerm::quoted_triple(t))
+                .prop_map(StarTerm::quoted_triple)
                 .boxed(),
         ];
 
@@ -138,8 +138,8 @@ mod tests {
         #[test]
         fn test_star_term_display_parse_roundtrip(term in star_term_strategy()) {
             // Test that display formatting is deterministic
-            let display1 = format!("{}", term);
-            let display2 = format!("{}", term);
+            let display1 = format!("{term}");
+            let display2 = format!("{term}");
             prop_assert_eq!(display1, display2);
         }
 
@@ -285,8 +285,8 @@ mod tests {
             value in literal_value_strategy(),
             literal_type in prop_oneof![
                 Just("simple".to_string()),
-                language_tag_strategy().prop_map(|l| format!("lang:{}", l)),
-                iri_strategy().prop_map(|dt| format!("datatype:{}", dt))
+                language_tag_strategy().prop_map(|l| format!("lang:{l}")),
+                iri_strategy().prop_map(|dt| format!("datatype:{dt}"))
             ]
         ) {
             // Skip empty values as they might not be valid
@@ -302,7 +302,7 @@ mod tests {
                 unreachable!()
             };
 
-            let display = format!("{}", literal);
+            let display = format!("{literal}");
 
             // Check basic formatting rules
             prop_assert!(display.starts_with('"'));

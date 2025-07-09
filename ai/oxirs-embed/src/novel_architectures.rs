@@ -7,11 +7,11 @@
 //! - Geometric deep learning approaches
 //! - Quantum-inspired embedding methods
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
-use ndarray::{s, Array1, Array2, Array3, Axis};
+use chrono::Utc;
+use ndarray::{s, Array1, Array2, Array3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -60,7 +60,7 @@ pub enum ArchitectureType {
 }
 
 /// Architecture-specific parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ArchitectureParams {
     /// Graph Transformer parameters
     pub transformer_params: GraphTransformerParams,
@@ -74,17 +74,6 @@ pub struct ArchitectureParams {
     pub quantum_params: QuantumParams,
 }
 
-impl Default for ArchitectureParams {
-    fn default() -> Self {
-        Self {
-            transformer_params: GraphTransformerParams::default(),
-            ode_params: NeuralODEParams::default(),
-            hyperbolic_params: HyperbolicParams::default(),
-            geometric_params: GeometricParams::default(),
-            quantum_params: QuantumParams::default(),
-        }
-    }
-}
 
 /// Graph Transformer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -543,7 +532,7 @@ impl Default for StabilityConstraints {
 }
 
 /// Geometric configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GeometricConfig {
     /// Manifold learning parameters
     pub manifold_learning: ManifoldLearning,
@@ -553,15 +542,6 @@ pub struct GeometricConfig {
     pub parallel_transport: ParallelTransport,
 }
 
-impl Default for GeometricConfig {
-    fn default() -> Self {
-        Self {
-            manifold_learning: ManifoldLearning::default(),
-            curvature_computation: CurvatureComputation::default(),
-            parallel_transport: ParallelTransport::default(),
-        }
-    }
-}
 
 /// Manifold learning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -945,7 +925,7 @@ impl NovelArchitectureModel {
 
     /// Initialize Geometric Deep Learning components
     fn initialize_geometric(&mut self) -> Result<()> {
-        let params = &self.config.architecture_params.geometric_params;
+        let _params = &self.config.architecture_params.geometric_params;
         let dimensions = self.config.base_config.dimensions;
 
         let connection = Array3::from_shape_fn((dimensions, dimensions, dimensions), |_| {
@@ -1116,10 +1096,10 @@ impl NovelArchitectureModel {
     /// Compute quantum circuit output using advanced quantum circuits
     pub fn quantum_forward(&self, input: &Array1<f64>) -> Result<Array1<f64>> {
         use crate::quantum_circuits::{
-            QNNLayerType, QuantumCircuit, QuantumGate, QuantumNeuralNetworkLayer, QuantumSimulator,
+            QNNLayerType, QuantumCircuit, QuantumNeuralNetworkLayer, QuantumSimulator,
         };
 
-        if let Some(ref quantum_state) = self.architecture_state.quantum_state {
+        if let Some(ref _quantum_state) = self.architecture_state.quantum_state {
             let params = &self.config.architecture_params.quantum_params;
 
             // Create quantum neural network layer for input encoding
@@ -1134,7 +1114,7 @@ impl NovelArchitectureModel {
             let mut circuit = QuantumCircuit::new(params.num_qubits);
 
             // Add encoding gates
-            let input_normalized: Vec<f64> = input.iter().map(|&x| x as f64).collect();
+            let input_normalized: Vec<f64> = input.iter().copied().collect();
             let encoding_circuit = encoding_layer.build_circuit(Some(&input_normalized));
             for gate in encoding_circuit.gates {
                 circuit.add_gate(gate);
@@ -1280,7 +1260,7 @@ impl EmbeddingModel for NovelArchitectureModel {
         Err(anyhow!("Entity not found: {}", entity))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(&relation_id) = self.relations.get(relation) {
             if relation_id < self.relation_embeddings.nrows() {
                 let embedding = self.relation_embeddings.row(relation_id);
@@ -1292,27 +1272,27 @@ impl EmbeddingModel for NovelArchitectureModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let predicate_emb = self.get_relation_embedding(predicate)?;
+        let predicate_emb = self.getrelation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         match &self.config.architecture {
             ArchitectureType::HyperbolicEmbedding => {
                 // Use hyperbolic distance for scoring
                 let subject_arr =
-                    Array1::from_vec(subject_emb.values.iter().map(|&x| x as f64).collect());
+                    Array1::from_vec(subject_emb.values.iter().copied().map(|x| x as f64).collect());
                 let object_arr =
-                    Array1::from_vec(object_emb.values.iter().map(|&x| x as f64).collect());
+                    Array1::from_vec(object_emb.values.iter().copied().map(|x| x as f64).collect());
                 let distance = self.poincare_distance(&subject_arr, &object_arr);
                 Ok(-distance) // Negative distance as score
             }
             _ => {
                 // Standard TransE-like scoring
                 let subject_arr =
-                    Array1::from_vec(subject_emb.values.iter().map(|&x| x as f64).collect());
+                    Array1::from_vec(subject_emb.values.iter().copied().map(|x| x as f64).collect());
                 let predicate_arr =
-                    Array1::from_vec(predicate_emb.values.iter().map(|&x| x as f64).collect());
+                    Array1::from_vec(predicate_emb.values.iter().copied().map(|x| x as f64).collect());
                 let object_arr =
-                    Array1::from_vec(object_emb.values.iter().map(|&x| x as f64).collect());
+                    Array1::from_vec(object_emb.values.iter().copied().map(|x| x as f64).collect());
 
                 let predicted = &subject_arr + &predicate_arr;
                 let diff = &predicted - &object_arr;
@@ -1330,7 +1310,7 @@ impl EmbeddingModel for NovelArchitectureModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != subject {
                 let score = self.score_triple(subject, predicate, entity)?;
                 scores.push((entity.clone(), score));
@@ -1351,7 +1331,7 @@ impl EmbeddingModel for NovelArchitectureModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != object {
                 let score = self.score_triple(entity, predicate, object)?;
                 scores.push((entity.clone(), score));
@@ -1372,7 +1352,7 @@ impl EmbeddingModel for NovelArchitectureModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             let score = self.score_triple(subject, relation, object)?;
             scores.push((relation.clone(), score));
         }
@@ -1606,6 +1586,7 @@ impl NovelArchitectureModel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NamedNode;
 
     #[test]
     fn test_novel_architecture_config_default() {
@@ -1707,7 +1688,7 @@ mod tests {
         const TOLERANCE: f64 = 1e-10;
         assert!(output
             .iter()
-            .all(|&x| x >= -1.0 - TOLERANCE && x <= 1.0 + TOLERANCE));
+            .all(|&x| (-1.0 - TOLERANCE..=1.0 + TOLERANCE).contains(&x)));
     }
 
     #[tokio::test]

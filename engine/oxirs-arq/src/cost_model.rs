@@ -196,6 +196,7 @@ pub enum MemoryAccessPattern {
 #[derive(Debug, Clone)]
 pub struct CostModel {
     config: CostModelConfig,
+    #[allow(dead_code)]
     statistics: Option<StatisticsCollector>,
     cached_estimates: HashMap<String, CostEstimate>,
 }
@@ -246,7 +247,7 @@ impl CostModel {
             Algebra::Union { left, right } => self.estimate_union_cost(left, right),
             Algebra::Filter { condition, pattern } => self.estimate_filter_cost(condition, pattern),
             Algebra::Project { pattern, .. } => self.estimate_project_cost(pattern),
-            Algebra::Extend { expr, pattern, .. } => self.estimate_extend_cost(&expr, pattern),
+            Algebra::Extend { expr, pattern, .. } => self.estimate_extend_cost(expr, pattern),
             Algebra::Distinct { pattern } => self.estimate_distinct_cost(pattern),
             Algebra::Reduced { pattern } => self.estimate_reduced_cost(pattern),
             Algebra::OrderBy { pattern, .. } => self.estimate_order_by_cost(pattern),
@@ -841,7 +842,7 @@ impl CostModel {
     /// Generate a cache key for an algebra expression
     fn algebra_to_key(&self, algebra: &Algebra) -> String {
         // Simple implementation - in production would use better hashing
-        format!("{:?}", algebra)
+        format!("{algebra:?}")
     }
 
     /// Clear the cost estimation cache
@@ -890,7 +891,7 @@ mod tests {
 
     #[test]
     fn test_triple_pattern_cost_estimation() {
-        let mut cost_model = CostModel::new(CostModelConfig::default());
+        let cost_model = CostModel::new(CostModelConfig::default());
 
         let pattern = TriplePattern {
             subject: Term::Variable(Variable::new("s").unwrap()),

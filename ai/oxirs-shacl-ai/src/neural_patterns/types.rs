@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::ml::{EdgeFeatures, GlobalFeatures, NodeFeatures};
+use crate::ml::NodeFeatures;
 
 /// Configuration for advanced pattern correlation analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,6 +119,12 @@ pub struct PatternHierarchy {
     pub root_patterns: Vec<String>,
     pub hierarchy_levels: Vec<HierarchyLevel>,
     pub hierarchy_metrics: HierarchyMetrics,
+}
+
+impl Default for PatternHierarchy {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PatternHierarchy {

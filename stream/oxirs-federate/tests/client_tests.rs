@@ -1,6 +1,6 @@
 //! Unit tests for service clients
 
-use oxirs_federate::service::{AuthType, RateLimit, ServiceAuthConfig, ServiceMetadata};
+use oxirs_federate::service::{AuthType, RateLimit, ServiceAuthConfig};
 use oxirs_federate::*;
 use std::time::Duration;
 

@@ -11,16 +11,15 @@
 //! - Influence and importance metrics
 //! - Graph neural network features
 
-use crate::error::{FusekiError, FusekiResult};
+use crate::error::FusekiResult;
 use crate::store::Store;
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     sync::Arc,
 };
 use tokio::sync::RwLock;
-use tracing::{debug, info, instrument};
+use tracing::{info, instrument};
 
 /// Graph analytics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +93,12 @@ pub struct AnalysisGraph {
     pub edge_weights: HashMap<(String, String), f64>,
 }
 
+impl Default for AnalysisGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnalysisGraph {
     /// Create new analysis graph
     pub fn new() -> Self {
@@ -119,12 +124,12 @@ impl AnalysisGraph {
         // Update adjacency lists
         self.adjacency_list
             .entry(edge.source.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(edge.target.clone());
 
         self.reverse_adjacency_list
             .entry(edge.target.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(edge.source.clone());
 
         // Store edge weight
@@ -287,8 +292,8 @@ impl GraphAnalyticsEngine {
         // Add sample nodes and edges for demonstration
         for i in 1..=100 {
             let node = GraphNode {
-                id: format!("node_{}", i),
-                label: Some(format!("Node {}", i)),
+                id: format!("node_{i}"),
+                label: Some(format!("Node {i}")),
                 properties: HashMap::new(),
                 out_edges: Vec::new(),
                 in_edges: Vec::new(),
@@ -302,8 +307,8 @@ impl GraphAnalyticsEngine {
                 let target = ((i + j - 1) % 100) + 1;
                 if target != i {
                     let edge = GraphEdge {
-                        source: format!("node_{}", i),
-                        target: format!("node_{}", target),
+                        source: format!("node_{i}"),
+                        target: format!("node_{target}"),
                         label: "connected_to".to_string(),
                         weight: Some(1.0),
                         properties: HashMap::new(),

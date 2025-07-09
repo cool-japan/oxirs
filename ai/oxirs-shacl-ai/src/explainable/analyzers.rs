@@ -14,6 +14,12 @@ use crate::Result;
 #[derive(Debug, Clone)]
 pub struct FeatureImportanceAnalyzer;
 
+impl Default for FeatureImportanceAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FeatureImportanceAnalyzer {
     pub fn new() -> Self {
         Self
@@ -53,6 +59,12 @@ impl InterpretabilityAnalyzer for FeatureImportanceAnalyzer {
 #[derive(Debug, Clone)]
 pub struct AttentionAnalyzer;
 
+impl Default for AttentionAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AttentionAnalyzer {
     pub fn new() -> Self {
         Self
@@ -89,6 +101,12 @@ impl InterpretabilityAnalyzer for AttentionAnalyzer {
 /// Analyzer for decision paths
 #[derive(Debug, Clone)]
 pub struct DecisionPathAnalyzer;
+
+impl Default for DecisionPathAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DecisionPathAnalyzer {
     pub fn new() -> Self {
@@ -127,6 +145,12 @@ impl InterpretabilityAnalyzer for DecisionPathAnalyzer {
 #[derive(Debug, Clone)]
 pub struct ModelBehaviorAnalyzer;
 
+impl Default for ModelBehaviorAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelBehaviorAnalyzer {
     pub fn new() -> Self {
         Self
@@ -164,6 +188,12 @@ impl InterpretabilityAnalyzer for ModelBehaviorAnalyzer {
 /// Analyzer for counterfactual explanations
 #[derive(Debug, Clone)]
 pub struct CounterfactualAnalyzer;
+
+impl Default for CounterfactualAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CounterfactualAnalyzer {
     pub fn new() -> Self {

@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::info;
 use validator::{Validate, ValidationError};
 
 #[cfg(feature = "hot-reload")]
@@ -175,6 +175,7 @@ pub struct TextIndexConfig {
 
 /// Security configuration with validation
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Default)]
 pub struct SecurityConfig {
     pub auth_required: bool,
 
@@ -212,6 +213,7 @@ pub struct SecurityConfig {
 
 /// Authentication configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Default)]
 pub struct AuthenticationConfig {
     pub enabled: bool,
 }
@@ -601,6 +603,7 @@ pub struct UserConfig {
 
 /// Monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Default)]
 pub struct MonitoringConfig {
     pub metrics: MetricsConfig,
     pub health_checks: HealthCheckConfig,
@@ -912,12 +915,12 @@ impl ServerConfig {
             .merge(Env::prefixed("OXIRS_FUSEKI_"))
             .extract()
             .map_err(|e| {
-                FusekiError::configuration(format!("Failed to load configuration: {}", e))
+                FusekiError::configuration(format!("Failed to load configuration: {e}"))
             })?;
 
         // Validate the configuration
         config.validate().map_err(|e| {
-            FusekiError::validation(format!("Configuration validation failed: {}", e))
+            FusekiError::validation(format!("Configuration validation failed: {e}"))
         })?;
 
         Ok(config)
@@ -941,21 +944,19 @@ impl ServerConfig {
             }
             _ => {
                 return Err(FusekiError::configuration(format!(
-                    "Unsupported configuration file format: {:?}",
-                    path
+                    "Unsupported configuration file format: {path:?}"
                 )));
             }
         }
         .map_err(|e| {
             FusekiError::configuration(format!(
-                "Failed to load configuration from {:?}: {}",
-                path, e
+                "Failed to load configuration from {path:?}: {e}"
             ))
         })?;
 
         // Validate the configuration
         config.validate().map_err(|e| {
-            FusekiError::validation(format!("Configuration validation failed: {}", e))
+            FusekiError::validation(format!("Configuration validation failed: {e}"))
         })?;
 
         info!("Configuration loaded from {:?}", path);
@@ -965,7 +966,7 @@ impl ServerConfig {
     /// Save configuration to YAML file
     pub fn save_yaml<P: AsRef<Path>>(&self, path: P) -> FusekiResult<()> {
         let content = serde_yaml::to_string(self).map_err(|e| {
-            FusekiError::configuration(format!("Failed to serialize configuration to YAML: {}", e))
+            FusekiError::configuration(format!("Failed to serialize configuration to YAML: {e}"))
         })?;
 
         std::fs::write(&path, content).map_err(|e| {
@@ -983,7 +984,7 @@ impl ServerConfig {
     /// Save configuration to TOML file
     pub fn save_toml<P: AsRef<Path>>(&self, path: P) -> FusekiResult<()> {
         let content = toml::to_string_pretty(self).map_err(|e| {
-            FusekiError::configuration(format!("Failed to serialize configuration to TOML: {}", e))
+            FusekiError::configuration(format!("Failed to serialize configuration to TOML: {e}"))
         })?;
 
         std::fs::write(&path, content).map_err(|e| {
@@ -1009,15 +1010,14 @@ impl ServerConfig {
             .to_socket_addrs()
             .map_err(|e| {
                 FusekiError::configuration(format!(
-                    "Invalid host:port combination '{}': {}",
-                    addr, e
+                    "Invalid host:port combination '{addr}': {e}"
                 ))
             })?
             .collect();
 
         // Return the first resolved address
         socket_addrs.into_iter().next().ok_or_else(|| {
-            FusekiError::configuration(format!("No valid socket address found for '{}'", addr))
+            FusekiError::configuration(format!("No valid socket address found for '{addr}'"))
         })
     }
 
@@ -1079,15 +1079,14 @@ impl ServerConfig {
         // Check dataset locations
         for (name, dataset) in &self.datasets {
             if dataset.location.is_empty() {
-                errors.push(format!("Dataset '{}' has empty location", name));
+                errors.push(format!("Dataset '{name}' has empty location"));
             }
 
             // Check if SHACL shape files exist
             for shape_file in &dataset.shacl_shapes {
                 if !shape_file.exists() {
                     errors.push(format!(
-                        "SHACL shape file not found for dataset '{}': {:?}",
-                        name, shape_file
+                        "SHACL shape file not found for dataset '{name}': {shape_file:?}"
                     ));
                 }
             }
@@ -1104,7 +1103,7 @@ impl ServerConfig {
         if let Some(ref file_config) = self.logging.file_config {
             if let Some(parent) = file_config.path.parent() {
                 if !parent.exists() {
-                    errors.push(format!("Log file directory does not exist: {:?}", parent));
+                    errors.push(format!("Log file directory does not exist: {parent:?}"));
                 }
             }
         }
@@ -1117,16 +1116,6 @@ impl ServerConfig {
     }
 }
 
-impl Default for MonitoringConfig {
-    fn default() -> Self {
-        Self {
-            metrics: MetricsConfig::default(),
-            health_checks: HealthCheckConfig::default(),
-            tracing: TracingConfig::default(),
-            prometheus: None,
-        }
-    }
-}
 
 impl Default for MetricsConfig {
     fn default() -> Self {
@@ -1164,30 +1153,7 @@ impl Default for TracingConfig {
     }
 }
 
-impl Default for SecurityConfig {
-    fn default() -> Self {
-        Self {
-            auth_required: false,
-            users: HashMap::new(),
-            jwt: None,
-            oauth: None,
-            ldap: None,
-            rate_limiting: None,
-            cors: CorsConfig::default(),
-            session: SessionConfig::default(),
-            authentication: AuthenticationConfig::default(),
-            api_keys: None,
-            certificate: None,
-            saml: None,
-        }
-    }
-}
 
-impl Default for AuthenticationConfig {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
-}
 
 impl Default for CorsConfig {
     fn default() -> Self {
@@ -1318,7 +1284,6 @@ fn get_cpu_count() -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::NamedTempFile;
 
     #[test]

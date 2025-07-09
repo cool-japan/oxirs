@@ -13,7 +13,7 @@ use tokio::{
 use url::Url;
 
 use crate::{
-    error::{FusekiError, FusekiResult},
+    error::FusekiResult,
     federation::{CircuitBreakerConfig, FederationConfig, ServiceEndpoint, ServiceHealth},
 };
 

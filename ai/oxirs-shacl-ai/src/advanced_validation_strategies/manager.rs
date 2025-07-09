@@ -1,10 +1,8 @@
 //! Advanced validation strategy manager
 
-use std::collections::HashMap;
-use std::time::Duration;
 
 use oxirs_core::Store;
-use oxirs_shacl::{Shape, ValidationReport};
+use oxirs_shacl::Shape;
 
 use crate::{Result, ShaclAiError};
 use super::config::*;
@@ -130,7 +128,7 @@ impl AdvancedValidationStrategyManager {
             }
         }
 
-        Ok(best_strategy.ok_or_else(|| ShaclAiError::Configuration("No suitable strategy found".to_string()))?)
+        best_strategy.ok_or_else(|| ShaclAiError::Configuration("No suitable strategy found".to_string()))
     }
 
     fn select_strategy_bandit(&self, _context: &ValidationContext) -> Result<&dyn ValidationStrategy> {
@@ -141,11 +139,11 @@ impl AdvancedValidationStrategyManager {
 
     fn select_strategy_quantum_enhanced(&self, context: &ValidationContext) -> Result<&dyn ValidationStrategy> {
         // Quantum-enhanced selection - look for quantum strategy
-        Ok(self.strategies.iter()
+        self.strategies.iter()
             .find(|s| s.name().contains("Quantum"))
             .map(|s| s.as_ref())
             .or_else(|| self.strategies.first().map(|s| s.as_ref()))
-            .ok_or_else(|| ShaclAiError::Configuration("No quantum strategy available".to_string()))?)
+            .ok_or_else(|| ShaclAiError::Configuration("No quantum strategy available".to_string()))
     }
 
     fn record_performance(&mut self, result: &StrategyValidationResult, context: &ValidationContext) {

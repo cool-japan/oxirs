@@ -4,9 +4,7 @@
 
 use oxirs_federate::service::{AuthType, ServiceAuthConfig, ServiceMetadata};
 use oxirs_federate::*;
-use std::collections::HashSet;
 use std::time::Duration;
-use tokio;
 
 #[tokio::test]
 async fn test_federation_engine_lifecycle() {
@@ -119,7 +117,7 @@ async fn test_service_clause_extraction() {
 
     let query_info = planner.analyze_sparql(query).await.unwrap();
 
-    assert!(query_info.patterns.len() > 0);
+    assert!(!query_info.patterns.is_empty());
     assert_eq!(query_info.query_type, QueryType::Select);
 }
 
@@ -291,9 +289,9 @@ async fn test_complex_query_planning() {
     // Register multiple services with fast timeout
     for i in 1..=3 {
         let service = FederatedService::new_sparql(
-            format!("sparql-{}", i),
-            format!("SPARQL Service {}", i),
-            format!("http://example.com/sparql{}", i),
+            format!("sparql-{i}"),
+            format!("SPARQL Service {i}"),
+            format!("http://example.com/sparql{i}"),
         );
         let _ = registry.register(service).await;
     }
@@ -314,7 +312,7 @@ async fn test_complex_query_planning() {
     let plan = planner.plan_sparql(&query_info, &registry).await.unwrap();
 
     assert!(!plan.steps.is_empty());
-    assert!(plan.steps.len() > 0);
+    assert!(!plan.steps.is_empty());
 }
 
 #[tokio::test]

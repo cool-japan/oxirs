@@ -375,7 +375,7 @@ impl IntelligentQueryCache {
 
         for (key, value) in var_pairs {
             key.hash(&mut hasher);
-            format!("{:?}", value).hash(&mut hasher);
+            format!("{value:?}").hash(&mut hasher);
         }
 
         format!("iqc:{:x}", hasher.finish())

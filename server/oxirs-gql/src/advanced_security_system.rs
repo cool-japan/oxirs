@@ -226,17 +226,24 @@ struct RateLimitState {
     requests: VecDeque<Instant>,
     blocked_until: Option<Instant>,
     total_requests: usize,
+    #[allow(dead_code)]
     first_request: Instant,
 }
 
 /// Client security state tracking
 #[derive(Debug)]
 struct ClientSecurityState {
+    #[allow(dead_code)]
     failed_attempts: usize,
+    #[allow(dead_code)]
     locked_until: Option<Instant>,
+    #[allow(dead_code)]
     threat_score: f64,
+    #[allow(dead_code)]
     suspicious_patterns: Vec<String>,
+    #[allow(dead_code)]
     first_seen: SystemTime,
+    #[allow(dead_code)]
     last_activity: SystemTime,
 }
 
@@ -259,19 +266,27 @@ pub struct QueryAnalysisResult {
 pub struct AdvancedSecuritySystem {
     config: SecurityConfig,
     rate_limits: Arc<AsyncMutex<HashMap<IpAddr, RateLimitState>>>,
+    #[allow(dead_code)]
     client_states: Arc<AsyncMutex<HashMap<IpAddr, ClientSecurityState>>>,
+    #[allow(dead_code)]
     whitelisted_queries: Arc<AsyncRwLock<HashSet<String>>>,
+    #[allow(dead_code)]
     field_permissions: Arc<AsyncRwLock<HashMap<String, HashSet<String>>>>,
     audit_log: Arc<AsyncMutex<VecDeque<AuditLogEntry>>>,
+    #[allow(dead_code)]
     threat_detector: Arc<AsyncMutex<ThreatDetector>>,
+    #[allow(dead_code)]
     auth_validator: Arc<AuthenticationValidator>,
 }
 
 /// Threat detection system
 #[derive(Debug)]
 pub struct ThreatDetector {
+    #[allow(dead_code)]
     known_attack_patterns: Vec<AttackPattern>,
+    #[allow(dead_code)]
     behavioral_baselines: HashMap<String, BehavioralBaseline>,
+    #[allow(dead_code)]
     anomaly_threshold: f64,
 }
 
@@ -339,8 +354,11 @@ pub struct BehavioralBaseline {
 /// Authentication validator
 #[derive(Debug)]
 pub struct AuthenticationValidator {
+    #[allow(dead_code)]
     jwt_secret: Option<String>,
+    #[allow(dead_code)]
     valid_sessions: Arc<AsyncRwLock<HashMap<String, SessionInfo>>>,
+    #[allow(dead_code)]
     api_keys: Arc<AsyncRwLock<HashMap<String, ApiKeyInfo>>>,
 }
 

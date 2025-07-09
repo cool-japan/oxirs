@@ -59,7 +59,7 @@ impl GraphTraversal {
         let mut current_entities = vec![entity_iri.to_string()];
 
         for _depth in 0..max_depth {
-            let mut next_entities = Vec::new();
+            let next_entities = Vec::new();
 
             for entity in &current_entities {
                 if visited.contains(entity) {

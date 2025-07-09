@@ -239,11 +239,13 @@ pub struct DistributedQueryProcessor {
     nodes: Arc<RwLock<HashMap<NodeId, NodeInfo>>>,
     statistics: Arc<RwLock<Statistics>>,
     active_queries: Arc<RwLock<HashMap<Uuid, DistributedExecution>>>,
+    #[allow(dead_code)]
     load_balancer: LoadBalancer,
 }
 
 /// Active distributed query execution state
 #[derive(Debug)]
+#[allow(dead_code)]
 struct DistributedExecution {
     plan: DistributedPlan,
     start_time: Instant,
@@ -254,6 +256,7 @@ struct DistributedExecution {
 
 /// Execution context for distributed queries
 #[derive(Debug)]
+#[allow(dead_code)]
 struct ExecutionContext {
     query_id: Uuid,
     user_context: HashMap<String, String>,
@@ -262,6 +265,7 @@ struct ExecutionContext {
 }
 
 /// Load balancer for distributing subqueries across nodes
+#[allow(dead_code)]
 struct LoadBalancer {
     strategy: LoadBalancingStrategy,
     node_loads: HashMap<NodeId, f64>,
@@ -731,6 +735,7 @@ impl Clone for DistributedQueryProcessor {
 #[derive(Debug)]
 struct DistributionAnalysis {
     is_distributable: bool,
+    #[allow(dead_code)]
     join_variables: Vec<Variable>,
     subquery_candidates: Vec<Algebra>,
     estimated_cardinality: usize,

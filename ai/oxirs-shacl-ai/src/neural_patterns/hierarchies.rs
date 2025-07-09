@@ -1,9 +1,8 @@
 //! Pattern hierarchy discovery and analysis for SHACL shape relationships
 
-use ndarray::{Array1, Array2};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
-use crate::{patterns::Pattern, Result, ShaclAiError};
+use crate::{patterns::Pattern, Result};
 
 use super::types::{
     CorrelationType, HierarchyLevel, HierarchyMetrics, PatternCorrelation, PatternHierarchy,
@@ -141,7 +140,7 @@ impl PatternHierarchyAnalyzer {
 
                 parent_child_map
                     .entry(parent)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(child);
             }
         }
@@ -198,7 +197,7 @@ impl PatternHierarchyAnalyzer {
         root_pattern: &str,
         parent_child_map: &HashMap<String, Vec<String>>,
     ) -> Result<PatternHierarchy> {
-        let hierarchy_id = format!("hierarchy_{}", root_pattern);
+        let hierarchy_id = format!("hierarchy_{root_pattern}");
         let mut hierarchy_levels = Vec::new();
 
         // Build levels using breadth-first traversal
@@ -416,11 +415,10 @@ impl PatternHierarchyAnalyzer {
     /// Find patterns at a specific hierarchy level
     pub fn find_patterns_at_level(&self, hierarchy_id: &str, level: usize) -> Option<Vec<String>> {
         for hierarchy in &self.hierarchies {
-            if hierarchy.hierarchy_id == hierarchy_id {
-                if level < hierarchy.hierarchy_levels.len() {
+            if hierarchy.hierarchy_id == hierarchy_id
+                && level < hierarchy.hierarchy_levels.len() {
                     return Some(hierarchy.hierarchy_levels[level].patterns.clone());
                 }
-            }
         }
         None
     }

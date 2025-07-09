@@ -977,7 +977,7 @@ mod tests {
         {
             assert_eq!(count.min_count, 1);
         } else {
-            panic!("Expected MinCount constraint");
+            assert!(false, "Expected MinCount constraint, got: {:?}", resolved.get(&ConstraintComponentId::new("minCount")));
         }
 
         // Test priority-based resolution
@@ -992,7 +992,7 @@ mod tests {
         {
             assert_eq!(count.min_count, 2);
         } else {
-            panic!("Expected MinCount constraint");
+            assert!(false, "Expected MinCount constraint, got: {:?}", resolved.get(&ConstraintComponentId::new("minCount")));
         }
     }
 }

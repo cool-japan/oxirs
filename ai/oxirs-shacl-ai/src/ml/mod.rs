@@ -312,7 +312,7 @@ impl ModelEnsemble {
             for shape in shapes {
                 shape_votes
                     .entry(shape.shape_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((shape.clone(), 1.0)); // Each model gets one vote
             }
         }
@@ -357,7 +357,7 @@ impl ModelEnsemble {
             for shape in shapes {
                 shape_votes
                     .entry(shape.shape_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((shape.clone(), normalized_weight));
             }
         }
@@ -421,7 +421,7 @@ impl ModelEnsemble {
             for constraint in &shape.constraints {
                 constraint_counts
                     .entry(constraint.constraint_type.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(constraint.clone());
             }
         }

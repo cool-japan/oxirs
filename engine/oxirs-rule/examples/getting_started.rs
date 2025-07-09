@@ -38,7 +38,7 @@ fn step1_create_engine() -> Result<()> {
     println!("--------------------------------");
 
     // Create a new rule engine instance
-    let mut engine = RuleEngine::new();
+    let _engine = RuleEngine::new();
 
     println!("✅ Created a new rule engine!");
     println!("   The engine supports:");
@@ -167,7 +167,7 @@ fn step3_inference() -> Result<()> {
             if let (Term::Constant(s), Term::Constant(p), Term::Constant(o)) =
                 (subject, predicate, object)
             {
-                println!("   {} {} {}", s, p, o);
+                println!("   {s} {p} {o}");
             }
         }
     }
@@ -189,7 +189,7 @@ fn step3_inference() -> Result<()> {
             {
                 // Only show derived facts (not the original ones)
                 if !facts.contains(result) {
-                    println!("   {} {} {} (derived)", s, p, o);
+                    println!("   {s} {p} {o} (derived)");
                 }
             }
         }

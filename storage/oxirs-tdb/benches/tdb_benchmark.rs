@@ -6,10 +6,8 @@
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use oxirs_tdb::{
     compression::{
-        AdaptiveCompressor, ColumnStoreCompressor, CompressionAlgorithm, RunLengthEncoder,
+        AdaptiveCompressor, CompressionAlgorithm,
     },
-    config::TdbConfig,
-    nodes::NodeTableConfig,
     SimpleTdbConfig, TdbStore, Term,
 };
 use rand::prelude::*;
@@ -19,18 +17,18 @@ use tempfile::TempDir;
 
 /// Generate random terms for benchmarking
 fn generate_random_triple(rng: &mut impl Rng) -> (Term, Term, Term) {
-    let subject = Term::iri(&format!(
+    let subject = Term::iri(format!(
         "http://example.org/subject/{}",
         rng.r#gen::<u64>()
     ));
-    let predicate = Term::iri(&format!(
+    let predicate = Term::iri(format!(
         "http://example.org/predicate/{}",
         rng.r#gen::<u8>()
     ));
     let object = if rng.gen_bool(0.5) {
-        Term::literal(&format!("value_{}", rng.r#gen::<u32>()))
+        Term::literal(format!("value_{}", rng.r#gen::<u32>()))
     } else {
-        Term::iri(&format!("http://example.org/object/{}", rng.r#gen::<u64>()))
+        Term::iri(format!("http://example.org/object/{}", rng.r#gen::<u64>()))
     };
 
     (subject, predicate, object)
@@ -214,7 +212,7 @@ fn bench_concurrent(c: &mut Criterion) {
                     let store = Arc::clone(&store);
                     std::thread::spawn(move || {
                         let subject =
-                            Term::iri(&format!("http://example.org/subject/{}", i * 1000));
+                            Term::iri(format!("http://example.org/subject/{}", i * 1000));
                         let results = store.query_triples(Some(&subject), None, None).unwrap();
                         black_box(results);
                     })
@@ -340,7 +338,7 @@ fn bench_compression(c: &mut Criterion) {
     ];
 
     for (name, data) in algorithms {
-        group.bench_function(&format!("compress_{}", name), |b| {
+        group.bench_function(format!("compress_{name}"), |b| {
             let compressor = AdaptiveCompressor::default();
             b.iter(|| {
                 let compressed = compressor.compress(black_box(&data)).unwrap();
@@ -351,7 +349,7 @@ fn bench_compression(c: &mut Criterion) {
         // Benchmark decompression
         let compressor = AdaptiveCompressor::default();
         let compressed = compressor.compress(&data).unwrap();
-        group.bench_function(&format!("decompress_{}", name), |b| {
+        group.bench_function(format!("decompress_{name}"), |b| {
             b.iter(|| {
                 let decompressed = compressor.decompress(black_box(&compressed)).unwrap();
                 black_box(decompressed);
@@ -379,7 +377,7 @@ fn bench_compression_configs(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let mut config = SimpleTdbConfig {
+                    let config = SimpleTdbConfig {
                         location: temp_dir.path().to_string_lossy().to_string(),
                         ..Default::default()
                     };
@@ -445,7 +443,7 @@ fn bench_memory_usage(c: &mut Criterion) {
                         // Perform queries to test cache effectiveness
                         for i in 0..100 {
                             let subject =
-                                Term::iri(&format!("http://example.org/subject/{}", i * 100));
+                                Term::iri(format!("http://example.org/subject/{}", i * 100));
                             let results = store.query_triples(Some(&subject), None, None).unwrap();
                             black_box(results);
                         }
@@ -477,10 +475,10 @@ fn bench_index_patterns(c: &mut Criterion) {
 
     // Pattern 1: Few subjects, many predicates/objects (star pattern)
     for subject_id in 0..1000 {
-        let subject = Term::iri(&format!("http://example.org/star_subject/{}", subject_id));
+        let subject = Term::iri(format!("http://example.org/star_subject/{subject_id}"));
         for i in 0..100 {
-            let predicate = Term::iri(&format!("http://example.org/predicate/{}", i));
-            let object = Term::literal(&format!("value_{}", rng.r#gen::<u32>()));
+            let predicate = Term::iri(format!("http://example.org/predicate/{i}"));
+            let object = Term::literal(format!("value_{}", rng.r#gen::<u32>()));
             store.insert_triple(&subject, &predicate, &object).unwrap();
         }
     }
@@ -493,9 +491,9 @@ fn bench_index_patterns(c: &mut Criterion) {
     ];
 
     for subject_id in 0..100000 {
-        let subject = Term::iri(&format!("http://example.org/person/{}", subject_id));
+        let subject = Term::iri(format!("http://example.org/person/{subject_id}"));
         let predicate = popular_predicates.choose(&mut rng).unwrap();
-        let object = Term::literal(&format!("value_{}", rng.r#gen::<u32>()));
+        let object = Term::literal(format!("value_{}", rng.r#gen::<u32>()));
         store.insert_triple(&subject, predicate, &object).unwrap();
     }
 
@@ -567,31 +565,25 @@ fn bench_real_world_patterns(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     // FOAF-like data
-    let foaf_predicates = vec![
-        "http://xmlns.com/foaf/0.1/name",
+    let foaf_predicates = ["http://xmlns.com/foaf/0.1/name",
         "http://xmlns.com/foaf/0.1/email",
         "http://xmlns.com/foaf/0.1/knows",
         "http://xmlns.com/foaf/0.1/age",
-        "http://xmlns.com/foaf/0.1/homepage",
-    ];
+        "http://xmlns.com/foaf/0.1/homepage"];
 
     // Schema.org-like data
-    let schema_predicates = vec![
-        "http://schema.org/name",
+    let schema_predicates = ["http://schema.org/name",
         "http://schema.org/description",
         "http://schema.org/dateCreated",
         "http://schema.org/author",
-        "http://schema.org/url",
-    ];
+        "http://schema.org/url"];
 
     // Dublin Core metadata
-    let dc_predicates = vec![
-        "http://purl.org/dc/terms/title",
+    let dc_predicates = ["http://purl.org/dc/terms/title",
         "http://purl.org/dc/terms/creator",
         "http://purl.org/dc/terms/subject",
         "http://purl.org/dc/terms/date",
-        "http://purl.org/dc/terms/identifier",
-    ];
+        "http://purl.org/dc/terms/identifier"];
 
     // Insert 1M triples with realistic distribution
     group.bench_function("load_knowledge_graph", |b| {
@@ -603,7 +595,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
 
             // Load people data (FOAF pattern)
             for person_id in 0..50000 {
-                let person = Term::iri(&format!("http://example.org/person/{}", person_id));
+                let person = Term::iri(format!("http://example.org/person/{person_id}"));
 
                 // Each person has 2-5 properties
                 let num_props = rng.gen_range(2..=5);
@@ -615,20 +607,20 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                         let predicate = Term::iri(*predicate_str);
                         let object = match predicate_str {
                             s if s.contains("name") => {
-                                Term::literal(&format!("Person {}", person_id))
+                                Term::literal(format!("Person {person_id}"))
                             }
                             s if s.contains("email") => {
-                                Term::literal(&format!("person{}@example.com", person_id))
+                                Term::literal(format!("person{person_id}@example.com"))
                             }
                             s if s.contains("age") => Term::typed_literal(
-                                &rng.gen_range(18..80).to_string(),
+                                rng.gen_range(18..80).to_string(),
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             ),
-                            s if s.contains("knows") => Term::iri(&format!(
+                            s if s.contains("knows") => Term::iri(format!(
                                 "http://example.org/person/{}",
                                 rng.gen_range(0..50000)
                             )),
-                            _ => Term::literal(&format!("value_{}", rng.r#gen::<u32>())),
+                            _ => Term::literal(format!("value_{}", rng.r#gen::<u32>())),
                         };
                         store.insert_triple(&person, &predicate, &object).unwrap();
                     }
@@ -637,13 +629,13 @@ fn bench_real_world_patterns(c: &mut Criterion) {
 
             // Load document metadata (Dublin Core pattern)
             for doc_id in 0..25000 {
-                let document = Term::iri(&format!("http://example.org/document/{}", doc_id));
+                let document = Term::iri(format!("http://example.org/document/{doc_id}"));
 
                 for predicate_str in dc_predicates.choose_multiple(&mut rng, 3) {
                     let predicate = Term::iri(*predicate_str);
                     let object = match predicate_str {
-                        s if s.contains("title") => Term::literal(&format!("Document {}", doc_id)),
-                        s if s.contains("creator") => Term::iri(&format!(
+                        s if s.contains("title") => Term::literal(format!("Document {doc_id}")),
+                        s if s.contains("creator") => Term::iri(format!(
                             "http://example.org/person/{}",
                             rng.gen_range(0..50000)
                         )),
@@ -651,7 +643,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                             "2024-01-01",
                             "http://www.w3.org/2001/XMLSchema#date",
                         ),
-                        _ => Term::literal(&format!("metadata_{}", rng.r#gen::<u32>())),
+                        _ => Term::literal(format!("metadata_{}", rng.r#gen::<u32>())),
                     };
                     store.insert_triple(&document, &predicate, &object).unwrap();
                 }
@@ -659,22 +651,22 @@ fn bench_real_world_patterns(c: &mut Criterion) {
 
             // Load product data (Schema.org pattern)
             for product_id in 0..25000 {
-                let product = Term::iri(&format!("http://example.org/product/{}", product_id));
+                let product = Term::iri(format!("http://example.org/product/{product_id}"));
 
                 for predicate_str in schema_predicates.choose_multiple(&mut rng, 4) {
                     let predicate = Term::iri(*predicate_str);
                     let object = match predicate_str {
                         s if s.contains("name") => {
-                            Term::literal(&format!("Product {}", product_id))
+                            Term::literal(format!("Product {product_id}"))
                         }
                         s if s.contains("description") => {
-                            Term::literal(&format!("Description for product {}", product_id))
+                            Term::literal(format!("Description for product {product_id}"))
                         }
-                        s if s.contains("author") => Term::iri(&format!(
+                        s if s.contains("author") => Term::iri(format!(
                             "http://example.org/person/{}",
                             rng.gen_range(0..50000)
                         )),
-                        _ => Term::literal(&format!("schema_value_{}", rng.r#gen::<u32>())),
+                        _ => Term::literal(format!("schema_value_{}", rng.r#gen::<u32>())),
                     };
                     store.insert_triple(&product, &predicate, &object).unwrap();
                 }

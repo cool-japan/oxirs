@@ -389,7 +389,7 @@ impl HealthMonitor {
         // Overall health status
         match health_status {
             Ok(_) => report.push_str("Status: HEALTHY\n"),
-            Err(e) => report.push_str(&format!("Status: UNHEALTHY - {}\n", e)),
+            Err(e) => report.push_str(&format!("Status: UNHEALTHY - {e}\n")),
         }
 
         report.push_str("\n--- System Metrics ---\n");
@@ -435,7 +435,7 @@ impl HealthMonitor {
             "filehandles" => self.recover_file_handles(),
             _ => Err(anyhow!(HardeningError::RecoveryFailed {
                 operation: component.to_string(),
-                details: format!("No recovery strategy for component: {}", component),
+                details: format!("No recovery strategy for component: {component}"),
             })),
         }
     }

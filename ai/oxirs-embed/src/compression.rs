@@ -280,6 +280,12 @@ pub struct ModelCompressionManager {
     pub nas: NASProcessor,
 }
 
+impl Default for ModelCompressionManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ModelCompressionManager {
     /// Create new compression manager
     pub fn new() -> Self {
@@ -298,8 +304,7 @@ impl ModelCompressionManager {
         compression_target: CompressionTarget,
     ) -> Result<CompressedModel> {
         println!(
-            "🗜️  Starting model compression with target: {:?}",
-            compression_target
+            "🗜️  Starting model compression with target: {compression_target:?}"
         );
 
         let mut compressed_weights = model_weights.clone();
@@ -570,7 +575,7 @@ impl PruningProcessor {
 
     /// Calculate magnitude threshold for pruning
     fn calculate_magnitude_threshold(&self, tensor: &Array2<f32>) -> f32 {
-        let mut abs_values: Vec<f32> = tensor.iter().map(|&x| x.abs()).collect();
+        let mut abs_values: Vec<f32> = tensor.iter().copied().map(|x| x.abs()).collect();
         abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         let percentile_index = (abs_values.len() as f32 * self.config.sparsity_ratio) as usize;
@@ -688,8 +693,7 @@ impl DistillationProcessor {
 
             if epoch % 5 == 0 {
                 println!(
-                    "  📉 Epoch {}: Distillation loss = {:.4}",
-                    epoch, distillation_loss
+                    "  📉 Epoch {epoch}: Distillation loss = {distillation_loss:.4}"
                 );
             }
         }
@@ -783,8 +787,7 @@ impl NASProcessor {
 
             if generation % 5 == 0 {
                 println!(
-                    "  🧬 Generation {}: Best score = {:.4}",
-                    generation, best_score
+                    "  🧬 Generation {generation}: Best score = {best_score:.4}"
                 );
             }
         }
@@ -1194,7 +1197,7 @@ mod tests {
     #[test]
     fn test_pruning_processor() {
         let config = PruningConfig::default();
-        let mut processor = PruningProcessor::new(config);
+        let processor = PruningProcessor::new(config);
 
         let tensor = Array2::from_shape_fn((4, 4), |(i, j)| if i == j { 1.0 } else { 0.01 });
         let mask = processor.generate_pruning_mask(&tensor).unwrap();

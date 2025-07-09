@@ -430,8 +430,7 @@ impl NodeLifecycleManager {
             let nodes = self.node_status.read().await;
             if nodes.contains_key(&node_id) {
                 return Err(ClusterError::Config(format!(
-                    "Node {} already exists",
-                    node_id
+                    "Node {node_id} already exists"
                 )));
             }
         }
@@ -542,7 +541,7 @@ impl NodeLifecycleManager {
         };
 
         if !node_exists {
-            return Err(ClusterError::Config(format!("Node {} not found", node_id)));
+            return Err(ClusterError::Config(format!("Node {node_id} not found")));
         }
 
         // Emit leaving event
@@ -934,7 +933,7 @@ impl NodeLifecycleManager {
     async fn emit_event(&self, event: LifecycleEvent) {
         let listeners = self.event_listeners.read().await;
         for listener in listeners.iter() {
-            if let Err(_) = listener.send(event.clone()) {
+            if listener.send(event.clone()).is_err() {
                 // Listener disconnected, will be cleaned up later
             }
         }
@@ -957,7 +956,7 @@ impl NodeLifecycleManager {
             self.consensus
                 .transfer_leadership(target)
                 .await
-                .map_err(|e| ClusterError::Other(format!("Leadership transfer failed: {}", e)))?;
+                .map_err(|e| ClusterError::Other(format!("Leadership transfer failed: {e}")))?;
         } else {
             // Let consensus layer choose the best candidate
             let healthy_nodes = self.get_healthy_nodes().await;
@@ -967,7 +966,7 @@ impl NodeLifecycleManager {
                         .transfer_leadership(target)
                         .await
                         .map_err(|e| {
-                            ClusterError::Other(format!("Leadership transfer failed: {}", e))
+                            ClusterError::Other(format!("Leadership transfer failed: {e}"))
                         })?;
                 }
             }

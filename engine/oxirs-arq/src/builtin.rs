@@ -305,7 +305,7 @@ impl CustomFunction for IriFunction {
                     {
                         s.clone()
                     } else {
-                        format!("{}{}", base, s)
+                        format!("{base}{s}")
                     }
                 } else {
                     s.clone()
@@ -375,11 +375,11 @@ impl CustomFunction for BlankFunction {
         match args.len() {
             0 => {
                 // Generate a fresh blank node
-                let id = format!("_:gen{}", rand::random::<u32>());
+                let id = format!("_:gen{r}", r = rand::random::<u32>());
                 Ok(Value::BlankNode(id))
             }
             1 => match &args[0] {
-                Value::String(s) => Ok(Value::BlankNode(format!("_:{s}"))),
+                Value::String(s) => Ok(Value::BlankNode(format!("_{s}"))),
                 _ => bail!("bnode() requires a string argument"),
             },
             _ => bail!("bnode() takes 0 or 1 arguments"),
@@ -852,7 +852,7 @@ impl CustomFunction for EncodeForUriFunction {
                 if c.is_ascii_alphanumeric() || "-_.~".contains(c) {
                     c.to_string()
                 } else {
-                    format!("%{:02X}", c as u8)
+                    format!("%{c:02X}", c = c as u8)
                 }
             })
             .collect();
@@ -1526,7 +1526,7 @@ impl CustomFunction for Md5Function {
         };
 
         // For now, return a placeholder hash
-        Ok(Value::String(format!("md5:{}", s.len())))
+        Ok(Value::String(format!("md5:{len}", len = s.len())))
     }
 }
 

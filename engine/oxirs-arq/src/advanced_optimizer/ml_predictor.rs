@@ -10,6 +10,7 @@ use std::collections::HashMap;
 pub struct MLPredictor {
     model: MLModel,
     training_data: Vec<TrainingExample>,
+    #[allow(dead_code)]
     feature_extractor: FeatureExtractor,
     prediction_cache: HashMap<u64, MLPrediction>,
 }
@@ -17,8 +18,11 @@ pub struct MLPredictor {
 /// ML model for cost prediction
 #[derive(Debug, Clone)]
 pub struct MLModel {
+    #[allow(dead_code)]
     weights: Vec<f64>,
+    #[allow(dead_code)]
     bias: f64,
+    #[allow(dead_code)]
     model_type: MLModelType,
     accuracy_metrics: AccuracyMetrics,
 }
@@ -56,16 +60,22 @@ pub struct QueryCharacteristics {
 /// Feature extractor for ML models
 #[derive(Debug, Clone)]
 pub struct FeatureExtractor {
+    #[allow(dead_code)]
     feature_weights: HashMap<String, f64>,
+    #[allow(dead_code)]
     normalization_params: NormalizationParams,
 }
 
 /// Normalization parameters for features
 #[derive(Debug, Clone)]
 pub struct NormalizationParams {
+    #[allow(dead_code)]
     mean: Vec<f64>,
+    #[allow(dead_code)]
     std_dev: Vec<f64>,
+    #[allow(dead_code)]
     min_values: Vec<f64>,
+    #[allow(dead_code)]
     max_values: Vec<f64>,
 }
 
@@ -128,7 +138,7 @@ impl MLPredictor {
     }
 
     /// Extract features from query
-    pub fn extract_features(&self, query: &crate::algebra::Algebra) -> Vec<f64> {
+    pub fn extract_features(&self, _query: &crate::algebra::Algebra) -> Vec<f64> {
         // Implementation will be extracted from the original file
         vec![]
     }
@@ -138,7 +148,7 @@ impl MLPredictor {
         &mut self,
         query: &crate::algebra::Algebra,
     ) -> anyhow::Result<MLPrediction> {
-        let features = self.extract_features(query);
+        let _features = self.extract_features(query);
         let query_hash = self.hash_query(query);
 
         if let Some(cached) = self.prediction_cache.get(&query_hash) {

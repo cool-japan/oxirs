@@ -12,10 +12,12 @@ use tracing::{debug, info, warn};
 
 /// Transaction isolation levels with full SQL standard compliance
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum IsolationLevel {
     /// Allows dirty reads, non-repeatable reads, and phantom reads
     ReadUncommitted,
     /// Prevents dirty reads, allows non-repeatable reads and phantom reads
+    #[default]
     ReadCommitted,
     /// Prevents dirty reads and non-repeatable reads, allows phantom reads
     RepeatableRead,
@@ -25,11 +27,6 @@ pub enum IsolationLevel {
     Serializable,
 }
 
-impl Default for IsolationLevel {
-    fn default() -> Self {
-        IsolationLevel::ReadCommitted
-    }
-}
 
 /// Transaction state with comprehensive lifecycle management
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -65,18 +62,15 @@ pub enum TransactionType {
 
 /// Transaction priority for conflict resolution
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum TransactionPriority {
     Low = 1,
+    #[default]
     Normal = 2,
     High = 3,
     Critical = 4,
 }
 
-impl Default for TransactionPriority {
-    fn default() -> Self {
-        TransactionPriority::Normal
-    }
-}
 
 /// Resource lock modes for granular locking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -322,6 +316,12 @@ pub struct DeadlockDetector {
     deadlock_cycles: Vec<Vec<String>>,
 }
 
+impl Default for DeadlockDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeadlockDetector {
     pub fn new() -> Self {
         Self {
@@ -335,7 +335,7 @@ impl DeadlockDetector {
     pub fn add_wait(&mut self, waiter: &str, holder: &str) {
         self.wait_for_graph
             .entry(waiter.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(holder.to_string());
     }
 
@@ -896,7 +896,7 @@ impl TransactionManager {
         let mut lock_manager = self.lock_manager.lock().unwrap();
         let existing_locks = lock_manager
             .entry(resource.clone())
-            .or_insert_with(Vec::new);
+            .or_default();
 
         // Check lock compatibility
         if self.is_lock_compatible(existing_locks, mode, tx_id) {

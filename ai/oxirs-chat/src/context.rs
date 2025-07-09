@@ -5,20 +5,16 @@
 
 use anyhow::{anyhow, Result};
 use fastrand;
-use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::f64::consts::PI;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    sync::Arc,
     time::{Duration, SystemTime},
 };
-use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 use crate::{
-    analytics::ConversationAnalytics, rag::QueryIntent, Message, MessageMetadata, MessageRole,
+    analytics::ConversationAnalytics, Message, MessageRole,
 };
 
 /// Configuration for context management
@@ -57,7 +53,7 @@ impl Default for ContextConfig {
 /// Implements brain-inspired processing patterns for context understanding
 pub mod neuromorphic_context {
     use super::*;
-    use std::collections::BTreeMap;
+    
 
     /// Neuromorphic processing unit inspired by biological neurons
     #[derive(Debug, Clone)]
@@ -75,7 +71,7 @@ pub mod neuromorphic_context {
         pub fn new(input_size: usize) -> Self {
             let mut dendrites = Vec::new();
             for i in 0..input_size {
-                dendrites.push(Dendrite::new(format!("dendrite_{}", i)));
+                dendrites.push(Dendrite::new(format!("dendrite_{i}")));
             }
 
             Self {
@@ -123,7 +119,7 @@ pub mod neuromorphic_context {
             let mut signals = Vec::new();
 
             for (i, dendrite) in self.dendrites.iter_mut().enumerate() {
-                let signal = dendrite.process_input(&input.features.get(i).unwrap_or(&0.0));
+                let signal = dendrite.process_input(input.features.get(i).unwrap_or(&0.0));
                 signals.push(signal);
             }
 
@@ -332,6 +328,12 @@ pub mod neuromorphic_context {
         pub leak_conductance: f64,
     }
 
+    impl Default for Soma {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl Soma {
         pub fn new() -> Self {
             Self {
@@ -351,7 +353,7 @@ pub mod neuromorphic_context {
             }
 
             // Apply leak conductance
-            self.membrane_potential *= (1.0 - self.leak_conductance);
+            self.membrane_potential *= 1.0 - self.leak_conductance;
 
             self.membrane_potential
         }
@@ -362,6 +364,12 @@ pub mod neuromorphic_context {
         pub conduction_velocity: f64,
         pub myelination: f64,
         pub branching_factor: usize,
+    }
+
+    impl Default for Axon {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl Axon {
@@ -749,6 +757,12 @@ pub mod neuromorphic_context {
         pub contextual_features: Vec<Vec<f64>>,
     }
 
+    impl Default for ContextFeatures {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl ContextFeatures {
         pub fn new() -> Self {
             Self {
@@ -871,6 +885,12 @@ pub mod neuromorphic_context {
         pub attention_decay: f64,
     }
 
+    impl Default for AttentionMechanism {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     impl AttentionMechanism {
         pub fn new() -> Self {
             Self {
@@ -961,7 +981,7 @@ pub mod neuromorphic_context {
                         1 => "Temporal Processing".to_string(),
                         2 => "Emotional Processing".to_string(),
                         3 => "Contextual Processing".to_string(),
-                        _ => format!("Processor {}", i),
+                        _ => format!("Processor {i}"),
                     });
                 }
             }
@@ -1192,6 +1212,12 @@ pub mod neuromorphic_context {
         pub activation_count: usize,
         pub total_learning_delta: f64,
         pub average_signal_strength: f64,
+    }
+
+    impl Default for PerformanceMetrics {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl PerformanceMetrics {
@@ -1475,7 +1501,7 @@ impl AdvancedContextManager {
                     topic.name, topic.confidence
                 ));
             }
-            context_text.push_str("\n");
+            context_text.push('\n');
         }
 
         // Add recent messages
@@ -1879,7 +1905,7 @@ impl AdvancedContextManager {
                     let entity2 = &entities[j];
 
                     // Create a general relationship notation
-                    let relationship = format!("{} <-> {}", entity1, entity2);
+                    let relationship = format!("{entity1} <-> {entity2}");
                     implicit_relationships.push(relationship);
                 }
             }
@@ -1918,12 +1944,12 @@ impl AdvancedContextManager {
                             .replace("http://", "")
                             .replace("https://", "")
                             .split('/')
-                            .last()
+                            .next_back()
                             .unwrap_or(predicate)
                             .replace('#', ":")
                             .to_string();
 
-                        return Some(format!("{} --[{}]--> {}", subject, clean_predicate, object));
+                        return Some(format!("{subject} --[{clean_predicate}]--> {object}"));
                     }
                 }
             }
@@ -2372,7 +2398,7 @@ impl ContextWindow {
 
         // Apply diminishing returns for multiple keyword matches
         if keyword_matches > 0 {
-            relevance_score = relevance_score * (1.0 - (keyword_matches as f32 * 0.05).min(0.3));
+            relevance_score *= (1.0 - (keyword_matches as f32 * 0.05).min(0.3));
         }
 
         // Check message metadata for additional topic relevance indicators

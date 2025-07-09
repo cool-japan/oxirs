@@ -11,9 +11,9 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::debug;
 
-use super::query_analysis::{QueryComplexity, QueryInfo};
+use super::query_analysis::QueryInfo;
 use super::types::*;
 
 /// Performance optimizer for federated queries
@@ -483,8 +483,7 @@ impl PerformanceOptimizer {
 
             if diff_percent > 10.0 {
                 format!(
-                    "Performance degraded by {:.1}% compared to historical average",
-                    diff_percent
+                    "Performance degraded by {diff_percent:.1}% compared to historical average"
                 )
             } else if diff_percent < -10.0 {
                 format!(
@@ -653,7 +652,7 @@ impl QueryFrequencyTracker {
     pub fn is_frequent_pattern(&self, pattern: &str) -> bool {
         self.pattern_counts
             .get(pattern)
-            .map_or(false, |&count| count >= self.frequency_threshold)
+            .is_some_and(|&count| count >= self.frequency_threshold)
     }
 
     pub fn get_pattern_frequency(&self, pattern: &str) -> usize {
@@ -742,6 +741,12 @@ pub struct LinearRegressionModel {
     is_trained: bool,
 }
 
+impl Default for LinearRegressionModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LinearRegressionModel {
     pub fn new() -> Self {
         Self {
@@ -807,7 +812,7 @@ impl LinearRegressionModel {
             return estimated_cost * 10.0 + field_count * 100.0;
         }
 
-        let features = vec![estimated_cost, field_count];
+        let features = [estimated_cost, field_count];
         let mut prediction = self.intercept;
 
         for (i, &coef) in self.coefficients.iter().enumerate() {
@@ -827,6 +832,12 @@ pub struct QueryPatternExtractor {
     join_regex: Regex,
     filter_regex: Regex,
     function_regex: Regex,
+}
+
+impl Default for QueryPatternExtractor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryPatternExtractor {

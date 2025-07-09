@@ -422,10 +422,20 @@ impl IntelligentFederationGateway {
 
         // Record performance metrics
         let execution_time = start_time.elapsed();
+        // Calculate query hash for performance tracking and caching
+        let query_hash = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            
+            let mut hasher = DefaultHasher::new();
+            query.hash(&mut hasher);
+            hasher.finish()
+        };
+
         self.performance_tracker.record_operation(OperationMetrics {
             operation_name: Some("federated_query".to_string()),
             operation_type: OperationType::Query,
-            query_hash: 0, // TODO: Calculate actual hash
+            query_hash,
             execution_time,
             parsing_time: Duration::from_millis(0),
             validation_time: Duration::from_millis(0),
@@ -772,7 +782,7 @@ impl IntelligentFederationGateway {
         }
 
         let hash = hasher.finish();
-        format!("gql_cache_{:x}", hash)
+        format!("gql_cache_{hash:x}")
     }
 
     async fn get_cached_result(&self, _cache_key: &str) -> Result<Option<CachedQueryResult>> {
@@ -847,11 +857,11 @@ impl IntelligentFederationGateway {
 
         // Initialize in-degree and adjacency list
         for (node, neighbors) in graph {
-            adj_list.entry(node.clone()).or_insert_with(Vec::new);
+            adj_list.entry(node.clone()).or_default();
             in_degree.entry(node.clone()).or_insert(0);
 
             for neighbor in neighbors {
-                adj_list.entry(neighbor.clone()).or_insert_with(Vec::new);
+                adj_list.entry(neighbor.clone()).or_default();
                 adj_list.get_mut(node).unwrap().push(neighbor.clone());
                 *in_degree.entry(neighbor.clone()).or_insert(0) += 1;
             }

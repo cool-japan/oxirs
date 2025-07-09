@@ -14,33 +14,19 @@
 //! - Multi-dimensional spatial analysis
 //! - Quantum temporal superposition validation
 
-use async_trait::async_trait;
-use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use dashmap::DashMap;
-use nalgebra::{Matrix4, Vector3, Vector4};
+use nalgebra::{Matrix4, Vector3};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::f64::consts::PI;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationReport};
 
-use crate::consciousness_validation::{
-    ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext,
-};
-use crate::cosmic_scale_processing::{CosmicScaleProcessor, CosmicValidationScope};
-use crate::quantum_consciousness_entanglement::QuantumConsciousnessEntanglement;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Time-space validation system for temporal and spatial dimension awareness
 #[derive(Debug)]
@@ -267,7 +253,7 @@ impl TimeSpaceValidator {
     async fn initialize_spacetime_geometry(&self) -> Result<SpacetimeGeometryInit> {
         info!("Initializing spacetime geometry processor");
 
-        let mut processor = self.spacetime_processor.write().await;
+        let processor = self.spacetime_processor.write().await;
 
         // Set up metric tensor calculations
         let metric_setup = processor.setup_metric_tensor_calculations().await?;
@@ -290,7 +276,7 @@ impl TimeSpaceValidator {
     async fn setup_temporal_framework(&self) -> Result<TemporalFrameworkInit> {
         info!("Setting up temporal validation framework");
 
-        let mut engine = self.temporal_engine.write().await;
+        let engine = self.temporal_engine.write().await;
 
         // Initialize temporal consistency checking
         let consistency_init = engine.initialize_consistency_checking().await?;
@@ -313,7 +299,7 @@ impl TimeSpaceValidator {
     async fn initialize_spatial_dimensions(&self) -> Result<SpatialDimensionInit> {
         info!("Initializing spatial dimension analysis");
 
-        let mut analyzer = self.spatial_analyzer.write().await;
+        let analyzer = self.spatial_analyzer.write().await;
 
         // Map accessible spatial dimensions
         let dimension_mapping = analyzer.map_spatial_dimensions().await?;
@@ -362,7 +348,7 @@ impl TimeSpaceValidator {
     async fn establish_causal_ordering(&self) -> Result<CausalOrderingSetup> {
         info!("Establishing causal ordering");
 
-        let mut manager = self.causal_manager.write().await;
+        let manager = self.causal_manager.write().await;
 
         // Set up causal cone calculations
         let causal_cone_setup = manager.setup_causal_cone_calculations().await?;
@@ -385,7 +371,7 @@ impl TimeSpaceValidator {
     async fn initialize_quantum_temporal(&self) -> Result<QuantumTemporalInit> {
         info!("Initializing quantum temporal processing");
 
-        let mut processor = self.quantum_temporal.write().await;
+        let processor = self.quantum_temporal.write().await;
 
         // Set up temporal superposition calculations
         let superposition_setup = processor.setup_temporal_superpositions().await?;
@@ -1711,6 +1697,7 @@ struct TemporalDecoherenceAnalysis {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     #[tokio::test]
     async fn test_time_space_validator_creation() {

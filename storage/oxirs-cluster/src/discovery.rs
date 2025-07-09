@@ -147,8 +147,10 @@ pub struct DiscoveryService {
 impl DiscoveryService {
     /// Create a new discovery service
     pub fn new(node_id: OxirsNodeId, address: SocketAddr, config: DiscoveryConfig) -> Self {
-        let mut metadata = NodeMetadata::default();
-        metadata.version = env!("CARGO_PKG_VERSION").to_string();
+        let mut metadata = NodeMetadata {
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            ..Default::default()
+        };
         metadata.features.insert("raft".to_string());
         metadata.features.insert("rdf".to_string());
 
@@ -470,7 +472,7 @@ impl DiscoveryService {
 
         // Simple DNS TXT record lookup for development
         // In production, this would use proper DNS SRV record resolution
-        let fqdn = format!("_{}.{}", service_name, domain);
+        let fqdn = format!("_{service_name}.{domain}");
 
         // Use nslookup or dig to resolve TXT records containing node information
         let output = Command::new("nslookup").args(["-type=TXT", &fqdn]).output();
@@ -508,7 +510,7 @@ impl DiscoveryService {
 
         tracing::debug!("Running multicast discovery on {}:{}", group, port);
 
-        let multicast_addr: SocketAddr = format!("{}:{}", group, port)
+        let multicast_addr: SocketAddr = format!("{group}:{port}")
             .parse()
             .map_err(|e| anyhow::anyhow!("Invalid multicast address: {}", e))?;
 
@@ -888,7 +890,7 @@ mod tests {
         let config = DiscoveryConfig::Static { nodes: vec![] };
         let mut service = DiscoveryService::new(1, addr, config);
 
-        let mut node2 = NodeInfo::new(2, addr);
+        let node2 = NodeInfo::new(2, addr);
         let mut node3 = NodeInfo::new(3, addr);
 
         // Set node3 as unhealthy

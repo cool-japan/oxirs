@@ -37,7 +37,7 @@ pub use online_learning::{
     StreamingDataType, StreamingFeatureExtractor, UpdateResult,
 };
 
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Create a default streaming adaptation engine with standard configuration
 pub fn create_default_engine() -> Result<StreamingAdaptationEngine> {

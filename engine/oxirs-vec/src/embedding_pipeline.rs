@@ -339,13 +339,10 @@ impl PreprocessingPipeline {
         for suffix in &suffixes {
             if word.ends_with(suffix) {
                 let stem = &word[..word.len() - suffix.len()];
-                if self.measure(stem) > 1 {
-                    if *suffix == "ion" && (stem.ends_with("s") || stem.ends_with("t")) {
-                        word = stem.to_string();
-                    } else if *suffix != "ion" {
+                if self.measure(stem) > 1
+                    && (*suffix != "ion" || (stem.ends_with("s") || stem.ends_with("t"))) {
                         word = stem.to_string();
                     }
-                }
                 break;
             }
         }
@@ -406,6 +403,7 @@ impl PreprocessingPipeline {
             .any(|(i, &ch)| self.is_vowel(ch, i, &chars))
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn is_vowel(&self, ch: char, pos: usize, chars: &[char]) -> bool {
         match ch {
             'a' | 'e' | 'i' | 'o' | 'u' => true,
@@ -547,12 +545,12 @@ impl PostprocessingPipeline {
                 let mut rng = rand::rngs::StdRng::seed_from_u64(42);
                 let mut projected = vec![0.0; *target_dims];
 
-                for i in 0..*target_dims {
-                    for (_j, &val) in values.iter().enumerate() {
+                for projected_val in projected.iter_mut().take(*target_dims) {
+                    for &val in values.iter() {
                         let random_weight: f32 = rng.gen_range(-1.0..1.0);
-                        projected[i] += val * random_weight;
+                        *projected_val += val * random_weight;
                     }
-                    projected[i] /= (values.len() as f32).sqrt();
+                    *projected_val /= (values.len() as f32).sqrt();
                 }
 
                 vector.values = VectorData::F32(projected);
@@ -726,8 +724,10 @@ mod tests {
 
     #[test]
     fn test_postprocessing_normalization() {
-        let mut pipeline = PostprocessingPipeline::default();
-        pipeline.normalization = VectorNormalization::L2;
+        let pipeline = PostprocessingPipeline {
+            normalization: VectorNormalization::L2,
+            ..Default::default()
+        };
 
         let mut vector = Vector::new(vec![3.0, 4.0, 0.0]);
         let quality = pipeline.process(&mut vector).unwrap();

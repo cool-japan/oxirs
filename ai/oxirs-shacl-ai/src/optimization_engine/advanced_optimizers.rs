@@ -2,7 +2,6 @@
 
 use crate::{shape::PropertyConstraint, Result, ShaclAiError};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::Instant;
 
 use super::types::*;
 
@@ -226,6 +225,12 @@ pub struct DEIndividual {
     fitness: f64,
 }
 
+impl Default for DifferentialEvolutionOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DifferentialEvolutionOptimizer {
     pub fn new() -> Self {
         Self {
@@ -267,6 +272,12 @@ pub struct ConstraintConfiguration {
     pub constraint_order: Vec<usize>,
     pub parallelization_config: ParallelValidationConfig,
     pub cache_configuration: CacheConfiguration,
+}
+
+impl Default for TabuSearchOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TabuSearchOptimizer {
@@ -326,6 +337,12 @@ pub enum OptimizationAction {
     NoAction,
 }
 
+impl Default for ReinforcementLearningOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ReinforcementLearningOptimizer {
     pub fn new() -> Self {
         Self {
@@ -380,6 +397,12 @@ pub struct AdaptiveOptimizationResult {
 pub struct PerformanceModel {
     // Simplified model
     weights: Vec<f64>,
+}
+
+impl Default for AdaptiveOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AdaptiveOptimizer {
@@ -460,6 +483,12 @@ pub struct BayesianOptimizer {
     pub noise_level: f64,
 }
 
+impl Default for BayesianOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BayesianOptimizer {
     pub fn new() -> Self {
         Self {
@@ -480,6 +509,12 @@ pub struct GeneticOptimizer {
     pub crossover_rate: f64,
     pub max_generations: usize,
     pub selection_method: String,
+}
+
+impl Default for GeneticOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GeneticOptimizer {
@@ -503,6 +538,12 @@ pub struct MultiObjectiveOptimizer {
     pub pareto_front_size: usize,
 }
 
+impl Default for MultiObjectiveOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiObjectiveOptimizer {
     pub fn new() -> Self {
         Self {
@@ -522,6 +563,12 @@ pub struct ParticleSwarmOptimizer {
     pub inertia_weight: f64,
     pub cognitive_coefficient: f64,
     pub social_coefficient: f64,
+}
+
+impl Default for ParticleSwarmOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ParticleSwarmOptimizer {
@@ -544,6 +591,12 @@ pub struct SimulatedAnnealingOptimizer {
     pub cooling_rate: f64,
     pub max_iterations: usize,
     pub acceptance_probability: String,
+}
+
+impl Default for SimulatedAnnealingOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SimulatedAnnealingOptimizer {

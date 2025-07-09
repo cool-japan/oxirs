@@ -262,10 +262,9 @@ impl ModelRegistry {
         if let Some(deployment) = deployments.get_mut(&deployment_id) {
             deployment.status = DeploymentStatus::Deployed;
             deployment.deployed_at = Some(Utc::now());
-            deployment.endpoint = Some(format!("https://api.oxirs.ai/v1/embed/{}", deployment_id));
+            deployment.endpoint = Some(format!("https://api.oxirs.ai/v1/embed/{deployment_id}"));
             deployment.health_check_url = Some(format!(
-                "https://api.oxirs.ai/v1/embed/{}/health",
-                deployment_id
+                "https://api.oxirs.ai/v1/embed/{deployment_id}/health"
             ));
         }
 

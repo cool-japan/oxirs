@@ -217,8 +217,8 @@ impl ShardManager {
         // Create shard metadata
         let metadata = ShardMetadata {
             shard_id,
-            node_ids: node_ids.iter().map(|&id| id as u64).collect(),
-            primary_node: node_ids[0] as u64,
+            node_ids: node_ids.to_vec(),
+            primary_node: node_ids[0],
             triple_count: 0,
             size_bytes: 0,
             state: ShardState::Active,
@@ -281,13 +281,12 @@ impl ShardManager {
                     let msg = RpcMessage::StoreTriple { shard_id, triple };
                     self.network.send_message(primary, msg).await?;
                 } else {
-                    return Err(ClusterError::Other(format!("Shard {} not found", shard_id)));
+                    return Err(ClusterError::Other(format!("Shard {shard_id} not found")));
                 }
             }
         } else {
             return Err(ClusterError::Other(format!(
-                "No owners found for shard {}",
-                shard_id
+                "No owners found for shard {shard_id}"
             )));
         }
 
@@ -346,11 +345,12 @@ impl ShardManager {
         if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
             Ok(metadata.primary_node as OxirsNodeId)
         } else {
-            Err(ClusterError::ShardNotFound(shard_id).into())
+            Err(ClusterError::ShardNotFound(shard_id))
         }
     }
 
     /// Check if a shard needs splitting
+    #[allow(dead_code)]
     async fn check_shard_split(&self, shard_id: ShardId) -> Result<bool> {
         if let Some(metadata) = self.router.get_shard_metadata(shard_id).await {
             Ok(metadata.triple_count > self.config.max_triples_per_shard)
@@ -360,6 +360,7 @@ impl ShardManager {
     }
 
     /// Check if shards need merging
+    #[allow(dead_code)]
     async fn check_shard_merge(&self, shard_ids: &[ShardId]) -> Result<bool> {
         let mut total_triples = 0;
 
@@ -373,6 +374,7 @@ impl ShardManager {
     }
 
     /// Calculate load imbalance
+    #[allow(dead_code)]
     async fn calculate_imbalance(&self) -> Result<f64> {
         let stats = self.router.get_statistics().await;
 
@@ -879,7 +881,7 @@ impl ShardManager {
     async fn determine_split_target(
         triple: &Triple,
         target_shards: &[ShardId],
-        split_points: &[String],
+        _split_points: &[String],
     ) -> Result<ShardId> {
         // Simple hash-based splitting strategy
         // In production, this could be more sophisticated based on semantic analysis

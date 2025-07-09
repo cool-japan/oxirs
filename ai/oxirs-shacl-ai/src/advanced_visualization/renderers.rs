@@ -1,6 +1,5 @@
 //! Visualization renderers for different output formats
 
-use std::collections::HashMap;
 
 use crate::{Result, ShaclAiError};
 

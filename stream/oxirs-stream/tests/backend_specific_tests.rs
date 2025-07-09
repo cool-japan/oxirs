@@ -42,13 +42,14 @@ mod kafka_specific_tests {
     #[tokio::test]
     #[ignore] // Requires Kafka
     async fn test_kafka_partitioning() -> Result<()> {
+        let test_id = Uuid::new_v4();
         let config = StreamConfig {
             backend: StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],
                 security_protocol: None,
                 sasl_config: None,
             },
-            topic: format!("partition-test-{}", Uuid::new_v4()),
+            topic: format!("partition-test-{test_id}"),
             batch_size: 1,
             flush_interval_ms: 100,
             max_connections: 5,
@@ -1147,8 +1148,8 @@ mod kinesis_specific_tests {
         // Publish events
         for i in 0..12 {
             let event = create_test_event_with_metadata(
-                &format!("fanout_{}", i),
-                &format!("fanout_data_{}", i),
+                &format!("fanout_{i}"),
+                &format!("fanout_data_{i}"),
             );
             producer.publish(event).await?;
         }

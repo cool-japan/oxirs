@@ -217,7 +217,7 @@ impl FederatedCoordinator {
 
     /// Calculate metrics for the completed round
     fn calculate_round_metrics(&self, round: &mut FederatedRound, updates: &[LocalUpdate]) {
-        let mut metrics = &mut round.metrics;
+        let metrics = &mut round.metrics;
 
         metrics.num_participants = updates.len();
         metrics.total_samples = updates.iter().map(|u| u.num_samples).sum();
@@ -330,6 +330,12 @@ pub struct CompressionEngine {
     pub stats: CompressionStats,
 }
 
+impl Default for CompressionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompressionEngine {
     /// Create new compression engine
     pub fn new() -> Self {
@@ -440,6 +446,12 @@ pub struct KeyManager {
     pub rotation_schedule: KeyRotationSchedule,
 }
 
+impl Default for KeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyManager {
     /// Create new key manager
     pub fn new() -> Self {
@@ -492,6 +504,12 @@ pub struct CertificateStore {
     pub revoked_certificates: Vec<String>,
 }
 
+impl Default for CertificateStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CertificateStore {
     /// Create new certificate store
     pub fn new() -> Self {
@@ -529,6 +547,12 @@ pub struct VerificationEngine {
     pub methods: Vec<VerificationMechanism>,
     /// Signature cache
     pub signature_cache: HashMap<String, VerificationResult>,
+}
+
+impl Default for VerificationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VerificationEngine {
@@ -648,7 +672,7 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         Ok(Vector::new(vec![0.0; 128]))
     }
 
-    fn get_relation_embedding(&self, _relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, _relation: &str) -> Result<Vector> {
         // Implementation would return relation embedding
         Ok(Vector::new(vec![0.0; 128]))
     }
@@ -665,7 +689,7 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         // Implementation would predict objects
-        Ok((0..k).map(|i| (format!("object_{}", i), 0.8)).collect())
+        Ok((0..k).map(|i| (format!("object_{i}"), 0.8)).collect())
     }
 
     fn predict_subjects(
@@ -675,7 +699,7 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         // Implementation would predict subjects
-        Ok((0..k).map(|i| (format!("subject_{}", i), 0.8)).collect())
+        Ok((0..k).map(|i| (format!("subject_{i}"), 0.8)).collect())
     }
 
     fn predict_relations(
@@ -685,7 +709,7 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         // Implementation would predict relations
-        Ok((0..k).map(|i| (format!("relation_{}", i), 0.8)).collect())
+        Ok((0..k).map(|i| (format!("relation_{i}"), 0.8)).collect())
     }
 
     fn get_entities(&self) -> Vec<String> {

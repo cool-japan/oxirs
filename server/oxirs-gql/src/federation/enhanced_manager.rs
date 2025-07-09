@@ -27,6 +27,7 @@ use crate::types::Schema;
 
 /// Enhanced federation manager configuration
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct EnhancedFederationConfig {
     pub service_discovery: ServiceDiscoveryConfig,
     pub load_balancing: LoadBalancingConfig,
@@ -37,19 +38,6 @@ pub struct EnhancedFederationConfig {
     pub real_time_sync: SyncConfig,
 }
 
-impl Default for EnhancedFederationConfig {
-    fn default() -> Self {
-        Self {
-            service_discovery: ServiceDiscoveryConfig::default(),
-            load_balancing: LoadBalancingConfig::default(),
-            circuit_breaker: CircuitBreakerConfig::default(),
-            retry_policy: RetryPolicyConfig::default(),
-            query_routing: QueryRoutingConfig::default(),
-            caching: FederationCacheConfig::default(),
-            real_time_sync: SyncConfig::default(),
-        }
-    }
-}
 
 /// Load balancing configuration
 #[derive(Debug, Clone)]
@@ -306,6 +294,12 @@ pub struct QueryExecutionStats {
     pub timestamp: Instant,
     pub complexity: f64,
     pub cache_hit: bool,
+}
+
+impl Default for QueryAnalytics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryAnalytics {
@@ -822,11 +816,11 @@ impl EnhancedFederationManager {
         let mut hasher = DefaultHasher::new();
 
         // Create a simplified representation of the query for hashing
-        let query_str = format!("{:?}", document);
+        let query_str = format!("{document:?}");
         query_str.hash(&mut hasher);
 
         // Include variables in the hash if they significantly affect query characteristics
-        let variables_str = format!("{:?}", variables);
+        let variables_str = format!("{variables:?}");
         variables_str.hash(&mut hasher);
 
         format!("{:x}", hasher.finish())
@@ -1187,7 +1181,7 @@ impl EnhancedFederationManager {
         } else {
             // Merge multiple results
             let mut merged = serde_json::Map::new();
-            for (_service_id, result) in results {
+            for result in results.values() {
                 if let Some(obj) = result.as_object() {
                     for (key, value) in obj {
                         merged.insert(key.clone(), value.clone());
@@ -1249,7 +1243,9 @@ impl EnhancedFederationManager {
 }
 
 /// Handler for schema rebuild events
+#[allow(dead_code)]
 struct SchemaRebuildHandler {
+    #[allow(dead_code)]
     manager: *const EnhancedFederationManager,
 }
 

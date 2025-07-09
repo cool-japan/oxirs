@@ -177,7 +177,7 @@ impl VectorWriter {
 
         // Write a placeholder header first to reserve space
         let placeholder_header_bytes = bincode::serialize(&header)?;
-        let header_size = (4 + placeholder_header_bytes.len()) as u64;
+        let _header_size = (4 + placeholder_header_bytes.len()) as u64;
 
         // Write placeholder header size and header
         writer.write_all(&(placeholder_header_bytes.len() as u32).to_le_bytes())?;

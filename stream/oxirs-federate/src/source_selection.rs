@@ -4,16 +4,16 @@
 //! in federated query processing. It includes triple pattern coverage analysis,
 //! predicate-based filtering, range-based selection, and ML-driven source prediction.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use bloom::{BloomFilter, ASMS};
 use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
-use crate::{service::ServiceMetadata, FederatedService, ServiceCapability, ServiceRegistry};
+use crate::ServiceRegistry;
 
 /// Triple pattern for SPARQL queries
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -144,7 +144,7 @@ impl std::fmt::Debug for ServiceBloomFilters {
 
 impl Clone for ServiceBloomFilters {
     fn clone(&self) -> Self {
-        let capacity = (self.estimated_elements.max(1000) as u32);
+        let capacity = self.estimated_elements.max(1000) as u32;
         Self {
             predicate_filter: BloomFilter::with_rate(0.01, capacity),
             subject_filter: BloomFilter::with_rate(0.01, capacity),
@@ -391,7 +391,7 @@ impl AdvancedSourceSelector {
                         selected_sources.insert(source.service_endpoint.clone());
                         selection_reasons
                             .entry(source.service_endpoint.clone())
-                            .or_insert_with(Vec::new)
+                            .or_default()
                             .push(format!("Pattern coverage: {:.2}", source.coverage_score));
                         confidence_scores
                             .insert(source.service_endpoint.clone(), source.coverage_score);
@@ -412,8 +412,8 @@ impl AdvancedSourceSelector {
                 selected_sources.insert(source.clone());
                 selection_reasons
                     .entry(source.clone())
-                    .or_insert_with(Vec::new)
-                    .push(format!("Predicate match: {:.2}", score));
+                    .or_default()
+                    .push(format!("Predicate match: {score:.2}"));
                 *confidence_scores.entry(source).or_insert(0.0) += score * 0.3;
             }
             methods_used.push(SelectionMethod::PredicateFiltering);
@@ -430,8 +430,8 @@ impl AdvancedSourceSelector {
                 selected_sources.insert(source.clone());
                 selection_reasons
                     .entry(source.clone())
-                    .or_insert_with(Vec::new)
-                    .push(format!("Range match: {:.2}", score));
+                    .or_default()
+                    .push(format!("Range match: {score:.2}"));
                 *confidence_scores.entry(source).or_insert(0.0) += score * 0.4;
             }
             methods_used.push(SelectionMethod::RangeBased);
@@ -449,8 +449,8 @@ impl AdvancedSourceSelector {
                             selected_sources.insert(source.clone());
                             selection_reasons
                                 .entry(source.clone())
-                                .or_insert_with(Vec::new)
-                                .push(format!("ML prediction: {:.2}", conf));
+                                .or_default()
+                                .push(format!("ML prediction: {conf:.2}"));
                             *confidence_scores.entry(source).or_insert(0.0) += conf * 0.5;
                         }
                     }
@@ -695,6 +695,12 @@ impl AdvancedSourceSelector {
         let base_size = 10000; // Assume 10K triples per service on average
         let selectivity = self.calculate_selectivity_estimate(patterns, &[]).await?;
         Ok((base_size as f64 * selectivity) as usize)
+    }
+}
+
+impl Default for PatternCoverageAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -990,18 +996,16 @@ impl PredicateBasedFilter {
                 }
 
                 // Check subject membership (if not variable)
-                if !pattern.subject.starts_with('?') {
-                    if filter.subject_filter.contains(&pattern.subject) {
+                if !pattern.subject.starts_with('?')
+                    && filter.subject_filter.contains(&pattern.subject) {
                         match_score += 0.5;
                     }
-                }
 
                 // Check object membership (if not variable)
-                if !pattern.object.starts_with('?') {
-                    if filter.object_filter.contains(&pattern.object) {
+                if !pattern.object.starts_with('?')
+                    && filter.object_filter.contains(&pattern.object) {
                         match_score += 0.5;
                     }
-                }
             }
 
             if total_patterns > 0.0 {

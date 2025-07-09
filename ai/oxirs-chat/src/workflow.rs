@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime};
 use tokio::fs;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 use uuid::Uuid;
 
 /// Configuration for workflow integration
@@ -622,8 +622,8 @@ impl AuditLogger {
             actor: "system".to_string(),
             timestamp: SystemTime::now(),
             details: [
-                ("old_status".to_string(), format!("{:?}", old_status)),
-                ("new_status".to_string(), format!("{:?}", new_status)),
+                ("old_status".to_string(), format!("{old_status:?}")),
+                ("new_status".to_string(), format!("{new_status:?}")),
             ]
             .into(),
             ip_address: None,
@@ -721,7 +721,7 @@ impl AuditLogger {
         let filepath = self.config.audit_directory.join(filename);
 
         let entry_json = serde_json::to_string(entry)?;
-        let entry_line = format!("{}\n", entry_json);
+        let entry_line = format!("{entry_json}\n");
 
         fs::write(&filepath, entry_line).await?;
         Ok(())
@@ -975,6 +975,12 @@ pub struct CollaborativeWorkspaceManager {
     message_bus: CollaborativeMessageBus,
     shared_document_manager: SharedDocumentManager,
     decision_tracker: CollaborativeDecisionTracker,
+}
+
+impl Default for CollaborativeWorkspaceManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CollaborativeWorkspaceManager {
@@ -1327,6 +1333,12 @@ pub struct PresenceTracker {
     workspace_presence: HashMap<String, Vec<UserPresence>>,
 }
 
+impl Default for PresenceTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PresenceTracker {
     pub fn new() -> Self {
         Self {
@@ -1346,7 +1358,7 @@ impl PresenceTracker {
 
         self.workspace_presence
             .entry(workspace_id.0.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(presence);
 
         Ok(())
@@ -1396,6 +1408,12 @@ pub struct CollaborativeMessageBus {
     subscribers: HashMap<String, Vec<String>>, // workspace_id -> user_ids
 }
 
+impl Default for CollaborativeMessageBus {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CollaborativeMessageBus {
     pub fn new() -> Self {
         Self {
@@ -1421,7 +1439,7 @@ impl CollaborativeMessageBus {
 
         self.message_history
             .entry(workspace_id.0.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(timestamped_message);
 
         // Broadcast to subscribers (implementation would use real-time channels)
@@ -1518,6 +1536,12 @@ pub struct SharedDocumentManager {
     editing_sessions: HashMap<String, Vec<CollaborativeEditingSession>>,
 }
 
+impl Default for SharedDocumentManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SharedDocumentManager {
     pub fn new() -> Self {
         Self {
@@ -1547,7 +1571,7 @@ impl SharedDocumentManager {
 
         self.editing_sessions
             .entry(document_id.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(session.clone());
 
         Ok(session)
@@ -1661,6 +1685,12 @@ pub enum CollaborationStatus {
 /// Collaborative decision-making system
 pub struct CollaborativeDecisionTracker {
     active_decisions: HashMap<String, DecisionProcess>,
+}
+
+impl Default for CollaborativeDecisionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CollaborativeDecisionTracker {

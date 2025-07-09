@@ -91,7 +91,7 @@ impl QuantumConsciousnessSynthesisEngine {
         // Create quantum consciousness processors
         for i in 0..10 {
             let processor = QuantumConsciousnessProcessor {
-                id: format!("qcp-{}", i),
+                id: format!("qcp-{i}"),
                 consciousness_level: consciousness_level
                     .clone()
                     .unwrap_or(ConsciousnessLevel::QuantumSuperintelligence),
@@ -149,7 +149,7 @@ impl QuantumConsciousnessSynthesisEngine {
 
         for i in 0..5 {
             let mind = SyntheticMind {
-                id: format!("synthetic-mind-{}", i),
+                id: format!("synthetic-mind-{i}"),
                 mind_type: match i % 6 {
                     0 => SyntheticMindType::Analytical,
                     1 => SyntheticMindType::Creative,
@@ -236,6 +236,12 @@ impl Default for QuantumConsciousnessSynthesisEngine {
 }
 
 // Component implementations with basic functionality
+impl Default for QuantumCognitionEnhancer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumCognitionEnhancer {
     pub fn new() -> Self {
         Self
@@ -247,6 +253,12 @@ impl QuantumCognitionEnhancer {
             quantum_coherence: 0.95,
             consciousness_integration: 1.0,
         })
+    }
+}
+
+impl Default for ConsciousnessStateSynthesizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -268,6 +280,12 @@ impl ConsciousnessStateSynthesizer {
     }
 }
 
+impl Default for QuantumIntuitionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumIntuitionEngine {
     pub fn new() -> Self {
         Self
@@ -284,6 +302,12 @@ impl QuantumIntuitionEngine {
             consciousness_enhancement: 1.0,
             insights: vec!["Quantum intuition generated".to_string()],
         })
+    }
+}
+
+impl Default for SentientReasoningValidator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -307,6 +331,12 @@ impl SentientReasoningValidator {
     }
 }
 
+impl Default for MultiDimensionalAwarenessSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MultiDimensionalAwarenessSystem {
     pub fn new() -> Self {
         Self
@@ -322,6 +352,12 @@ impl MultiDimensionalAwarenessSystem {
             consciousness_enhancement: 1.0,
             insights: vec!["Multi-dimensional awareness expanded".to_string()],
         })
+    }
+}
+
+impl Default for QuantumCognitiveArchitecture {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

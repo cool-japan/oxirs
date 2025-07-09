@@ -9,13 +9,19 @@ use std::time::Duration;
 
 use super::traits::*;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Video format validator
 #[derive(Debug)]
 pub struct VideoFormatValidator {
     supported_formats: Vec<String>,
     max_file_size: usize,
+}
+
+impl Default for VideoFormatValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VideoFormatValidator {
@@ -136,6 +142,12 @@ pub struct SceneAnalysisValidator {
     detect_objects: bool,
 }
 
+impl Default for SceneAnalysisValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SceneAnalysisValidator {
     pub fn new() -> Self {
         Self {
@@ -223,6 +235,12 @@ pub struct MotionDetectionValidator {
     frame_interval: Duration,
 }
 
+impl Default for MotionDetectionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MotionDetectionValidator {
     pub fn new() -> Self {
         Self {
@@ -301,6 +319,12 @@ pub struct VideoQualityValidator {
     max_duration: Duration,
 }
 
+impl Default for VideoQualityValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VideoQualityValidator {
     pub fn new() -> Self {
         Self {
@@ -329,7 +353,7 @@ impl VideoValidator for VideoQualityValidator {
 
         // Check resolution
         if let Some((width, height)) = quality_info.resolution {
-            details.insert("resolution".to_string(), format!("{}x{}", width, height));
+            details.insert("resolution".to_string(), format!("{width}x{height}"));
             if width < self.min_resolution.0 || height < self.min_resolution.1 {
                 is_valid = false;
                 issues.push(format!(

@@ -13,7 +13,7 @@
 use crate::{EmbeddingError, EmbeddingModel, ModelConfig, Vector};
 use anyhow::Result;
 use async_trait::async_trait;
-use ndarray::{s, Array1, Array2, Array3, Axis};
+use ndarray::{s, Array1, Array2, Axis};
 use rand::{Rng, SeedableRng};
 use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
@@ -196,8 +196,8 @@ impl NoiseScheduler {
             BetaSchedule::Cosine => {
                 let steps = Array1::linspace(0.0, 1.0, num_timesteps + 1);
                 let alpha_bar = steps.mapv(|s| {
-                    let f_t = (s * std::f64::consts::PI / 2.0).cos().powi(2);
-                    f_t
+                    
+                    (s * std::f64::consts::PI / 2.0).cos().powi(2)
                 });
 
                 let mut betas = Array1::zeros(num_timesteps);
@@ -391,7 +391,7 @@ impl DiffusionUNet {
         }
 
         // Up pass
-        for (i, block) in self.up_blocks.iter().enumerate() {
+        for block in self.up_blocks.iter() {
             if let Some(skip) = skip_connections.pop() {
                 // Concatenate skip connection
                 h = self.concatenate(&h, &skip)?;
@@ -427,7 +427,7 @@ impl DiffusionUNet {
 
     /// Cross-attention conditioning
     fn cross_attention(&self, h: &Array2<f64>, condition: &Array2<f64>) -> Result<Array2<f64>> {
-        let (batch_h, feat_h) = h.dim();
+        let (batch_h, _feat_h) = h.dim();
         let (batch_cond, feat_cond) = condition.dim();
 
         // Expand condition to match batch size if needed
@@ -593,7 +593,7 @@ impl ResNetBlock {
 
         // Add time embedding (project to match h1_activated dimensions)
         let time_proj =
-            Array2::from_shape_fn((h1_activated.nrows(), h1_activated.ncols()), |(i, j)| {
+            Array2::from_shape_fn((h1_activated.nrows(), h1_activated.ncols()), |(_i, j)| {
                 // Simple projection: repeat or truncate time embedding to match dimensions
                 let time_idx = j % time_emb.len();
                 time_emb[time_idx]
@@ -640,7 +640,7 @@ impl AttentionBlock {
     }
 
     pub fn forward(&self, x: &Array2<f64>) -> Result<Array2<f64>> {
-        let (batch_size, seq_len) = x.dim();
+        let (_batch_size, _seq_len) = x.dim();
 
         // Compute Q, K, V
         let qkv = x.dot(&self.qkv_weights);
@@ -917,7 +917,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
         Ok(Vector::new(embedding.mapv(|x| x as f32).to_vec()))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
@@ -935,7 +935,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let s_emb = self.get_entity_embedding(subject)?;
-        let p_emb = self.get_relation_embedding(predicate)?;
+        let p_emb = self.getrelation_embedding(predicate)?;
         let o_emb = self.get_entity_embedding(object)?;
 
         // Diffusion-based scoring
@@ -958,7 +958,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if let Ok(score) = self.score_triple(subject, predicate, entity) {
                 predictions.push((entity.clone(), score));
             }
@@ -978,7 +978,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if let Ok(score) = self.score_triple(entity, predicate, object) {
                 predictions.push((entity.clone(), score));
             }
@@ -998,7 +998,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             if let Ok(score) = self.score_triple(subject, relation, object) {
                 predictions.push((relation.clone(), score));
             }

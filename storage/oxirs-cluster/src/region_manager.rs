@@ -227,6 +227,7 @@ pub struct RegionManager {
     local_region: String,
     local_availability_zone: String,
     /// Consensus strategy configuration
+    #[allow(dead_code)]
     consensus_strategy: ConsensusStrategy,
     /// Replication strategy configuration
     replication_strategy: MultiRegionReplicationStrategy,
@@ -273,6 +274,12 @@ pub struct LatencyStats {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorClock {
     pub clocks: HashMap<String, u64>,
+}
+
+impl Default for VectorClock {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl VectorClock {
@@ -603,7 +610,7 @@ impl RegionManager {
         let topology = self.topology.read().await;
         let mut metrics = self.performance_metrics.write().await;
 
-        for ((region_a, region_b), _) in &topology.latency_matrix {
+        for (region_a, region_b) in topology.latency_matrix.keys() {
             if region_a != region_b {
                 // Perform actual latency measurement
                 let latency = self
@@ -629,7 +636,7 @@ impl RegionManager {
         let topology = self.topology.read().await;
         let metrics = self.performance_metrics.read().await;
 
-        let region = topology
+        let _region = topology
             .regions
             .get(region_id)
             .ok_or_else(|| anyhow::anyhow!("Unknown region: {}", region_id))?;
@@ -792,7 +799,7 @@ impl RegionManager {
         let measurement_timeout = Duration::from_secs(5);
 
         // Measure latency between representative nodes from each region
-        for addr_a in node_addresses_a.iter().take(3) {
+        for _addr_a in node_addresses_a.iter().take(3) {
             // Max 3 nodes per region for efficiency
             for addr_b in node_addresses_b.iter().take(3) {
                 for _ in 0..samples_per_pair {
@@ -1044,7 +1051,7 @@ impl RegionManager {
 
         // Send to all targets asynchronously
         for target_region in targets {
-            let package_clone = replication_package.clone();
+            let _package_clone = replication_package.clone();
             let target_clone = target_region.clone();
 
             tokio::spawn(async move {
@@ -1308,13 +1315,13 @@ mod tests {
             }),
             availability_zones: vec![
                 AvailabilityZone {
-                    id: format!("{}a", id),
-                    name: format!("{} AZ A", name),
+                    id: format!("{id}a"),
+                    name: format!("{name} AZ A"),
                     region_id: id.to_string(),
                 },
                 AvailabilityZone {
-                    id: format!("{}b", id),
-                    name: format!("{} AZ B", name),
+                    id: format!("{id}b"),
+                    name: format!("{name} AZ B"),
                     region_id: id.to_string(),
                 },
             ],

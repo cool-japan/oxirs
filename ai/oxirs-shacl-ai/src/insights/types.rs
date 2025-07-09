@@ -1,11 +1,9 @@
 //! Type definitions for AI-powered insights
 
 use crate::analytics::{InsightSeverity, TrendDirection};
-use oxirs_core::model::{NamedNode, Term};
 use oxirs_shacl::ShapeId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Duration;
 
 /// Validation insight - insights derived from validation patterns and results
 #[derive(Debug, Clone, Serialize, Deserialize)]

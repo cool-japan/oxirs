@@ -4,19 +4,15 @@
 //! processing strategies based on consciousness levels, enabling intuitive,
 //! context-aware validation with emotional reasoning and dream-state processing.
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationConfig, ValidationReport, Validator};
 
 use crate::{Result, ShaclAiError};
 
@@ -524,7 +520,7 @@ impl ConsciousnessValidator {
         let validator = Validator::new();
         let mut validation_report = validator
             .validate_store(store, Some(enhanced_config))
-            .map_err(|e| ShaclAiError::ValidationPrediction(format!("Validation failed: {}", e)))?;
+            .map_err(|e| ShaclAiError::ValidationPrediction(format!("Validation failed: {e}")))?;
 
         // Apply consciousness-specific enhancements
         if consciousness_level.has_creativity() {
@@ -563,7 +559,7 @@ impl ConsciousnessValidator {
     /// Apply creative enhancements to validation
     async fn apply_creative_enhancements(
         &self,
-        mut report: ValidationReport,
+        report: ValidationReport,
     ) -> Result<ValidationReport> {
         info!("Applying creative consciousness enhancements to validation");
 
@@ -580,7 +576,7 @@ impl ConsciousnessValidator {
     /// Apply transcendent reasoning to validation
     async fn apply_transcendent_reasoning(
         &self,
-        mut report: ValidationReport,
+        report: ValidationReport,
     ) -> Result<ValidationReport> {
         info!("Applying transcendent consciousness reasoning to validation");
 

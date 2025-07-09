@@ -53,7 +53,7 @@ pub async fn run(config: ArqConfig) -> ToolResult {
 
     println!("Query:");
     println!("---");
-    println!("{}", query_string);
+    println!("{query_string}");
     println!("---");
 
     // Validate query syntax
@@ -88,8 +88,8 @@ pub async fn run(config: ArqConfig) -> ToolResult {
 
     // Add named graphs
     for graph_uri in &config.namedgraph {
-        println!("Named graph: {}", graph_uri);
-        utils::validate_iri(graph_uri).map_err(|e| format!("Invalid named graph IRI: {}", e))?;
+        println!("Named graph: {graph_uri}");
+        utils::validate_iri(graph_uri).map_err(|e| format!("Invalid named graph IRI: {e}"))?;
         data_sources.push(DataSource::NamedGraph(graph_uri.clone()));
     }
 
@@ -277,18 +277,18 @@ fn explain_query(_query: &str, query_info: &QueryInfo) -> ToolResult<()> {
     println!("Prefixes: {}", query_info.prefixes.len());
 
     for (prefix, uri) in &query_info.prefixes {
-        println!("  {}: <{}>", prefix, uri);
+        println!("  {prefix}: <{uri}>");
     }
 
     println!("WHERE patterns: ~{}", query_info.where_patterns);
     println!("Filters: {}", query_info.filters);
 
     if let Some(limit) = query_info.limit {
-        println!("Limit: {}", limit);
+        println!("Limit: {limit}");
     }
 
     if let Some(offset) = query_info.offset {
-        println!("Offset: {}", offset);
+        println!("Offset: {offset}");
     }
 
     // Basic execution plan
@@ -390,10 +390,10 @@ fn format_query_results(
 
     if let QueryResultType::Ask(answer) = &results.result_type {
         match format {
-            "table" => println!("ASK result: {}", answer),
-            "json" => println!("{{ \"boolean\": {} }}", answer),
-            "xml" => println!("<sparql><boolean>{}</boolean></sparql>", answer),
-            _ => println!("{}", answer),
+            "table" => println!("ASK result: {answer}"),
+            "json" => println!("{{ \"boolean\": {answer} }}"),
+            "xml" => println!("<sparql><boolean>{answer}</boolean></sparql>"),
+            _ => println!("{answer}"),
         }
         return Ok(());
     }
@@ -409,7 +409,7 @@ fn format_query_results(
         "tsv" => format_csv_results(results, "\t"),
         "json" => format_json_results(results),
         "xml" => format_xml_results(results),
-        _ => Err(format!("Unknown results format: {}", format).into()),
+        _ => Err(format!("Unknown results format: {format}").into()),
     }
 }
 
@@ -503,8 +503,7 @@ fn format_json_results(results: &QueryResults) -> ToolResult<()> {
             let empty_string = String::new();
             let value = binding.values.get(var).unwrap_or(&empty_string);
             print!(
-                "        \"{}\": {{ \"type\": \"literal\", \"value\": \"{}\" }}",
-                var_name, value
+                "        \"{var_name}\": {{ \"type\": \"literal\", \"value\": \"{value}\" }}"
             );
             if j < results.variables.len() - 1 {
                 print!(",");
@@ -541,8 +540,8 @@ fn format_xml_results(results: &QueryResults) -> ToolResult<()> {
         for var in &results.variables {
             let var_name = var.trim_start_matches('?');
             if let Some(value) = binding.values.get(var) {
-                println!("      <binding name=\"{}\">", var_name);
-                println!("        <literal>{}</literal>", value);
+                println!("      <binding name=\"{var_name}\">");
+                println!("        <literal>{value}</literal>");
                 println!("      </binding>");
             }
         }

@@ -143,7 +143,7 @@ impl ConstraintOrderOptimizer {
     /// Optimize by selectivity (most selective constraints first)
     fn optimize_by_selectivity(&self, constraints: &[String]) -> Result<Vec<String>, ShaclAiError> {
         let graph = self.dependency_graph.read().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to read dependency graph: {}", e))
+            ShaclAiError::Optimization(format!("Failed to read dependency graph: {e}"))
         })?;
 
         let mut constraint_selectivity: Vec<(String, f64)> = constraints
@@ -164,7 +164,7 @@ impl ConstraintOrderOptimizer {
     /// Optimize by execution cost (fastest constraints first)
     fn optimize_by_cost(&self, constraints: &[String]) -> Result<Vec<String>, ShaclAiError> {
         let performance_history = self.performance_history.read().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to read performance history: {}", e))
+            ShaclAiError::Optimization(format!("Failed to read performance history: {e}"))
         })?;
 
         let mut constraint_costs: Vec<(String, f64)> = constraints
@@ -187,7 +187,7 @@ impl ConstraintOrderOptimizer {
     /// Optimize by dependency constraints (topological sort)
     fn optimize_by_dependency(&self, constraints: &[String]) -> Result<Vec<String>, ShaclAiError> {
         let graph = self.dependency_graph.read().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to read dependency graph: {}", e))
+            ShaclAiError::Optimization(format!("Failed to read dependency graph: {e}"))
         })?;
 
         // Topological sort implementation
@@ -249,7 +249,7 @@ impl ConstraintOrderOptimizer {
         // Simplified ML-based optimization
         // In a real implementation, this would use trained models
         let performance_history = self.performance_history.read().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to read performance history: {}", e))
+            ShaclAiError::Optimization(format!("Failed to read performance history: {e}"))
         })?;
 
         let mut scored_constraints: Vec<(String, f64)> = constraints
@@ -322,7 +322,7 @@ impl ConstraintOrderOptimizer {
         selectivity: f64,
     ) -> Result<(), ShaclAiError> {
         let mut history = self.performance_history.write().map_err(|e| {
-            ShaclAiError::Optimization(format!("Failed to write performance history: {}", e))
+            ShaclAiError::Optimization(format!("Failed to write performance history: {e}"))
         })?;
 
         let stats = history.entry(constraint_id.to_string()).or_insert_with(|| {
@@ -454,7 +454,7 @@ impl ParallelValidationExecutor {
         let mut queue = self
             .task_queue
             .lock()
-            .map_err(|e| ShaclAiError::Optimization(format!("Failed to lock task queue: {}", e)))?;
+            .map_err(|e| ShaclAiError::Optimization(format!("Failed to lock task queue: {e}")))?;
 
         // Insert task based on priority
         let insert_pos = queue
@@ -490,7 +490,7 @@ impl ParallelValidationExecutor {
             self.thread_pool.execute(move || {
                 let result = Self::execute_validation_task(&task, &cache_clone, &config_clone);
                 tx_clone.send(result).unwrap_or_else(|e| {
-                    eprintln!("Failed to send validation result: {}", e);
+                    eprintln!("Failed to send validation result: {e}");
                 });
             });
         }
@@ -680,6 +680,12 @@ impl ValidationCache {
 pub struct ResourceMonitor {
     memory_samples: Arc<Mutex<VecDeque<f64>>>,
     cpu_samples: Arc<Mutex<VecDeque<f64>>>,
+}
+
+impl Default for ResourceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceMonitor {
@@ -888,6 +894,12 @@ pub struct IndexUsageStats {
     pub effectiveness_score: f64,
 }
 
+impl Default for IndexOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IndexOptimizer {
     pub fn new() -> Self {
         Self {
@@ -931,6 +943,12 @@ pub struct OptimizedQuery {
     pub optimized_query: String,
     pub execution_plan: String,
     pub estimated_improvement: f64,
+}
+
+impl Default for QueryOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl QueryOptimizer {
@@ -1361,6 +1379,12 @@ impl ConsciousnessState {
 }
 
 // Implement placeholder types for quantum components
+impl Default for QuantumEntanglementNetwork {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumEntanglementNetwork {
     pub fn new() -> Self {
         Self {
@@ -1369,6 +1393,12 @@ impl QuantumEntanglementNetwork {
             coherence_maintainer: CoherenceMaintainer::new(),
             measurement_synchronizer: MeasurementSynchronizer::new(),
         }
+    }
+}
+
+impl Default for NeuralPatternRecognizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1388,6 +1418,12 @@ impl NeuralPatternRecognizer {
     }
 }
 
+impl Default for QuantumSuperpositionStates {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumSuperpositionStates {
     pub fn new() -> Self {
         Self {
@@ -1396,6 +1432,12 @@ impl QuantumSuperpositionStates {
             interference_patterns: vec![],
             measurement_outcomes: vec![],
         }
+    }
+}
+
+impl Default for SentientValidationOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1434,6 +1476,12 @@ pub struct CoherenceMaintainer {
     pub coherence_time: Duration,
 }
 
+impl Default for CoherenceMaintainer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CoherenceMaintainer {
     pub fn new() -> Self {
         Self {
@@ -1445,6 +1493,12 @@ impl CoherenceMaintainer {
 #[derive(Debug, Clone)]
 pub struct MeasurementSynchronizer {
     pub sync_accuracy: f64,
+}
+
+impl Default for MeasurementSynchronizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MeasurementSynchronizer {

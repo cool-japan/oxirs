@@ -177,6 +177,7 @@ struct LearningState {
 
 /// Record of adaptation for analysis
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct AdaptationRecord {
     /// Timestamp of adaptation
     timestamp: DateTime<Utc>,

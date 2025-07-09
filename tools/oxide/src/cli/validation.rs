@@ -208,12 +208,11 @@ pub fn validate_iri(iri: &str) -> Result<(), String> {
     for (i, ch) in iri.chars().enumerate() {
         match ch {
             ' ' | '\t' | '\n' | '\r' => {
-                return Err(format!("IRI contains whitespace at position {}", i));
+                return Err(format!("IRI contains whitespace at position {i}"));
             }
             '<' | '>' | '"' | '{' | '}' | '|' | '^' | '`' => {
                 return Err(format!(
-                    "IRI contains invalid character '{}' at position {}",
-                    ch, i
+                    "IRI contains invalid character '{ch}' at position {i}"
                 ));
             }
             _ => {}
@@ -226,7 +225,7 @@ pub fn validate_iri(iri: &str) -> Result<(), String> {
 /// Validate SPARQL endpoint URL
 pub fn validate_sparql_endpoint(url: &str) -> CliResult<Url> {
     let parsed = Url::parse(url).map_err(|e| {
-        CliError::invalid_arguments(format!("Invalid SPARQL endpoint URL: {}", e))
+        CliError::invalid_arguments(format!("Invalid SPARQL endpoint URL: {e}"))
             .with_suggestion("URL should be in format: http://host:port/path")
     })?;
 
@@ -419,7 +418,7 @@ impl ValidationContext {
             if let Some(deps) = self.dependencies.get(*arg) {
                 for dep in deps {
                     if !present_args.contains(&dep.as_str()) {
-                        errors.push(format!("--{} requires --{} to be specified", arg, dep));
+                        errors.push(format!("--{arg} requires --{dep} to be specified"));
                     }
                 }
             }
@@ -437,7 +436,7 @@ impl ValidationContext {
                     "The following arguments cannot be used together: {}",
                     present_in_group
                         .iter()
-                        .map(|s| format!("--{}", s))
+                        .map(|s| format!("--{s}"))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
@@ -462,7 +461,7 @@ impl ValidationContext {
                     present_in_group[0],
                     missing
                         .iter()
-                        .map(|s| format!("--{}", s))
+                        .map(|s| format!("--{s}"))
                         .collect::<Vec<_>>()
                         .join(", ")
                 ));
@@ -531,7 +530,7 @@ pub mod fs_validation {
     pub fn validate_file_extension(path: &Path, valid_extensions: &[&str]) -> CliResult<()> {
         let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
-        if !valid_extensions.iter().any(|&ext| ext == extension) {
+        if !valid_extensions.contains(&extension) {
             return Err(CliError::invalid_arguments(format!(
                 "Invalid file extension '{}'. Expected one of: {}",
                 extension,
@@ -580,7 +579,7 @@ pub mod dataset_validation {
         let valid_pattern = Regex::new(r"^[a-zA-Z0-9_-]+$").unwrap();
         if !valid_pattern.is_match(name) {
             return Err(CliError::invalid_arguments(
-                format!("Invalid dataset name: '{}'. Must contain only letters, numbers, underscores, and hyphens", name)
+                format!("Invalid dataset name: '{name}'. Must contain only letters, numbers, underscores, and hyphens")
             ));
         }
 
@@ -601,7 +600,7 @@ pub mod dataset_validation {
         }
 
         validate_iri(uri).map_err(|e| {
-            CliError::invalid_arguments(format!("Invalid graph URI: {}", e))
+            CliError::invalid_arguments(format!("Invalid graph URI: {e}"))
                 .with_suggestion("Use 'default' for the default graph or a valid IRI")
         })
     }
@@ -694,7 +693,7 @@ pub mod env_validation {
         let required_vars = ["OXIDE_SECRET_KEY", "OXIDE_DATABASE_URL"];
         for var in &required_vars {
             if std::env::var(var).is_err() {
-                errors.push(format!("{} must be set in production", var));
+                errors.push(format!("{var} must be set in production"));
             }
         }
 

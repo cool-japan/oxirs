@@ -1,21 +1,16 @@
 //! Core processing logic for swarm neuromorphic networks
 
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, trace, warn};
-use uuid::Uuid;
+use tracing::info;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
+use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
 use super::{
-    config::SwarmNetworkConfig,
     network::SwarmNeuromorphicNetwork,
-    types::{SwarmNodeId, SwarmPosition, SwarmValidationContext},
+    types::SwarmValidationContext,
 };
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 // Result types for processing operations
 #[derive(Debug)]
@@ -533,6 +528,7 @@ impl SwarmNeuromorphicNetwork {
 
 // Helper struct for initialization results
 #[derive(Debug)]
+#[derive(Default)]
 struct InitResult {
     topology_established: bool,
     intelligence_active: bool,
@@ -544,17 +540,3 @@ struct InitResult {
     optimization_running: bool,
 }
 
-impl Default for InitResult {
-    fn default() -> Self {
-        Self {
-            topology_established: false,
-            intelligence_active: false,
-            decisions_enabled: false,
-            monitoring_active: false,
-            protocols_active: false,
-            learning_online: false,
-            mechanisms_active: false,
-            optimization_running: false,
-        }
-    }
-}

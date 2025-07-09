@@ -10,21 +10,11 @@ use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{constraints::*, Shape, ShapeId, ValidationConfig, ValidationReport};
+use oxirs_core::Store;
+use oxirs_shacl::ValidationReport;
 
 use crate::ai_orchestrator::AiOrchestrator;
-use crate::analytics::AnalyticsEngine;
-use crate::learning::{LearningConfig, ShapeLearner};
-use crate::ml::{ModelMetrics, ModelParams};
-use crate::neural_patterns::{NeuralPattern, NeuralPatternRecognizer};
-use crate::optimization::OptimizationEngine;
-use crate::quantum_neural_patterns::{QuantumNeuralPatternRecognizer, QuantumPattern};
 use crate::{Result, ShaclAiError};
 
 /// Self-adaptive AI engine for continuous learning
@@ -264,6 +254,12 @@ pub struct AdaptationEngine {
     strategy_performance: HashMap<String, f64>,
 }
 
+impl Default for AdaptationEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdaptationEngine {
     /// Create a new adaptation engine
     pub fn new() -> Self {
@@ -364,6 +360,12 @@ pub struct PerformanceMonitor {
     current_indicators: PerformanceIndicators,
     /// Baseline performance
     baseline_performance: Option<PerformanceMetrics>,
+}
+
+impl Default for PerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceMonitor {
@@ -473,6 +475,12 @@ pub struct LearningStrategySelector {
     context_mapping: HashMap<PerformanceContext, String>,
 }
 
+impl Default for LearningStrategySelector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LearningStrategySelector {
     /// Create a new strategy selector
     pub fn new() -> Self {
@@ -565,6 +573,12 @@ pub struct MetaLearningEngine {
     meta_model: MetaModel,
 }
 
+impl Default for MetaLearningEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MetaLearningEngine {
     /// Create a new meta-learning engine
     pub fn new() -> Self {
@@ -625,6 +639,12 @@ pub struct EvolutionTracker {
     pub current_generation: u64,
     /// Evolution milestones
     milestones: Vec<EvolutionMilestone>,
+}
+
+impl Default for EvolutionTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EvolutionTracker {
@@ -728,6 +748,12 @@ pub trait AdaptationStrategyTrait: Send + Sync + std::fmt::Debug {
 #[derive(Debug)]
 pub struct IncrementalStrategy;
 
+impl Default for IncrementalStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IncrementalStrategy {
     pub fn new() -> Self {
         Self
@@ -756,6 +782,12 @@ impl AdaptationStrategyTrait for IncrementalStrategy {
 /// Reinforcement learning strategy
 #[derive(Debug)]
 pub struct ReinforcementStrategy;
+
+impl Default for ReinforcementStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ReinforcementStrategy {
     pub fn new() -> Self {
@@ -786,6 +818,12 @@ impl AdaptationStrategyTrait for ReinforcementStrategy {
 #[derive(Debug)]
 pub struct TransferLearningStrategy;
 
+impl Default for TransferLearningStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TransferLearningStrategy {
     pub fn new() -> Self {
         Self
@@ -814,6 +852,12 @@ impl AdaptationStrategyTrait for TransferLearningStrategy {
 /// Ensemble learning strategy
 #[derive(Debug)]
 pub struct EnsembleStrategy;
+
+impl Default for EnsembleStrategy {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl EnsembleStrategy {
     pub fn new() -> Self {
@@ -954,6 +998,12 @@ pub struct LearningExperience {
 pub struct MetaModel {
     // Simplified meta-model representation
     strategy_preferences: HashMap<PerformanceContext, Vec<String>>,
+}
+
+impl Default for MetaModel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetaModel {

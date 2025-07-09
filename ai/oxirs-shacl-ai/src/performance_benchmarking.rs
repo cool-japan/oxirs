@@ -6,27 +6,15 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Quad, Term, Triple},
-    Graph, Store,
-};
+use oxirs_core::Store;
 
-use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
-    Target, ValidationConfig, ValidationReport, Validator,
-};
 
 use crate::{
-    advanced_validation_strategies::{
-        AdvancedValidationConfig, AdvancedValidationStrategyManager, ValidationContext,
-    },
-    learning::ShapeLearner,
-    validation_performance::ValidationPerformanceOptimizer,
     Result, ShaclAiError,
 };
 
@@ -735,7 +723,7 @@ impl PerformanceBenchmarkFramework {
     /// Execute a single benchmark suite
     async fn execute_benchmark_suite(&self, suite: BenchmarkSuite) -> Result<Vec<BenchmarkResult>> {
         let mut benchmark_runner = self.benchmark_runner.lock().map_err(|e| {
-            ShaclAiError::Benchmark(format!("Failed to acquire benchmark runner lock: {}", e))
+            ShaclAiError::Benchmark(format!("Failed to acquire benchmark runner lock: {e}"))
         })?;
 
         benchmark_runner.execute_suite(suite, &self.config).await
@@ -964,7 +952,7 @@ impl PerformanceBenchmarkFramework {
         results.iter().any(|r| {
             r.regression_analysis
                 .as_ref()
-                .map_or(false, |ra| ra.regression_detected)
+                .is_some_and(|ra| ra.regression_detected)
         })
     }
 
@@ -973,7 +961,7 @@ impl PerformanceBenchmarkFramework {
         results.iter().any(|r| {
             r.scalability_analysis
                 .as_ref()
-                .map_or(false, |sa| sa.linear_scalability_score < 0.7)
+                .is_some_and(|sa| sa.linear_scalability_score < 0.7)
         })
     }
 
@@ -1137,6 +1125,12 @@ pub struct EnvironmentInfo {
 // Implementation of supporting types continues...
 // Due to length constraints, providing core structure and implementations
 
+impl Default for BenchmarkRunner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BenchmarkRunner {
     pub fn new() -> Self {
         Self {
@@ -1194,6 +1188,12 @@ impl BenchmarkRunner {
 }
 
 // Placeholder implementations for supporting types
+impl Default for BenchmarkExecutionContext {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BenchmarkExecutionContext {
     pub fn new() -> Self {
         Self {
@@ -1210,6 +1210,12 @@ impl BenchmarkExecutionContext {
             cpu_topology: CpuTopology::new(),
             memory_topology: MemoryTopology::new(),
         }
+    }
+}
+
+impl Default for PerformanceCounters {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1269,11 +1275,11 @@ impl Default for BenchmarkPerformanceMetrics {
 impl Default for StatisticalAnalysis {
     fn default() -> Self {
         Self {
-            descriptive_statistics: DescriptiveStatistics::default(),
-            distribution_analysis: DistributionAnalysis::default(),
-            trend_analysis: TrendAnalysis::default(),
-            outlier_analysis: OutlierAnalysis::default(),
-            confidence_intervals: ConfidenceIntervals::default(),
+            descriptive_statistics: DescriptiveStatistics,
+            distribution_analysis: DistributionAnalysis,
+            trend_analysis: TrendAnalysis,
+            outlier_analysis: OutlierAnalysis,
+            confidence_intervals: ConfidenceIntervals,
         }
     }
 }
@@ -1288,6 +1294,12 @@ pub struct JvmInfo;
 #[derive(Debug)]
 pub struct CpuTopology;
 
+impl Default for CpuTopology {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuTopology {
     pub fn new() -> Self {
         Self
@@ -1296,6 +1308,12 @@ impl CpuTopology {
 
 #[derive(Debug)]
 pub struct MemoryTopology;
+
+impl Default for MemoryTopology {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MemoryTopology {
     pub fn new() -> Self {
@@ -1405,6 +1423,12 @@ impl_default_analysis!(BottleneckAnalysis);
 impl_default_analysis!(CapacityProjections);
 
 // Implement new() methods for existing analyzers
+impl Default for PerformanceAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -1413,6 +1437,12 @@ impl PerformanceAnalyzer {
             outlier_detectors: Vec::new(),
             distribution_analyzers: Vec::new(),
         }
+    }
+}
+
+impl Default for ScalabilityTester {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1427,6 +1457,12 @@ impl ScalabilityTester {
     }
 }
 
+impl Default for RegressionDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RegressionDetector {
     pub fn new() -> Self {
         Self {
@@ -1435,6 +1471,12 @@ impl RegressionDetector {
             anomaly_detectors: Vec::new(),
             historical_baselines: BTreeMap::new(),
         }
+    }
+}
+
+impl Default for MemoryProfiler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1449,6 +1491,12 @@ impl MemoryProfiler {
     }
 }
 
+impl Default for CpuProfiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CpuProfiler {
     pub fn new() -> Self {
         Self {
@@ -1457,6 +1505,12 @@ impl CpuProfiler {
             hotspot_detectors: Vec::new(),
             flame_graph_generators: Vec::new(),
         }
+    }
+}
+
+impl Default for IoProfiler {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1471,6 +1525,12 @@ impl IoProfiler {
     }
 }
 
+impl Default for BenchmarkResultCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BenchmarkResultCollector {
     pub fn new() -> Self {
         Self {
@@ -1479,6 +1539,12 @@ impl BenchmarkResultCollector {
             performance_history: BTreeMap::new(),
             regression_events: Vec::new(),
         }
+    }
+}
+
+impl Default for BaselineManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

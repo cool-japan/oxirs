@@ -43,6 +43,7 @@ pub struct ExtendedServiceMetadata {
 
 /// Service Level Agreement information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ServiceSLA {
     /// Guaranteed uptime percentage (e.g., 99.9)
     pub uptime_guarantee: Option<f64>,
@@ -78,6 +79,7 @@ pub struct ResponseTimeTargets {
 
 /// Rate limit information
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct RateLimitInfo {
     /// Requests per minute limit
     pub requests_per_minute: Option<usize>,
@@ -113,6 +115,7 @@ pub struct MaintenanceWindow {
 
 /// Dataset statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct DatasetStatistics {
     /// Total number of triples
     pub triple_count: Option<u64>,
@@ -348,17 +351,6 @@ impl ExtendedServiceMetadata {
     }
 }
 
-impl Default for ServiceSLA {
-    fn default() -> Self {
-        Self {
-            uptime_guarantee: None,
-            response_time_targets: ResponseTimeTargets::default(),
-            rate_limits: RateLimitInfo::default(),
-            maintenance_windows: Vec::new(),
-            support_contact: None,
-        }
-    }
-}
 
 impl Default for ResponseTimeTargets {
     fn default() -> Self {
@@ -371,33 +363,7 @@ impl Default for ResponseTimeTargets {
     }
 }
 
-impl Default for RateLimitInfo {
-    fn default() -> Self {
-        Self {
-            requests_per_minute: None,
-            requests_per_hour: None,
-            concurrent_requests: None,
-            burst_size: None,
-            max_query_complexity: None,
-        }
-    }
-}
 
-impl Default for DatasetStatistics {
-    fn default() -> Self {
-        Self {
-            triple_count: None,
-            subject_count: None,
-            predicate_count: None,
-            object_count: None,
-            size_bytes: None,
-            last_modified: None,
-            named_graphs: Vec::new(),
-            vocabularies: Vec::new(),
-            languages: Vec::new(),
-        }
-    }
-}
 
 impl Default for HealthMetrics {
     fn default() -> Self {

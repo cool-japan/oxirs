@@ -39,20 +39,20 @@ pub enum PropertyPath {
 impl std::fmt::Display for PropertyPath {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PropertyPath::Direct(term) => write!(f, "{:?}", term),
-            PropertyPath::Inverse(path) => write!(f, "^{}", path),
-            PropertyPath::Sequence(left, right) => write!(f, "{}/{}", left, right),
-            PropertyPath::Alternative(left, right) => write!(f, "{}|{}", left, right),
-            PropertyPath::ZeroOrMore(path) => write!(f, "{}*", path),
-            PropertyPath::OneOrMore(path) => write!(f, "{}+", path),
-            PropertyPath::ZeroOrOne(path) => write!(f, "{}?", path),
+            PropertyPath::Direct(term) => write!(f, "{term:?}"),
+            PropertyPath::Inverse(path) => write!(f, "^{path}"),
+            PropertyPath::Sequence(left, right) => write!(f, "{left}/{right}"),
+            PropertyPath::Alternative(left, right) => write!(f, "{left}|{right}"),
+            PropertyPath::ZeroOrMore(path) => write!(f, "{path}*"),
+            PropertyPath::OneOrMore(path) => write!(f, "{path}+"),
+            PropertyPath::ZeroOrOne(path) => write!(f, "{path}?"),
             PropertyPath::NegatedPropertySet(terms) => {
                 write!(f, "!(")?;
                 for (i, term) in terms.iter().enumerate() {
                     if i > 0 {
                         write!(f, "|")?;
                     }
-                    write!(f, "{:?}", term)?;
+                    write!(f, "{term:?}")?;
                 }
                 write!(f, ")")
             }
@@ -335,10 +335,9 @@ impl PropertyPathEvaluator {
                 // Find all predicates and exclude the negated ones
                 let all_predicates = dataset.get_predicates()?;
                 for predicate in all_predicates {
-                    if !predicates.contains(&predicate) {
-                        if dataset.contains_triple(current, &predicate, target)? {
-                            return Ok(true);
-                        }
+                    if !predicates.contains(&predicate)
+                        && dataset.contains_triple(current, &predicate, target)? {
+                        return Ok(true);
                     }
                 }
                 Ok(false)
@@ -350,6 +349,7 @@ impl PropertyPathEvaluator {
     }
 
     /// Evaluate one step of a path
+    #[allow(clippy::only_used_in_recursion)]
     fn evaluate_path_step(
         &self,
         current: &Term,
@@ -444,6 +444,7 @@ impl PropertyPathEvaluator {
     }
 
     /// Invert a property path
+    #[allow(clippy::only_used_in_recursion)]
     fn invert_path(&self, path: &PropertyPath) -> PropertyPath {
         match path {
             PropertyPath::Direct(term) => {
@@ -494,6 +495,7 @@ impl PropertyPathEvaluator {
     }
 
     /// Basic path optimizations
+    #[allow(clippy::only_used_in_recursion)]
     fn basic_path_optimization(&self, path: PropertyPath) -> PropertyPath {
         match path {
             PropertyPath::Sequence(first, second) => {
@@ -645,9 +647,7 @@ macro_rules! path_inv {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra::{Iri, Literal};
     use oxirs_core::model::NamedNode;
-    use std::collections::HashMap;
 
     struct TestDataset {
         triples: Vec<(Term, Term, Term)>,
@@ -705,7 +705,7 @@ mod tests {
 
         fn get_predicates(&self) -> Result<Vec<Term>> {
             let mut predicates: Vec<_> = self.triples.iter().map(|(_, p, _)| p.clone()).collect();
-            predicates.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
+            predicates.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
             predicates.dedup();
             Ok(predicates)
         }

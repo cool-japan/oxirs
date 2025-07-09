@@ -104,6 +104,7 @@ struct CacheEntry {
     /// Query plan
     plan: QueryPlan,
     /// Timestamp
+    #[allow(dead_code)]
     timestamp: u64,
     /// Access count
     access_count: u64,
@@ -327,8 +328,8 @@ impl QueryRouter {
             // Parallel execution
             let mut handles = Vec::new();
 
-            for target in plan.shard_targets {
-                let shard_manager = self.shard_manager.clone();
+            for _target in plan.shard_targets {
+                let _shard_manager = self.shard_manager.clone();
                 let handle = tokio::spawn(async move {
                     // Execute query on shard
                     // In real implementation, this would query the specific shard
@@ -340,12 +341,12 @@ impl QueryRouter {
             for handle in handles {
                 let results = handle
                     .await
-                    .map_err(|e| ClusterError::Runtime(format!("Query execution failed: {}", e)))?;
+                    .map_err(|e| ClusterError::Runtime(format!("Query execution failed: {e}")))?;
                 all_results.extend(results);
             }
         } else {
             // Sequential execution
-            for target in plan.shard_targets {
+            for _target in plan.shard_targets {
                 // Execute query on shard
                 // In real implementation, this would query the specific shard
             }
@@ -375,7 +376,7 @@ impl QueryRouter {
         predicate: Option<&str>,
         object: Option<&str>,
     ) -> String {
-        format!("{:?}:{:?}:{:?}", subject, predicate, object)
+        format!("{subject:?}:{predicate:?}:{object:?}")
     }
 
     /// Estimate query selectivity

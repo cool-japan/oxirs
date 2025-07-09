@@ -1075,8 +1075,8 @@ mod tests {
         let mut vectors = Vec::new();
         for i in 0..10 {
             let mut data = vec![0.0; 200]; // 200 dimensions
-            for j in 0..200 {
-                data[j] = (i * j) as f32 * 0.01;
+            for (j, item) in data.iter_mut().enumerate().take(200) {
+                *item = (i * j) as f32 * 0.01;
             }
             vectors.push(Vector::new(data));
         }

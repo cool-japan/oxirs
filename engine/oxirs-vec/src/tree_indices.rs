@@ -827,7 +827,7 @@ impl CoverTree {
         Ok(())
     }
 
-    fn get_level(&self, point_idx: usize) -> i32 {
+    fn get_level(&self, _point_idx: usize) -> i32 {
         // Simple heuristic for initial level
         ((self.data.len() as f32).log2() as i32).max(0)
     }

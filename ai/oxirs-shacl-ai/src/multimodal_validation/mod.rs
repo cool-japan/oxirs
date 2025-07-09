@@ -4,27 +4,19 @@
 //! beyond traditional RDF/SPARQL validation to support text, images, audio, video,
 //! and other multimedia data types within knowledge graphs.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
-use url::Url;
-use uuid::Uuid;
 
-use oxirs_core::{
-    model::{BlankNode, Literal, NamedNode, Object, Term, Triple},
-    Store,
-};
+use oxirs_core::Store;
 use oxirs_shacl::{
-    constraints::*, paths::*, targets::*, Constraint, ConstraintComponentId, PropertyPath,
-    Severity, Shape, ShapeId, ValidationConfig, ValidationReport, ValidationViolation,
+    constraints::*, Shape, ValidationViolation,
 };
 
-use crate::neural_patterns::{NeuralPattern, NeuralPatternRecognizer};
 use crate::quality::QualityAssessor;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 pub mod audio_validators;
 pub mod document_validators;

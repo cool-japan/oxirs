@@ -1,11 +1,8 @@
 //! Core types and structures for quantum consciousness synthesis
 
-use crate::ai_orchestrator::AiOrchestrator;
-use crate::ShaclAiError;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 
 /// Quantum consciousness synthesis engine that combines quantum computing with consciousness simulation
 #[derive(Debug, Clone)]

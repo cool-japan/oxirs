@@ -1137,7 +1137,7 @@ impl BenchmarkSuite {
 
                 let mut query_count = 0;
                 for query in &queries[start_idx..end_idx] {
-                    if let Ok(_) = index.search_knn(query, 10) {
+                    if index.search_knn(query, 10).is_ok() {
                         query_count += 1;
                     }
                 }

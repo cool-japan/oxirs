@@ -146,11 +146,7 @@ impl<T> LockFreeWorkStealingQueue<T> {
     pub fn len(&self) -> usize {
         let head = self.head.load(Ordering::Relaxed);
         let tail = self.tail.load(Ordering::Relaxed);
-        if tail >= head {
-            tail - head
-        } else {
-            0
-        }
+        tail.saturating_sub(head)
     }
 }
 
@@ -223,12 +219,11 @@ impl<T> MemoryPool<T> {
     /// Return an object to the pool
     fn return_object(&self, obj: Box<T>) {
         let current = self.current_size.load(Ordering::Relaxed);
-        if current < self.max_size {
-            if self.available.push(obj).is_ok() {
+        if current < self.max_size
+            && self.available.push(obj).is_ok() {
                 self.current_size.fetch_add(1, Ordering::Relaxed);
             }
             // If push fails, just drop the object
-        }
         // If pool is full, just drop the object
     }
 }
@@ -264,6 +259,7 @@ pub struct CacheFriendlyHashJoin {
     /// Number of radix partitions (should be power of 2)
     num_partitions: usize,
     /// Radix bits for partitioning
+    #[allow(dead_code)]
     radix_bits: u32,
     /// Memory pool for hash tables
     hash_table_pool: MemoryPool<HashMap<u64, Vec<Solution>>>,
@@ -297,7 +293,6 @@ impl CacheFriendlyHashJoin {
 
         // Phase 2: Join corresponding partitions in parallel
         let results: Vec<_> = (0..self.num_partitions)
-            .into_iter()
             .map(|i| self.join_partition(&left_partitions[i], &right_partitions[i], join_variables))
             .collect::<Result<Vec<_>>>()?;
 
@@ -351,7 +346,7 @@ impl CacheFriendlyHashJoin {
             hash_table
                 .get_mut()
                 .entry(key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(solution.clone());
         }
 
@@ -509,6 +504,12 @@ pub struct CacheFriendlyStorage {
     row_count: usize,
 }
 
+impl Default for CacheFriendlyStorage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CacheFriendlyStorage {
     /// Create new cache-friendly storage
     pub fn new() -> Self {
@@ -525,7 +526,7 @@ impl CacheFriendlyStorage {
                 for (var, term) in binding {
                     self.columns
                         .entry(var.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(term.clone());
                 }
             }
@@ -585,7 +586,7 @@ mod tests {
 
     #[test]
     fn test_memory_pool() {
-        let pool = MemoryPool::new(2, 10, || HashMap::<String, i32>::new());
+        let pool = MemoryPool::new(2, 10, HashMap::<String, i32>::new);
 
         let mut obj1 = pool.acquire();
         obj1.get_mut().insert("test".to_string(), 42);

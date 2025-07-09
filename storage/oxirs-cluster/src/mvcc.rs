@@ -254,7 +254,7 @@ impl MVCCManager {
 
                 // Clean up old versions
                 for mut entry in versions.iter_mut() {
-                    let key = entry.key();
+                    let _key = entry.key();
                     let versions_map = entry.value_mut();
 
                     // Remove versions older than cutoff
@@ -393,7 +393,7 @@ impl MVCCManager {
         // Store version
         self.versions
             .entry(key.to_string())
-            .or_insert_with(BTreeMap::new)
+            .or_default()
             .insert(timestamp, version);
 
         debug!(
@@ -531,7 +531,7 @@ impl MVCCManager {
             versions
                 .range(..=before_timestamp)
                 .rev()
-                .find(|(ts, version)| {
+                .find(|(_ts, version)| {
                     // Check if this version's transaction is committed
                     committed
                         .values()
@@ -770,7 +770,7 @@ mod tests {
 
         // Begin transaction
         let tx_id = "tx1".to_string();
-        let snapshot = mvcc
+        let _snapshot = mvcc
             .begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
             .await
             .unwrap();

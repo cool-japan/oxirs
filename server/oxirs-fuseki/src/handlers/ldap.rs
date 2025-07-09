@@ -1,8 +1,7 @@
 //! LDAP authentication handlers
 
 use crate::{
-    auth::{ldap::LdapAuthRequest, AuthResult, AuthService, User},
-    error::FusekiResult,
+    auth::{AuthResult, User},
     server::AppState,
 };
 use axum::{
@@ -12,7 +11,6 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 /// LDAP login request
@@ -308,7 +306,7 @@ pub async fn get_ldap_groups(
             let group_info: Vec<LdapGroupInfo> = groups
                 .into_iter()
                 .map(|g| LdapGroupInfo {
-                    dn: format!("cn={},ou=groups,dc=example,dc=com", g),
+                    dn: format!("cn={g},ou=groups,dc=example,dc=com"),
                     name: g,
                     description: None,
                 })
@@ -326,7 +324,7 @@ pub async fn get_ldap_groups(
             let response = LdapGroupResponse {
                 success: false,
                 groups: vec![],
-                message: format!("Failed to retrieve groups: {}", e),
+                message: format!("Failed to retrieve groups: {e}"),
             };
             Ok((StatusCode::INTERNAL_SERVER_ERROR, Json(response)).into_response())
         }

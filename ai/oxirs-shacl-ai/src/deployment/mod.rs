@@ -15,7 +15,7 @@ pub mod updates;
 
 use std::time::Instant;
 
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 // Re-export main types for convenience
 pub use config::{DeploymentConfig, DeploymentStrategy, EnvironmentType};

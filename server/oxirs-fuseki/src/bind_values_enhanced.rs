@@ -4,11 +4,10 @@
 //! including expression optimization, value set management, and performance improvements.
 
 use crate::error::{FusekiError, FusekiResult};
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::warn;
 
 /// Enhanced BIND processor with expression optimization
 #[derive(Debug, Clone)]
@@ -541,6 +540,12 @@ pub struct ValuesStatistics {
     pub join_strategy_usage: HashMap<String, u64>,
 }
 
+impl Default for EnhancedBindProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedBindProcessor {
     pub fn new() -> Self {
         Self {
@@ -711,6 +716,12 @@ impl EnhancedBindProcessor {
             stats.average_evaluation_time_ms =
                 (total_time + eval_time) / (stats.total_bind_expressions as f64);
         }
+    }
+}
+
+impl Default for EnhancedValuesProcessor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -981,6 +992,12 @@ impl EnhancedValuesProcessor {
     }
 }
 
+impl Default for ExpressionEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExpressionEvaluator {
     pub fn new() -> Self {
         let mut functions = HashMap::new();
@@ -1012,6 +1029,12 @@ impl ExpressionEvaluator {
 
         // For now, return a mock result
         Ok(serde_json::json!("evaluated_result"))
+    }
+}
+
+impl Default for AdvancedBindOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1089,6 +1112,12 @@ impl AdvancedBindOptimizer {
     }
 }
 
+impl Default for AdvancedValuesOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdvancedValuesOptimizer {
     pub fn new() -> Self {
         Self {
@@ -1148,6 +1177,12 @@ impl AdvancedValuesOptimizer {
     }
 }
 
+impl Default for ValueSetManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValueSetManager {
     pub fn new() -> Self {
         Self {
@@ -1190,7 +1225,13 @@ impl ValueSetManager {
 
         sets.get(id)
             .cloned()
-            .ok_or_else(|| FusekiError::internal(format!("Value set not found: {}", id)))
+            .ok_or_else(|| FusekiError::internal(format!("Value set not found: {id}")))
+    }
+}
+
+impl Default for ExpressionCache {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1241,6 +1282,12 @@ impl TypeCoercionRules {
     }
 }
 
+impl Default for ExpressionSimplifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ExpressionSimplifier {
     pub fn new() -> Self {
         Self {
@@ -1252,6 +1299,12 @@ impl ExpressionSimplifier {
     pub fn simplify(&self, expr: &str) -> FusekiResult<String> {
         // Simplification logic
         Ok(expr.to_string())
+    }
+}
+
+impl Default for ConstantFolder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1287,12 +1340,18 @@ impl ConstantFolder {
             if all_literals && !result_parts.is_empty() {
                 // Fold the constants into a single string literal
                 let folded_result = result_parts.join("");
-                return Ok(format!("\"{}\"", folded_result));
+                return Ok(format!("\"{folded_result}\""));
             }
         }
 
         // For other expressions or non-foldable CONCAT, return unchanged
         Ok(expr.to_string())
+    }
+}
+
+impl Default for CommonSubexpressionEliminator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1314,6 +1373,12 @@ impl CommonSubexpressionEliminator {
     }
 }
 
+impl Default for ValueDeduplicator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValueDeduplicator {
     pub fn new() -> Self {
         Self {
@@ -1325,6 +1390,12 @@ impl ValueDeduplicator {
     pub fn deduplicate(&self, clause: ValuesClause) -> FusekiResult<ValuesClause> {
         // Deduplication logic
         Ok(clause)
+    }
+}
+
+impl Default for ValueCompressor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1342,12 +1413,24 @@ impl ValueCompressor {
     }
 }
 
+impl Default for ValueIndexBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ValueIndexBuilder {
     pub fn new() -> Self {
         Self {
             index_types: vec![IndexType::Hash],
             build_threshold: 1000,
         }
+    }
+}
+
+impl Default for JoinStrategySelector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1409,16 +1492,19 @@ impl JoinStrategySelector {
         bindings_size: usize,
     ) -> bool {
         for condition in &strategy.applicable_conditions {
-            match condition {
-                JoinCondition::SizeThreshold { min, max } => {
-                    if values_size < *min || values_size > *max {
-                        return false;
-                    }
+            if let JoinCondition::SizeThreshold { min, max } = condition {
+                if values_size < *min || values_size > *max {
+                    return false;
                 }
-                _ => {}
             }
         }
         true
+    }
+}
+
+impl Default for MemoryManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

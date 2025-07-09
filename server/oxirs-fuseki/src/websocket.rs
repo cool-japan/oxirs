@@ -19,8 +19,7 @@ use crate::{
 };
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
-        Query, State,
+        ws::{Message, WebSocket, WebSocketUpgrade}, State,
     },
     response::{IntoResponse, Response},
 };
@@ -32,17 +31,14 @@ use futures::{
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{broadcast, mpsc, RwLock},
-    time::{interval, timeout},
+    sync::{broadcast, mpsc},
+    time::interval,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 /// WebSocket subscription manager
@@ -337,7 +333,7 @@ impl SubscriptionManager {
     ) -> FusekiResult<()> {
         info!("New WebSocket connection: {}", connection_id);
         self.metrics
-            .increment_counter("websocket.connections.total", 1);
+            .increment_counter("websocket.connections.total", 1).await;
 
         let (sender, receiver) = ws.split();
         let (tx, rx) = mpsc::channel(100);
@@ -372,7 +368,7 @@ impl SubscriptionManager {
 
         info!("WebSocket connection closed: {}", connection_id);
         self.metrics
-            .increment_counter("websocket.connections.closed", 1);
+            .increment_counter("websocket.connections.closed", 1).await;
 
         Ok(())
     }
@@ -418,7 +414,7 @@ impl SubscriptionManager {
         match msg {
             Message::Text(text) => {
                 let ws_msg: WsMessage = serde_json::from_str(&text)
-                    .map_err(|e| FusekiError::bad_request(format!("Invalid message: {}", e)))?;
+                    .map_err(|e| FusekiError::bad_request(format!("Invalid message: {e}")))?;
                 self.handle_ws_message(ws_msg, connection_id).await?;
             }
             Message::Binary(data) => {
@@ -426,7 +422,7 @@ impl SubscriptionManager {
                 if self.config.enable_compression {
                     let decompressed = Self::decompress_message(&data)?;
                     let ws_msg: WsMessage = serde_json::from_slice(&decompressed)
-                        .map_err(|e| FusekiError::bad_request(format!("Invalid message: {}", e)))?;
+                        .map_err(|e| FusekiError::bad_request(format!("Invalid message: {e}")))?;
                     self.handle_ws_message(ws_msg, connection_id).await?;
                 } else {
                     return Err(FusekiError::bad_request("Binary messages not supported"));
@@ -516,7 +512,7 @@ impl SubscriptionManager {
         let query_hash = Self::hash_query(&query);
         self.query_subscriptions
             .entry(query_hash)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(subscription_id.clone());
 
         // Update connection
@@ -538,7 +534,7 @@ impl SubscriptionManager {
         self.evaluate_subscription(&subscription_id).await?;
 
         self.metrics
-            .increment_counter("websocket.subscriptions.created", 1);
+            .increment_counter("websocket.subscriptions.created", 1).await;
         info!(
             "Created subscription {} for connection {}",
             subscription_id, connection_id
@@ -745,7 +741,7 @@ impl SubscriptionManager {
         }
 
         self.metrics
-            .increment_counter("websocket.notifications.sent", 1);
+            .increment_counter("websocket.notifications.sent", 1).await;
 
         Ok(())
     }
@@ -853,7 +849,7 @@ impl SubscriptionManager {
     /// Send WebSocket protocol message
     async fn send_ws_message(&self, connection_id: &str, msg: WsMessage) -> FusekiResult<()> {
         let json = serde_json::to_string(&msg)
-            .map_err(|e| FusekiError::internal(format!("Serialization error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Serialization error: {e}")))?;
 
         self.send_message(connection_id, Message::Text(json)).await
     }
@@ -905,7 +901,7 @@ impl SubscriptionManager {
         let mut decompressed = Vec::new();
         decoder
             .read_to_end(&mut decompressed)
-            .map_err(|e| FusekiError::bad_request(format!("Decompression error: {}", e)))?;
+            .map_err(|e| FusekiError::bad_request(format!("Decompression error: {e}")))?;
 
         Ok(decompressed)
     }

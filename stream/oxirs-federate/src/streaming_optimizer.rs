@@ -5,20 +5,17 @@
 //! and memory-bounded streaming for optimal performance.
 
 use anyhow::{anyhow, Result};
-use bytes::{Bytes, BytesMut};
 use futures_util::{Stream, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, RwLock, Semaphore};
 use tokio_stream::wrappers::ReceiverStream;
-use tracing::{debug, info, warn};
+use tracing::{debug, warn};
 use uuid::Uuid;
 
-use crate::{executor::GraphQLResponse, FederatedService, ServiceRegistry};
+use crate::ServiceRegistry;
 
 /// Streaming optimization configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

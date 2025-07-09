@@ -7,13 +7,9 @@ use nalgebra::DMatrix;
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
+use oxirs_core::Store;
 
 use crate::neural_patterns::NeuralPattern;
-use crate::patterns::PatternType;
 use crate::{Result, ShaclAiError};
 
 /// Quantum state representation for RDF patterns

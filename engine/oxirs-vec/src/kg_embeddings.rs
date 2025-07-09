@@ -1016,28 +1016,28 @@ impl KGEmbeddingModel for GCNAdapter {
         Ok(())
     }
 
-    fn get_entity_embedding(&self, entity: &str) -> Option<Vector> {
+    fn get_entity_embedding(&self, _entity: &str) -> Option<Vector> {
         // GCN embeddings would be computed from graph structure
         // For now, return a default embedding
         Some(Vector::new(vec![0.0; 128]))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Option<Vector> {
+    fn get_relation_embedding(&self, _relation: &str) -> Option<Vector> {
         // Relations in GCN are typically handled differently
         Some(Vector::new(vec![0.0; 128]))
     }
 
-    fn score_triple(&self, triple: &Triple) -> f32 {
+    fn score_triple(&self, _triple: &Triple) -> f32 {
         // GCN scoring would use graph structure
         0.5
     }
 
-    fn predict_tail(&self, head: &str, relation: &str, k: usize) -> Vec<(String, f32)> {
+    fn predict_tail(&self, _head: &str, _relation: &str, _k: usize) -> Vec<(String, f32)> {
         // Return mock predictions
         vec![]
     }
 
-    fn predict_head(&self, relation: &str, tail: &str, k: usize) -> Vec<(String, f32)> {
+    fn predict_head(&self, _relation: &str, _tail: &str, _k: usize) -> Vec<(String, f32)> {
         // Return mock predictions
         vec![]
     }

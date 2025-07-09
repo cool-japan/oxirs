@@ -118,7 +118,7 @@ impl InferenceCache {
         self.entity_cache.insert(entity, CacheEntry::new(embedding));
     }
 
-    pub fn get_relation_embedding(&mut self, relation: &str) -> Option<Vector> {
+    pub fn getrelation_embedding(&mut self, relation: &str) -> Option<Vector> {
         let expired = if let Some(entry) = self.relation_cache.get(relation) {
             if !entry.is_expired(self.ttl_seconds) {
                 return Some(entry.value.clone());
@@ -135,7 +135,7 @@ impl InferenceCache {
         None
     }
 
-    pub fn cache_relation_embedding(&mut self, relation: String, embedding: Vector) {
+    pub fn cacherelation_embedding(&mut self, relation: String, embedding: Vector) {
         if self.relation_cache.len() >= self.max_size {
             if let Some(oldest_key) = self.find_oldest_relation() {
                 self.relation_cache.remove(&oldest_key);
@@ -259,7 +259,7 @@ impl BatchProcessor {
         for chunk in relations.chunks(self.batch_size) {
             let model_guard = model.read().unwrap();
             for relation in chunk {
-                let result = model_guard.get_relation_embedding(relation);
+                let result = model_guard.getrelation_embedding(relation);
                 results.push((relation.clone(), result));
             }
         }
@@ -315,11 +315,11 @@ impl InferenceEngine {
     }
 
     /// Get relation embedding with caching
-    pub async fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    pub async fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         // Check cache first
         if self.config.enable_caching {
             if let Ok(mut cache) = self.cache.write() {
-                if let Some(cached) = cache.get_relation_embedding(relation) {
+                if let Some(cached) = cache.getrelation_embedding(relation) {
                     debug!("Cache hit for relation: {}", relation);
                     return Ok(cached.clone());
                 }
@@ -329,13 +329,13 @@ impl InferenceEngine {
         // Get from model
         let embedding = {
             let model_guard = self.model.read().unwrap();
-            model_guard.get_relation_embedding(relation)?
+            model_guard.getrelation_embedding(relation)?
         };
 
         // Cache result
         if self.config.enable_caching {
             if let Ok(mut cache) = self.cache.write() {
-                cache.cache_relation_embedding(relation.to_string(), embedding.clone());
+                cache.cacherelation_embedding(relation.to_string(), embedding.clone());
             }
         }
 
@@ -344,7 +344,7 @@ impl InferenceEngine {
 
     /// Score triple with caching
     pub async fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
-        let cache_key = format!("{}|{}|{}", subject, predicate, object);
+        let cache_key = format!("{subject}|{predicate}|{object}");
 
         // Check cache first
         if self.config.enable_caching {
@@ -383,7 +383,7 @@ impl InferenceEngine {
     }
 
     /// Batch process relation embeddings
-    pub async fn get_relation_embeddings_batch(
+    pub async fn getrelation_embeddings_batch(
         &self,
         relations: Vec<String>,
     ) -> Result<Vec<(String, Result<Vector>)>> {
@@ -412,7 +412,7 @@ impl InferenceEngine {
 
         // Warm up relation cache
         for relation in relations.iter().take(self.config.cache_size / 2) {
-            let _ = self.get_relation_embedding(relation).await;
+            let _ = self.getrelation_embedding(relation).await;
         }
 
         info!("Cache warm-up completed");

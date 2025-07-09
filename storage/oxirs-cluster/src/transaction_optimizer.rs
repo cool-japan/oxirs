@@ -26,6 +26,12 @@ pub struct TwoPhaseOptimizer {
     stats: Arc<RwLock<OptimizationStats>>,
 }
 
+impl Default for TwoPhaseOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TwoPhaseOptimizer {
     /// Create a new optimizer with default settings
     pub fn new() -> Self {
@@ -107,7 +113,7 @@ impl TwoPhaseOptimizer {
         for (shard_id, op) in &transaction.operations {
             shard_ops
                 .entry(*shard_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(op.clone());
         }
 
@@ -266,6 +272,12 @@ pub struct DeadlockDetector {
     wait_graph: Arc<RwLock<HashMap<TransactionId, HashSet<TransactionId>>>>,
 }
 
+impl Default for DeadlockDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeadlockDetector {
     pub fn new() -> Self {
         Self {
@@ -405,7 +417,7 @@ mod tests {
     async fn test_readonly_optimization() {
         let optimizer = TwoPhaseOptimizer::new();
 
-        let mut transaction = Transaction {
+        let transaction = Transaction {
             id: "test-tx".to_string(),
             state: TransactionState::Active,
             operations: vec![(

@@ -5,12 +5,11 @@
 
 use oxirs_federate::{
     ml_optimizer::*,
-    planner::{planning::QueryComplexity, QueryInfo},
-    FederatedService, QueryType, ServiceRegistry, TriplePattern,
+    planner::QueryInfo,
+    FederatedService, QueryType, TriplePattern,
 };
 use std::collections::HashMap;
-use std::time::{Duration, Instant, SystemTime};
-use tokio;
+use std::time::{Duration, SystemTime};
 
 #[tokio::test]
 async fn test_ml_optimizer_creation() {
@@ -116,7 +115,7 @@ async fn test_query_performance_prediction() {
             service_selections: vec![],
             join_order: vec![],
             caching_decisions: HashMap::new(),
-            query_id: format!("train-{}", i),
+            query_id: format!("train-{i}"),
         };
         optimizer.add_training_sample(sample).await;
     }
@@ -500,8 +499,7 @@ async fn test_anomaly_detection() {
     let optimizer = MLOptimizer::new();
 
     // Train with normal query performance data
-    let normal_performances = vec![
-        Duration::from_millis(100),
+    let normal_performances = [Duration::from_millis(100),
         Duration::from_millis(110),
         Duration::from_millis(95),
         Duration::from_millis(105),
@@ -510,8 +508,7 @@ async fn test_anomaly_detection() {
         Duration::from_millis(107),
         Duration::from_millis(103),
         Duration::from_millis(99),
-        Duration::from_millis(101),
-    ];
+        Duration::from_millis(101)];
 
     let query_features = QueryFeatures {
         pattern_count: 1,
@@ -562,7 +559,7 @@ async fn test_anomaly_detection() {
                 service_selections: vec!["service1".to_string()],
                 join_order: vec!["0".to_string()],
                 caching_decisions: HashMap::new(),
-                query_id: format!("perf_test_{}", i),
+                query_id: format!("perf_test_{i}"),
             })
             .await;
     }
@@ -682,7 +679,7 @@ async fn test_feature_importance_analysis() {
                     service_selections: vec!["service1".to_string()],
                     join_order: vec!["0".to_string()],
                     caching_decisions: HashMap::new(),
-                    query_id: format!("perf_test_{}_{}", i, j),
+                    query_id: format!("perf_test_{i}_{j}"),
                 })
                 .await;
         }
@@ -742,7 +739,7 @@ async fn test_model_retraining() {
                 service_selections: vec!["service1".to_string()],
                 join_order: vec!["0".to_string()],
                 caching_decisions: HashMap::new(),
-                query_id: format!("initial_test_{}", i),
+                query_id: format!("initial_test_{i}"),
             })
             .await;
     }
@@ -779,7 +776,7 @@ async fn test_model_retraining() {
                 service_selections: vec!["service1".to_string()],
                 join_order: vec!["0".to_string()],
                 caching_decisions: HashMap::new(),
-                query_id: format!("retrain_test_{}", i),
+                query_id: format!("retrain_test_{i}"),
             })
             .await;
     }
@@ -836,7 +833,7 @@ async fn test_cross_validation() {
                 service_selections: vec!["service1".to_string()],
                 join_order: vec!["0".to_string()],
                 caching_decisions: HashMap::new(),
-                query_id: format!("perf_test_{}", i),
+                query_id: format!("perf_test_{i}"),
             })
             .await;
     }
@@ -914,7 +911,7 @@ async fn test_prediction_confidence_thresholding() {
                 service_selections: vec!["service1".to_string()],
                 join_order: vec!["0".to_string()],
                 caching_decisions: HashMap::new(),
-                query_id: format!("perf_test_{}", i),
+                query_id: format!("perf_test_{i}"),
             })
             .await;
     }
@@ -975,11 +972,7 @@ fn create_test_query_features(
         variable_count,
         filter_count: 0,
         service_count: 0,
-        join_count: if pattern_count > 1 {
-            pattern_count - 1
-        } else {
-            0
-        },
+        join_count: pattern_count.saturating_sub(1),
         has_aggregation: false,
         complexity_score: complexity,
         selectivity: 1.0 - complexity,

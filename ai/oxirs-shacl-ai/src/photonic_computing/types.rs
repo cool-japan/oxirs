@@ -1,7 +1,5 @@
 //! Type definitions for photonic computing
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Wavelength range for optical processing
 #[derive(Debug, Clone)]

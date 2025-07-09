@@ -123,14 +123,13 @@ impl Validator {
         }
 
         // Additional checks for common schemes
-        if iri.starts_with("http://") || iri.starts_with("https://") {
-            if iri.len() < 8 {
+        if (iri.starts_with("http://") || iri.starts_with("https://"))
+            && iri.len() < 8 {
                 // Minimum valid HTTP(S) URL
                 return Err(StorageError::InvalidIri {
                     iri: iri.to_string(),
                 });
             }
-        }
 
         Ok(())
     }
@@ -222,7 +221,14 @@ pub struct MemoryStorage {
     config: StorageConfig,
     metrics: StorageMetrics,
     quad_index: HashMap<String, Vec<usize>>, // Subject -> quad indices for faster queries
+    #[allow(dead_code)]
     created_at: Instant,
+}
+
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryStorage {
@@ -275,7 +281,7 @@ impl MemoryStorage {
                 &self.config,
             ) {
                 return Err(StorageError::StorageCorrupted {
-                    details: format!("Invalid quad at index {}: {}", i, e),
+                    details: format!("Invalid quad at index {i}: {e}"),
                 });
             }
         }
@@ -426,7 +432,7 @@ impl StorageBackend for MemoryStorage {
 
             // Validate input
             Validator::validate_quad(subject, predicate, object, graph, &self.config)
-                .map_err(|e| anyhow::Error::new(e))?;
+                .map_err(anyhow::Error::new)?;
 
             // Check for duplicates
             if self.is_duplicate(subject, predicate, object, graph) {
@@ -460,7 +466,7 @@ impl StorageBackend for MemoryStorage {
             // Update index for faster queries
             self.quad_index
                 .entry(subject.to_string())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(index);
 
             success = true;
@@ -571,7 +577,7 @@ impl StorageBackend for MemoryStorage {
             // Validate input if strict validation is enabled
             if self.config.strict_iri_validation {
                 Validator::validate_quad(subject, predicate, object, graph, &self.config)
-                    .map_err(|e| anyhow::Error::new(e))?;
+                    .map_err(anyhow::Error::new)?;
             }
 
             let initial_len = self.quads.len();

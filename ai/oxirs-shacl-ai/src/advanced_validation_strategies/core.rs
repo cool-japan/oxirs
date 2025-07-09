@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
 
-use oxirs_core::{model::Quad, Graph, Store};
+use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
 use crate::Result;

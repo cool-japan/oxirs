@@ -1477,7 +1477,7 @@ impl PropertyPathEvaluator {
     fn generate_fallback_sparql_query(
         &self,
         start_node: &Term,
-        path: &PropertyPath,
+        _path: &PropertyPath,
         graph_name: Option<&str>,
     ) -> Result<String> {
         // For complex paths that can't be efficiently expressed in SPARQL,

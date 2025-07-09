@@ -123,7 +123,7 @@ impl LLMProvider for AnthropicProvider {
 
         let response = self
             .client
-            .post(&format!("{}/v1/messages", self.base_url))
+            .post(format!("{}/v1/messages", self.base_url))
             .header("x-api-key", &self.api_key)
             .json(&body)
             .send()

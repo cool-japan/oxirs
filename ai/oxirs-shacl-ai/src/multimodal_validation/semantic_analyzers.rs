@@ -5,12 +5,18 @@ use std::collections::HashMap;
 
 use super::traits::*;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Content semantic analyzer
 #[derive(Debug)]
 pub struct ContentSemanticAnalyzer {
     confidence_threshold: f64,
+}
+
+impl Default for ContentSemanticAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ContentSemanticAnalyzer {
@@ -51,6 +57,12 @@ impl SemanticAnalyzer for ContentSemanticAnalyzer {
 #[derive(Debug)]
 pub struct CrossModalAnalyzer;
 
+impl Default for CrossModalAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CrossModalAnalyzer {
     pub fn new() -> Self {
         Self
@@ -82,6 +94,12 @@ impl SemanticAnalyzer for CrossModalAnalyzer {
 /// Knowledge extraction analyzer
 #[derive(Debug)]
 pub struct KnowledgeExtractionAnalyzer;
+
+impl Default for KnowledgeExtractionAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl KnowledgeExtractionAnalyzer {
     pub fn new() -> Self {

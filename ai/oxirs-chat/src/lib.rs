@@ -163,7 +163,6 @@
 //! ```
 
 use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
@@ -270,7 +269,7 @@ impl OxiRSChat {
             .context("Failed to initialize RAG engine")?;
 
         // Initialize LLM manager with provided config or default
-        let llm_config = llm_config.unwrap_or_else(|| llm::LLMConfig::default());
+        let llm_config = llm_config.unwrap_or_else(llm::LLMConfig::default);
         let llm_manager = llm::LLMManager::new(llm_config)?;
 
         // Initialize NL2SPARQL engine
@@ -353,7 +352,7 @@ impl OxiRSChat {
         &self,
         persistence_path: P,
     ) -> Result<usize> {
-        use crate::session_manager::SessionData;
+        
         use std::fs;
 
         let sessions = self.sessions.read().await;
@@ -376,7 +375,7 @@ impl OxiRSChat {
             match session_arc.try_lock() {
                 Ok(session) => {
                     let session_data = session.to_data();
-                    let session_file = persistence_dir.join(format!("{}.json", session_id));
+                    let session_file = persistence_dir.join(format!("{session_id}.json"));
 
                     match serde_json::to_string_pretty(&session_data) {
                         Ok(json_data) => {
@@ -548,7 +547,7 @@ impl OxiRSChat {
         let response_text = {
             let mut llm_manager = self.llm_manager.lock().await;
             self.generate_enhanced_response(
-                &mut *llm_manager,
+                &mut llm_manager,
                 &user_message,
                 &assembled_context,
                 sparql_query.as_ref(),
@@ -727,7 +726,7 @@ impl OxiRSChat {
         prompt.push_str("Provide helpful, accurate, and insightful responses based on the available context.\n\n");
 
         // User query
-        prompt.push_str(&format!("User Query: {}\n\n", user_message));
+        prompt.push_str(&format!("User Query: {user_message}\n\n"));
 
         // Add semantic search results
         if !assembled_context.semantic_results.is_empty() {
@@ -795,7 +794,7 @@ impl OxiRSChat {
                 for (i, result) in results.iter().take(10).enumerate() {
                     prompt.push_str(&format!("{}. ", i + 1));
                     for (key, value) in result {
-                        prompt.push_str(&format!("{}: {} ", key, value));
+                        prompt.push_str(&format!("{key}: {value} "));
                     }
                     prompt.push('\n');
                 }
@@ -1044,7 +1043,7 @@ impl OxiRSChat {
                         .send(StreamResponseChunk::Error {
                             error: StructuredError {
                                 error_type: ErrorType::InternalError,
-                                message: format!("Failed to store user message: {}", e),
+                                message: format!("Failed to store user message: {e}"),
                                 error_code: Some("MSG_STORE_FAILED".to_string()),
                                 component: "ChatSession".to_string(),
                                 timestamp: chrono::Utc::now(),
@@ -1075,7 +1074,7 @@ impl OxiRSChat {
                             .send(StreamResponseChunk::Error {
                                 error: StructuredError {
                                     error_type: ErrorType::RagRetrievalError,
-                                    message: format!("RAG retrieval failed: {}", e),
+                                    message: format!("RAG retrieval failed: {e}"),
                                     error_code: Some("RAG_RETRIEVAL_FAILED".to_string()),
                                     component: "RagEngine".to_string(),
                                     timestamp: chrono::Utc::now(),
@@ -1194,7 +1193,7 @@ impl OxiRSChat {
             // Build prompt for LLM
             let mut prompt = String::new();
             prompt.push_str("You are an advanced AI assistant with access to a knowledge graph. ");
-            prompt.push_str(&format!("User Query: {}\n\n", user_message));
+            prompt.push_str(&format!("User Query: {user_message}\n\n"));
 
             if !assembled_context.semantic_results.is_empty() {
                 prompt.push_str("Relevant Knowledge Graph Facts:\n");
@@ -1237,7 +1236,7 @@ impl OxiRSChat {
                             .send(StreamResponseChunk::Error {
                                 error: StructuredError {
                                     error_type: ErrorType::LlmGenerationError,
-                                    message: format!("LLM generation failed: {}", e),
+                                    message: format!("LLM generation failed: {e}"),
                                     error_code: Some("LLM_GENERATION_FAILED".to_string()),
                                     component: "LLMManager".to_string(),
                                     timestamp: chrono::Utc::now(),

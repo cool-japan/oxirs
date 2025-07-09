@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// OAuth2 flow types supported
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -179,7 +179,7 @@ impl OAuth2Service {
         info!("Discovering OIDC configuration from: {}", discovery_url);
 
         let response = self.client.get(&discovery_url).send().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to fetch OIDC discovery: {}", e))
+            FusekiError::authentication(format!("Failed to fetch OIDC discovery: {e}"))
         })?;
 
         if !response.status().is_success() {
@@ -190,7 +190,7 @@ impl OAuth2Service {
         }
 
         let discovery: OIDCDiscovery = response.json().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to parse OIDC discovery: {}", e))
+            FusekiError::authentication(format!("Failed to parse OIDC discovery: {e}"))
         })?;
 
         debug!("OIDC discovery successful for issuer: {}", discovery.issuer);
@@ -299,19 +299,18 @@ impl OAuth2Service {
             .form(&params)
             .send()
             .await
-            .map_err(|e| FusekiError::authentication(format!("Token exchange failed: {}", e)))?;
+            .map_err(|e| FusekiError::authentication(format!("Token exchange failed: {e}")))?;
 
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await.unwrap_or_default();
             return Err(FusekiError::authentication(format!(
-                "Token exchange failed with status {}: {}",
-                status, error_text
+                "Token exchange failed with status {status}: {error_text}"
             )));
         }
 
         let token_response: OAuth2TokenResponse = response.json().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to parse token response: {}", e))
+            FusekiError::authentication(format!("Failed to parse token response: {e}"))
         })?;
 
         let token = OAuth2Token {
@@ -342,7 +341,7 @@ impl OAuth2Service {
             .bearer_auth(access_token)
             .send()
             .await
-            .map_err(|e| FusekiError::authentication(format!("UserInfo request failed: {}", e)))?;
+            .map_err(|e| FusekiError::authentication(format!("UserInfo request failed: {e}")))?;
 
         if !response.status().is_success() {
             return Err(FusekiError::authentication(format!(
@@ -352,7 +351,7 @@ impl OAuth2Service {
         }
 
         let user_info: OIDCUserInfo = response.json().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to parse user info: {}", e))
+            FusekiError::authentication(format!("Failed to parse user info: {e}"))
         })?;
 
         debug!(
@@ -395,7 +394,7 @@ impl OAuth2Service {
             .form(&params)
             .send()
             .await
-            .map_err(|e| FusekiError::authentication(format!("Token refresh failed: {}", e)))?;
+            .map_err(|e| FusekiError::authentication(format!("Token refresh failed: {e}")))?;
 
         if !response.status().is_success() {
             return Err(FusekiError::authentication(format!(
@@ -405,7 +404,7 @@ impl OAuth2Service {
         }
 
         let token_response: OAuth2TokenResponse = response.json().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to parse refresh response: {}", e))
+            FusekiError::authentication(format!("Failed to parse refresh response: {e}"))
         })?;
 
         let token = OAuth2Token {
@@ -606,7 +605,6 @@ mod urlencoding {
     }
 }
 
-use percent_encoding;
 
 #[cfg(test)]
 mod tests {

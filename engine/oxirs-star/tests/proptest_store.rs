@@ -22,7 +22,7 @@ fn simple_triple_strategy() -> impl Strategy<Value = StarTriple> {
                 .prop_map(|(val, lang)| (val, Some(lang), None::<String>)),
         ],
     )
-        .prop_map(|(subj, pred, (obj_val, lang, dt))| {
+        .prop_map(|(subj, pred, (obj_val, lang, _dt))| {
             let subject = StarTerm::iri(&subj).unwrap();
             let predicate = StarTerm::iri(&pred).unwrap();
             let object = if let Some(l) = lang {
@@ -390,8 +390,8 @@ mod tests {
         for i in 0..5 {
             current = StarTriple::new(
                 StarTerm::quoted_triple(current),
-                StarTerm::iri(&format!("http://example.org/level{}", i)).unwrap(),
-                StarTerm::literal(&format!("{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/level{i}")).unwrap(),
+                StarTerm::literal(&format!("{i}")).unwrap(),
             );
         }
 

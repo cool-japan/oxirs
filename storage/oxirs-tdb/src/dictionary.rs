@@ -251,7 +251,7 @@ impl std::fmt::Debug for InternedString {
 impl std::fmt::Display for InternedString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(value) = self.value() {
-            write!(f, "{}", value)
+            write!(f, "{value}")
         } else {
             write!(f, "<invalid:{}>", self.id)
         }
@@ -341,9 +341,6 @@ impl InnerDictionary {
         id
     }
 
-    fn get_entry(&self, id: StringId) -> Option<&DictionaryEntry> {
-        self.entries.get(&id)
-    }
 
     fn get_string(&self, id: StringId) -> Option<&str> {
         self.entries.get(&id).map(|entry| entry.value.as_str())
@@ -540,8 +537,7 @@ impl StringDictionary {
                 }
             } else {
                 issues.push(format!(
-                    "Dangling reference: string '{}' maps to non-existent ID {}",
-                    string, id
+                    "Dangling reference: string '{string}' maps to non-existent ID {id}"
                 ));
             }
         }
@@ -574,8 +570,7 @@ impl StringDictionary {
                 }
             } else {
                 issues.push(format!(
-                    "Stale zero reference tracking: ID {} in zero_ref_entries but not in entries",
-                    id
+                    "Stale zero reference tracking: ID {id} in zero_ref_entries but not in entries"
                 ));
             }
         }

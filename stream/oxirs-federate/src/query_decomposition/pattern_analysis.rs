@@ -3,9 +3,7 @@
 //! This module provides sophisticated pattern analysis including selectivity estimation,
 //! join pattern detection, and predicate affinity analysis.
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
-use std::hash::{Hash, Hasher};
 
 use crate::{planner::TriplePattern, FederatedService, ServiceCapability};
 
@@ -93,7 +91,7 @@ impl QueryDecomposer {
         let pattern_factor = patterns.len() as u64;
         let selectivity = self.estimate_pattern_selectivity(patterns);
 
-        (base_size * pattern_factor as u64 * selectivity as u64).max(1)
+        (base_size * pattern_factor * selectivity as u64).max(1)
     }
 
     /// Estimate selectivity of patterns
@@ -103,7 +101,7 @@ impl QueryDecomposer {
         for (_, pattern) in patterns {
             let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
                 .iter()
-                .filter(|p| p.as_ref().map_or(false, |s| s.starts_with('?')))
+                .filter(|p| p.as_ref().is_some_and(|s| s.starts_with('?')))
                 .count();
 
             selectivity *= match var_count {
@@ -122,7 +120,7 @@ impl QueryDecomposer {
     pub fn estimate_single_pattern_selectivity(&self, pattern: &TriplePattern) -> f64 {
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
-            .filter(|p| p.as_ref().map_or(false, |s| s.starts_with('?')))
+            .filter(|p| p.as_ref().is_some_and(|s| s.starts_with('?')))
             .count();
 
         match var_count {
@@ -801,7 +799,7 @@ impl QueryDecomposer {
             if pattern
                 .subject
                 .as_ref()
-                .map_or(false, |s| s.starts_with('?'))
+                .is_some_and(|s| s.starts_with('?'))
             {
                 1.0
             } else {
@@ -813,7 +811,7 @@ impl QueryDecomposer {
             if pattern
                 .predicate
                 .as_ref()
-                .map_or(false, |p| p.starts_with('?'))
+                .is_some_and(|p| p.starts_with('?'))
             {
                 1.0
             } else {
@@ -825,7 +823,7 @@ impl QueryDecomposer {
             if pattern
                 .object
                 .as_ref()
-                .map_or(false, |o| o.starts_with('?'))
+                .is_some_and(|o| o.starts_with('?'))
             {
                 1.0
             } else {
@@ -860,7 +858,7 @@ impl QueryDecomposer {
         // Pattern complexity
         let var_count = [&pattern.subject, &pattern.predicate, &pattern.object]
             .iter()
-            .filter(|term| term.as_ref().map_or(false, |s| s.starts_with('?')))
+            .filter(|term| term.as_ref().is_some_and(|s| s.starts_with('?')))
             .count();
         features.insert("variable_count".to_string(), var_count as f64);
 
@@ -985,6 +983,12 @@ pub struct JoinPatternAnalysis {
     pub pattern_type: JoinPattern,
     pub max_join_degree: usize,
     pub central_variable: Option<String>,
+}
+
+impl Default for JoinPatternAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl JoinPatternAnalysis {

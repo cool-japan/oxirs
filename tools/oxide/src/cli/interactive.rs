@@ -89,7 +89,7 @@ impl InteractiveMode {
 
                             let _ = self.editor.add_history_entry(&full_command);
                             if let Err(e) = self.process_command(&full_command).await {
-                                eprintln!("Error: {}", e);
+                                eprintln!("Error: {e}");
                             }
                             continue;
                         }
@@ -110,7 +110,7 @@ impl InteractiveMode {
                     let _ = self.editor.add_history_entry(line.as_str());
 
                     if let Err(e) = self.process_command(&line).await {
-                        eprintln!("Error: {}", e);
+                        eprintln!("Error: {e}");
                     }
                 }
                 Err(ReadlineError::Interrupted) => {
@@ -128,7 +128,7 @@ impl InteractiveMode {
                     break;
                 }
                 Err(err) => {
-                    eprintln!("Error: {:?}", err);
+                    eprintln!("Error: {err:?}");
                     break;
                 }
             }
@@ -146,7 +146,7 @@ impl InteractiveMode {
         if self.multi_line_mode {
             format!("{:>6}> ", "...")
         } else if let Some(ref dataset) = self.current_dataset {
-            format!("oxide:{}> ", dataset)
+            format!("oxide:{dataset}> ")
         } else {
             "oxide> ".to_string()
         }
@@ -237,11 +237,10 @@ impl InteractiveMode {
                         .collect::<Vec<_>>(),
                 );
                 if let Some(suggestion) = suggestions {
-                    println!("Unknown command: {}. {}", cmd, suggestion);
+                    println!("Unknown command: {cmd}. {suggestion}");
                 } else {
                     println!(
-                        "Unknown command: {}. Type 'help' for available commands.",
-                        cmd
+                        "Unknown command: {cmd}. Type 'help' for available commands."
                     );
                 }
                 Ok(())
@@ -253,8 +252,8 @@ impl InteractiveMode {
     fn expand_variables(&self, command: &str) -> String {
         let mut result = command.to_string();
         for (key, value) in &self.environment {
-            result = result.replace(&format!("${}", key), value);
-            result = result.replace(&format!("${{{}}}", key), value);
+            result = result.replace(&format!("${key}"), value);
+            result = result.replace(&format!("${{{key}}}"), value);
         }
         result
     }
@@ -322,7 +321,7 @@ impl InteractiveMode {
         println!("  - Variables: $VAR expands to environment value");
 
         if let Some(ref dataset) = self.current_dataset {
-            println!("\nCurrent dataset: {}", dataset);
+            println!("\nCurrent dataset: {dataset}");
         }
     }
 
@@ -343,8 +342,8 @@ impl InteractiveMode {
         let dataset = args[0];
         let query = args[1..].join(" ");
 
-        println!("Executing query on dataset '{}'...", dataset);
-        println!("Query: {}", query);
+        println!("Executing query on dataset '{dataset}'...");
+        println!("Query: {query}");
 
         // TODO: Integrate with actual query execution
         println!("Query execution not yet implemented in interactive mode");
@@ -362,7 +361,7 @@ impl InteractiveMode {
         let dataset = args[0];
         let file = args[1];
 
-        println!("Importing {} into dataset '{}'...", file, dataset);
+        println!("Importing {file} into dataset '{dataset}'...");
 
         // TODO: Integrate with actual import
         println!("Import not yet implemented in interactive mode");
@@ -380,7 +379,7 @@ impl InteractiveMode {
         let dataset = args[0];
         let file = args[1];
 
-        println!("Exporting dataset '{}' to {}...", dataset, file);
+        println!("Exporting dataset '{dataset}' to {file}...");
 
         // TODO: Integrate with actual export
         println!("Export not yet implemented in interactive mode");
@@ -396,7 +395,7 @@ impl InteractiveMode {
         }
 
         let file = args[0];
-        println!("Validating {}...", file);
+        println!("Validating {file}...");
 
         // TODO: Integrate with actual validation
         println!("Validation not yet implemented in interactive mode");
@@ -412,7 +411,7 @@ impl InteractiveMode {
         }
 
         let dataset = args[0];
-        println!("Getting statistics for dataset '{}'...", dataset);
+        println!("Getting statistics for dataset '{dataset}'...");
 
         // TODO: Integrate with actual stats
         println!("Stats not yet implemented in interactive mode");
@@ -423,13 +422,13 @@ impl InteractiveMode {
     /// Use a dataset
     fn use_dataset(&mut self, dataset: &str) {
         self.current_dataset = Some(dataset.to_string());
-        println!("Now using dataset: {}", dataset);
+        println!("Now using dataset: {dataset}");
     }
 
     /// Set an environment variable
     fn set_variable(&mut self, key: &str, value: &str) {
         self.environment.insert(key.to_string(), value.to_string());
-        println!("Set {} = {}", key, value);
+        println!("Set {key} = {value}");
     }
 
     /// Show environment variables
@@ -439,12 +438,12 @@ impl InteractiveMode {
         } else {
             println!("Environment variables:");
             for (key, value) in &self.environment {
-                println!("  {} = {}", key, value);
+                println!("  {key} = {value}");
             }
         }
 
         if let Some(ref dataset) = self.current_dataset {
-            println!("\nCurrent dataset: {}", dataset);
+            println!("\nCurrent dataset: {dataset}");
         }
     }
 

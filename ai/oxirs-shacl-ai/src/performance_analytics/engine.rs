@@ -67,7 +67,7 @@ impl PerformanceAnalyticsEngine {
         
         // Use tokio runtime to execute async method
         let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| crate::ShaclAiError::Performance(format!("Failed to create runtime: {}", e)))?;
+            .map_err(|e| crate::ShaclAiError::Performance(format!("Failed to create runtime: {e}")))?;
         
         rt.block_on(async {
             monitor.start().await.map(|_| ())
@@ -80,7 +80,7 @@ impl PerformanceAnalyticsEngine {
         
         // Use tokio runtime to execute async method
         let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| crate::ShaclAiError::Performance(format!("Failed to create runtime: {}", e)))?;
+            .map_err(|e| crate::ShaclAiError::Performance(format!("Failed to create runtime: {e}")))?;
         
         rt.block_on(async {
             monitor.stop().await

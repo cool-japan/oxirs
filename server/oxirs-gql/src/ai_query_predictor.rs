@@ -249,7 +249,9 @@ pub struct AIQueryPredictor {
     gnn_model: Arc<AsyncRwLock<GraphNeuralNetwork>>,
     time_series_predictor: Arc<AsyncRwLock<TimeSeriesPredictor>>,
     training_data: Arc<AsyncMutex<VecDeque<TrainingExample>>>,
+    #[allow(dead_code)]
     performance_history: Arc<AsyncRwLock<VecDeque<OperationMetrics>>>,
+    #[allow(dead_code)]
     embeddings_cache: Arc<AsyncRwLock<HashMap<u64, QueryEmbedding>>>,
 }
 
@@ -895,10 +897,8 @@ impl AIQueryPredictor {
         );
 
         let memory_usage = (graph_complexity * 60.0 + total_edges * 2.0).max(15.0) as u64;
-        let cpu_usage = (graph_density + (max_activation.abs() - min_activation.abs()).abs())
-            .min(1.0)
-            .max(0.05);
-        let cache_probability = (1.0 - graph_complexity * 0.3).max(0.0).min(1.0);
+        let cpu_usage = (graph_density + (max_activation.abs() - min_activation.abs()).abs()).clamp(0.05, 1.0);
+        let cache_probability = (1.0 - graph_complexity * 0.3).clamp(0.0, 1.0);
 
         // GNN confidence based on graph structure consistency
         let structure_consistency = 1.0
@@ -908,9 +908,7 @@ impl AIQueryPredictor {
                 .sum::<f64>()
                 / num_nodes as f64)
                 .min(1.0);
-        let gnn_confidence = (structure_consistency * graph_representation.abs())
-            .min(1.0)
-            .max(0.1);
+        let gnn_confidence = (structure_consistency * graph_representation.abs()).clamp(0.1, 1.0);
 
         Ok(QueryPrediction {
             predicted_execution_time: execution_time,
@@ -993,18 +991,14 @@ impl AIQueryPredictor {
             let mut forget_gate = vec![0.0; hidden_size];
             for i in 0..hidden_size {
                 forget_gate[i] = (0.5 * hidden_state[i] + 0.3 * input_val + 0.1)
-                    .tanh()
-                    .max(0.0)
-                    .min(1.0);
+                    .tanh().clamp(0.0, 1.0);
             }
 
             // Input gate: i_t = σ(W_i * [h_{t-1}, x_t] + b_i)
             let mut input_gate = vec![0.0; hidden_size];
             for i in 0..hidden_size {
                 input_gate[i] = (0.4 * hidden_state[i] + 0.4 * input_val + 0.2)
-                    .tanh()
-                    .max(0.0)
-                    .min(1.0);
+                    .tanh().clamp(0.0, 1.0);
             }
 
             // Candidate values: C̃_t = tanh(W_C * [h_{t-1}, x_t] + b_C)
@@ -1017,9 +1011,7 @@ impl AIQueryPredictor {
             let mut output_gate = vec![0.0; hidden_size];
             for i in 0..hidden_size {
                 output_gate[i] = (0.5 * hidden_state[i] + 0.4 * input_val + 0.1)
-                    .tanh()
-                    .max(0.0)
-                    .min(1.0);
+                    .tanh().clamp(0.0, 1.0);
             }
 
             // Update cell state: C_t = f_t * C_{t-1} + i_t * C̃_t
@@ -1105,15 +1097,11 @@ impl AIQueryPredictor {
         );
 
         let memory_usage = (cell_activation * 80.0 + pattern_strength * 40.0).max(20.0) as u64;
-        let cpu_usage = (1.0 - temporal_stability).max(0.1).min(1.0);
-        let cache_probability = (temporal_stability * autocorrelation.abs())
-            .max(0.0)
-            .min(1.0);
+        let cpu_usage = (1.0 - temporal_stability).clamp(0.1, 1.0);
+        let cache_probability = (temporal_stability * autocorrelation.abs()).clamp(0.0, 1.0);
 
         // Time series confidence based on pattern consistency
-        let ts_confidence = (temporal_stability * pattern_strength.min(1.0))
-            .max(0.1)
-            .min(1.0);
+        let ts_confidence = (temporal_stability * pattern_strength.min(1.0)).clamp(0.1, 1.0);
 
         Ok(QueryPrediction {
             predicted_execution_time: execution_time,
@@ -1214,6 +1202,7 @@ impl AIQueryPredictor {
     }
 
     /// Create default prediction
+    #[allow(dead_code)]
     fn create_default_prediction(&self) -> QueryPrediction {
         QueryPrediction {
             predicted_execution_time: Duration::from_millis(100),
@@ -1353,8 +1342,11 @@ pub struct TrainingExample {
 /// Neural network model structure
 #[derive(Debug)]
 pub struct NeuralNetwork {
+    #[allow(dead_code)]
     layers: Vec<LayerType>,
+    #[allow(dead_code)]
     weights: Vec<Vec<Vec<f64>>>,
+    #[allow(dead_code)]
     biases: Vec<Vec<f64>>,
 }
 
@@ -1371,9 +1363,13 @@ impl NeuralNetwork {
 /// Reinforcement learning agent
 #[derive(Debug)]
 pub struct ReinforcementLearningAgent {
+    #[allow(dead_code)]
     q_table: HashMap<String, HashMap<String, f64>>,
+    #[allow(dead_code)]
     exploration_rate: f64,
+    #[allow(dead_code)]
     learning_rate: f64,
+    #[allow(dead_code)]
     discount_factor: f64,
 }
 
@@ -1391,9 +1387,13 @@ impl ReinforcementLearningAgent {
 /// Transformer model for sequence modeling
 #[derive(Debug)]
 pub struct TransformerModel {
+    #[allow(dead_code)]
     attention_heads: usize,
+    #[allow(dead_code)]
     model_dim: usize,
+    #[allow(dead_code)]
     vocab_size: usize,
+    #[allow(dead_code)]
     max_seq_length: usize,
 }
 
@@ -1421,8 +1421,11 @@ impl TransformerModel {
 /// Graph Neural Network for structured data
 #[derive(Debug)]
 pub struct GraphNeuralNetwork {
+    #[allow(dead_code)]
     node_features: usize,
+    #[allow(dead_code)]
     hidden_dim: usize,
+    #[allow(dead_code)]
     num_layers: usize,
 }
 
@@ -1444,8 +1447,11 @@ impl GraphNeuralNetwork {
 /// Time series predictor for temporal patterns
 #[derive(Debug)]
 pub struct TimeSeriesPredictor {
+    #[allow(dead_code)]
     window_size: usize,
+    #[allow(dead_code)]
     prediction_horizon: usize,
+    #[allow(dead_code)]
     seasonality_periods: Vec<usize>,
 }
 

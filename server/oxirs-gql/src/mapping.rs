@@ -171,10 +171,10 @@ impl RdfGraphQLMapper {
         // Handle different operation types
         match operation.operation_type {
             crate::ast::OperationType::Query => {
-                self.translate_query_operation(&operation, &mut sparql_builder, context, type_name)
+                self.translate_query_operation(operation, &mut sparql_builder, context, type_name)
             }
             crate::ast::OperationType::Mutation => self.translate_mutation_operation(
-                &operation,
+                operation,
                 &mut sparql_builder,
                 context,
                 type_name,
@@ -265,15 +265,199 @@ impl RdfGraphQLMapper {
     ) -> Result<String> {
         // For Mutation type, translate to SPARQL UPDATE operations
         if type_name == "Mutation" {
-            // TODO: Implement mutation translation to SPARQL UPDATE
-            // For now, return a basic SPARQL UPDATE structure
-            builder.add_update_operation("INSERT DATA { }");
-            self.translate_root_selection_set(&operation.selection_set, builder, context)?;
+            self.translate_mutation_selection_set(&operation.selection_set, builder, context)?;
         } else {
             return Err(anyhow!("Only Mutation type supported for mutations"));
         }
 
         builder.build()
+    }
+
+    fn translate_mutation_selection_set(
+        &self,
+        selection_set: &SelectionSet,
+        builder: &mut SparqlQueryBuilder,
+        context: &QueryContext,
+    ) -> Result<()> {
+        for selection in &selection_set.selections {
+            match selection {
+                Selection::Field(field) => {
+                    self.translate_mutation_field(field, builder, context)?;
+                }
+                Selection::InlineFragment(_) | Selection::FragmentSpread(_) => {
+                    // Handle fragments if needed
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn translate_mutation_field(
+        &self,
+        field: &Field,
+        builder: &mut SparqlQueryBuilder,
+        _context: &QueryContext,
+    ) -> Result<()> {
+        match field.name.as_str() {
+            "insertTriple" => {
+                let args: Vec<(String, Value)> = field.arguments.iter()
+                    .map(|arg| (arg.name.clone(), arg.value.clone()))
+                    .collect();
+                let triple = self.extract_triple_from_arguments(&args)?;
+                builder.add_insert_data(&triple);
+            }
+            "insertTriples" => {
+                let args: Vec<(String, Value)> = field.arguments.iter()
+                    .map(|arg| (arg.name.clone(), arg.value.clone()))
+                    .collect();
+                let triples = self.extract_triples_from_arguments(&args)?;
+                for triple in triples {
+                    builder.add_insert_data(&triple);
+                }
+            }
+            "deleteTriple" => {
+                let args: Vec<(String, Value)> = field.arguments.iter()
+                    .map(|arg| (arg.name.clone(), arg.value.clone()))
+                    .collect();
+                let triple = self.extract_triple_from_arguments(&args)?;
+                builder.add_delete_data(&triple);
+            }
+            "deleteTriples" => {
+                let args: Vec<(String, Value)> = field.arguments.iter()
+                    .map(|arg| (arg.name.clone(), arg.value.clone()))
+                    .collect();
+                let triples = self.extract_triples_from_arguments(&args)?;
+                for triple in triples {
+                    builder.add_delete_data(&triple);
+                }
+            }
+            "updateTriple" => {
+                // Update = Delete old + Insert new
+                let args: Vec<(String, Value)> = field.arguments.iter()
+                    .map(|arg| (arg.name.clone(), arg.value.clone()))
+                    .collect();
+                if let Ok(old_triple) = self.extract_old_triple_from_arguments(&args) {
+                    builder.add_delete_data(&old_triple);
+                }
+                if let Ok(new_triple) = self.extract_new_triple_from_arguments(&args) {
+                    builder.add_insert_data(&new_triple);
+                }
+            }
+            _ => {
+                return Err(anyhow!(
+                    "Unsupported mutation operation: {}",
+                    field.name
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn extract_triple_from_arguments(&self, arguments: &[(String, Value)]) -> Result<String> {
+        let mut subject = None;
+        let mut predicate = None;
+        let mut object = None;
+
+        for (arg_name, arg_value) in arguments {
+            match arg_name.as_str() {
+                "subject" => {
+                    subject = Some(self.format_rdf_term(arg_value)?);
+                }
+                "predicate" => {
+                    predicate = Some(self.format_rdf_term(arg_value)?);
+                }
+                "object" => {
+                    object = Some(self.format_rdf_term(arg_value)?);
+                }
+                _ => {}
+            }
+        }
+
+        match (subject, predicate, object) {
+            (Some(s), Some(p), Some(o)) => Ok(format!("{s} {p} {o} .")),
+            _ => Err(anyhow!("Missing required arguments: subject, predicate, or object")),
+        }
+    }
+
+    fn extract_triples_from_arguments(&self, arguments: &[(String, Value)]) -> Result<Vec<String>> {
+        for (arg_name, arg_value) in arguments {
+            if arg_name == "triples" {
+                if let Value::ListValue(triple_list) = arg_value {
+                    let mut result = Vec::new();
+                    for triple_value in triple_list {
+                        if let Value::ObjectValue(triple_obj) = triple_value {
+                            let triple_args: Vec<(String, Value)> = triple_obj.iter()
+                                .map(|(k, v)| (k.clone(), v.clone()))
+                                .collect();
+                            result.push(self.extract_triple_from_arguments(&triple_args)?);
+                        }
+                    }
+                    return Ok(result);
+                }
+            }
+        }
+        Err(anyhow!("No triples argument found"))
+    }
+
+    fn extract_old_triple_from_arguments(&self, arguments: &[(String, Value)]) -> Result<String> {
+        for (arg_name, arg_value) in arguments {
+            if arg_name == "old" {
+                if let Value::ObjectValue(old_obj) = arg_value {
+                    let old_args: Vec<(String, Value)> = old_obj.iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    return self.extract_triple_from_arguments(&old_args);
+                }
+            }
+        }
+        Err(anyhow!("No old triple argument found"))
+    }
+
+    fn extract_new_triple_from_arguments(&self, arguments: &[(String, Value)]) -> Result<String> {
+        for (arg_name, arg_value) in arguments {
+            if arg_name == "new" {
+                if let Value::ObjectValue(new_obj) = arg_value {
+                    let new_args: Vec<(String, Value)> = new_obj.iter()
+                        .map(|(k, v)| (k.clone(), v.clone()))
+                        .collect();
+                    return self.extract_triple_from_arguments(&new_args);
+                }
+            }
+        }
+        Err(anyhow!("No new triple argument found"))
+    }
+
+    fn format_rdf_term(&self, value: &Value) -> Result<String> {
+        match value {
+            Value::StringValue(s) => {
+                // Check if it's a URI (contains :// or starts with http)
+                if s.contains("://") || s.starts_with("http") {
+                    Ok(format!("<{s}>"))
+                } else if s.starts_with("_:") {
+                    // Blank node
+                    Ok(s.clone())
+                } else {
+                    // Literal string
+                    Ok(format!("\"{}\"", s.replace('\"', "\\\"")))
+                }
+            }
+            Value::IntValue(i) => Ok(format!("\"{i}\"^^<http://www.w3.org/2001/XMLSchema#integer>")),
+            Value::FloatValue(f) => Ok(format!("\"{f}\"^^<http://www.w3.org/2001/XMLSchema#decimal>")),
+            Value::BooleanValue(b) => Ok(format!("\"{b}\"^^<http://www.w3.org/2001/XMLSchema#boolean>")),
+            Value::ObjectValue(obj) => {
+                // Handle typed literals
+                if let (Some(Value::StringValue(value)), Some(Value::StringValue(datatype))) = 
+                    (obj.get("value"), obj.get("datatype")) {
+                    Ok(format!("\"{value}\"^^<{datatype}>"))
+                } else if let (Some(Value::StringValue(value)), Some(Value::StringValue(lang))) = 
+                    (obj.get("value"), obj.get("language")) {
+                    Ok(format!("\"{value}\"@{lang}"))
+                } else {
+                    Err(anyhow!("Invalid RDF term object format"))
+                }
+            }
+            _ => Err(anyhow!("Unsupported value type for RDF term")),
+        }
     }
 
     fn translate_root_selection_set(
@@ -411,7 +595,7 @@ impl RdfGraphQLMapper {
         let subject_var = "?subject";
 
         // Add type constraint
-        builder.add_where_pattern(&format!("{} a <{}>", subject_var, class_uri));
+        builder.add_where_pattern(&format!("{subject_var} a <{class_uri}>"));
 
         // Handle arguments
         let limit = self
@@ -508,8 +692,7 @@ impl RdfGraphQLMapper {
                         match property.property_type {
                             PropertyType::ObjectProperty => {
                                 builder.add_where_pattern(&format!(
-                                    "{} <{}> {}",
-                                    subject_var, prop_uri, field_var
+                                    "{subject_var} <{prop_uri}> {field_var}"
                                 ));
 
                                 // Handle nested object selections
@@ -525,16 +708,14 @@ impl RdfGraphQLMapper {
                             }
                             PropertyType::DataProperty | PropertyType::AnnotationProperty => {
                                 builder.add_where_pattern(&format!(
-                                    "{} <{}> {}",
-                                    subject_var, prop_uri, field_var
+                                    "{subject_var} <{prop_uri}> {field_var}"
                                 ));
                             }
                         }
                     } else {
                         // Fallback
                         builder.add_where_pattern(&format!(
-                            "{} <{}> {}",
-                            subject_var, prop_uri, field_var
+                            "{subject_var} <{prop_uri}> {field_var}"
                         ));
                     }
                 } else {
@@ -543,7 +724,7 @@ impl RdfGraphQLMapper {
                     let field_var = format!("?{}", field.name);
                     builder.add_select(&field_var);
                     builder
-                        .add_where_pattern(&format!("{} {} {}", subject_var, predicate, field_var));
+                        .add_where_pattern(&format!("{subject_var} {predicate} {field_var}"));
                 }
             }
         }
@@ -562,7 +743,7 @@ impl RdfGraphQLMapper {
         let predicate = self.field_to_predicate(&field.name);
 
         builder.add_select(&var_name);
-        builder.add_where_pattern(&format!("?s {} {}", predicate, var_name));
+        builder.add_where_pattern(&format!("?s {predicate} {var_name}"));
 
         Ok(())
     }
@@ -577,7 +758,7 @@ impl RdfGraphQLMapper {
             }
 
             // Also try matching the local name from the URI
-            let local_name = prop_uri.split(['#', '/']).last().unwrap_or("");
+            let local_name = prop_uri.split(['#', '/']).next_back().unwrap_or("");
             if local_name.to_lowercase() == field_name.to_lowercase() {
                 return Some(prop_uri.clone());
             }
@@ -586,9 +767,9 @@ impl RdfGraphQLMapper {
     }
 
     fn uri_to_graphql_name(&self, uri: &str) -> String {
-        if let Some(fragment) = uri.split('#').last() {
+        if let Some(fragment) = uri.split('#').next_back() {
             self.to_pascal_case(fragment)
-        } else if let Some(segment) = uri.split('/').last() {
+        } else if let Some(segment) = uri.split('/').next_back() {
             self.to_pascal_case(segment)
         } else {
             "Resource".to_string()
@@ -617,11 +798,11 @@ impl RdfGraphQLMapper {
 
     fn pluralize(&self, word: &str) -> String {
         if word.ends_with('s') || word.ends_with("sh") || word.ends_with("ch") {
-            format!("{}es", word)
+            format!("{word}es")
         } else if word.ends_with('y') {
             format!("{}ies", &word[..word.len() - 1])
         } else {
-            format!("{}s", word)
+            format!("{word}s")
         }
     }
 
@@ -637,6 +818,7 @@ impl RdfGraphQLMapper {
         }
     }
 
+    #[allow(dead_code)]
     fn build_sparql_from_selection_set(
         &self,
         selection_set: &SelectionSet,
@@ -700,12 +882,9 @@ impl RdfGraphQLMapper {
     fn extract_limit_from_field(&self, field: &Field) -> Option<usize> {
         for arg in &field.arguments {
             if arg.name == "limit" {
-                match &arg.value {
-                    Value::IntValue(i) => {
-                        let limit = (*i as usize).min(self.config.max_limit);
-                        return Some(limit);
-                    }
-                    _ => {}
+                if let Value::IntValue(i) = &arg.value {
+                    let limit = (*i as usize).min(self.config.max_limit);
+                    return Some(limit);
                 }
             }
         }
@@ -715,10 +894,7 @@ impl RdfGraphQLMapper {
     fn extract_offset_from_field(&self, field: &Field) -> Option<usize> {
         for arg in &field.arguments {
             if arg.name == "offset" {
-                match &arg.value {
-                    Value::IntValue(i) => return Some(*i as usize),
-                    _ => {}
-                }
+                if let Value::IntValue(i) = &arg.value { return Some(*i as usize) }
             }
         }
         None
@@ -727,10 +903,7 @@ impl RdfGraphQLMapper {
     fn extract_where_from_field(&self, field: &Field) -> Option<String> {
         for arg in &field.arguments {
             if arg.name == "where" {
-                match &arg.value {
-                    Value::StringValue(s) => return Some(s.clone()),
-                    _ => {}
-                }
+                if let Value::StringValue(s) = &arg.value { return Some(s.clone()) }
             }
         }
         None
@@ -744,7 +917,7 @@ impl RdfGraphQLMapper {
             "knows" => "foaf:knows".to_string(),
             "label" => "rdfs:label".to_string(),
             "comment" => "rdfs:comment".to_string(),
-            _ => format!(":{}", field_name), // Default to local namespace
+            _ => format!(":{field_name}"), // Default to local namespace
         }
     }
 
@@ -763,9 +936,8 @@ type Query {{
   sparql(query: String!): String
 }}
 
-# Generated from vocabulary: {}
-"#,
-            vocabulary_uri
+# Generated from vocabulary: {vocabulary_uri}
+"#
         ))
     }
 }
@@ -782,6 +954,12 @@ struct SparqlQueryBuilder {
     offset: Option<usize>,
     distinct: bool,
     config: TranslationConfig,
+    // UPDATE operation fields
+    insert_data: Vec<String>,
+    delete_data: Vec<String>,
+    insert_where: Vec<String>,
+    delete_where: Vec<String>,
+    is_update_query: bool,
 }
 
 impl SparqlQueryBuilder {
@@ -797,6 +975,11 @@ impl SparqlQueryBuilder {
             offset: None,
             distinct: false,
             config: config.clone(),
+            insert_data: Vec::new(),
+            delete_data: Vec::new(),
+            insert_where: Vec::new(),
+            delete_where: Vec::new(),
+            is_update_query: false,
         }
     }
 
@@ -832,10 +1015,26 @@ impl SparqlQueryBuilder {
         self.offset = Some(offset);
     }
 
-    fn add_update_operation(&mut self, operation: &str) {
-        // For UPDATE operations, we'll store them as special patterns
-        // This is a simplified implementation for mutations
-        self.where_patterns.push(format!("# UPDATE: {}", operation));
+    fn add_insert_data(&mut self, triple: &str) {
+        self.is_update_query = true;
+        self.insert_data.push(triple.to_string());
+    }
+
+    fn add_delete_data(&mut self, triple: &str) {
+        self.is_update_query = true;
+        self.delete_data.push(triple.to_string());
+    }
+
+    #[allow(dead_code)]
+    fn add_insert_where(&mut self, triple: &str, condition: &str) {
+        self.is_update_query = true;
+        self.insert_where.push(format!("{triple} WHERE {{ {condition} }}"));
+    }
+
+    #[allow(dead_code)]
+    fn add_delete_where(&mut self, triple: &str, condition: &str) {
+        self.is_update_query = true;
+        self.delete_where.push(format!("{triple} WHERE {{ {condition} }}"));
     }
 
     fn build(&self) -> Result<String> {
@@ -843,13 +1042,25 @@ impl SparqlQueryBuilder {
 
         // Add prefixes
         for (prefix, uri) in &self.prefixes {
-            writeln!(query, "PREFIX {}: <{}>", prefix, uri)?;
+            writeln!(query, "PREFIX {prefix}: <{uri}>")?;
         }
 
         if !query.is_empty() {
             writeln!(query)?;
         }
 
+        if self.is_update_query {
+            // Build UPDATE query
+            self.build_update_query(&mut query)?;
+        } else {
+            // Build SELECT query
+            self.build_select_query(&mut query)?;
+        }
+
+        Ok(query)
+    }
+
+    fn build_select_query(&self, query: &mut String) -> Result<()> {
         // Add SELECT clause
         if self.select_vars.is_empty() {
             write!(query, "SELECT *")?;
@@ -868,12 +1079,12 @@ impl SparqlQueryBuilder {
             writeln!(query)?;
             writeln!(query, "WHERE {{")?;
             for pattern in &self.where_patterns {
-                writeln!(query, "  {}", pattern)?;
+                writeln!(query, "  {pattern}")?;
             }
 
             // Add filters
             for filter in &self.filters {
-                writeln!(query, "  FILTER({})", filter)?;
+                writeln!(query, "  FILTER({filter})")?;
             }
 
             write!(query, "}}")?
@@ -894,23 +1105,66 @@ impl SparqlQueryBuilder {
         // Add LIMIT and OFFSET
         if let Some(limit) = self.limit {
             writeln!(query)?;
-            write!(query, "LIMIT {}", limit)?;
+            write!(query, "LIMIT {limit}")?;
         }
 
         if let Some(offset) = self.offset {
             writeln!(query)?;
-            write!(query, "OFFSET {}", offset)?;
+            write!(query, "OFFSET {offset}")?;
         }
 
-        Ok(query)
+        Ok(())
+    }
+
+    fn build_update_query(&self, query: &mut String) -> Result<()> {
+        let mut operations = Vec::new();
+
+        // Add DELETE DATA operations
+        if !self.delete_data.is_empty() {
+            let mut delete_block = String::new();
+            writeln!(delete_block, "DELETE DATA {{")?;
+            for triple in &self.delete_data {
+                writeln!(delete_block, "  {triple}")?;
+            }
+            write!(delete_block, "}}")?;
+            operations.push(delete_block);
+        }
+
+        // Add INSERT DATA operations
+        if !self.insert_data.is_empty() {
+            let mut insert_block = String::new();
+            writeln!(insert_block, "INSERT DATA {{")?;
+            for triple in &self.insert_data {
+                writeln!(insert_block, "  {triple}")?;
+            }
+            write!(insert_block, "}}")?;
+            operations.push(insert_block);
+        }
+
+        // Add DELETE WHERE operations
+        for delete_where in &self.delete_where {
+            operations.push(format!("DELETE {delete_where}"));
+        }
+
+        // Add INSERT WHERE operations
+        for insert_where in &self.insert_where {
+            operations.push(format!("INSERT {insert_where}"));
+        }
+
+        // Join operations with semicolons
+        write!(query, "{}", operations.join(";\n"))?;
+
+        Ok(())
     }
 
     /// Add group by clause
+    #[allow(dead_code)]
     fn add_group_by(&mut self, group: &str) {
         self.group_by.push(group.to_string());
     }
 
     /// Add order by clause
+    #[allow(dead_code)]
     fn add_order_by(&mut self, order: &str) {
         self.order_by.push(order.to_string());
     }

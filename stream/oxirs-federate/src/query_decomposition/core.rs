@@ -6,17 +6,14 @@
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
 use crate::{
-    planner::{ExecutionPlan, ExecutionStep, StepType},
-    FederatedService, ServiceCapability, ServiceRegistry,
+    planner::{ExecutionPlan, ExecutionStep, StepType}, ServiceRegistry,
 };
 
-use super::{
-    cost_estimation::*, graph_analysis::*, pattern_analysis::*, plan_generation::*, types::*,
-};
+use super::types::*;
 
 impl QueryDecomposer {
     /// Create a new query decomposer

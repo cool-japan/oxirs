@@ -3,6 +3,7 @@
 use crate::rdf_scalars::RdfScalars;
 use crate::types::*;
 use anyhow::{anyhow, Result};
+use oxirs_core::format::{RdfFormat, RdfParser};
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
@@ -232,9 +233,9 @@ impl SchemaGenerator {
     }
 
     /// Generate GraphQL schema SDL from RDF ontology
-    pub fn generate_from_ontology(&self, ontology_uri: &str) -> Result<String> {
-        // For now, load a mock vocabulary - TODO: implement real ontology parsing
-        let vocabulary = self.load_mock_vocabulary(ontology_uri)?;
+    pub async fn generate_from_ontology(&self, ontology_uri: &str) -> Result<String> {
+        // Load and parse real RDF ontology from URI
+        let vocabulary = self.load_ontology_from_uri(ontology_uri).await?;
 
         let schema_with_vocab = Self::new()
             .with_config(self.config.clone())
@@ -692,7 +693,7 @@ impl SchemaGenerator {
                         type_name.clone(),
                     )))),
                 )
-                .with_description(format!("Query all instances of {}", type_name))
+                .with_description(format!("Query all instances of {type_name}"))
                 .with_argument(
                     "where".to_string(),
                     ArgumentType::new(
@@ -729,7 +730,7 @@ impl SchemaGenerator {
                     singular_field.clone(),
                     GraphQLType::Object(ObjectType::new(type_name.clone())),
                 )
-                .with_description(format!("Query a single {} by ID", type_name))
+                .with_description(format!("Query a single {type_name} by ID"))
                 .with_argument(
                     "id".to_string(),
                     ArgumentType::new(
@@ -762,27 +763,271 @@ impl SchemaGenerator {
         Ok(query_type)
     }
 
-    fn generate_mutation_type(&self, _vocabulary: &RdfVocabulary) -> Result<ObjectType> {
-        let mutation_type = ObjectType::new("Mutation".to_string())
+    fn generate_mutation_type(&self, vocabulary: &RdfVocabulary) -> Result<ObjectType> {
+        let mut mutation_type = ObjectType::new("Mutation".to_string())
             .with_description("The root mutation type for modifying RDF data".to_string());
 
-        // TODO: Add mutation fields based on vocabulary
+        // Add CRUD operations for each class
+        for (class_uri, rdf_class) in &vocabulary.classes {
+            if self.config.exclude_classes.contains(class_uri) {
+                continue;
+            }
+
+            let type_name = self.uri_to_graphql_name(&rdf_class.uri);
+            let input_type_name = format!("{type_name}Input");
+            let update_input_type_name = format!("{type_name}UpdateInput");
+
+            // Create mutation for adding new instances
+            mutation_type = mutation_type.with_field(
+                format!("create{type_name}"),
+                FieldType::new(
+                    format!("create{type_name}"),
+                    GraphQLType::Object(ObjectType::new(type_name.clone())),
+                )
+                .with_description(format!("Create a new {type_name}"))
+                .with_argument(
+                    "input".to_string(),
+                    ArgumentType::new(
+                        "input".to_string(),
+                        GraphQLType::NonNull(Box::new(GraphQLType::InputObject(InputObjectType::new(input_type_name.clone())))),
+                    )
+                    .with_description(format!("Input data for creating a new {type_name}")),
+                ),
+            );
+
+            // Update mutation
+            mutation_type = mutation_type.with_field(
+                format!("update{type_name}"),
+                FieldType::new(
+                    format!("update{type_name}"),
+                    GraphQLType::Object(ObjectType::new(type_name.clone())),
+                )
+                .with_description(format!("Update an existing {type_name}"))
+                .with_argument(
+                    "id".to_string(),
+                    ArgumentType::new(
+                        "id".to_string(),
+                        GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::id()))),
+                    )
+                    .with_description("The ID of the resource to update".to_string()),
+                )
+                .with_argument(
+                    "input".to_string(),
+                    ArgumentType::new(
+                        "input".to_string(),
+                        GraphQLType::NonNull(Box::new(GraphQLType::InputObject(InputObjectType::new(update_input_type_name)))),
+                    )
+                    .with_description(format!("Input data for updating the {type_name}")),
+                ),
+            );
+
+            // Delete mutation
+            mutation_type = mutation_type.with_field(
+                format!("delete{type_name}"),
+                FieldType::new(
+                    format!("delete{type_name}"),
+                    GraphQLType::Scalar(BuiltinScalars::boolean()),
+                )
+                .with_description(format!("Delete a {type_name}"))
+                .with_argument(
+                    "id".to_string(),
+                    ArgumentType::new(
+                        "id".to_string(),
+                        GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::id()))),
+                    )
+                    .with_description("The ID of the resource to delete".to_string()),
+                ),
+            );
+        }
+
+        // Add bulk operations
+        mutation_type = mutation_type.with_field(
+            "executeSparqlUpdate".to_string(),
+            FieldType::new(
+                "executeSparqlUpdate".to_string(),
+                GraphQLType::Scalar(BuiltinScalars::boolean()),
+            )
+            .with_description("Execute a raw SPARQL UPDATE query".to_string())
+            .with_argument(
+                "update".to_string(),
+                ArgumentType::new(
+                    "update".to_string(),
+                    GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::string()))),
+                )
+                .with_description("The SPARQL UPDATE query to execute".to_string()),
+            ),
+        );
+
+        // Add transaction support
+        mutation_type = mutation_type.with_field(
+            "executeTransaction".to_string(),
+            FieldType::new(
+                "executeTransaction".to_string(),
+                GraphQLType::Scalar(BuiltinScalars::boolean()),
+            )
+            .with_description("Execute multiple SPARQL UPDATE queries in a transaction".to_string())
+            .with_argument(
+                "updates".to_string(),
+                ArgumentType::new(
+                    "updates".to_string(),
+                    GraphQLType::NonNull(Box::new(GraphQLType::List(Box::new(GraphQLType::Scalar(BuiltinScalars::string()))))),
+                )
+                .with_description("List of SPARQL UPDATE queries to execute".to_string()),
+            ),
+        );
+
         Ok(mutation_type)
     }
 
-    fn generate_subscription_type(&self, _vocabulary: &RdfVocabulary) -> Result<ObjectType> {
-        let subscription_type = ObjectType::new("Subscription".to_string()).with_description(
+    fn generate_subscription_type(&self, vocabulary: &RdfVocabulary) -> Result<ObjectType> {
+        let mut subscription_type = ObjectType::new("Subscription".to_string()).with_description(
             "The root subscription type for real-time RDF data updates".to_string(),
         );
 
-        // TODO: Add subscription fields based on vocabulary
+        // Add change subscriptions for each class
+        for (class_uri, rdf_class) in &vocabulary.classes {
+            if self.config.exclude_classes.contains(class_uri) {
+                continue;
+            }
+
+            let type_name = self.uri_to_graphql_name(&rdf_class.uri);
+            let field_name = format!("{}Changed", self.to_camel_case(&type_name));
+
+            // Resource change subscription
+            subscription_type = subscription_type.with_field(
+                field_name.clone(),
+                FieldType::new(
+                    field_name.clone(),
+                    GraphQLType::Object(ObjectType::new(format!("{type_name}ChangeEvent"))),
+                )
+                .with_description(format!("Subscribe to changes for {type_name} instances"))
+                .with_argument(
+                    "id".to_string(),
+                    ArgumentType::new(
+                        "id".to_string(),
+                        GraphQLType::Scalar(BuiltinScalars::id()),
+                    )
+                    .with_description("Subscribe to changes for a specific resource ID".to_string()),
+                )
+                .with_argument(
+                    "changeType".to_string(),
+                    ArgumentType::new(
+                        "changeType".to_string(),
+                        GraphQLType::Enum(EnumType::new("ChangeType".to_string())),
+                    )
+                    .with_description("Filter by change type (CREATED, UPDATED, DELETED)".to_string()),
+                ),
+            );
+
+            // Collection changes subscription  
+            let collection_field = format!("{}CollectionChanged", self.to_camel_case(&type_name));
+            subscription_type = subscription_type.with_field(
+                collection_field.clone(),
+                FieldType::new(
+                    collection_field.clone(),
+                    GraphQLType::Object(ObjectType::new("CollectionChangeEvent".to_string())),
+                )
+                .with_description(format!("Subscribe to collection changes for {type_name}"))
+                .with_argument(
+                    "filter".to_string(),
+                    ArgumentType::new(
+                        "filter".to_string(),
+                        GraphQLType::Scalar(BuiltinScalars::string()),
+                    )
+                    .with_description("SPARQL filter condition for subscription".to_string()),
+                ),
+            );
+        }
+
+        // Add property-specific change subscriptions
+        for (property_uri, property) in &vocabulary.properties {
+            if self.config.exclude_properties.contains(property_uri) {
+                continue;
+            }
+
+            let property_name = self.uri_to_graphql_name(&property.uri);
+            let field_name = format!("{}PropertyChanged", self.to_camel_case(&property_name));
+
+            subscription_type = subscription_type.with_field(
+                field_name.clone(),
+                FieldType::new(
+                    field_name.clone(),
+                    GraphQLType::Object(ObjectType::new("PropertyChangeEvent".to_string())),
+                )
+                .with_description(format!("Subscribe to changes for the {property_name} property"))
+                .with_argument(
+                    "subject".to_string(),
+                    ArgumentType::new(
+                        "subject".to_string(),
+                        GraphQLType::Scalar(RdfScalars::iri()),
+                    )
+                    .with_description("The subject resource to monitor".to_string()),
+                ),
+            );
+        }
+
+        // Add query-based subscription
+        subscription_type = subscription_type.with_field(
+            "queryResultChanged".to_string(),
+            FieldType::new(
+                "queryResultChanged".to_string(),
+                GraphQLType::Object(ObjectType::new("QueryResultChangeEvent".to_string())),
+            )
+            .with_description("Subscribe to changes in SPARQL query results".to_string())
+            .with_argument(
+                "query".to_string(),
+                ArgumentType::new(
+                    "query".to_string(),
+                    GraphQLType::NonNull(Box::new(GraphQLType::Scalar(BuiltinScalars::string()))),
+                )
+                .with_description("The SPARQL query to monitor".to_string()),
+            )
+            .with_argument(
+                "pollInterval".to_string(),
+                ArgumentType::new(
+                    "pollInterval".to_string(),
+                    GraphQLType::Scalar(BuiltinScalars::int()),
+                )
+                .with_default_value(crate::ast::Value::IntValue(5000))
+                .with_description("Polling interval in milliseconds".to_string()),
+            ),
+        );
+
+        // Add graph-level subscription
+        subscription_type = subscription_type.with_field(
+            "graphChanged".to_string(),
+            FieldType::new(
+                "graphChanged".to_string(),
+                GraphQLType::Object(ObjectType::new("GraphChangeEvent".to_string())),
+            )
+            .with_description("Subscribe to any changes in the RDF graph".to_string())
+            .with_argument(
+                "graph".to_string(),
+                ArgumentType::new(
+                    "graph".to_string(),
+                    GraphQLType::Scalar(RdfScalars::iri()),
+                )
+                .with_description("The named graph to monitor (default graph if not specified)".to_string()),
+            ),
+        );
+
+        // Add transaction subscription
+        subscription_type = subscription_type.with_field(
+            "transactionCompleted".to_string(),
+            FieldType::new(
+                "transactionCompleted".to_string(),
+                GraphQLType::Object(ObjectType::new("TransactionEvent".to_string())),
+            )
+            .with_description("Subscribe to transaction completion events".to_string()),
+        );
+
         Ok(subscription_type)
     }
 
     fn uri_to_graphql_name(&self, uri: &str) -> String {
-        if let Some(fragment) = uri.split('#').last() {
+        if let Some(fragment) = uri.split('#').next_back() {
             self.to_pascal_case(fragment)
-        } else if let Some(segment) = uri.split('/').last() {
+        } else if let Some(segment) = uri.split('/').next_back() {
             self.to_pascal_case(segment)
         } else {
             "Resource".to_string()
@@ -820,11 +1065,11 @@ impl SchemaGenerator {
 
     fn pluralize(&self, word: &str) -> String {
         if word.ends_with('s') || word.ends_with("sh") || word.ends_with("ch") {
-            format!("{}es", word)
+            format!("{word}es")
         } else if word.ends_with('y') {
             format!("{}ies", &word[..word.len() - 1])
         } else {
-            format!("{}s", word)
+            format!("{word}s")
         }
     }
 
@@ -834,19 +1079,19 @@ impl SchemaGenerator {
         // Write schema definition
         writeln!(sdl, "schema {{").unwrap();
         if let Some(ref query) = schema.query_type {
-            writeln!(sdl, "  query: {}", query).unwrap();
+            writeln!(sdl, "  query: {query}").unwrap();
         }
         if let Some(ref mutation) = schema.mutation_type {
-            writeln!(sdl, "  mutation: {}", mutation).unwrap();
+            writeln!(sdl, "  mutation: {mutation}").unwrap();
         }
         if let Some(ref subscription) = schema.subscription_type {
-            writeln!(sdl, "  subscription: {}", subscription).unwrap();
+            writeln!(sdl, "  subscription: {subscription}").unwrap();
         }
         writeln!(sdl, "}}").unwrap();
         writeln!(sdl).unwrap();
 
         // Write type definitions
-        for (_, graphql_type) in &schema.types {
+        for graphql_type in schema.types.values() {
             match graphql_type {
                 GraphQLType::Object(obj) => {
                     self.write_object_type_sdl(&mut sdl, obj);
@@ -875,7 +1120,7 @@ impl SchemaGenerator {
 
     fn write_object_type_sdl(&self, sdl: &mut String, obj: &ObjectType) {
         if let Some(ref description) = obj.description {
-            writeln!(sdl, "\"\"\"\n{}\n\"\"\"", description).unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
         }
 
         write!(sdl, "type {}", obj.name).unwrap();
@@ -886,7 +1131,7 @@ impl SchemaGenerator {
 
         writeln!(sdl, " {{").unwrap();
 
-        for (_, field) in &obj.fields {
+        for field in obj.fields.values() {
             self.write_field_sdl(sdl, field);
         }
 
@@ -896,7 +1141,7 @@ impl SchemaGenerator {
 
     fn write_field_sdl(&self, sdl: &mut String, field: &FieldType) {
         if let Some(ref description) = field.description {
-            writeln!(sdl, "  \"{}\"", description).unwrap();
+            writeln!(sdl, "  \"{description}\"").unwrap();
         }
 
         write!(sdl, "  {}", field.name).unwrap();
@@ -917,7 +1162,7 @@ impl SchemaGenerator {
 
     fn write_scalar_type_sdl(&self, sdl: &mut String, scalar: &ScalarType) {
         if let Some(ref description) = scalar.description {
-            writeln!(sdl, "\"\"\"\n{}\n\"\"\"", description).unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
         }
         writeln!(sdl, "scalar {}", scalar.name).unwrap();
         writeln!(sdl).unwrap();
@@ -925,13 +1170,13 @@ impl SchemaGenerator {
 
     fn write_enum_type_sdl(&self, sdl: &mut String, enum_type: &EnumType) {
         if let Some(ref description) = enum_type.description {
-            writeln!(sdl, "\"\"\"\n{}\n\"\"\"", description).unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
         }
         writeln!(sdl, "enum {} {{", enum_type.name).unwrap();
 
-        for (_, value) in &enum_type.values {
+        for value in enum_type.values.values() {
             if let Some(ref description) = value.description {
-                writeln!(sdl, "  \"{}\"", description).unwrap();
+                writeln!(sdl, "  \"{description}\"").unwrap();
             }
             writeln!(sdl, "  {}", value.name).unwrap();
         }
@@ -942,11 +1187,11 @@ impl SchemaGenerator {
 
     fn write_interface_type_sdl(&self, sdl: &mut String, interface: &InterfaceType) {
         if let Some(ref description) = interface.description {
-            writeln!(sdl, "\"\"\"\n{}\n\"\"\"", description).unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
         }
         writeln!(sdl, "interface {} {{", interface.name).unwrap();
 
-        for (_, field) in &interface.fields {
+        for field in interface.fields.values() {
             self.write_field_sdl(sdl, field);
         }
 
@@ -956,7 +1201,7 @@ impl SchemaGenerator {
 
     fn write_union_type_sdl(&self, sdl: &mut String, union_type: &UnionType) {
         if let Some(ref description) = union_type.description {
-            writeln!(sdl, "\"\"\"\n{}\n\"\"\"", description).unwrap();
+            writeln!(sdl, "\"\"\"\n{description}\n\"\"\"").unwrap();
         }
         writeln!(
             sdl,
@@ -968,6 +1213,105 @@ impl SchemaGenerator {
         writeln!(sdl).unwrap();
     }
 
+    /// Load and parse RDF ontology from URI
+    async fn load_ontology_from_uri(&self, ontology_uri: &str) -> Result<RdfVocabulary> {
+
+        // Create a temporary store to load the ontology
+        let store = crate::RdfStore::new()?;
+
+        // Determine format based on URI or default to RDF/XML
+        let format = self.detect_rdf_format(ontology_uri);
+
+        // Fetch ontology content from URI
+        let content = self.fetch_ontology_content(ontology_uri).await?;
+
+        // Parse the RDF content into the store using format-specific parsing
+        let parser = RdfParser::new(format);
+
+        // Insert parsed quads into the store
+        for quad_result in parser.for_slice(&content) {
+            match quad_result {
+                Ok(quad) => {
+                    store.insert(&quad)?;
+                }
+                Err(e) => {
+                    return Err(anyhow::anyhow!("Failed to parse quad from {}: {}", ontology_uri, e));
+                }
+            }
+        }
+
+        // Extract vocabulary from the loaded ontology using existing method
+        self.extract_vocabulary_from_store(&store)
+    }
+
+    /// Fetch ontology content from URI (HTTP/HTTPS or local file)
+    async fn fetch_ontology_content(&self, uri: &str) -> Result<Vec<u8>> {
+        if uri.starts_with("http://") || uri.starts_with("https://") {
+            // Fetch from HTTP/HTTPS
+            self.fetch_http_content(uri).await
+        } else if uri.starts_with("file://") || !uri.contains("://") {
+            // Load from local file
+            let file_path = if uri.starts_with("file://") {
+                &uri[7..] // Remove "file://" prefix
+            } else {
+                uri
+            };
+            
+            match std::fs::read(file_path) {
+                Ok(content) => Ok(content),
+                Err(e) => Err(anyhow::anyhow!("Failed to read local file {}: {}", file_path, e))
+            }
+        } else {
+            Err(anyhow::anyhow!("Unsupported URI scheme: {}", uri))
+        }
+    }
+
+    /// Fetch content from HTTP/HTTPS URI
+    async fn fetch_http_content(&self, uri: &str) -> Result<Vec<u8>> {
+        use reqwest;
+        
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()?;
+
+        let response = client
+            .get(uri)
+            .header("Accept", "application/rdf+xml, text/turtle, application/n-triples, application/ld+json")
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Err(anyhow::anyhow!("HTTP error {}: Failed to fetch ontology from {}", 
+                response.status(), uri));
+        }
+
+        let content = response.bytes().await?;
+        Ok(content.to_vec())
+    }
+
+    /// Detect RDF format based on URI or content-type
+    fn detect_rdf_format(&self, uri: &str) -> RdfFormat {
+        use oxirs_core::format::JsonLdProfileSet;
+        
+        let uri_lower = uri.to_lowercase();
+        
+        if uri_lower.ends_with(".ttl") || uri_lower.ends_with(".turtle") {
+            RdfFormat::Turtle
+        } else if uri_lower.ends_with(".nt") || uri_lower.ends_with(".ntriples") {
+            RdfFormat::NTriples
+        } else if uri_lower.ends_with(".jsonld") || uri_lower.ends_with(".json-ld") {
+            RdfFormat::JsonLd { 
+                profile: JsonLdProfileSet::empty() 
+            }
+        } else if uri_lower.ends_with(".n3") {
+            RdfFormat::N3
+        } else {
+            // Default to RDF/XML for .rdf, .owl, or unknown extensions
+            RdfFormat::RdfXml
+        }
+    }
+
+    #[allow(dead_code)]
     fn load_mock_vocabulary(&self, _ontology_uri: &str) -> Result<RdfVocabulary> {
         // Enhanced mock vocabulary for demonstration
         let mut classes = HashMap::new();

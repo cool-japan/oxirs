@@ -464,7 +464,7 @@ impl PerformanceBenchmarkSuite {
         Document {
             definitions: vec![Definition::Operation(OperationDefinition {
                 operation_type: OperationType::Query,
-                name: Some(format!("SimpleQuery{}", id)),
+                name: Some(format!("SimpleQuery{id}")),
                 variable_definitions: vec![],
                 directives: vec![],
                 selection_set: SelectionSet {
@@ -535,8 +535,8 @@ impl PerformanceBenchmarkSuite {
     ) -> Result<BenchmarkResult> {
         if response_times.is_empty() {
             return Ok(BenchmarkResult {
-                scenario: format!("{:?}", scenario),
-                strategy: format!("{:?}", strategy),
+                scenario: format!("{scenario:?}"),
+                strategy: format!("{strategy:?}"),
                 configuration: "default".to_string(),
                 total_requests: successful_requests + failed_requests,
                 successful_requests,
@@ -612,8 +612,8 @@ impl PerformanceBenchmarkSuite {
         };
 
         Ok(BenchmarkResult {
-            scenario: format!("{:?}", scenario),
-            strategy: format!("{:?}", strategy),
+            scenario: format!("{scenario:?}"),
+            strategy: format!("{strategy:?}"),
             configuration: "default".to_string(),
             total_requests,
             successful_requests,

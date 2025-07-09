@@ -167,6 +167,12 @@ pub struct NetworkOptimizer {
     compression_cache: Arc<RwLock<HashMap<u64, CompressedData>>>,
 }
 
+impl Default for NetworkOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkOptimizer {
     /// Create a new network optimizer
     pub fn new() -> Self {

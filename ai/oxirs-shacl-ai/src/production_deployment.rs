@@ -761,8 +761,7 @@ impl ProductionDeploymentManager {
     ) -> Result<(), ShaclAiError> {
         if self.environments.contains_key(&environment_name) {
             return Err(ShaclAiError::ShapeManagement(format!(
-                "Environment '{}' already exists",
-                environment_name
+                "Environment '{environment_name}' already exists"
             )));
         }
 
@@ -780,7 +779,7 @@ impl ProductionDeploymentManager {
         change_log: Vec<String>,
     ) -> Result<Uuid, ShaclAiError> {
         let environment = self.environments.get(environment_name).ok_or_else(|| {
-            ShaclAiError::ShapeManagement(format!("Environment '{}' not found", environment_name))
+            ShaclAiError::ShapeManagement(format!("Environment '{environment_name}' not found"))
         })?;
 
         let deployment_id = Uuid::new_v4();
@@ -836,15 +835,13 @@ impl ProductionDeploymentManager {
         // Simplified deployment execution
         // In a real implementation, this would interact with Kubernetes API
 
-        let phases = vec![
-            DeploymentPhase::Validation,
+        let phases = [DeploymentPhase::Validation,
             DeploymentPhase::PreDeployment,
             DeploymentPhase::Deployment,
             DeploymentPhase::PostDeployment,
             DeploymentPhase::HealthCheck,
             DeploymentPhase::Monitoring,
-            DeploymentPhase::Completed,
-        ];
+            DeploymentPhase::Completed];
 
         for (i, phase) in phases.iter().enumerate() {
             self.update_deployment_phase(
@@ -909,8 +906,7 @@ impl ProductionDeploymentManager {
             .max_by_key(|d| d.started_at)
             .ok_or_else(|| {
                 ShaclAiError::ShapeManagement(format!(
-                    "No deployment found for environment '{}'",
-                    environment_name
+                    "No deployment found for environment '{environment_name}'"
                 ))
             })?;
 
@@ -993,7 +989,7 @@ impl ProductionDeploymentManager {
         replica_count: u32,
     ) -> Result<(), ShaclAiError> {
         let environment = self.environments.get_mut(environment_name).ok_or_else(|| {
-            ShaclAiError::ShapeManagement(format!("Environment '{}' not found", environment_name))
+            ShaclAiError::ShapeManagement(format!("Environment '{environment_name}' not found"))
         })?;
 
         environment.kubernetes_config.replica_count = replica_count;
@@ -1009,7 +1005,7 @@ impl ProductionDeploymentManager {
         config_update: EnvironmentConfigUpdate,
     ) -> Result<(), ShaclAiError> {
         let environment = self.environments.get_mut(environment_name).ok_or_else(|| {
-            ShaclAiError::ShapeManagement(format!("Environment '{}' not found", environment_name))
+            ShaclAiError::ShapeManagement(format!("Environment '{environment_name}' not found"))
         })?;
 
         match config_update {
@@ -1034,7 +1030,7 @@ impl ProductionDeploymentManager {
         output_format: ManifestFormat,
     ) -> Result<String, ShaclAiError> {
         let environment = self.environments.get(environment_name).ok_or_else(|| {
-            ShaclAiError::ShapeManagement(format!("Environment '{}' not found", environment_name))
+            ShaclAiError::ShapeManagement(format!("Environment '{environment_name}' not found"))
         })?;
 
         match output_format {
@@ -1180,7 +1176,7 @@ CMD ["./start.sh"]
                 .container_config
                 .exposed_ports
                 .iter()
-                .map(|p| format!("EXPOSE {}", p))
+                .map(|p| format!("EXPOSE {p}"))
                 .collect::<Vec<_>>()
                 .join("\n"),
             environment.container_config.health_check.period_seconds,

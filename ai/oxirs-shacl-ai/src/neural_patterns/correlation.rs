@@ -1,18 +1,18 @@
 //! Pattern correlation analysis for discovering relationships between SHACL patterns
 
-use ndarray::{Array1, Array2, Axis};
-use std::collections::{HashMap, HashSet};
+use ndarray::Array2;
+use std::collections::HashMap;
 use std::time::Instant;
 
 use crate::{
-    patterns::{Pattern, PatternAnalyzer},
-    Result, ShaclAiError,
+    patterns::Pattern,
+    Result,
 };
 
 use super::types::{
     CausalRelationship, CorrelationAnalysisConfig, CorrelationAnalysisResult,
     CorrelationAnalysisStats, CorrelationCluster, CorrelationType, PatternCorrelation,
-    PatternRelationshipGraph, TemporalDynamics,
+    PatternRelationshipGraph,
 };
 
 /// Advanced pattern correlation analyzer for discovering complex relationships
@@ -186,8 +186,8 @@ impl AdvancedPatternCorrelationAnalyzer {
 
                     if correlation_coefficient.abs() >= self.config.min_correlation_threshold {
                         correlations.push(PatternCorrelation {
-                            pattern1_id: format!("pattern_{}", i),
-                            pattern2_id: format!("pattern_{}", j),
+                            pattern1_id: format!("pattern_{i}"),
+                            pattern2_id: format!("pattern_{j}"),
                             correlation_type: correlation_type.clone(),
                             correlation_coefficient,
                             statistical_significance: self

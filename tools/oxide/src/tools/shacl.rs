@@ -32,7 +32,7 @@ pub async fn run(
     // Check shapes file
     utils::check_file_readable(&shapes)?;
     let shapes_format = utils::detect_rdf_format(&shapes);
-    println!("Shapes format: {}", shapes_format);
+    println!("Shapes format: {shapes_format}");
 
     // Determine data source
     let data_source = match (data, dataset) {
@@ -86,7 +86,7 @@ pub async fn run(
         utils::write_output(&output_content, Some(&output_file))?;
         println!("Validation report written to: {}", output_file.display());
     } else {
-        println!("\n{}", output_content);
+        println!("\n{output_content}");
     }
 
     // Summary
@@ -113,13 +113,13 @@ pub async fn run(
         }
 
         if error_count > 0 {
-            println!("  Violations: {}", error_count);
+            println!("  Violations: {error_count}");
         }
         if warning_count > 0 {
-            println!("  Warnings: {}", warning_count);
+            println!("  Warnings: {warning_count}");
         }
         if info_count > 0 {
-            println!("  Info: {}", info_count);
+            println!("  Info: {info_count}");
         }
     }
 
@@ -274,7 +274,7 @@ fn load_shapes_file(shapes_path: &Path, format: &str) -> ToolResult<ShaclShapesG
             }
         }
         _ => {
-            return Err(format!("Shapes format '{}' not supported", format).into());
+            return Err(format!("Shapes format '{format}' not supported").into());
         }
     }
 
@@ -352,7 +352,7 @@ fn parse_rdf_data(content: &str, format: &str) -> ToolResult<Vec<RdfTriple>> {
             }
         }
         _ => {
-            return Err(format!("Data format '{}' not supported", format).into());
+            return Err(format!("Data format '{format}' not supported").into());
         }
     }
 
@@ -398,7 +398,7 @@ fn find_target_nodes(data_graph: &RdfGraph, shape: &ShaclShape) -> Vec<String> {
         // Find all instances of the target class
         for triple in &data_graph.triples {
             if triple.predicate == "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"
-                && triple.object == format!("<{}>", target_class)
+                && triple.object == format!("<{target_class}>")
             {
                 targets.push(triple.subject.clone());
             }
@@ -406,7 +406,7 @@ fn find_target_nodes(data_graph: &RdfGraph, shape: &ShaclShape) -> Vec<String> {
     }
 
     if let Some(ref target_node) = shape.target_node {
-        targets.push(format!("<{}>", target_node));
+        targets.push(format!("<{target_node}>"));
     }
 
     // If no specific targets, include all subjects (not recommended for real use)
@@ -491,7 +491,7 @@ fn format_validation_report(report: &ValidationReport, format: &str) -> ToolResu
         "turtle" => format_turtle_report(report),
         "json" => format_json_report(report),
         "xml" => format_xml_report(report),
-        _ => Err(format!("Unsupported output format: {}", format).into()),
+        _ => Err(format!("Unsupported output format: {format}").into()),
     }
 }
 
@@ -518,10 +518,10 @@ fn format_text_report(report: &ValidationReport) -> ToolResult<String> {
             ));
             output.push_str(&format!("   Focus Node: {}\n", result.focus_node));
             if let Some(ref path) = result.result_path {
-                output.push_str(&format!("   Property: {}\n", path));
+                output.push_str(&format!("   Property: {path}\n"));
             }
             if let Some(ref value) = result.value {
-                output.push_str(&format!("   Value: {}\n", value));
+                output.push_str(&format!("   Value: {value}\n"));
             }
             output.push_str(&format!("   Shape: {}\n", result.source_shape));
             output.push_str(&format!(
@@ -556,7 +556,7 @@ fn format_turtle_report(report: &ValidationReport) -> ToolResult<String> {
     if !report.results.is_empty() {
         output.push_str("  sh:result\n");
         for (i, _result) in report.results.iter().enumerate() {
-            output.push_str(&format!("    ex:result{}", i));
+            output.push_str(&format!("    ex:result{i}"));
             if i < report.results.len() - 1 {
                 output.push_str(",\n");
             } else {
@@ -565,10 +565,10 @@ fn format_turtle_report(report: &ValidationReport) -> ToolResult<String> {
         }
 
         for (i, result) in report.results.iter().enumerate() {
-            output.push_str(&format!("ex:result{} a sh:ValidationResult ;\n", i));
+            output.push_str(&format!("ex:result{i} a sh:ValidationResult ;\n"));
             output.push_str(&format!("  sh:focusNode {} ;\n", result.focus_node));
             if let Some(ref path) = result.result_path {
-                output.push_str(&format!("  sh:resultPath <{}> ;\n", path));
+                output.push_str(&format!("  sh:resultPath <{path}> ;\n"));
             }
             output.push_str(&format!("  sh:resultMessage \"{}\" ;\n", result.message));
             output.push_str(&format!(
@@ -604,7 +604,7 @@ fn format_json_report(report: &ValidationReport) -> ToolResult<String> {
             result.focus_node
         ));
         if let Some(ref path) = result.result_path {
-            output.push_str(&format!("      \"resultPath\": \"{}\",\n", path));
+            output.push_str(&format!("      \"resultPath\": \"{path}\",\n"));
         }
         output.push_str(&format!("      \"message\": \"{}\",\n", result.message));
         output.push_str(&format!(
@@ -647,7 +647,7 @@ fn format_xml_report(report: &ValidationReport) -> ToolResult<String> {
             result.focus_node
         ));
         if let Some(ref path) = result.result_path {
-            output.push_str(&format!("    <resultPath>{}</resultPath>\n", path));
+            output.push_str(&format!("    <resultPath>{path}</resultPath>\n"));
         }
         output.push_str(&format!("    <message>{}</message>\n", result.message));
         output.push_str(&format!(

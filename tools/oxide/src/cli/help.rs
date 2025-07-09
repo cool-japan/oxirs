@@ -389,7 +389,7 @@ ORDER BY DESC(?bookCount)
         } else {
             println!(
                 "{}",
-                format!("No help available for command: {}", command).red()
+                format!("No help available for command: {command}").red()
             );
             self.suggest_similar_commands(command);
         }
@@ -409,7 +409,7 @@ ORDER BY DESC(?bookCount)
         // Usage
         println!("\n{}", "USAGE:".yellow());
         for usage in &help.usage {
-            println!("    {}", usage);
+            println!("    {usage}");
         }
 
         // Arguments
@@ -433,18 +433,18 @@ ORDER BY DESC(?bookCount)
         if !help.options.is_empty() {
             println!("\n{}", "OPTIONS:".yellow());
             for opt in &help.options {
-                let short = opt.short.map(|c| format!("-{}, ", c)).unwrap_or_default();
+                let short = opt.short.map(|c| format!("-{c}, ")).unwrap_or_default();
                 let long = format!("--{}", opt.long);
                 let value = opt
                     .value_name
                     .as_ref()
-                    .map(|v| format!(" <{}>", v))
+                    .map(|v| format!(" <{v}>"))
                     .unwrap_or_default();
 
                 println!(
                     "    {:<4}{:<20} {}",
                     short.green(),
-                    format!("{}{}", long, value).green(),
+                    format!("{long}{value}").green(),
                     opt.description
                 );
 
@@ -473,7 +473,7 @@ ORDER BY DESC(?bookCount)
                 println!("    {}", example.command.cyan());
 
                 if let Some(ref output) = example.output {
-                    println!("    {}", format!("→ {}", output).dimmed());
+                    println!("    {}", format!("→ {output}").dimmed());
                 }
 
                 if let Some(ref explanation) = example.explanation {
@@ -496,7 +496,7 @@ ORDER BY DESC(?bookCount)
         } else {
             println!(
                 "{}",
-                format!("No help available for topic: {}", topic).red()
+                format!("No help available for topic: {topic}").red()
             );
             self.list_available_topics();
         }
@@ -671,11 +671,11 @@ ORDER BY DESC(?bookCount)
     /// Display search results
     pub fn show_search_results(&self, query: &str, results: &[SearchResult]) {
         if results.is_empty() {
-            println!("{}", format!("No results found for: {}", query).yellow());
+            println!("{}", format!("No results found for: {query}").yellow());
             return;
         }
 
-        println!("{}", format!("Search results for: {}", query).bold());
+        println!("{}", format!("Search results for: {query}").bold());
         println!("{}", "=".repeat(30).dimmed());
 
         for result in results.iter().take(10) {
@@ -744,13 +744,13 @@ pub mod markdown {
         writeln!(output, "{}\n", cmd.description)?;
 
         if let Some(ref long_desc) = cmd.long_description {
-            writeln!(output, "{}\n", long_desc)?;
+            writeln!(output, "{long_desc}\n")?;
         }
 
         writeln!(output, "### Usage\n")?;
         writeln!(output, "```bash")?;
         for usage in &cmd.usage {
-            writeln!(output, "{}", usage)?;
+            writeln!(output, "{usage}")?;
         }
         writeln!(output, "```\n")?;
 
@@ -768,7 +768,7 @@ pub mod markdown {
                     arg.name, required, arg.description
                 )?;
                 if let Some(ref default) = arg.default {
-                    writeln!(output, "  - Default: `{}`", default)?;
+                    writeln!(output, "  - Default: `{default}`")?;
                 }
             }
             writeln!(output)?;
@@ -777,7 +777,7 @@ pub mod markdown {
         if !cmd.options.is_empty() {
             writeln!(output, "### Options\n")?;
             for opt in &cmd.options {
-                let short = opt.short.map(|c| format!("-{}, ", c)).unwrap_or_default();
+                let short = opt.short.map(|c| format!("-{c}, ")).unwrap_or_default();
                 writeln!(
                     output,
                     "- **{}--{}** - {}",
@@ -785,7 +785,7 @@ pub mod markdown {
                 )?;
 
                 if let Some(ref value) = opt.value_name {
-                    writeln!(output, "  - Value: `<{}>`", value)?;
+                    writeln!(output, "  - Value: `<{value}>`")?;
                 }
 
                 if !opt.possible_values.is_empty() {
@@ -797,7 +797,7 @@ pub mod markdown {
                 }
 
                 if let Some(ref default) = opt.default {
-                    writeln!(output, "  - Default: `{}`", default)?;
+                    writeln!(output, "  - Default: `{default}`")?;
                 }
             }
             writeln!(output)?;
@@ -812,7 +812,7 @@ pub mod markdown {
                 writeln!(output, "```")?;
 
                 if let Some(ref explanation) = example.explanation {
-                    writeln!(output, "\n{}\n", explanation)?;
+                    writeln!(output, "\n{explanation}\n")?;
                 }
             }
         }

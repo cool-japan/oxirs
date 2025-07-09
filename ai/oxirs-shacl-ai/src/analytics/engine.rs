@@ -1,24 +1,19 @@
 //! Analytics engine implementation
 
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use oxirs_core::{
-    model::{Literal, NamedNode, Term, Triple},
-    Store,
-};
+use oxirs_core::Store;
 
 use oxirs_shacl::{
-    constraints::*, Constraint, PropertyPath, Shape, ShapeId, Target, ValidationConfig,
+    Shape,
     ValidationReport,
 };
 
 use crate::{
     insights::{PerformanceInsight, QualityInsight, ValidationInsight, ValidationInsightType, PerformanceInsightType, QualityInsightType},
-    patterns::Pattern,
     quality::{QualityIssue, QualityReport},
-    Result, ShaclAiError,
+    Result,
 };
 
 use super::{config::AnalyticsConfig, types::*};
@@ -719,7 +714,7 @@ impl AnalyticsEngine {
         // Generate trend insights
         for (i, &rate) in success_rates.iter().enumerate() {
             trends.push(Trend {
-                metric_name: format!("success_rate_{}", i),
+                metric_name: format!("success_rate_{i}"),
                 trend_direction: if rate > 0.8 {
                     TrendDirection::Increasing
                 } else if rate < 0.5 {
@@ -729,7 +724,7 @@ impl AnalyticsEngine {
                 },
                 magnitude: rate,
                 confidence: if success_rates.len() > 5 { 0.8 } else { 0.6 },
-                time_period: format!("period_{}", i),
+                time_period: format!("period_{i}"),
             });
         }
 
@@ -781,8 +776,7 @@ impl AnalyticsEngine {
                 category: RecommendationCategory::Validation,
                 title: "Address High-Severity Validation Issues".to_string(),
                 description: format!(
-                    "Found {} high-severity validation issues that require immediate attention",
-                    high_severity_validation_issues
+                    "Found {high_severity_validation_issues} high-severity validation issues that require immediate attention"
                 ),
                 priority: RecommendationPriority::High,
                 estimated_effort: EstimatedEffort::Medium,
@@ -808,8 +802,7 @@ impl AnalyticsEngine {
                 category: RecommendationCategory::Performance,
                 title: "Optimize Validation Performance".to_string(),
                 description: format!(
-                    "Detected {} performance degradation patterns affecting validation efficiency",
-                    performance_degradations
+                    "Detected {performance_degradations} performance degradation patterns affecting validation efficiency"
                 ),
                 priority: RecommendationPriority::Medium,
                 estimated_effort: EstimatedEffort::High,
@@ -835,8 +828,7 @@ impl AnalyticsEngine {
                 category: RecommendationCategory::Quality,
                 title: "Improve Data Quality Processes".to_string(),
                 description: format!(
-                    "Identified {} data quality degradation trends requiring process improvements",
-                    quality_degradations
+                    "Identified {quality_degradations} data quality degradation trends requiring process improvements"
                 ),
                 priority: RecommendationPriority::High,
                 estimated_effort: EstimatedEffort::Medium,
@@ -935,8 +927,7 @@ impl AnalyticsEngine {
         
         if high_severity_count > 0 {
             key_findings.push(format!(
-                "{} high-severity issues require immediate attention",
-                high_severity_count
+                "{high_severity_count} high-severity issues require immediate attention"
             ));
         }
         
@@ -1023,7 +1014,7 @@ impl AnalyticsEngine {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:p}", store).hash(&mut hasher);
+        format!("{store:p}").hash(&mut hasher);
         shapes.len().hash(&mut hasher);
         validation_history.len().hash(&mut hasher);
         format!("insights_{}", hasher.finish())

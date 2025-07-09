@@ -10,7 +10,7 @@ mod shard_integration_tests {
     use oxirs_cluster::shard_routing::{QueryOptimizationHints, QueryRouter};
     use oxirs_cluster::storage::mock::MockStorageBackend;
     use oxirs_core::model::{NamedNode, Triple};
-    use std::collections::{HashMap, HashSet};
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     #[tokio::test]
@@ -96,8 +96,7 @@ mod shard_integration_tests {
             let shard_id = router.route_triple(&triple).await.unwrap();
             assert_eq!(
                 shard_id, expected_shard,
-                "IRI {} should route to shard {}",
-                iri, expected_shard
+                "IRI {iri} should route to shard {expected_shard}"
             );
         }
     }

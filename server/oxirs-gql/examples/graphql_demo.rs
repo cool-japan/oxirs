@@ -33,7 +33,7 @@ async fn main() -> Result<()> {
     let schema_generator = SchemaGenerator::new().with_config(SchemaGenerationConfig::default());
 
     // Generate schema from FOAF ontology (mock)
-    let schema_sdl = schema_generator.generate_from_ontology("http://xmlns.com/foaf/0.1/")?;
+    let schema_sdl = schema_generator.generate_from_ontology("http://xmlns.com/foaf/0.1/").await?;
     println!("📄 Generated GraphQL Schema:");
     println!("{}", schema_sdl);
 

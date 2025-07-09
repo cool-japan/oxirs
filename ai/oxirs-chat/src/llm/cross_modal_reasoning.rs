@@ -1,5 +1,5 @@
 use crate::llm::manager::LLMManager;
-use crate::llm::types::{ChatMessage, ChatRole, LLMRequest, LLMResponse, Priority, Usage, UseCase};
+use crate::llm::types::{ChatMessage, ChatRole, LLMRequest, Priority, Usage, UseCase};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -161,7 +161,7 @@ impl CrossModalReasoning {
                 description: "Visual content analysis".to_string(),
                 modality: ReasoningModality::Vision,
                 input_references: (0..input.images.len())
-                    .map(|i| format!("image_{}", i))
+                    .map(|i| format!("image_{i}"))
                     .collect(),
                 output: vision_result.content.clone(),
                 confidence: vision_result.confidence,
@@ -224,8 +224,7 @@ impl CrossModalReasoning {
         query: &str,
     ) -> Result<ModalityResult, Box<dyn std::error::Error + Send + Sync>> {
         let prompt = format!(
-            "Analyze the following text in the context of the query: '{}'\n\nText: {}\n\nProvide detailed analysis and relevant insights:",
-            query, text
+            "Analyze the following text in the context of the query: '{query}'\n\nText: {text}\n\nProvide detailed analysis and relevant insights:"
         );
 
         let request = LLMRequest {
@@ -267,8 +266,7 @@ impl CrossModalReasoning {
         let vision_analysis = vision_processor.analyze_images(images).await?;
 
         let prompt = format!(
-            "Analyze the following visual content in the context of the query: '{}'\n\nVision Analysis: {}\n\nProvide detailed visual insights:",
-            query, vision_analysis
+            "Analyze the following visual content in the context of the query: '{query}'\n\nVision Analysis: {vision_analysis}\n\nProvide detailed visual insights:"
         );
 
         let request = LLMRequest {
@@ -357,8 +355,7 @@ impl CrossModalReasoning {
             .await?;
 
         let prompt = format!(
-            "Given the following multi-modal analysis results for the query: '{}', provide a comprehensive synthesized answer:\n\n{}\n\nSynthesis:",
-            query, fusion_context
+            "Given the following multi-modal analysis results for the query: '{query}', provide a comprehensive synthesized answer:\n\n{fusion_context}\n\nSynthesis:"
         );
 
         let request = LLMRequest {
@@ -453,6 +450,12 @@ pub struct VisionProcessor {
     supported_formats: Vec<ImageFormat>,
 }
 
+impl Default for VisionProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VisionProcessor {
     pub fn new() -> Self {
         Self {
@@ -494,12 +497,11 @@ impl VisionProcessor {
         let description = image
             .description
             .as_ref()
-            .map(|d| format!("Description: {}", d))
+            .map(|d| format!("Description: {d}"))
             .unwrap_or_default();
 
         Ok(format!(
-            "{}, {}, {}",
-            size_analysis, format_analysis, description
+            "{size_analysis}, {format_analysis}, {description}"
         ))
     }
 }
@@ -507,6 +509,12 @@ impl VisionProcessor {
 // Structured Data Processing Component
 pub struct StructuredProcessor {
     supported_formats: Vec<DataFormat>,
+}
+
+impl Default for StructuredProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StructuredProcessor {
@@ -561,8 +569,7 @@ impl StructuredProcessor {
         // Simple XML analysis
         let element_count = data.matches('<').count() / 2; // Rough estimate
         Ok(format!(
-            "XML document with approximately {} elements",
-            element_count
+            "XML document with approximately {element_count} elements"
         ))
     }
 
@@ -577,8 +584,7 @@ impl StructuredProcessor {
             .map(|line| line.split(',').count())
             .unwrap_or(0);
         Ok(format!(
-            "CSV data with {} rows and {} columns",
-            rows, columns
+            "CSV data with {rows} rows and {columns} columns"
         ))
     }
 
@@ -591,8 +597,7 @@ impl StructuredProcessor {
             .filter(|line| !line.trim().is_empty() && !line.starts_with('#'))
             .count();
         Ok(format!(
-            "RDF data with approximately {} triples",
-            triple_count
+            "RDF data with approximately {triple_count} triples"
         ))
     }
 
@@ -611,7 +616,7 @@ impl StructuredProcessor {
         } else {
             "UNKNOWN"
         };
-        Ok(format!("SPARQL {} query", query_type))
+        Ok(format!("SPARQL {query_type} query"))
     }
 
     async fn analyze_graphql(
@@ -627,7 +632,7 @@ impl StructuredProcessor {
         } else {
             "unknown"
         };
-        Ok(format!("GraphQL {} operation", operation_type))
+        Ok(format!("GraphQL {operation_type} operation"))
     }
 
     fn count_json_keys(&self, value: &serde_json::Value) -> usize {
@@ -641,6 +646,12 @@ impl StructuredProcessor {
 // Fusion Engine Component
 pub struct FusionEngine {
     strategies: HashMap<String, Box<dyn FusionStrategyTrait + Send + Sync>>,
+}
+
+impl Default for FusionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FusionEngine {
@@ -681,7 +692,7 @@ impl FusionEngine {
         if let Some(fusion_strategy) = self.strategies.get(strategy_name) {
             fusion_strategy.fuse(steps).await
         } else {
-            Err(format!("Unknown fusion strategy: {}", strategy_name).into())
+            Err(format!("Unknown fusion strategy: {strategy_name}").into())
         }
     }
 }
@@ -733,12 +744,12 @@ impl FusionStrategyTrait for LateFusionStrategy {
             let modality_key = format!("{:?}", step.modality);
             modality_groups
                 .entry(modality_key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(step);
         }
 
         for (modality, modality_steps) in modality_groups {
-            context.push_str(&format!("\n{} Modality:\n", modality));
+            context.push_str(&format!("\n{modality} Modality:\n"));
             for step in modality_steps {
                 context.push_str(&format!("  - {}: {}\n", step.description, step.output));
             }
@@ -767,7 +778,7 @@ impl FusionStrategyTrait for HybridFusionStrategy {
         let late_result = late_fusion.fuse(steps).await?;
 
         context.push_str(&early_result);
-        context.push_str("\n");
+        context.push('\n');
         context.push_str(&late_result);
 
         Ok(context)

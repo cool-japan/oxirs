@@ -201,6 +201,7 @@ struct LockTableEntry {
     /// Condition variable for waiting threads
     condition: Arc<Condvar>,
     /// Mutex for synchronization
+    #[allow(dead_code)]
     mutex: Arc<Mutex<()>>,
 }
 
@@ -218,11 +219,10 @@ impl LockTableEntry {
     fn can_grant(&self, request: &LockRequest) -> bool {
         // Check compatibility with all granted locks
         for grant in self.granted.values() {
-            if grant.transaction_id != request.transaction_id {
-                if !request.mode.is_compatible_with(&grant.mode) {
+            if grant.transaction_id != request.transaction_id
+                && !request.mode.is_compatible_with(&grant.mode) {
                     return false;
                 }
-            }
         }
 
         // For upgrade requests, check if no other waiters exist
@@ -232,11 +232,10 @@ impl LockTableEntry {
 
         // Check if there are waiting requests that should be granted first
         for waiting_request in &self.waiting {
-            if waiting_request.transaction_id != request.transaction_id {
-                if waiting_request.requested_at < request.requested_at {
+            if waiting_request.transaction_id != request.transaction_id
+                && waiting_request.requested_at < request.requested_at {
                     return false;
                 }
-            }
         }
 
         true
@@ -314,10 +313,11 @@ impl DeadlockDetector {
     }
 
     /// Add a wait-for edge
+    #[allow(dead_code)]
     fn add_edge(&mut self, waiter: TransactionId, holder: TransactionId) {
         self.wait_for
             .entry(waiter)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(holder);
     }
 
@@ -694,7 +694,7 @@ impl LockManager {
             let mut tx_locks = self.transaction_locks.write().unwrap();
             tx_locks
                 .entry(request.transaction_id)
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(request.resource_id.clone());
         }
 

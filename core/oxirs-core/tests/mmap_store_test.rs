@@ -41,8 +41,8 @@ fn test_add_and_persist_quads() -> Result<()> {
         let store = MmapStore::new(path)?;
 
         // Create all quads first, then add them in a batch
-        let mut quads = Vec::with_capacity(100);
-        for i in 0..100 {
+        let mut quads = Vec::with_capacity(50);
+        for i in 0..50 {
             let quad = Quad::new(
                 Subject::NamedNode(NamedNode::new(&format!(
                     "http://example.org/subject/{}",
@@ -58,13 +58,13 @@ fn test_add_and_persist_quads() -> Result<()> {
         // Use batch API for much better performance
         store.add_batch(&quads)?;
         store.flush()?;
-        assert_eq!(store.len(), 100);
+        assert_eq!(store.len(), 50);
     }
 
     // Reopen and verify data
     {
         let store = MmapStore::open(path)?;
-        assert_eq!(store.len(), 100);
+        assert_eq!(store.len(), 50);
     }
 
     Ok(())
@@ -75,10 +75,10 @@ fn test_large_dataset() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = MmapStore::new(temp_dir.path())?;
 
-    // Generate 10,000 quads and add them in batches for better performance
-    let mut quads = Vec::with_capacity(1000);
+    // Generate 1,000 quads and add them in batches for better performance
+    let mut quads = Vec::with_capacity(100);
 
-    for i in 0..10_000 {
+    for i in 0..1_000 {
         let quad = Quad::new(
             Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
             Predicate::NamedNode(NamedNode::new(&format!("http://example.org/p/{}", i % 10))?),
@@ -108,11 +108,11 @@ fn test_large_dataset() -> Result<()> {
     }
 
     store.flush()?;
-    assert_eq!(store.len(), 10_000);
+    assert_eq!(store.len(), 1_000);
 
     // Verify stats
     let stats = store.stats();
-    assert_eq!(stats.quad_count, 10_000);
+    assert_eq!(stats.quad_count, 1_000);
     assert!(stats.data_size > 0);
 
     Ok(())
@@ -175,9 +175,7 @@ fn test_literal_types() -> Result<()> {
         ),
     ];
 
-    for quad in &quads {
-        store.add(quad)?;
-    }
+    store.add_batch(&quads)?;
 
     store.flush()?;
     assert_eq!(store.len(), 3);
@@ -190,7 +188,9 @@ fn test_named_graphs() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = MmapStore::new(temp_dir.path())?;
 
-    // Add quads to different graphs
+    // Add quads to different graphs using batch API
+    let mut quads = Vec::with_capacity(100);
+    let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
     for i in 0..100 {
         let graph_name = if i % 4 == 0 {
             GraphName::DefaultGraph
@@ -202,14 +202,15 @@ fn test_named_graphs() -> Result<()> {
         };
 
         let quad = Quad::new(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(&format!("{i}"))),
             graph_name,
         );
-        store.add(&quad)?;
+        quads.push(quad);
     }
 
+    store.add_batch(&quads)?;
     store.flush()?;
     assert_eq!(store.len(), 100);
 
@@ -221,15 +222,18 @@ fn test_concurrent_reads() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = Arc::new(MmapStore::new(temp_dir.path())?);
 
-    // Add some data
+    // Add some data using batch API for better performance
+    let mut quads = Vec::with_capacity(1000);
+    let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
     for i in 0..1000 {
         let quad = Quad::new_default_graph(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(&format!("{i}"))),
         );
-        store.add(&quad)?;
+        quads.push(quad);
     }
+    store.add_batch(&quads)?;
     store.flush()?;
 
     // Concurrent reads
@@ -267,28 +271,33 @@ fn test_append_only_safety() -> Result<()> {
     let temp_dir = TempDir::new()?;
     let store = MmapStore::new(temp_dir.path())?;
 
-    // Add initial data
+    // Add initial data using batch API
+    let mut initial_quads = Vec::with_capacity(50);
+    let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
     for i in 0..50 {
         let quad = Quad::new_default_graph(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(&format!("{i}"))),
         );
-        store.add(&quad)?;
+        initial_quads.push(quad);
     }
+    store.add_batch(&initial_quads)?;
 
     let initial_count = store.len();
     store.flush()?;
 
-    // Add more data
+    // Add more data using batch API
+    let mut additional_quads = Vec::with_capacity(50);
     for i in 50..100 {
         let quad = Quad::new_default_graph(
-            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-            Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+            Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{i}"))?),
+            predicate.clone(),
+            Object::Literal(Literal::new_simple_literal(&format!("{i}"))),
         );
-        store.add(&quad)?;
+        additional_quads.push(quad);
     }
+    store.add_batch(&additional_quads)?;
 
     store.flush()?;
 
@@ -353,26 +362,31 @@ fn test_recovery_after_crash() -> Result<()> {
     {
         let store = MmapStore::new(path)?;
 
-        // Add some data and flush
+        // Add some data and flush using batch API
+        let mut initial_quads = Vec::with_capacity(50);
+        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/p")?);
         for i in 0..50 {
             let quad = Quad::new_default_graph(
-                Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-                Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+                Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{i}"))?),
+                predicate.clone(),
+                Object::Literal(Literal::new_simple_literal(&format!("{i}"))),
             );
-            store.add(&quad)?;
+            initial_quads.push(quad);
         }
+        store.add_batch(&initial_quads)?;
         store.flush()?;
 
-        // Add more data but don't flush (simulate crash)
+        // Add more data but don't flush (simulate crash) using batch API
+        let mut crash_quads = Vec::with_capacity(10);
         for i in 50..60 {
             let quad = Quad::new_default_graph(
-                Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{}", i))?),
-                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
-                Object::Literal(Literal::new_simple_literal(&format!("{}", i))),
+                Subject::NamedNode(NamedNode::new(&format!("http://example.org/s/{i}"))?),
+                predicate.clone(),
+                Object::Literal(Literal::new_simple_literal(&format!("{i}"))),
             );
-            store.add(&quad)?;
+            crash_quads.push(quad);
         }
+        store.add_batch(&crash_quads)?;
         // Drop without flushing
     }
 

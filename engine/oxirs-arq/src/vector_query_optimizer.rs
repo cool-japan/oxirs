@@ -122,8 +122,12 @@ pub struct VectorQueryOptimizer {
     config: VectorOptimizerConfig,
     integrated_planner: IntegratedQueryPlanner,
     vector_indexes: Arc<Mutex<HashMap<String, VectorIndexInfo>>>,
+    #[allow(dead_code)]
     embedding_cache: Arc<Mutex<HashMap<String, Vec<f32>>>>,
+    #[allow(dead_code)]
+    #[allow(clippy::type_complexity)]
     semantic_cache: Arc<Mutex<HashMap<String, Vec<(String, f32)>>>>,
+    #[allow(dead_code)]
     query_patterns: Arc<Mutex<HashMap<u64, VectorSearchStrategy>>>,
     performance_metrics: Arc<Mutex<VectorPerformanceMetrics>>,
 }
@@ -577,9 +581,9 @@ impl VectorQueryOptimizer {
             Term::Iri(iri) => {
                 // Extract local name from IRI
                 let iri_str = iri.as_str();
-                if let Some(fragment) = iri_str.split('#').last() {
+                if let Some(fragment) = iri_str.split('#').next_back() {
                     Ok(fragment.to_string())
-                } else if let Some(local) = iri_str.split('/').last() {
+                } else if let Some(local) = iri_str.split('/').next_back() {
                     Ok(local.to_string())
                 } else {
                     Ok(iri_str.to_string())
@@ -674,12 +678,11 @@ impl VectorQueryOptimizer {
 
                 // Estimate recall based on strategy
                 estimate.estimated_recall = match strategy {
-                    VectorSearchStrategy::PureVector { .. } => info
+                    VectorSearchStrategy::PureVector { .. } => *info
                         .accuracy_stats
                         .recall_at_k
                         .get(&10)
-                        .unwrap_or(&0.9)
-                        .clone(),
+                        .unwrap_or(&0.9),
                     VectorSearchStrategy::Hybrid { .. } => {
                         // Hybrid search typically has higher effective recall
                         info.accuracy_stats.recall_at_k.get(&10).unwrap_or(&0.9) * 1.1
@@ -746,10 +749,10 @@ impl VectorQueryOptimizer {
     /// Update execution feedback for vector operations
     pub fn update_vector_execution_feedback(
         &mut self,
-        strategy_hash: u64,
+        _strategy_hash: u64,
         actual_duration: Duration,
-        actual_recall: f32,
-        actual_memory: usize,
+        _actual_recall: f32,
+        _actual_memory: usize,
         success: bool,
     ) -> Result<()> {
         // Update performance metrics and adaptive thresholds based on execution feedback

@@ -405,7 +405,7 @@ impl QuantumRealTimeAnalyticsEngine {
                 // Quantum entanglement suggests filter pushdown
                 info!("Quantum analysis suggests filter pushdown optimization");
                 // Note: Actual query rewriting would be more complex
-                optimized_query = format!("-- Quantum-optimized: {}", optimized_query);
+                optimized_query = format!("-- Quantum-optimized: {optimized_query}");
             }
         }
 
@@ -415,7 +415,7 @@ impl QuantumRealTimeAnalyticsEngine {
                 "Quantum analysis suggests parallel execution (speedup: {:.2}x)",
                 analysis.expected_quantum_speedup
             );
-            optimized_query = format!("-- Quantum-parallel: {}", optimized_query);
+            optimized_query = format!("-- Quantum-parallel: {optimized_query}");
         }
 
         Ok(optimized_query)

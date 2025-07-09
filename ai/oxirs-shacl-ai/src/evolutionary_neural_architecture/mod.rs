@@ -23,4 +23,3 @@ pub use search_engine::NeuralArchitectureSearchEngine;
 pub use self_modification::SelfModificationEngine;
 pub use types::*;
 
-use crate::{Result, ShaclAiError};

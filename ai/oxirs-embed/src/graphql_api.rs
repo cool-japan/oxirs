@@ -4,7 +4,7 @@
 //! the embedding system, supporting type-safe queries, nested embeddings,
 //! filtering, aggregations, and real-time subscriptions.
 
-use crate::{CacheManager, EmbeddingModel, ModelRegistry};
+use crate::{CacheManager, ModelRegistry};
 use async_graphql::{
     Context, Enum, FieldResult, InputObject, Object, Schema, SimpleObject, Subscription, Union, ID,
 };
@@ -385,7 +385,7 @@ impl QueryRoot {
         ctx: &Context<'_>,
         input: EmbeddingQueryInput,
     ) -> FieldResult<Vec<EmbeddingResult>> {
-        let context = ctx.data::<GraphQLContext>()?;
+        let _context = ctx.data::<GraphQLContext>()?;
 
         // Implementation logic here
         let mut results = Vec::new();
@@ -415,7 +415,7 @@ impl QueryRoot {
     async fn similarity_search(
         &self,
         ctx: &Context<'_>,
-        input: SimilaritySearchInput,
+        _input: SimilaritySearchInput,
     ) -> FieldResult<Vec<SimilarityResult>> {
         let _context = ctx.data::<GraphQLContext>()?;
 
@@ -435,7 +435,7 @@ impl QueryRoot {
     async fn models(
         &self,
         ctx: &Context<'_>,
-        names: Option<Vec<String>>,
+        _names: Option<Vec<String>>,
     ) -> FieldResult<Vec<ModelInfo>> {
         let _context = ctx.data::<GraphQLContext>()?;
 
@@ -477,7 +477,7 @@ impl QueryRoot {
     async fn clustering(
         &self,
         ctx: &Context<'_>,
-        input: ClusteringInput,
+        _input: ClusteringInput,
     ) -> FieldResult<Vec<ClusteringResult>> {
         let _context = ctx.data::<GraphQLContext>()?;
 
@@ -497,7 +497,7 @@ impl QueryRoot {
     async fn analytics(
         &self,
         ctx: &Context<'_>,
-        time_range: Option<TimeRange>,
+        _time_range: Option<TimeRange>,
     ) -> FieldResult<EmbeddingAnalytics> {
         let _context = ctx.data::<GraphQLContext>()?;
 
@@ -561,7 +561,7 @@ impl MutationRoot {
     }
 
     /// Cancel batch job
-    async fn cancel_batch_job(&self, ctx: &Context<'_>, job_id: ID) -> FieldResult<bool> {
+    async fn cancel_batch_job(&self, ctx: &Context<'_>, _job_id: ID) -> FieldResult<bool> {
         let _context = ctx.data::<GraphQLContext>()?;
 
         // Mock implementation
@@ -598,15 +598,12 @@ impl SubscriptionRoot {
     async fn embedding_events(
         &self,
         ctx: &Context<'_>,
-        entity_filter: Option<Vec<String>>,
+        _entity_filter: Option<Vec<String>>,
     ) -> Pin<Box<dyn Stream<Item = EmbeddingEvent> + Send>> {
         let context = ctx.data::<GraphQLContext>().unwrap();
         let rx = context.event_broadcaster.read().await.subscribe();
 
-        let stream = BroadcastStream::new(rx).filter_map(|result| match result {
-            Ok(event) => Some(event),
-            Err(_) => None,
-        });
+        let stream = BroadcastStream::new(rx).filter_map(|result| result.ok());
 
         Box::pin(stream)
     }
@@ -615,7 +612,7 @@ impl SubscriptionRoot {
     async fn batch_updates(
         &self,
         ctx: &Context<'_>,
-        job_id: Option<ID>,
+        _job_id: Option<ID>,
     ) -> Pin<Box<dyn Stream<Item = BatchCompletedEvent> + Send>> {
         let context = ctx.data::<GraphQLContext>().unwrap();
         let rx = context.event_broadcaster.read().await.subscribe();
@@ -632,7 +629,7 @@ impl SubscriptionRoot {
     async fn quality_alerts(
         &self,
         ctx: &Context<'_>,
-        severity_filter: Option<Vec<String>>,
+        _severity_filter: Option<Vec<String>>,
     ) -> Pin<Box<dyn Stream<Item = QualityAlertEvent> + Send>> {
         let context = ctx.data::<GraphQLContext>().unwrap();
         let rx = context.event_broadcaster.read().await.subscribe();

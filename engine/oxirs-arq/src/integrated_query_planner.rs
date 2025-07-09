@@ -16,7 +16,8 @@ use tracing::{debug, info, span, Level};
 
 use crate::advanced_optimizer::{AdvancedOptimizer, AdvancedOptimizerConfig};
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
-use crate::bgp_optimizer::{BGPOptimizer, IndexUsagePlan, OptimizedBGP};
+// use crate::bgp_optimizer::BGPOptimizer;
+use crate::bgp_optimizer_types::{IndexUsagePlan, OptimizedBGP, PatternSelectivity, SelectivityFactors, SelectivityInfo, IndexAssignment};
 use crate::cost_model::{CostEstimate, CostModel};
 use crate::optimizer::{IndexStatistics, IndexType, Statistics};
 use crate::statistics_collector::StatisticsCollector;
@@ -26,10 +27,15 @@ use crate::streaming::{StreamingConfig, StreamingExecutor};
 pub struct IntegratedQueryPlanner {
     config: IntegratedPlannerConfig,
     cost_model: Arc<Mutex<CostModel>>,
+    #[allow(dead_code)]
     statistics_collector: Arc<StatisticsCollector>,
+    #[allow(dead_code)]
     statistics: Statistics,
+    #[allow(dead_code)]
     index_stats: IndexStatistics,
+    #[allow(dead_code)]
     advanced_optimizer: AdvancedOptimizer,
+    #[allow(dead_code)]
     streaming_executor: Option<StreamingExecutor>,
     plan_cache: Arc<Mutex<PlanCache>>,
     execution_history: Arc<Mutex<ExecutionHistory>>,
@@ -124,18 +130,13 @@ pub struct MemoryHints {
 }
 
 /// Memory allocation strategies
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum MemoryStrategy {
     Conservative,
+    #[default]
     Balanced,
     Aggressive,
     Adaptive,
-}
-
-impl Default for MemoryStrategy {
-    fn default() -> Self {
-        MemoryStrategy::Balanced
-    }
 }
 
 /// Index access pattern hint
@@ -228,6 +229,7 @@ pub enum InvalidationTrigger {
 #[derive(Debug)]
 pub struct ExecutionHistory {
     executions: VecDeque<ExecutionRecord>,
+    #[allow(dead_code)]
     pattern_performance: HashMap<String, PatternPerformance>,
     max_history_size: usize,
 }
@@ -548,6 +550,7 @@ impl IntegratedQueryPlanner {
     }
 
     /// Check if filter expression is complex
+    #[allow(clippy::only_used_in_recursion)]
     fn is_complex_filter(&self, expression: &Expression) -> bool {
         // Simplified complexity check
         match expression {
@@ -603,7 +606,7 @@ impl IntegratedQueryPlanner {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", algebra).hash(&mut hasher);
+        format!("{algebra:?}").hash(&mut hasher);
         hasher.finish()
     }
 
@@ -745,7 +748,7 @@ impl IntegratedQueryPlanner {
 
     fn optimize_bgp_patterns(&mut self, algebra: &Algebra) -> Result<OptimizedBGP> {
         // Create BGPOptimizer with required statistics
-        let _bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.index_stats);
+        // let _bgp_optimizer = BGPOptimizer::new(&self.statistics, &self.index_stats);
 
         // Extract BGP patterns from algebra
         let bgp_patterns = self.extract_bgp_patterns(algebra);
@@ -762,11 +765,11 @@ impl IntegratedQueryPlanner {
             let selectivity = self.estimate_pattern_selectivity(pattern);
             let cardinality = (1_000_000.0 * selectivity).max(1.0) as usize;
 
-            let pattern_sel = crate::bgp_optimizer::PatternSelectivity {
+            let pattern_sel = PatternSelectivity {
                 pattern: pattern.clone(),
                 selectivity,
                 cardinality,
-                factors: crate::bgp_optimizer::SelectivityFactors {
+                factors: SelectivityFactors {
                     subject_selectivity: 1.0,
                     predicate_selectivity: 1.0,
                     object_selectivity: 1.0,
@@ -781,7 +784,7 @@ impl IntegratedQueryPlanner {
             // Determine index usage for this pattern
             let index_hint = self.suggest_index_for_pattern(pattern);
             if let Some((pattern_idx, index_type)) = index_hint {
-                pattern_indexes.push(crate::bgp_optimizer::IndexAssignment {
+                pattern_indexes.push(IndexAssignment {
                     pattern_idx,
                     index_type,
                     scan_cost: selectivity * 5.0, // Estimated scan cost
@@ -814,7 +817,7 @@ impl IntegratedQueryPlanner {
         Ok(OptimizedBGP {
             patterns: optimized_patterns,
             estimated_cost: total_cost,
-            selectivity_info: crate::bgp_optimizer::SelectivityInfo {
+            selectivity_info: SelectivityInfo {
                 pattern_selectivity,
                 join_selectivity,
                 overall_selectivity,
@@ -845,6 +848,7 @@ impl IntegratedQueryPlanner {
         })
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_execution_cost(
         &self,
         algebra: &Algebra,
@@ -1044,33 +1048,33 @@ impl IntegratedQueryPlanner {
         _history: &ExecutionHistory,
     ) -> Result<Vec<IndexRecommendation>> {
         // Analyze execution history to recommend new indexes
-        let mut recommendations = Vec::new();
-
         // Basic index recommendations based on common query patterns
         // In a full implementation, this would analyze actual execution history
 
-        // Recommend B-tree index for frequently filtered properties
-        recommendations.push(IndexRecommendation {
-            index_type: IndexType::BTree,
-            estimated_benefit: 0.3, // 30% improvement
-            creation_cost: 100.0,
-            maintenance_cost: 10.0,
-            confidence: 0.8,
-        });
-
-        // Recommend hash index for equality lookups
-        recommendations.push(IndexRecommendation {
-            index_type: IndexType::Hash,
-            estimated_benefit: 0.5, // 50% improvement for exact matches
-            creation_cost: 50.0,
-            maintenance_cost: 5.0,
-            confidence: 0.9,
-        });
+        let recommendations = vec![
+            // Recommend B-tree index for frequently filtered properties
+            IndexRecommendation {
+                index_type: IndexType::BTree,
+                estimated_benefit: 0.3, // 30% improvement
+                creation_cost: 100.0,
+                maintenance_cost: 10.0,
+                confidence: 0.8,
+            },
+            // Recommend hash index for equality lookups
+            IndexRecommendation {
+                index_type: IndexType::Hash,
+                estimated_benefit: 0.5, // 50% improvement for exact matches
+                creation_cost: 50.0,
+                maintenance_cost: 5.0,
+                confidence: 0.9,
+            },
+        ];
 
         Ok(recommendations)
     }
 
     /// Extract BGP patterns from algebra expression
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_bgp_patterns(&self, algebra: &Algebra) -> Vec<TriplePattern> {
         match algebra {
             Algebra::Bgp(patterns) => patterns.clone(),

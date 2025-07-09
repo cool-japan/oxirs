@@ -484,7 +484,7 @@ where
             versions.retain(|v| {
                 v.version == 0 || // Uncommitted
                 v.version >= oldest_active_version || // Visible to active transactions
-                recent_versions.iter().any(|&kept| kept == v as *const _) // Recent
+                recent_versions.iter().any(|&kept| std::ptr::eq(kept, v)) // Recent
             });
 
             cleaned += original_len - versions.len();
@@ -1083,8 +1083,7 @@ where
             for read_key in &sets.read_set {
                 if committed_sets.write_set.contains_key(read_key) {
                     return Ok(ValidationResult::ReadConflict(format!(
-                        "Read key {:?} was written by committed transaction {}",
-                        read_key, committed_tx_id
+                        "Read key {read_key:?} was written by committed transaction {committed_tx_id}"
                     )));
                 }
             }
@@ -1093,8 +1092,7 @@ where
             for write_key in sets.write_set.keys() {
                 if committed_sets.write_set.contains_key(write_key) {
                     return Ok(ValidationResult::WriteConflict(format!(
-                        "Write key {:?} conflicts with committed transaction {}",
-                        write_key, committed_tx_id
+                        "Write key {write_key:?} conflicts with committed transaction {committed_tx_id}"
                     )));
                 }
             }
@@ -1102,7 +1100,7 @@ where
 
         // Phantom read detection (if enabled)
         if self.config.enable_phantom_read_detection {
-            if let Some(phantom_conflict) = self.detect_phantom_reads(&sets, &committed)? {
+            if let Some(phantom_conflict) = self.detect_phantom_reads(sets, &committed)? {
                 return Ok(ValidationResult::ReadConflict(phantom_conflict));
             }
         }
@@ -1211,8 +1209,7 @@ where
                 for write_key in committed_sets.write_set.keys() {
                     if self.keys_might_conflict(read_key, write_key) {
                         return Ok(Some(format!(
-                            "Potential phantom read: read pattern {:?} conflicts with insert {:?} from transaction {}",
-                            read_key, write_key, committed_tx_id
+                            "Potential phantom read: read pattern {read_key:?} conflicts with insert {write_key:?} from transaction {committed_tx_id}"
                         )));
                     }
                 }
@@ -1268,9 +1265,9 @@ where
 {
     /// Create new MVCC storage with optimistic concurrency control
     pub fn with_optimistic_control(_node_id: u64) -> Self {
-        let storage = Self::new();
+        
         // Initialize optimistic concurrency control (this would be integrated more deeply in a real implementation)
-        storage
+        Self::new()
     }
 
     /// Begin transaction with timestamp ordering

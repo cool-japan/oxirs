@@ -55,15 +55,15 @@ pub async fn run(
         dataset_validation::validate_graph_uri(g)?;
     }
 
-    ctx.info(&format!("Importing data into dataset '{}'", dataset));
+    ctx.info(&format!("Importing data into dataset '{dataset}'"));
     ctx.info(&format!("Source file: {}", file.display()));
 
     // Detect format if not specified
     let detected_format = format.unwrap_or_else(|| detect_format(&file));
-    ctx.info(&format!("Format: {}", detected_format));
+    ctx.info(&format!("Format: {detected_format}"));
 
     if let Some(g) = &graph {
-        ctx.info(&format!("Target graph: {}", g));
+        ctx.info(&format!("Target graph: {g}"));
     }
 
     // Load dataset configuration or use dataset path directly
@@ -79,7 +79,7 @@ pub async fn run(
     let mut store = if dataset_path.is_dir() {
         Store::open(&dataset_path)?
     } else {
-        return Err(error_helpers::dataset_not_found_error(&dataset).into());
+        return Err(error_helpers::dataset_not_found_error(&dataset));
     };
 
     // Start import with progress tracking and logging
@@ -88,7 +88,7 @@ pub async fn run(
 
     // Initialize data logger
     let mut data_logger = DataLogger::new("import", &dataset);
-    let mut perf_logger = PerfLogger::new(format!("import_{}", detected_format));
+    let mut perf_logger = PerfLogger::new(format!("import_{detected_format}"));
     perf_logger.add_metadata("file", file.display().to_string());
     perf_logger.add_metadata("format", &detected_format);
     if let Some(ref g) = graph {
@@ -135,10 +135,10 @@ pub async fn run(
         "Import completed in {:.2} seconds",
         duration.as_secs_f64()
     ));
-    ctx.info(&format!("Triples imported: {}", triple_count));
+    ctx.info(&format!("Triples imported: {triple_count}"));
 
     if error_count > 0 {
-        ctx.warn(&format!("Errors encountered: {}", error_count));
+        ctx.warn(&format!("Errors encountered: {error_count}"));
     }
 
     ctx.info(&format!(

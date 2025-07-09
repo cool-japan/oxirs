@@ -4,8 +4,7 @@
 //! the temporal paradox resolution system.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use uuid::Uuid;
+use std::collections::HashMap;
 
 /// Types of timelines
 #[derive(Debug, Clone)]

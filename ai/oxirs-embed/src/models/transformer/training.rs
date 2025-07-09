@@ -1,9 +1,9 @@
 //! Training algorithms for transformer embedding models
 
 use super::types::{ModelWeights, TransformerConfig, TransformerTrainingStats};
-use crate::{EmbeddingError, Triple, Vector};
+use crate::Triple;
 use anyhow::Result;
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 use rand::{prelude::SliceRandom, Rng};
 use std::collections::HashMap;
 
@@ -139,9 +139,9 @@ impl TransformerTrainer {
     /// Apply gradient updates to embeddings
     fn apply_gradient_updates(
         &mut self,
-        subject_emb: &Array1<f32>,
-        predicate_emb: &Array1<f32>,
-        object_emb: &Array1<f32>,
+        _subject_emb: &Array1<f32>,
+        _predicate_emb: &Array1<f32>,
+        _object_emb: &Array1<f32>,
         diff: &Array1<f32>,
         learning_rate: f32,
     ) -> Result<()> {
@@ -287,7 +287,7 @@ impl TransformerTrainer {
         }
 
         if entity_count > 0 {
-            let avg_entity_norm = entity_norm_sum / entity_count as f32;
+            let _avg_entity_norm = entity_norm_sum / entity_count as f32;
             // Store in some statistics structure if needed
         }
 
@@ -305,7 +305,7 @@ impl TransformerTrainer {
     }
 
     /// Get relation embeddings
-    pub fn get_relation_embeddings(&self) -> &HashMap<String, Array1<f32>> {
+    pub fn getrelation_embeddings(&self) -> &HashMap<String, Array1<f32>> {
         &self.relation_embeddings
     }
 
@@ -315,7 +315,7 @@ impl TransformerTrainer {
     }
 
     /// Set relation embedding
-    pub fn set_relation_embedding(&mut self, relation: String, embedding: Array1<f32>) {
+    pub fn setrelation_embedding(&mut self, relation: String, embedding: Array1<f32>) {
         self.relation_embeddings.insert(relation, embedding);
     }
 
@@ -412,8 +412,6 @@ impl LearningRateScheduler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::transformer::types::TransformerType;
-    use crate::NamedNode;
 
     #[tokio::test]
     async fn test_trainer_initialization() {

@@ -899,7 +899,7 @@ impl VectorQueryPlanner {
     fn estimate_quality_score(
         &self,
         steps: &[OptimizationStep],
-        query: &VectorQuery,
+        _query: &VectorQuery,
     ) -> Result<f32> {
         let base_quality = 0.8; // Base quality score
         let quality_improvement = steps
@@ -968,7 +968,7 @@ impl VectorQueryPlanner {
         &self,
         query: &VectorQuery,
         execution_time: Duration,
-        result_count: usize,
+        _result_count: usize,
     ) -> Result<()> {
         let mut stats = self.query_stats.write().unwrap();
 

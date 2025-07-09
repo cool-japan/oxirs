@@ -3,7 +3,7 @@
 use super::collection::InsightCollection;
 use super::config::InsightGenerationConfig;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Main insight generation engine
 #[derive(Debug)]
@@ -29,7 +29,7 @@ impl InsightGenerator {
 
     /// Generate insights from validation data
     pub fn generate_insights(&self, _data: &ValidationData) -> Result<InsightCollection> {
-        let mut collection = InsightCollection::new();
+        let collection = InsightCollection::new();
 
         // TODO: Implement actual insight generation logic
         // For now, return empty collection

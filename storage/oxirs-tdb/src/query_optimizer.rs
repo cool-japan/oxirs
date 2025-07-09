@@ -211,6 +211,12 @@ pub struct AdaptiveIndexManager {
     cost_improvement_threshold: f64,
 }
 
+impl Default for AdaptiveIndexManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AdaptiveIndexManager {
     /// Create a new adaptive index manager
     pub fn new() -> Self {
@@ -400,8 +406,7 @@ impl QueryOptimizer {
             .cost_model
             .estimate_cost(pattern, optimal_index, store_stats);
         let mut reasoning = format!(
-            "Optimal index {:?} for pattern {:?}",
-            optimal_index, pattern_type
+            "Optimal index {optimal_index:?} for pattern {pattern_type:?}"
         );
 
         // Check if historical data suggests a better index
@@ -643,6 +648,7 @@ impl Default for QueryOptimizer {
 
 /// Summary of query execution statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct QueryStatisticsSummary {
     pub total_queries: u64,
     pub avg_execution_time_ms: u64,
@@ -651,17 +657,6 @@ pub struct QueryStatisticsSummary {
     pub pattern_type_usage: HashMap<PatternType, u64>,
 }
 
-impl Default for QueryStatisticsSummary {
-    fn default() -> Self {
-        Self {
-            total_queries: 0,
-            avg_execution_time_ms: 0,
-            avg_result_count: 0,
-            index_usage: HashMap::new(),
-            pattern_type_usage: HashMap::new(),
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -303,7 +303,7 @@ impl ApplicationQueryAnsweringEvaluator {
         // Calculate overall metrics
         for metric in &self.metrics {
             let score = self.calculate_metric(metric, &per_query_results)?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         let overall_accuracy = if per_query_results.is_empty() {
@@ -523,10 +523,9 @@ impl ApplicationQueryAnsweringEvaluator {
     // Helper methods to create different types of QA pairs
     fn create_fact_lookup_pair(&self, id: usize) -> QuestionAnswerPair {
         QuestionAnswerPair {
-            question: format!("What is the type of entity{}?", id),
+            question: format!("What is the type of entity{id}?"),
             structured_query: Some(format!(
-                "SELECT ?type WHERE {{ entity{} rdf:type ?type }}",
-                id
+                "SELECT ?type WHERE {{ entity{id} rdf:type ?type }}"
             )),
             answer_entities: vec![format!("Type{}", id % 5)],
             answer_literals: vec![],
@@ -538,10 +537,9 @@ impl ApplicationQueryAnsweringEvaluator {
 
     fn create_relationship_pair(&self, id: usize) -> QuestionAnswerPair {
         QuestionAnswerPair {
-            question: format!("Who is related to entity{}?", id),
+            question: format!("Who is related to entity{id}?"),
             structured_query: Some(format!(
-                "SELECT ?related WHERE {{ entity{} ?relation ?related }}",
-                id
+                "SELECT ?related WHERE {{ entity{id} ?relation ?related }}"
             )),
             answer_entities: vec![
                 format!("entity{}", (id + 1) % 10),
@@ -556,10 +554,9 @@ impl ApplicationQueryAnsweringEvaluator {
 
     fn create_aggregation_pair(&self, id: usize) -> QuestionAnswerPair {
         QuestionAnswerPair {
-            question: format!("How many relations does entity{} have?", id),
+            question: format!("How many relations does entity{id} have?"),
             structured_query: Some(format!(
-                "SELECT (COUNT(?relation) as ?count) WHERE {{ entity{} ?relation ?object }}",
-                id
+                "SELECT (COUNT(?relation) as ?count) WHERE {{ entity{id} ?relation ?object }}"
             )),
             answer_entities: vec![],
             answer_literals: vec![format!("{}", (id % 5) + 1)],
@@ -591,8 +588,8 @@ impl ApplicationQueryAnsweringEvaluator {
 
     fn create_multi_hop_pair(&self, id: usize) -> QuestionAnswerPair {
         QuestionAnswerPair {
-            question: format!("What is connected to the parent of entity{}?", id),
-            structured_query: Some(format!("SELECT ?connected WHERE {{ entity{} :parent ?parent . ?parent ?relation ?connected }}", id)),
+            question: format!("What is connected to the parent of entity{id}?"),
+            structured_query: Some(format!("SELECT ?connected WHERE {{ entity{id} :parent ?parent . ?parent ?relation ?connected }}")),
             answer_entities: vec![format!("entity{}", (id + 3) % 10)],
             answer_literals: vec![],
             complexity: QueryComplexity::Complex,
@@ -603,8 +600,8 @@ impl ApplicationQueryAnsweringEvaluator {
 
     fn create_temporal_pair(&self, id: usize) -> QuestionAnswerPair {
         QuestionAnswerPair {
-            question: format!("What happened to entity{} before 2020?", id),
-            structured_query: Some(format!("SELECT ?event WHERE {{ ?event :involves entity{} . ?event :date ?date . FILTER(?date < '2020-01-01') }}", id)),
+            question: format!("What happened to entity{id} before 2020?"),
+            structured_query: Some(format!("SELECT ?event WHERE {{ ?event :involves entity{id} . ?event :date ?date . FILTER(?date < '2020-01-01') }}")),
             answer_entities: vec![format!("event{}", id % 3)],
             answer_literals: vec![],
             complexity: QueryComplexity::Complex,

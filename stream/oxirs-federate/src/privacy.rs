@@ -31,10 +31,12 @@ pub enum PrivacyError {
 
 /// Privacy protection level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum PrivacyLevel {
     /// No privacy protection
     None,
     /// Basic anonymization
+    #[default]
     Basic,
     /// k-anonymity protection
     KAnonymity,
@@ -48,11 +50,6 @@ pub enum PrivacyLevel {
     Maximum,
 }
 
-impl Default for PrivacyLevel {
-    fn default() -> Self {
-        PrivacyLevel::Basic
-    }
-}
 
 impl PrivacyLevel {
     /// Get numeric privacy score
@@ -522,7 +519,7 @@ impl PrivacyManager {
 
         let mut rng = thread_rng();
         let normal = Normal::new(0.0, sigma).map_err(|e| {
-            PrivacyError::AnonymizationFailed(format!("Invalid Gaussian parameters: {}", e))
+            PrivacyError::AnonymizationFailed(format!("Invalid Gaussian parameters: {e}"))
         })?;
 
         self.apply_noise_recursive(data, &mut |value| {
@@ -609,7 +606,7 @@ impl PrivacyManager {
                             let group_key = self.get_equivalence_class_key(map);
                             diversity_groups
                                 .entry(group_key)
-                                .or_insert_with(HashSet::new)
+                                .or_default()
                                 .insert(value.to_string());
                         }
                     }
@@ -642,7 +639,7 @@ impl PrivacyManager {
         let mut key_parts = Vec::new();
         for (field, value) in record.iter() {
             if field.contains("quasi") || field.contains("id") {
-                key_parts.push(format!("{}:{}", field, value));
+                key_parts.push(format!("{field}:{value}"));
             }
         }
         key_parts.sort();
@@ -715,7 +712,7 @@ impl PrivacyManager {
                         {
                             for (key, value) in right_map {
                                 if !join_keys.contains(key) {
-                                    left_map.insert(format!("right_{}", key), value.clone());
+                                    left_map.insert(format!("right_{key}"), value.clone());
                                 }
                             }
                         }
@@ -864,7 +861,7 @@ impl PrivacyManager {
                         {
                             for (key, value) in right_map {
                                 if !join_keys.contains(key) {
-                                    left_map.insert(format!("right_{}", key), value.clone());
+                                    left_map.insert(format!("right_{key}"), value.clone());
                                 }
                             }
                         }
@@ -929,6 +926,12 @@ pub struct PrivacyProtectionResult {
 pub struct SensitiveDataDetector {
     /// Sensitive patterns (regex)
     patterns: Vec<regex::Regex>,
+}
+
+impl Default for SensitiveDataDetector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SensitiveDataDetector {
@@ -1028,6 +1031,12 @@ pub struct GdprAuditEntry {
     pub data_description: String,
 }
 
+impl Default for GdprComplianceChecker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GdprComplianceChecker {
     /// Create new GDPR compliance checker
     pub fn new() -> Self {
@@ -1074,6 +1083,12 @@ impl GdprComplianceChecker {
 #[derive(Debug)]
 pub struct DataAnonymizer;
 
+impl Default for DataAnonymizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataAnonymizer {
     /// Create new data anonymizer
     pub fn new() -> Self {
@@ -1099,7 +1114,7 @@ impl DataAnonymizer {
         rule: &AnonymizationRule,
     ) -> Result<(), PrivacyError> {
         let field_regex = regex::Regex::new(&rule.field_pattern)
-            .map_err(|e| PrivacyError::AnonymizationFailed(format!("Invalid regex: {}", e)))?;
+            .map_err(|e| PrivacyError::AnonymizationFailed(format!("Invalid regex: {e}")))?;
 
         self.apply_rule_recursive(data, &field_regex, rule)?;
         Ok(())
@@ -1155,7 +1170,7 @@ impl DataAnonymizer {
                     let mut hasher = DefaultHasher::new();
                     s.hash(&mut hasher);
                     let hash = hasher.finish();
-                    *value = serde_json::Value::String(format!("hash_{:x}", hash));
+                    *value = serde_json::Value::String(format!("hash_{hash:x}"));
                 }
             }
             AnonymizationTechnique::Masking => {
@@ -1234,14 +1249,14 @@ fn generalize_value(value: &str) -> String {
         // Email generalization
         if let Some(domain_start) = value.find('@') {
             let domain = &value[domain_start..];
-            format!("user{}", domain)
+            format!("user{domain}")
         } else {
             "email@domain.com".to_string()
         }
     } else if value.chars().all(|c| c.is_ascii_digit()) {
         // Numeric ID generalization
         let len = value.len();
-        format!("ID-{}-digits", len)
+        format!("ID-{len}-digits")
     } else if value.len() > 10 {
         // Long text generalization
         "long_text".to_string()

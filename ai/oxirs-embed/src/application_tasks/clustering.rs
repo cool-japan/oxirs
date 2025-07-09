@@ -137,7 +137,7 @@ impl ClusteringEvaluator {
                 &cluster_assignments,
                 &sample_entities,
             )?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         // Analyze clusters
@@ -387,8 +387,8 @@ impl ClusteringEvaluator {
     /// Calculate Davies-Bouldin index (simplified)
     fn calculate_davies_bouldin(
         &self,
-        embeddings: &[Vec<f32>],
-        assignments: &[usize],
+        _embeddings: &[Vec<f32>],
+        _assignments: &[usize],
     ) -> Result<f64> {
         // Simplified implementation
         Ok(0.5)
@@ -397,9 +397,9 @@ impl ClusteringEvaluator {
     /// Calculate Adjusted Rand Index (simplified)
     fn calculate_adjusted_rand_index(
         &self,
-        assignments: &[usize],
-        ground_truth: &HashMap<String, String>,
-        entities: &[String],
+        _assignments: &[usize],
+        _ground_truth: &HashMap<String, String>,
+        _entities: &[String],
     ) -> Result<f64> {
         // Simplified implementation
         Ok(0.6)
@@ -408,7 +408,7 @@ impl ClusteringEvaluator {
     /// Analyze clusters
     fn analyze_clusters(
         &self,
-        embeddings: &[Vec<f32>],
+        _embeddings: &[Vec<f32>],
         assignments: &[usize],
     ) -> Result<ClusterAnalysis> {
         let unique_clusters: HashSet<usize> = assignments.iter().cloned().collect();
@@ -438,8 +438,8 @@ impl ClusteringEvaluator {
     /// Analyze clustering stability
     fn analyze_stability(
         &self,
-        embeddings: &[Vec<f32>],
-        config: &ApplicationEvalConfig,
+        _embeddings: &[Vec<f32>],
+        _config: &ApplicationEvalConfig,
     ) -> Result<ClusteringStabilityAnalysis> {
         // Simplified implementation
         Ok(ClusteringStabilityAnalysis {

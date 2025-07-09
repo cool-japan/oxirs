@@ -5,34 +5,25 @@
 //! With SPARQL 1.2 enhancements and advanced optimizations
 
 use crate::{
-    aggregation::{AggregationFactory, EnhancedAggregationProcessor},
     auth::{AuthUser, Permission},
-    bind_values_enhanced::{EnhancedBindProcessor, EnhancedValuesProcessor},
-    config::ServerConfig,
     error::{FusekiError, FusekiResult},
     federated_query_optimizer::FederatedQueryOptimizer,
-    federation::{planner::FederatedQueryPlan, FederationConfig},
-    metrics::MetricsService,
     server::AppState,
-    store::Store,
-    subquery_optimizer::AdvancedSubqueryOptimizer,
 };
 use axum::{
-    body::Body,
     extract::{Query, State},
     http::{
-        header::{ACCEPT, CONTENT_TYPE},
+        header::ACCEPT,
         HeaderMap, StatusCode,
     },
     response::{Html, IntoResponse, Json, Response},
     Form,
 };
-use chrono;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, instrument, warn};
 
 // SPARQL query parsing
 use oxirs_arq::query::parse_query;
@@ -469,7 +460,7 @@ async fn apply_query_optimizations(
     context: &QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<String> {
-    let mut optimized_query = query.to_string();
+    let optimized_query = query.to_string();
 
     // Apply federation optimization if enabled
     if context.enable_federation {
@@ -596,7 +587,7 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
         }
         "application/sparql-results+xml" => {
             // Return XML format with proper content type
-            let xml_response = Html(format!("<result>{:?}</result>", result)).into_response();
+            let xml_response = Html(format!("<result>{result:?}</result>")).into_response();
             let mut response = xml_response;
             response.headers_mut().insert(
                 "content-type",
@@ -606,7 +597,7 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
         }
         "text/csv" => {
             // Return CSV format with proper content type
-            let csv_response = format!("CSV format not yet implemented").into_response();
+            let csv_response = "CSV format not yet implemented".to_string().into_response();
             let mut response = csv_response;
             response
                 .headers_mut()

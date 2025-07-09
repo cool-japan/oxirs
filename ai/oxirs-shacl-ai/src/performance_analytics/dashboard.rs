@@ -14,7 +14,7 @@ impl DashboardProvider {
     }
 
     pub fn generate_dashboard_data(&self, stats: &PerformanceStatistics) -> String {
-        format!("Dashboard data for stats: {:?}", stats)
+        format!("Dashboard data for stats: {stats:?}")
     }
 }
 

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Vector search engine with multiple embedding models
 #[derive(Clone)]
@@ -221,7 +221,7 @@ impl VectorSearchEngine {
         let models = self.models.read().await;
         let model = models
             .get(model_name)
-            .ok_or_else(|| FusekiError::not_found(format!("Model not found: {}", model_name)))?;
+            .ok_or_else(|| FusekiError::not_found(format!("Model not found: {model_name}")))?;
 
         match &model.model_type {
             ModelType::Sentence => self.generate_sentence_embeddings(texts, model).await,
@@ -365,7 +365,7 @@ impl VectorSearchEngine {
             sparql_result
                 .to_json()
                 .map(|json_str| serde_json::from_str(&json_str).unwrap_or_default())
-                .map_err(|e| FusekiError::internal(format!("Failed to convert result: {}", e)))
+                .map_err(|e| FusekiError::internal(format!("Failed to convert result: {e}")))
         }
     }
 
@@ -588,7 +588,7 @@ impl VectorSearchEngine {
 
         // Add VALUES clauses for each vector search result
         for (variable, results) in vector_results {
-            let mut values_clause = format!("VALUES ?{} {{\n", variable);
+            let mut values_clause = format!("VALUES ?{variable} {{\n");
 
             for result in &results.results {
                 values_clause.push_str(&format!("  <{}>\n", result.resource_uri));
@@ -630,7 +630,7 @@ impl VectorSearchEngine {
                                         // Find matching similarity score
                                         for sim_result in &vector_result.results {
                                             if sim_result.resource_uri == uri_str {
-                                                let score_key = format!("{}_similarity", variable);
+                                                let score_key = format!("{variable}_similarity");
                                                 binding.as_object_mut().unwrap().insert(
                                                     score_key,
                                                     serde_json::json!({

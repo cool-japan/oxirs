@@ -8,9 +8,8 @@
 //! - Alternative viewpoints and assumption validation
 
 use crate::types::Message;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Explanation result with attribution and reasoning
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -603,7 +602,7 @@ impl ExplanationEngine {
 
         for (i, source) in sources.iter().enumerate() {
             evidence.push(Evidence {
-                evidence_id: format!("evidence_{}", i),
+                evidence_id: format!("evidence_{i}"),
                 evidence_type: EvidenceType::Direct,
                 content: format!("Source: {}", source.title),
                 strength: source.reliability_score,

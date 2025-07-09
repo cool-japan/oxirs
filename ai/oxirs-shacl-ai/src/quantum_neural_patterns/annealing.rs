@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
 use super::core::QuantumPattern;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Quantum Annealing for Pattern Optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]

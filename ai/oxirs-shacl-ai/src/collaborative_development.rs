@@ -1016,6 +1016,12 @@ pub struct Notification {
     pub created_at: DateTime<Utc>,
 }
 
+impl Default for NotificationSystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NotificationSystem {
     pub fn new() -> Self {
         Self {
@@ -1117,6 +1123,12 @@ pub struct AccessControlManager {
     workspace_permissions: HashMap<(Uuid, Uuid), HashSet<Permission>>, // (user_id, workspace_id) -> permissions
 }
 
+impl Default for AccessControlManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AccessControlManager {
     pub fn new() -> Self {
         Self {
@@ -1137,8 +1149,7 @@ impl AccessControlManager {
         }
 
         Err(ShaclAiError::ShapeManagement(format!(
-            "User does not have permission: {:?}",
-            permission
+            "User does not have permission: {permission:?}"
         )))
     }
 
@@ -1162,7 +1173,7 @@ impl AccessControlManager {
     pub fn grant_permission(&mut self, user_id: Uuid, permission: Permission) {
         self.user_permissions
             .entry(user_id)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(permission);
     }
 

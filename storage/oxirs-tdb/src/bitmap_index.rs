@@ -11,7 +11,7 @@ use std::hash::Hash;
 use std::sync::{Arc, RwLock};
 
 /// Bitmap compression algorithms
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum BitmapCompression {
     /// Run-Length Encoding - good for sparse bitmaps
     RLE,
@@ -20,15 +20,10 @@ pub enum BitmapCompression {
     /// Enhanced Word-Aligned Hybrid (EWAH)
     EWAH,
     /// Roaring Bitmaps - excellent for general use
+    #[default]
     Roaring,
     /// No compression (raw bitmap)
     None,
-}
-
-impl Default for BitmapCompression {
-    fn default() -> Self {
-        BitmapCompression::Roaring
-    }
 }
 
 /// Compressed bitmap representation
@@ -281,9 +276,8 @@ impl CompressedBitmap {
 
         // Group bits into 64-bit chunks and store set bit positions
         let chunk_size = 64;
-        let mut chunk_count = 0u32;
 
-        for chunk_start in (0..bits.len()).step_by(chunk_size) {
+        for (chunk_count, chunk_start) in (0..bits.len()).step_by(chunk_size).enumerate() {
             let chunk_end = (chunk_start + chunk_size).min(bits.len());
             let chunk = &bits[chunk_start..chunk_end];
 
@@ -304,8 +298,6 @@ impl CompressedBitmap {
                     result.extend_from_slice(&pos.to_le_bytes());
                 }
             }
-
-            chunk_count += 1;
         }
 
         Ok(result)
@@ -776,7 +768,7 @@ where
         } else {
             1.0
         };
-        self.stats.avg_cardinality = if bitmaps.len() > 0 {
+        self.stats.avg_cardinality = if !bitmaps.is_empty() {
             total_cardinality as f64 / bitmaps.len() as f64
         } else {
             0.0

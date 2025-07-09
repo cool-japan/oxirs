@@ -7,6 +7,12 @@ use super::*;
 /// Query processor for analyzing and extracting constraints from queries
 pub struct QueryProcessor;
 
+impl Default for QueryProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QueryProcessor {
     pub fn new() -> Self {
         Self

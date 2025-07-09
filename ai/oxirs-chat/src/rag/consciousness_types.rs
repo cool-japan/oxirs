@@ -7,7 +7,6 @@
 use super::*;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 
 // Essential data structures for enhanced consciousness system
@@ -526,6 +525,12 @@ pub struct ConsciousnessIndicators {
     indicators: HashMap<String, f64>,
 }
 
+impl Default for ConsciousnessIndicators {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConsciousnessIndicators {
     pub fn new() -> Self {
         Self {
@@ -568,6 +573,12 @@ pub struct ConsciousnessExperience {
 pub struct TemporalBinding {
     binding_window: Duration,
     binding_strength: f64,
+}
+
+impl Default for TemporalBinding {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TemporalBinding {
@@ -696,6 +707,12 @@ pub struct ConsolidationMetrics {
     pub insight_generation_rate: f64,
 }
 
+impl Default for ConsolidationMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConsolidationMetrics {
     pub fn new() -> Self {
         Self {
@@ -731,6 +748,12 @@ pub struct TemporalPatternRecognition {
     pub recognition_threshold: f64,
 }
 
+impl Default for TemporalPatternRecognition {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemporalPatternRecognition {
     pub fn new() -> Self {
         Self {
@@ -744,6 +767,12 @@ impl TemporalPatternRecognition {
 pub struct FutureProjectionEngine {
     pub projection_horizon: chrono::Duration,
     pub confidence_decay_rate: f64,
+}
+
+impl Default for FutureProjectionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl FutureProjectionEngine {
@@ -760,6 +789,12 @@ pub struct TemporalMetrics {
     pub coherence_score: f64,
     pub continuity_index: f64,
     pub prediction_accuracy: f64,
+}
+
+impl Default for TemporalMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TemporalMetrics {

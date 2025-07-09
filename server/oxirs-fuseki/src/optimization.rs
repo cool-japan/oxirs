@@ -11,15 +11,14 @@
 use crate::{
     config::PerformanceConfig,
     error::{FusekiError, FusekiResult},
-    performance::{PerformanceService, QueryCacheKey},
     store::Store,
 };
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Query optimization service with advanced algorithms
 #[derive(Clone)]

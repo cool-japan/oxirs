@@ -14,6 +14,12 @@ pub struct EnhancedAggregationProcessor {
     optimization_cache: HashMap<String, String>,
 }
 
+impl Default for EnhancedAggregationProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedAggregationProcessor {
     pub fn new() -> Self {
         let mut processor = Self {
@@ -99,7 +105,7 @@ impl EnhancedAggregationProcessor {
         function_name: &str,
         function: &AggregationFunction,
     ) -> FusekiResult<String> {
-        let pattern = format!("{}(", function_name);
+        let pattern = format!("{function_name}(");
         let mut result = query.to_string();
 
         while let Some(pos) = result.find(&pattern) {
@@ -181,10 +187,10 @@ impl EnhancedAggregationProcessor {
         // Add default separator if not specified
         if args.len() == 1 && !func_call.contains("SEPARATOR") {
             let expr = &args[0];
-            Ok(format!("GROUP_CONCAT({} ; SEPARATOR=',')", expr))
+            Ok(format!("GROUP_CONCAT({expr} ; SEPARATOR=',')"))
         } else if func_call.contains("DISTINCT") {
             // Optimize DISTINCT GROUP_CONCAT
-            Ok(format!("OPTIMIZED_{}", func_call))
+            Ok(format!("OPTIMIZED_{func_call}"))
         } else {
             Ok(func_call.to_string())
         }
@@ -206,13 +212,13 @@ impl EnhancedAggregationProcessor {
     /// Optimize MEDIAN function
     fn optimize_median(&self, _func_call: &str) -> FusekiResult<String> {
         // MEDIAN requires sorted data - add optimization hint
-        Ok(format!("SORTED_{}", _func_call))
+        Ok(format!("SORTED_{_func_call}"))
     }
 
     /// Optimize MODE function
     fn optimize_mode(&self, _func_call: &str) -> FusekiResult<String> {
         // MODE requires grouping - add optimization hint
-        Ok(format!("GROUPED_{}", _func_call))
+        Ok(format!("GROUPED_{_func_call}"))
     }
 
     /// Parse function arguments

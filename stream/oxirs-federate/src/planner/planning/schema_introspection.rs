@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use std::collections::HashSet;
-use tracing::{debug, info, warn};
+use tracing::debug;
 
 use super::types::*;
 
@@ -411,7 +411,7 @@ impl SchemaIntrospector {
                 report.is_compatible = false;
                 report
                     .missing_features
-                    .push(format!("entity type: {}", required_entity));
+                    .push(format!("entity type: {required_entity}"));
             }
         }
 

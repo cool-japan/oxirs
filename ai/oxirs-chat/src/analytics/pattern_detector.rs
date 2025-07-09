@@ -5,16 +5,12 @@
 //! conversational patterns.
 
 use anyhow::Result;
-use std::{
-    collections::{HashMap, VecDeque},
-    time::{Duration, SystemTime},
-};
-use tracing::{debug, info};
+use std::collections::{HashMap, VecDeque};
+use tracing::debug;
 
 use crate::{
     analytics::types::*,
     session_manager::{TopicTransition, TransitionType},
-    types::*,
     Message, MessageRole,
 };
 
@@ -182,8 +178,7 @@ impl PatternDetector {
             return Ok(Some(ConversationPattern {
                 pattern_type: PatternType::TopicProgression,
                 description: format!(
-                    "Natural topic progression with {} transitions",
-                    natural_transitions
+                    "Natural topic progression with {natural_transitions} transitions"
                 ),
                 confidence: progression_score / self.topic_history.len() as f64,
                 frequency: natural_transitions,
@@ -258,8 +253,7 @@ impl PatternDetector {
             return Ok(Some(ConversationPattern {
                 pattern_type: PatternType::ComplexityEscalation,
                 description: format!(
-                    "Complexity escalation detected in {} steps",
-                    escalation_count
+                    "Complexity escalation detected in {escalation_count} steps"
                 ),
                 confidence: 0.6,
                 frequency: escalation_count,
@@ -367,7 +361,7 @@ impl PatternDetector {
         if learning_indicators >= 2 {
             return Ok(Some(ConversationPattern {
                 pattern_type: PatternType::LearningPattern,
-                description: format!("Learning indicators detected: {}", learning_indicators),
+                description: format!("Learning indicators detected: {learning_indicators}"),
                 confidence: 0.6,
                 frequency: learning_indicators,
                 examples,
@@ -405,7 +399,7 @@ impl PatternDetector {
         if frustration_score > 0.5 {
             return Ok(Some(ConversationPattern {
                 pattern_type: PatternType::FrustrationPattern,
-                description: format!("Frustration indicators: {:.2}", frustration_score),
+                description: format!("Frustration indicators: {frustration_score:.2}"),
                 confidence: 0.7,
                 frequency: examples.len(),
                 examples,
@@ -439,7 +433,7 @@ impl PatternDetector {
         if exploration_indicators >= 2 {
             return Ok(Some(ConversationPattern {
                 pattern_type: PatternType::ExplorationPattern,
-                description: format!("Exploration indicators: {}", exploration_indicators),
+                description: format!("Exploration indicators: {exploration_indicators}"),
                 confidence: 0.6,
                 frequency: exploration_indicators,
                 examples,

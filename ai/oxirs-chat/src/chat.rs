@@ -7,11 +7,11 @@
 //! - Multi-modal response generation
 //! - Accessibility features
 
-use crate::types::{ChatConfig, Message, MessageRole};
-use anyhow::{anyhow, Result};
+use crate::types::Message;
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tokio::time::{Duration, Instant};
+use tokio::time::Duration;
 
 /// User profile for personalization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -645,18 +645,15 @@ impl ExpertiseDetector {
         let mut beginner_indicators = 0;
 
         for message in context {
-            match &message.content {
-                crate::types::MessageContent::Text(text) => {
-                    let text_lower = text.to_lowercase();
+            if let crate::types::MessageContent::Text(text) = &message.content {
+                let text_lower = text.to_lowercase();
 
-                    if text_lower.contains("complex") || text_lower.contains("advanced") {
-                        expert_indicators += 1;
-                    }
-                    if text_lower.contains("simple") || text_lower.contains("basic") {
-                        beginner_indicators += 1;
-                    }
+                if text_lower.contains("complex") || text_lower.contains("advanced") {
+                    expert_indicators += 1;
                 }
-                _ => {}
+                if text_lower.contains("simple") || text_lower.contains("basic") {
+                    beginner_indicators += 1;
+                }
             }
         }
 
@@ -727,7 +724,7 @@ impl ContentAdapter {
             }
             DetailLevel::Comprehensive => {
                 // Add additional context and explanations
-                Ok(format!("{}\n\n**Additional Context**: This response provides comprehensive information on the topic. For more specific details, feel free to ask follow-up questions.", content))
+                Ok(format!("{content}\n\n**Additional Context**: This response provides comprehensive information on the topic. For more specific details, feel free to ask follow-up questions."))
             }
             _ => Ok(content.to_string()),
         }
@@ -744,8 +741,7 @@ impl ContentAdapter {
             FormalityLevel::Academic => {
                 // Add more formal academic language
                 Ok(format!(
-                    "In accordance with semantic web principles, {}",
-                    content
+                    "In accordance with semantic web principles, {content}"
                 ))
             }
             _ => Ok(content.to_string()),
@@ -771,7 +767,7 @@ impl ContentAdapter {
             }
             ExplanationStyle::ExampleDriven => {
                 // Add examples
-                Ok(format!("{}\n\n**Example**: For instance, when querying for person names, you might use: SELECT ?name WHERE {{ ?person foaf:name ?name }}", content))
+                Ok(format!("{content}\n\n**Example**: For instance, when querying for person names, you might use: SELECT ?name WHERE {{ ?person foaf:name ?name }}"))
             }
             _ => Ok(content.to_string()),
         }
@@ -795,7 +791,7 @@ impl ContentAdapter {
             }
             ExpertiseLevel::Expert => {
                 // Add technical depth
-                Ok(format!("{}\n\n**Technical Note**: For advanced optimization, consider using query federation and distributed processing techniques.", content))
+                Ok(format!("{content}\n\n**Technical Note**: For advanced optimization, consider using query federation and distributed processing techniques."))
             }
             _ => Ok(content.to_string()),
         }
@@ -854,7 +850,7 @@ impl AccessibilityEnhancer {
             .iter()
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
-            .map(|s| format!("{}.", s))
+            .map(|s| format!("{s}."))
             .collect();
 
         Ok(simplified.join("\n\n"))
@@ -862,7 +858,7 @@ impl AccessibilityEnhancer {
 
     async fn enhance_for_visual_impairment(&self, content: &str) -> Result<String> {
         // Add descriptive text for visual elements
-        Ok(format!("[Text content] {}", content))
+        Ok(format!("[Text content] {content}"))
     }
 }
 

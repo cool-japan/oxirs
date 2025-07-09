@@ -4,23 +4,20 @@
 //! to provide state-of-the-art neural enhancement for SPARQL query planning and execution.
 
 use crate::{
-    ml::{GraphData, ModelError, ModelMetrics},
-    neural_patterns::{NeuralPattern, NeuralPatternConfig, NeuralPatternRecognizer},
-    optimization::OptimizationEngine,
-    quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
+    neural_patterns::{NeuralPatternConfig, NeuralPatternRecognizer},
+    quantum_enhanced_pattern_optimizer::QuantumEnhancedPatternOptimizer,
     Result, ShaclAiError,
 };
 
-use ndarray::{s, Array1, Array2, Array3, Array4, Axis};
+use ndarray::{s, Array1, Array2, Array3};
 use oxirs_core::{
-    model::{Term, Variable},
+    model::Variable,
     query::{
         algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
         pattern_optimizer::{
-            IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
+            IndexType, OptimizedPatternPlan, PatternStrategy,
         },
-    },
-    OxirsError, Store,
+    }, Store,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -301,7 +298,7 @@ impl MultiHeadAttention {
     fn concatenate_heads(&self, heads: &[Array2<f64>]) -> Result<Array2<f64>> {
         if heads.is_empty() {
             return Err(
-                ShaclAiError::DataProcessing("No attention heads provided".to_string()).into(),
+                ShaclAiError::DataProcessing("No attention heads provided".to_string()),
             );
         }
 
@@ -532,14 +529,14 @@ impl PatternEmbedder {
         let mut embedding = Array1::zeros(self.config.model_dim);
 
         for token in &pattern_tokens {
-            let token_id = self.get_or_create_token_id(&token);
+            let token_id = self.get_or_create_token_id(token);
             let token_embedding = self.embedding_table.slice(s![token_id, ..]);
             embedding = embedding + token_embedding;
         }
 
         // Normalize by number of tokens
         if !pattern_tokens.is_empty() {
-            embedding = embedding / pattern_tokens.len() as f64;
+            embedding /= pattern_tokens.len() as f64;
         }
 
         Ok(embedding)
@@ -657,7 +654,7 @@ impl AttentionCostPredictor {
         // Weighted context vector
         let mut context_vector: Array1<f64> = Array1::zeros(self.config.model_dim);
         for (weight, context_emb) in normalized_weights.iter().zip(context_embeddings.iter()) {
-            context_vector = context_vector + &(context_emb * *weight);
+            context_vector += &(context_emb * *weight);
         }
 
         // Combine pattern and context
@@ -784,7 +781,7 @@ impl PatternMemoryBank {
 
     /// Store pattern in memory
     pub fn store(&mut self, pattern: AlgebraTriplePattern, embedding: Array1<f64>, cost: f64) {
-        let pattern_key = format!("{:?}", pattern);
+        let pattern_key = format!("{pattern:?}");
 
         // Check if pattern already exists
         if let Some(entry) = self
@@ -965,7 +962,7 @@ impl NeuralTransformerPatternIntegration {
         match self.pattern_embedder.lock() {
             Ok(mut embedder) => embedder.embed_pattern_sequence(patterns),
             _ => Err(
-                ShaclAiError::DataProcessing("Failed to lock pattern embedder".to_string()).into(),
+                ShaclAiError::DataProcessing("Failed to lock pattern embedder".to_string()),
             ),
         }
     }
@@ -975,8 +972,7 @@ impl NeuralTransformerPatternIntegration {
         match self.positional_encoder.lock() {
             Ok(encoder) => encoder.encode(embeddings),
             _ => Err(
-                ShaclAiError::DataProcessing("Failed to lock positional encoder".to_string())
-                    .into(),
+                ShaclAiError::DataProcessing("Failed to lock positional encoder".to_string()),
             ),
         }
     }
@@ -987,8 +983,7 @@ impl NeuralTransformerPatternIntegration {
             Ok(mut encoder) => encoder.forward(embeddings, None),
             _ => Err(ShaclAiError::DataProcessing(
                 "Failed to lock transformer encoder".to_string(),
-            )
-            .into()),
+            )),
         }
     }
 
@@ -1020,8 +1015,7 @@ impl NeuralTransformerPatternIntegration {
             _ => {
                 return Err(ShaclAiError::DataProcessing(
                     "Failed to lock attention cost predictor".to_string(),
-                )
-                .into());
+                ));
             }
         }
 

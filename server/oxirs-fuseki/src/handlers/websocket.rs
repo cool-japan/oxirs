@@ -9,18 +9,15 @@
 //! - Query result streaming
 
 use crate::{
-    auth::{AuthUser, Permission},
     error::{FusekiError, FusekiResult},
     server::AppState,
-    store::Store,
 };
 use axum::{
     extract::{
         ws::{Message, WebSocket},
         Query, State, WebSocketUpgrade,
     },
-    http::StatusCode,
-    response::{IntoResponse, Response},
+    response::IntoResponse,
 };
 use chrono::{DateTime, Utc};
 use futures_util::{SinkExt, StreamExt};
@@ -29,7 +26,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, RwLock};
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
 /// WebSocket subscription manager
@@ -191,6 +188,12 @@ pub struct SubscriptionMetrics {
     pub average_execution_time_ms: f64,
     pub error_count: usize,
     pub last_result_count: usize,
+}
+
+impl Default for SubscriptionManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl SubscriptionManager {
@@ -453,7 +456,7 @@ async fn handle_websocket_message(
     response_tx: &mpsc::Sender<SubscriptionResponse>,
 ) -> FusekiResult<()> {
     let request: SubscriptionRequest = serde_json::from_str(message)
-        .map_err(|e| FusekiError::bad_request(format!("Invalid JSON: {}", e)))?;
+        .map_err(|e| FusekiError::bad_request(format!("Invalid JSON: {e}")))?;
 
     debug!("Processing WebSocket request: {:?}", request.action);
 
@@ -474,7 +477,7 @@ async fn handle_websocket_message(
     response_tx
         .send(response)
         .await
-        .map_err(|e| FusekiError::internal(format!("Failed to send response: {}", e)))?;
+        .map_err(|e| FusekiError::internal(format!("Failed to send response: {e}")))?;
 
     Ok(())
 }
@@ -489,7 +492,7 @@ async fn handle_subscribe_request(
         .query
         .ok_or_else(|| FusekiError::bad_request("Query required for subscription"))?;
 
-    let filters = request.filters.unwrap_or_else(|| SubscriptionFilters {
+    let filters = request.filters.unwrap_or(SubscriptionFilters {
         min_results: None,
         max_results: Some(1000),
         graph_filter: None,
@@ -796,6 +799,12 @@ pub struct ChangeDetector {
     last_check: DateTime<Utc>,
     graph_checksums: HashMap<String, u64>,
     change_buffer: Vec<ChangeNotification>,
+}
+
+impl Default for ChangeDetector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ChangeDetector {

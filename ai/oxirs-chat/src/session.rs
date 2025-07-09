@@ -9,9 +9,9 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::Arc,
-    time::{Duration, SystemTime},
+    time::SystemTime,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Persistent session data
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -505,7 +505,7 @@ impl ChatSession {
             for window in words.windows(2) {
                 if let [first, second] = window {
                     // Look for capitalized words that might be entities
-                    if first.chars().next().map_or(false, |c| c.is_uppercase())
+                    if first.chars().next().is_some_and(|c| c.is_uppercase())
                         && first.len() > 2
                         && !first.ends_with('.')
                     {
@@ -513,10 +513,10 @@ impl ChatSession {
                     }
 
                     // Look for two-word entities
-                    if first.chars().next().map_or(false, |c| c.is_uppercase())
-                        && second.chars().next().map_or(false, |c| c.is_uppercase())
+                    if first.chars().next().is_some_and(|c| c.is_uppercase())
+                        && second.chars().next().is_some_and(|c| c.is_uppercase())
                     {
-                        entities.insert(format!("{} {}", first, second));
+                        entities.insert(format!("{first} {second}"));
                     }
                 }
             }
@@ -685,6 +685,12 @@ pub struct TopicTracker {
     pub topic_history: Vec<TopicTransition>,
     pub confidence_threshold: f32,
     pub max_topics: usize,
+}
+
+impl Default for TopicTracker {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TopicTracker {

@@ -2,8 +2,8 @@
 
 use std::time::Duration;
 
-use oxirs_core::{model::Term, Store};
-use oxirs_shacl::{Shape, ShapeId, ValidationReport};
+use oxirs_core::Store;
+use oxirs_shacl::Shape;
 
 use super::{
     config::PredictiveAnalyticsConfig,
@@ -13,9 +13,9 @@ use super::{
     types::{PredictiveAnalyticsStatistics, PredictiveInsights},
 };
 use crate::{
-    analytics::{AnalyticsEngine, PerformanceAnalysis, ValidationInsights},
+    analytics::{PerformanceAnalysis, ValidationInsights},
     quality::QualityReport,
-    Result, ShaclAiError,
+    Result,
 };
 
 /// Predictive analytics engine with forecasting and recommendation capabilities

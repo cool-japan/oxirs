@@ -583,8 +583,8 @@ impl OptimizationCache {
     fn calculate_effectiveness_score(&self, hit_rate: f64, avg_reuse: f64) -> f64 {
         let hit_score = hit_rate;
         let reuse_score = (avg_reuse - 1.0).max(0.0) / 10.0; // Normalize to 0-1 range
-        let combined_score = (hit_score * 0.7 + reuse_score * 0.3).min(1.0);
-        combined_score
+        
+        (hit_score * 0.7 + reuse_score * 0.3).min(1.0)
     }
 
     /// Clean expired entries from the cache

@@ -4,11 +4,8 @@
 //! with AI-powered enhancements.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
-use oxirs_core::model::NamedNode;
 
-use crate::{Result, ShaclAiError};
 
 // Simplified shape types for AI operations
 // We'll expand this as the SHACL crate stabilizes
@@ -212,16 +209,16 @@ impl PropertyConstraint {
         let mut parts = Vec::new();
 
         if let Some(min_count) = self.min_count {
-            parts.push(format!("minCount:{}", min_count));
+            parts.push(format!("minCount:{min_count}"));
         }
         if let Some(max_count) = self.max_count {
-            parts.push(format!("maxCount:{}", max_count));
+            parts.push(format!("maxCount:{max_count}"));
         }
         if let Some(ref datatype) = self.datatype {
-            parts.push(format!("datatype:{}", datatype));
+            parts.push(format!("datatype:{datatype}"));
         }
         if let Some(ref class) = self.class {
-            parts.push(format!("class:{}", class));
+            parts.push(format!("class:{class}"));
         }
 
         if parts.is_empty() {
@@ -279,11 +276,7 @@ impl PropertyConstraint {
             Some(self.in_values.join(","))
         } else if let Some(min_length) = self.min_length {
             Some(min_length.to_string())
-        } else if let Some(max_length) = self.max_length {
-            Some(max_length.to_string())
-        } else {
-            None
-        }
+        } else { self.max_length.map(|max_length| max_length.to_string()) }
     }
 }
 

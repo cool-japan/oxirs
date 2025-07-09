@@ -352,8 +352,10 @@ impl Default for NumaTopology {
 
 /// NUMA allocation strategy
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum NumaAllocationStrategy {
     /// Allocate on current NUMA node
+    #[default]
     Local,
     /// Interleave allocation across all NUMA nodes
     Interleave,
@@ -365,11 +367,6 @@ pub enum NumaAllocationStrategy {
     Bind(usize),
 }
 
-impl Default for NumaAllocationStrategy {
-    fn default() -> Self {
-        NumaAllocationStrategy::Local
-    }
-}
 
 /// NUMA memory pool configuration
 #[derive(Debug, Clone)]
@@ -524,6 +521,7 @@ impl BufferPoolStats {
 /// LRU node for buffer pool
 #[derive(Debug)]
 struct LruNode {
+    #[allow(dead_code)]
     page_id: PageId,
     prev: Option<PageId>,
     next: Option<PageId>,
@@ -548,16 +546,21 @@ pub struct BufferPool {
     /// Page file
     page_file: Arc<Mutex<File>>,
     /// File path
+    #[allow(dead_code)]
     file_path: PathBuf,
     /// Next page ID counter
     next_page_id: Arc<Mutex<PageId>>,
     /// NUMA topology
+    #[allow(dead_code)]
     numa_topology: Arc<RwLock<NumaTopology>>,
     /// NUMA memory pools
+    #[allow(dead_code)]
     numa_memory_pools: Arc<RwLock<HashMap<usize, NumaMemoryPool>>>,
     /// Page to NUMA node mapping
+    #[allow(dead_code)]
     page_numa_mapping: Arc<RwLock<HashMap<PageId, usize>>>,
     /// Current NUMA allocation node (for round-robin)
+    #[allow(dead_code)]
     current_numa_node: Arc<Mutex<usize>>,
 }
 
@@ -645,7 +648,7 @@ impl BufferPool {
                 .map_err(|_| anyhow!("Failed to lock page"))?;
 
             if page.is_dirty {
-                self.write_page_to_disk(&*page)?;
+                self.write_page_to_disk(&page)?;
                 self.update_stats_write();
 
                 // Remove from dirty pages queue
@@ -1085,6 +1088,7 @@ impl BufferPool {
     }
 
     /// Parse CPU list string (e.g., "0-3,8-11")
+    #[allow(dead_code)]
     fn parse_cpu_list(cpulist: &str) -> Vec<usize> {
         let mut cores = Vec::new();
         for range in cpulist.split(',') {
@@ -1107,6 +1111,7 @@ impl BufferPool {
     }
 
     /// Parse memory info from NUMA node meminfo
+    #[allow(dead_code)]
     fn parse_memory_info(meminfo: &str) -> usize {
         for line in meminfo.lines() {
             if line.starts_with("Node") && line.contains("MemTotal:") {

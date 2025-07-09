@@ -20,16 +20,11 @@ use tokio::{
     time::interval,
 };
 use tracing::{debug, error, info, warn};
-use uuid::Uuid;
 
 // Encryption and compression
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Key, Nonce,
-};
-use argon2::{
-    password_hash::{PasswordHasher, SaltString},
-    Argon2,
 };
 use base64::{engine::general_purpose, Engine};
 use zstd::{Decoder, Encoder};
@@ -38,7 +33,6 @@ use crate::{
     analytics::{
         ComplexityMetrics, ConfidenceMetrics, ConversationAnalytics, ConversationQuality,
         EmotionScore, ImplicitSatisfactionSignals, IntentType, SatisfactionMetrics,
-        UncertaintyFactor,
     },
     ChatConfig, Message, SessionMetrics,
 };
@@ -114,6 +108,7 @@ pub struct SessionWithDirtyFlag {
 
 /// Conversation state for advanced context management
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ConversationState {
     pub current_topic: Option<String>,
     pub context_window: Vec<String>, // Message IDs in current context
@@ -123,18 +118,6 @@ pub struct ConversationState {
     pub conversation_flow: ConversationFlow,
 }
 
-impl Default for ConversationState {
-    fn default() -> Self {
-        Self {
-            current_topic: None,
-            context_window: Vec::new(),
-            entity_history: Vec::new(),
-            query_history: Vec::new(),
-            user_intent_history: Vec::new(),
-            conversation_flow: ConversationFlow::default(),
-        }
-    }
-}
 
 /// Entity reference for tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -650,7 +633,7 @@ impl SessionPersistenceManager {
         let mut query_history = Vec::new();
         let mut user_intent_history = Vec::new();
         let mut current_topic = None;
-        let mut topic_transitions = Vec::new();
+        let topic_transitions = Vec::new();
         let mut interaction_patterns = Vec::new();
 
         // Analyze recent messages (last 10 for context window)
@@ -678,7 +661,7 @@ impl SessionPersistenceManager {
                         entities
                             .entry(entity_key.clone())
                             .or_insert_with(|| EntityReference {
-                                entity_uri: format!("local:{}", entity_key),
+                                entity_uri: format!("local:{entity_key}"),
                                 entity_label: word.to_string(),
                                 first_mentioned: message.timestamp.into(),
                                 mention_count: 0,
@@ -1005,19 +988,19 @@ impl SessionPersistenceManager {
     fn get_session_file_path(&self, session_id: &str) -> PathBuf {
         self.config
             .storage_path
-            .join(format!("{}.session", session_id))
+            .join(format!("{session_id}.session"))
     }
 
     fn get_backup_file_path(&self, session_id: &str) -> PathBuf {
         self.config
             .backup_path
-            .join(format!("{}.backup", session_id))
+            .join(format!("{session_id}.backup"))
     }
 
     fn get_checkpoint_file_path(&self, session_id: &str) -> PathBuf {
         self.config
             .storage_path
-            .join(format!("{}.checkpoint", session_id))
+            .join(format!("{session_id}.checkpoint"))
     }
 
     async fn load_all_sessions(&self) -> Result<()> {
@@ -1266,15 +1249,14 @@ impl SessionPersistenceManager {
         };
 
         // Verify checksum if available
-        if !persisted.checksum.is_empty() {
-            if !self.verify_checksum(&persisted).await? {
+        if !persisted.checksum.is_empty()
+            && !self.verify_checksum(&persisted).await? {
                 warn!(
                     "Checkpoint checksum verification failed for session: {}",
                     session_id
                 );
                 return Ok(None);
             }
-        }
 
         // Convert to persistent chat session
         let session = self

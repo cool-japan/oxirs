@@ -15,8 +15,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     analytics::ConversationAnalytics,
-    cache::{AdvancedCacheManager, CacheConfig, CacheStats},
-    Message, MessageRole,
+    cache::{AdvancedCacheManager, CacheStats},
 };
 
 /// Performance monitoring configuration

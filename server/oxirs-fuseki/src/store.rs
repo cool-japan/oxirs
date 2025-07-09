@@ -7,12 +7,12 @@ use oxirs_core::parser::{Parser, RdfFormat as CoreRdfFormat};
 use oxirs_core::query::{QueryEngine, QueryResult as CoreQueryResult};
 use oxirs_core::serializer::Serializer;
 use oxirs_core::{RdfStore, Store as CoreStore};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// SPARQL query result formats
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -115,7 +115,7 @@ impl Store {
     /// Create a new in-memory store
     pub fn new() -> FusekiResult<Self> {
         let default_store = RdfStore::new()
-            .map_err(|e| FusekiError::store(format!("Failed to create core store: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to create core store: {e}")))?;
 
         Ok(Store {
             default_store: Arc::new(RwLock::new(default_store)),
@@ -136,13 +136,13 @@ impl Store {
         // For now, create the directory if it doesn't exist
         if !path.exists() {
             std::fs::create_dir_all(path).map_err(|e| {
-                FusekiError::store(format!("Failed to create store directory: {}", e))
+                FusekiError::store(format!("Failed to create store directory: {e}"))
             })?;
         }
 
         // Create the core store - currently will be in-memory until disk persistence is implemented
         let default_store = RdfStore::open(path.join("default.db"))
-            .map_err(|e| FusekiError::store(format!("Failed to open core store: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to open core store: {e}")))?;
 
         Ok(Store {
             default_store: Arc::new(RwLock::new(default_store)),
@@ -160,12 +160,11 @@ impl Store {
         let mut datasets = self
             .datasets
             .write()
-            .map_err(|e| FusekiError::store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to acquire write lock: {e}")))?;
 
         if datasets.contains_key(name) {
             return Err(FusekiError::store(format!(
-                "Dataset '{}' already exists",
-                name
+                "Dataset '{name}' already exists"
             )));
         }
 
@@ -174,7 +173,7 @@ impl Store {
         } else {
             RdfStore::open(&config.location)
         }
-        .map_err(|e| FusekiError::store(format!("Failed to create dataset store: {}", e)))?;
+        .map_err(|e| FusekiError::store(format!("Failed to create dataset store: {e}")))?;
 
         datasets.insert(name.to_string(), Arc::new(RwLock::new(store)));
         info!("Created dataset: '{}'", name);
@@ -186,7 +185,7 @@ impl Store {
         let mut datasets = self
             .datasets
             .write()
-            .map_err(|e| FusekiError::store(format!("Failed to acquire write lock: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to acquire write lock: {e}")))?;
 
         let removed = datasets.remove(name).is_some();
         if removed {
@@ -201,13 +200,13 @@ impl Store {
             None => Ok(Arc::clone(&self.default_store)),
             Some(dataset_name) => {
                 let datasets = self.datasets.read().map_err(|e| {
-                    FusekiError::store(format!("Failed to acquire read lock: {}", e))
+                    FusekiError::store(format!("Failed to acquire read lock: {e}"))
                 })?;
 
                 datasets
                     .get(dataset_name)
                     .map(Arc::clone)
-                    .ok_or_else(|| FusekiError::not_found(format!("Dataset '{}'", dataset_name)))
+                    .ok_or_else(|| FusekiError::not_found(format!("Dataset '{dataset_name}'")))
             }
         }
     }
@@ -217,7 +216,7 @@ impl Store {
         let datasets = self
             .datasets
             .read()
-            .map_err(|e| FusekiError::store(format!("Failed to acquire read lock: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to acquire read lock: {e}")))?;
 
         Ok(datasets.keys().cloned().collect())
     }
@@ -247,13 +246,13 @@ impl Store {
         let store = self.get_dataset(dataset_name)?;
         let store_guard = store
             .read()
-            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {e}")))?;
 
         // Execute the query using the query engine
         let core_result = self
             .query_engine
             .query(sparql, &*store_guard)
-            .map_err(|e| FusekiError::query_execution(format!("Query execution failed: {}", e)))?;
+            .map_err(|e| FusekiError::query_execution(format!("Query execution failed: {e}")))?;
 
         let execution_time = start_time.elapsed();
 
@@ -300,7 +299,7 @@ impl Store {
 
         let store = self.get_dataset(dataset_name)?;
         let mut store_guard = store.write().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire store write lock: {}", e))
+            FusekiError::store(format!("Failed to acquire store write lock: {e}"))
         })?;
 
         let mut quads_inserted = 0;
@@ -398,7 +397,7 @@ impl Store {
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
         let quad_count = store.len().map_err(|e| {
-            FusekiError::update_execution(format!("Failed to get store size: {}", e))
+            FusekiError::update_execution(format!("Failed to get store size: {e}"))
         })?;
 
         // Check if clearing specific graph or all
@@ -406,13 +405,13 @@ impl Store {
             || sparql.to_uppercase().contains("CLEAR DEFAULT")
         {
             store.clear_all().map_err(|e| {
-                FusekiError::update_execution(format!("Failed to clear store: {}", e))
+                FusekiError::update_execution(format!("Failed to clear store: {e}"))
             })?;
             Ok(("CLEAR", 0, quad_count))
         } else {
             // For now, clear everything (TODO: implement named graph clearing)
             store.clear_all().map_err(|e| {
-                FusekiError::update_execution(format!("Failed to clear store: {}", e))
+                FusekiError::update_execution(format!("Failed to clear store: {e}"))
             })?;
             Ok(("CLEAR", 0, quad_count))
         }
@@ -431,7 +430,7 @@ impl Store {
         let mut inserted_count = 0;
         for quad in quads {
             if store.insert_quad(quad).map_err(|e| {
-                FusekiError::update_execution(format!("Failed to insert quad: {}", e))
+                FusekiError::update_execution(format!("Failed to insert quad: {e}"))
             })? {
                 inserted_count += 1;
             }
@@ -453,7 +452,7 @@ impl Store {
         let mut deleted_count = 0;
         for quad in quads {
             if store.remove_quad(&quad).map_err(|e| {
-                FusekiError::update_execution(format!("Failed to remove quad: {}", e))
+                FusekiError::update_execution(format!("Failed to remove quad: {e}"))
             })? {
                 deleted_count += 1;
             }
@@ -479,7 +478,7 @@ impl Store {
             let delete_quads = self.parse_data_block(&delete_block)?;
             for quad in delete_quads {
                 if store.remove_quad(&quad).map_err(|e| {
-                    FusekiError::update_execution(format!("Failed to remove quad: {}", e))
+                    FusekiError::update_execution(format!("Failed to remove quad: {e}"))
                 })? {
                     deleted_count += 1;
                 }
@@ -491,7 +490,7 @@ impl Store {
             let insert_quads = self.parse_data_block(&insert_block)?;
             for quad in insert_quads {
                 if store.insert_quad(quad).map_err(|e| {
-                    FusekiError::update_execution(format!("Failed to insert quad: {}", e))
+                    FusekiError::update_execution(format!("Failed to insert quad: {e}"))
                 })? {
                     inserted_count += 1;
                 }
@@ -525,14 +524,13 @@ impl Store {
                     )
                     .map_err(|e| {
                         FusekiError::update_execution(format!(
-                            "Failed to query matching quads: {}",
-                            e
+                            "Failed to query matching quads: {e}"
                         ))
                     })?;
 
                 for quad in matching_quads {
                     if store.remove_quad(&quad).map_err(|e| {
-                        FusekiError::update_execution(format!("Failed to remove quad: {}", e))
+                        FusekiError::update_execution(format!("Failed to remove quad: {e}"))
                     })? {
                         deleted_count += 1;
                     }
@@ -560,7 +558,7 @@ impl Store {
         let mut inserted_count = 0;
         for quad in quads {
             if store.insert_quad(quad).map_err(|e| {
-                FusekiError::update_execution(format!("Failed to insert quad: {}", e))
+                FusekiError::update_execution(format!("Failed to insert quad: {e}"))
             })? {
                 inserted_count += 1;
             }
@@ -587,7 +585,7 @@ impl Store {
 
         // Find the operation keyword
         let operation_pos = sparql_upper.find(&operation_upper).ok_or_else(|| {
-            FusekiError::update_execution(format!("Operation '{}' not found", operation))
+            FusekiError::update_execution(format!("Operation '{operation}' not found"))
         })?;
 
         // Find the opening brace after the operation
@@ -642,7 +640,7 @@ impl Store {
             let line_with_period = if line.ends_with('.') {
                 line.to_string()
             } else {
-                format!("{}.", line)
+                format!("{line}.")
             };
 
             // Try to parse as N-Triples
@@ -668,8 +666,8 @@ impl Store {
         dataset_name: Option<&str>,
     ) -> FusekiResult<usize> {
         let store = self.get_dataset(dataset_name)?;
-        let mut store_guard = store.write().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire store write lock: {}", e))
+        let store_guard = store.write().map_err(|e| {
+            FusekiError::store(format!("Failed to acquire store write lock: {e}"))
         })?;
 
         let core_format = match format {
@@ -687,7 +685,7 @@ impl Store {
         let parser = Parser::new(core_format);
         let quads = parser
             .parse_str_to_quads(data)
-            .map_err(|e| FusekiError::parse(format!("Failed to parse RDF data: {}", e)))?;
+            .map_err(|e| FusekiError::parse(format!("Failed to parse RDF data: {e}")))?;
         let graph = Graph::from_iter(
             quads
                 .into_iter()
@@ -699,7 +697,7 @@ impl Store {
         for triple in graph.iter() {
             if store_guard
                 .insert_triple(triple.clone())
-                .map_err(|e| FusekiError::store(format!("Failed to insert triple: {}", e)))?
+                .map_err(|e| FusekiError::store(format!("Failed to insert triple: {e}")))?
             {
                 inserted_count += 1;
             }
@@ -718,7 +716,7 @@ impl Store {
         let store = self.get_dataset(dataset_name)?;
         let store_guard = store
             .read()
-            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {e}")))?;
 
         let core_format = match format {
             RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
@@ -735,12 +733,12 @@ impl Store {
         let serializer = Serializer::new(core_format);
         let triples = store_guard
             .triples()
-            .map_err(|e| FusekiError::store(format!("Failed to query triples: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to query triples: {e}")))?;
 
         let graph = Graph::from_triples(triples);
         let serialized = serializer
             .serialize_graph(&graph)
-            .map_err(|e| FusekiError::parse(format!("Failed to serialize data: {}", e)))?;
+            .map_err(|e| FusekiError::parse(format!("Failed to serialize data: {e}")))?;
 
         Ok(serialized)
     }
@@ -751,7 +749,7 @@ impl Store {
         since: chrono::DateTime<chrono::Utc>,
     ) -> FusekiResult<Vec<StoreChange>> {
         let metadata = self.metadata.read().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire metadata read lock: {}", e))
+            FusekiError::store(format!("Failed to acquire metadata read lock: {e}"))
         })?;
 
         let recent_changes = metadata
@@ -770,7 +768,7 @@ impl Store {
         params: ChangeDetectionParams,
     ) -> FusekiResult<Vec<StoreChange>> {
         let metadata = self.metadata.read().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire metadata read lock: {}", e))
+            FusekiError::store(format!("Failed to acquire metadata read lock: {e}"))
         })?;
 
         let mut changes: Vec<StoreChange> = metadata
@@ -817,7 +815,7 @@ impl Store {
         older_than: chrono::DateTime<chrono::Utc>,
     ) -> FusekiResult<usize> {
         let mut metadata = self.metadata.write().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire metadata write lock: {}", e))
+            FusekiError::store(format!("Failed to acquire metadata write lock: {e}"))
         })?;
 
         let initial_count = metadata.change_log.len();
@@ -836,7 +834,7 @@ impl Store {
     /// Get the latest change ID
     pub async fn get_latest_change_id(&self) -> FusekiResult<u64> {
         let metadata = self.metadata.read().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire metadata read lock: {}", e))
+            FusekiError::store(format!("Failed to acquire metadata read lock: {e}"))
         })?;
 
         Ok(metadata.last_change_id)
@@ -845,7 +843,7 @@ impl Store {
     /// Watch for changes (used by WebSocket subscriptions)
     pub async fn watch_changes(&self, since_id: u64) -> FusekiResult<Vec<StoreChange>> {
         let metadata = self.metadata.read().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire metadata read lock: {}", e))
+            FusekiError::store(format!("Failed to acquire metadata read lock: {e}"))
         })?;
 
         let new_changes = metadata
@@ -863,15 +861,15 @@ impl Store {
         let store = self.get_dataset(dataset_name)?;
         let store_guard = store
             .read()
-            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store read lock: {e}")))?;
 
         let metadata = self.metadata.read().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire metadata read lock: {}", e))
+            FusekiError::store(format!("Failed to acquire metadata read lock: {e}"))
         })?;
 
         let triple_count = store_guard
             .len()
-            .map_err(|e| FusekiError::store(format!("Failed to get store size: {}", e)))?;
+            .map_err(|e| FusekiError::store(format!("Failed to get store size: {e}")))?;
 
         let uptime = metadata
             .created_at
@@ -969,14 +967,14 @@ impl QueryResult {
                 let mut xml = String::from("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n");
                 xml.push_str("  <head>\n");
                 for var in variables {
-                    xml.push_str(&format!("    <variable name=\"{}\"/>\n", var));
+                    xml.push_str(&format!("    <variable name=\"{var}\"/>\n"));
                 }
                 xml.push_str("  </head>\n  <results>\n");
 
                 for binding in bindings {
                     xml.push_str("    <result>\n");
                     for (var, term) in binding {
-                        xml.push_str(&format!("      <binding name=\"{}\">\n", var));
+                        xml.push_str(&format!("      <binding name=\"{var}\">\n"));
                         match term {
                             Term::NamedNode(node) => {
                                 xml.push_str(&format!("        <uri>{}</uri>\n", node.as_str()));
@@ -1014,7 +1012,7 @@ impl QueryResult {
                 Ok(xml)
             }
             CoreQueryResult::Ask(result) => {
-                let xml = format!("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  <boolean>{}</boolean>\n</sparql>", result);
+                let xml = format!("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <head/>\n  <boolean>{result}</boolean>\n</sparql>");
                 Ok(xml)
             }
             _ => Err(FusekiError::unsupported_media_type(
@@ -1106,7 +1104,7 @@ impl QueryResult {
                 let serializer = Serializer::new(core_format);
                 let graph = oxirs_core::model::graph::Graph::from_iter(triples.clone());
                 serializer.serialize_graph(&graph).map_err(|e| {
-                    FusekiError::parse(format!("Failed to serialize CONSTRUCT result: {}", e))
+                    FusekiError::parse(format!("Failed to serialize CONSTRUCT result: {e}"))
                 })
             }
             _ => Err(FusekiError::unsupported_media_type(

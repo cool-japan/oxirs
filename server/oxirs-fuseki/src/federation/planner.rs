@@ -1,7 +1,6 @@
 //! Query planning for federated SPARQL execution
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
 use futures;
 use regex;
 use std::{
@@ -13,7 +12,6 @@ use tokio::sync::RwLock;
 use url::Url;
 
 use oxirs_arq::query::{Query, QueryType};
-use oxirs_core::{model::NamedNode, query::QueryResults};
 
 use crate::{
     error::{FusekiError as Error, FusekiResult as Result},
@@ -209,6 +207,12 @@ pub struct DefaultEstimates {
     pub default_network_cost: f64,
 }
 
+impl Default for DefaultServiceDiscovery {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefaultServiceDiscovery {
     /// Create a new service discovery instance
     pub fn new() -> Self {
@@ -292,7 +296,7 @@ impl DefaultServiceDiscovery {
         Ok(ServiceEndpoint {
             url,
             metadata: ServiceMetadata {
-                name: format!("Service at {}", endpoint_url),
+                name: format!("Service at {endpoint_url}"),
                 description: None,
                 tags: vec![],
                 location: None,
@@ -302,6 +306,12 @@ impl DefaultServiceDiscovery {
             health: self.check_health(endpoint_url).await.unwrap_or_default(),
             capabilities: EndpointCapabilities::default(),
         })
+    }
+}
+
+impl Default for DefaultCostEstimator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -612,13 +622,13 @@ impl QueryPlanner {
 
     /// Extract SERVICE patterns from SPARQL query
     fn extract_service_patterns(&self, query: &Query) -> Result<Vec<ServicePattern>> {
-        let query_string = format!("{:?}", query);
+        let query_string = format!("{query:?}");
         let mut patterns = Vec::new();
 
         // Use regex to find SERVICE clauses (simplified approach)
         let service_regex =
             regex::Regex::new(r"SERVICE\s*<([^>]+)>\s*\{([^}]+)\}").map_err(|e| Error::Parse {
-                message: format!("Regex error: {}", e),
+                message: format!("Regex error: {e}"),
             })?;
 
         for cap in service_regex.captures_iter(&query_string) {
@@ -670,7 +680,7 @@ impl QueryPlanner {
             let service_selection = ServiceSelection {
                 service_id: matching_endpoint.0.metadata.name.clone(),
                 service_url: Url::parse(&pattern.service_url).map_err(|e| Error::Parse {
-                    message: format!("Invalid service URL: {}", e),
+                    message: format!("Invalid service URL: {e}"),
                 })?,
                 score: 1.0
                     / (matching_endpoint
@@ -683,7 +693,7 @@ impl QueryPlanner {
             };
 
             steps.push(ExecutionStep {
-                id: format!("service_step_{}", idx),
+                id: format!("service_step_{idx}"),
                 services: vec![service_selection],
                 sub_query,
                 dependencies: if idx > 0 {
@@ -734,7 +744,7 @@ impl QueryPlanner {
 
     /// Check if query is complex enough to benefit from decomposition
     fn is_complex_query(&self, query: &Query) -> bool {
-        let query_string = format!("{:?}", query);
+        let query_string = format!("{query:?}");
 
         // Heuristics for complexity:
         // 1. Multiple graph patterns
@@ -757,7 +767,7 @@ impl QueryPlanner {
         endpoint_costs: &[(ServiceEndpoint, QueryCost)],
     ) -> Result<Vec<ExecutionStep>> {
         let mut steps = Vec::new();
-        let query_string = format!("{:?}", query);
+        let query_string = format!("{query:?}");
 
         // Try to identify independent graph patterns that can be parallelized
         let graph_patterns = self.identify_graph_patterns(&query_string)?;
@@ -777,7 +787,7 @@ impl QueryPlanner {
                     };
 
                     steps.push(ExecutionStep {
-                        id: format!("parallel_step_{}", idx),
+                        id: format!("parallel_step_{idx}"),
                         services: vec![service_selection],
                         sub_query,
                         dependencies: vec![], // Independent parallel steps
@@ -892,7 +902,7 @@ impl QueryPlanner {
     /// Create a SPARQL sub-query from a pattern
     fn create_sub_query(&self, pattern: &str) -> Result<Query> {
         // Simple sub-query creation - wrap pattern in SELECT * WHERE
-        let sub_query_string = format!("SELECT * WHERE {{ {} }}", pattern);
+        let sub_query_string = format!("SELECT * WHERE {{ {pattern} }}");
 
         // For now, create a simple placeholder query
         // In a real implementation, this would use proper SPARQL parsing
@@ -1030,7 +1040,7 @@ impl QueryPlanner {
                         .send()
                         .await
                         .map_err(|e| Error::NetworkError {
-                            message: format!("HTTP request failed: {}", e),
+                            message: format!("HTTP request failed: {e}"),
                         })?;
 
                     if !response.status().is_success() {
@@ -1041,14 +1051,13 @@ impl QueryPlanner {
                             .unwrap_or_else(|_| "Unknown error".to_string());
                         return Err(Error::ServiceError {
                             message: format!(
-                                "Service {} returned HTTP {}: {}",
-                                url, status, error_text
+                                "Service {url} returned HTTP {status}: {error_text}"
                             ),
                         });
                     }
 
                     response.json().await.map_err(|e| Error::Parse {
-                        message: format!("Failed to parse JSON response: {}", e),
+                        message: format!("Failed to parse JSON response: {e}"),
                     })
                 })
             })

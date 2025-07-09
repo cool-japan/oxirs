@@ -139,7 +139,7 @@ pub struct MonitoringConfig {
 #[async_trait]
 pub trait CloudService: Send + Sync {
     /// Deploy model to cloud service
-    async fn deploy_model(&self, deployment_config: &DeploymentConfig) -> Result<DeploymentResult>;
+    async fn deploy_model(&self, _deployment_config: &DeploymentConfig) -> Result<DeploymentResult>;
 
     /// Get inference endpoint
     async fn get_endpoint(&self, deployment_id: &str) -> Result<EndpointInfo>;
@@ -175,7 +175,7 @@ pub trait CloudService: Send + Sync {
     async fn estimate_costs(
         &self,
         config: &DeploymentConfig,
-        duration_hours: u32,
+        _duration_hours: u32,
     ) -> Result<CostEstimate>;
 
     /// Deploy serverless function
@@ -187,7 +187,7 @@ pub trait CloudService: Send + Sync {
     /// Invoke serverless function
     async fn invoke_function(
         &self,
-        function_name: &str,
+        _function_name: &str,
         payload: &[u8],
     ) -> Result<FunctionInvocationResult>;
 
@@ -436,6 +436,7 @@ pub struct OptimizationPhase {
 }
 
 /// AWS SageMaker integration
+#[allow(dead_code)]
 pub struct AWSSageMakerService {
     region: String,
     access_key_id: String,
@@ -461,7 +462,7 @@ impl AWSSageMakerService {
 
 #[async_trait]
 impl CloudService for AWSSageMakerService {
-    async fn deploy_model(&self, deployment_config: &DeploymentConfig) -> Result<DeploymentResult> {
+    async fn deploy_model(&self, __deployment_config: &DeploymentConfig) -> Result<DeploymentResult> {
         // Mock implementation - replace with actual AWS SageMaker API calls
         let deployment_id = Uuid::new_v4().to_string();
 
@@ -577,7 +578,7 @@ impl CloudService for AWSSageMakerService {
     async fn estimate_costs(
         &self,
         config: &DeploymentConfig,
-        duration_hours: u32,
+        _duration_hours: u32,
     ) -> Result<CostEstimate> {
         // Mock implementation with actual AWS pricing estimates
         let hourly_rate = match config.instance_type.as_str() {
@@ -626,7 +627,7 @@ impl CloudService for AWSSageMakerService {
 
     async fn invoke_function(
         &self,
-        function_name: &str,
+        _function_name: &str,
         payload: &[u8],
     ) -> Result<FunctionInvocationResult> {
         // Mock Lambda invocation
@@ -796,6 +797,7 @@ impl CloudService for AWSSageMakerService {
 }
 
 /// Azure ML Service integration
+#[allow(dead_code)]
 pub struct AzureMLService {
     subscription_id: String,
     resource_group: String,
@@ -827,7 +829,7 @@ impl AzureMLService {
 
 #[async_trait]
 impl CloudService for AzureMLService {
-    async fn deploy_model(&self, deployment_config: &DeploymentConfig) -> Result<DeploymentResult> {
+    async fn deploy_model(&self, _deployment_config: &DeploymentConfig) -> Result<DeploymentResult> {
         // Mock implementation for Azure ML
         let deployment_id = format!("azure-{}", Uuid::new_v4());
 
@@ -928,7 +930,7 @@ impl CloudService for AzureMLService {
     async fn estimate_costs(
         &self,
         config: &DeploymentConfig,
-        duration_hours: u32,
+        _duration_hours: u32,
     ) -> Result<CostEstimate> {
         let hourly_rate = match config.instance_type.as_str() {
             "Standard_DS2_v2" => 0.14,
@@ -992,8 +994,7 @@ impl CloudService for AzureMLService {
             response_payload:
                 b"{\"status\": \"success\", \"message\": \"Azure function executed\"}".to_vec(),
             log_result: Some(format!(
-                "Executing '{}' (ID: azure-123, Duration: {}ms)",
-                function_name, execution_duration
+                "Executing '{function_name}' (ID: azure-123, Duration: {execution_duration}ms)"
             )),
             status_code: 200,
         })
@@ -1061,7 +1062,7 @@ impl CloudService for AzureMLService {
 
         Ok(StorageResult {
             storage_id: storage_id.clone(),
-            endpoint: format!("https://{}.blob.core.windows.net/", storage_id),
+            endpoint: format!("https://{storage_id}.blob.core.windows.net/"),
             status: StorageStatus::Creating,
             actual_capacity_gb: storage_config.capacity_gb,
             monthly_cost_estimate: monthly_cost,
@@ -1157,6 +1158,7 @@ impl CloudService for AzureMLService {
 }
 
 /// AWS Bedrock service integration
+#[allow(dead_code)]
 pub struct AWSBedrockService {
     region: String,
     access_key_id: String,
@@ -1378,6 +1380,7 @@ impl AzureCognitiveServices {
 }
 
 /// Azure Container Instances integration
+#[allow(dead_code)]
 pub struct AzureContainerInstances {
     subscription_id: String,
     resource_group: String,
@@ -1445,7 +1448,7 @@ impl AzureContainerInstances {
     /// Get container group status
     pub async fn get_container_group_status(
         &self,
-        container_group_name: &str,
+        _container_group_name: &str,
     ) -> Result<ContainerGroupStatus> {
         // Mock status check
         Ok(ContainerGroupStatus::Running)
@@ -1453,7 +1456,7 @@ impl AzureContainerInstances {
 
     /// Delete container group
     pub async fn delete_container_group(&self, container_group_name: &str) -> Result<()> {
-        println!("Deleting Azure Container Group: {}", container_group_name);
+        println!("Deleting Azure Container Group: {container_group_name}");
         Ok(())
     }
 
@@ -1464,8 +1467,7 @@ impl AzureContainerInstances {
         container_name: &str,
     ) -> Result<String> {
         Ok(format!(
-            "[2025-06-30 10:00:00] Container {} in group {} started successfully\n[2025-06-30 10:00:01] Application initialized\n[2025-06-30 10:00:02] Ready to accept requests",
-            container_name, container_group_name
+            "[2025-06-30 10:00:00] Container {container_name} in group {container_group_name} started successfully\n[2025-06-30 10:00:01] Application initialized\n[2025-06-30 10:00:02] Ready to accept requests"
         ))
     }
 }

@@ -10,7 +10,6 @@ use crate::error::FusekiResult;
 use crate::handlers::sparql::optimizers::InjectionDetector;
 use crate::property_path_optimizer::AdvancedPropertyPathOptimizer;
 use crate::subquery_optimizer::AdvancedSubqueryOptimizer;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -197,6 +196,12 @@ pub struct EndpointDiscovery {
     discovery_ttl: std::time::Duration,
 }
 
+impl Default for Sparql12Features {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sparql12Features {
     pub fn new() -> Self {
         Self {
@@ -248,6 +253,12 @@ impl Sparql12Features {
     }
 }
 
+impl Default for PropertyPathOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PropertyPathOptimizer {
     pub fn new() -> Self {
         Self {
@@ -276,7 +287,7 @@ impl PropertyPathOptimizer {
         // Create optimized path
         let optimized = OptimizedPath {
             original_path: path.to_string(),
-            optimized_path: format!("OPTIMIZED({})", path),
+            optimized_path: format!("OPTIMIZED({path})"),
             estimated_cost: 1.0,
             optimization_applied: vec!["path_optimization".to_string()],
             cache_key: format!("path_{}", path.len()),
@@ -289,6 +300,12 @@ impl PropertyPathOptimizer {
         }
 
         Ok(optimized)
+    }
+}
+
+impl Default for AggregationEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -450,17 +467,23 @@ impl AggregationEngine {
     fn optimize_group_concat(&self, function: &str) -> FusekiResult<Option<String>> {
         // Enhanced GROUP_CONCAT with better separator handling
         if function.contains("SEPARATOR") {
-            Ok(Some(format!("ENHANCED_{}", function)))
+            Ok(Some(format!("ENHANCED_{function}")))
         } else {
             // Add default separator
             let inner = &function[12..function.len() - 1]; // Remove GROUP_CONCAT( and )
-            Ok(Some(format!("GROUP_CONCAT({}, ',')", inner)))
+            Ok(Some(format!("GROUP_CONCAT({inner}, ',')")))
         }
     }
 
     fn optimize_sample(&self, function: &str) -> FusekiResult<Option<String>> {
         // Make SAMPLE deterministic for better caching
-        Ok(Some(format!("DETERMINISTIC_{}", function)))
+        Ok(Some(format!("DETERMINISTIC_{function}")))
+    }
+}
+
+impl Default for SubqueryOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -617,7 +640,13 @@ impl SubqueryOptimizer {
     ) -> FusekiResult<Option<String>> {
         // Optimize correlated subquery by pushing predicates
         // This is a simplified implementation
-        Ok(Some(format!("OPTIMIZED_CORRELATED({})", subquery)))
+        Ok(Some(format!("OPTIMIZED_CORRELATED({subquery})")))
+    }
+}
+
+impl Default for BindValuesProcessor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -651,6 +680,12 @@ impl BindValuesProcessor {
         
         // If safe, proceed with optimization
         self.optimize_query(query).await
+    }
+}
+
+impl Default for BindOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -746,12 +781,18 @@ impl BindOptimizer {
 
     fn optimize_concat_expression(&self, bind_clause: &str) -> FusekiResult<String> {
         // Optimize CONCAT expressions
-        Ok(format!("OPTIMIZED_{}", bind_clause))
+        Ok(format!("OPTIMIZED_{bind_clause}"))
     }
 
     fn optimize_arithmetic_expression(&self, bind_clause: &str) -> FusekiResult<String> {
         // Optimize arithmetic expressions
-        Ok(format!("FAST_{}", bind_clause))
+        Ok(format!("FAST_{bind_clause}"))
+    }
+}
+
+impl Default for ValuesOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -832,9 +873,9 @@ impl ValuesOptimizer {
 
         // Optimize VALUES clause
         let optimized = if self.can_push_down_values(values_clause) {
-            Some(format!("PUSHED_DOWN_{}", values_clause))
+            Some(format!("PUSHED_DOWN_{values_clause}"))
         } else {
-            Some(format!("OPTIMIZED_{}", values_clause))
+            Some(format!("OPTIMIZED_{values_clause}"))
         };
 
         // Cache result
@@ -860,6 +901,12 @@ impl ValuesOptimizer {
     }
 }
 
+impl Default for ServiceDelegator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceDelegator {
     pub fn new() -> Self {
         Self {
@@ -868,6 +915,12 @@ impl ServiceDelegator {
             result_merger: ServiceResultMerger::new(),
             endpoint_discovery: EndpointDiscovery::new(),
         }
+    }
+}
+
+impl Default for ParallelServiceExecutor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -880,11 +933,23 @@ impl ParallelServiceExecutor {
     }
 }
 
+impl Default for ServiceResultMerger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ServiceResultMerger {
     pub fn new() -> Self {
         Self {
             merge_strategies: HashMap::new(),
         }
+    }
+}
+
+impl Default for EndpointDiscovery {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

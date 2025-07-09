@@ -504,7 +504,7 @@ impl BatchLoadFn<String, serde_json::Value> for SubjectBatchLoader {
 
         for key in keys {
             // Build SPARQL query for subject
-            let query = format!("SELECT ?p ?o WHERE {{ <{}> ?p ?o }}", key);
+            let query = format!("SELECT ?p ?o WHERE {{ <{key}> ?p ?o }}");
 
             match self.store.query(&query) {
                 Ok(crate::QueryResults::Solutions(solutions)) => {
@@ -545,7 +545,7 @@ impl BatchLoadFn<String, Vec<String>> for PredicateBatchLoader {
 
         for key in keys {
             // Build SPARQL query for predicate values
-            let query = format!("SELECT DISTINCT ?s WHERE {{ ?s <{}> ?o }}", key);
+            let query = format!("SELECT DISTINCT ?s WHERE {{ ?s <{key}> ?o }}");
 
             match self.store.query(&query) {
                 Ok(crate::QueryResults::Solutions(solutions)) => {

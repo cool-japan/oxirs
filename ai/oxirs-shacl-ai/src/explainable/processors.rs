@@ -13,6 +13,12 @@ pub struct NaturalLanguageProcessor {
     templates: HashMap<String, String>,
 }
 
+impl Default for NaturalLanguageProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NaturalLanguageProcessor {
     pub fn new() -> Self {
         let mut templates = HashMap::new();

@@ -509,7 +509,7 @@ impl VectorAnalyticsEngine {
     ) -> Result<(usize, Vec<usize>, Vec<f32>, f32)> {
         // Simplified clustering analysis using k-means with multiple k values
         let max_k = (vectors.len() as f32).sqrt() as usize;
-        let optimal_k = (max_k / 2).max(2).min(10);
+        let optimal_k = (max_k / 2).clamp(2, 10);
 
         // For simplicity, return estimated values
         let cluster_count = optimal_k;

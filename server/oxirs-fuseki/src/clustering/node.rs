@@ -490,7 +490,7 @@ impl NodeCommunication for TcpNodeCommunication {
         let nodes = self.known_nodes.read().await;
         let target_addr = nodes
             .get(target)
-            .ok_or_else(|| FusekiError::internal(format!("Unknown target node: {}", target)))?;
+            .ok_or_else(|| FusekiError::internal(format!("Unknown target node: {target}")))?;
 
         // TODO: Implement actual TCP message sending
         info!(

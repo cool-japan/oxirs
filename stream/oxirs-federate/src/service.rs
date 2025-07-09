@@ -143,6 +143,7 @@ pub enum AuthType {
 
 /// Authentication credentials
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AuthCredentials {
     pub username: Option<String>,
     pub password: Option<String>,
@@ -158,24 +159,6 @@ pub struct AuthCredentials {
     pub token_endpoint: Option<String>,
 }
 
-impl Default for AuthCredentials {
-    fn default() -> Self {
-        Self {
-            username: None,
-            password: None,
-            token: None,
-            api_key: None,
-            api_key_header: None,
-            client_id: None,
-            client_secret: None,
-            token_url: None,
-            scope: None,
-            custom_headers: None,
-            refresh_token: None,
-            token_endpoint: None,
-        }
-    }
-}
 
 /// Authentication configuration for services
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -659,7 +642,7 @@ impl ServiceRegistry {
                 success: matches!(health_result, Ok(ServiceStatus::Healthy)),
                 response_time: Some(response_time),
                 error_message: if health_result.is_err() {
-                    Some(format!("{:?}", health_result))
+                    Some(format!("{health_result:?}"))
                 } else {
                     None
                 },
@@ -1370,6 +1353,7 @@ impl FederatedService {
 
 /// Service metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct ServiceMetadata {
     pub description: Option<String>,
     pub version: Option<String>,
@@ -1379,18 +1363,6 @@ pub struct ServiceMetadata {
     pub schema_url: Option<String>,
 }
 
-impl Default for ServiceMetadata {
-    fn default() -> Self {
-        Self {
-            description: None,
-            version: None,
-            maintainer: None,
-            tags: Vec::new(),
-            documentation_url: None,
-            schema_url: None,
-        }
-    }
-}
 
 /// Service performance characteristics
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -108,7 +108,7 @@ impl DistributedJoinOptimizer {
         // Create nodes for each pattern
         for (idx, pattern) in patterns.iter().enumerate() {
             let node = JoinNode {
-                id: format!("pattern_{}", idx),
+                id: format!("pattern_{idx}"),
                 pattern: pattern.clone(),
                 variables: self.extract_variables(pattern),
                 selectivity: self.estimate_selectivity(pattern).await?,

@@ -6,10 +6,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use oxirs_embed::{EmbeddingModel, Vector as EmbedVector};
-use oxirs_vec::{
-    embeddings::{EmbeddableContent, EmbeddingStrategy},
-    Vector,
-};
+use oxirs_vec::Vector;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -47,7 +44,7 @@ impl EmbeddingManager {
     /// Get embedding for text using the specified model
     pub async fn get_embedding(&self, text: &str, model_name: Option<&str>) -> Result<Vector> {
         let model_key = model_name.unwrap_or(&self.config.default_model);
-        let cache_key = format!("{}:{}", model_key, text);
+        let cache_key = format!("{model_key}:{text}");
 
         // Check cache first
         if self.config.enable_caching {
@@ -400,7 +397,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         Ok(EmbedVector::new(embedding))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<EmbedVector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<EmbedVector> {
         self.get_entity_embedding(relation)
     }
 

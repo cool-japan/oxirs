@@ -413,7 +413,7 @@ impl SubjectRoutingEngine {
     fn generate_cache_key(&self, message_type: &str, context: &HashMap<String, String>) -> String {
         let mut key = message_type.to_string();
         for (k, v) in context {
-            key.push_str(&format!("{}:{}", k, v));
+            key.push_str(&format!("{k}:{v}"));
         }
         key
     }
@@ -455,7 +455,7 @@ impl SubjectRoutingEngine {
     fn expand_pattern(&self, pattern: &str, context: &HashMap<String, String>) -> String {
         let mut expanded = pattern.to_string();
         for (key, value) in context {
-            let placeholder = format!("{{{}}}", key);
+            let placeholder = format!("{{{key}}}");
             expanded = expanded.replace(&placeholder, value);
         }
         expanded
@@ -1001,7 +1001,7 @@ impl NatsFederationClient {
     fn get_message_type(&self, message: &FederationMessage) -> String {
         match message {
             FederationMessage::QueryRequest { query_type, .. } => {
-                format!("query.{:?}", query_type).to_lowercase()
+                format!("query.{query_type:?}").to_lowercase()
             }
             FederationMessage::QueryResponse { .. } => "query.response".to_string(),
             FederationMessage::HealthCheckRequest { .. } => "health.request".to_string(),

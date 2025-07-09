@@ -1077,7 +1077,7 @@ impl ValidationReportAnalytics {
         // Count different types of violations across all reports
         let mut missing_data_count = 0;
         let mut invalid_values_count = 0;
-        let mut constraint_violations_count = 0;
+        let mut _constraint_violations_count = 0;
 
         for report in &self.report_history {
             for violation in &report.report.violations {
@@ -1088,7 +1088,7 @@ impl ValidationReportAnalytics {
                 } else if component_str.contains("Datatype") || component_str.contains("Pattern") {
                     invalid_values_count += 1;
                 } else {
-                    constraint_violations_count += 1;
+                    _constraint_violations_count += 1;
                 }
             }
         }

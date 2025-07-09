@@ -2,11 +2,10 @@
 
 use super::config::PatternCacheSettings;
 use super::types::{CachedPatternResult, Pattern};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 use oxirs_core::Store;
 use std::collections::{hash_map::DefaultHasher, HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Advanced pattern cache manager with intelligent caching strategies
@@ -502,6 +501,12 @@ pub struct AdvancedCacheStats {
     pub cache_efficiency_score: f64,
 }
 
+impl Default for CacheAnalytics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CacheAnalytics {
     /// Create new cache analytics
     pub fn new() -> Self {
@@ -554,6 +559,12 @@ impl CacheAnalytics {
         if self.hit_rate_history.len() > 100 {
             self.hit_rate_history.pop_front();
         }
+    }
+}
+
+impl Default for CacheWarmingPredictor {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -621,6 +632,12 @@ impl CacheWarmingPredictor {
     }
 }
 
+impl Default for PredictionModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PredictionModel {
     /// Create new prediction model
     pub fn new() -> Self {
@@ -628,6 +645,12 @@ impl PredictionModel {
             historical_patterns: HashMap::new(),
             time_based_weights: VecDeque::new(),
         }
+    }
+}
+
+impl Default for CompressionEngine {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -693,6 +716,12 @@ impl CompressionEngine {
     }
 }
 
+impl Default for CompressionStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompressionStats {
     /// Create new compression statistics
     pub fn new() -> Self {
@@ -703,6 +732,12 @@ impl CompressionStats {
             avg_compression_ratio: 0.0,
             compression_time_ns: 0,
         }
+    }
+}
+
+impl Default for AdaptiveEvictionManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -937,6 +972,12 @@ impl AdaptiveEvictionManager {
     /// Get strategy performance metrics
     pub fn get_strategy_performance(&self) -> &HashMap<EvictionStrategy, EvictionPerformance> {
         &self.strategy_performance
+    }
+}
+
+impl Default for EvictionPerformance {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

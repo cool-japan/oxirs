@@ -1,17 +1,16 @@
 //! Stream processing pipelines for real-time analytics
 
 use async_trait::async_trait;
-use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::RwLock;
 
 use crate::{
     error::Result,
-    streaming::{EventHandler, PipelineConfig, RDFEvent},
+    streaming::{PipelineConfig, RDFEvent},
 };
 
 /// Pipeline stage for processing events

@@ -1,35 +1,9 @@
 //! Core data types for neural cost estimation
 
-use crate::{
-    ml::{GraphData, ModelError, ModelMetrics},
-    neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
-    neural_transformer_pattern_integration::{
-        NeuralTransformerConfig, NeuralTransformerPatternIntegration,
-    },
-    quantum_enhanced_pattern_optimizer::{QuantumEnhancedPatternOptimizer, QuantumOptimizerConfig},
-    realtime_adaptive_query_optimizer::{
-        AdaptiveOptimizerConfig, OptimizationPlanType, PerformanceMetrics, QueryPerformanceRecord,
-    },
-    Result, ShaclAiError,
-};
 
-use ndarray::{Array1, Array2, Array3, Array4, Axis};
-use oxirs_core::{
-    model::{Term, Variable},
-    query::{
-        algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
-        pattern_optimizer::{
-            IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
-        },
-    },
-    OxirsError, Store,
-};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use ndarray::{Array1, Array2};
+use std::time::{Duration, SystemTime};
 
-use super::config::*;
 
 /// Cost prediction result
 #[derive(Debug, Clone)]

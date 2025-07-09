@@ -3,7 +3,6 @@
 //! This module provides sophisticated cost estimation algorithms for different
 //! execution strategies, including network costs, join costs, and resource utilization.
 
-use crate::{planner::TriplePattern, FederatedService};
 
 use super::types::*;
 
@@ -113,6 +112,12 @@ pub struct CostBreakdown {
     pub resource_utilization_cost: f64,
     pub latency_penalty_cost: f64,
     pub total_cost: f64,
+}
+
+impl Default for CostBreakdown {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl CostBreakdown {

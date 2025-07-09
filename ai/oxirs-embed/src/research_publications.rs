@@ -594,7 +594,7 @@ impl EmbeddingModel for ResearchEmbedding {
         self.get_typed_entity_embedding(entity)
     }
     
-    async fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    async fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         let embedding = self
             .relation_embeddings
             .get(relation)
@@ -608,7 +608,7 @@ impl EmbeddingModel for ResearchEmbedding {
         }
         
         let subj_emb = self.get_typed_entity_embedding(subject)?;
-        let pred_emb = self.get_relation_embedding(predicate).await?;
+        let pred_emb = self.getrelation_embedding(predicate).await?;
         let obj_emb = self.get_typed_entity_embedding(object)?;
         
         // Simple scoring function (in practice, this would be model-specific)

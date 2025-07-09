@@ -639,7 +639,7 @@ impl ResultStreamingManager {
         for binding in results {
             xml_data.push_str("    <result>\n");
             for (var, value) in binding {
-                let escaped_value = format!("{}", value)
+                let escaped_value = format!("{value}")
                     .replace('&', "&amp;")
                     .replace('<', "&lt;")
                     .replace('>', "&gt;")

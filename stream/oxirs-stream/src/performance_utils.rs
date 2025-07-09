@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock, Semaphore};
+use tokio::sync::{RwLock, Semaphore};
 use tokio::task::yield_now;
 use tracing::{debug, info, warn};
 
@@ -797,7 +797,7 @@ mod tests {
 
         // Load data with prefetcher
         let data1 = prefetcher
-            .get_with_prefetch("key1", |key| async move { Ok(format!("data_for_{}", key)) })
+            .get_with_prefetch("key1", |key| async move { Ok(format!("data_for_{key}")) })
             .await
             .unwrap();
 

@@ -1561,7 +1561,7 @@ impl CustomFunction for Md5Function {
         };
 
         let digest = md5::compute(string.as_bytes());
-        Ok(Value::String(format!("{:x}", digest)))
+        Ok(Value::String(format!("{digest:x}")))
     }
 }
 
@@ -1602,7 +1602,7 @@ impl CustomFunction for Sha1Function {
         let mut hasher = Sha1::new();
         Sha1Digest::update(&mut hasher, string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{:x}", result)))
+        Ok(Value::String(format!("{result:x}")))
     }
 }
 
@@ -1643,7 +1643,7 @@ impl CustomFunction for Sha256Function {
         let mut hasher = Sha256::new();
         hasher.update(string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{:x}", result)))
+        Ok(Value::String(format!("{result:x}")))
     }
 }
 
@@ -1684,7 +1684,7 @@ impl CustomFunction for Sha384Function {
         let mut hasher = Sha384::new();
         hasher.update(string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{:x}", result)))
+        Ok(Value::String(format!("{result:x}")))
     }
 }
 
@@ -1725,7 +1725,7 @@ impl CustomFunction for Sha512Function {
         let mut hasher = Sha512::new();
         hasher.update(string.as_bytes());
         let result = hasher.finalize();
-        Ok(Value::String(format!("{:x}", result)))
+        Ok(Value::String(format!("{result:x}")))
     }
 }
 
@@ -1864,7 +1864,7 @@ impl CustomFunction for BnodeFunction {
         }
 
         let uuid = Uuid::new_v4();
-        Ok(Value::BlankNode(format!("b{}", uuid.simple())))
+        Ok(Value::BlankNode(format!("b{uuid}", uuid = uuid.simple())))
     }
 }
 

@@ -1,7 +1,7 @@
 //! Tests for the comprehensive term system
 
-use oxirs_arq::algebra::{Literal, Term as AlgebraTerm, Variable};
-use oxirs_arq::term::{matches_pattern, xsd, BindingContext, LiteralValue, NumericValue, Term};
+use oxirs_arq::algebra::{Literal, Term as AlgebraTerm};
+use oxirs_arq::term::{matches_pattern, xsd, BindingContext, NumericValue, Term};
 use oxirs_core::model::NamedNode;
 
 #[test]

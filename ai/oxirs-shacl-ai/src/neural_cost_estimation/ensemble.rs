@@ -3,7 +3,7 @@
 use ndarray::{Array1, Array2};
 
 use super::{config::*, types::*};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Ensemble cost predictor with multiple models
 #[derive(Debug)]

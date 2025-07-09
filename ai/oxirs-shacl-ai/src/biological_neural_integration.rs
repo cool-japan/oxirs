@@ -14,31 +14,18 @@
 //! - Bio-hybrid artificial intelligence systems
 //! - Neural organoid integration for complex reasoning
 
-use async_trait::async_trait;
 use dashmap::DashMap;
-use nalgebra::{DVector, Matrix3, Vector3};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::{E, PI, TAU};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationReport};
 
-use crate::consciousness_validation::{
-    ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext,
-};
-use crate::neuromorphic_validation::NeuromorphicValidationNetwork;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Biological neural integration system for bio-hybrid validation
 #[derive(Debug)]
@@ -218,7 +205,7 @@ impl BiologicalNeuralIntegrator {
     async fn initialize_neuron_interfaces(&self) -> Result<NeuronInterfaceInit> {
         info!("Initializing biological neuron interfaces");
 
-        let mut interface = self.neuron_interface.write().await;
+        let interface = self.neuron_interface.write().await;
 
         // Set up microelectrode arrays for neuron interfacing
         let microelectrode_setup = interface.setup_microelectrode_arrays().await?;
@@ -307,7 +294,7 @@ impl BiologicalNeuralIntegrator {
     async fn calibrate_signal_processing(&self) -> Result<SignalProcessingCalibration> {
         info!("Calibrating bio-electrical signal processing");
 
-        let mut analyzer = self.signal_analyzer.write().await;
+        let analyzer = self.signal_analyzer.write().await;
 
         // Calibrate action potential detection
         let action_potential_calibration = analyzer.calibrate_action_potential_detection().await?;
@@ -330,7 +317,7 @@ impl BiologicalNeuralIntegrator {
     async fn initialize_plasticity_management(&self) -> Result<PlasticityManagementInit> {
         info!("Initializing synaptic plasticity management");
 
-        let mut manager = self.plasticity_manager.write().await;
+        let manager = self.plasticity_manager.write().await;
 
         // Set up long-term potentiation (LTP) protocols
         let ltp_setup = manager.setup_ltp_protocols().await?;
@@ -357,7 +344,7 @@ impl BiologicalNeuralIntegrator {
     async fn setup_neurotransmitter_processing(&self) -> Result<NeurotransmitterSetup> {
         info!("Setting up neurotransmitter processing");
 
-        let mut processor = self.neurotransmitter_processor.write().await;
+        let processor = self.neurotransmitter_processor.write().await;
 
         // Initialize neurotransmitter detection systems
         let detection_init = processor.initialize_detection_systems().await?;
@@ -380,7 +367,7 @@ impl BiologicalNeuralIntegrator {
     async fn initialize_bio_hybrid_coordination(&self) -> Result<BioHybridCoordinationInit> {
         info!("Initializing bio-hybrid AI coordination");
 
-        let mut coordinator = self.bio_hybrid_coordinator.write().await;
+        let coordinator = self.bio_hybrid_coordinator.write().await;
 
         // Set up biological-artificial interface protocols
         let interface_setup = coordinator.setup_bio_artificial_interfaces().await?;

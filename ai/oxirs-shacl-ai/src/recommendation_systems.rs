@@ -12,15 +12,14 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::{
-    forecasting_models::{ForecastResult, ForecastingHorizon},
     optimization_engine::PerformanceMetrics,
-    quality::{QualityConfig, QualityReport},
+    quality::QualityReport,
     shape::Shape,
-    Result, ShaclAiError,
+    Result,
 };
 
 use oxirs_core::Store;
-use oxirs_shacl::{ValidationConfig, ValidationReport};
+use oxirs_shacl::ValidationReport;
 
 /// Main recommendation engine
 #[derive(Debug)]
@@ -391,7 +390,7 @@ impl RecommendationEngine {
         for recommendation in &all_recommendations {
             recommendations_by_type
                 .entry(recommendation.recommendation_type.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(recommendation.clone());
         }
 
@@ -1419,7 +1418,7 @@ impl RecommendationEngine {
 
         // Factor in ROI
         if let Some(roi) = recommendation.estimated_impact.roi_estimate {
-            score *= (1.0 + roi / 10.0); // Normalize ROI impact
+            score *= 1.0 + roi / 10.0; // Normalize ROI impact
         }
 
         // Factor in implementation complexity (prefer simpler implementations)
@@ -1465,9 +1464,7 @@ impl RecommendationEngine {
             }
         }
 
-        let mut top_impact_categories: Vec<ImpactCategory> = category_counts
-            .into_iter()
-            .map(|(category, _count)| category)
+        let mut top_impact_categories: Vec<ImpactCategory> = category_counts.into_keys()
             .collect();
         top_impact_categories.sort();
         top_impact_categories.truncate(5);
@@ -1693,7 +1690,7 @@ impl RecommendationEngine {
 
     /// Update success rates based on historical data
     fn update_success_rates(&mut self) {
-        let mut type_counts: HashMap<RecommendationType, (usize, usize)> = HashMap::new();
+        let type_counts: HashMap<RecommendationType, (usize, usize)> = HashMap::new();
 
         for outcome in self.effectiveness_tracker.applied_recommendations.values() {
             // This would need to be enhanced to track recommendation type
@@ -1730,7 +1727,7 @@ impl RecommendationEngine {
         let successful_count = self
             .recommendation_history
             .iter()
-            .filter(|r| r.outcome.as_ref().map_or(false, |o| o.success))
+            .filter(|r| r.outcome.as_ref().is_some_and(|o| o.success))
             .count();
         stats.insert(
             "successful_recommendations".to_string(),

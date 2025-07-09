@@ -96,16 +96,19 @@ pub struct ArqCacheConfig {
 
 impl Default for ArqCacheConfig {
     fn default() -> Self {
-        let mut base_config = AdvancedCacheConfig::default();
-        base_config.l1_cache_size = 5000; // Smaller for query plans
-        base_config.l2_cache_size = 20000;
-        base_config.l3_cache_size = 100000;
+        let base_config = AdvancedCacheConfig {
+            l1_cache_size: 5000, // Smaller for query plans
+            l2_cache_size: 20000,
+            l3_cache_size: 100000,
+            ..Default::default()
+        };
 
-        let mut result_config = AdvancedCacheConfig::default();
-        result_config.l1_cache_size = 1000; // Results can be large
-        result_config.l2_cache_size = 5000;
-        result_config.l3_cache_size = 20000;
-        result_config.enable_compression = true;
+        let result_config = AdvancedCacheConfig {
+            l1_cache_size: 1000, // Results can be large
+            l2_cache_size: 5000,
+            l3_cache_size: 20000,
+            enable_compression: true,
+        };
 
         Self {
             query_plan_cache: base_config.clone(),
@@ -525,7 +528,7 @@ impl ArqCacheManager {
         // Create a canonical hash of the query
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         // This would hash the normalized query structure
-        format!("{:?}", query).hash(&mut hasher);
+        format!("{query:?}").hash(&mut hasher);
         hasher.finish()
     }
 
@@ -548,7 +551,7 @@ impl ArqCacheManager {
 
         for (var, term) in sorted_bindings {
             var.hash(&mut hasher);
-            format!("{:?}", term).hash(&mut hasher);
+            format!("{term:?}").hash(&mut hasher);
         }
 
         hasher.finish()
@@ -557,7 +560,7 @@ impl ArqCacheManager {
     fn create_query_signature(&self, query: &Query) -> QuerySignature {
         // Extract canonical form and metadata
         QuerySignature {
-            canonical_form: format!("{:?}", query), // Simplified
+            canonical_form: format!("{query:?}"), // Simplified
             variables: query
                 .select_variables
                 .iter()
@@ -636,10 +639,9 @@ mod tests {
     #[test]
     fn test_cache_key_creation() {
         let config = ArqCacheConfig::default();
-        let cache_manager = ArqCacheManager::new(config);
+        let _cache_manager = ArqCacheManager::new(config);
 
         // Test would create actual query and test key creation
         // This is a placeholder test structure
-        assert!(true);
     }
 }

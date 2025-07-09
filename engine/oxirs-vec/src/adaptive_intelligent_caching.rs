@@ -4,6 +4,8 @@
 //! vector characteristics, and performance metrics. It implements machine learning-driven
 //! cache optimization and predictive prefetching.
 
+#![allow(dead_code)]
+
 use crate::{similarity::SimilarityMetric, Vector, VectorId};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -36,6 +38,7 @@ pub struct AdaptiveIntelligentCache {
 #[derive(Debug)]
 pub struct CacheTier {
     /// Tier identifier
+    #[allow(dead_code)]
     tier_id: u32,
     /// Storage implementation
     storage: Box<dyn CacheStorage>,
@@ -50,6 +53,7 @@ pub struct CacheTier {
 }
 
 /// Access pattern analysis for intelligent caching decisions
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct AccessPatternAnalyzer {
     /// Recent access patterns
@@ -63,6 +67,7 @@ pub struct AccessPatternAnalyzer {
 }
 
 /// Predictive prefetching based on access patterns and ML models
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct PredictivePrefetcher {
     /// Prefetch queue with priorities
@@ -76,6 +81,7 @@ pub struct PredictivePrefetcher {
 }
 
 /// Cache optimization engine with adaptive algorithms
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct CacheOptimizer {
     /// Optimization algorithms

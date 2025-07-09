@@ -1,9 +1,9 @@
 //! Uncertainty quantification for neural cost estimation
 
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 
 use super::{config::*, types::*};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Uncertainty quantifier
 #[derive(Debug)]
@@ -294,6 +294,12 @@ impl UncertaintyQuantifier {
     /// Get bootstrap samples
     pub fn get_bootstrap_samples(&self) -> &[f64] {
         &self.bootstrap_samples
+    }
+}
+
+impl Default for UncertaintyModel {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

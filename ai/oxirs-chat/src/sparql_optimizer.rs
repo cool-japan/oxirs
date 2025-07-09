@@ -3,18 +3,17 @@
 //! Provides sophisticated query optimization, performance analysis, and intelligent
 //! query rewriting for improved SPARQL execution performance and accuracy.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
+    collections::HashMap,
     time::{Duration, SystemTime},
 };
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::{
-    nl2sparql::{GenerationMethod, OptimizationHint, OptimizationHintType, SPARQLGenerationResult},
+    nl2sparql::{OptimizationHint, OptimizationHintType, SPARQLGenerationResult},
     rag::QueryIntent,
 };
 
@@ -558,16 +557,15 @@ impl QueryAnalyzer {
             Regex::new(r"(?i)FILTER\s*\([^)]*\?([a-zA-Z][a-zA-Z0-9_]*)[^)]*\)").unwrap();
         if let Some(captures) = filter_regex.captures(query) {
             let var_name = &captures[1];
-            let var_pattern = format!(r"\?{}\s+[^?]*\.", var_name);
+            let var_pattern = format!(r"\?{var_name}\s+[^?]*\.");
             if !Regex::new(&var_pattern).unwrap().is_match(query) {
                 issues.push(QueryIssue {
                     issue_type: QueryIssueType::UnboundVariable,
                     description: format!(
-                        "Variable ?{} used in FILTER may not be properly bound",
-                        var_name
+                        "Variable ?{var_name} used in FILTER may not be properly bound"
                     ),
                     severity: IssueSeverity::Warning,
-                    location: Some(format!("FILTER clause with ?{}", var_name)),
+                    location: Some(format!("FILTER clause with ?{var_name}")),
                     suggested_fix: Some(
                         "Ensure variable is bound in a triple pattern before use in FILTER"
                             .to_string(),
@@ -744,7 +742,7 @@ impl QueryRewriter {
             if optimized_query != before_optimization {
                 self.applied_optimizations.push(AppliedOptimization {
                     strategy: strategy.clone(),
-                    description: format!("Applied {:?} optimization", strategy),
+                    description: format!("Applied {strategy:?} optimization"),
                     query_before: before_optimization,
                     query_after: optimized_query.clone(),
                     expected_improvement: 10.0, // Simplified estimate

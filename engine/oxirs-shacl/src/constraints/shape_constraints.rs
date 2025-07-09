@@ -137,8 +137,7 @@ impl QualifiedValueShapeConstraint {
             if let Some(min_count) = self.qualified_min_count {
                 if min_count > 0 {
                     eprintln!(
-                        "DEBUG QualifiedValueShape: VIOLATION - no values but min_count={}",
-                        min_count
+                        "DEBUG QualifiedValueShape: VIOLATION - no values but min_count={min_count}"
                     );
                     return Ok(ConstraintEvaluationResult::violated(
                         None,
@@ -163,8 +162,7 @@ impl QualifiedValueShapeConstraint {
         // Check min count constraint
         if let Some(min_count) = self.qualified_min_count {
             eprintln!(
-                "DEBUG QualifiedValueShape: Checking min_count={}, conforming_count={}",
-                min_count, conforming_count
+                "DEBUG QualifiedValueShape: Checking min_count={min_count}, conforming_count={conforming_count}"
             );
             if conforming_count < min_count {
                 eprintln!("DEBUG QualifiedValueShape: VIOLATION - conforming_count < min_count");
@@ -181,8 +179,7 @@ impl QualifiedValueShapeConstraint {
         // Check max count constraint
         if let Some(max_count) = self.qualified_max_count {
             eprintln!(
-                "DEBUG QualifiedValueShape: Checking max_count={}, conforming_count={}",
-                max_count, conforming_count
+                "DEBUG QualifiedValueShape: Checking max_count={max_count}, conforming_count={conforming_count}"
             );
             if conforming_count > max_count {
                 eprintln!("DEBUG QualifiedValueShape: VIOLATION - conforming_count > max_count");
@@ -216,13 +213,11 @@ impl QualifiedValueShapeConstraint {
         // For each value, check if it conforms to the qualified shape
         for (i, value) in values.iter().enumerate() {
             eprintln!(
-                "DEBUG count_conforming_values: checking value[{}] = {:?}",
-                i, value
+                "DEBUG count_conforming_values: checking value[{i}] = {value:?}"
             );
             let conforms = self.value_conforms_to_shape(value, store, context)?;
             eprintln!(
-                "DEBUG count_conforming_values: value[{}] conforms = {}",
-                i, conforms
+                "DEBUG count_conforming_values: value[{i}] conforms = {conforms}"
             );
             if conforms {
                 conforming_count += 1;
@@ -230,8 +225,7 @@ impl QualifiedValueShapeConstraint {
         }
 
         eprintln!(
-            "DEBUG count_conforming_values: total conforming_count = {}",
-            conforming_count
+            "DEBUG count_conforming_values: total conforming_count = {conforming_count}"
         );
         Ok(conforming_count)
     }
@@ -282,7 +276,7 @@ impl QualifiedValueShapeConstraint {
                     }
                     Err(e) => {
                         // If validation failed due to error, consider it non-conforming
-                        eprintln!("DEBUG value_conforms_to_shape: validation error: {}", e);
+                        eprintln!("DEBUG value_conforms_to_shape: validation error: {e}");
                         Ok(false)
                     }
                 }

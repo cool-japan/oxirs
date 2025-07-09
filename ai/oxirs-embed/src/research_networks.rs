@@ -3,15 +3,14 @@
 //! This module provides specialized embeddings and analysis for research publication networks,
 //! including author embeddings, citation analysis, collaboration networks, and impact prediction.
 
-use crate::{EmbeddingModel, Vector};
-use anyhow::{Context, Result};
+use crate::Vector;
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use tokio::task::JoinHandle;
-use tracing::{debug, info, warn};
-use uuid::Uuid;
+use tracing::{debug, info};
 
 /// Research publication network analyzer and embedding generator
 pub struct ResearchNetworkAnalyzer {
@@ -488,7 +487,7 @@ impl ResearchNetworkAnalyzer {
 
         let author_embedding = AuthorEmbedding {
             author_id: author_id.to_string(),
-            name: format!("Author_{}", author_id), // Placeholder - would get from database
+            name: format!("Author_{author_id}"), // Placeholder - would get from database
             affiliations: vec!["Unknown".to_string()], // Placeholder
             research_topics,
             h_index,
@@ -530,12 +529,12 @@ impl ResearchNetworkAnalyzer {
         info!("Generating publication embedding for: {}", publication_id);
 
         // Get publication metadata (would come from database)
-        let title = format!("Publication_{}", publication_id);
-        let abstract_text = format!("Abstract for publication {}", publication_id);
+        let title = format!("Publication_{publication_id}");
+        let abstract_text = format!("Abstract for publication {publication_id}");
         let authors = vec![format!("author_{}", publication_id)];
         let venue = "Unknown Venue".to_string();
         let year = 2023; // Placeholder
-        let doi = Some(format!("10.1000/{}", publication_id));
+        let doi = Some(format!("10.1000/{publication_id}"));
 
         // Get citation information
         let citation_count = self.get_publication_citation_count(publication_id).await?;
@@ -602,17 +601,21 @@ impl ResearchNetworkAnalyzer {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         let target_embedding = self.generate_author_embedding(author_id).await?;
-        let embeddings = self.author_embeddings.read().unwrap();
+        let embeddings_data: Vec<(String, AuthorEmbedding)> = {
+            let embeddings = self.author_embeddings.read().unwrap();
+            embeddings.iter()
+                .filter(|(other_id, _)| *other_id != author_id)
+                .map(|(id, emb)| (id.clone(), emb.clone()))
+                .collect()
+        };
 
         let mut similarities = Vec::new();
 
-        for (other_id, other_embedding) in embeddings.iter() {
-            if other_id != author_id {
-                let similarity = self
-                    .calculate_author_similarity(&target_embedding, other_embedding)
-                    .await?;
-                similarities.push((other_id.clone(), similarity));
-            }
+        for (other_id, other_embedding) in embeddings_data {
+            let similarity = self
+                .calculate_author_similarity(&target_embedding, &other_embedding)
+                .await?;
+            similarities.push((other_id, similarity));
         }
 
         // Sort by similarity and take top k
@@ -665,7 +668,7 @@ impl ResearchNetworkAnalyzer {
         network
             .citations
             .entry(citation.citing_paper.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(citation);
 
         info!("Added new citation to network");
@@ -773,8 +776,8 @@ impl ResearchNetworkAnalyzer {
 
         // Generate random distribution that sums to 1.0
         let total: f64 = (0..num_topics).map(|_| rand::random::<f64>()).sum();
-        for i in 0..num_topics {
-            distribution[i] = rand::random::<f64>() / total;
+        for item in distribution.iter_mut().take(num_topics) {
+            *item = rand::random::<f64>() / total;
         }
 
         Ok(distribution)
@@ -801,7 +804,7 @@ impl ResearchNetworkAnalyzer {
     ) -> Result<f64> {
         // Placeholder - would use trained impact prediction model
         let base_impact = (citation_count as f64).ln() / 10.0;
-        Ok(base_impact.min(1.0).max(0.0))
+        Ok(base_impact.clamp(0.0, 1.0))
     }
 
     async fn calculate_author_similarity(
@@ -859,7 +862,7 @@ impl ResearchNetworkAnalyzer {
     // ===== BACKGROUND ANALYSIS TASKS =====
 
     async fn start_citation_analysis(&self) -> JoinHandle<()> {
-        let citation_network = Arc::clone(&self.citation_network);
+        let _citation_network = Arc::clone(&self.citation_network);
         let interval =
             std::time::Duration::from_secs(self.config.citation_update_interval_hours * 3600);
 
@@ -881,7 +884,7 @@ impl ResearchNetworkAnalyzer {
     }
 
     async fn start_collaboration_analysis(&self) -> JoinHandle<()> {
-        let collaboration_network = Arc::clone(&self.collaboration_network);
+        let _collaboration_network = Arc::clone(&self.collaboration_network);
         let interval = std::time::Duration::from_secs(
             self.config.collaboration_analysis_interval_hours * 3600,
         );
@@ -926,7 +929,7 @@ impl ResearchNetworkAnalyzer {
 
     async fn start_topic_modeling(&self) -> JoinHandle<()> {
         let topic_models = Arc::clone(&self.topic_models);
-        let config = self.config.clone();
+        let _config = self.config.clone();
         let interval = std::time::Duration::from_secs(24 * 3600); // Daily
 
         tokio::spawn(async move {

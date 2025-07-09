@@ -508,9 +508,9 @@ impl RotatE {
     }
 
     /// Get relation embedding as phase vector
-    fn get_relation_embedding_vector(&self, relation_id: usize) -> Vector {
+    fn getrelation_embedding_vector(&self, relation_id: usize) -> Vector {
         let phases = self.relation_phases.row(relation_id);
-        let values: Vec<f32> = phases.iter().map(|&x| x as f32).collect();
+        let values: Vec<f32> = phases.iter().copied().map(|x| x as f32).collect();
         Vector::new(values)
     }
 }
@@ -587,7 +587,7 @@ impl EmbeddingModel for RotatE {
         Ok(self.get_entity_embedding_vector(entity_id))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.embeddings_initialized {
             return Err(anyhow!("Model not trained"));
         }
@@ -597,7 +597,7 @@ impl EmbeddingModel for RotatE {
             .get_relation_id(relation)
             .ok_or_else(|| anyhow!("Relation not found: {}", relation))?;
 
-        Ok(self.get_relation_embedding_vector(relation_id))
+        Ok(self.getrelation_embedding_vector(relation_id))
     }
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {

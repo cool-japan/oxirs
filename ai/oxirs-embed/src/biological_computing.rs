@@ -335,7 +335,7 @@ impl CellularAutomaton {
     /// Initialize with embedding data
     pub fn initialize_with_embedding(&mut self, embedding: &Vector) {
         let total_cells = self.size.0 * self.size.1;
-        let chunk_size = embedding.values.len() / total_cells.min(embedding.values.len());
+        let _chunk_size = embedding.values.len() / total_cells.min(embedding.values.len());
 
         for ((i, j), cell) in self.grid.indexed_iter_mut() {
             let flat_index = i * self.size.1 + j;
@@ -1174,7 +1174,7 @@ impl BiologicalEmbeddingModel {
         // Convert embedding to substrate concentrations
         for (i, &value) in embedding.values.iter().enumerate() {
             let substrate =
-                Substrate::new(format!("substrate_{}", i), value.abs() as f64, value as f64);
+                Substrate::new(format!("substrate_{i}"), value.abs() as f64, value as f64);
             self.enzymatic_network.add_substrate(substrate);
         }
 
@@ -1191,7 +1191,7 @@ impl BiologicalEmbeddingModel {
 
         for (i, &value) in embedding.values.iter().enumerate() {
             let dna_seq = DNASequence::random(100, &mut rng);
-            let mut gene = Gene::new(format!("gene_{}", i), dna_seq);
+            let mut gene = Gene::new(format!("gene_{i}"), dna_seq);
             gene.basal_expression = value.abs() as f64;
             self.gene_network.add_gene(gene);
         }
@@ -1368,7 +1368,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
         }
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
@@ -1399,7 +1399,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let s_emb = self.get_entity_embedding(subject)?;
-        let p_emb = self.get_relation_embedding(predicate)?;
+        let p_emb = self.getrelation_embedding(predicate)?;
         let o_emb = self.get_entity_embedding(object)?;
 
         // Biological scoring using DNA hybridization
@@ -1425,7 +1425,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if let Ok(score) = self.score_triple(subject, predicate, entity) {
                 predictions.push((entity.clone(), score));
             }
@@ -1445,7 +1445,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if let Ok(score) = self.score_triple(entity, predicate, object) {
                 predictions.push((entity.clone(), score));
             }
@@ -1465,7 +1465,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut predictions = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             if let Ok(score) = self.score_triple(subject, relation, object) {
                 predictions.push((relation.clone(), score));
             }

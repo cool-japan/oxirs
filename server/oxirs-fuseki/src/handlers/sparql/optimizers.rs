@@ -14,6 +14,12 @@ pub struct InjectionDetector {
     pub enabled: bool,
 }
 
+impl Default for InjectionDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl InjectionDetector {
     pub fn new() -> Self {
         Self {
@@ -74,6 +80,12 @@ pub struct ComplexityAnalyzer {
     max_depth: usize,
     max_joins: usize,
     max_unions: usize,
+}
+
+impl Default for ComplexityAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ComplexityAnalyzer {
@@ -151,6 +163,12 @@ pub struct QueryComplexity {
 #[derive(Debug, Clone)]
 pub struct PerformanceOptimizer {
     cache: HashMap<String, OptimizedQuery>,
+}
+
+impl Default for PerformanceOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl PerformanceOptimizer {

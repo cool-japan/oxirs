@@ -265,7 +265,7 @@ impl UncertaintyQuantifier {
         })
     }
 
-    async fn sample_prediction<M: EmbeddingModel>(&self, model: &M, query: &str) -> Result<f32> {
+    async fn sample_prediction<M: EmbeddingModel>(&self, _model: &M, _query: &str) -> Result<f32> {
         // Simplified prediction sampling
         // In practice, this would use the actual model with dropout enabled
         Ok(0.5 + (rand::random::<f32>() - 0.5) * 0.2)
@@ -401,7 +401,7 @@ impl AdversarialAttackGenerator {
             attack_types: self
                 .attack_types
                 .iter()
-                .map(|t| format!("{:?}", t))
+                .map(|t| format!("{t:?}"))
                 .collect(),
         })
     }
@@ -423,22 +423,22 @@ impl AdversarialAttackGenerator {
     async fn fgsm_attack(&self, entity1: &str, entity2: &str) -> Result<(String, String)> {
         // Fast Gradient Sign Method attack
         // In practice, this would perturb the embeddings using gradient information
-        let perturbed_entity1 = format!("{}_perturbed", entity1);
-        let perturbed_entity2 = format!("{}_perturbed", entity2);
+        let perturbed_entity1 = format!("{entity1}_perturbed");
+        let perturbed_entity2 = format!("{entity2}_perturbed");
         Ok((perturbed_entity1, perturbed_entity2))
     }
 
     async fn pgd_attack(&self, entity1: &str, entity2: &str) -> Result<(String, String)> {
         // Projected Gradient Descent attack
-        let perturbed_entity1 = format!("{}_pgd", entity1);
-        let perturbed_entity2 = format!("{}_pgd", entity2);
+        let perturbed_entity1 = format!("{entity1}_pgd");
+        let perturbed_entity2 = format!("{entity2}_pgd");
         Ok((perturbed_entity1, perturbed_entity2))
     }
 
     async fn graph_attack(&self, entity1: &str, entity2: &str) -> Result<(String, String)> {
         // Graph-specific attack (edge addition/removal)
-        let perturbed_entity1 = format!("{}_graph_attack", entity1);
-        let perturbed_entity2 = format!("{}_graph_attack", entity2);
+        let perturbed_entity1 = format!("{entity1}_graph_attack");
+        let perturbed_entity2 = format!("{entity2}_graph_attack");
         Ok((perturbed_entity1, perturbed_entity2))
     }
 
@@ -452,7 +452,7 @@ impl AdversarialAttackGenerator {
         Ok(0.5 + (rand::random::<f32>() - 0.5) * 0.3)
     }
 
-    fn calculate_perturbation_magnitude(&self, perturbed_data: &(String, String)) -> f32 {
+    fn calculate_perturbation_magnitude(&self, _perturbed_data: &(String, String)) -> f32 {
         // Calculate L2 norm of perturbation
         // Simplified calculation
         0.1 * rand::random::<f32>()
@@ -525,7 +525,7 @@ impl FairnessAssessment {
 
     async fn calculate_demographic_parity(
         &self,
-        test_data: &[(String, HashMap<String, String>, f32)],
+        _test_data: &[(String, HashMap<String, String>, f32)],
     ) -> Result<f32> {
         // Calculate demographic parity difference
         // Simplified calculation
@@ -534,7 +534,7 @@ impl FairnessAssessment {
 
     async fn calculate_equal_opportunity(
         &self,
-        test_data: &[(String, HashMap<String, String>, f32)],
+        _test_data: &[(String, HashMap<String, String>, f32)],
     ) -> Result<f32> {
         // Calculate equal opportunity difference
         Ok(0.03 + rand::random::<f32>() * 0.08)
@@ -542,7 +542,7 @@ impl FairnessAssessment {
 
     async fn calculate_equalized_odds(
         &self,
-        test_data: &[(String, HashMap<String, String>, f32)],
+        _test_data: &[(String, HashMap<String, String>, f32)],
     ) -> Result<f32> {
         // Calculate equalized odds difference
         Ok(0.04 + rand::random::<f32>() * 0.09)
@@ -550,8 +550,8 @@ impl FairnessAssessment {
 
     async fn calculate_individual_fairness<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, HashMap<String, String>, f32)],
+        _model: &M,
+        _test_data: &[(String, HashMap<String, String>, f32)],
     ) -> Result<f32> {
         // Calculate individual fairness score
         Ok(0.9 + rand::random::<f32>() * 0.1)
@@ -571,6 +571,12 @@ pub enum ExplanationMethod {
     GradCAM,
     IntegratedGradients,
     Attention,
+}
+
+impl Default for ExplanationQualityEvaluator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ExplanationQualityEvaluator {
@@ -619,8 +625,8 @@ impl ExplanationQualityEvaluator {
 
     async fn calculate_fidelity<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, String, f32)],
+        _model: &M,
+        _test_data: &[(String, String, f32)],
     ) -> Result<f32> {
         // Calculate explanation fidelity
         Ok(0.85 + rand::random::<f32>() * 0.1)
@@ -628,8 +634,8 @@ impl ExplanationQualityEvaluator {
 
     async fn calculate_stability<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, String, f32)],
+        _model: &M,
+        _test_data: &[(String, String, f32)],
     ) -> Result<f32> {
         // Calculate explanation stability
         Ok(0.8 + rand::random::<f32>() * 0.15)
@@ -637,7 +643,7 @@ impl ExplanationQualityEvaluator {
 
     async fn calculate_comprehensibility(
         &self,
-        test_data: &[(String, String, f32)],
+        _test_data: &[(String, String, f32)],
     ) -> Result<f32> {
         // Calculate explanation comprehensibility
         Ok(0.75 + rand::random::<f32>() * 0.2)
@@ -645,8 +651,8 @@ impl ExplanationQualityEvaluator {
 
     async fn calculate_feature_consistency<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, String, f32)],
+        _model: &M,
+        _test_data: &[(String, String, f32)],
     ) -> Result<f32> {
         // Calculate feature importance consistency
         Ok(0.82 + rand::random::<f32>() * 0.12)
@@ -654,8 +660,8 @@ impl ExplanationQualityEvaluator {
 
     async fn calculate_counterfactual_validity<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, String, f32)],
+        _model: &M,
+        _test_data: &[(String, String, f32)],
     ) -> Result<f32> {
         // Calculate counterfactual validity
         Ok(0.78 + rand::random::<f32>() * 0.15)
@@ -663,8 +669,8 @@ impl ExplanationQualityEvaluator {
 
     async fn calculate_local_global_consistency<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, String, f32)],
+        _model: &M,
+        _test_data: &[(String, String, f32)],
     ) -> Result<f32> {
         // Calculate local vs global explanation consistency
         Ok(0.79 + rand::random::<f32>() * 0.16)
@@ -739,7 +745,7 @@ impl AdvancedEvaluator {
         let fairness_results = if self.config.enable_fairness {
             let fairness_test_data: Vec<_> = test_data
                 .iter()
-                .map(|(e1, e2, score)| {
+                .map(|(e1, _e2, score)| {
                     let mut attrs = HashMap::new();
                     attrs.insert("entity".to_string(), e1.clone());
                     (e1.clone(), attrs, *score)
@@ -789,8 +795,8 @@ impl AdvancedEvaluator {
 
     async fn calculate_basic_metrics<M: EmbeddingModel>(
         &self,
-        model: &M,
-        test_data: &[(String, String, f32)],
+        _model: &M,
+        _test_data: &[(String, String, f32)],
     ) -> Result<BasicMetrics> {
         // Calculate basic evaluation metrics
         let mut hits_at_k = HashMap::new();
@@ -839,7 +845,7 @@ impl AdvancedEvaluator {
     }
 
     /// Generate negative samples for evaluation
-    pub fn generate_negative_samples<M: EmbeddingModel>(&mut self, model: &M) -> Result<()> {
+    pub fn generate_negative_samples<M: EmbeddingModel>(&mut self, _model: &M) -> Result<()> {
         info!("Generating negative samples for evaluation");
         // In a real implementation, this would generate hard negative samples
         // for link prediction and other tasks

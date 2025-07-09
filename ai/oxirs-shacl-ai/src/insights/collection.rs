@@ -1,7 +1,7 @@
 //! Insight collection and management
 
 use super::types::{
-    DataInsight, InsightCategory, PerformanceInsight, QualityInsight, ShapeInsight,
+    DataInsight, PerformanceInsight, QualityInsight, ShapeInsight,
     ValidationInsight,
 };
 use crate::analytics::InsightSeverity;

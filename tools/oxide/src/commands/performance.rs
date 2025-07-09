@@ -7,14 +7,14 @@ use crate::{
     cli::{error::CliError, output::OutputFormatter},
     config::Config,
     tools::performance::{
-        BenchmarkComparison, MonitoringConfig, PerformanceMonitor, ProfilingResult,
+        MonitoringConfig, PerformanceMonitor, ProfilingResult,
     },
 };
 use clap::{Args, Subcommand};
 use serde_json;
 use std::{path::PathBuf, time::Duration};
 use tokio::fs;
-use tracing::{debug, info, warn};
+use tracing::{info, warn};
 
 /// Performance monitoring and profiling commands
 #[derive(Debug, Args)]
@@ -277,7 +277,7 @@ impl MonitorCommand {
                             let json_data = serde_json::to_string_pretty(&report)
                                 .map_err(|e| CliError::serialization_error(e.to_string()))?;
                             fs::write(save_path, json_data).await
-                                .map_err(|e| CliError::io_error(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save monitoring data: {}", e))))?;
+                                .map_err(|e| CliError::io_error(std::io::Error::new(std::io::ErrorKind::Other, format!("Failed to save monitoring data: {e}"))))?;
                         }
                     }
                     _ = tokio::signal::ctrl_c() => {
@@ -302,7 +302,7 @@ impl MonitorCommand {
                 fs::write(save_path, json_data).await.map_err(|e| {
                     CliError::io_error(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Failed to save report: {}", e),
+                        format!("Failed to save report: {e}"),
                     ))
                 })?;
                 info!("Report saved to {}", save_path.display());
@@ -371,7 +371,7 @@ impl ProfileCommand {
             fs::write(save_path, json_data).await.map_err(|e| {
                 CliError::io_error(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to save profile: {}", e),
+                    format!("Failed to save profile: {e}"),
                 ))
             })?;
             info!("Profiling results saved to {}", save_path.display());
@@ -410,22 +410,22 @@ impl CompareCommand {
         let baseline_data = fs::read_to_string(&self.baseline).await.map_err(|e| {
             CliError::io_error(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to read baseline file: {}", e),
+                format!("Failed to read baseline file: {e}"),
             ))
         })?;
         let baseline: ProfilingResult = serde_json::from_str(&baseline_data).map_err(|e| {
-            CliError::serialization_error(format!("Failed to parse baseline: {}", e))
+            CliError::serialization_error(format!("Failed to parse baseline: {e}"))
         })?;
 
         // Load current results
         let current_data = fs::read_to_string(&self.current).await.map_err(|e| {
             CliError::io_error(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to read current file: {}", e),
+                format!("Failed to read current file: {e}"),
             ))
         })?;
         let current: ProfilingResult = serde_json::from_str(&current_data).map_err(|e| {
-            CliError::serialization_error(format!("Failed to parse current: {}", e))
+            CliError::serialization_error(format!("Failed to parse current: {e}"))
         })?;
 
         // Perform comparison
@@ -467,7 +467,7 @@ impl CompareCommand {
             fs::write(save_path, json_data).await.map_err(|e| {
                 CliError::io_error(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to save comparison: {}", e),
+                    format!("Failed to save comparison: {e}"),
                 ))
             })?;
             info!("Comparison report saved to {}", save_path.display());
@@ -501,7 +501,7 @@ impl HealthCommand {
                         if self.recommendations {
                             println!("\nRecommendations:");
                             for rec in &report.recommendations {
-                                println!("  • {}", rec);
+                                println!("  • {rec}");
                             }
                         }
                     }
@@ -520,12 +520,12 @@ impl HealthCommand {
             if self.recommendations {
                 println!("\nSystem Recommendations:");
                 for rec in &report.recommendations {
-                    println!("  • {}", rec);
+                    println!("  • {rec}");
                 }
 
                 println!("\nHealth-specific Recommendations:");
                 for rec in &report.system_health.recommendations {
-                    println!("  • {}", rec);
+                    println!("  • {rec}");
                 }
             }
         }
@@ -609,7 +609,7 @@ impl ReportCommand {
             report
                 .recommendations
                 .iter()
-                .map(|r| format!("<li>{}</li>", r))
+                .map(|r| format!("<li>{r}</li>"))
                 .collect::<Vec<_>>()
                 .join("\n    ")
         );
@@ -623,7 +623,7 @@ impl ReportCommand {
         fs::write(&output_path, html_content).await.map_err(|e| {
             CliError::io_error(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to write HTML report: {}", e),
+                format!("Failed to write HTML report: {e}"),
             ))
         })?;
 
@@ -675,7 +675,7 @@ impl ReportCommand {
             report
                 .recommendations
                 .iter()
-                .map(|r| format!("- {}", r))
+                .map(|r| format!("- {r}"))
                 .collect::<Vec<_>>()
                 .join("\n")
         );
@@ -691,7 +691,7 @@ impl ReportCommand {
             .map_err(|e| {
                 CliError::io_error(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Failed to write Markdown report: {}", e),
+                    format!("Failed to write Markdown report: {e}"),
                 ))
             })?;
 
@@ -715,7 +715,7 @@ impl ReportCommand {
         fs::write(&output_path, json_content).await.map_err(|e| {
             CliError::io_error(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Failed to write JSON report: {}", e),
+                format!("Failed to write JSON report: {e}"),
             ))
         })?;
 

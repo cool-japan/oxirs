@@ -82,7 +82,7 @@ pub trait EmbeddingModel: Send + Sync {
     fn add_triple(&mut self, triple: Triple) -> Result<()>;
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats>;
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector>;
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector>;
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector>;
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64>;
     fn get_entities(&self) -> Vec<String>;
     fn get_relations(&self) -> Vec<String>;

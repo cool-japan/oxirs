@@ -121,9 +121,11 @@ impl Default for TransactionConfig {
 
 /// Transaction coordinator for 2PC protocol
 pub struct TransactionCoordinator {
+    #[allow(dead_code)]
     node_id: OxirsNodeId,
     shard_router: Arc<ShardRouter>,
     shard_manager: Arc<ShardManager>,
+    #[allow(dead_code)]
     storage: Arc<dyn StorageBackend>,
     network: Arc<NetworkService>,
     config: TransactionConfig,
@@ -216,17 +218,14 @@ impl TransactionCoordinator {
         };
 
         // Add participant if not already present
-        if !transaction.participants.contains_key(&shard_id) {
+        if let std::collections::hash_map::Entry::Vacant(e) = transaction.participants.entry(shard_id) {
             let node_id = self.shard_manager.get_primary_node(shard_id).await?;
-            transaction.participants.insert(
+            e.insert(TransactionParticipant {
+                node_id,
                 shard_id,
-                TransactionParticipant {
-                    node_id,
-                    shard_id,
-                    vote: None,
-                    last_contact: Instant::now(),
-                },
-            );
+                vote: None,
+                last_contact: Instant::now(),
+            });
         }
 
         transaction.operations.push((shard_id, operation));
@@ -628,17 +627,21 @@ impl TransactionLog {
     }
 }
 
+/// Type alias for transaction lock mapping
+type TransactionLockMap = HashMap<TransactionId, HashSet<(ShardId, String)>>;
+
 /// Lock manager for concurrency control
 #[derive(Debug)]
 struct LockManager {
     locks: Arc<RwLock<HashMap<(ShardId, String), Lock>>>,
-    tx_locks: Arc<RwLock<HashMap<TransactionId, HashSet<(ShardId, String)>>>>,
+    tx_locks: Arc<RwLock<TransactionLockMap>>,
 }
 
 #[derive(Debug)]
 struct Lock {
     lock_type: LockType,
     tx_id: TransactionId,
+    #[allow(dead_code)]
     acquired_at: Instant,
 }
 

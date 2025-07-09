@@ -13,6 +13,7 @@ use std::sync::Arc;
 /// Expression evaluator with full SPARQL 1.1 support
 pub struct ExpressionEvaluator {
     /// Extension registry for custom functions
+    #[allow(dead_code)]
     extension_registry: Arc<ExtensionRegistry>,
     /// Current binding context
     binding_context: BindingContext,
@@ -45,7 +46,7 @@ impl ExpressionEvaluator {
                 .binding_context
                 .get(var.as_str())
                 .cloned()
-                .ok_or_else(|| anyhow!("Unbound variable: ?{}", var)),
+                .ok_or_else(|| anyhow!("Unbound variable: ?{var}")),
 
             AlgebraExpression::Literal(lit) => Ok(Term::from_algebra_term(
                 &crate::algebra::Term::Literal(lit.clone()),
@@ -146,7 +147,7 @@ impl ExpressionEvaluator {
             "strlang" | "STRLANG" => self.builtin_strlang(&arg_values),
 
             // Check extension registry
-            _ => bail!("Unknown function: {}", name),
+            _ => bail!("Unknown function: {name}"),
         }
     }
 
@@ -492,7 +493,7 @@ impl ExpressionEvaluator {
                             'x' => {
                                 builder.ignore_whitespace(true);
                             }
-                            _ => bail!("Unknown regex flag: {}", flag),
+                            _ => bail!("Unknown regex flag: {flag}"),
                         }
                     }
 
@@ -500,7 +501,7 @@ impl ExpressionEvaluator {
                         Ok(regex) => regex
                             .replace_all(&input_lit.lexical_form, repl_lit.lexical_form.as_str())
                             .to_string(),
-                        Err(e) => bail!("Invalid regex pattern: {}", e),
+                        Err(e) => bail!("Invalid regex pattern: {e}"),
                     }
                 } else {
                     unreachable!()
@@ -646,7 +647,7 @@ impl ExpressionEvaluator {
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             )
                         } else {
-                            bail!("Invalid date/dateTime format: {}", lit.lexical_form)
+                            bail!("Invalid date/dateTime format: {lex}", lex = lit.lexical_form)
                         }
                     }
                     _ => bail!("YEAR function can only be applied to date/dateTime literals"),
@@ -689,7 +690,7 @@ impl ExpressionEvaluator {
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             )
                         } else {
-                            bail!("Invalid date/dateTime format: {}", lit.lexical_form)
+                            bail!("Invalid date/dateTime format: {lex}", lex = lit.lexical_form)
                         }
                     }
                     _ => bail!("MONTH function can only be applied to date/dateTime literals"),
@@ -732,7 +733,7 @@ impl ExpressionEvaluator {
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             )
                         } else {
-                            bail!("Invalid date/dateTime format: {}", lit.lexical_form)
+                            bail!("Invalid date/dateTime format: {lex}", lex = lit.lexical_form)
                         }
                     }
                     _ => bail!("DAY function can only be applied to date/dateTime literals"),
@@ -779,7 +780,7 @@ impl ExpressionEvaluator {
     fn builtin_bnode(&self, args: &[Term]) -> Result<Term> {
         if args.is_empty() {
             // Generate new blank node
-            Ok(Term::blank_node(&format!("b{}", uuid::Uuid::new_v4())))
+            Ok(Term::blank_node(&format!("b{uuid}", uuid = uuid::Uuid::new_v4())))
         } else if args.len() == 1 {
             let str_val = self.builtin_str(&[args[0].clone()])?;
             if let Term::Literal(lit) = str_val {

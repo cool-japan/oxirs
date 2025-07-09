@@ -651,7 +651,7 @@ mod tests {
     fn test_constraint_grouping_key() {
         let config = AdvancedBatchConfig::default();
         let cache = Arc::new(ConstraintCache::default());
-        let validator = AdvancedBatchValidator::new(config, cache);
+        let _validator = AdvancedBatchValidator::new(config, cache);
 
         // Test would create actual constraints and contexts
         // This is a placeholder test structure

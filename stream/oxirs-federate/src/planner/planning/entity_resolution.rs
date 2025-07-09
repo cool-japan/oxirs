@@ -109,7 +109,7 @@ impl EntityResolver {
         let selection_fields = first_entity.required_fields.join(" ");
 
         // Simple implementation - could be enhanced for batching
-        Ok(format!("{{ {} }}", selection_fields))
+        Ok(format!("{{ {selection_fields} }}"))
     }
 
     /// Analyze dependencies between entities
@@ -130,8 +130,12 @@ impl EntityResolver {
                 step.service_name
             );
 
-            // TODO: Extract entity references from the step query
-            let entity_refs = Vec::new(); // Placeholder for entity references
+            // Extract entity references from the step query
+            let entity_refs = Self::extract_entity_references(&step.query)
+                .unwrap_or_else(|e| {
+                    debug!("Failed to extract entity references from query: {}", e);
+                    Vec::new()
+                });
 
             // Batch resolve entities for this service
             let entities = Self::batch_resolve_entities(&step.service_name, &entity_refs).await?;
@@ -165,8 +169,7 @@ impl EntityResolver {
             // For now, create a basic query structure - this should be enhanced
             // to properly build GraphQL _entities queries from EntityReference data
             let entities_query = format!(
-                "query {{ _entities(representations: [{{ __typename: \"{}\" }}]) {{ ... on {} {{ id }} }} }}",
-                typename, typename
+                "query {{ _entities(representations: [{{ __typename: \"{typename}\" }}]) {{ ... on {typename} {{ id }} }} }}"
             );
 
             // Execute query against service (mock implementation)
@@ -421,11 +424,11 @@ impl EntityResolver {
         let mut query_parts = Vec::new();
 
         for (idx, entity) in entities.iter().enumerate() {
-            let alias = format!("entity_{}", idx);
+            let alias = format!("entity_{idx}");
             let key_args = entity
                 .key_fields
                 .iter()
-                .map(|field| format!("{}: ${}_{}", field, alias, field))
+                .map(|field| format!("{field}: ${alias}_{field}"))
                 .collect::<Vec<_>>()
                 .join(", ");
 
@@ -449,7 +452,7 @@ impl EntityResolver {
 
         let data = &response.data;
         for (idx, entity) in entities.iter().enumerate() {
-            let alias = format!("entity_{}", idx);
+            let alias = format!("entity_{idx}");
 
             if let Some(entity_data) = data.get(&alias) {
                 if let Some(obj) = entity_data.as_object() {

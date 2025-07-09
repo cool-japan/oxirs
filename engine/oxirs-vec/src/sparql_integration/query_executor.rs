@@ -198,7 +198,7 @@ impl QueryExecutor {
             10
         };
 
-        let threshold = if query.args.len() > 2 {
+        let _threshold = if query.args.len() > 2 {
             match &query.args[2] {
                 VectorServiceArg::Number(n) => *n,
                 _ => 0.0,
@@ -286,7 +286,7 @@ impl QueryExecutor {
         &mut self,
         query_text: &str,
         limit: usize,
-        threshold: f32,
+        _threshold: f32,
     ) -> Result<Vec<(String, f32)>> {
         // Generate embedding for the query text
         let content = EmbeddableContent::Text(query_text.to_string());
@@ -302,7 +302,7 @@ impl QueryExecutor {
         &mut self,
         query_text: &str,
         limit: usize,
-        threshold: f32,
+        _threshold: f32,
         target_languages: &[String],
     ) -> Result<Vec<(String, f32)>> {
         // Process query with cross-language variations
@@ -382,8 +382,8 @@ impl QueryExecutor {
             _ => GraphSearchScope::Exact,
         };
 
-        if let Some(ref graph_search) = self.graph_aware_search {
-            let context = GraphContext {
+        if let Some(ref _graph_search) = self.graph_aware_search {
+            let _context = GraphContext {
                 primary_graph: graph_iri.clone(),
                 additional_graphs: Vec::new(),
                 scope,
@@ -392,7 +392,7 @@ impl QueryExecutor {
 
             // Generate embedding for query text
             let content = EmbeddableContent::Text(query_text.to_string());
-            let query_vector = self.embedding_manager.get_embedding(&content)?;
+            let _query_vector = self.embedding_manager.get_embedding(&content)?;
 
             // Since search_with_context doesn't exist, fallback to simple search
             self.execute_simple_text_search(query_text, limit, threshold)

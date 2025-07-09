@@ -160,6 +160,12 @@ pub struct SolutionBinding {
     pub bindings: VariableBindings,
 }
 
+impl Default for SolutionBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SolutionBinding {
     pub fn new() -> Self {
         Self {
@@ -558,6 +564,7 @@ mod tests {
     use crate::triple_store::TripleStoreConfig;
     use tempfile::TempDir;
 
+    #[allow(dead_code)]
     fn create_test_store() -> (Arc<TripleStore>, TempDir) {
         let temp_dir = TempDir::new().unwrap();
         let config = TripleStoreConfig {

@@ -3,11 +3,11 @@
 //! This module implements real-time fine-tuning capabilities for embedding models
 //! with incremental learning, online adaptation, and dynamic model updates.
 
-use crate::{EmbeddingModel, ModelConfig, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingModel, ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use ndarray::{s, Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
@@ -726,7 +726,7 @@ impl EmbeddingModel for RealTimeFinetuningModel {
         Err(anyhow!("Entity not found: {}", entity))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(&relation_id) = self.relations.get(relation) {
             if relation_id < self.embeddings.nrows() {
                 let embedding = self.embeddings.row(relation_id);
@@ -738,7 +738,7 @@ impl EmbeddingModel for RealTimeFinetuningModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let predicate_emb = self.get_relation_embedding(predicate)?;
+        let predicate_emb = self.getrelation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // Simple TransE-style scoring
@@ -761,7 +761,7 @@ impl EmbeddingModel for RealTimeFinetuningModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != subject {
                 let score = self.score_triple(subject, predicate, entity)?;
                 scores.push((entity.clone(), score));
@@ -782,7 +782,7 @@ impl EmbeddingModel for RealTimeFinetuningModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (entity, _) in &self.entities {
+        for entity in self.entities.keys() {
             if entity != object {
                 let score = self.score_triple(entity, predicate, object)?;
                 scores.push((entity.clone(), score));
@@ -803,7 +803,7 @@ impl EmbeddingModel for RealTimeFinetuningModel {
     ) -> Result<Vec<(String, f64)>> {
         let mut scores = Vec::new();
 
-        for (relation, _) in &self.relations {
+        for relation in self.relations.keys() {
             let score = self.score_triple(subject, relation, object)?;
             scores.push((relation.clone(), score));
         }

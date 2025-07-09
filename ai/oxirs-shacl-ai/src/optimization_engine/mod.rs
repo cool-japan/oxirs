@@ -3,14 +3,11 @@
 //! This module implements sophisticated optimization strategies for SHACL shapes,
 //! including parallel validation, caching, constraint ordering, and performance tuning.
 
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, Semaphore};
+use std::collections::HashMap;
+use std::time::Instant;
 
 use crate::{
-    shape::{AiShape, PropertyConstraint},
+    shape::AiShape,
     shape_management::{
         EffortLevel, OptimizationOpportunity, OptimizationPriority, OptimizationType,
         PerformanceProfile,
@@ -260,7 +257,7 @@ impl AdvancedOptimizationEngine {
         let constraints = shape.property_constraints();
         let optimized_order = self
             .constraint_optimizer
-            .optimize_constraint_order(&constraints)?;
+            .optimize_constraint_order(constraints)?;
 
         tracing::debug!(
             "Optimized constraint order for shape {}: {:?}",

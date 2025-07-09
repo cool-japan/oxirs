@@ -535,7 +535,7 @@ impl NetworkManager {
             .await??;
 
             // Perform TLS handshake
-            let server_name = rustls::pki_types::ServerName::try_from(format!("node-{}", peer_id))?;
+            let server_name = rustls::pki_types::ServerName::try_from(format!("node-{peer_id}"))?;
 
             let _tls_stream = connector.connect(server_name, tcp_stream).await?;
 
@@ -648,7 +648,7 @@ impl NetworkManager {
 
     /// Encrypt data at rest using the TLS manager's encryption
     pub async fn encrypt_data(&self, data: &[u8]) -> Result<Vec<u8>> {
-        if let Some(tls_manager) = &self.tls_manager {
+        if let Some(_tls_manager) = &self.tls_manager {
             // Use the TLS manager's encryption capabilities
             // In a real implementation, we might extract the encryption manager
             // For now, we'll simulate encryption

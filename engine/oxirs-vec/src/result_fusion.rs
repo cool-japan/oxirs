@@ -470,7 +470,7 @@ impl ResultFusionEngine {
     ) -> Result<Vec<VectorSearchResult>> {
         let mut fused_results = Vec::new();
 
-        for (resource, mut resource_results) in grouped_results {
+        for (_resource, mut resource_results) in grouped_results {
             let fused_result = match &self.config.fusion_algorithm {
                 FusionAlgorithm::CombSum => self.apply_combsum(&resource_results)?,
                 FusionAlgorithm::CombMax => self.apply_combmax(&resource_results)?,

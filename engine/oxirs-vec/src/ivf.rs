@@ -240,7 +240,7 @@ impl InvertedList {
     fn add_multi_codebook(&mut self, uri: String, residual: Vector) -> Result<()> {
         let mut codebook_codes = Vec::new();
 
-        for (_i, pq_index) in self.multi_codebook_pq.iter_mut().enumerate() {
+        for pq_index in self.multi_codebook_pq.iter_mut() {
             // Train this codebook's PQ if not already trained
             if !pq_index.is_trained() {
                 let training_residuals = vec![residual.clone()];

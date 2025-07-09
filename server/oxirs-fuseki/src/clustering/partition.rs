@@ -1,6 +1,5 @@
 //! Data partitioning and sharding for distributed storage
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
@@ -76,7 +75,7 @@ impl ConsistentHashRing {
     /// Add a node to the ring
     pub fn add_node(&mut self, node_id: &str) {
         for i in 0..self.vnodes_per_node {
-            let vnode_key = format!("{}-vnode-{}", node_id, i);
+            let vnode_key = format!("{node_id}-vnode-{i}");
             let hash = self.hash_key(&vnode_key);
             self.ring.insert(hash, node_id.to_string());
         }
@@ -199,12 +198,12 @@ impl PartitionManager {
             PartitionStrategy::ConsistentHashing => {
                 let mut hasher = std::collections::hash_map::DefaultHasher::new();
                 key.hash(&mut hasher);
-                (hasher.finish() % self.config.partition_count as u64) as u32
+                (hasher.finish() % u64::from(self.config.partition_count)) as u32
             }
             PartitionStrategy::Range => {
                 // Simple range partitioning based on first character
                 let first_char = key.chars().next().unwrap_or('a') as u32;
-                (first_char % self.config.partition_count) as u32
+                (first_char % self.config.partition_count)
             }
             PartitionStrategy::Custom => {
                 // Default to hash partitioning
@@ -248,7 +247,7 @@ impl PartitionManager {
         let mut partitions = self.partitions.write().await;
 
         for partition_id in 0..self.config.partition_count {
-            let key = format!("partition-{}", partition_id);
+            let key = format!("partition-{partition_id}");
             let assigned_nodes =
                 hash_ring.get_nodes(&key, self.config.rebalancing.max_concurrent_moves);
 

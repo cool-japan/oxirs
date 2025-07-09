@@ -69,7 +69,7 @@ impl OutputFormatter {
     /// Print an info message
     pub fn info(&self, message: &str) {
         if self.no_color {
-            println!("ℹ {}", message);
+            println!("ℹ {message}");
         } else {
             println!("{} {}", "ℹ".blue(), message);
         }
@@ -78,7 +78,7 @@ impl OutputFormatter {
     /// Print a success message
     pub fn success(&self, message: &str) {
         if self.no_color {
-            println!("✓ {}", message);
+            println!("✓ {message}");
         } else {
             println!("{} {}", "✓".green(), message);
         }
@@ -87,7 +87,7 @@ impl OutputFormatter {
     /// Print a warning message
     pub fn warn(&self, message: &str) {
         if self.no_color {
-            eprintln!("⚠ {}", message);
+            eprintln!("⚠ {message}");
         } else {
             eprintln!("{} {}", "⚠".yellow(), message.yellow());
         }
@@ -96,7 +96,7 @@ impl OutputFormatter {
     /// Print an error message
     pub fn error(&self, message: &str) {
         if self.no_color {
-            eprintln!("✗ {}", message);
+            eprintln!("✗ {message}");
         } else {
             eprintln!("{} {}", "✗".red(), message.red());
         }
@@ -105,7 +105,7 @@ impl OutputFormatter {
     /// Print verbose/debug output
     pub fn verbose(&self, message: &str) {
         if self.no_color {
-            println!("  {}", message);
+            println!("  {message}");
         } else {
             println!("  {}", message.cyan());
         }
@@ -114,16 +114,16 @@ impl OutputFormatter {
     /// Print a section header
     pub fn section(&self, title: &str) {
         if self.no_color {
-            println!("\n=== {} ===", title);
+            println!("\n=== {title} ===");
         } else {
-            println!("\n{}", format!("=== {} ===", title).bright_white().bold());
+            println!("\n{}", format!("=== {title} ===").bright_white().bold());
         }
     }
 
     /// Print a highlighted value
     pub fn highlight(&self, label: &str, value: &str) {
         if self.no_color {
-            println!("{}: {}", label, value);
+            println!("{label}: {value}");
         } else {
             println!("{}: {}", label.bright_white(), value.magenta());
         }
@@ -132,7 +132,7 @@ impl OutputFormatter {
     /// Print key-value pairs
     pub fn key_value(&self, key: &str, value: &str) {
         if self.no_color {
-            println!("{}: {}", key, value);
+            println!("{key}: {value}");
         } else {
             println!("{}: {}", key.bright_white(), value);
         }
@@ -141,7 +141,7 @@ impl OutputFormatter {
     /// Print a list item
     pub fn list_item(&self, item: &str) {
         if self.no_color {
-            println!("  • {}", item);
+            println!("  • {item}");
         } else {
             println!("  {} {}", "•".blue(), item);
         }
@@ -150,7 +150,7 @@ impl OutputFormatter {
     /// Print muted/secondary text
     pub fn muted(&self, text: &str) {
         if self.no_color {
-            println!("{}", text);
+            println!("{text}");
         } else {
             println!("{}", text.bright_black());
         }
@@ -175,7 +175,7 @@ impl OutputFormatter {
     /// Print JSON output (pretty-printed)
     pub fn json<T: Serialize>(&self, data: &T) -> Result<(), serde_json::Error> {
         let json = serde_json::to_string_pretty(data)?;
-        println!("{}", json);
+        println!("{json}");
         Ok(())
     }
 
@@ -185,21 +185,21 @@ impl OutputFormatter {
             Some(total) => {
                 let percent = (current as f64 / total as f64 * 100.0) as u8;
                 if self.no_color {
-                    print!("\r[{}/{}] {}% - {}", current, total, percent, message);
+                    print!("\r[{current}/{total}] {percent}% - {message}");
                 } else {
                     print!(
                         "\r{} {}% - {}",
-                        format!("[{}/{}]", current, total).blue(),
-                        format!("{}%", percent).green(),
+                        format!("[{current}/{total}]").blue(),
+                        format!("{percent}%").green(),
                         message
                     );
                 }
             }
             None => {
                 if self.no_color {
-                    print!("\r[{}] {}", current, message);
+                    print!("\r[{current}] {message}");
                 } else {
-                    print!("\r{} {}", format!("[{}]", current).blue(), message);
+                    print!("\r{} {}", format!("[{current}]").blue(), message);
                 }
             }
         }
@@ -227,7 +227,7 @@ impl OutputFormatter {
             .unwrap_or_default()
             .as_secs();
 
-        self.key_value("Timestamp", &format!("{}", timestamp));
+        self.key_value("Timestamp", &format!("{timestamp}"));
         self.key_value(
             "CPU Usage",
             &format!("{:.1}%", report.current_metrics.cpu_usage),
@@ -254,7 +254,7 @@ impl OutputFormatter {
         if !report.performance_counters.is_empty() {
             self.section("Performance Counters");
             for (name, value) in &report.performance_counters {
-                self.key_value(name, &format!("{}", value));
+                self.key_value(name, &format!("{value}"));
             }
         }
 
@@ -303,7 +303,7 @@ impl OutputFormatter {
                 ]));
             }
 
-            println!("{}", table);
+            println!("{table}");
         }
 
         Ok(())
@@ -361,7 +361,7 @@ impl OutputFormatter {
                 ]));
             }
 
-            println!("{}", table);
+            println!("{table}");
         }
 
         Ok(())
@@ -377,16 +377,16 @@ impl OutputFormatter {
         let status_text = format!("{:?}", health.status);
         match health.status {
             crate::tools::performance::HealthStatus::Healthy => {
-                self.success(&format!("Status: {}", status_text))
+                self.success(&format!("Status: {status_text}"))
             }
             crate::tools::performance::HealthStatus::Moderate => {
-                self.info(&format!("Status: {}", status_text))
+                self.info(&format!("Status: {status_text}"))
             }
             crate::tools::performance::HealthStatus::Warning => {
-                self.warn(&format!("Status: {}", status_text))
+                self.warn(&format!("Status: {status_text}"))
             }
             crate::tools::performance::HealthStatus::Critical => {
-                self.error(&format!("Status: {}", status_text))
+                self.error(&format!("Status: {status_text}"))
             }
         }
 
@@ -465,7 +465,7 @@ impl ResultFormatter {
             "tsv" => Ok(Self::format_as_tsv(results)),
             "json" => Ok(serde_json::to_string_pretty(results)?),
             "xml" => Ok(Self::format_as_xml(results)),
-            _ => Err(format!("Unsupported output format: {}", format).into()),
+            _ => Err(format!("Unsupported output format: {format}").into()),
         }
     }
 
@@ -551,7 +551,7 @@ impl ResultFormatter {
         // Head
         xml.push_str("  <head>\n");
         for var in &results.vars {
-            xml.push_str(&format!("    <variable name=\"{}\"/>\n", var));
+            xml.push_str(&format!("    <variable name=\"{var}\"/>\n"));
         }
         xml.push_str("  </head>\n");
 
@@ -561,7 +561,7 @@ impl ResultFormatter {
             xml.push_str("    <result>\n");
             for var in &results.vars {
                 if let Some(value) = binding.get(var) {
-                    xml.push_str(&format!("      <binding name=\"{}\">\n", var));
+                    xml.push_str(&format!("      <binding name=\"{var}\">\n"));
                     xml.push_str(&format!(
                         "        <literal>{}</literal>\n",
                         Self::escape_xml(value)

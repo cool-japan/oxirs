@@ -4,9 +4,9 @@
 //! including pattern coverage analysis, predicate-based filtering, and range-based selection.
 
 use anyhow::Result;
-use bloom::{BloomFilter, ASMS};
+use bloom::ASMS;
 use std::collections::{HashMap, HashSet};
-use tracing::{debug, info};
+use tracing::info;
 
 use super::{types::*, ServiceOptimizer};
 use crate::planner::TriplePattern;
@@ -116,7 +116,7 @@ impl ServiceOptimizer {
             score += self.calculate_domain_affinity(description, pattern);
         }
 
-        Ok((score as f64).min(1.0))
+        Ok(score.min(1.0))
     }
 
     /// Assess the quality of coverage distribution
@@ -235,7 +235,7 @@ impl ServiceOptimizer {
         // Capability-based scoring
         score += self.calculate_predicate_capability_match(predicate, &service.capabilities);
 
-        Ok((score as f64).min(1.0))
+        Ok(score.min(1.0))
     }
 
     /// Calculate predicate-domain matching score
@@ -276,29 +276,24 @@ impl ServiceOptimizer {
         let mut score = 0.0;
 
         // Text-related predicates
-        if predicate.contains("label") || predicate.contains("name") || predicate.contains("title")
-        {
-            if capabilities.contains(&ServiceCapability::FullTextSearch) {
+        if (predicate.contains("label") || predicate.contains("name") || predicate.contains("title"))
+            && capabilities.contains(&ServiceCapability::FullTextSearch) {
                 score += 0.2;
             }
-        }
 
         // Geospatial predicates
-        if predicate.contains("geo")
+        if (predicate.contains("geo")
             || predicate.contains("location")
-            || predicate.contains("coordinate")
-        {
-            if capabilities.contains(&ServiceCapability::Geospatial) {
+            || predicate.contains("coordinate"))
+            && capabilities.contains(&ServiceCapability::Geospatial) {
                 score += 0.3;
             }
-        }
 
         // Temporal predicates
-        if predicate.contains("date") || predicate.contains("time") || predicate.contains("year") {
-            if capabilities.contains(&ServiceCapability::TemporalQueries) {
+        if (predicate.contains("date") || predicate.contains("time") || predicate.contains("year"))
+            && capabilities.contains(&ServiceCapability::TemporalQueries) {
                 score += 0.2;
             }
-        }
 
         score
     }
@@ -470,22 +465,19 @@ impl ServiceOptimizer {
 
         // Check range type based on data_type field
         if range.data_type.contains("temporal") || range.data_type.contains("date") {
-            if predicate.contains("date") || predicate.contains("time") {
-                if desc_lower.contains("historical") || desc_lower.contains("temporal") {
+            if (predicate.contains("date") || predicate.contains("time"))
+                && (desc_lower.contains("historical") || desc_lower.contains("temporal")) {
                     affinity += 0.2;
                 }
-            }
         } else if range.is_numeric || range.data_type.contains("numeric") {
-            if predicate.contains("price") || predicate.contains("value") {
-                if desc_lower.contains("economic") || desc_lower.contains("financial") {
+            if (predicate.contains("price") || predicate.contains("value"))
+                && (desc_lower.contains("economic") || desc_lower.contains("financial")) {
                     affinity += 0.2;
                 }
-            }
-        } else if range.data_type.contains("geospatial") || range.data_type.contains("geo") {
-            if desc_lower.contains("geographic") || desc_lower.contains("spatial") {
+        } else if (range.data_type.contains("geospatial") || range.data_type.contains("geo"))
+            && (desc_lower.contains("geographic") || desc_lower.contains("spatial")) {
                 affinity += 0.3;
             }
-        }
 
         affinity
     }
@@ -940,11 +932,7 @@ impl ServiceOptimizer {
     fn extract_namespace(&self, uri: &str) -> Option<String> {
         if let Some(hash_pos) = uri.rfind('#') {
             Some(uri[..hash_pos].to_string())
-        } else if let Some(slash_pos) = uri.rfind('/') {
-            Some(uri[..slash_pos].to_string())
-        } else {
-            None
-        }
+        } else { uri.rfind('/').map(|slash_pos| uri[..slash_pos].to_string()) }
     }
 
     fn classify_pattern_type(&self, pattern: &TriplePattern) -> String {
@@ -1105,7 +1093,7 @@ impl ServiceOptimizer {
                 if subject.starts_with('?') {
                     variable_patterns
                         .entry(subject.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(pattern_idx);
                 }
             }
@@ -1113,7 +1101,7 @@ impl ServiceOptimizer {
                 if predicate.starts_with('?') {
                     variable_patterns
                         .entry(predicate.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(pattern_idx);
                 }
             }
@@ -1121,7 +1109,7 @@ impl ServiceOptimizer {
                 if object.starts_with('?') {
                     variable_patterns
                         .entry(object.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(pattern_idx);
                 }
             }

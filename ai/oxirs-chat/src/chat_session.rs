@@ -8,8 +8,7 @@ use crate::types::*;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 
 /// Chat session
 pub struct ChatSession {
@@ -90,7 +89,7 @@ impl ChatSession {
         self.last_activity = chrono::Utc::now();
     }
 
-    pub fn add_message(&mut self, mut message: Message) -> Result<()> {
+    pub fn add_message(&mut self, message: Message) -> Result<()> {
         // Update activity timestamp
         self.update_activity();
 
@@ -193,7 +192,7 @@ impl ChatSession {
         importance += (context_references * 0.1).min(0.3);
 
         // 6. Semantic density (information content)
-        let semantic_score = self.calculate_semantic_density(&content_text);
+        let semantic_score = self.calculate_semantic_density(content_text);
         importance += semantic_score * 0.2;
 
         // 7. User engagement indicators
@@ -482,7 +481,7 @@ impl ChatSession {
                     "CONSTRUCT"
                 };
                 *concept_frequency
-                    .entry(format!("{} Query", query_type))
+                    .entry(format!("{query_type} Query"))
                     .or_insert(0) += 1;
             }
         }
@@ -519,7 +518,7 @@ impl ChatSession {
                 || content_lower.contains("resolve")
             {
                 outcomes.push(KeyOutcome {
-                    description: self.extract_outcome_summary(&content_text),
+                    description: self.extract_outcome_summary(content_text),
                     message_id: message.id.clone(),
                     outcome_type: OutcomeType::Solution,
                     confidence: 0.8,
@@ -532,7 +531,7 @@ impl ChatSession {
                 || content_lower.contains("recommend")
             {
                 outcomes.push(KeyOutcome {
-                    description: self.extract_outcome_summary(&content_text),
+                    description: self.extract_outcome_summary(content_text),
                     message_id: message.id.clone(),
                     outcome_type: OutcomeType::Decision,
                     confidence: 0.7,
@@ -622,7 +621,7 @@ impl ChatSession {
                 .filter(|o| matches!(o.outcome_type, OutcomeType::Solution))
                 .count();
             if solution_count > 0 {
-                summary_parts.push(format!("{} solutions provided", solution_count));
+                summary_parts.push(format!("{solution_count} solutions provided"));
             }
         }
 

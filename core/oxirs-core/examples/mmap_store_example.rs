@@ -148,7 +148,7 @@ fn main() -> Result<()> {
     print_stats(&final_stats);
 
     println!("\n6. Memory-mapped store benefits:");
-    println!("   - Data persisted to disk: {}", store_path);
+    println!("   - Data persisted to disk: {store_path}");
     println!("   - Can handle datasets larger than RAM");
     println!("   - Crash-safe with append-only writes");
     println!("   - Supports concurrent readers");

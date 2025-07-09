@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::{
-    error::{FusekiError, FusekiResult},
-    streaming::{ConsumerConfig, ProducerConfig, RDFEvent, StreamConsumer, StreamProducer},
+    error::FusekiResult,
+    streaming::{RDFEvent, StreamConsumer, StreamProducer},
 };
 
 /// Kafka-specific configuration

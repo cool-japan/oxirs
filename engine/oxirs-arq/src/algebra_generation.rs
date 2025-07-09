@@ -106,6 +106,7 @@ pub struct JoinCandidate {
 pub struct AlgebraGenerator {
     config: AlgebraGenerationConfig,
     analyzer: QueryAnalyzer,
+    #[allow(dead_code)]
     statistics: Option<StatisticsCollector>,
 }
 
@@ -229,6 +230,7 @@ impl AlgebraGenerator {
     }
 
     /// Generate bushy join tree (balanced)
+    #[allow(clippy::only_used_in_recursion)]
     fn generate_bushy_joins(&self, patterns: Vec<TriplePattern>) -> Result<Algebra> {
         if patterns.is_empty() {
             return Err(anyhow!("No patterns to join"));
@@ -477,6 +479,7 @@ impl AlgebraGenerator {
     }
 
     /// Push a filter down to the optimal position
+    #[allow(clippy::only_used_in_recursion)]
     fn push_filter_down(
         &self,
         algebra: Algebra,
@@ -676,6 +679,7 @@ impl AlgebraGenerator {
     }
 
     /// Collect variables used in a filter expression
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_filter_variables(&self, expression: &Expression, variables: &mut HashSet<Variable>) {
         match expression {
             Expression::Variable(var) => {

@@ -1,22 +1,21 @@
 //! Administrative handlers for server and dataset management
 
 use crate::{
-    auth::{AuthUser, Permission},
-    config::{DatasetConfig, ServerConfig},
+    config::DatasetConfig,
     error::{FusekiError, FusekiResult},
     server::AppState,
     store::Store,
 };
 use std::sync::Arc;
+use std::collections::HashMap;
 use axum::{
     extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
+    http::StatusCode,
     response::{Html, IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::time::Instant;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, info, instrument};
 
 /// Dataset creation request
 #[derive(Debug, Deserialize)]
@@ -124,7 +123,7 @@ pub async fn get_dataset(
 
     let config =
         state.config.datasets.get(&dataset_name).ok_or_else(|| {
-            FusekiError::not_found(format!("Dataset '{}' not found", dataset_name))
+            FusekiError::not_found(format!("Dataset '{dataset_name}' not found"))
         })?;
 
     let dataset_info = get_dataset_info(&dataset_name, config, &state.store).await?;
@@ -205,8 +204,7 @@ pub async fn delete_dataset(
     // Check if dataset exists
     if !state.config.datasets.contains_key(&dataset_name) {
         return Err(FusekiError::not_found(format!(
-            "Dataset '{}' not found",
-            dataset_name
+            "Dataset '{dataset_name}' not found"
         )));
     }
 
@@ -310,8 +308,7 @@ pub async fn compact_dataset(
     // Check if dataset exists
     if !state.config.datasets.contains_key(&dataset_name) {
         return Err(FusekiError::not_found(format!(
-            "Dataset '{}' not found",
-            dataset_name
+            "Dataset '{dataset_name}' not found"
         )));
     }
 
@@ -355,8 +352,7 @@ pub async fn backup_dataset(
     // Check if dataset exists
     if !state.config.datasets.contains_key(&dataset_name) {
         return Err(FusekiError::not_found(format!(
-            "Dataset '{}' not found",
-            dataset_name
+            "Dataset '{dataset_name}' not found"
         )));
     }
 
@@ -386,23 +382,23 @@ pub async fn backup_dataset(
 
     // Determine content type and filename
     let (content_type, filename) = match format {
-        "turtle" => ("text/turtle", format!("{}_backup.ttl", dataset_name)),
+        "turtle" => ("text/turtle", format!("{dataset_name}_backup.ttl")),
         "ntriples" => (
             "application/n-triples",
-            format!("{}_backup.nt", dataset_name),
+            format!("{dataset_name}_backup.nt"),
         ),
         "rdfxml" => (
             "application/rdf+xml",
-            format!("{}_backup.rdf", dataset_name),
+            format!("{dataset_name}_backup.rdf"),
         ),
-        _ => ("text/turtle", format!("{}_backup.ttl", dataset_name)),
+        _ => ("text/turtle", format!("{dataset_name}_backup.ttl")),
     };
 
     let headers = [
         ("content-type", content_type),
         (
             "content-disposition",
-            &format!("attachment; filename=\"{}\"", filename),
+            &format!("attachment; filename=\"{filename}\""),
         ),
     ];
 

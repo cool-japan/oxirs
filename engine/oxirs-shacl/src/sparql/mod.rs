@@ -69,9 +69,9 @@ impl SparqlConstraintExecutor {
 
     pub fn execute_constraint(
         &self,
-        constraint: &SparqlConstraint,
-        context: &ConstraintContext,
-        store: &dyn Store,
+        _constraint: &SparqlConstraint,
+        _context: &ConstraintContext,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // Basic implementation - in a real system this would execute SPARQL queries
         Ok(ConstraintEvaluationResult::Satisfied)
@@ -135,8 +135,8 @@ impl SparqlConstraint {
     /// Evaluate the SPARQL constraint
     pub fn evaluate(
         &self,
-        context: &ConstraintContext,
-        store: &dyn Store,
+        _context: &ConstraintContext,
+        _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
         // Basic implementation - in a real system this would execute SPARQL queries
         // For now, return satisfied to allow compilation
@@ -489,7 +489,7 @@ mod tests {
             Term::Literal(literal) => {
                 assert_eq!(literal.as_str(), "HELLO");
             }
-            _ => panic!("Expected literal result"),
+            _ => assert!(false, "Expected literal result, got: {:?}", result),
         }
     }
 
@@ -518,7 +518,7 @@ mod tests {
                 let value: f64 = literal.as_str().parse().unwrap();
                 assert_eq!(value, 8.0);
             }
-            _ => panic!("Expected literal result"),
+            _ => assert!(false, "Expected literal result, got: {:?}", result),
         }
     }
 }

@@ -483,7 +483,7 @@ impl CrossModalAttention {
             return Err(anyhow!("Dimension mismatch in attention"));
         }
 
-        let seq_len = query_vals.len() / self.head_dim;
+        let _seq_len = query_vals.len() / self.head_dim;
         let mut output = vec![0.0; query_vals.len()];
 
         // Process each attention head
@@ -880,7 +880,7 @@ impl JointEmbeddingSpace {
         top_k: usize,
     ) -> Result<Vec<(usize, f32)>> {
         // Project query to joint space
-        let query_joint = self.project_to_joint_space(query_modality, query_embedding)?;
+        let _query_joint = self.project_to_joint_space(query_modality, query_embedding)?;
 
         // Search across target modality
         self.cross_modal_search(
@@ -1448,14 +1448,14 @@ impl ContrastiveOptimizer {
     pub fn step_schedule(&mut self) {
         // Update learning rate based on schedule
         match self.lr_schedule {
-            LearningRateSchedule::StepDecay { step_size, gamma } => {
+            LearningRateSchedule::StepDecay { step_size: _, gamma } => {
                 // Implement step decay
                 self.learning_rate *= gamma;
             }
             LearningRateSchedule::ExponentialDecay { gamma } => {
                 self.learning_rate *= gamma;
             }
-            LearningRateSchedule::CosineAnnealing { min_lr, max_epochs } => {
+            LearningRateSchedule::CosineAnnealing { min_lr, max_epochs: _ } => {
                 // Simplified cosine annealing
                 let progress = 0.01; // Would track actual progress
                 let lr_range = self.learning_rate - min_lr;

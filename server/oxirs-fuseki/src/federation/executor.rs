@@ -1,8 +1,8 @@
 //! Federated query executor for parallel service execution
 
 use futures::{
-    future::{join_all, select_all},
-    stream::{self, StreamExt},
+    future::join_all,
+    stream::StreamExt,
 };
 use reqwest::Client;
 use std::{
@@ -11,10 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{
-    sync::{RwLock, Semaphore},
+    sync::Semaphore,
     time::timeout,
 };
-use url::Url;
 
 use oxirs_arq::query::{Query, QueryType};
 use oxirs_core::query::QueryResults;
@@ -332,7 +331,7 @@ impl FederatedExecutor {
             Ok(Ok(resp)) => resp,
             Ok(Err(e)) => {
                 return Err(FusekiError::QueryExecution {
-                    message: format!("Service request failed: {}", e),
+                    message: format!("Service request failed: {e}"),
                 });
             }
             Err(_) => {
@@ -388,7 +387,7 @@ impl FederatedExecutor {
             Ok(Err(e)) => {
                 context.metrics.failed_calls += 1;
                 return Err(FusekiError::QueryExecution {
-                    message: format!("Service request failed: {}", e),
+                    message: format!("Service request failed: {e}"),
                 });
             }
             Err(_) => {
@@ -425,17 +424,17 @@ impl FederatedExecutor {
             .text()
             .await
             .map_err(|e| FusekiError::QueryExecution {
-                message: format!("Failed to read response: {}", e),
+                message: format!("Failed to read response: {e}"),
             })?;
 
         // Parse based on query type
         let results = match query_type {
-            QueryType::Select { .. } => {
+            QueryType::Select => {
                 // Parse SPARQL JSON results
                 let json: serde_json::Value =
                     serde_json::from_str(&response_text).map_err(|e| {
                         FusekiError::QueryExecution {
-                            message: format!("Invalid JSON response: {}", e),
+                            message: format!("Invalid JSON response: {e}"),
                         }
                     })?;
 
@@ -449,11 +448,11 @@ impl FederatedExecutor {
 
                 QueryResults::Solutions(vec![]) // TODO: Parse actual bindings
             }
-            QueryType::Ask { .. } => {
+            QueryType::Ask => {
                 let json: serde_json::Value =
                     serde_json::from_str(&response_text).map_err(|e| {
                         FusekiError::QueryExecution {
-                            message: format!("Invalid JSON response: {}", e),
+                            message: format!("Invalid JSON response: {e}"),
                         }
                     })?;
 
@@ -464,7 +463,7 @@ impl FederatedExecutor {
 
                 QueryResults::Boolean(boolean_result)
             }
-            QueryType::Construct { .. } | QueryType::Describe { .. } => {
+            QueryType::Construct | QueryType::Describe => {
                 // Parse N-Triples or Turtle
                 QueryResults::Graph(Default::default()) // TODO: Parse actual graph
             }
@@ -494,8 +493,8 @@ impl FederatedExecutor {
     /// Get appropriate Accept header for query type
     fn get_accept_header(&self, query_type: &QueryType) -> &'static str {
         match query_type {
-            QueryType::Select { .. } | QueryType::Ask { .. } => "application/sparql-results+json",
-            QueryType::Construct { .. } | QueryType::Describe { .. } => "application/n-triples",
+            QueryType::Select | QueryType::Ask => "application/sparql-results+json",
+            QueryType::Construct | QueryType::Describe => "application/n-triples",
         }
     }
 

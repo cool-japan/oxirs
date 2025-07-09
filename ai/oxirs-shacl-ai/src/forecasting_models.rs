@@ -3,10 +3,10 @@
 //! This module provides advanced forecasting capabilities for quality prediction, trend forecasting,
 //! resource planning, and risk assessment in SHACL validation systems.
 
-use crate::{ShaclAiError, Shape};
+use crate::ShaclAiError;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Time series data point for forecasting
@@ -164,7 +164,7 @@ impl QualityForecastingModel {
         steps: usize,
     ) -> Result<ForecastResult, ShaclAiError> {
         // Check if we have a cached prediction
-        let cache_key = format!("{}_{:?}_{}", metric_name, horizon, steps);
+        let cache_key = format!("{metric_name}_{horizon:?}_{steps}");
         if let Some(cached) = self.predictions_cache.get(&cache_key) {
             if cached.valid_until > Utc::now() {
                 return Ok(cached.clone());
@@ -208,9 +208,9 @@ impl QualityForecastingModel {
             {
                 let (slope, intercept) = self.calculate_linear_trend(&series.data_points)?;
                 self.model_parameters
-                    .insert(format!("{}_slope", target_metric), slope);
+                    .insert(format!("{target_metric}_slope"), slope);
                 self.model_parameters
-                    .insert(format!("{}_intercept", target_metric), intercept);
+                    .insert(format!("{target_metric}_intercept"), intercept);
             }
         }
 
@@ -273,11 +273,11 @@ impl QualityForecastingModel {
                 // Store parameters
                 for (i, param) in ar_params.iter().enumerate() {
                     self.model_parameters
-                        .insert(format!("{}_ar_{}", target_metric, i), *param);
+                        .insert(format!("{target_metric}_ar_{i}"), *param);
                 }
                 for (i, param) in ma_params.iter().enumerate() {
                     self.model_parameters
-                        .insert(format!("{}_ma_{}", target_metric, i), *param);
+                        .insert(format!("{target_metric}_ma_{i}"), *param);
                 }
             }
         }
@@ -368,11 +368,11 @@ impl QualityForecastingModel {
                     self.optimize_smoothing_parameters(&series.data_points)?;
 
                 self.model_parameters
-                    .insert(format!("{}_alpha", target_metric), alpha);
+                    .insert(format!("{target_metric}_alpha"), alpha);
                 self.model_parameters
-                    .insert(format!("{}_beta", target_metric), beta);
+                    .insert(format!("{target_metric}_beta"), beta);
                 self.model_parameters
-                    .insert(format!("{}_gamma", target_metric), gamma);
+                    .insert(format!("{target_metric}_gamma"), gamma);
             }
         }
 
@@ -415,19 +415,19 @@ impl QualityForecastingModel {
 
                 // Store architecture parameters
                 self.model_parameters
-                    .insert(format!("{}_hidden_size", target_metric), hidden_size as f64);
+                    .insert(format!("{target_metric}_hidden_size"), hidden_size as f64);
                 self.model_parameters.insert(
-                    format!("{}_sequence_length", target_metric),
+                    format!("{target_metric}_sequence_length"),
                     sequence_length as f64,
                 );
                 self.model_parameters
-                    .insert(format!("{}_num_layers", target_metric), num_layers as f64);
+                    .insert(format!("{target_metric}_num_layers"), num_layers as f64);
                 self.model_parameters
-                    .insert(format!("{}_dropout_rate", target_metric), dropout_rate);
+                    .insert(format!("{target_metric}_dropout_rate"), dropout_rate);
                 self.model_parameters
-                    .insert(format!("{}_learning_rate", target_metric), learning_rate);
+                    .insert(format!("{target_metric}_learning_rate"), learning_rate);
                 self.model_parameters
-                    .insert(format!("{}_epochs", target_metric), epochs as f64);
+                    .insert(format!("{target_metric}_epochs"), epochs as f64);
 
                 // Prepare time series data for LSTM
                 let sequences = self.create_sequences(&series.data_points, sequence_length)?;
@@ -444,8 +444,7 @@ impl QualityForecastingModel {
                             let weight = self.xavier_initialization();
                             self.model_parameters.insert(
                                 format!(
-                                    "{}_lstm_layer_{}_unit_{}_input_{}_weight",
-                                    target_metric, layer, unit, input
+                                    "{target_metric}_lstm_layer_{layer}_unit_{unit}_input_{input}_weight"
                                 ),
                                 weight,
                             );
@@ -456,8 +455,7 @@ impl QualityForecastingModel {
                             let weight = self.xavier_initialization();
                             self.model_parameters.insert(
                                 format!(
-                                    "{}_lstm_layer_{}_unit_{}_hidden_{}_weight",
-                                    target_metric, layer, unit, hidden
+                                    "{target_metric}_lstm_layer_{layer}_unit_{unit}_hidden_{hidden}_weight"
                                 ),
                                 weight,
                             );
@@ -465,7 +463,7 @@ impl QualityForecastingModel {
 
                         // Bias terms
                         self.model_parameters.insert(
-                            format!("{}_lstm_layer_{}_unit_{}_bias", target_metric, layer, unit),
+                            format!("{target_metric}_lstm_layer_{layer}_unit_{unit}_bias"),
                             0.0,
                         );
                     }
@@ -477,18 +475,18 @@ impl QualityForecastingModel {
                     for hidden in 0..hidden_size {
                         let weight = self.xavier_initialization();
                         self.model_parameters.insert(
-                            format!("{}_output_hidden_{}_weight", target_metric, hidden),
+                            format!("{target_metric}_output_hidden_{hidden}_weight"),
                             weight,
                         );
                     }
                     self.model_parameters
-                        .insert(format!("{}_output_bias", target_metric), 0.0);
+                        .insert(format!("{target_metric}_output_bias"), 0.0);
                 }
 
                 // Attention mechanism weights (for enhanced performance)
                 for attention_head in 0..8 {
                     self.model_parameters.insert(
-                        format!("{}_attention_head_{}_weight", target_metric, attention_head),
+                        format!("{target_metric}_attention_head_{attention_head}_weight"),
                         self.xavier_initialization(),
                     );
                 }
@@ -506,13 +504,13 @@ impl QualityForecastingModel {
 
                 // Store final training loss
                 self.model_parameters
-                    .insert(format!("{}_final_loss", target_metric), loss);
+                    .insert(format!("{target_metric}_final_loss"), loss);
 
                 // Feature importance from attention weights
                 for (i, feature) in engineered_features.iter().enumerate() {
                     let importance = 1.0 / (i + 1) as f64 * (1.0 - loss); // Higher importance for successful features
                     self.model_parameters.insert(
-                        format!("{}_{}_importance", target_metric, feature),
+                        format!("{target_metric}_{feature}_importance"),
                         importance,
                     );
                 }
@@ -530,17 +528,17 @@ impl QualityForecastingModel {
         for target_metric in &self.target_metrics {
             // Random forest parameters
             self.model_parameters
-                .insert(format!("{}_n_trees", target_metric), 100.0);
+                .insert(format!("{target_metric}_n_trees"), 100.0);
             self.model_parameters
-                .insert(format!("{}_max_depth", target_metric), 10.0);
+                .insert(format!("{target_metric}_max_depth"), 10.0);
             self.model_parameters
-                .insert(format!("{}_min_samples_split", target_metric), 2.0);
+                .insert(format!("{target_metric}_min_samples_split"), 2.0);
 
             // Feature importance (simplified)
             for (i, feature) in self.features.iter().enumerate() {
                 let importance = 1.0 / (i + 1) as f64; // Decreasing importance
                 self.model_parameters.insert(
-                    format!("{}_{}_importance", target_metric, feature),
+                    format!("{target_metric}_{feature}_importance"),
                     importance,
                 );
             }
@@ -610,11 +608,11 @@ impl QualityForecastingModel {
             ForecastingModelType::LinearRegression => {
                 let slope = self
                     .model_parameters
-                    .get(&format!("{}_slope", metric_name))
+                    .get(&format!("{metric_name}_slope"))
                     .unwrap_or(&0.0);
                 let intercept = self
                     .model_parameters
-                    .get(&format!("{}_intercept", metric_name))
+                    .get(&format!("{metric_name}_intercept"))
                     .unwrap_or(&0.0);
 
                 for i in 0..steps {
@@ -639,7 +637,7 @@ impl QualityForecastingModel {
             ForecastingModelType::ExponentialSmoothing => {
                 let alpha = self
                     .model_parameters
-                    .get(&format!("{}_alpha", metric_name))
+                    .get(&format!("{metric_name}_alpha"))
                     .unwrap_or(&0.3);
 
                 // Get last known value
@@ -776,7 +774,7 @@ impl QualityForecastingModel {
         // Lag features
         for lag in [1, 7, 30, 365] {
             if data_points.len() > lag {
-                features.push(format!("lag_{}", lag));
+                features.push(format!("lag_{lag}"));
             }
         }
 
@@ -968,11 +966,11 @@ impl QualityForecastingModel {
             ForecastingModelType::LinearRegression => {
                 let slope = self
                     .model_parameters
-                    .get(&format!("{}_slope", metric_name))
+                    .get(&format!("{metric_name}_slope"))
                     .unwrap_or(&0.01);
                 let intercept = self
                     .model_parameters
-                    .get(&format!("{}_intercept", metric_name))
+                    .get(&format!("{metric_name}_intercept"))
                     .unwrap_or(&train_data.last().unwrap().value);
 
                 Ok(intercept + slope)
@@ -981,7 +979,7 @@ impl QualityForecastingModel {
             ForecastingModelType::ExponentialSmoothing => {
                 let alpha = self
                     .model_parameters
-                    .get(&format!("{}_alpha", metric_name))
+                    .get(&format!("{metric_name}_alpha"))
                     .unwrap_or(&0.3);
 
                 // Simple exponential smoothing prediction
@@ -1007,12 +1005,12 @@ impl QualityForecastingModel {
                 // Simplified neural network prediction
                 let hidden_size = *self
                     .model_parameters
-                    .get(&format!("{}_hidden_size", metric_name))
+                    .get(&format!("{metric_name}_hidden_size"))
                     .unwrap_or(&64.0) as usize;
 
                 let sequence_length = *self
                     .model_parameters
-                    .get(&format!("{}_sequence_length", metric_name))
+                    .get(&format!("{metric_name}_sequence_length"))
                     .unwrap_or(&24.0) as usize;
 
                 if train_data.len() < sequence_length {
@@ -1034,8 +1032,7 @@ impl QualityForecastingModel {
                         let weight = self
                             .model_parameters
                             .get(&format!(
-                                "{}_lstm_layer_0_unit_{}_input_0_weight",
-                                metric_name, i
+                                "{metric_name}_lstm_layer_0_unit_{i}_input_0_weight"
                             ))
                             .unwrap_or(&0.1);
                         hidden_state[i] = (hidden_state[i] + input * weight).tanh();
@@ -1047,14 +1044,14 @@ impl QualityForecastingModel {
                 for i in 0..hidden_size {
                     let weight = self
                         .model_parameters
-                        .get(&format!("{}_output_hidden_{}_weight", metric_name, i))
+                        .get(&format!("{metric_name}_output_hidden_{i}_weight"))
                         .unwrap_or(&0.1);
                     output += hidden_state[i] * weight;
                 }
 
                 let bias = self
                     .model_parameters
-                    .get(&format!("{}_output_bias", metric_name))
+                    .get(&format!("{metric_name}_output_bias"))
                     .unwrap_or(&0.0);
 
                 Ok(output + bias)
@@ -1083,6 +1080,12 @@ pub struct ResourceForecastingModel {
     memory_model: QualityForecastingModel,
     storage_model: QualityForecastingModel,
     network_model: QualityForecastingModel,
+}
+
+impl Default for ResourceForecastingModel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ResourceForecastingModel {
@@ -1198,6 +1201,12 @@ pub struct RiskForecastingModel {
     quality_risk_model: QualityForecastingModel,
     performance_risk_model: QualityForecastingModel,
     security_risk_model: QualityForecastingModel,
+}
+
+impl Default for RiskForecastingModel {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl RiskForecastingModel {
@@ -1466,7 +1475,7 @@ impl ForecastingManager {
         for (model_name, model) in &mut self.quality_models {
             for target_metric in &model.target_metrics.clone() {
                 let forecast = model.forecast(target_metric, horizon.clone(), 30)?;
-                quality_forecasts.insert(format!("{}_{}", model_name, target_metric), forecast);
+                quality_forecasts.insert(format!("{model_name}_{target_metric}"), forecast);
             }
         }
 
@@ -1483,7 +1492,7 @@ impl ForecastingManager {
             quality_forecasts,
             resource_forecast,
             risk_forecast,
-            recommendations: self.generate_comprehensive_recommendations(&workload_projections)?,
+            recommendations: self.generate_comprehensive_recommendations(workload_projections)?,
             confidence_score: 0.82,
             generated_at: Utc::now(),
         })

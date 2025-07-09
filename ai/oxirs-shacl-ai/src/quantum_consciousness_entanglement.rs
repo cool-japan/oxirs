@@ -12,34 +12,24 @@
 //! - Quantum decoherence detection and correction
 //! - Non-local consciousness correlation
 
-use async_trait::async_trait;
 use dashmap::DashMap;
-use nalgebra::{Complex, DMatrix, DVector};
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::f64::consts::PI;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationConfig, ValidationReport};
 
-use crate::collective_consciousness::{
-    CollectiveConsciousnessNetwork, ConsciousnessAgent, ConsciousnessId,
-};
+use crate::collective_consciousness::ConsciousnessId;
 use crate::consciousness_validation::{
     ConsciousnessLevel, ConsciousnessValidationResult, EmotionalContext,
 };
-use crate::quantum_neural_patterns::QuantumState;
 use crate::{Result, ShaclAiError};
 
 /// Helper function for serde default Instant
@@ -834,13 +824,13 @@ impl QuantumConsciousnessEntanglement {
         self.entanglement_registry
             .agent_entanglements
             .entry(agent_a)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(entanglement_id);
 
         self.entanglement_registry
             .agent_entanglements
             .entry(agent_b)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(entanglement_id);
 
         // Store quantum state
@@ -864,7 +854,7 @@ impl QuantumConsciousnessEntanglement {
             timestamp: creation_time,
             details: {
                 let mut details = HashMap::new();
-                details.insert("bell_state".to_string(), format!("{:?}", bell_state));
+                details.insert("bell_state".to_string(), format!("{bell_state:?}"));
                 details.insert("initial_fidelity".to_string(), "1.0".to_string());
                 details
             },

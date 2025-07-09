@@ -10,10 +10,10 @@
 //! - Quantum error correction for robustness
 
 use super::*;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use fastrand;
 use std::f64::consts::PI;
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Quantum-inspired state for retrieval optimization
 #[derive(Debug, Clone)]
@@ -352,7 +352,7 @@ impl QuantumEntanglementManager {
         doc2_id: &str,
         strength: f64,
     ) -> Result<()> {
-        if strength < 0.0 || strength > 1.0 {
+        if !(0.0..=1.0).contains(&strength) {
             return Err(anyhow!("Entanglement strength must be between 0.0 and 1.0"));
         }
 
@@ -361,9 +361,9 @@ impl QuantumEntanglementManager {
 
         // Store bidirectional correlation
         self.correlation_strength
-            .insert(format!("{}:{}", doc1_id, doc2_id), strength);
+            .insert(format!("{doc1_id}:{doc2_id}"), strength);
         self.correlation_strength
-            .insert(format!("{}:{}", doc2_id, doc1_id), strength);
+            .insert(format!("{doc2_id}:{doc1_id}"), strength);
 
         debug!(
             "Entangled documents {} and {} with strength {}",
@@ -375,7 +375,7 @@ impl QuantumEntanglementManager {
     /// Get entanglement strength between two documents
     pub fn get_entanglement_strength(&self, doc1_id: &str, doc2_id: &str) -> f64 {
         self.correlation_strength
-            .get(&format!("{}:{}", doc1_id, doc2_id))
+            .get(&format!("{doc1_id}:{doc2_id}"))
             .copied()
             .unwrap_or(0.0)
     }

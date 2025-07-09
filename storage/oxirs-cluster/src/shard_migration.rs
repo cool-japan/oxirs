@@ -272,6 +272,7 @@ pub struct ShardMigrationManager {
     /// Semaphore for controlling concurrent migrations
     migration_semaphore: Arc<Semaphore>,
     /// Shutdown signal
+    #[allow(dead_code)]
     shutdown_tx: Option<mpsc::Sender<()>>,
 }
 
@@ -307,7 +308,7 @@ impl ShardMigrationManager {
         // Estimate migration size
         let estimated_size = self.estimate_migration_size(shard_id).await?;
 
-        let mut migration = MigrationOperation::new(
+        let migration = MigrationOperation::new(
             shard_id,
             source_nodes,
             target_nodes,
@@ -461,17 +462,15 @@ impl ShardMigrationManager {
 
         // Process in batches
         let batch_size = self.config.batch_size;
-        let mut sequence = 0u64;
         let mut processed = 0u64;
 
-        for chunk in triples.chunks(batch_size) {
-            let batch = MigrationBatch::new(migration_id.to_string(), sequence, chunk.to_vec());
+        for (sequence, chunk) in triples.chunks(batch_size).enumerate() {
+            let batch = MigrationBatch::new(migration_id.to_string(), sequence as u64, chunk.to_vec());
 
             // Transfer batch to target nodes
             self.transfer_batch(migration_id, &batch).await?;
 
             processed += chunk.len() as u64;
-            sequence += 1;
 
             // Update progress
             self.update_migration_progress(migration_id, processed)
@@ -767,8 +766,6 @@ impl Clone for ShardMigrationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::mock::MockStorageBackend;
-    use std::collections::HashSet;
 
     fn create_test_migration() -> MigrationOperation {
         let source_nodes = [1, 2].iter().cloned().collect();
@@ -817,7 +814,7 @@ mod tests {
 
     #[test]
     fn test_migration_batch_integrity() {
-        use oxirs_core::model::{NamedNode, Term, Triple as CoreTriple};
+        use oxirs_core::model::{NamedNode, Triple as CoreTriple};
 
         let triples = vec![CoreTriple::new(
             NamedNode::new("http://example.org/s").unwrap(),

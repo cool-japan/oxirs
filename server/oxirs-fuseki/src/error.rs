@@ -293,7 +293,7 @@ impl IntoResponse for FusekiError {
         // Extract request ID from tracing context if available
         let request_id = tracing::Span::current()
             .field("request_id")
-            .and_then(|field| {
+            .and({
                 // This is a simplified extraction - in practice you'd use a proper context
                 None::<String>
             });
@@ -450,7 +450,7 @@ where
     }
 
     fn with_context(self, context: &str) -> FusekiResult<T> {
-        self.map_err(|e| FusekiError::internal(format!("{}: {}", context, e)))
+        self.map_err(|e| FusekiError::internal(format!("{context}: {e}")))
     }
 }
 

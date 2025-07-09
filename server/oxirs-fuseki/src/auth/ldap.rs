@@ -10,10 +10,10 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// LDAP authentication service
 #[derive(Clone)]
@@ -186,8 +186,7 @@ impl LdapService {
 
         if search_results.is_empty() {
             return Err(FusekiError::authentication(format!(
-                "User not found: {}",
-                username
+                "User not found: {username}"
             )));
         }
 
@@ -319,7 +318,7 @@ impl LdapService {
             ldap_user
                 .display_name
                 .or_else(|| match (&ldap_user.given_name, &ldap_user.sn) {
-                    (Some(given), Some(surname)) => Some(format!("{} {}", given, surname)),
+                    (Some(given), Some(surname)) => Some(format!("{given} {surname}")),
                     (Some(given), None) => Some(given.clone()),
                     (None, Some(surname)) => Some(surname.clone()),
                     _ => ldap_user.cn.clone(),
@@ -631,8 +630,8 @@ pub fn active_directory_config(
     service_password: &str,
 ) -> LdapConfig {
     LdapConfig {
-        server: format!("ldap://{}", domain_controller),
-        bind_dn: format!("{}@{}", service_account, domain),
+        server: format!("ldap://{domain_controller}"),
+        bind_dn: format!("{service_account}@{domain}"),
         bind_password: service_password.to_string(),
         user_base_dn: format!("dc={}", domain.replace('.', ",dc=")),
         user_filter: "(sAMAccountName={username})".to_string(),

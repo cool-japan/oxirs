@@ -2,10 +2,9 @@
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::{
-    error::{FusekiError, FusekiResult},
+    error::FusekiResult,
     streaming::{RDFEvent, StreamConsumer, StreamProducer},
 };
 

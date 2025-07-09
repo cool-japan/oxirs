@@ -167,7 +167,7 @@ impl fmt::Display for VectorClock {
             if !first {
                 write!(f, ", ")?;
             }
-            write!(f, "{}:{}", node, time)?;
+            write!(f, "{node}:{time}")?;
             first = false;
         }
         write!(f, "]")
@@ -319,11 +319,7 @@ impl HybridLogicalClock {
     /// Check if timestamp is within clock skew bounds
     pub fn is_within_skew_bounds(&self, max_skew_micros: PhysicalTime) -> bool {
         let current = Self::current_physical_time();
-        let diff = if self.physical_time > current {
-            self.physical_time - current
-        } else {
-            current - self.physical_time
-        };
+        let diff = self.physical_time.abs_diff(current);
         diff <= max_skew_micros
     }
 }
@@ -359,8 +355,10 @@ pub struct ClockSyncManager {
     /// Maximum allowed clock skew in microseconds
     max_skew_micros: PhysicalTime,
     /// Synchronization interval
+    #[allow(dead_code)]
     sync_interval: Duration,
     /// Last synchronization time
+    #[allow(dead_code)]
     last_sync: Arc<Mutex<Instant>>,
 }
 
@@ -431,29 +429,17 @@ impl ClockSyncManager {
 
         if from_node == self.local_node {
             // Local timestamp - check against current time with small tolerance
-            let diff = if timestamp > local_time {
-                timestamp - local_time
-            } else {
-                local_time - timestamp
-            };
+            let diff = timestamp.abs_diff(local_time);
             return diff <= self.max_skew_micros;
         }
 
         // Remote timestamp - consider estimated skew
         if let Some(estimated_remote_time) = self.estimate_remote_time(from_node) {
-            let diff = if timestamp > estimated_remote_time {
-                timestamp - estimated_remote_time
-            } else {
-                estimated_remote_time - timestamp
-            };
+            let diff = timestamp.abs_diff(estimated_remote_time);
             diff <= self.max_skew_micros * 2 // More tolerance for remote timestamps
         } else {
             // No skew information - use conservative bounds
-            let diff = if timestamp > local_time {
-                timestamp - local_time
-            } else {
-                local_time - timestamp
-            };
+            let diff = timestamp.abs_diff(local_time);
             diff <= self.max_skew_micros * 3
         }
     }
@@ -478,6 +464,7 @@ impl ClockSyncManager {
 /// Timestamp manager combining all timestamp types
 pub struct TimestampManager {
     /// Local node ID
+    #[allow(dead_code)]
     local_node: NodeId,
     /// Vector clock for causality tracking
     vector_clock: Arc<RwLock<VectorClock>>,

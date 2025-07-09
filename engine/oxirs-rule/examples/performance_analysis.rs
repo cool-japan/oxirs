@@ -114,8 +114,7 @@ fn comprehensive_testing_example() -> anyhow::Result<()> {
 
     for (fact_count, rule_count, description) in test_cases {
         println!(
-            "\n🔬 Testing {}: {} facts, {} rules",
-            description, fact_count, rule_count
+            "\n🔬 Testing {description}: {fact_count} facts, {rule_count} rules"
         );
 
         let facts = generate_test_facts(fact_count);
@@ -151,7 +150,7 @@ fn memory_stress_testing_example() -> anyhow::Result<()> {
     let stress_levels = vec![1, 2, 5]; // Scale factors
 
     for scale in stress_levels {
-        println!("\n🧠 Memory stress test - Scale factor: {}", scale);
+        println!("\n🧠 Memory stress test - Scale factor: {scale}");
 
         let metrics = harness.run_memory_stress_test(scale);
 
@@ -202,7 +201,7 @@ fn integration_performance_example() -> anyhow::Result<()> {
 
         // Generate RDF triples and add to store
         for i in 0..200 {
-            let subject_iri = format!("http://example.org/person{}", i);
+            let subject_iri = format!("http://example.org/person{i}");
             let subject = oxirs_core::NamedNode::new(&subject_iri).unwrap();
             let predicate =
                 oxirs_core::NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
@@ -217,7 +216,7 @@ fn integration_performance_example() -> anyhow::Result<()> {
         integration.apply_rules().unwrap()
     });
 
-    println!("Integration test derived {} facts", integration_result);
+    println!("Integration test derived {integration_result} facts");
 
     // Generate detailed report
     let metrics = profiler.generate_report();
@@ -235,7 +234,7 @@ fn integration_performance_example() -> anyhow::Result<()> {
     if !metrics.warnings.is_empty() {
         println!("\n⚠️  Performance Warnings:");
         for warning in &metrics.warnings {
-            println!("  - {}", warning);
+            println!("  - {warning}");
         }
     } else {
         println!("\n✅ All performance thresholds met!");
@@ -251,14 +250,14 @@ fn generate_test_facts(count: usize) -> Vec<RuleAtom> {
     for i in 0..count {
         // Person type facts
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("person_{}", i)),
+            subject: Term::Constant(format!("person_{i}")),
             predicate: Term::Constant("hasType".to_string()),
             object: Term::Constant("Person".to_string()),
         });
 
         // Age facts
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("person_{}", i)),
+            subject: Term::Constant(format!("person_{i}")),
             predicate: Term::Constant("hasAge".to_string()),
             object: Term::Literal((20 + i % 50).to_string()),
         });
@@ -266,7 +265,7 @@ fn generate_test_facts(count: usize) -> Vec<RuleAtom> {
         // Additional properties
         if i % 3 == 0 {
             facts.push(RuleAtom::Triple {
-                subject: Term::Constant(format!("person_{}", i)),
+                subject: Term::Constant(format!("person_{i}")),
                 predicate: Term::Constant("hasEducation".to_string()),
                 object: Term::Constant("university".to_string()),
             });
@@ -282,7 +281,7 @@ fn generate_test_rules(count: usize) -> Vec<Rule> {
 
     for i in 0..count {
         rules.push(Rule {
-            name: format!("test_rule_{}", i),
+            name: format!("test_rule_{i}"),
             body: vec![RuleAtom::Triple {
                 subject: Term::Variable("X".to_string()),
                 predicate: Term::Constant("hasType".to_string()),
@@ -291,7 +290,7 @@ fn generate_test_rules(count: usize) -> Vec<Rule> {
             head: vec![RuleAtom::Triple {
                 subject: Term::Variable("X".to_string()),
                 predicate: Term::Constant("hasProperty".to_string()),
-                object: Term::Constant(format!("property_{}", i)),
+                object: Term::Constant(format!("property_{i}")),
             }],
         });
     }

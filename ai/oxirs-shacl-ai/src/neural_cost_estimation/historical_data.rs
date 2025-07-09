@@ -75,7 +75,7 @@ impl HistoricalDataManager {
     pub fn get_training_data(&self) -> Result<&TrainingData> {
         // Return cached data or generate new training data
         // For now, return a placeholder
-        Err(ShaclAiError::DataProcessing("Training data not implemented".to_string()).into())
+        Err(ShaclAiError::DataProcessing("Training data not implemented".to_string()))
     }
 
     /// Clear old records

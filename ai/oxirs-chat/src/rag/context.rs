@@ -5,10 +5,9 @@
 
 use super::types::*;
 use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
-use tracing::{debug, info, warn};
+use std::collections::HashSet;
+use std::time::Instant;
+use tracing::{debug, info};
 
 /// Context assembler for RAG results
 pub struct ContextAssembler {
@@ -197,7 +196,7 @@ impl ContextOptimizer {
     /// Apply diversity optimization to avoid redundant content
     async fn apply_diversity_optimization(
         &self,
-        mut results: Vec<SearchResult>,
+        results: Vec<SearchResult>,
     ) -> Result<Vec<SearchResult>> {
         let mut diverse_results = Vec::new();
         let mut selected_content = Vec::new();
@@ -276,7 +275,7 @@ impl ContextOptimizer {
     }
 
     /// Apply length constraints to fit within token limits
-    fn apply_length_constraints(&self, mut results: Vec<SearchResult>) -> Vec<SearchResult> {
+    fn apply_length_constraints(&self, results: Vec<SearchResult>) -> Vec<SearchResult> {
         let mut total_tokens = 0;
         let mut constrained_results = Vec::new();
 

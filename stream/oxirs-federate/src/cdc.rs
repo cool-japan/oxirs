@@ -191,6 +191,12 @@ pub struct VectorClock {
     pub last_updated: SystemTime,
 }
 
+impl Default for VectorClock {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VectorClock {
     /// Create new vector clock
     pub fn new() -> Self {
@@ -817,7 +823,7 @@ impl CdcProcessor {
 
         let publishers = self.change_publishers.read().await;
         if let Some(publisher) = publishers.get(&change.source_service) {
-            if let Err(_) = publisher.send(change.clone()) {
+            if publisher.send(change.clone()).is_err() {
                 debug!(
                     "No subscribers for change notifications on service: {}",
                     change.source_service
@@ -849,7 +855,7 @@ impl CdcProcessor {
             let mut sync_state = self.sync_state.write().await;
             sync_state
                 .active_syncs
-                .insert(format!("{}->{}", source_service, target_service));
+                .insert(format!("{source_service}->{target_service}"));
         }
 
         // Get last sync time
@@ -890,7 +896,7 @@ impl CdcProcessor {
                 .insert(target_service.to_string(), SystemTime::now());
             sync_state
                 .active_syncs
-                .remove(&format!("{}->{}", source_service, target_service));
+                .remove(&format!("{source_service}->{target_service}"));
             sync_state.failed_syncs.remove(target_service);
         }
 

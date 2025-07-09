@@ -4,7 +4,7 @@ use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 
 use super::core::{QuantumPattern, QuantumState};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Quantum Teleportation Protocol for Pattern Transfer
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -84,10 +84,8 @@ impl QuantumTeleportation {
                 // Apply Pauli-X correction
                 let half_len = pattern.quantum_state.amplitudes.len() / 2;
                 for i in 0..half_len {
-                    let temp = pattern.quantum_state.amplitudes[i];
-                    pattern.quantum_state.amplitudes[i] =
-                        pattern.quantum_state.amplitudes[i + half_len];
-                    pattern.quantum_state.amplitudes[i + half_len] = temp;
+                    let i = i;
+                    pattern.quantum_state.amplitudes.swap(i, i + half_len);
                 }
             }
             (true, true) => {

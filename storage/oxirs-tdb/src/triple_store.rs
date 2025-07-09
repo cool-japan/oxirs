@@ -493,6 +493,7 @@ pub struct TripleStore {
     /// Node table for term storage
     node_table: Arc<NodeTable>,
     /// Transaction manager
+    #[allow(dead_code)]
     transaction_manager: Arc<RwLock<TransactionManager>>,
     /// MVCC storage for triples
     mvcc_storage: Arc<MvccStorage<TripleKey, bool>>,
@@ -869,7 +870,7 @@ impl TripleStore {
                 + query_time)
                 / stats.query_count as f64;
 
-            let index_name = format!("{:?}", best_index);
+            let index_name = format!("{best_index:?}");
             *stats.index_hits.entry(index_name).or_insert(0) += 1;
         }
 
@@ -1110,7 +1111,7 @@ impl TripleStore {
                 + query_time)
                 / stats.query_count as f64;
 
-            let index_name = format!("{:?}", best_index);
+            let index_name = format!("{best_index:?}");
             *stats.index_hits.entry(index_name).or_insert(0) += 1;
         }
 
@@ -1638,9 +1639,9 @@ impl StorageInterface for TripleStore {
                             
                             if let Some(idx_type) = idx_type {
                                 let mut indices = self.indices.write().unwrap();
-                                if !indices.contains_key(&idx_type) {
+                                if let std::collections::hash_map::Entry::Vacant(e) = indices.entry(idx_type) {
                                     let btree = BTree::with_config(self.config.btree_config.clone());
-                                    indices.insert(idx_type, btree);
+                                    e.insert(btree);
                                     info!("Created standard index: {:?}", idx_type);
                                 }
                             }
@@ -1702,7 +1703,7 @@ impl StorageInterface for TripleStore {
                 
                 // Store metadata as properties of the graph if provided
                 for (key, value) in metadata {
-                    let predicate_term = Term::iri(format!("http://oxirs.org/graph/metadata#{}", key));
+                    let predicate_term = Term::iri(format!("http://oxirs.org/graph/metadata#{key}"));
                     let predicate_id = self.node_table.store_term(&predicate_term)?;
                     
                     let value_term = Term::literal(value);
@@ -1758,7 +1759,7 @@ impl StorageInterface for TripleStore {
                 info!("Schema change: Adding constraint {}", constraint_name);
                 
                 // Store constraint definition as metadata in the default graph
-                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{}", constraint_name));
+                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{constraint_name}"));
                 let constraint_id = self.node_table.store_term(&constraint_subject)?;
                 
                 // Store constraint type
@@ -1785,7 +1786,7 @@ impl StorageInterface for TripleStore {
                 info!("Schema change: Dropping constraint {}", constraint_name);
                 
                 // Find and remove constraint metadata triples
-                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{}", constraint_name));
+                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{constraint_name}"));
                 if let Some(constraint_id) = self.node_table.get_node_id(&constraint_subject)? {
                     // Query all triples with this constraint as subject
                     let constraint_triples = self.query_triples(Some(constraint_id), None, None)?;
@@ -1811,7 +1812,7 @@ impl StorageInterface for TripleStore {
                 info!("Schema change: Updating {} from {} to {}", setting_name, old_value, new_value);
                 
                 // Store configuration changes as metadata
-                let config_subject = Term::iri(format!("http://oxirs.org/config/{}", setting_name));
+                let config_subject = Term::iri(format!("http://oxirs.org/config/{setting_name}"));
                 let config_id = self.node_table.store_term(&config_subject)?;
                 
                 // Store the new value
@@ -1840,7 +1841,7 @@ impl StorageInterface for TripleStore {
                 info!("Schema change: Updating statistics for {}", table_name);
                 
                 // Calculate and store current statistics
-                let stats_subject = Term::iri(format!("http://oxirs.org/stats/{}", table_name));
+                let stats_subject = Term::iri(format!("http://oxirs.org/stats/{table_name}"));
                 let stats_id = self.node_table.store_term(&stats_subject)?;
                 
                 match table_name.as_str() {
@@ -1906,7 +1907,7 @@ impl StorageInterface for TripleStore {
                 );
                 
                 // Store view definition as metadata
-                let view_subject = Term::iri(format!("http://oxirs.org/views/{}", view_name));
+                let view_subject = Term::iri(format!("http://oxirs.org/views/{view_name}"));
                 let view_id = self.node_table.store_term(&view_subject)?;
                 
                 // Store view type (materialized or regular)
@@ -1953,7 +1954,7 @@ impl StorageInterface for TripleStore {
                 );
                 
                 // Find and remove view metadata triples
-                let view_subject = Term::iri(format!("http://oxirs.org/views/{}", view_name));
+                let view_subject = Term::iri(format!("http://oxirs.org/views/{view_name}"));
                 if let Some(view_id) = self.node_table.get_node_id(&view_subject)? {
                     // Query all triples with this view as subject and delete them
                     let view_triples = self.query_triples(Some(view_id), None, None)?;

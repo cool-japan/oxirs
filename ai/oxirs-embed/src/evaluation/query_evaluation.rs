@@ -221,7 +221,7 @@ impl QueryAnsweringEvaluator {
     }
 
     /// Evaluate a model on query answering tasks
-    pub async fn evaluate(&self, model: &dyn EmbeddingModel) -> Result<QueryEvaluationResults> {
+    pub async fn evaluate(&self, _model: &dyn EmbeddingModel) -> Result<QueryEvaluationResults> {
         info!("Starting query answering evaluation");
 
         // Placeholder implementation
@@ -249,14 +249,14 @@ pub mod utils {
 
     /// Generate test queries from templates
     pub fn generate_test_queries(
-        templates: &[QueryTemplate],
-        num_queries: usize,
+        _templates: &[QueryTemplate],
+        _num_queries: usize,
     ) -> Vec<QueryResult> {
         Vec::new()
     }
 
     /// Compute query similarity metrics
-    pub fn compute_query_similarity(query1: &str, query2: &str) -> f64 {
+    pub fn compute_query_similarity(_query1: &str, _query2: &str) -> f64 {
         0.0
     }
 }

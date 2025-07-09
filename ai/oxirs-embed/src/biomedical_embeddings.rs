@@ -613,7 +613,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
             }
 
             if epoch % 100 == 0 {
-                println!("Epoch {}: Loss = {:.6}", epoch, epoch_loss);
+                println!("Epoch {epoch}: Loss = {epoch_loss:.6}");
             }
         }
 
@@ -623,7 +623,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
             epochs_completed: epochs,
             final_loss: loss_history.last().copied().unwrap_or(0.0),
             training_time_seconds: training_time,
-            convergence_achieved: loss_history.last().map_or(false, |&loss| loss < 0.001),
+            convergence_achieved: loss_history.last().is_some_and(|&loss| loss < 0.001),
             loss_history,
         };
 
@@ -643,7 +643,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
         self.get_typed_entity_embedding(entity)
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(embedding) = self.relation_embeddings.get(relation) {
             Ok(Vector::from_array1(embedding))
         } else {
@@ -653,7 +653,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let relation_emb = self.get_relation_embedding(predicate)?;
+        let relation_emb = self.getrelation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // TransE-style scoring with biomedical enhancements
@@ -690,8 +690,8 @@ impl EmbeddingModel for BiomedicalEmbedding {
         }
 
         // Generic prediction
-        let subject_emb = self.get_entity_embedding(subject)?;
-        let relation_emb = self.get_relation_embedding(predicate)?;
+        let _subject_emb = self.get_entity_embedding(subject)?;
+        let _relation_emb = self.getrelation_embedding(predicate)?;
 
         let mut scores = Vec::new();
         for entity in self.entity_types.keys() {
@@ -714,8 +714,8 @@ impl EmbeddingModel for BiomedicalEmbedding {
         object: &str,
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
-        let object_emb = self.get_entity_embedding(object)?;
-        let relation_emb = self.get_relation_embedding(predicate)?;
+        let _object_emb = self.get_entity_embedding(object)?;
+        let _relation_emb = self.getrelation_embedding(predicate)?;
 
         let mut scores = Vec::new();
         for entity in self.entity_types.keys() {
@@ -738,8 +738,8 @@ impl EmbeddingModel for BiomedicalEmbedding {
         object: &str,
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
-        let subject_emb = self.get_entity_embedding(subject)?;
-        let object_emb = self.get_entity_embedding(object)?;
+        let _subject_emb = self.get_entity_embedding(subject)?;
+        let _object_emb = self.get_entity_embedding(object)?;
 
         let mut scores = Vec::new();
         for relation in self.relation_types.keys() {
@@ -1163,7 +1163,7 @@ impl SpecializedTextEmbedding {
                 let mut chars = text.chars().peekable();
                 while let Some(c) = chars.next() {
                     result.push(c);
-                    if c.is_lowercase() && chars.peek().map_or(false, |&next| next.is_uppercase()) {
+                    if c.is_lowercase() && chars.peek().is_some_and(|&next| next.is_uppercase()) {
                         result.push(' ');
                     }
                 }
@@ -1285,7 +1285,7 @@ impl SpecializedTextEmbedding {
 
         // Fill remaining dimensions with text-based features
         for i in 3..embedding_dim {
-            let byte_val = text.bytes().nth(i % text.len()).unwrap_or(0) as f32;
+            let byte_val = text.as_bytes().get(i % text.len()).copied().unwrap_or(0) as f32;
             embedding[i] = (byte_val / 255.0 - 0.5) * 2.0; // Normalize to [-1, 1]
         }
 
@@ -1324,7 +1324,7 @@ impl SpecializedTextEmbedding {
             loss_history.push(epoch_loss as f64);
 
             if epoch % 10 == 0 {
-                println!("Fine-tuning epoch {}: Loss = {:.6}", epoch, epoch_loss);
+                println!("Fine-tuning epoch {epoch}: Loss = {epoch_loss:.6}");
             }
         }
 
@@ -1334,7 +1334,7 @@ impl SpecializedTextEmbedding {
             epochs_completed: epochs,
             final_loss: loss_history.last().copied().unwrap_or(0.0),
             training_time_seconds: training_time,
-            convergence_achieved: loss_history.last().map_or(false, |&loss| loss < 0.01),
+            convergence_achieved: loss_history.last().is_some_and(|&loss| loss < 0.01),
             loss_history,
         };
 
@@ -1357,15 +1357,19 @@ impl SpecializedTextEmbedding {
 }
 
 // Simplified regex-like functionality for preprocessing
+#[allow(dead_code)]
 mod regex {
+    #[allow(dead_code)]
     pub struct Regex(String);
 
     impl Regex {
+        #[allow(dead_code)]
         pub fn new(pattern: &str) -> Result<Self, &'static str> {
             Ok(Regex(pattern.to_string()))
         }
 
-        pub fn replace_all<'a, F>(&self, text: &'a str, rep: F) -> std::borrow::Cow<'a, str>
+        #[allow(dead_code)]
+        pub fn replace_all<'a, F>(&self, text: &'a str, _rep: F) -> std::borrow::Cow<'a, str>
         where
             F: Fn(&str) -> String,
         {
@@ -1620,6 +1624,7 @@ mod tests {
 
 /// Research publication network analysis and embeddings
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PublicationNetworkAnalyzer {
     /// Author embedding cache
     author_embeddings: HashMap<String, Vector>,

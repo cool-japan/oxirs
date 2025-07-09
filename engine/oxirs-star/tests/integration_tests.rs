@@ -25,7 +25,7 @@ ex:alice ex:says << ex:bob ex:age 30 >> .
     // Note: Current Turtle-star parser has limitations with quoted triples
     // TODO: Fix Turtle-star parser to properly handle quoted triples
     // For now, we expect only regular triples to be parsed
-    assert!(graph.len() >= 1); // At least some triples should be parsed
+    assert!(!graph.is_empty()); // At least some triples should be parsed
 
     // Serialize back
     let serializer = StarSerializer::new();
@@ -95,7 +95,7 @@ ex:graph2 {
     let graph = parser.parse_str(input, StarFormat::TrigStar).unwrap();
 
     // Check default graph
-    assert!(graph.len() > 0); // Has default graph triples
+    assert!(!graph.is_empty()); // Has default graph triples
 
     // Check named graphs
     let graph_names = graph.named_graph_names();
@@ -275,8 +275,7 @@ fn test_streaming_large_file() {
     for i in 0..1000 {
         writeln!(
             temp_file,
-            "<http://example.org/subject{}> <http://example.org/predicate> \"object{}\" .",
-            i, i
+            "<http://example.org/subject{i}> <http://example.org/predicate> \"object{i}\" ."
         )
         .unwrap();
 
@@ -284,8 +283,7 @@ fn test_streaming_large_file() {
         if i % 10 == 0 {
             writeln!(
                 temp_file,
-                "<< <http://example.org/s{}> <http://example.org/p> \"o{}\" >> <http://example.org/meta> \"metadata{}\" .",
-                i, i, i
+                "<< <http://example.org/s{i}> <http://example.org/p> \"o{i}\" >> <http://example.org/meta> \"metadata{i}\" ."
             ).unwrap();
         }
     }

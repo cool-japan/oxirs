@@ -196,6 +196,12 @@ pub enum RollbackStrategyType {
     None,
 }
 
+impl Default for ShapeVersionControl {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ShapeVersionControl {
     pub fn new() -> Self {
         Self {
@@ -231,11 +237,11 @@ impl ShapeVersionControl {
         to_version: &VersionId,
     ) -> Result<MigrationPlan> {
         let from_shape_version = self.get_version(shape_id, from_version).ok_or_else(|| {
-            ShaclAiError::ShapeManagement(format!("Source version {} not found", from_version))
+            ShaclAiError::ShapeManagement(format!("Source version {from_version} not found"))
         })?;
 
         let to_shape_version = self.get_version(shape_id, to_version).ok_or_else(|| {
-            ShaclAiError::ShapeManagement(format!("Target version {} not found", to_version))
+            ShaclAiError::ShapeManagement(format!("Target version {to_version} not found"))
         })?;
 
         let mut migration_steps = Vec::new();
@@ -312,7 +318,7 @@ impl ShapeVersionControl {
         estimated_duration += Duration::from_secs(120);
 
         let migration_plan = MigrationPlan {
-            plan_id: format!("migration_{}_{}_to_{}", shape_id, from_version, to_version),
+            plan_id: format!("migration_{shape_id}_{from_version}_to_{to_version}"),
             from_version: from_version.clone(),
             to_version: to_version.clone(),
             migration_steps,

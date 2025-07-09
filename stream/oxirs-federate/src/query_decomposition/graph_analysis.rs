@@ -9,7 +9,6 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::debug;
 
 use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
-use crate::planner::TriplePattern;
 
 use super::types::*;
 
@@ -281,6 +280,12 @@ pub struct GraphStructureAnalysis {
     pub detected_patterns: Vec<DetectedPattern>,
 }
 
+impl Default for GraphStructureAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GraphStructureAnalysis {
     pub fn new() -> Self {
         Self {
@@ -299,6 +304,12 @@ pub struct ConnectivityAnalysis {
     pub node_degrees: HashMap<NodeIndex, usize>,
     pub max_degree: usize,
     pub hub_nodes: Vec<NodeIndex>,
+}
+
+impl Default for ConnectivityAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConnectivityAnalysis {

@@ -1,6 +1,5 @@
 //! Type definitions for service optimization
 
-use anyhow::Result;
 use bloom::BloomFilter as ExternalBloomFilter;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -117,6 +116,12 @@ impl Default for ServiceOptimizerConfig {
 #[derive(Debug)]
 pub struct StatisticsCache {
     service_stats: HashMap<String, ServiceStatistics>,
+}
+
+impl Default for StatisticsCache {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StatisticsCache {

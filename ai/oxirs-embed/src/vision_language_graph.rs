@@ -8,17 +8,17 @@
 //! - Meta-learning for adaptation
 //! - Vision-text-graph unified embedding spaces
 
-use crate::{EmbeddingModel, ModelConfig, ModelStats, NamedNode, TrainingStats, Triple, Vector};
+use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use ndarray::{s, Array1, Array2, Array3, Array4, Axis};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Configuration for vision-language-graph integration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct VisionLanguageGraphConfig {
     pub base_config: ModelConfig,
     /// Vision encoder configuration
@@ -37,20 +37,6 @@ pub struct VisionLanguageGraphConfig {
     pub joint_training_config: JointTrainingConfig,
 }
 
-impl Default for VisionLanguageGraphConfig {
-    fn default() -> Self {
-        Self {
-            base_config: ModelConfig::default(),
-            vision_config: VisionEncoderConfig::default(),
-            language_config: LanguageEncoderConfig::default(),
-            graph_config: GraphEncoderConfig::default(),
-            transformer_config: MultiModalTransformerConfig::default(),
-            meta_learning_config: MetaLearningConfig::default(),
-            transfer_config: TransferLearningConfig::default(),
-            joint_training_config: JointTrainingConfig::default(),
-        }
-    }
-}
 
 /// Vision encoder configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -805,7 +791,7 @@ impl VisionEncoder {
 
         // Initialize CNN parameters
         for (i, &filter_size) in config.cnn_config.filter_sizes.iter().enumerate() {
-            let layer_name = format!("conv_{}", i);
+            let layer_name = format!("conv_{i}");
             let weight_shape = (
                 filter_size,
                 if i == 0 {
@@ -882,7 +868,7 @@ impl VisionEncoder {
 
                 // Flatten patch
                 let patch_owned = patch.to_owned();
-                let flattened_patch = patch_owned.into_shape(c * patch_h * patch_w).unwrap();
+                let flattened_patch = patch_owned.into_shape_with_order(c * patch_h * patch_w).unwrap();
 
                 // Project to embedding space
                 if let Some(patch_embedding_matrix) = self.vit_parameters.get("patch_embedding") {
@@ -946,7 +932,7 @@ impl VisionEncoder {
 
         // Global average pooling
         let features_len = features.len();
-        let flattened = features.into_shape(features_len).unwrap();
+        let flattened = features.into_shape_with_order(features_len).unwrap();
         let mut global_features = vec![0.0; self.config.vision_dim];
 
         for i in 0..global_features.len().min(flattened.len()) {
@@ -987,14 +973,14 @@ impl LanguageEncoder {
         // Initialize transformer layers
         for layer in 0..config.transformer_config.num_layers {
             transformer_parameters.insert(
-                format!("attention_weights_{}", layer),
+                format!("attention_weights_{layer}"),
                 Array2::from_shape_fn((config.language_dim, config.language_dim), |_| {
                     (rand::random::<f32>() - 0.5) * 0.1
                 }),
             );
 
             transformer_parameters.insert(
-                format!("feed_forward_{}", layer),
+                format!("feed_forward_{layer}"),
                 Array2::from_shape_fn(
                     (
                         config.transformer_config.intermediate_dim,
@@ -1041,7 +1027,7 @@ impl LanguageEncoder {
             // Limit for performance
             if let Some(attention_weights) = self
                 .transformer_parameters
-                .get(&format!("attention_weights_{}", layer))
+                .get(&format!("attention_weights_{layer}"))
             {
                 // Apply self-attention (simplified)
                 hidden_states = hidden_states.dot(attention_weights);
@@ -1097,7 +1083,7 @@ impl GraphEncoder {
         // Initialize node transformation layers
         for layer in 0..config.num_layers {
             node_parameters.insert(
-                format!("node_transform_{}", layer),
+                format!("node_transform_{layer}"),
                 Array2::from_shape_fn((config.node_dim, config.node_dim), |_| {
                     (rand::random::<f32>() - 0.5) * 0.1
                 }),
@@ -1107,7 +1093,7 @@ impl GraphEncoder {
         // Initialize edge transformation layers
         for layer in 0..config.num_layers {
             edge_parameters.insert(
-                format!("edge_transform_{}", layer),
+                format!("edge_transform_{layer}"),
                 Array2::from_shape_fn((config.edge_dim, config.edge_dim), |_| {
                     (rand::random::<f32>() - 0.5) * 0.1
                 }),
@@ -1169,7 +1155,7 @@ impl GraphEncoder {
         adjacency_matrix: &Array2<f32>,
         layer: usize,
     ) -> Result<Array2<f32>> {
-        let transform_key = format!("node_transform_{}", layer);
+        let transform_key = format!("node_transform_{layer}");
 
         if let Some(transform_matrix) = self.node_parameters.get(&transform_key) {
             // Message passing: aggregate neighbor features
@@ -1270,7 +1256,7 @@ impl MultiModalTransformer {
         for layer in 0..config.num_fusion_layers {
             for modality_pair in &["vision_language", "language_graph", "vision_graph"] {
                 cross_attention_params.insert(
-                    format!("{}_{}", modality_pair, layer),
+                    format!("{modality_pair}_{layer}"),
                     Array2::from_shape_fn((config.unified_dim, config.unified_dim), |_| {
                         (rand::random::<f32>() - 0.5) * 0.1
                     }),
@@ -1767,7 +1753,7 @@ impl EmbeddingModel for VisionLanguageGraphModel {
         }
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(embedding) = self.unified_embeddings.get(relation) {
             Ok(Vector::new(embedding.to_vec()))
         } else {
@@ -1777,7 +1763,7 @@ impl EmbeddingModel for VisionLanguageGraphModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let predicate_emb = self.get_relation_embedding(predicate)?;
+        let predicate_emb = self.getrelation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // Simple TransE-style scoring

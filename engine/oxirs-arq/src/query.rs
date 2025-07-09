@@ -60,7 +60,7 @@ impl fmt::Display for Query {
                         if i > 0 {
                             write!(f, " ")?;
                         }
-                        write!(f, "?{}", var.as_str())?;
+                        write!(f, "?{var}", var = var.as_str())?;
                     }
                     write!(f, " ")?;
                 }
@@ -71,9 +71,9 @@ impl fmt::Display for Query {
                 write!(f, "CONSTRUCT {{ ")?;
                 for (i, pattern) in self.construct_template.iter().enumerate() {
                     if i > 0 {
-                        write!(f, " . ");
+                        write!(f, " . ")?;
                     }
-                    write!(f, "{:?}", pattern)?;
+                    write!(f, "{pattern:?}")?;
                 }
                 write!(f, " }} WHERE {{ {:?} }}", self.where_clause)?;
             }
@@ -89,7 +89,7 @@ impl fmt::Display for Query {
                         if i > 0 {
                             write!(f, " ")?;
                         }
-                        write!(f, "?{}", var.as_str())?;
+                        write!(f, "?{var}", var = var.as_str())?;
                     }
                     write!(f, " ")?;
                 }
@@ -98,10 +98,10 @@ impl fmt::Display for Query {
         }
 
         if let Some(limit) = self.limit {
-            write!(f, " LIMIT {}", limit)?;
+            write!(f, " LIMIT {limit}")?;
         }
         if let Some(offset) = self.offset {
-            write!(f, " OFFSET {}", offset)?;
+            write!(f, " OFFSET {offset}")?;
         }
 
         Ok(())
@@ -130,6 +130,7 @@ pub struct QueryParser {
     prefixes: HashMap<String, String>,
     base_iri: Option<String>,
     variables: HashSet<Variable>,
+    #[allow(dead_code)]
     blank_node_counter: usize,
 }
 
@@ -394,7 +395,7 @@ impl QueryParser {
                 '?' => {
                     chars.next();
                     // Check if this is a variable or property path operator
-                    if chars.peek().map_or(false, |c| c.is_ascii_alphabetic()) {
+                    if chars.peek().is_some_and(|c| c.is_ascii_alphabetic()) {
                         let var = self.parse_identifier(&mut chars);
                         tokens.push(Token::Variable(var));
                     } else {
@@ -582,9 +583,9 @@ impl QueryParser {
                     let prefix = identifier[..colon_pos].to_string();
                     let local = identifier[colon_pos + 1..].to_string();
                     Token::PrefixedName(prefix, local)
-                } else if identifier.starts_with(':') {
+                } else if let Some(stripped) = identifier.strip_prefix(':') {
                     // Default namespace (starts with colon)
-                    let local = identifier[1..].to_string();
+                    let local = stripped.to_string();
                     Token::PrefixedName("".to_string(), local)
                 } else {
                     // Assume it's an identifier that could be a function name
@@ -1314,11 +1315,9 @@ impl QueryParser {
                     binding.insert(var.clone(), term);
                 }
                 self.expect_token(Token::RightParen)?;
-            } else {
-                if !variables.is_empty() {
-                    let term = self.parse_term()?;
-                    binding.insert(variables[0].clone(), term);
-                }
+            } else if !variables.is_empty() {
+                let term = self.parse_term()?;
+                binding.insert(variables[0].clone(), term);
             }
 
             bindings.push(binding);
@@ -1476,7 +1475,7 @@ impl QueryParser {
                 // Function call
                 let prefix = prefix.clone();
                 let local = local.clone();
-                let name = format!("{}:{}", prefix, local);
+                let name = format!("{prefix}:{local}");
                 self.advance();
 
                 if self.match_token(&Token::LeftParen) {
@@ -1492,7 +1491,7 @@ impl QueryParser {
                 } else {
                     // It's an IRI
                     let full_iri = if let Some(base) = self.prefixes.get(&prefix) {
-                        format!("{}{}", base, local)
+                        format!("{base}{local}")
                     } else {
                         name
                     };
@@ -1602,13 +1601,10 @@ impl QueryParser {
     /// Resolve a prefixed name to its full IRI
     fn resolve_prefixed_name(&self, prefix: &str, local: &str) -> Result<String> {
         if let Some(base) = self.prefixes.get(prefix) {
-            Ok(format!("{}{}", base, local))
+            Ok(format!("{base}{local}"))
         } else {
             bail!(
-                "Undefined prefix '{}' in prefixed name '{}:{}'",
-                prefix,
-                prefix,
-                local
+                "Undefined prefix '{prefix}' in prefixed name '{prefix}:{local}'"
             )
         }
     }
@@ -1646,7 +1642,7 @@ impl QueryParser {
             self.advance();
             Ok(())
         } else {
-            bail!("Expected {:?}, found {:?}", token, self.peek())
+            bail!("Expected {token:?}, found {:?}", self.peek())
         }
     }
 
@@ -2289,7 +2285,7 @@ mod tests {
 
         let query = parse_query(query_str)
             .map_err(|e| {
-                eprintln!("Parse error: {}", e);
+                eprintln!("Parse error: {e}");
                 e
             })
             .unwrap();

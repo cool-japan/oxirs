@@ -4,7 +4,7 @@
 //! for accurate cardinality estimation and query optimization.
 
 use crate::algebra::{Algebra, Term, TriplePattern, Variable};
-use crate::optimizer::{IndexStatistics, IndexType, Statistics};
+use crate::optimizer::{IndexType, Statistics};
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
@@ -476,7 +476,7 @@ impl StatisticsCollector {
 
                 let selectivity = (freq1.min(freq2) / total).sqrt();
 
-                let join_key = format!("{}_{}", pred1, pred2);
+                let join_key = format!("{pred1}_{pred2}");
                 self.stats.join_selectivities.insert(join_key, selectivity);
             }
         }
@@ -503,7 +503,7 @@ impl StatisticsCollector {
             .stats
             .index_stats
             .entry(IndexType::SubjectPredicate)
-            .or_insert_with(IndexStatistics::default);
+            .or_default();
         sp_stats.index_selectivity = sp_benefit;
 
         // Predicate-Object index benefit
@@ -519,7 +519,7 @@ impl StatisticsCollector {
             .stats
             .index_stats
             .entry(IndexType::PredicateObject)
-            .or_insert_with(IndexStatistics::default);
+            .or_default();
         po_stats.index_selectivity = po_benefit;
 
         // Update access costs based on selectivity
@@ -599,7 +599,7 @@ impl StatisticsCollector {
         };
 
         // Normalize to [-1, 1] range
-        Ok(correlation.max(-1.0).min(1.0))
+        Ok(correlation.clamp(-1.0, 1.0))
     }
 
     /// Estimate co-occurrence probability of two predicates
@@ -711,7 +711,7 @@ impl StatisticsCollector {
 
     /// Estimate cardinality for a triple pattern
     pub fn estimate_pattern_cardinality(&self, pattern: &TriplePattern) -> usize {
-        let pattern_key = format!("{}", pattern);
+        let pattern_key = format!("{pattern}");
 
         // Use exact count if available
         if let Some(&count) = self.stats.pattern_cardinality.get(&pattern_key) {
@@ -917,30 +917,6 @@ impl StatisticsCollector {
         coefficient_of_variation > 1.5
     }
 
-    /// Check if histogram has significant skew requiring redistribution
-    fn has_significant_skew(&self, histogram: &Histogram) -> bool {
-        if histogram.frequencies.len() < 3 {
-            return false;
-        }
-
-        // Calculate coefficient of variation for bucket sizes
-        let mean = histogram.total_count as f64 / histogram.frequencies.len() as f64;
-        let variance: f64 = histogram
-            .frequencies
-            .iter()
-            .map(|&count| {
-                let diff = count as f64 - mean;
-                diff * diff
-            })
-            .sum::<f64>()
-            / histogram.frequencies.len() as f64;
-
-        let std_dev = variance.sqrt();
-        let coefficient_of_variation = if mean > 0.0 { std_dev / mean } else { 0.0 };
-
-        // Significant skew if CV > 1.5 (high variability in bucket sizes)
-        coefficient_of_variation > 1.5
-    }
 
     /// Rebuild histogram with better bucket distribution
     fn rebuild_histogram(&mut self, predicate: &str) -> Result<()> {
@@ -985,9 +961,7 @@ impl StatisticsCollector {
         let sqrt_rule = (total_count as f64).sqrt().ceil() as usize;
 
         // Use the more conservative estimate, but ensure reasonable bounds
-        let optimal = sturges_buckets.min(sqrt_rule).max(10).min(100);
-
-        optimal
+        sturges_buckets.min(sqrt_rule).clamp(10, 100)
     }
 
     /// Create new histogram with adaptive bucket boundaries
@@ -1037,7 +1011,7 @@ impl StatisticsCollector {
         }
 
         // Fallback: generate a boundary name
-        format!("quantile_{:.2}", quantile)
+        format!("quantile_{quantile:.2}")
     }
 
     /// Redistribute counts from old histogram to new histogram
@@ -1257,6 +1231,12 @@ pub struct QueryExecutionRecord {
     pub timestamp: Instant,
 }
 
+impl Default for DynamicStatisticsUpdater {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DynamicStatisticsUpdater {
     /// Create a new dynamic updater
     pub fn new() -> Self {
@@ -1366,7 +1346,7 @@ impl DynamicStatisticsUpdater {
             .iter()
             .filter(|r| {
                 let ratio = r.actual_cardinality as f64 / r.estimated_cardinality.max(1) as f64;
-                ratio < 0.1 || ratio > 10.0
+                !(0.1..=10.0).contains(&ratio)
             })
             .collect();
 
@@ -1413,7 +1393,7 @@ mod tests {
 
         // Add some values
         for i in 0..100 {
-            histogram.add_value(&format!("value_{}", i));
+            histogram.add_value(&format!("value_{i}"));
             histogram.total_count = i + 1;
         }
         histogram.distinct_count = 100;

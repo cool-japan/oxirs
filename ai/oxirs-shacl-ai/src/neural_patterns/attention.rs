@@ -1,12 +1,12 @@
 //! Cross-pattern attention mechanisms for discovering subtle relationships
 
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2, Axis};
 use std::collections::HashMap;
 
-use crate::{patterns::Pattern, Result, ShaclAiError};
+use crate::{patterns::Pattern, Result};
 
 use super::types::{
-    AttentionAnalysisResult, AttentionFocus, AttentionFocusType, AttentionPattern, CorrelationType,
+    AttentionAnalysisResult, AttentionFocus, AttentionFocusType, AttentionPattern,
     CrossPatternInfluence, InfluenceType,
 };
 
@@ -196,7 +196,7 @@ impl CrossPatternAttention {
 
         for (head_idx, head) in self.multi_scale_heads.iter().enumerate() {
             let head_attention = self.compute_single_head_attention(embeddings, head)?;
-            attention_weights.insert(format!("head_{}", head_idx), head_attention);
+            attention_weights.insert(format!("head_{head_idx}"), head_attention);
         }
 
         Ok(attention_weights)
@@ -251,7 +251,7 @@ impl CrossPatternAttention {
                 let focus_regions = self.identify_attention_foci(&attention_distribution)?;
 
                 attention_patterns.push(AttentionPattern {
-                    pattern_id: format!("{}_{}", head_name, pattern_idx),
+                    pattern_id: format!("{head_name}_{pattern_idx}"),
                     attention_distribution,
                     focus_regions,
                 });
@@ -312,8 +312,8 @@ impl CrossPatternAttention {
                             };
 
                             influences.push(CrossPatternInfluence {
-                                source_pattern: format!("pattern_{}", i),
-                                target_pattern: format!("pattern_{}", j),
+                                source_pattern: format!("pattern_{i}"),
+                                target_pattern: format!("pattern_{j}"),
                                 influence_strength,
                                 influence_type,
                             });

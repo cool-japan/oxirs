@@ -287,7 +287,7 @@ impl MemoryTracker {
     /// Adaptive pressure threshold based on workload
     pub fn adjust_pressure_threshold(&mut self, workload_intensity: f64) {
         // Lower threshold for high-intensity workloads to spill earlier
-        self.pressure_threshold = (0.6 + (0.3 * (1.0 - workload_intensity))).max(0.5).min(0.9);
+        self.pressure_threshold = (0.6 + (0.3 * (1.0 - workload_intensity))).clamp(0.5, 0.9);
     }
 }
 
@@ -377,6 +377,7 @@ impl StreamingSolution {
     }
 
     /// Estimate the memory size of a term
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_term_size(&self, term: &Term) -> usize {
         match term {
             Term::Iri(iri) => iri.as_str().len(),
@@ -417,7 +418,7 @@ impl StreamingSolution {
         let serialized_solutions: Vec<SerializableSolution> = self
             .solutions
             .iter()
-            .map(|sol| SerializableSolution::from_solution(sol))
+            .map(SerializableSolution::from_solution)
             .collect();
 
         let data = if self.config.compress_spills {
@@ -775,7 +776,7 @@ impl SpillableHashJoin {
 
             self.hash_buckets[bucket_idx]
                 .entry(hash_key)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(solution);
         }
 
@@ -838,7 +839,7 @@ impl SpillableHashJoin {
         for binding in solution {
             for join_var in join_vars {
                 if let Some(term) = binding.get(join_var) {
-                    key_parts.push(format!("{}:{:?}", join_var, term));
+                    key_parts.push(format!("{join_var}:{term:?}"));
                 }
             }
         }
@@ -880,7 +881,7 @@ impl SpillableHashJoin {
 
         let serialized_solutions: Vec<SerializableSolution> = all_solutions
             .iter()
-            .map(|sol| SerializableSolution::from_solution(sol))
+            .map(SerializableSolution::from_solution)
             .collect();
 
         let data = bincode::serialize(&serialized_solutions)?;
@@ -1070,7 +1071,6 @@ impl Default for SpillableHashJoin {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::algebra;
 
     #[test]
     fn test_streaming_solution_basic() {

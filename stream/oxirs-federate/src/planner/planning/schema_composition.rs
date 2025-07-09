@@ -4,7 +4,6 @@
 //! federated schema, including conflict resolution, directive processing, and validation.
 
 use anyhow::{anyhow, Result};
-use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
 use super::types::*;
@@ -48,7 +47,7 @@ impl SchemaComposer {
             unified
                 .schema_mapping
                 .entry(type_name.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(service_id.to_string());
         }
 
@@ -63,7 +62,7 @@ impl SchemaComposer {
                         ));
                     }
                     FieldConflictResolution::Namespace => {
-                        let namespaced_name = format!("{}_{}", service_id, field_name);
+                        let namespaced_name = format!("{service_id}_{field_name}");
                         unified.queries.insert(namespaced_name, field_def.clone());
                     }
                     FieldConflictResolution::FirstWins => {
@@ -88,7 +87,7 @@ impl SchemaComposer {
                         ));
                     }
                     FieldConflictResolution::Namespace => {
-                        let namespaced_name = format!("{}_{}", service_id, field_name);
+                        let namespaced_name = format!("{service_id}_{field_name}");
                         unified.mutations.insert(namespaced_name, field_def.clone());
                     }
                     FieldConflictResolution::FirstWins => {
@@ -238,26 +237,23 @@ impl SchemaComposer {
         for (type_name, type_def) in &schema.types {
             // Check for @key directive (entity definition)
             for directive in &type_def.directives {
-                match directive.name.as_str() {
-                    "key" => {
-                        let key_fields = Self::extract_key_fields_from_directive(directive)?;
-                        composed.entity_types.insert(
-                            type_name.clone(),
-                            EntityTypeInfo {
-                                key_fields,
-                                owning_service: service_id.to_string(),
-                                extending_services: Vec::new(),
-                            },
-                        );
-                    }
-                    _ => {}
+                if directive.name.as_str() == "key" {
+                    let key_fields = Self::extract_key_fields_from_directive(directive)?;
+                    composed.entity_types.insert(
+                        type_name.clone(),
+                        EntityTypeInfo {
+                            key_fields,
+                            owning_service: service_id.to_string(),
+                            extending_services: Vec::new(),
+                        },
+                    );
                 }
             }
 
             // Process field-level directives
             if let TypeKind::Object { fields } = &type_def.kind {
                 for (field_name, field_def) in fields {
-                    let field_key = format!("{}.{}", type_name, field_name);
+                    let field_key = format!("{type_name}.{field_name}");
 
                     for directive in &field_def.directives {
                         match directive.name.as_str() {
@@ -290,11 +286,7 @@ impl SchemaComposer {
                     }
 
                     // Track field ownership by service
-                    if !composed.field_ownership.contains_key(&field_key) {
-                        composed
-                            .field_ownership
-                            .insert(field_key, FieldOwnershipType::Owned(service_id.to_string()));
-                    }
+                    composed.field_ownership.entry(field_key).or_insert_with(|| FieldOwnershipType::Owned(service_id.to_string()));
                 }
             }
         }
@@ -421,7 +413,7 @@ impl SchemaComposer {
         // Validate entity key fields exist
         for (type_name, entity_info) in &composed.entity_types {
             for key_field in &entity_info.key_fields {
-                let field_key = format!("{}.{}", type_name, key_field);
+                let field_key = format!("{type_name}.{key_field}");
                 if !composed.field_ownership.contains_key(&field_key) {
                     return Err(anyhow!(
                         "Key field {} not found for entity {}",
@@ -448,7 +440,7 @@ impl SchemaComposer {
             if !new_schema.types.contains_key(type_name) {
                 breaking_changes.push(BreakingChange {
                     change_type: BreakingChangeType::TypeRemoved,
-                    description: format!("Type '{}' was removed", type_name),
+                    description: format!("Type '{type_name}' was removed"),
                     severity: BreakingChangeSeverity::High,
                 });
             }
@@ -482,7 +474,7 @@ impl SchemaComposer {
                 if !new_fields.contains_key(field_name) {
                     changes.push(BreakingChange {
                         change_type: BreakingChangeType::FieldRemoved,
-                        description: format!("Field '{}.{}' was removed", type_name, field_name),
+                        description: format!("Field '{type_name}.{field_name}' was removed"),
                         severity: BreakingChangeSeverity::High,
                     });
                 }
@@ -499,8 +491,7 @@ impl SchemaComposer {
                                 changes.push(BreakingChange {
                                     change_type: BreakingChangeType::ArgumentMadeRequired,
                                     description: format!(
-                                        "Argument '{}.{}.{}' is now required",
-                                        type_name, field_name, arg_name
+                                        "Argument '{type_name}.{field_name}.{arg_name}' is now required"
                                     ),
                                     severity: BreakingChangeSeverity::Medium,
                                 });
@@ -510,8 +501,7 @@ impl SchemaComposer {
                             changes.push(BreakingChange {
                                 change_type: BreakingChangeType::RequiredArgumentAdded,
                                 description: format!(
-                                    "Required argument '{}.{}.{}' was added",
-                                    type_name, field_name, arg_name
+                                    "Required argument '{type_name}.{field_name}.{arg_name}' was added"
                                 ),
                                 severity: BreakingChangeSeverity::High,
                             });

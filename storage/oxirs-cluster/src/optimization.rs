@@ -5,10 +5,9 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use tokio::fs::{File, OpenOptions};
-use tokio::io::{AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncWrite, AsyncWriteExt};
 use zstd;
 
 /// Binary serialization format with compression
@@ -100,7 +99,7 @@ impl BinarySerializer {
 
     /// Deserialize data with decompression and checksum validation
     pub fn deserialize<T: for<'de> Deserialize<'de>>(&self, data: &[u8]) -> Result<T> {
-        let (binary_data, expected_checksum) = if self.config.enable_checksums {
+        let (binary_data, _expected_checksum) = if self.config.enable_checksums {
             if data.len() < 8 {
                 return Err(anyhow::anyhow!("Data too short for checksum"));
             }

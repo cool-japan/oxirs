@@ -124,8 +124,7 @@ impl AdvancedModelSelector {
                     selection_score: score,
                     expected_performance: ModelPerformanceMetrics::default(),
                     selection_reason: format!(
-                        "Data-adaptive selection (complexity: {:.2})",
-                        complexity_factor
+                        "Data-adaptive selection (complexity: {complexity_factor:.2})"
                     ),
                 }
             })
@@ -227,7 +226,7 @@ impl AdvancedModelSelector {
     ) {
         self.model_performance_history
             .entry(model_name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(metrics);
     }
 

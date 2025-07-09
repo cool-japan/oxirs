@@ -12,8 +12,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
+use tracing::warn;
 
 /// Configuration for external services
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -661,11 +660,11 @@ impl ExternalServicesManager {
     ) -> Result<Vec<KnowledgeResult>> {
         let mut request = self
             .client
-            .get(&format!("{}/search", config.base_url))
+            .get(format!("{}/search", config.base_url))
             .query(&[("q", query)]);
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         for (key, value) in &config.headers {
@@ -700,7 +699,7 @@ impl ExternalServicesManager {
             .query(&[("q", query), ("count", &config.max_results.to_string())]);
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         let response = request.send().await?;
@@ -723,11 +722,11 @@ impl ExternalServicesManager {
     async fn check_fact(&self, config: &FactCheckerConfig, claim: &str) -> Result<FactCheckResult> {
         let mut request = self
             .client
-            .post(&format!("{}/check", config.api_url))
+            .post(format!("{}/check", config.api_url))
             .json(&serde_json::json!({"claim": claim}));
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         let response = request.send().await?;
@@ -751,14 +750,14 @@ impl ExternalServicesManager {
     ) -> Result<TranslationResult> {
         let mut request = self
             .client
-            .post(&format!("{}/translate", config.api_url))
+            .post(format!("{}/translate", config.api_url))
             .json(&serde_json::json!({
                 "text": text,
                 "target": target_language
             }));
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         let response = request.send().await?;
@@ -795,7 +794,7 @@ impl ExternalServicesManager {
         let mut request = self.client.post(url).multipart(form);
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         let response = request.send().await?;
@@ -820,11 +819,11 @@ impl ExternalServicesManager {
     ) -> Result<LanguageDetectionResult> {
         let mut request = self
             .client
-            .post(&format!("{}/detect", config.api_url))
+            .post(format!("{}/detect", config.api_url))
             .json(&serde_json::json!({"text": text}));
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         let response = request.send().await?;
@@ -860,7 +859,7 @@ impl ExternalServicesManager {
         }));
 
         if let Some(api_key) = &config.api_key {
-            request = request.header("Authorization", format!("Bearer {}", api_key));
+            request = request.header("Authorization", format!("Bearer {api_key}"));
         }
 
         let response = request.send().await?;

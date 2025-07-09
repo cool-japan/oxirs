@@ -8,12 +8,11 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::Arc,
     time::{Duration, SystemTime},
 };
 use tokio::sync::{RwLock, Semaphore};
 
-use super::fine_tuning::{TrainingExample, TrainingMetrics, TrainingParameters};
+use super::fine_tuning::{TrainingMetrics, TrainingParameters};
 
 /// Federated learning coordinator configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -241,7 +240,7 @@ impl FederatedCoordinator {
         let federation_round = FederationRound {
             round_number,
             participants: participants.clone(),
-            global_model_version: format!("v_{}", round_number),
+            global_model_version: format!("v_{round_number}"),
             aggregation_result: AggregationResult {
                 aggregated_weights: Vec::new(),
                 aggregation_quality: 0.0,
@@ -366,7 +365,7 @@ impl FederatedCoordinator {
             for participant_id in participants {
                 // In real implementation, this would send model via network
                 tokio::time::sleep(Duration::from_millis(100)).await;
-                println!("Sent model to participant: {}", participant_id);
+                println!("Sent model to participant: {participant_id}");
             }
         }
 

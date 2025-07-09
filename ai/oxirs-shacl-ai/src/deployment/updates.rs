@@ -19,6 +19,12 @@ pub struct UpdateManager {
     deployment_history: VecDeque<DeploymentRecord>,
 }
 
+impl Default for UpdateManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UpdateManager {
     pub fn new() -> Self {
         Self {

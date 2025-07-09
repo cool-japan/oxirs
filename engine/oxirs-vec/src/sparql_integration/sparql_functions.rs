@@ -385,14 +385,14 @@ impl SparqlVectorFunctions {
             return Err(anyhow!("embed_text requires at least 1 argument"));
         }
 
-        let text = match &args[0] {
+        let _text = match &args[0] {
             VectorServiceArg::String(s) | VectorServiceArg::Literal(s) => s,
             _ => return Err(anyhow!("First argument must be text")),
         };
 
         // Use the embed query type to generate the embedding
         let query = VectorQuery::new("embed".to_string(), args.to_vec());
-        let result = executor.execute_optimized_query(&query)?;
+        let _result = executor.execute_optimized_query(&query)?;
 
         // For embed functions, we want to return the vector itself
         // This is a simplified implementation - in practice, you'd generate the actual vector

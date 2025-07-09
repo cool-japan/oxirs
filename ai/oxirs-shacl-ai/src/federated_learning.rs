@@ -7,22 +7,18 @@
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{constraints::*, Shape, ShapeId, ValidationConfig, ValidationReport};
+use oxirs_core::Store;
+use oxirs_shacl::Shape;
 
-use crate::learning::{LearningConfig, ShapeLearner};
-use crate::ml::{ModelParams, ShapeTrainingData};
-use crate::neural_patterns::{NeuralPattern, NeuralPatternRecognizer};
-use crate::quantum_neural_patterns::{QuantumNeuralPatternRecognizer, QuantumPattern};
+use crate::learning::ShapeLearner;
+use crate::neural_patterns::NeuralPatternRecognizer;
+use crate::quantum_neural_patterns::QuantumNeuralPatternRecognizer;
 use crate::{Result, ShaclAiError};
 
 /// Federated learning node representing a knowledge graph participant
@@ -632,6 +628,12 @@ pub struct ConsensusManager {
     voting_history: Vec<VotingRound>,
 }
 
+impl Default for ConsensusManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConsensusManager {
     /// Create new consensus manager
     pub fn new() -> Self {
@@ -1094,6 +1096,12 @@ pub struct ReliableBroadcastState {
     initiated: bool,
     echoes_received: HashMap<Uuid, Vec<u8>>,
     ready_received: HashMap<Uuid, Vec<u8>>,
+}
+
+impl Default for ReliableBroadcastState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ReliableBroadcastState {

@@ -1,9 +1,9 @@
 //! Tests for LDAP authentication
 
 use axum::body::to_bytes;
-use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::http::StatusCode;
 use oxirs_fuseki::{
-    auth::{AuthResult, AuthService, User},
+    auth::{AuthResult, AuthService},
     config::{LdapConfig, SecurityConfig},
 };
 use serde_json::json;
@@ -247,8 +247,7 @@ fn test_ldap_group_mapping() {
 
         assert_eq!(
             role, *expected_role,
-            "Group '{}' should map to role '{}'",
-            group, expected_role
+            "Group '{group}' should map to role '{expected_role}'"
         );
     }
 }
@@ -316,7 +315,7 @@ mod integration_tests {
                 assert!(connected, "Should be able to connect to LDAP server");
             }
             Err(e) => {
-                panic!("LDAP connection failed: {}", e);
+                panic!("LDAP connection failed: {e}");
             }
         }
     }

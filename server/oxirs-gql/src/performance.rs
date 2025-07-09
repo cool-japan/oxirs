@@ -30,23 +30,12 @@ pub struct OperationMetrics {
 }
 
 /// Client information for request tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClientInfo {
     pub ip_address: Option<String>,
     pub user_agent: Option<String>,
     pub user_id: Option<String>,
     pub session_id: Option<String>,
-}
-
-impl Default for ClientInfo {
-    fn default() -> Self {
-        Self {
-            ip_address: None,
-            user_agent: None,
-            user_id: None,
-            session_id: None,
-        }
-    }
 }
 
 /// Aggregated performance statistics
@@ -549,7 +538,7 @@ impl OperationTimer {
         use std::hash::{Hash, Hasher};
 
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", document).hash(&mut hasher);
+        format!("{document:?}").hash(&mut hasher);
         hasher.finish()
     }
 }

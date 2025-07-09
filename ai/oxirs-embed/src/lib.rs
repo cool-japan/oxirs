@@ -223,7 +223,7 @@ impl Vector {
     where
         F: Fn(f32) -> f32,
     {
-        Self::new(self.values.iter().map(|&x| f(x)).collect())
+        Self::new(self.values.iter().copied().map(f).collect())
     }
 
     /// Sum of all elements
@@ -494,7 +494,7 @@ pub trait EmbeddingModel: Send + Sync {
     fn add_triple(&mut self, triple: Triple) -> Result<()>;
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats>;
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector>;
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector>;
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector>;
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64>;
     fn predict_objects(
         &self,
@@ -806,7 +806,7 @@ pub mod quick_start {
         operation: F,
     ) -> std::time::Duration
     where
-        F: Fn() -> (),
+        F: Fn(),
     {
         let start = std::time::Instant::now();
         for _ in 0..iterations {

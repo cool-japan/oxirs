@@ -186,7 +186,7 @@ impl RecommendationEvaluator {
     pub fn add_interaction(&mut self, interaction: UserInteraction) {
         self.user_interactions
             .entry(interaction.user_id.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(interaction);
     }
 
@@ -222,7 +222,7 @@ impl RecommendationEvaluator {
         // Calculate aggregate metrics
         for metric in &self.metrics {
             let score = self.calculate_metric(metric, &per_user_results)?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         // Calculate coverage and diversity
@@ -332,7 +332,7 @@ impl RecommendationEvaluator {
     /// Generate recommendations for a user
     async fn generate_recommendations(
         &self,
-        user_id: &str,
+        _user_id: &str,
         interactions: &[UserInteraction],
         model: &dyn EmbeddingModel,
         num_recommendations: usize,

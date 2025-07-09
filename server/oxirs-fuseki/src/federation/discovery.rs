@@ -208,7 +208,7 @@ impl ServiceDiscovery {
             .send()
             .await
             .map_err(|e| FusekiError::Internal {
-                message: format!("Failed to fetch service description: {}", e),
+                message: format!("Failed to fetch service description: {e}"),
             })?;
 
         if !response.status().is_success() {
@@ -249,13 +249,13 @@ impl ServiceDiscovery {
         let resolver =
             Resolver::new(ResolverConfig::default(), ResolverOpts::default()).map_err(|e| {
                 FusekiError::Internal {
-                    message: format!("Failed to create DNS resolver: {}", e),
+                    message: format!("Failed to create DNS resolver: {e}"),
                 }
             })?;
 
         // Look up SRV records for SPARQL services
         // Convention: _sparql._tcp.domain.com
-        let srv_query = format!("_sparql._tcp.{}", domain);
+        let srv_query = format!("_sparql._tcp.{domain}");
 
         match resolver.srv_lookup(&srv_query) {
             Ok(lookup) => {
@@ -294,8 +294,7 @@ impl ServiceDiscovery {
                                         port
                                     ),
                                     description: Some(format!(
-                                        "Discovered via DNS SRV record for {}",
-                                        domain
+                                        "Discovered via DNS SRV record for {domain}"
                                     )),
                                     version: None,
                                     contact: None,
@@ -356,7 +355,7 @@ impl ServiceDiscovery {
         );
 
         // Query Consul for services with "sparql" tag
-        let consul_url = format!("{}/v1/health/service/sparql?passing=true", consul_endpoint);
+        let consul_url = format!("{consul_endpoint}/v1/health/service/sparql?passing=true");
 
         let response = client
             .get(&consul_url)
@@ -365,7 +364,7 @@ impl ServiceDiscovery {
             .send()
             .await
             .map_err(|e| FusekiError::Internal {
-                message: format!("Failed to query Consul: {}", e),
+                message: format!("Failed to query Consul: {e}"),
             })?;
 
         if !response.status().is_success() {
@@ -376,7 +375,7 @@ impl ServiceDiscovery {
 
         let consul_services: serde_json::Value =
             response.json().await.map_err(|e| FusekiError::Internal {
-                message: format!("Failed to parse Consul response: {}", e),
+                message: format!("Failed to parse Consul response: {e}"),
             })?;
 
         let mut eps = endpoints.write().await;
@@ -435,7 +434,7 @@ impl ServiceDiscovery {
 
                     // Construct service URL
                     let service_url =
-                        match Url::parse(&format!("http://{}:{}{}", address, port, sparql_path)) {
+                        match Url::parse(&format!("http://{address}:{port}{sparql_path}")) {
                             Ok(url) => url,
                             Err(e) => {
                                 tracing::warn!(
@@ -452,15 +451,14 @@ impl ServiceDiscovery {
                     // Double-check service health
                     match Self::check_service_health(&service_url, client).await {
                         Ok(health) => {
-                            let consul_service_id = format!("consul-{}", service_id);
+                            let consul_service_id = format!("consul-{service_id}");
 
                             let endpoint = ServiceEndpoint {
                                 url: service_url.clone(),
                                 metadata: ServiceMetadata {
-                                    name: format!("Consul Service: {}", service_name),
+                                    name: format!("Consul Service: {service_name}"),
                                     description: Some(format!(
-                                        "Discovered via Consul from {}",
-                                        consul_endpoint
+                                        "Discovered via Consul from {consul_endpoint}"
                                     )),
                                     version: tags
                                         .iter()
@@ -546,7 +544,7 @@ impl ServiceDiscovery {
             Err(e) => {
                 tracing::warn!("Failed to reach service at {}: {}", url, e);
                 Err(FusekiError::Internal {
-                    message: format!("Service health check failed: {}", e),
+                    message: format!("Service health check failed: {e}"),
                 })
             }
         }
@@ -568,7 +566,7 @@ impl ServiceDiscovery {
             for path in &common_paths {
                 let scheme = if *port == 443 { "https" } else { "http" };
                 let service_url =
-                    match Url::parse(&format!("{}://{}:{}{}", scheme, domain, port, path)) {
+                    match Url::parse(&format!("{scheme}://{domain}:{port}{path}")) {
                         Ok(url) => url,
                         Err(e) => {
                             tracing::debug!(
@@ -584,12 +582,12 @@ impl ServiceDiscovery {
 
                 match Self::check_service_health(&service_url, client).await {
                     Ok(health) => {
-                        let service_id = format!("fallback-{}:{}{}", domain, port, path);
+                        let service_id = format!("fallback-{domain}:{port}{path}");
 
                         let endpoint = ServiceEndpoint {
                             url: service_url.clone(),
                             metadata: ServiceMetadata {
-                                name: format!("SPARQL Service at {}:{}{}", domain, port, path),
+                                name: format!("SPARQL Service at {domain}:{port}{path}"),
                                 description: Some(
                                     "Discovered via fallback port scanning".to_string(),
                                 ),

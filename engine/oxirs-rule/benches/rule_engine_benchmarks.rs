@@ -5,14 +5,11 @@
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_rule::{
-    backward::BackwardChainer,
-    forward::ForwardChainer,
     integration::{rule_builders, RuleIntegration},
     rete::ReteNetwork,
-    swrl::{SwrlArgument, SwrlAtom, SwrlEngine, SwrlRule},
+    swrl::{SwrlArgument, SwrlEngine},
     Rule, RuleAtom, RuleEngine, Term,
 };
-use std::collections::HashMap;
 
 /// Generate test facts for benchmarking
 fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
@@ -21,7 +18,7 @@ fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
     for i in 0..size {
         // Generate person facts
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant(
                 "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
             ),
@@ -30,7 +27,7 @@ fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
 
         // Generate age facts
         facts.push(RuleAtom::Triple {
-            subject: Term::Constant(format!("http://example.org/person{}", i)),
+            subject: Term::Constant(format!("http://example.org/person{i}")),
             predicate: Term::Constant("http://example.org/hasAge".to_string()),
             object: Term::Literal((20 + i % 60).to_string()),
         });
@@ -38,9 +35,9 @@ fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
         // Generate some relationships
         if i > 0 {
             facts.push(RuleAtom::Triple {
-                subject: Term::Constant(format!("http://example.org/person{}", i)),
+                subject: Term::Constant(format!("http://example.org/person{i}")),
                 predicate: Term::Constant("http://example.org/knows".to_string()),
-                object: Term::Constant(format!("http://example.org/person{}", i - 1)),
+                object: Term::Constant(format!("http://example.org/person{prev_i}", prev_i = i - 1)),
             });
         }
     }
@@ -55,7 +52,7 @@ fn generate_test_rules(complexity: usize) -> Vec<Rule> {
     // Basic type inheritance rules
     for i in 0..complexity {
         rules.push(Rule {
-            name: format!("rule_{}", i),
+            name: format!("rule_{i}"),
             body: vec![
                 RuleAtom::Triple {
                     subject: Term::Variable("X".to_string()),
@@ -75,7 +72,7 @@ fn generate_test_rules(complexity: usize) -> Vec<Rule> {
                 predicate: Term::Constant(
                     "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
                 ),
-                object: Term::Constant(format!("http://example.org/Adult{}", i)),
+                object: Term::Constant(format!("http://example.org/Adult{i}")),
             }],
         });
     }
@@ -97,7 +94,7 @@ fn benchmark_forward_chaining(c: &mut Criterion) {
 
             group.throughput(Throughput::Elements(*fact_size as u64));
             group.bench_with_input(
-                BenchmarkId::new("facts_rules", format!("{}_{}", fact_size, rule_count)),
+                BenchmarkId::new("facts_rules", format!("{fact_size}_{rule_count}")),
                 &(facts, rules),
                 |b, (facts, rules)| {
                     b.iter(|| {
@@ -190,7 +187,7 @@ fn benchmark_rete_network(c: &mut Criterion) {
 fn benchmark_swrl_builtins(c: &mut Criterion) {
     let mut group = c.benchmark_group("swrl_builtins");
 
-    let mut engine = SwrlEngine::new();
+    let _engine = SwrlEngine::new();
 
     // Mathematical operations
     group.bench_function("math_operations", |b| {
@@ -221,9 +218,9 @@ fn benchmark_swrl_builtins(c: &mut Criterion) {
         b.iter(|| {
             for i in 0..100 {
                 let concat_args = vec![
-                    SwrlArgument::Literal(format!("Hello{}", i)),
+                    SwrlArgument::Literal(format!("Hello{i}")),
                     SwrlArgument::Literal(" World".to_string()),
-                    SwrlArgument::Literal(format!("Hello{} World", i)),
+                    SwrlArgument::Literal(format!("Hello{i} World")),
                 ];
                 oxirs_rule::swrl::builtin_string_concat(&concat_args).unwrap();
 
@@ -258,7 +255,7 @@ fn benchmark_integration(c: &mut Criterion) {
                     // Generate and add RDF triples
                     for i in 0..fact_size {
                         let subject =
-                            oxirs_core::NamedNode::new(&format!("http://example.org/person{}", i))
+                            oxirs_core::NamedNode::new(format!("http://example.org/person{i}"))
                                 .unwrap();
                         let predicate = oxirs_core::NamedNode::new(
                             "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
@@ -343,11 +340,11 @@ fn benchmark_rule_complexity(c: &mut Criterion) {
                         name: "complex_rule".to_string(),
                         body: (0..complexity)
                             .map(|i| RuleAtom::Triple {
-                                subject: Term::Variable(format!("X{}", i)),
+                                subject: Term::Variable(format!("X{i}")),
                                 predicate: Term::Constant(
                                     "http://example.org/hasProperty".to_string(),
                                 ),
-                                object: Term::Variable(format!("Y{}", i)),
+                                object: Term::Variable(format!("Y{i}")),
                             })
                             .collect(),
                         head: vec![RuleAtom::Triple {

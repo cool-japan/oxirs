@@ -191,7 +191,7 @@ impl KGEncoder {
         }
 
         if !relations.is_empty() {
-            relation_agg = relation_agg / relations.len() as f32;
+            relation_agg /= relations.len() as f32;
         }
 
         // Combine entity and relation information

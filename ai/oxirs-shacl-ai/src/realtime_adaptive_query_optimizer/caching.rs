@@ -127,7 +127,7 @@ impl AdaptivePlanCache {
         let pattern = self
             .access_patterns
             .entry(cache_key.to_string())
-            .or_insert_with(AccessPattern::default);
+            .or_default();
 
         pattern.frequency += 1.0;
         pattern.recency = 1.0; // Reset recency on access

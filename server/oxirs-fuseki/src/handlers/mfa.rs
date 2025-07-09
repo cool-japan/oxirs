@@ -9,14 +9,14 @@
 //! - MFA enrollment and management
 
 use crate::{
-    auth::{AuthService, MfaChallenge, MfaMethod, MfaType, User},
+    auth::{AuthService, MfaChallenge, MfaMethod, MfaMethodInfo, MfaType, User},
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
 use axum::{
-    extract::{Path, Query, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Json, Response},
+    extract::{Path, State},
+    http::HeaderMap,
+    response::Json,
 };
 use base32::Alphabet;
 use base64::{engine::general_purpose, Engine as _};
@@ -26,8 +26,7 @@ use qrcode::{render::svg, QrCode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use sha1::{Digest, Sha1};
-use std::collections::HashMap;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{info, instrument, warn};
 
 type HmacSha1 = Hmac<Sha1>;
 
@@ -88,15 +87,6 @@ pub struct MfaStatusResponse {
     pub last_used: Option<DateTime<Utc>>,
 }
 
-/// MFA method information
-#[derive(Debug, Serialize)]
-pub struct MfaMethodInfo {
-    pub method_type: MfaType,
-    pub identifier: String, // Phone number, email, or device name
-    pub enrolled_at: DateTime<Utc>,
-    pub last_used: Option<DateTime<Utc>>,
-    pub enabled: bool,
-}
 
 /// Hardware token (FIDO2/WebAuthn) registration options
 #[derive(Debug, Serialize)]
@@ -325,7 +315,7 @@ pub async fn get_mfa_status(
 
     let response = MfaStatusResponse {
         enabled: mfa_status.enabled,
-        enrolled_methods: vec![], // TODO: Implement methods field in MfaStatus
+        enrolled_methods: mfa_status.enrolled_methods,
         backup_codes_remaining: mfa_status.backup_codes_remaining,
         last_used: mfa_status.last_used,
     };
@@ -487,8 +477,8 @@ async fn enroll_email_mfa(
     let verification_code = generate_email_verification_code();
     send_verification_email(&email_addr, &verification_code).await?;
 
-    // TODO: Store email for user - implement store_mfa_email method
-    // auth_service.store_mfa_email(&user.username, &email_addr).await?;
+    // Store email for user
+    auth_service.store_mfa_email(&user.username, &email_addr).await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -540,8 +530,8 @@ async fn enroll_hardware_mfa(
         attestation: "direct".to_string(),
     };
 
-    // TODO: Store registration challenge - implement store_webauthn_challenge method
-    // auth_service.store_webauthn_challenge(&user.username, &registration_options.challenge).await?;
+    // Store registration challenge
+    auth_service.store_webauthn_challenge(&user.username, &registration_options.challenge).await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -550,7 +540,7 @@ async fn enroll_hardware_mfa(
         qr_code: None,
         backup_codes: None,
         enrollment_id: Some(format!("webauthn_{}", generate_enrollment_id())),
-        message: format!("Hardware MFA enrollment initiated for device: {}", device),
+        message: format!("Hardware MFA enrollment initiated for device: {device}"),
     }))
 }
 
@@ -597,7 +587,7 @@ fn generate_totp_uri(config: &TotpConfig) -> String {
 
 fn generate_qr_code_svg(uri: &str) -> FusekiResult<String> {
     let code = QrCode::new(uri)
-        .map_err(|e| FusekiError::internal(format!("Failed to generate QR code: {}", e)))?;
+        .map_err(|e| FusekiError::internal(format!("Failed to generate QR code: {e}")))?;
 
     let svg = code
         .render()
@@ -622,15 +612,15 @@ fn generate_totp_code(secret: &str, time: u64) -> FusekiResult<String> {
     let time_bytes = (time / 30).to_be_bytes();
 
     let mut mac = HmacSha1::new_from_slice(&key)
-        .map_err(|e| FusekiError::internal(format!("HMAC error: {}", e)))?;
+        .map_err(|e| FusekiError::internal(format!("HMAC error: {e}")))?;
     mac.update(&time_bytes);
     let result = mac.finalize().into_bytes();
 
     let offset = (result[19] & 0xf) as usize;
     let code = ((result[offset] & 0x7f) as u32) << 24
-        | ((result[offset + 1] & 0xff) as u32) << 16
-        | ((result[offset + 2] & 0xff) as u32) << 8
-        | (result[offset + 3] & 0xff) as u32;
+        | (result[offset + 1] as u32) << 16
+        | (result[offset + 2] as u32) << 8
+        | result[offset + 3] as u32;
 
     Ok(format!("{:06}", code % 1_000_000))
 }
@@ -652,8 +642,9 @@ async fn create_sms_challenge(
 ) -> FusekiResult<MfaChallenge> {
     // Generate and send SMS code
     let code = generate_sms_verification_code();
-    // TODO: Implement get_user_sms_phone method
-    let phone = "placeholder_phone".to_string();
+    // Get user's SMS phone number
+    let phone = auth_service.get_user_sms_phone(&user.username).await?
+        .unwrap_or_else(|| "placeholder_phone".to_string());
 
     send_verification_sms(&phone, &code).await?;
 
@@ -671,8 +662,9 @@ async fn create_email_challenge(
 ) -> FusekiResult<MfaChallenge> {
     // Generate and send email code
     let code = generate_email_verification_code();
-    // TODO: Implement get_user_mfa_email method
-    let email = "placeholder@example.com".to_string();
+    // Get user's MFA email
+    let email = auth_service.get_user_mfa_email(&user.username).await?
+        .unwrap_or_else(|| "placeholder@example.com".to_string());
 
     send_verification_email(&email, &code).await?;
 
@@ -689,8 +681,8 @@ async fn create_webauthn_challenge(
     auth_service: &AuthService,
 ) -> FusekiResult<MfaChallenge> {
     let challenge = generate_webauthn_challenge();
-    // TODO: Implement store_webauthn_challenge method
-    // auth_service.store_webauthn_challenge(&user.username, &challenge).await?;
+    // Store WebAuthn challenge
+    auth_service.store_webauthn_challenge(&user.username, &challenge).await?;
 
     Ok(MfaChallenge {
         challenge_id: challenge,
@@ -892,7 +884,7 @@ fn mask_email(email: &str) -> String {
         if username.len() >= 2 {
             format!("{}***{}", &username[..1], domain)
         } else {
-            format!("***{}", domain)
+            format!("***{domain}")
         }
     } else {
         "***@***.***".to_string()

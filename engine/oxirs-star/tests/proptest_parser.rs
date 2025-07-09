@@ -23,7 +23,7 @@ fn ntriples_line_strategy() -> impl Strategy<Value = String> {
             prop::string::string_regex("_:[a-zA-Z][a-zA-Z0-9_]*").unwrap(),
         ],
     )
-        .prop_map(|(s, p, o)| format!("{} {} {} .", s, p, o))
+        .prop_map(|(s, p, o)| format!("{s} {p} {o} ."))
 }
 
 // Generate valid Turtle-star prefixes
@@ -35,7 +35,7 @@ fn turtle_prefix_strategy() -> impl Strategy<Value = String> {
         )
         .unwrap(),
     )
-        .prop_map(|(prefix, iri)| format!("@prefix {}: <{}> .", prefix, iri))
+        .prop_map(|(prefix, iri)| format!("@prefix {prefix}: <{iri}> ."))
 }
 
 // Generate simple Turtle-star content
@@ -77,9 +77,9 @@ fn nquads_line_strategy() -> impl Strategy<Value = String> {
     )
         .prop_map(|(s, p, o, g)| {
             if let Some(graph) = g {
-                format!("{} {} {} {} .", s, p, o, graph)
+                format!("{s} {p} {o} {graph} .")
             } else {
-                format!("{} {} {} .", s, p, o)
+                format!("{s} {p} {o} .")
             }
         })
 }
@@ -119,7 +119,7 @@ fn trig_content_strategy() -> impl Strategy<Value = String> {
 
             // Named graphs
             for (graph_name, triples) in named_graphs {
-                content.push_str(&format!("{} {{\n", graph_name));
+                content.push_str(&format!("{graph_name} {{\n"));
                 for triple in triples {
                     content.push_str("  ");
                     content.push_str(&triple);
@@ -149,7 +149,7 @@ mod tests {
                 },
                 Err(e) => {
                     // If parsing fails, the error should be meaningful
-                    let error_msg = format!("{}", e);
+                    let error_msg = format!("{e}");
                     prop_assert!(!error_msg.is_empty());
                 }
             }
@@ -160,13 +160,13 @@ mod tests {
             let parser = StarParser::new();
 
             match parser.parse_str(&content, StarFormat::TurtleStar) {
-                Ok(graph) => {
+                Ok(_graph) => {
                     // Parsing should produce a valid graph
                     // (graph.len() is always >= 0 by type invariant)
                 },
                 Err(e) => {
                     // Error messages should be descriptive
-                    let error_msg = format!("{}", e);
+                    let error_msg = format!("{e}");
                     prop_assert!(error_msg.contains("Parse error") || error_msg.contains("line"));
                 }
             }
@@ -183,7 +183,7 @@ mod tests {
                     prop_assert_eq!(graph.quad_len(), content.len());
                 },
                 Err(e) => {
-                    let error_msg = format!("{}", e);
+                    let error_msg = format!("{e}");
                     prop_assert!(!error_msg.is_empty());
                 }
             }
@@ -204,7 +204,7 @@ mod tests {
                     }
                 },
                 Err(e) => {
-                    let error_msg = format!("{}", e);
+                    let error_msg = format!("{e}");
                     prop_assert!(!error_msg.is_empty());
                 }
             }
@@ -256,7 +256,7 @@ mod tests {
             }
 
             // Only test if we have valid triples
-            if original_graph.len() > 0 {
+            if !original_graph.is_empty() {
                 // Serialize to N-Triples-star
                 match serializer.serialize_to_string(&original_graph, StarFormat::NTriplesStar) {
                     Ok(serialized) => {
@@ -298,7 +298,7 @@ mod tests {
             if result.is_err() {
                 // Error should be a parse error
                 let error = result.unwrap_err();
-                let error_msg = format!("{}", error);
+                let error_msg = format!("{error}");
                 prop_assert!(error_msg.contains("Parse error") || error_msg.contains("Unexpected"));
             }
         }
@@ -336,8 +336,7 @@ mod tests {
 
             // Build input with comments
             let input = format!(
-                "# {}\n{}\n# Another comment\n",
-                comment_text, triple_line
+                "# {comment_text}\n{triple_line}\n# Another comment\n"
             );
 
             match parser.parse_str(&input, format) {
@@ -365,12 +364,12 @@ mod tests {
             let parser = StarParser::new();
 
             // Add whitespace around valid content
-            let input = format!("{}{}{}", ws_before, triple_line, ws_after);
+            let input = format!("{ws_before}{triple_line}{ws_after}");
 
             match parser.parse_str(&input, format) {
                 Ok(graph) => {
                     // Whitespace shouldn't affect parsing
-                    prop_assert!(graph.len() > 0);
+                    prop_assert!(!graph.is_empty());
                 },
                 Err(_) => {
                     // Failure should be due to content, not whitespace

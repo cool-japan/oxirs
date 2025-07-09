@@ -6,10 +6,10 @@
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
-use crate::{shape::Shape as AiShape, Result, ShaclAiError};
+use crate::{shape::Shape as AiShape, Result};
 use oxirs_shacl::ShapeId;
 
-use super::{ShapePattern, TemplateId};
+use super::ShapePattern;
 
 /// Shape library for organizing and discovering shapes
 #[derive(Debug)]
@@ -228,7 +228,7 @@ impl ShapeLibrary {
     pub fn add_shape(&mut self, shape: &AiShape, entry: ShapeEntry) -> Result<()> {
         // Add shape to catalog
         self.shape_catalog
-            .insert(shape.id().clone().into(), entry.clone());
+            .insert(shape.id().into(), entry.clone());
 
         // Update search indices
         self.update_search_indices(&entry)?;
@@ -276,7 +276,7 @@ impl ShapeLibrary {
             self.search_index
                 .text_index
                 .entry(word)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(entry.shape_id.clone());
         }
 
@@ -285,7 +285,7 @@ impl ShapeLibrary {
             self.search_index
                 .tag_index
                 .entry(tag.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(entry.shape_id.clone());
         }
 
@@ -293,7 +293,7 @@ impl ShapeLibrary {
         self.search_index
             .category_index
             .entry(entry.category.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(entry.shape_id.clone());
 
         // Update complexity index
@@ -308,10 +308,16 @@ impl ShapeLibrary {
         self.search_index
             .complexity_index
             .entry(complexity_range)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(entry.shape_id.clone());
 
         Ok(())
+    }
+}
+
+impl Default for PatternRepository {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -364,6 +370,12 @@ impl PatternRepository {
             .values()
             .filter(|pattern| format!("{:?}", pattern.pattern_type) == pattern_type)
             .collect()
+    }
+}
+
+impl Default for SearchIndex {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

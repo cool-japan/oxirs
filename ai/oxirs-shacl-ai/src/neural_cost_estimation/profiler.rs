@@ -3,8 +3,8 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use super::{config::*, types::*};
-use crate::{Result, ShaclAiError};
+use super::config::*;
+use crate::Result;
 
 /// Performance profiler
 #[derive(Debug)]

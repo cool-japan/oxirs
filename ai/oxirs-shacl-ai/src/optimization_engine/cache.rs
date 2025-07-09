@@ -1,6 +1,6 @@
 //! Cache manager for constraint validation results
 
-use crate::{shape::AiShape, Result, ShaclAiError};
+use crate::{shape::AiShape, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};

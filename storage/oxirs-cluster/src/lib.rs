@@ -175,7 +175,7 @@ impl NodeConfig {
         Self {
             node_id,
             address,
-            data_dir: format!("./data/node-{}", node_id),
+            data_dir: format!("./data/node-{node_id}"),
             peers: Vec::new(),
             discovery: Some(DiscoveryConfig::default()),
             replication_strategy: Some(ReplicationStrategy::default()),
@@ -248,6 +248,7 @@ pub struct ClusterNode {
     query_executor: DistributedQueryExecutor,
     region_manager: Option<Arc<RegionManager>>,
     conflict_resolver: Arc<ConflictResolver>,
+    #[allow(dead_code)]
     edge_manager: Option<Arc<EdgeComputingManager>>,
     local_vector_clock: Arc<RwLock<VectorClock>>,
     running: Arc<RwLock<bool>>,
@@ -268,7 +269,7 @@ impl ClusterNode {
         // Create data directory if it doesn't exist
         tokio::fs::create_dir_all(&config.data_dir)
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to create data directory: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to create data directory: {e}")))?;
 
         // Initialize consensus manager
         let consensus = ConsensusManager::new(config.node_id, config.peers.clone());
@@ -311,7 +312,7 @@ impl ClusterNode {
                 .initialize(region_config.regions.clone())
                 .await
                 .map_err(|e| {
-                    ClusterError::Other(format!("Failed to initialize region manager: {}", e))
+                    ClusterError::Other(format!("Failed to initialize region manager: {e}"))
                 })?;
 
             // Register this node in the region manager
@@ -325,7 +326,7 @@ impl ClusterNode {
                 )
                 .await
                 .map_err(|e| {
-                    ClusterError::Other(format!("Failed to register node in region manager: {}", e))
+                    ClusterError::Other(format!("Failed to register node in region manager: {e}"))
                 })?;
 
             Some(manager)
@@ -344,7 +345,7 @@ impl ClusterNode {
                         .register_device(edge_config.device_profile.clone())
                         .await
                         .map_err(|e| {
-                            ClusterError::Other(format!("Failed to register edge device: {}", e))
+                            ClusterError::Other(format!("Failed to register edge device: {e}"))
                         })?;
 
                     Some(manager)
@@ -393,7 +394,7 @@ impl ClusterNode {
 
         // Start discovery service
         self.discovery.start().await.map_err(|e| {
-            ClusterError::Other(format!("Failed to start discovery service: {}", e))
+            ClusterError::Other(format!("Failed to start discovery service: {e}"))
         })?;
 
         // Discover initial nodes
@@ -401,7 +402,7 @@ impl ClusterNode {
             .discovery
             .discover_nodes()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to discover nodes: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to discover nodes: {e}")))?;
 
         // Add discovered nodes to replication manager and query executor
         for node in discovered_nodes {
@@ -416,7 +417,7 @@ impl ClusterNode {
         self.consensus
             .init()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to initialize consensus: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to initialize consensus: {e}")))?;
 
         tracing::info!("Cluster node {} started successfully", self.config.node_id);
 
@@ -439,7 +440,7 @@ impl ClusterNode {
         self.discovery
             .stop()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to stop discovery service: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to stop discovery service: {e}")))?;
 
         *running = false;
 
@@ -565,7 +566,7 @@ impl ClusterNode {
             .query_executor
             .execute_query(sparql)
             .await
-            .map_err(|e| ClusterError::Other(format!("Query execution failed: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Query execution failed: {e}")))?;
 
         // Convert result bindings to string format
         let results = bindings
@@ -574,7 +575,7 @@ impl ClusterNode {
                 let vars: Vec<String> = binding
                     .variables
                     .into_iter()
-                    .map(|(var, val)| format!("{}: {}", var, val))
+                    .map(|(var, val)| format!("{var}: {val}"))
                     .collect();
                 vars.join(", ")
             })
@@ -588,7 +589,7 @@ impl ClusterNode {
         self.query_executor
             .execute_query(sparql)
             .await
-            .map_err(|e| ClusterError::Other(format!("Query execution failed: {}", e)))
+            .map_err(|e| ClusterError::Other(format!("Query execution failed: {e}")))
     }
 
     /// Get query execution statistics
@@ -750,7 +751,7 @@ impl ClusterNode {
             .add_node_with_consensus(node_id, address.to_string())
             .await
             .map_err(|e| {
-                ClusterError::Other(format!("Failed to add node through consensus: {}", e))
+                ClusterError::Other(format!("Failed to add node through consensus: {e}"))
             })?;
 
         // Update local configuration
@@ -771,7 +772,7 @@ impl ClusterNode {
             .remove_node_with_consensus(node_id)
             .await
             .map_err(|e| {
-                ClusterError::Other(format!("Failed to remove node through consensus: {}", e))
+                ClusterError::Other(format!("Failed to remove node through consensus: {e}"))
             })?;
 
         // Update local configuration
@@ -802,13 +803,13 @@ impl ClusterNode {
         self.consensus
             .graceful_shutdown()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to shutdown consensus: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to shutdown consensus: {e}")))?;
 
         // Stop discovery and replication services
         self.discovery
             .stop()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to stop discovery: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to stop discovery: {e}")))?;
 
         tracing::info!("Cluster node {} gracefully shutdown", self.config.node_id);
         Ok(())
@@ -818,15 +819,14 @@ impl ClusterNode {
     pub async fn transfer_leadership(&mut self, target_node: OxirsNodeId) -> Result<()> {
         if !self.config.peers.contains(&target_node) {
             return Err(ClusterError::Config(format!(
-                "Target node {} not in cluster",
-                target_node
+                "Target node {target_node} not in cluster"
             )));
         }
 
         self.consensus
             .transfer_leadership(target_node)
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to transfer leadership: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to transfer leadership: {e}")))?;
 
         Ok(())
     }
@@ -836,7 +836,7 @@ impl ClusterNode {
         self.consensus
             .force_evict_node(node_id)
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to force evict node: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to force evict node: {e}")))?;
 
         // Update local configuration
         self.config.peers.retain(|&id| id != node_id);
@@ -852,7 +852,7 @@ impl ClusterNode {
         self.consensus
             .check_peer_health()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to check cluster health: {}", e)))
+            .map_err(|e| ClusterError::Other(format!("Failed to check cluster health: {e}")))
     }
 
     /// Attempt recovery from partition or failure
@@ -860,7 +860,7 @@ impl ClusterNode {
         self.consensus
             .attempt_recovery()
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to recover cluster: {}", e)))?;
+            .map_err(|e| ClusterError::Other(format!("Failed to recover cluster: {e}")))?;
 
         tracing::info!(
             "Cluster recovery completed for node {}",
@@ -968,7 +968,7 @@ impl ClusterNode {
                 .calculate_replication_targets(region_id)
                 .await
                 .map_err(|e| {
-                    ClusterError::Other(format!("Failed to calculate replication targets: {}", e))
+                    ClusterError::Other(format!("Failed to calculate replication targets: {e}"))
                 })
         } else {
             Ok(Vec::new())
@@ -979,7 +979,7 @@ impl ClusterNode {
     pub async fn monitor_region_latencies(&self) -> Result<()> {
         if let Some(region_manager) = &self.region_manager {
             region_manager.monitor_latencies().await.map_err(|e| {
-                ClusterError::Other(format!("Failed to monitor region latencies: {}", e))
+                ClusterError::Other(format!("Failed to monitor region latencies: {e}"))
             })
         } else {
             Ok(())
@@ -992,7 +992,7 @@ impl ClusterNode {
             region_manager
                 .get_region_health(region_id)
                 .await
-                .map_err(|e| ClusterError::Other(format!("Failed to get region health: {}", e)))
+                .map_err(|e| ClusterError::Other(format!("Failed to get region health: {e}")))
         } else {
             Err(ClusterError::Config(
                 "Multi-region not configured".to_string(),
@@ -1011,7 +1011,7 @@ impl ClusterNode {
                 .perform_region_failover(failed_region, target_region)
                 .await
                 .map_err(|e| {
-                    ClusterError::Other(format!("Failed to perform region failover: {}", e))
+                    ClusterError::Other(format!("Failed to perform region failover: {e}"))
                 })
         } else {
             Err(ClusterError::Config(
@@ -1044,7 +1044,7 @@ impl ClusterNode {
             region_manager
                 .register_node(node_id, region_id, availability_zone_id, data_center, rack)
                 .await
-                .map_err(|e| ClusterError::Other(format!("Failed to add node to region: {}", e)))
+                .map_err(|e| ClusterError::Other(format!("Failed to add node to region: {e}")))
         } else {
             Err(ClusterError::Config(
                 "Multi-region not configured".to_string(),
@@ -1096,7 +1096,7 @@ impl ClusterNode {
         self.conflict_resolver
             .detect_conflicts(operations)
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to detect conflicts: {}", e)))
+            .map_err(|e| ClusterError::Other(format!("Failed to detect conflicts: {e}")))
     }
 
     /// Resolve conflicts using configured strategies
@@ -1107,7 +1107,7 @@ impl ClusterNode {
         self.conflict_resolver
             .resolve_conflicts(conflicts)
             .await
-            .map_err(|e| ClusterError::Other(format!("Failed to resolve conflicts: {}", e)))
+            .map_err(|e| ClusterError::Other(format!("Failed to resolve conflicts: {e}")))
     }
 
     /// Submit an operation for conflict-aware processing

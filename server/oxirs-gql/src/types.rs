@@ -61,8 +61,8 @@ impl fmt::Display for GraphQLType {
             GraphQLType::Union(u) => write!(f, "{}", u.name),
             GraphQLType::Enum(e) => write!(f, "{}", e.name),
             GraphQLType::InputObject(io) => write!(f, "{}", io.name),
-            GraphQLType::List(inner) => write!(f, "[{}]", inner),
-            GraphQLType::NonNull(inner) => write!(f, "{}!", inner),
+            GraphQLType::List(inner) => write!(f, "[{inner}]"),
+            GraphQLType::NonNull(inner) => write!(f, "{inner}!"),
         }
     }
 }

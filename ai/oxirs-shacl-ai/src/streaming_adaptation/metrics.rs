@@ -1,12 +1,12 @@
 //! Real-time metrics collection for streaming adaptation
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Real-time metrics collector
 #[derive(Debug)]
@@ -252,8 +252,7 @@ impl PerformanceMonitor {
             timestamp: SystemTime::now(),
             value,
             message: format!(
-                "Performance threshold exceeded: {:?} = {}",
-                alert_type, value
+                "Performance threshold exceeded: {alert_type:?} = {value}"
             ),
         };
 

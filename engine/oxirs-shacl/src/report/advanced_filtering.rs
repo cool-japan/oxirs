@@ -416,7 +416,7 @@ impl ReportFilterEngine {
                 })
                 .cloned()
                 .collect()),
-            FilterFunction::ViolationThreshold { operator, value } => {
+            FilterFunction::ViolationThreshold { operator: _, value: _ } => {
                 // This would typically be applied at the report level, not violation level
                 // For now, we'll pass through all violations
                 Ok(violations.to_vec())
@@ -425,7 +425,7 @@ impl ReportFilterEngine {
                 // This would typically be applied at the report level
                 Ok(violations.to_vec())
             }
-            FilterFunction::SparqlQuery(query) => {
+            FilterFunction::SparqlQuery(_query) => {
                 // SPARQL filtering would require more complex implementation
                 // For now, return all violations
                 Ok(violations.to_vec())
@@ -700,7 +700,7 @@ impl ReportQueryEngine {
     }
 
     /// Execute a SPARQL query against validation reports
-    pub fn execute_sparql_query(&self, query: &str) -> Result<QueryResult> {
+    pub fn execute_sparql_query(&self, _query: &str) -> Result<QueryResult> {
         // This is a simplified implementation
         // In a full implementation, this would convert validation reports to RDF
         // and execute the SPARQL query using a proper SPARQL engine
@@ -719,7 +719,7 @@ impl ReportQueryEngine {
 
         // Apply time range filter
         if let Some(time_range) = &criteria.time_range {
-            filtered_reports.retain(|report| {
+            filtered_reports.retain(|_report| {
                 let report_time = Utc::now(); // In practice, would get from report metadata
                 report_time >= time_range.start && report_time <= time_range.end
             });

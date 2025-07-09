@@ -185,7 +185,7 @@ impl RdfResolver {
 
         let mut hasher = DefaultHasher::new();
         field_name.hash(&mut hasher);
-        format!("{:?}", args).hash(&mut hasher);
+        format!("{args:?}").hash(&mut hasher);
         context.request_id.hash(&mut hasher);
         format!("field_{}_{}", field_name, hasher.finish())
     }
@@ -229,7 +229,7 @@ impl RdfResolver {
             // This is a simplified implementation - in practice you'd want to
             // optimize based on actual query patterns
             let keys: Vec<String> = (0..limit.unwrap_or(10))
-                .map(|i| format!("subject_{}", i))
+                .map(|i| format!("subject_{i}"))
                 .collect();
 
             match loader.load_many(keys).await {
@@ -360,7 +360,7 @@ impl RdfResolver {
             Ok(subjects) => {
                 let graphql_subjects: Vec<Value> = subjects
                     .into_iter()
-                    .map(|s| Value::StringValue(s))
+                    .map(Value::StringValue)
                     .collect();
                 Ok(Value::ListValue(graphql_subjects))
             }
@@ -381,7 +381,7 @@ impl RdfResolver {
             Ok(predicates) => {
                 let graphql_predicates: Vec<Value> = predicates
                     .into_iter()
-                    .map(|p| Value::StringValue(p))
+                    .map(Value::StringValue)
                     .collect();
                 Ok(Value::ListValue(graphql_predicates))
             }
@@ -419,6 +419,7 @@ impl RdfResolver {
     }
 
     /// Execute a raw SPARQL query
+    #[allow(dead_code)]
     async fn resolve_sparql_query(&self, args: &HashMap<String, Value>) -> Result<Value> {
         let query = args
             .get("query")
@@ -441,20 +442,17 @@ impl RdfResolver {
                 let mut result_rows = Vec::new();
 
                 // Collect all solutions synchronously
-                for _solution in solutions {
-                    let row = HashMap::new();
+                for solution in solutions {
+                    let mut row = HashMap::new();
 
-                    // TODO: Solution doesn't have iter() method
-                    // For now, we'll return empty rows until we can properly iterate
-                    // This needs to be fixed when the Solution API is clarified
-                    /*
+                    // Iterate over variable-term bindings in the solution
                     for (var, term) in solution.iter() {
                         let value = match term {
                             oxirs_core::model::Term::NamedNode(node) => {
                                 Value::StringValue(node.to_string())
                             }
                             oxirs_core::model::Term::BlankNode(node) => {
-                                Value::StringValue(format!("_:{}", node))
+                                Value::StringValue(format!("_:{node}"))
                             }
                             oxirs_core::model::Term::Literal(literal) => {
                                 // Try to parse as different types
@@ -471,9 +469,8 @@ impl RdfResolver {
                             // Note: Term::Triple is not currently supported
                             _ => Value::StringValue("Unknown term type".to_string())
                         };
-                        row.insert(var.to_string(), value);
+                        row.insert(var.name().to_string(), value);
                     }
-                    */
                     result_rows.push(Value::ObjectValue(row));
                 }
 

@@ -355,7 +355,7 @@ impl SparqlSecurityAnalyzer {
     }
 
     /// Check resource limits
-    fn check_resource_limits(&self, analysis: &SecurityAnalysisResult) -> Result<()> {
+    fn check_resource_limits(&self, _analysis: &SecurityAnalysisResult) -> Result<()> {
         // These checks are performed during analysis, this method validates final limits
         Ok(())
     }

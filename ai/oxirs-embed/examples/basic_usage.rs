@@ -84,7 +84,7 @@ async fn basic_transe_example() -> Result<()> {
 
     // Get embeddings
     let alice_embedding = model.get_entity_embedding("http://example.org/alice")?;
-    let knows_embedding = model.get_relation_embedding("http://example.org/knows")?;
+    let knows_embedding = model.getrelation_embedding("http://example.org/knows")?;
 
     println!("Alice embedding dimensions: {}", alice_embedding.dimensions);
     println!("Knows embedding dimensions: {}", knows_embedding.dimensions);

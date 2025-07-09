@@ -37,6 +37,12 @@ pub struct OxirsQueryResults {
     pub variables: Vec<String>,
 }
 
+impl Default for OxirsQueryResults {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OxirsQueryResults {
     pub fn new() -> Self {
         Self {
@@ -81,6 +87,12 @@ pub mod sparql {
 
     pub struct QueryResults {
         pub bindings: Vec<Binding>,
+    }
+
+    impl Default for QueryResults {
+        fn default() -> Self {
+            Self::new()
+        }
     }
 
     impl QueryResults {

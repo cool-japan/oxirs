@@ -6,6 +6,7 @@
 pub mod algebra;
 pub mod algebra_generation;
 pub mod bgp_optimizer;
+pub mod bgp_optimizer_types;
 pub mod builtin;
 pub mod builtin_fixed;
 pub mod cache_integration;

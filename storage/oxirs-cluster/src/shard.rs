@@ -133,7 +133,7 @@ impl ShardRouter {
     }
 
     /// Initialize shards
-    pub async fn init_shards(&self, num_shards: u32, nodes_per_shard: usize) -> Result<()> {
+    pub async fn init_shards(&self, num_shards: u32, _nodes_per_shard: usize) -> Result<()> {
         let mut shards = self.shards.write().await;
 
         for shard_id in 0..num_shards {
@@ -159,7 +159,7 @@ impl ShardRouter {
     /// Route a triple to appropriate shard
     pub async fn route_triple(&self, triple: &Triple) -> Result<ShardId> {
         // Check cache first
-        let cache_key = format!("{:?}", triple);
+        let cache_key = format!("{triple:?}");
         if let Some(&shard_id) = self.routing_cache.read().await.get(&cache_key) {
             return Ok(shard_id);
         }
@@ -312,7 +312,7 @@ impl ShardRouter {
         &self,
         triple: &Triple,
         clusters: &[ConceptCluster],
-        threshold: f64,
+        _threshold: f64,
     ) -> Result<ShardId> {
         if let Some(similarity_calc) = &self.similarity_calc {
             // Extract concept from subject
@@ -333,7 +333,7 @@ impl ShardRouter {
         &self,
         subject: Option<&str>,
         predicate: Option<&str>,
-        object: Option<&str>,
+        _object: Option<&str>,
     ) -> Result<Vec<ShardId>> {
         match &self.strategy {
             ShardingStrategy::Subject { num_shards } => {

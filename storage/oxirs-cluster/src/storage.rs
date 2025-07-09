@@ -20,7 +20,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
 
 /// Persistent state required by Raft
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RaftState {
     /// Current term
     pub current_term: u64,
@@ -34,17 +34,6 @@ pub struct RaftState {
     pub last_applied: u64,
 }
 
-impl Default for RaftState {
-    fn default() -> Self {
-        Self {
-            current_term: 0,
-            voted_for: None,
-            log: Vec::new(),
-            commit_index: 0,
-            last_applied: 0,
-        }
-    }
-}
 
 /// Snapshot metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -191,14 +180,14 @@ impl Default for StorageConfig {
 impl PersistentStorage {
     /// Create a new persistent storage instance
     pub async fn new(node_id: OxirsNodeId, config: StorageConfig) -> Result<Self> {
-        let data_dir = PathBuf::from(&config.data_dir).join(format!("node-{}", node_id));
+        let data_dir = PathBuf::from(&config.data_dir).join(format!("node-{node_id}"));
 
         // Create data directory if it doesn't exist
         if !data_dir.exists() {
             std::fs::create_dir_all(&data_dir)?;
         }
 
-        let mut storage = Self {
+        let storage = Self {
             data_dir,
             node_id,
             raft_state: Arc::new(RwLock::new(RaftState::default())),
@@ -278,6 +267,7 @@ impl PersistentStorage {
     }
 
     /// Recover from crash using WAL
+    #[allow(dead_code)]
     async fn recover_from_wal_internal(&self) -> Result<()> {
         let wal_path = self.data_dir.join("wal.log");
         if !wal_path.exists() {
@@ -345,13 +335,14 @@ impl PersistentStorage {
         let op_bytes = bincode::serialize(&entry.operation)?;
         let mut hasher = Sha256::new();
         hasher.update(&op_bytes);
-        hasher.update(&entry.sequence.to_le_bytes());
-        hasher.update(&entry.timestamp.to_le_bytes());
+        hasher.update(entry.sequence.to_le_bytes());
+        hasher.update(entry.timestamp.to_le_bytes());
         let computed_checksum = format!("{:x}", hasher.finalize());
         Ok(computed_checksum == entry.checksum)
     }
 
     /// Apply WAL operation during recovery
+    #[allow(dead_code)]
     async fn apply_wal_operation(&self, operation: &WalOperation) -> Result<()> {
         match operation {
             WalOperation::WriteRaftState(state) => {
@@ -608,8 +599,8 @@ impl PersistentStorage {
         let op_bytes = bincode::serialize(&operation)?;
         let mut hasher = Sha256::new();
         hasher.update(&op_bytes);
-        hasher.update(&sequence.to_le_bytes());
-        hasher.update(&timestamp.to_le_bytes());
+        hasher.update(sequence.to_le_bytes());
+        hasher.update(timestamp.to_le_bytes());
         let checksum = format!("{:x}", hasher.finalize());
 
         let wal_entry = WalEntry {
@@ -643,7 +634,7 @@ impl PersistentStorage {
         T: Serialize,
     {
         let path = self.data_dir.join(filename);
-        let temp_path = self.data_dir.join(format!("{}.tmp", filename));
+        let temp_path = self.data_dir.join(format!("{filename}.tmp"));
 
         // Create checksummed data
         let checksummed_data = if self.config.enable_corruption_detection {
@@ -756,11 +747,10 @@ impl PersistentStorage {
         let checksummed_data: ChecksummedData<T> = bincode::deserialize(&data)?;
 
         // Verify checksum if corruption detection is enabled
-        if self.config.enable_corruption_detection {
-            if !checksummed_data.verify()? {
+        if self.config.enable_corruption_detection
+            && !checksummed_data.verify()? {
                 return Err(anyhow!("Checksum verification failed for {:?}", path));
             }
-        }
 
         Ok(checksummed_data.data)
     }
@@ -808,6 +798,7 @@ impl PersistentStorage {
     }
 
     /// Calculate directory size
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_directory_size(&self, dir: &Path) -> Result<u64> {
         let mut size = 0;
         if dir.is_dir() {
@@ -876,7 +867,7 @@ impl PersistentStorage {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs();
-        let archive_path = self.data_dir.join(format!("wal-{}.log", timestamp));
+        let archive_path = self.data_dir.join(format!("wal-{timestamp}.log"));
         std::fs::rename(&wal_path, &archive_path)?;
 
         // Reinitialize WAL
@@ -1231,7 +1222,7 @@ impl PersistentStorage {
         let mut hasher = Sha256::new();
         hasher.update(data);
         let result = hasher.finalize();
-        Ok(format!("{:x}", result))
+        Ok(format!("{result:x}"))
     }
 
     /// Recover corrupted file from backup
@@ -1405,6 +1396,7 @@ impl PersistentStorage {
     }
 
     /// Write operation to WAL before performing it
+    #[allow(dead_code)]
     async fn write_to_wal(&self, operation: WalOperation) -> Result<()> {
         if !self.config.enable_wal {
             return Ok(());
@@ -1440,6 +1432,7 @@ impl PersistentStorage {
     }
 
     /// Clear WAL after successful operation
+    #[allow(dead_code)]
     async fn clear_wal(&self) -> Result<()> {
         if !self.config.enable_wal {
             return Ok(());
@@ -1453,6 +1446,7 @@ impl PersistentStorage {
     }
 
     /// Update file checksum after write
+    #[allow(dead_code)]
     async fn update_file_checksum(&self, file_path: &Path) -> Result<()> {
         if !self.config.enable_corruption_detection {
             return Ok(());
@@ -1959,7 +1953,7 @@ mod tests {
         // Add multiple entries
         for i in 1..=5 {
             let command = RdfCommand::Insert {
-                subject: format!("s{}", i),
+                subject: format!("s{i}"),
                 predicate: "p".to_string(),
                 object: "o".to_string(),
             };
@@ -2024,7 +2018,7 @@ mod tests {
         // Add entries beyond limit
         for i in 1..=5 {
             let command = RdfCommand::Insert {
-                subject: format!("s{}", i),
+                subject: format!("s{i}"),
                 predicate: "p".to_string(),
                 object: "o".to_string(),
             };

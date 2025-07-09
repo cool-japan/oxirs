@@ -12,28 +12,21 @@
 //! - Reality bridge construction
 //! - Dimensional coherence validation
 
-use async_trait::async_trait;
 use dashmap::DashMap;
-use nalgebra::{DMatrix, DVector};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
+use std::time::{Duration, Instant};
+use tokio::sync::RwLock;
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::Shape;
 
-use crate::collective_consciousness::{CollectiveConsciousnessNetwork, Reality, ValidationContext};
+use crate::collective_consciousness::ValidationContext;
 use crate::consciousness_validation::{ConsciousnessLevel, EmotionalContext};
-use crate::quantum_neural_patterns::QuantumState;
 use crate::{Result, ShaclAiError};
 
 /// Helper function for serde default Instant

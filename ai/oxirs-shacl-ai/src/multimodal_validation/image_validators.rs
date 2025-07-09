@@ -5,12 +5,18 @@ use std::collections::HashMap;
 
 use super::traits::*;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Image format validator
 #[derive(Debug)]
 pub struct ImageFormatValidator {
     supported_formats: Vec<String>,
+}
+
+impl Default for ImageFormatValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ImageFormatValidator {
@@ -123,6 +129,12 @@ pub struct ImageContentValidator {
     max_height: u32,
 }
 
+impl Default for ImageContentValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImageContentValidator {
     pub fn new() -> Self {
         Self {
@@ -171,12 +183,12 @@ impl ImageValidator for ImageContentValidator {
 
             if width < self.min_width || height < self.min_height {
                 is_valid = false;
-                issues.push(format!("Image too small: {}x{}", width, height));
+                issues.push(format!("Image too small: {width}x{height}"));
             }
 
             if width > self.max_width || height > self.max_height {
                 is_valid = false;
-                issues.push(format!("Image too large: {}x{}", width, height));
+                issues.push(format!("Image too large: {width}x{height}"));
             }
         } else {
             is_valid = false;
@@ -284,6 +296,12 @@ pub struct FaceDetectionValidator {
     confidence_threshold: f64,
 }
 
+impl Default for FaceDetectionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FaceDetectionValidator {
     pub fn new() -> Self {
         Self {
@@ -356,6 +374,12 @@ impl FaceDetectionValidator {
 pub struct ObjectRecognitionValidator {
     target_classes: Vec<String>,
     confidence_threshold: f64,
+}
+
+impl Default for ObjectRecognitionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ObjectRecognitionValidator {

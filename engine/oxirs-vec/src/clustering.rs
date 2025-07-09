@@ -212,7 +212,7 @@ impl ClusteringEngine {
             }
 
             // Update centroids
-            for cluster_id in 0..k {
+            for (cluster_id, centroid) in centroids.iter_mut().enumerate().take(k) {
                 let cluster_vectors: Vec<&Vector> = resources
                     .iter()
                     .enumerate()
@@ -221,7 +221,7 @@ impl ClusteringEngine {
                     .collect();
 
                 if !cluster_vectors.is_empty() {
-                    centroids[cluster_id] = self.compute_centroid(&cluster_vectors)?;
+                    *centroid = self.compute_centroid(&cluster_vectors)?;
                 }
             }
 
@@ -237,7 +237,7 @@ impl ClusteringEngine {
 
         // Build clusters from assignments
         let mut clusters = Vec::new();
-        for cluster_id in 0..k {
+        for (cluster_id, centroid) in centroids.iter().enumerate().take(k) {
             let members: Vec<String> = resources
                 .iter()
                 .enumerate()
@@ -258,7 +258,7 @@ impl ClusteringEngine {
                 clusters.push(Cluster {
                     id: cluster_id,
                     members,
-                    centroid: Some(centroids[cluster_id].clone()),
+                    centroid: Some(centroid.clone()),
                     stats,
                 });
             }

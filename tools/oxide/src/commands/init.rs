@@ -14,8 +14,7 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
     let cmd_logger = CommandLogger::new("init", vec![name.clone(), format.clone()]);
 
     ctx.info(&format!(
-        "Initializing dataset '{}' with format '{}'",
-        name, format
+        "Initializing dataset '{name}' with format '{format}'"
     ));
 
     // If in interactive mode, prompt for additional configuration
@@ -37,8 +36,7 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
         "tdb2" | "memory" => {}
         _ => {
             return Err(format!(
-                "Unsupported format '{}'. Supported formats: tdb2, memory",
-                format
+                "Unsupported format '{format}'. Supported formats: tdb2, memory"
             )
             .into());
         }
@@ -95,8 +93,8 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
     ));
 
     ctx.info("Dataset Initialized Successfully");
-    ctx.info(&format!("Name: {}", final_name));
-    ctx.info(&format!("Storage format: {}", final_format));
+    ctx.info(&format!("Name: {final_name}"));
+    ctx.info(&format!("Storage format: {final_format}"));
     ctx.info(&format!("Location: {}", dataset_path.display()));
     ctx.info(&format!("Configuration: {}", config_path.display()));
 
@@ -266,8 +264,8 @@ fn interactive_init(
 
     // Summary
     ctx.info("Configuration Summary");
-    ctx.info(&format!("Name: {}", name));
-    ctx.info(&format!("Format: {}", format));
+    ctx.info(&format!("Name: {name}"));
+    ctx.info(&format!("Format: {format}"));
     ctx.info(&format!("Location: {}", location.display()));
 
     if features.any_enabled() {

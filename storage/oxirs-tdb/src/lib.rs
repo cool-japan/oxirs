@@ -272,6 +272,7 @@ impl Default for SimpleTdbConfig {
 /// - **Compression**: Enable advanced compression for space-constrained environments
 /// - **File Layout**: TDB2-compatible file organization for optimal I/O patterns
 pub struct TdbStore {
+    #[allow(dead_code)]
     config: SimpleTdbConfig,
     filesystem: TdbFileSystem,
     triple_store: TripleStore,

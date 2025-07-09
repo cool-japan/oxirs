@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(chat) => Arc::new(chat),
             Err(e) => {
                 error!("Failed to initialize OxiRS Chat: {}", e);
-                return Err(format!("Failed to initialize OxiRS Chat: {}", e).into());
+                return Err(format!("Failed to initialize OxiRS Chat: {e}").into());
             }
         }
     };
@@ -277,7 +277,7 @@ async fn initialize_store(
             }
             Err(e) => {
                 error!("Failed to read dataset file: {}", e);
-                return Err(format!("Failed to read dataset file: {}", e).into());
+                return Err(format!("Failed to read dataset file: {e}").into());
             }
         }
     } else {
@@ -372,7 +372,7 @@ fn parse_rdf_content(
                     }
                 }
                 Err(e) => {
-                    return Err(format!("Failed to parse RDF/XML: {}", e).into());
+                    return Err(format!("Failed to parse RDF/XML: {e}").into());
                 }
             }
         }
@@ -390,14 +390,14 @@ fn parse_rdf_content(
                     }
                 }
                 Err(e) => {
-                    return Err(format!("Failed to parse JSON-LD: {}", e).into());
+                    return Err(format!("Failed to parse JSON-LD: {e}").into());
                 }
             }
         }
         _ => {
             // For other formats, use the generic parser
             use oxirs_core::format::RdfParser;
-            let format_debug = format!("{:?}", format); // Capture debug representation before move
+            let format_debug = format!("{format:?}"); // Capture debug representation before move
             let parser = RdfParser::new(format);
             let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
 
@@ -410,7 +410,7 @@ fn parse_rdf_content(
                 }
                 Err(e) => {
                     return Err(
-                        format!("Failed to parse RDF format {}: {}", format_debug, e).into(),
+                        format!("Failed to parse RDF format {format_debug}: {e}").into(),
                     );
                 }
             }

@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::sync::RwLock;
 
-use super::types::{ChatMessage, LLMRequest, LLMResponse, Usage};
+use super::types::ChatMessage;
 
 /// Fine-tuning job configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -103,6 +103,7 @@ pub enum JobStatus {
 
 /// Training progress tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TrainingProgress {
     pub current_epoch: usize,
     pub total_epochs: usize,
@@ -113,22 +114,10 @@ pub struct TrainingProgress {
     pub estimated_time_remaining: Option<Duration>,
 }
 
-impl Default for TrainingProgress {
-    fn default() -> Self {
-        Self {
-            current_epoch: 0,
-            total_epochs: 0,
-            current_step: 0,
-            total_steps: 0,
-            examples_processed: 0,
-            total_examples: 0,
-            estimated_time_remaining: None,
-        }
-    }
-}
 
 /// Training metrics and evaluation results
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TrainingMetrics {
     pub train_loss: Vec<f32>,
     pub validation_loss: Vec<f32>,
@@ -141,24 +130,10 @@ pub struct TrainingMetrics {
     pub final_model_quality: Option<f32>,
 }
 
-impl Default for TrainingMetrics {
-    fn default() -> Self {
-        Self {
-            train_loss: Vec::new(),
-            validation_loss: Vec::new(),
-            accuracy: Vec::new(),
-            perplexity: Vec::new(),
-            bleu_score: Vec::new(),
-            rouge_score: Vec::new(),
-            domain_specific_metrics: HashMap::new(),
-            best_checkpoint: None,
-            final_model_quality: None,
-        }
-    }
-}
 
 /// Job artifacts and outputs
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct JobArtifacts {
     pub model_path: Option<PathBuf>,
     pub checkpoint_paths: Vec<PathBuf>,
@@ -167,17 +142,6 @@ pub struct JobArtifacts {
     pub config_snapshot: Option<PathBuf>,
 }
 
-impl Default for JobArtifacts {
-    fn default() -> Self {
-        Self {
-            model_path: None,
-            checkpoint_paths: Vec::new(),
-            training_logs: None,
-            evaluation_report: None,
-            config_snapshot: None,
-        }
-    }
-}
 
 /// Fine-tuning engine for managing training jobs
 pub struct FineTuningEngine {
@@ -353,9 +317,9 @@ impl FineTuningEngine {
 
         for i in 0..100 {
             examples.push(TrainingExample {
-                id: format!("example_{}", i),
+                id: format!("example_{i}"),
                 messages: vec![],
-                expected_response: format!("Response {}", i),
+                expected_response: format!("Response {i}"),
                 metadata: HashMap::new(),
                 quality_score: Some(0.8),
                 domain: "general".to_string(),

@@ -138,7 +138,7 @@ impl FreeBlockTracker {
         // Add to size index
         self.blocks_by_size
             .entry(size)
-            .or_insert_with(BTreeSet::new)
+            .or_default()
             .insert(id);
 
         // Update metadata
@@ -287,22 +287,17 @@ pub struct BlockManagerStats {
 }
 
 /// Block allocation strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AllocationStrategy {
     /// First fit - use first available block
     FirstFit,
     /// Best fit - use smallest block that fits
+    #[default]
     BestFit,
     /// Worst fit - use largest available block
     WorstFit,
     /// Next fit - continue from last allocation point
     NextFit,
-}
-
-impl Default for AllocationStrategy {
-    fn default() -> Self {
-        AllocationStrategy::BestFit
-    }
 }
 
 /// Block manager for efficient storage allocation
@@ -411,8 +406,7 @@ impl BlockManager {
                         BlockMetadata::new(remaining_id, remaining_offset, remaining_size);
 
                     println!(
-                        "Creating remaining block: id={}, size={}, offset={}",
-                        remaining_id, remaining_size, remaining_offset
+                        "Creating remaining block: id={remaining_id}, size={remaining_size}, offset={remaining_offset}"
                     );
                     free_blocks.add_free_block(remaining_metadata.clone());
                     println!("Added remaining block to free_blocks");
@@ -508,7 +502,7 @@ impl BlockManager {
         let mut free_blocks = self.free_blocks.write().unwrap();
 
         // Find largest available block
-        if let Some((&largest_size, block_ids)) = free_blocks.blocks_by_size.iter().rev().next() {
+        if let Some((&largest_size, block_ids)) = free_blocks.blocks_by_size.iter().next_back() {
             if largest_size >= size {
                 if let Some(&block_id) = block_ids.iter().next() {
                     if let Some(mut metadata) = free_blocks.remove_free_block(block_id) {
@@ -780,8 +774,7 @@ impl BlockManager {
         let (free_space, free_count, _) = free_blocks.get_stats();
 
         println!(
-            "get_stats: FreeBlockTracker reports free_space={}, free_count={}",
-            free_space, free_count
+            "get_stats: FreeBlockTracker reports free_space={free_space}, free_count={free_count}"
         );
         println!(
             "get_stats: Number of entries in free_blocks.block_metadata: {}",
@@ -803,8 +796,7 @@ impl BlockManager {
         stats.largest_free_block = free_blocks
             .blocks_by_size
             .keys()
-            .rev()
-            .next()
+            .next_back()
             .copied()
             .unwrap_or(0);
 
@@ -915,7 +907,7 @@ impl BlockManager {
         }
 
         // Coalesce any remaining small free blocks
-        self.coalesce_free_blocks_internal(&mut *free_blocks, &*all_blocks);
+        self.coalesce_free_blocks_internal(&mut free_blocks, &all_blocks);
 
         // Update statistics
         let compaction_time = start_time.elapsed();
@@ -927,7 +919,7 @@ impl BlockManager {
             "Compaction completed: moved {} blocks in {:?}, fragmentation reduced to {:.2}%",
             compaction_moves,
             compaction_time,
-            self.calculate_fragmentation_ratio_internal(&*free_blocks, &*all_blocks) * 100.0
+            self.calculate_fragmentation_ratio_internal(&free_blocks, &all_blocks) * 100.0
         );
 
         Ok(())
@@ -1043,7 +1035,7 @@ impl BlockManager {
         let free_blocks = self.free_blocks.read().unwrap();
 
         // Check that all free blocks are actually marked as free
-        for (&block_id, _) in &free_blocks.block_metadata {
+        for &block_id in free_blocks.block_metadata.keys() {
             if let Some(metadata) = all_blocks.get(&block_id) {
                 if metadata.status != BlockStatus::Free {
                     issues.push(format!(
@@ -1053,8 +1045,7 @@ impl BlockManager {
                 }
             } else {
                 issues.push(format!(
-                    "Block {} is in free list but not in all_blocks",
-                    block_id
+                    "Block {block_id} is in free list but not in all_blocks"
                 ));
             }
         }
@@ -1073,8 +1064,7 @@ impl BlockManager {
 
                 if start2 < end1 {
                     issues.push(format!(
-                        "Blocks {} and {} overlap: [{}, {}) and [{}, {})",
-                        id1, id2, start1, end1, start2, end2
+                        "Blocks {id1} and {id2} overlap: [{start1}, {end1}) and [{start2}, {end2})"
                     ));
                 }
             }

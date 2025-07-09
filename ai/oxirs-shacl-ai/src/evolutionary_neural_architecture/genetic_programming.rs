@@ -1,7 +1,7 @@
 //! Genetic programming system implementation
 
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Genetic programming system
 #[derive(Debug)]

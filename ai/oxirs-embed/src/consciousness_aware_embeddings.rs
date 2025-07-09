@@ -4,12 +4,11 @@
 //! can adapt based on context, reasoning, and multi-dimensional awareness patterns.
 //! Inspired by theories of consciousness, cognitive science, and advanced AI research.
 
-use crate::{ModelConfig, Vector};
+use crate::ModelConfig;
 use anyhow::Result;
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 /// Levels of consciousness awareness in the embedding system
@@ -171,9 +170,8 @@ impl WorkingMemory {
     /// Remove the least active concept
     fn remove_least_active(&mut self) -> Result<()> {
         // Simple strategy: remove first concept (could be improved with usage tracking)
-        if let Some((concept, _)) = self.active_concepts.iter().next() {
-            let concept_to_remove = concept.clone();
-            self.active_concepts.remove(&concept_to_remove);
+        if let Some(concept) = self.active_concepts.keys().next().cloned() {
+            self.active_concepts.remove(&concept);
         }
         Ok(())
     }
@@ -351,7 +349,7 @@ impl ConsciousnessAwareEmbedding {
     /// Create a base embedding for an entity
     fn create_base_embedding(&self, entity: &str) -> Array1<f32> {
         let dimensions = self.config.dimensions;
-        let mut rng = rand::thread_rng();
+        let _rng = rand::thread_rng();
 
         // Simple hash-based initialization (could be more sophisticated)
         let hash = entity.chars().map(|c| c as u32).sum::<u32>();
@@ -405,7 +403,7 @@ impl ConsciousnessAwareEmbedding {
         // Normalize to prevent explosion
         let norm = enhanced.mapv(|x| x * x).sum().sqrt();
         if norm > 0.0 {
-            enhanced = enhanced / norm;
+            enhanced /= norm;
         }
 
         Ok(enhanced)
@@ -426,8 +424,7 @@ impl ConsciousnessAwareEmbedding {
 
         // Reflect on the process
         let reflection = format!(
-            "Generated embedding for '{}' with quality {:.3} and norm {:.3}",
-            entity, quality_score, norm
+            "Generated embedding for '{entity}' with quality {quality_score:.3} and norm {norm:.3}"
         );
         self.meta_cognition.reflect(reflection, quality_score);
 
@@ -616,7 +613,7 @@ mod tests {
 
         // Add some quality experiences
         for i in 0..150 {
-            let entity = format!("entity_{}", i);
+            let entity = format!("entity_{i}");
             let embedding = Array1::from_vec(vec![0.1; 32]);
             model.learning_history.push((entity, embedding, 0.9)); // High quality
         }

@@ -6,28 +6,15 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
-use tracing::{debug, error, info, warn};
+use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Quad, Term, Triple},
-    Graph, Store,
-};
+use oxirs_core::Store;
 
-use oxirs_shacl::{
-    constraints::*, Constraint, ConstraintComponentId, PropertyPath, Severity, Shape, ShapeId,
-    Target, ValidationConfig, ValidationReport, Validator,
-};
 
 use crate::{
-    advanced_validation_strategies::{
-        AdvancedValidationConfig, AdvancedValidationStrategyManager, ValidationContext,
-    },
-    learning::ShapeLearner,
-    quality::QualityAssessor,
-    validation_performance::ValidationPerformanceOptimizer,
     Result, ShaclAiError,
 };
 
@@ -575,7 +562,7 @@ impl IntegrationTestFramework {
         scenarios: Vec<TestScenario>,
     ) -> Result<Vec<TestResult>> {
         let mut test_runner = self.test_runner.lock().map_err(|e| {
-            ShaclAiError::Integration(format!("Failed to acquire test runner lock: {}", e))
+            ShaclAiError::Integration(format!("Failed to acquire test runner lock: {e}"))
         })?;
 
         // Queue all scenarios
@@ -980,6 +967,12 @@ impl TestRunner {
     }
 }
 
+impl Default for TestScenarioGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TestScenarioGenerator {
     pub fn new() -> Self {
         Self {
@@ -1001,12 +994,11 @@ impl TestScenarioGenerator {
             name: format!(
                 "{:?}_{}_{}",
                 test_type,
-                format!("{:?}", complexity).to_lowercase(),
+                format!("{complexity:?}").to_lowercase(),
                 data_size
             ),
             description: format!(
-                "Test scenario for {:?} with {:?} complexity and {} data points",
-                test_type, complexity, data_size
+                "Test scenario for {test_type:?} with {complexity:?} complexity and {data_size} data points"
             ),
             test_type: test_type.clone(),
             complexity_level: complexity.clone(),
@@ -1052,14 +1044,20 @@ impl TestScenarioGenerator {
             },
             timeout: Duration::from_secs(30),
             tags: HashSet::from([
-                format!("{:?}", test_type).to_lowercase(),
-                format!("{:?}", complexity).to_lowercase(),
+                format!("{test_type:?}").to_lowercase(),
+                format!("{complexity:?}").to_lowercase(),
             ]),
         })
     }
 }
 
 // Placeholder implementations for other supporting types
+impl Default for PerformanceProfiler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceProfiler {
     pub fn new() -> Self {
         Self {
@@ -1104,6 +1102,12 @@ impl MemoryMonitor {
     }
 }
 
+impl Default for DependencyAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -1122,6 +1126,12 @@ impl DependencyAnalyzer {
             compatibility_issues: 0,
             dependency_depth: 5,
         })
+    }
+}
+
+impl Default for TestResultCollector {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -1213,6 +1223,12 @@ pub struct MemoryBaseline;
 #[derive(Debug)]
 pub struct DependencyGraph;
 
+impl Default for DependencyGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyGraph {
     pub fn new() -> Self {
         Self
@@ -1224,6 +1240,12 @@ pub struct CircularDependency;
 
 #[derive(Debug)]
 pub struct CompatibilityMatrix;
+
+impl Default for CompatibilityMatrix {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CompatibilityMatrix {
     pub fn new() -> Self {

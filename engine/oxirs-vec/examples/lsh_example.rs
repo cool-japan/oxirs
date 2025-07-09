@@ -63,7 +63,7 @@ fn random_projection_example() -> Result<()> {
     println!("  Query vector: [0.9, 0.1, 0.2, 0.0, 0.2]");
     println!("  Top 2 results:");
     for (uri, distance) in results {
-        println!("    {} (distance: {:.4})", uri, distance);
+        println!("    {uri} (distance: {distance:.4})");
     }
 
     // Get index statistics
@@ -119,7 +119,7 @@ fn minhash_example() -> Result<()> {
     println!("  Results ordered by Jaccard similarity:");
     for (uri, distance) in results {
         let similarity = 1.0 - distance; // Convert distance to similarity
-        println!("    {} (Jaccard similarity: {:.4})", uri, similarity);
+        println!("    {uri} (Jaccard similarity: {similarity:.4})");
     }
 
     Ok(())
@@ -153,7 +153,7 @@ fn multiprobe_example() -> Result<()> {
     for i in 0..num_vectors {
         let angle = i as f32 * 2.0 * std::f32::consts::PI / num_vectors as f32;
         let vector = Vector::new(vec![angle.cos(), angle.sin()]);
-        let uri = format!("point_{}", i);
+        let uri = format!("point_{i}");
 
         index_standard.insert(uri.clone(), vector.clone())?;
         index_multiprobe.insert(uri, vector)?;
@@ -197,8 +197,7 @@ fn performance_comparison() -> Result<()> {
 
     // Generate and index random vectors
     println!(
-        "  Indexing {} {}-dimensional vectors...",
-        num_vectors, dimensions
+        "  Indexing {num_vectors} {dimensions}-dimensional vectors..."
     );
     let start = Instant::now();
 
@@ -210,17 +209,17 @@ fn performance_comparison() -> Result<()> {
             values.push(value);
         }
         let vector = Vector::new(values);
-        let uri = format!("vec_{}", i);
+        let uri = format!("vec_{i}");
 
         lsh_index.insert(uri.clone(), vector.clone())?;
         brute_force.insert(uri, vector)?;
     }
 
     let indexing_time = start.elapsed();
-    println!("  Indexing completed in {:?}", indexing_time);
+    println!("  Indexing completed in {indexing_time:?}");
 
     // Run queries
-    println!("  Running {} queries...", num_queries);
+    println!("  Running {num_queries} queries...");
     let mut lsh_times = Vec::new();
     let mut brute_times = Vec::new();
     let mut recall_scores = Vec::new();
@@ -261,9 +260,9 @@ fn performance_comparison() -> Result<()> {
     let speedup = avg_brute_time.as_secs_f64() / avg_lsh_time.as_secs_f64();
 
     println!("\n  Results:");
-    println!("    LSH average query time: {:?}", avg_lsh_time);
-    println!("    Brute force average query time: {:?}", avg_brute_time);
-    println!("    Speedup: {:.2}x", speedup);
+    println!("    LSH average query time: {avg_lsh_time:?}");
+    println!("    Brute force average query time: {avg_brute_time:?}");
+    println!("    Speedup: {speedup:.2}x");
     println!("    Average recall@10: {:.2}%", avg_recall * 100.0);
 
     let lsh_stats = lsh_index.stats();

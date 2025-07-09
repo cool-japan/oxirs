@@ -5,27 +5,22 @@
 //! superior pattern matching and cost estimation.
 
 use crate::{
-    ml::{GraphData, ModelError, ModelMetrics},
-    neural_patterns::{NeuralPattern, NeuralPatternRecognizer},
-    optimization::OptimizationEngine,
     quantum_consciousness_entanglement::{
         QuantumConsciousnessEntanglement, QuantumEntanglementConfig,
     },
-    quantum_neural_patterns::QuantumState,
-    quantum_neural_patterns::{QuantumNeuralPatternRecognizer, QuantumPattern},
+    quantum_neural_patterns::QuantumNeuralPatternRecognizer,
     Result, ShaclAiError,
 };
 
-use ndarray::{Array1, Array2, Array3, Axis};
+use ndarray::{Array1, Array2, Array3};
 use oxirs_core::{
-    model::{Term, Variable},
+    model::Variable,
     query::{
         algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
         pattern_optimizer::{
-            IndexStats, IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
+            IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
         },
-    },
-    OxirsError, Store,
+    }, Store,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -532,6 +527,12 @@ pub struct NeuralPredictor {
     layer_sizes: Vec<usize>,
 }
 
+impl Default for NeuralPredictor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NeuralPredictor {
     pub fn new() -> Self {
         let layer_sizes = vec![20, 50, 30, 1]; // Input features -> hidden -> output
@@ -718,7 +719,7 @@ impl QuantumEnhancedPatternOptimizer {
             .classical_optimizer
             .optimize_patterns(patterns)
             .map_err(|e| {
-                ShaclAiError::Optimization(format!("Classical optimization failed: {}", e))
+                ShaclAiError::Optimization(format!("Classical optimization failed: {e}"))
             })?;
 
         let classical_cost = classical_plan.total_cost;
@@ -833,7 +834,7 @@ impl QuantumEnhancedPatternOptimizer {
 
     /// Entanglement-based optimization
     async fn entanglement_optimization(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<()> {
-        if let Ok(mut entanglement) = self.entanglement_engine.lock() {
+        if let Ok(entanglement) = self.entanglement_engine.lock() {
             // Create entanglement pairs for correlated patterns
             for i in 0..patterns.len() {
                 for j in (i + 1)..patterns.len() {

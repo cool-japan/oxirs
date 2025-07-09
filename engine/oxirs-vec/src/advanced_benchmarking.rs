@@ -69,8 +69,11 @@ pub struct AdvancedBenchmarkSuite {
     datasets: Vec<EnhancedBenchmarkDataset>,
     algorithms: Vec<BenchmarkAlgorithm>,
     results: Vec<AdvancedBenchmarkResult>,
+    #[allow(dead_code)]
     statistical_analyzer: StatisticalAnalyzer,
+    #[allow(dead_code)]
     performance_profiler: PerformanceProfiler,
+    #[allow(dead_code)]
     hyperparameter_tuner: HyperparameterTuner,
 }
 
@@ -542,24 +545,34 @@ pub struct MemoryTrace {
 
 /// Statistical analyzer for benchmark results
 pub struct StatisticalAnalyzer {
+    #[allow(dead_code)]
     confidence_level: f64,
     min_sample_size: usize,
+    #[allow(dead_code)]
     outlier_threshold: f64,
 }
 
 /// Performance profiler for detailed analysis
 pub struct PerformanceProfiler {
+    #[allow(dead_code)]
     enable_memory_profiling: bool,
+    #[allow(dead_code)]
     enable_cache_profiling: bool,
+    #[allow(dead_code)]
     enable_cpu_profiling: bool,
+    #[allow(dead_code)]
     sample_interval: Duration,
 }
 
 /// Hyperparameter tuner for algorithm optimization
 pub struct HyperparameterTuner {
+    #[allow(dead_code)]
     optimization_strategy: OptimizationStrategy,
+    #[allow(dead_code)]
     search_space: HashMap<String, ParameterSpace>,
+    #[allow(dead_code)]
     objective_function: ObjectiveFunction,
+    #[allow(dead_code)]
     max_iterations: usize,
 }
 
@@ -925,8 +938,8 @@ impl AdvancedBenchmarkSuite {
         // Compute variance in each dimension
         for dim in 0..vectors[0].dimensions {
             let mut values = Vec::new();
-            for i in 0..sample_size {
-                let vector_values = vectors[i].as_f32();
+            for vector in vectors.iter().take(sample_size) {
+                let vector_values = vector.as_f32();
                 if dim < vector_values.len() {
                     values.push(vector_values[dim]);
                 }
@@ -1012,8 +1025,8 @@ impl AdvancedBenchmarkSuite {
         let centroid = self.compute_centroid(&vectors[..sample_size])?;
 
         // Compute distances to centroid
-        for i in 0..sample_size {
-            let distance = vectors[i].euclidean_distance(&centroid)?;
+        for vector in vectors.iter().take(sample_size) {
+            let distance = vector.euclidean_distance(&centroid)?;
             distances_to_centroid.push(distance);
         }
 
@@ -1340,6 +1353,7 @@ impl AdvancedBenchmarkSuite {
         Ok(Vector::new(centroid_values))
     }
 
+    #[allow(dead_code)]
     fn benchmark_algorithm_on_dataset(
         &self,
         algorithm: &mut BenchmarkAlgorithm,
@@ -1391,6 +1405,7 @@ impl AdvancedBenchmarkSuite {
         Ok(result)
     }
 
+    #[allow(dead_code)]
     fn measure_performance(
         &self,
         index: &dyn VectorIndex,
@@ -1456,6 +1471,7 @@ impl AdvancedBenchmarkSuite {
         })
     }
 
+    #[allow(dead_code)]
     fn analyze_latencies(&self, latencies: &[f64]) -> LatencyMetrics {
         if latencies.is_empty() {
             return LatencyMetrics {
@@ -1504,6 +1520,7 @@ impl AdvancedBenchmarkSuite {
         }
     }
 
+    #[allow(dead_code)]
     fn analyze_throughput(&self, measurements: &[(usize, f64)]) -> ThroughputMetrics {
         let qps = measurements.last().map(|(_, qps)| *qps).unwrap_or(0.0);
 
@@ -1519,6 +1536,7 @@ impl AdvancedBenchmarkSuite {
         }
     }
 
+    #[allow(dead_code)]
     fn measure_quality(
         &self,
         _index: &dyn VectorIndex,
@@ -1557,6 +1575,7 @@ impl AdvancedBenchmarkSuite {
         })
     }
 
+    #[allow(dead_code)]
     fn measure_scalability(
         &self,
         _index: &dyn VectorIndex,
@@ -1572,6 +1591,7 @@ impl AdvancedBenchmarkSuite {
         })
     }
 
+    #[allow(dead_code)]
     fn measure_memory_usage(&self, _index: &dyn VectorIndex) -> Result<MemoryMetrics> {
         // Placeholder memory measurement
         Ok(MemoryMetrics {

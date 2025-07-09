@@ -39,7 +39,7 @@ fn main() -> Result<()> {
         }
 
         let vector = Vector::new(values);
-        let uri = format!("http://example.org/vector/{}", i);
+        let uri = format!("http://example.org/vector/{i}");
 
         index.insert(uri, vector)?;
 
@@ -49,7 +49,7 @@ fn main() -> Result<()> {
     }
 
     let indexing_time = start.elapsed();
-    println!("  Indexed {} vectors in {:?}\n", num_vectors, indexing_time);
+    println!("  Indexed {num_vectors} vectors in {indexing_time:?}\n");
 
     // Get index statistics
     let stats = index.stats();
@@ -100,7 +100,7 @@ fn main() -> Result<()> {
     let loaded_results = loaded_index.search_knn(&query_vector, k)?;
     let search_time = search_start.elapsed();
 
-    println!("  Search on loaded index completed in {:?}", search_time);
+    println!("  Search on loaded index completed in {search_time:?}");
     println!("  Results match: {}\n", results == loaded_results);
 
     // Threshold search example
@@ -115,12 +115,12 @@ fn main() -> Result<()> {
     );
     if threshold_results.len() <= 20 {
         for (uri, distance) in &threshold_results {
-            println!("    {} (distance: {:.4})", uri, distance);
+            println!("    {uri} (distance: {distance:.4})");
         }
     } else {
         println!("    (showing first 5 results)");
         for (uri, distance) in threshold_results.iter().take(5) {
-            println!("    {} (distance: {:.4})", uri, distance);
+            println!("    {uri} (distance: {distance:.4})");
         }
     }
 
@@ -130,9 +130,9 @@ fn main() -> Result<()> {
     let mmap_memory = loaded_stats.memory_usage;
     let savings = (1.0 - (mmap_memory as f64 / in_memory_size as f64)) * 100.0;
 
-    println!("  In-memory storage would use: {} bytes", in_memory_size);
-    println!("  Memory-mapped index uses: {} bytes", mmap_memory);
-    println!("  Memory savings: {:.1}%", savings);
+    println!("  In-memory storage would use: {in_memory_size} bytes");
+    println!("  Memory-mapped index uses: {mmap_memory} bytes");
+    println!("  Memory savings: {savings:.1}%");
 
     // Clean up
     std::fs::remove_file(index_path).ok();

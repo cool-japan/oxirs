@@ -1884,9 +1884,9 @@ mod tests {
         // Create a graph suitable for parallel processing
         for i in 0..500 {
             let triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/subject{i}")).unwrap(),
                 StarTerm::iri("http://example.org/predicate").unwrap(),
-                StarTerm::iri(&format!("http://example.org/object{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/object{i}")).unwrap(),
             );
             graph.insert(triple).unwrap();
         }
@@ -1917,15 +1917,17 @@ mod tests {
             let triple = StarTriple::new(
                 StarTerm::iri(&format!("http://example.org/s{i}")).unwrap(),
                 StarTerm::iri("http://example.org/p").unwrap(),
-                StarTerm::literal(&format!("test{}", i)).unwrap(),
+                StarTerm::literal(&format!("test{i}")).unwrap(),
             );
             graph.insert(triple).unwrap();
         }
 
-        let mut options = SerializationOptions::default();
-        options.streaming = true;
-        options.batch_size = 25;
-        options.buffer_size = 1024;
+        let options = SerializationOptions {
+            streaming: true,
+            batch_size: 25,
+            buffer_size: 1024,
+            ..Default::default()
+        };
 
         let output = Box::leak(Box::new(Vec::new()));
         let output_ptr = output as *const Vec<u8>;
@@ -1951,9 +1953,9 @@ mod tests {
         // Create a complex graph with quoted triples
         for i in 0..50 {
             let inner = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/alice{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/alice{i}")).unwrap(),
                 StarTerm::iri("http://example.org/says").unwrap(),
-                StarTerm::literal(&format!("statement{}", i)).unwrap(),
+                StarTerm::literal(&format!("statement{i}")).unwrap(),
             );
             let outer = StarTriple::new(
                 StarTerm::quoted_triple(inner),
@@ -2006,8 +2008,10 @@ mod tests {
         assert!(memory_estimate > 1000);
         assert!(memory_estimate < 10_000_000);
 
-        let mut streaming_options = SerializationOptions::default();
-        streaming_options.streaming = true;
+        let streaming_options = SerializationOptions {
+            streaming: true,
+            ..Default::default()
+        };
         let streaming_estimate =
             serializer.estimate_memory_usage(&graph, StarFormat::NTriplesStar, &streaming_options);
 

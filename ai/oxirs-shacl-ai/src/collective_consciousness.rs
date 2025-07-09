@@ -12,26 +12,22 @@
 //! - Reality consensus validation
 //! - Interdimensional pattern recognition
 
-use async_trait::async_trait;
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::sync::{broadcast, mpsc, RwLock, Semaphore};
-use tokio::time::{interval, sleep, timeout};
-use tracing::{debug, error, info, trace, warn};
+use tokio::time::interval;
+use tracing::{debug, info, trace, warn};
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ShapeId, ValidationConfig};
 
 use crate::consciousness_validation::{
-    ConsciousnessLevel, ConsciousnessValidationResult, ConsciousnessValidator, Emotion,
+    ConsciousnessLevel, ConsciousnessValidationResult, ConsciousnessValidator,
     EmotionalContext,
 };
 use crate::{Result, ShaclAiError};
@@ -1294,7 +1290,7 @@ impl CollectiveConsciousnessNetwork {
 
         // Wait for all agents to finish processing
         let _permit = self.sync_barrier.acquire().await.map_err(|e| {
-            ShaclAiError::Configuration(format!("Failed to acquire shutdown barrier: {}", e))
+            ShaclAiError::Configuration(format!("Failed to acquire shutdown barrier: {e}"))
         })?;
 
         // Clear all agents and data structures
@@ -1462,6 +1458,12 @@ impl ReputationScore {
 #[derive(Debug)]
 pub struct RealityCoherenceValidator;
 
+impl Default for RealityCoherenceValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RealityCoherenceValidator {
     pub fn new() -> Self {
         Self
@@ -1470,6 +1472,12 @@ impl RealityCoherenceValidator {
 
 #[derive(Debug)]
 pub struct SynthesisEngine;
+
+impl Default for SynthesisEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SynthesisEngine {
     pub fn new() -> Self {

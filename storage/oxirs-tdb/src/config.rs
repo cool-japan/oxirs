@@ -15,7 +15,7 @@ extern crate num_cpus;
 extern crate toml;
 
 /// Main TDB configuration structure
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TdbConfig {
     /// Storage configuration
     pub storage: StorageConfig,
@@ -29,17 +29,6 @@ pub struct TdbConfig {
     pub advanced: AdvancedConfig,
 }
 
-impl Default for TdbConfig {
-    fn default() -> Self {
-        Self {
-            storage: StorageConfig::default(),
-            transactions: TransactionConfig::default(),
-            performance: PerformanceConfig::default(),
-            monitoring: MonitoringConfig::default(),
-            advanced: AdvancedConfig::default(),
-        }
-    }
-}
 
 /// Storage-related configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,7 +100,7 @@ impl Default for TransactionConfig {
 }
 
 /// Performance tuning configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerformanceConfig {
     /// Buffer pool configuration
     pub buffer_pool: BufferPoolConfig,
@@ -125,17 +114,6 @@ pub struct PerformanceConfig {
     pub cache_config: CacheConfig,
 }
 
-impl Default for PerformanceConfig {
-    fn default() -> Self {
-        Self {
-            buffer_pool: BufferPoolConfig::default(),
-            index_config: IndexConfig::default(),
-            query_optimization: QueryOptimizationConfig::default(),
-            thread_pool: ThreadPoolConfig::default(),
-            cache_config: CacheConfig::default(),
-        }
-    }
-}
 
 /// Monitoring and observability configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -3,16 +3,14 @@
 use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 use oxirs_core::{model::Triple, Store};
-use rand_distr::{Distribution, Normal};
+use rand_distr::Distribution;
 use tokio::sync::RwLock;
-use tracing;
 
 use super::core::{QuantumAdvantageMetrics, QuantumMetrics, QuantumPattern};
 use crate::neural_patterns::NeuralPattern;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Quantum Neural Pattern Recognizer with quantum-inspired algorithms
 #[derive(Debug)]

@@ -94,6 +94,12 @@ pub struct ResultBinding {
     pub variables: BTreeMap<String, String>,
 }
 
+impl Default for ResultBinding {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ResultBinding {
     pub fn new() -> Self {
         Self {
@@ -127,6 +133,7 @@ impl ResultBinding {
 /// Distributed query executor
 #[derive(Debug)]
 pub struct DistributedQueryExecutor {
+    #[allow(dead_code)]
     node_id: OxirsNodeId,
     cluster_nodes: Arc<RwLock<HashSet<OxirsNodeId>>>,
     query_cache: Arc<RwLock<HashMap<String, Vec<ResultBinding>>>>,
@@ -237,7 +244,7 @@ impl DistributedQueryExecutor {
 
         let mut variables = Vec::new();
         let mut triple_patterns = Vec::new();
-        let mut filters = Vec::new();
+        let filters = Vec::new();
 
         // Extract SELECT variables
         if let Some(select_part) = sparql.split("WHERE").next() {
@@ -255,7 +262,7 @@ impl DistributedQueryExecutor {
 
         // Extract triple patterns (very simplified)
         if let Some(where_part) = sparql.split("WHERE").nth(1) {
-            let clean_where = where_part.replace('{', "").replace('}', "");
+            let clean_where = where_part.replace(['{', '}'], "");
             for line in clean_where.lines() {
                 let line = line.trim();
                 if !line.is_empty() && line.contains(' ') {
@@ -324,7 +331,7 @@ impl DistributedQueryExecutor {
             );
 
             subqueries.push(SubqueryPlan {
-                subquery_id: format!("subquery_{}", i),
+                subquery_id: format!("subquery_{i}"),
                 target_node,
                 sparql_fragment,
                 variables: parsed.variables.clone(),
@@ -511,7 +518,7 @@ impl DistributedQueryExecutor {
                             .and_then(|v| v.as_str())
                             .unwrap_or("")
                             .to_string();
-                        result_binding.add_binding(format!("?{}", var_name), value);
+                        result_binding.add_binding(format!("?{var_name}"), value);
                     }
                 }
                 results.push(result_binding);
@@ -538,10 +545,10 @@ impl DistributedQueryExecutor {
             for var in &subquery.variables {
                 // Generate more realistic values based on variable names
                 let value = match var.as_str() {
-                    "?s" | "?subject" => format!("http://example.org/resource_{}", i),
+                    "?s" | "?subject" => format!("http://example.org/resource_{i}"),
                     "?p" | "?predicate" => format!("http://example.org/property_{}", i % 10),
-                    "?o" | "?object" => format!("\"Object value {}\"", i),
-                    "?name" => format!("\"Name {}\"", i),
+                    "?o" | "?object" => format!("\"Object value {i}\""),
+                    "?name" => format!("\"Name {i}\""),
                     "?type" => "http://example.org/Type".to_string(),
                     _ => format!("value_{}_{}", subquery.target_node, i),
                 };
@@ -648,7 +655,7 @@ impl DistributedQueryExecutor {
                 joined_results.extend_from_slice(left_results);
                 joined_results.extend_from_slice(right_results);
                 // Remove duplicates
-                joined_results.sort_by(|a, b| format!("{:?}", a).cmp(&format!("{:?}", b)));
+                joined_results.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
                 joined_results.dedup();
             }
         }
@@ -784,6 +791,7 @@ impl DistributedQueryExecutor {
 struct ParsedQuery {
     variables: Vec<String>,
     triple_patterns: Vec<TriplePattern>,
+    #[allow(dead_code)]
     filters: Vec<String>,
     limit: Option<u64>,
     offset: Option<u64>,
@@ -801,7 +809,9 @@ struct TriplePattern {
 #[derive(Debug, Clone)]
 struct DataDistribution {
     node_triple_counts: HashMap<OxirsNodeId, u64>,
+    #[allow(dead_code)]
     predicate_distribution: HashMap<String, Vec<OxirsNodeId>>,
+    #[allow(dead_code)]
     subject_distribution: HashMap<String, Vec<OxirsNodeId>>,
 }
 

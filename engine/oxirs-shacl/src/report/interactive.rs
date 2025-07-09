@@ -717,7 +717,7 @@ impl InteractiveReportViewer {
     }
 
     /// Generate charts section HTML
-    fn generate_charts_section(&self, summary: &ViewSummary) -> String {
+    fn generate_charts_section(&self, _summary: &ViewSummary) -> String {
         // This would typically include Chart.js or similar library
         r#"
         <div class="charts-section">

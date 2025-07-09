@@ -77,3 +77,9 @@ pub enum OffsetReset {
     Latest,
     None,
 }
+
+impl Default for OffsetReset {
+    fn default() -> Self {
+        Self::Latest
+    }
+}

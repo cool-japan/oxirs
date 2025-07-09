@@ -123,7 +123,13 @@ impl TurtleParser {
             TokenKind::PrefixKeyword => {
                 tokenizer.consume_token(); // consume @prefix
                 let prefix = self.parse_prefix_name(tokenizer)?;
-                self.expect_token(tokenizer, TokenKind::Colon)?;
+                
+                // Check if we need to consume a colon (only if prefix didn't already include it)
+                let next_token = tokenizer.peek_token()?;
+                if matches!(next_token.kind, TokenKind::Colon) {
+                    tokenizer.consume_token(); // consume colon
+                }
+                
                 let iri = self.parse_iri_ref(tokenizer, context)?;
                 self.expect_token(tokenizer, TokenKind::Dot)?;
                 Ok(Some(TurtleStatement::PrefixDecl(prefix, iri)))
@@ -332,6 +338,10 @@ impl TurtleParser {
 
         match &token.kind {
             TokenKind::PrefixName(name) => Ok(name.clone()),
+            TokenKind::PrefixedName(prefix, local) if local.is_empty() => {
+                // Handle case where "prefix:" is parsed as PrefixedName but we only want the prefix part
+                Ok(prefix.clone())
+            },
             _ => Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
                 message: format!("Expected prefix name, found {:?}", token.kind),
                 position: token.position,
@@ -572,6 +582,45 @@ impl TurtleTokenizer {
             TokenKind::DataTypeAnnotation => {
                 self.advance(); // ^
                 self.advance(); // ^
+            }
+            TokenKind::PrefixKeyword => {
+                // Advance by "@prefix" length (7 characters)
+                for _ in 0..7 {
+                    self.advance();
+                }
+            }
+            TokenKind::BaseKeyword => {
+                // Advance by "@base" length (5 characters)
+                for _ in 0..5 {
+                    self.advance();
+                }
+            }
+            TokenKind::PrefixedName(prefix, local) => {
+                // Advance by prefix length + colon + local part length
+                let total_length = prefix.len() + 1 + local.len(); // +1 for colon
+                for _ in 0..total_length {
+                    self.advance();
+                }
+            }
+            TokenKind::PrefixName(name) => {
+                // Advance by name length
+                for _ in 0..name.len() {
+                    self.advance();
+                }
+            }
+            TokenKind::IriRef(iri) => {
+                // Advance by IRI length + 2 for angle brackets
+                let total_length = iri.len() + 2; // +2 for < and >
+                for _ in 0..total_length {
+                    self.advance();
+                }
+            }
+            TokenKind::StringLiteral(string) => {
+                // Advance by string length + 2 for quotes
+                let total_length = string.len() + 2; // +2 for quotes
+                for _ in 0..total_length {
+                    self.advance();
+                }
             }
             TokenKind::Eof => {
                 // Don't advance past EOF

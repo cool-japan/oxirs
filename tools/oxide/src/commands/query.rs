@@ -48,7 +48,7 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     // Complete validation
     validator.finish()?;
 
-    ctx.info(&format!("Executing SPARQL query on dataset '{}'", dataset));
+    ctx.info(&format!("Executing SPARQL query on dataset '{dataset}'"));
 
     // Load query from file or use directly
     let sparql_query = if file {
@@ -84,7 +84,7 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     let store = if dataset_path.is_dir() {
         Store::open(&dataset_path)?
     } else {
-        return Err(error_helpers::dataset_not_found_error(&dataset).into());
+        return Err(error_helpers::dataset_not_found_error(&dataset));
     };
 
     // Execute query with progress tracking and logging
@@ -174,7 +174,7 @@ fn format_results(
             format_xml_results(results)?;
         }
         _ => {
-            return Err(format!("Output format '{}' not implemented", format).into());
+            return Err(format!("Output format '{format}' not implemented").into());
         }
     }
 
@@ -301,7 +301,7 @@ fn format_results_enhanced(
         }
         _ => {
             // This should not happen due to validation
-            return Err(format!("Unsupported output format: {}", output_format).into());
+            return Err(format!("Unsupported output format: {output_format}").into());
         }
     }
 

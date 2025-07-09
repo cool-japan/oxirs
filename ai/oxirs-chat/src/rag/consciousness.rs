@@ -13,8 +13,7 @@ use super::*;
 use anyhow::{Context, Result};
 use fastrand;
 use std::collections::{HashMap, VecDeque};
-use std::f64::consts::PI;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Advanced consciousness model with neural-inspired architecture
 #[derive(Debug, Clone)]
@@ -479,7 +478,7 @@ impl ConsciousnessModel {
         if attention_entropy < 0.3 {
             insights.push(AdvancedConsciousInsight {
                 insight_type: AdvancedInsightType::AttentionFocus,
-                content: format!("Highly focused attention: entropy={:.3}", attention_entropy),
+                content: format!("Highly focused attention: entropy={attention_entropy:.3}"),
                 confidence: 0.8,
                 implications: vec![
                     "Concentrated cognitive resources".to_string(),
@@ -496,8 +495,7 @@ impl ConsciousnessModel {
             insights.push(AdvancedConsciousInsight {
                 insight_type: AdvancedInsightType::StreamCoherence,
                 content: format!(
-                    "High consciousness stream coherence: {:.3}",
-                    stream_coherence
+                    "High consciousness stream coherence: {stream_coherence:.3}"
                 ),
                 confidence: stream_coherence,
                 implications: vec![
@@ -565,7 +563,7 @@ impl ConsciousnessModel {
         if let Some(pattern) = self.detect_query_pattern(query) {
             insights.push(ConsciousInsight {
                 insight_type: InsightType::PatternRecognition,
-                content: format!("Detected pattern: {}", pattern),
+                content: format!("Detected pattern: {pattern}"),
                 confidence: 0.8,
                 implications: vec!["This suggests a systematic approach to analysis".to_string()],
             });
@@ -577,8 +575,7 @@ impl ConsciousnessModel {
             insights.push(ConsciousInsight {
                 insight_type: InsightType::EmotionalResonance,
                 content: format!(
-                    "High emotional resonance detected: {:.2}",
-                    emotional_resonance
+                    "High emotional resonance detected: {emotional_resonance:.2}"
                 ),
                 confidence: emotional_resonance,
                 implications: vec!["Consider emotional context in response".to_string()],
@@ -590,7 +587,7 @@ impl ConsciousnessModel {
         if memory_integration > 0.7 {
             insights.push(ConsciousInsight {
                 insight_type: InsightType::MemoryIntegration,
-                content: format!("Strong memory integration: {:.2}", memory_integration),
+                content: format!("Strong memory integration: {memory_integration:.2}"),
                 confidence: memory_integration,
                 implications: vec!["Can leverage previous interaction patterns".to_string()],
             });
@@ -689,6 +686,12 @@ pub struct MetacognitiveLayer {
     pub self_awareness: f64,
     pub strategy_monitoring: f64,
     pub comprehension_monitoring: f64,
+}
+
+impl Default for MetacognitiveLayer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetacognitiveLayer {
@@ -1251,7 +1254,7 @@ impl AdvancedEmotionalState {
             current_dominance: self.dominance,
             emotional_intensity: self.calculate_emotional_intensity()?,
             emotional_coherence: self.calculate_emotional_coherence()?,
-            regulation_applied: self.current_regulation.clone(),
+            regulation_applied: self.current_regulation,
         })
     }
 
@@ -1631,6 +1634,12 @@ pub struct ConsciousnessStream {
     temporal_binding: TemporalBinding,
 }
 
+impl Default for ConsciousnessStream {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConsciousnessStream {
     pub fn new() -> Self {
         Self {
@@ -1733,6 +1742,12 @@ pub struct ConsciousnessMetrics {
     processing_times: VecDeque<Duration>,
     accuracy_scores: VecDeque<f64>,
     health_scores: VecDeque<f64>,
+}
+
+impl Default for ConsciousnessMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConsciousnessMetrics {
@@ -2105,6 +2120,12 @@ pub struct ConsolidationMetrics {
     pub insight_generation_rate: f64,
 }
 
+impl Default for ConsolidationMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConsolidationMetrics {
     pub fn new() -> Self {
         Self {
@@ -2171,6 +2192,12 @@ pub struct DreamScenario {
     emotional_tone: EmotionalTone,
     insight_potential: f64,
     symbolic_elements: Vec<String>,
+}
+
+impl Default for DreamStateProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DreamStateProcessor {
@@ -2411,6 +2438,12 @@ pub struct TemporalPatternRecognition {
     confidence: f64,
 }
 
+impl Default for TemporalPatternRecognition {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemporalPatternRecognition {
     pub fn new() -> Self {
         Self {
@@ -2454,6 +2487,12 @@ pub struct FutureProjectionEngine {
     horizon: Duration,
 }
 
+impl Default for FutureProjectionEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl FutureProjectionEngine {
     pub fn new() -> Self {
         Self {
@@ -2486,8 +2525,7 @@ impl FutureProjectionEngine {
         // Add general implications based on existing predictions
         if implications.is_empty() {
             implications.push(format!(
-                "Future implications for '{}' will depend on emerging patterns",
-                query
+                "Future implications for '{query}' will depend on emerging patterns"
             ));
         }
 
@@ -2501,6 +2539,12 @@ pub struct TemporalMetrics {
     pub pattern_detection_rate: f64,
     pub prediction_accuracy: f64,
     pub temporal_coherence: f64,
+}
+
+impl Default for TemporalMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TemporalMetrics {
@@ -2557,6 +2601,12 @@ pub struct TemporalMemoryBank {
     cyclic_patterns: HashMap<Duration, Vec<CyclicEvent>>,
 }
 
+impl Default for TemporalMemoryBank {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TemporalMemoryBank {
     pub fn new() -> Self {
         Self {
@@ -2585,6 +2635,12 @@ pub struct TemporalEvent {
     significance: f64,
     context_tags: Vec<String>,
     emotional_valence: f64,
+}
+
+impl Default for TemporalConsciousness {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TemporalConsciousness {
@@ -2756,6 +2812,12 @@ pub struct StateMetrics {
     average_state_duration: Duration,
     most_frequent_state: ConsciousnessState,
     state_effectiveness: HashMap<ConsciousnessState, f64>,
+}
+
+impl Default for StateMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl StateMetrics {

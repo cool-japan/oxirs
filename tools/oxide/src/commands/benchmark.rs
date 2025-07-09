@@ -23,15 +23,13 @@ pub async fn run(
     output: Option<PathBuf>,
 ) -> CommandResult {
     println!(
-        "Running '{}' benchmark suite on dataset '{}' ({} iterations)",
-        suite, dataset, iterations
+        "Running '{suite}' benchmark suite on dataset '{dataset}' ({iterations} iterations)"
     );
 
     // Validate benchmark suite
     if !is_supported_benchmark_suite(&suite) {
         return Err(format!(
-            "Unsupported benchmark suite '{}'. Supported suites: sp2bench, watdiv, ldbc, custom",
-            suite
+            "Unsupported benchmark suite '{suite}'. Supported suites: sp2bench, watdiv, ldbc, custom"
         )
         .into());
     }
@@ -47,15 +45,14 @@ pub async fn run(
         Store::open(&dataset_path)?
     } else {
         return Err(format!(
-            "Dataset '{}' not found. Use 'oxide init' to create a dataset.",
-            dataset
+            "Dataset '{dataset}' not found. Use 'oxide init' to create a dataset."
         )
         .into());
     };
 
     println!("Dataset loaded successfully");
-    println!("Benchmark suite: {}", suite);
-    println!("Iterations: {}", iterations);
+    println!("Benchmark suite: {suite}");
+    println!("Iterations: {iterations}");
     println!();
 
     // Run benchmark
@@ -124,7 +121,7 @@ fn run_benchmark_suite(
     suite: &str,
     iterations: usize,
 ) -> Result<BenchmarkResults, Box<dyn std::error::Error>> {
-    println!("Executing benchmark suite: {}", suite);
+    println!("Executing benchmark suite: {suite}");
 
     let queries = get_benchmark_queries(suite)?;
     let mut query_results = Vec::new();
@@ -140,7 +137,7 @@ fn run_benchmark_suite(
 
         for iteration in 1..=iterations {
             if iteration % 10 == 0 || iteration == 1 {
-                print!("  Iteration {}/{}\r", iteration, iterations);
+                print!("  Iteration {iteration}/{iterations}\r");
             }
 
             let start = Instant::now();
@@ -159,7 +156,7 @@ fn run_benchmark_suite(
             }
         }
 
-        println!("  Completed {} iterations", iterations);
+        println!("  Completed {iterations} iterations");
 
         let avg_time = Duration::from_nanos(
             (execution_times.iter().map(|d| d.as_nanos()).sum::<u128>() / iterations as u128)
@@ -219,7 +216,7 @@ fn get_benchmark_queries(suite: &str) -> Result<Vec<(String, String)>, Box<dyn s
         "custom" => Ok(vec![
             ("simple".to_string(), "SELECT * WHERE { ?s ?p ?o } LIMIT 1".to_string()),
         ]),
-        _ => Err(format!("Unknown benchmark suite: {}", suite).into()),
+        _ => Err(format!("Unknown benchmark suite: {suite}").into()),
     }
 }
 

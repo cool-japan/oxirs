@@ -4,22 +4,21 @@
 //! analysis, ML-driven recommendations, and sophisticated optimization strategies.
 
 use anyhow::Result;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
 use crate::{
     planner::planning::{FilterExpression, TriplePattern},
     query_decomposition::advanced_pattern_analysis::{
         AdvancedAnalysisConfig, AdvancedPatternAnalyzer, OptimizationOpportunity,
-        PatternAnalysisResult, ServiceRecommendation,
+        PatternAnalysisResult,
     },
-    service_optimizer::types::QueryFeatures,
     service_optimizer::{
         types::{
-            CrossServiceJoin, ExecutionStrategy, JoinType, MLSourcePrediction, OptimizedQuery,
-            OptimizedServiceClause, PatternFeatures, ServiceExecutionStrategy,
+            CrossServiceJoin, ExecutionStrategy, JoinType, OptimizedQuery,
+            OptimizedServiceClause, ServiceExecutionStrategy,
             ServicePerformanceUpdate,
         },
         ServiceOptimizer, ServiceOptimizerConfig,
@@ -195,7 +194,7 @@ impl EnhancedServiceOptimizer {
 
         // Generate optimized service clauses based on ML recommendations
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
-            let pattern_id = format!("pattern_{}", pattern_idx);
+            let pattern_id = format!("pattern_{pattern_idx}");
 
             if let Some(ml_rec) = ml_recommendations
                 .iter()
@@ -250,15 +249,15 @@ impl EnhancedServiceOptimizer {
         // Create service execution steps
         for (idx, service_clause) in optimized_query.services.iter().enumerate() {
             let step = ExecutionStep {
-                step_id: format!("service_execution_{}", idx),
+                step_id: format!("service_execution_{idx}"),
                 step_type: ExecutionStepType::ServiceQuery,
                 service_id: service_clause.service_id.clone(),
-                estimated_duration: self.estimate_step_duration(&service_clause),
+                estimated_duration: self.estimate_step_duration(service_clause),
                 dependencies: Vec::new(),
                 parallelizable: self
-                    .is_step_parallelizable(&service_clause, &optimized_query.cross_service_joins),
-                resource_requirements: self.estimate_resource_requirements(&service_clause),
-                optimization_hints: self.generate_optimization_hints(&service_clause, analysis),
+                    .is_step_parallelizable(service_clause, &optimized_query.cross_service_joins),
+                resource_requirements: self.estimate_resource_requirements(service_clause),
+                optimization_hints: self.generate_optimization_hints(service_clause, analysis),
             };
             steps.push(step);
         }
@@ -266,7 +265,7 @@ impl EnhancedServiceOptimizer {
         // Create join execution steps
         for (idx, join) in optimized_query.cross_service_joins.iter().enumerate() {
             let step = ExecutionStep {
-                step_id: format!("join_execution_{}", idx),
+                step_id: format!("join_execution_{idx}"),
                 step_type: ExecutionStepType::Join,
                 service_id: format!("{}+{}", join.left_service, join.right_service),
                 estimated_duration: self.estimate_join_duration(join),
@@ -295,7 +294,7 @@ impl EnhancedServiceOptimizer {
             resource_requirements,
             optimization_strategy: optimized_query.execution_strategy.clone(),
             risk_assessment,
-            fallback_strategies: self.generate_fallback_strategies(&optimized_query),
+            fallback_strategies: self.generate_fallback_strategies(optimized_query),
         })
     }
 
@@ -311,7 +310,7 @@ impl EnhancedServiceOptimizer {
         for step in &plan.steps {
             if let ExecutionStepType::ServiceQuery = step.step_type {
                 if let Some(service) = services.iter().find(|s| s.id == step.service_id) {
-                    let prediction = self.predict_service_performance(service, &step).await?;
+                    let prediction = self.predict_service_performance(service, step).await?;
                     service_predictions.insert(step.service_id.clone(), prediction);
                 }
             }

@@ -117,8 +117,8 @@ fn test_concurrent_readers_writers() {
 
     println!("Concurrent test results:");
     println!("  Final graph size: {}", graph.len());
-    println!("  Total reads: {}", total_reads);
-    println!("  Total items found: {}", total_found);
+    println!("  Total reads: {total_reads}");
+    println!("  Total items found: {total_found}");
     println!("  Graph stats: {:?}", graph.stats());
 
     // The graph should have some triples
@@ -199,8 +199,8 @@ fn test_stress_with_mixed_types() {
 
     println!("Mixed types test:");
     println!("  Total triples: {}", graph.len());
-    println!("  Literal objects: {}", literal_matches);
-    println!("  Blank subjects: {}", blank_matches);
+    println!("  Literal objects: {literal_matches}");
+    println!("  Blank subjects: {blank_matches}");
 
     assert!(literal_matches > 0);
     assert!(blank_matches > 0);
@@ -249,7 +249,7 @@ fn test_memory_safety_under_pressure() {
     let total_ops: usize = handles.into_iter().map(|h| h.join().unwrap()).sum();
 
     println!("Memory pressure test:");
-    println!("  Total operations: {}", total_ops);
+    println!("  Total operations: {total_ops}");
     println!("  Final size: {}", graph.len());
     println!("  Stats: {:?}", graph.stats());
 

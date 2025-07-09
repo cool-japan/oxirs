@@ -84,20 +84,17 @@ impl RdfStore {
     /// Get count of triples in the store
     pub fn triple_count(&self) -> Result<usize> {
         let query = "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }";
-        match self.query(query)? {
-            QueryResults::Solutions(solutions) => {
-                if let Some(solution) = solutions.first() {
-                    let count_var = Variable::new("count")
-                        .map_err(|e| anyhow::anyhow!("Failed to create count variable: {}", e))?;
-                    if let Some(Term::Literal(lit)) = solution.get(&count_var) {
-                        let count = lit.value().parse::<usize>().map_err(|e| {
-                            anyhow::anyhow!("Failed to parse count value '{}': {}", lit.value(), e)
-                        })?;
-                        return Ok(count);
-                    }
+        if let QueryResults::Solutions(solutions) = self.query(query)? {
+            if let Some(solution) = solutions.first() {
+                let count_var = Variable::new("count")
+                    .map_err(|e| anyhow::anyhow!("Failed to create count variable: {}", e))?;
+                if let Some(Term::Literal(lit)) = solution.get(&count_var) {
+                    let count = lit.value().parse::<usize>().map_err(|e| {
+                        anyhow::anyhow!("Failed to parse count value '{}': {}", lit.value(), e)
+                    })?;
+                    return Ok(count);
                 }
             }
-            _ => {}
         }
         Ok(0)
     }
@@ -105,25 +102,22 @@ impl RdfStore {
     /// Get subjects with optional limit
     pub fn get_subjects(&self, limit: Option<usize>) -> Result<Vec<String>> {
         let limit_clause = match limit {
-            Some(l) => format!(" LIMIT {}", l),
+            Some(l) => format!(" LIMIT {l}"),
             None => String::new(),
         };
 
-        let query = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o }}{}", limit_clause);
+        let query = format!("SELECT DISTINCT ?s WHERE {{ ?s ?p ?o }}{limit_clause}");
         let mut subjects = Vec::new();
 
         let subject_var = Variable::new("s")
             .map_err(|e| anyhow::anyhow!("Failed to create subject variable: {}", e))?;
 
-        match self.query(&query)? {
-            QueryResults::Solutions(solutions) => {
-                for solution in &solutions {
-                    if let Some(subject) = solution.get(&subject_var) {
-                        subjects.push(subject.to_string());
-                    }
+        if let QueryResults::Solutions(solutions) = self.query(&query)? {
+            for solution in &solutions {
+                if let Some(subject) = solution.get(&subject_var) {
+                    subjects.push(subject.to_string());
                 }
             }
-            _ => {}
         }
 
         Ok(subjects)
@@ -132,25 +126,22 @@ impl RdfStore {
     /// Get predicates with optional limit
     pub fn get_predicates(&self, limit: Option<usize>) -> Result<Vec<String>> {
         let limit_clause = match limit {
-            Some(l) => format!(" LIMIT {}", l),
+            Some(l) => format!(" LIMIT {l}"),
             None => String::new(),
         };
 
-        let query = format!("SELECT DISTINCT ?p WHERE {{ ?s ?p ?o }}{}", limit_clause);
+        let query = format!("SELECT DISTINCT ?p WHERE {{ ?s ?p ?o }}{limit_clause}");
         let mut predicates = Vec::new();
 
         let predicate_var = Variable::new("p")
             .map_err(|e| anyhow::anyhow!("Failed to create predicate variable: {}", e))?;
 
-        match self.query(&query)? {
-            QueryResults::Solutions(solutions) => {
-                for solution in &solutions {
-                    if let Some(predicate) = solution.get(&predicate_var) {
-                        predicates.push(predicate.to_string());
-                    }
+        if let QueryResults::Solutions(solutions) = self.query(&query)? {
+            for solution in &solutions {
+                if let Some(predicate) = solution.get(&predicate_var) {
+                    predicates.push(predicate.to_string());
                 }
             }
-            _ => {}
         }
 
         Ok(predicates)
@@ -159,32 +150,29 @@ impl RdfStore {
     /// Get objects with optional limit
     pub fn get_objects(&self, limit: Option<usize>) -> Result<Vec<(String, String)>> {
         let limit_clause = match limit {
-            Some(l) => format!(" LIMIT {}", l),
+            Some(l) => format!(" LIMIT {l}"),
             None => String::new(),
         };
 
-        let query = format!("SELECT DISTINCT ?o WHERE {{ ?s ?p ?o }}{}", limit_clause);
+        let query = format!("SELECT DISTINCT ?o WHERE {{ ?s ?p ?o }}{limit_clause}");
         let mut objects = Vec::new();
 
         let object_var = Variable::new("o")
             .map_err(|e| anyhow::anyhow!("Failed to create object variable: {}", e))?;
 
-        match self.query(&query)? {
-            QueryResults::Solutions(solutions) => {
-                for solution in &solutions {
-                    if let Some(object) = solution.get(&object_var) {
-                        let object_type = match object {
-                            Term::NamedNode(_) => "IRI".to_string(),
-                            Term::BlankNode(_) => "BlankNode".to_string(),
-                            Term::Literal(_) => "Literal".to_string(),
-                            Term::Variable(_) => "Variable".to_string(),
-                            Term::QuotedTriple(_) => "QuotedTriple".to_string(),
-                        };
-                        objects.push((object.to_string(), object_type));
-                    }
+        if let QueryResults::Solutions(solutions) = self.query(&query)? {
+            for solution in &solutions {
+                if let Some(object) = solution.get(&object_var) {
+                    let object_type = match object {
+                        Term::NamedNode(_) => "IRI".to_string(),
+                        Term::BlankNode(_) => "BlankNode".to_string(),
+                        Term::Literal(_) => "Literal".to_string(),
+                        Term::Variable(_) => "Variable".to_string(),
+                        Term::QuotedTriple(_) => "QuotedTriple".to_string(),
+                    };
+                    objects.push((object.to_string(), object_type));
                 }
             }
-            _ => {}
         }
 
         Ok(objects)
@@ -219,6 +207,16 @@ impl RdfStore {
             .lock()
             .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
         store.insert_quad(quad)?;
+        Ok(())
+    }
+
+    /// Insert a quad into the store
+    pub fn insert(&self, quad: &oxirs_core::model::Quad) -> Result<()> {
+        let store = self
+            .store
+            .lock()
+            .map_err(|e| anyhow::anyhow!("Mutex lock error: {}", e))?;
+        store.insert_quad(quad.clone())?;
         Ok(())
     }
 

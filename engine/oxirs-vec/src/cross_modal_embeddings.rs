@@ -394,8 +394,8 @@ impl FusionLayer {
                 return Err(anyhow!("Dimension mismatch in embeddings"));
             }
 
-            for i in 0..dim {
-                fused[i] += embedding_f32[i] * weight;
+            for (i, &value) in embedding_f32.iter().enumerate() {
+                fused[i] += value * weight;
             }
             total_weight += weight;
         }
@@ -514,8 +514,8 @@ impl FusionLayer {
 
         for embedding in embeddings {
             let embedding_f32 = embedding.as_f32();
-            for i in 0..dim {
-                fused[i] += embedding_f32[i];
+            for (i, &value) in embedding_f32.iter().enumerate() {
+                fused[i] += value;
             }
         }
 
@@ -684,9 +684,7 @@ impl CrossModalEncoder {
         let mut projected = vec![0.0f32; self.config.joint_embedding_dim];
         let copy_len = embedding_f32.len().min(self.config.joint_embedding_dim);
 
-        for i in 0..copy_len {
-            projected[i] = embedding_f32[i];
-        }
+        projected[..copy_len].copy_from_slice(&embedding_f32[..copy_len]);
 
         // If we had to truncate, normalize to maintain magnitude
         if embedding_f32.len() > self.config.joint_embedding_dim {

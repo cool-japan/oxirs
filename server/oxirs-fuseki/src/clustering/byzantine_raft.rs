@@ -13,26 +13,24 @@
 //! - Distributed key management for node authentication
 
 use crate::clustering::raft::{
-    AppendEntriesRequest, AppendEntriesResponse, LogEntry, RequestVoteRequest, RequestVoteResponse,
+    AppendEntriesRequest, RequestVoteRequest,
     RpcMessage,
 };
 use crate::error::{FusekiError, FusekiResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use ring::{
-    digest::{Context, Digest, SHA256},
-    hmac::{self, Key, Tag},
+    digest::{Context, SHA256},
+    hmac::{self, Key},
     rand::{self, SecureRandom},
     signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519},
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::sync::{Mutex, RwLock};
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 
 /// Maximum number of Byzantine nodes the system can tolerate
 const MAX_BYZANTINE_NODES: usize = 10;
@@ -150,17 +148,17 @@ impl BftNodeState {
         // Generate Ed25519 key pair for signing
         let rng = rand::SystemRandom::new();
         let key_bytes = Ed25519KeyPair::generate_pkcs8(&rng)
-            .map_err(|e| FusekiError::internal(format!("Failed to generate key pair: {:?}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to generate key pair: {e:?}")))?;
 
         let key_pair = Ed25519KeyPair::from_pkcs8(key_bytes.as_ref())
-            .map_err(|e| FusekiError::internal(format!("Failed to parse key pair: {:?}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to parse key pair: {e:?}")))?;
 
         let public_key = key_pair.public_key().as_ref().to_vec();
 
         // Generate HMAC key
         let mut hmac_key_bytes = [0u8; 32];
         rng.fill(&mut hmac_key_bytes)
-            .map_err(|e| FusekiError::internal(format!("Failed to generate HMAC key: {:?}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to generate HMAC key: {e:?}")))?;
         let hmac_key = Key::new(hmac::HMAC_SHA256, &hmac_key_bytes);
 
         let identity = NodeIdentity {
@@ -190,11 +188,11 @@ impl BftNodeState {
         let rng = rand::SystemRandom::new();
         let mut nonce = [0u8; 16];
         rng.fill(&mut nonce)
-            .map_err(|e| FusekiError::internal(format!("Failed to generate nonce: {:?}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to generate nonce: {e:?}")))?;
 
         // Serialize message for signing
         let message_bytes = bincode::serialize(message)
-            .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
 
         // Create message hash including timestamp and nonce
         let mut context = Context::new(&SHA256);
@@ -235,7 +233,7 @@ impl BftNodeState {
             self.record_byzantine_behavior(
                 &bft_message.sender_key_id,
                 ByzantineBehavior::ReplayAttack,
-                format!("Duplicate message: {}", message_id).into_bytes(),
+                format!("Duplicate message: {message_id}").into_bytes(),
             );
             return Ok(false);
         }
@@ -250,7 +248,7 @@ impl BftNodeState {
 
         // Recreate message hash
         let message_bytes = bincode::serialize(&bft_message.inner)
-            .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to serialize message: {e}")))?;
 
         let mut context = Context::new(&SHA256);
         context.update(&message_bytes);
@@ -301,7 +299,7 @@ impl BftNodeState {
             let term_votes = self
                 .vote_tracking
                 .entry(vote_req.term)
-                .or_insert_with(HashMap::new);
+                .or_default();
 
             // Use this node's ID as key to track its votes
             let node_id = &self.identity.node_id;
@@ -345,7 +343,7 @@ impl BftNodeState {
             let entries = self
                 .append_entries_tracking
                 .entry(append_req.leader_id.clone())
-                .or_insert_with(VecDeque::new);
+                .or_default();
 
             // Keep only recent entries
             while entries.len() > 100 {
@@ -424,7 +422,7 @@ impl BftNodeState {
     fn compute_message_id(&self, bft_message: &BftMessage) -> FusekiResult<String> {
         let mut context = Context::new(&SHA256);
         context.update(&bft_message.signature);
-        context.update(&bft_message.sender_key_id.as_bytes());
+        context.update(bft_message.sender_key_id.as_bytes());
         context.update(&bft_message.timestamp.timestamp().to_le_bytes());
         context.update(&bft_message.nonce);
 
@@ -477,7 +475,7 @@ impl BftNodeState {
             context.update(&term.to_le_bytes());
             context.update(candidate.as_bytes());
             context.update(&nonce.to_le_bytes());
-            context.update(&self.identity.node_id.as_bytes());
+            context.update(self.identity.node_id.as_bytes());
 
             let hash = context.finish();
             let hash_bytes = hash.as_ref();
@@ -512,7 +510,7 @@ impl BftNodeState {
         context.update(&term.to_le_bytes());
         context.update(candidate.as_bytes());
         context.update(&pow.nonce.to_le_bytes());
-        context.update(&self.identity.node_id.as_bytes());
+        context.update(self.identity.node_id.as_bytes());
 
         let hash = context.finish();
         let hash_bytes = hash.as_ref();

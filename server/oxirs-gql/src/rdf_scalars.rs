@@ -93,9 +93,9 @@ impl fmt::Display for Literal {
         write!(f, "\"{}\"", self.value)?;
 
         if let Some(ref lang) = self.language {
-            write!(f, "@{}", lang)?;
+            write!(f, "@{lang}")?;
         } else if let Some(ref datatype) = self.datatype {
-            write!(f, "^^<{}>", datatype)?;
+            write!(f, "^^<{datatype}>")?;
         }
 
         Ok(())
@@ -152,11 +152,11 @@ pub struct GeoLocation {
 
 impl GeoLocation {
     pub fn new(latitude: f64, longitude: f64) -> Result<Self> {
-        if latitude < -90.0 || latitude > 90.0 {
+        if !(-90.0..=90.0).contains(&latitude) {
             return Err(anyhow!("Latitude must be between -90 and 90 degrees"));
         }
 
-        if longitude < -180.0 || longitude > 180.0 {
+        if !(-180.0..=180.0).contains(&longitude) {
             return Err(anyhow!("Longitude must be between -180 and 180 degrees"));
         }
 
@@ -303,8 +303,8 @@ impl RdfScalars {
                     }
                     Ok(Value::StringValue(s.clone()))
                 }
-                Value::IntValue(i) => Ok(Value::StringValue(format!("PT{}S", i))),
-                Value::FloatValue(f) => Ok(Value::StringValue(format!("PT{}S", f))),
+                Value::IntValue(i) => Ok(Value::StringValue(format!("PT{i}S"))),
+                Value::FloatValue(f) => Ok(Value::StringValue(format!("PT{f}S"))),
                 _ => Err(anyhow!("Cannot serialize {:?} as Duration", v)),
             })
             .with_value_parser(|v| match v {

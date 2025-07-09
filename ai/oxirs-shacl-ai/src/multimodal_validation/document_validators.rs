@@ -5,11 +5,17 @@ use std::collections::HashMap;
 
 use super::traits::*;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// PDF document validator
 #[derive(Debug)]
 pub struct PDFValidator;
+
+impl Default for PDFValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl PDFValidator {
     pub fn new() -> Self {
@@ -55,6 +61,12 @@ impl DocumentValidator for PDFValidator {
 #[derive(Debug)]
 pub struct OfficeDocumentValidator;
 
+impl Default for OfficeDocumentValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OfficeDocumentValidator {
     pub fn new() -> Self {
         Self
@@ -68,7 +80,7 @@ impl DocumentValidator for OfficeDocumentValidator {
             return Ok(None);
         }
 
-        let is_zip = content.data.len() >= 4 && &content.data[0..4] == [0x50, 0x4B, 0x03, 0x04];
+        let is_zip = content.data.len() >= 4 && content.data[0..4] == [0x50, 0x4B, 0x03, 0x04];
 
         let mut details = HashMap::new();
         details.insert("file_size".to_string(), content.data.len().to_string());
@@ -98,6 +110,12 @@ impl DocumentValidator for OfficeDocumentValidator {
 /// Markdown document validator
 #[derive(Debug)]
 pub struct MarkdownValidator;
+
+impl Default for MarkdownValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl MarkdownValidator {
     pub fn new() -> Self {

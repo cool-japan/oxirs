@@ -313,6 +313,7 @@ impl Optimizer {
     }
 
     /// Extract variables from an algebra expression
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_variables(&self, algebra: &Algebra) -> HashSet<Variable> {
         let mut vars = HashSet::new();
         match algebra {
@@ -355,6 +356,7 @@ impl Optimizer {
     }
 
     /// Extract variables from an expression
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_expression_variables(&self, expr: &Expression) -> HashSet<Variable> {
         let mut vars = HashSet::new();
         match expr {
@@ -379,6 +381,7 @@ impl Optimizer {
     }
 
     /// Estimate execution cost for algebra
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_cost(&self, algebra: &Algebra) -> f64 {
         match algebra {
             Algebra::Bgp(patterns) => {
@@ -399,6 +402,7 @@ impl Optimizer {
     }
 
     /// Fold constants in expressions
+    #[allow(clippy::only_used_in_recursion)]
     fn fold_expression_constants(&self, expr: Expression) -> Result<Expression> {
         match expr {
             Expression::Binary { op, left, right } => {
@@ -441,13 +445,13 @@ impl Optimizer {
     /// Check if two algebra expressions are equal (simplified check)
     fn algebra_equal(&self, a: &Algebra, b: &Algebra) -> bool {
         // Simplified equality check - should be improved
-        format!("{:?}", a) == format!("{:?}", b)
+        format!("{a:?}") == format!("{b:?}")
     }
 
     /// Hash an algebra expression for caching
     pub fn hash_algebra(&self, algebra: &Algebra) -> u64 {
         let mut hasher = DefaultHasher::new();
-        format!("{:?}", algebra).hash(&mut hasher);
+        format!("{algebra:?}").hash(&mut hasher);
         hasher.finish()
     }
 }

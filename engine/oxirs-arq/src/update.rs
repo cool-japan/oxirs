@@ -107,7 +107,7 @@ pub enum GraphTarget {
 }
 
 /// Result of an update operation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct UpdateResult {
     /// Number of triples/quads inserted
     pub inserted: usize,
@@ -119,20 +119,10 @@ pub struct UpdateResult {
     pub graphs_dropped: Vec<String>,
 }
 
-impl Default for UpdateResult {
-    fn default() -> Self {
-        UpdateResult {
-            inserted: 0,
-            deleted: 0,
-            graphs_created: Vec::new(),
-            graphs_dropped: Vec::new(),
-        }
-    }
-}
-
 /// Executor for SPARQL UPDATE operations
 pub struct UpdateExecutor<'a> {
     store: &'a mut dyn Store,
+    #[allow(dead_code)]
     context: ExecutionContext,
     /// Transaction mode for atomic updates
     transaction_mode: bool,
@@ -254,6 +244,7 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Execute INSERT DATA
+    #[allow(dead_code)]
     fn execute_insert_data(&mut self, data: &[QuadPattern]) -> Result<UpdateResult, OxirsError> {
         let mut result = UpdateResult::default();
 
@@ -369,6 +360,7 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Execute DELETE DATA
+    #[allow(dead_code)]
     fn execute_delete_data(&mut self, data: &[QuadPattern]) -> Result<UpdateResult, OxirsError> {
         let mut result = UpdateResult::default();
 
@@ -522,7 +514,7 @@ impl<'a> UpdateExecutor<'a> {
                     Ok(quad) => quads_to_insert.push(quad),
                     Err(e) => {
                         // Log the error but continue with other insertions
-                        eprintln!("Warning: Failed to instantiate template: {}", e);
+                        eprintln!("Warning: Failed to instantiate template: {e}");
                     }
                 }
             }
@@ -581,7 +573,7 @@ impl<'a> UpdateExecutor<'a> {
                     match self.instantiate_template(quad_pattern, binding) {
                         Ok(quad) => quads_to_delete.push(quad),
                         Err(e) => {
-                            eprintln!("Warning: Failed to instantiate delete template: {}", e);
+                            eprintln!("Warning: Failed to instantiate delete template: {e}");
                         }
                     }
                 }
@@ -600,7 +592,7 @@ impl<'a> UpdateExecutor<'a> {
                     match self.instantiate_template(quad_pattern, binding) {
                         Ok(quad) => quads_to_insert.push(quad),
                         Err(e) => {
-                            eprintln!("Warning: Failed to instantiate insert template: {}", e);
+                            eprintln!("Warning: Failed to instantiate insert template: {e}");
                         }
                     }
                 }
@@ -1081,7 +1073,7 @@ impl<'a> UpdateExecutor<'a> {
                 let lit = crate::algebra::Literal {
                     value: l.value().to_string(),
                     language: l.language().map(|s| s.to_string()),
-                    datatype: Some(l.datatype().clone().into()),
+                    datatype: Some(l.datatype().into()),
                 };
                 Term::Literal(lit)
             }
@@ -1137,6 +1129,7 @@ impl<'a> UpdateExecutor<'a> {
     }
 
     /// Extract triple patterns from algebra expression
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_triple_patterns(&self, algebra: &Algebra) -> Vec<TriplePattern> {
         let mut patterns = Vec::new();
 
@@ -1274,7 +1267,6 @@ mod tests {
 
     #[test]
     fn test_enhanced_update_operations() {
-        use oxirs_core::Store;
 
         // Create a test store (would need actual Store implementation)
         // For now, this is a placeholder test to verify the enhanced operations compile
@@ -1332,7 +1324,7 @@ mod tests {
 
     #[test]
     fn test_validation_errors() {
-        let invalid_pattern = QuadPattern {
+        let _invalid_pattern = QuadPattern {
             subject: Term::Variable(Variable::new("s").unwrap()),
             predicate: Term::Iri(NamedNode::new("http://example.org/predicate").unwrap()),
             object: Term::Literal(crate::algebra::Literal {

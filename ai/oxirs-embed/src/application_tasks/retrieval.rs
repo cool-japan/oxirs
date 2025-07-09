@@ -161,7 +161,7 @@ impl RetrievalEvaluator {
         // Calculate aggregate metrics
         for metric in &self.metrics {
             let score = self.calculate_retrieval_metric(metric, &per_query_results)?;
-            metric_scores.insert(format!("{:?}", metric), score);
+            metric_scores.insert(format!("{metric:?}"), score);
         }
 
         // Generate retrieval analysis
@@ -239,7 +239,7 @@ impl RetrievalEvaluator {
     async fn retrieve_documents(
         &self,
         query: &RetrievalQuery,
-        model: &dyn EmbeddingModel,
+        _model: &dyn EmbeddingModel,
     ) -> Result<Vec<(String, f64)>> {
         // Simple retrieval using text similarity (placeholder)
         let mut doc_scores = Vec::new();

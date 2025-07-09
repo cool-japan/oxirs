@@ -1328,13 +1328,13 @@ mod tests {
             ImportType::NamespaceMapping(ns) => {
                 assert_eq!(ns, "http://mapped.example.org/");
             }
-            _ => panic!("Expected NamespaceMapping"),
+            _ => assert!(false, "Expected NamespaceMapping, got: {:?}", import_type),
         }
     }
 
     #[test]
     fn test_import_statistics_tracking() {
-        let mut manager = ShapeImportManager::default();
+        let manager = ShapeImportManager::default();
         
         // Initial statistics should be zero
         let stats = manager.get_statistics();

@@ -1,6 +1,6 @@
 //! Multi-dimensional feature extraction for neural cost estimation
 
-use ndarray::{Array1, Array2};
+use ndarray::Array1;
 use oxirs_core::query::{algebra::AlgebraTriplePattern, pattern_optimizer::IndexType};
 use std::collections::HashMap;
 
@@ -172,7 +172,7 @@ impl MultiDimensionalFeatureExtractor {
         let timestamp = context
             .timestamp
             .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| ShaclAiError::DataProcessing(format!("Invalid timestamp: {}", e)))?;
+            .map_err(|e| ShaclAiError::DataProcessing(format!("Invalid timestamp: {e}")))?;
 
         Ok(vec![
             (timestamp.as_secs() % 86400) as f64 / 86400.0, // Time of day
@@ -204,6 +204,12 @@ impl MultiDimensionalFeatureExtractor {
     }
 }
 
+impl Default for PatternStructureAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternStructureAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -215,7 +221,7 @@ impl PatternStructureAnalyzer {
         &mut self,
         patterns: &[AlgebraTriplePattern],
     ) -> Result<PatternStructureFeatures> {
-        let pattern_key = format!("{:?}", patterns);
+        let pattern_key = format!("{patterns:?}");
 
         if let Some(cached_features) = self.pattern_cache.get(&pattern_key) {
             return Ok(cached_features.clone());
@@ -252,6 +258,12 @@ impl PatternStructureAnalyzer {
 
     fn calculate_structural_complexity(&self, patterns: &[AlgebraTriplePattern]) -> f64 {
         patterns.len() as f64 * 1.2 // Simplified
+    }
+}
+
+impl Default for IndexUsageAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -311,6 +323,12 @@ impl IndexStatsAnalysis for HashMap<IndexType, IndexUsageStats> {
     }
 }
 
+impl Default for JoinComplexityAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl JoinComplexityAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -319,7 +337,7 @@ impl JoinComplexityAnalyzer {
     }
 
     pub fn analyze(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<JoinComplexityFeatures> {
-        let pattern_key = format!("{:?}", patterns);
+        let pattern_key = format!("{patterns:?}");
 
         if let Some(cached_features) = self.join_cache.get(&pattern_key) {
             return Ok(cached_features.clone());
@@ -335,6 +353,12 @@ impl JoinComplexityAnalyzer {
 
         self.join_cache.insert(pattern_key, features.clone());
         Ok(features)
+    }
+}
+
+impl Default for SystemContextAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -369,6 +393,12 @@ impl SystemContextAnalyzer {
     }
 }
 
+impl Default for HistoricalPerformanceAnalyzer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HistoricalPerformanceAnalyzer {
     pub fn new() -> Self {
         Self {
@@ -396,7 +426,7 @@ impl HistoricalPerformanceAnalyzer {
         resource_usage: ResourceUsage,
         context_features: Array1<f64>,
     ) {
-        let pattern_hash = format!("{:?}", patterns);
+        let pattern_hash = format!("{patterns:?}");
         self.performance_history.push(PerformanceRecord {
             pattern_hash,
             execution_time,

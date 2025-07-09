@@ -80,7 +80,7 @@ fn benchmark_serialization(c: &mut Criterion) {
             StarFormat::NQuadsStar,
         ] {
             group.bench_with_input(
-                BenchmarkId::new(format!("{:?}", format), size),
+                BenchmarkId::new(format!("{format:?}"), size),
                 &graph,
                 |b, graph| {
                     let serializer = StarSerializer::new();
@@ -115,7 +115,8 @@ fn benchmark_store_operations(c: &mut Criterion) {
                     },
                     |(store, triples)| {
                         for triple in triples {
-                            black_box(store.insert(&triple).unwrap());
+                            store.insert(&triple).unwrap();
+                            black_box(());
                         }
                         black_box(store)
                     },
@@ -137,7 +138,8 @@ fn benchmark_store_operations(c: &mut Criterion) {
                     },
                     |(store, triples)| {
                         for triple in triples {
-                            black_box(store.insert(&triple).unwrap());
+                            store.insert(&triple).unwrap();
+                            black_box(());
                         }
                         black_box(store)
                     },
@@ -290,7 +292,8 @@ fn benchmark_memory_usage(c: &mut Criterion) {
             let store = StarStore::new();
             let triples = generate_quoted_triples(10000);
             for triple in triples {
-                black_box(store.insert(&triple).unwrap());
+                store.insert(&triple).unwrap();
+                black_box(());
             }
             black_box(store)
         })
@@ -318,8 +321,7 @@ fn generate_turtle_star_data(size: usize) -> String {
         } else {
             // Generate regular triple
             data.push_str(&format!(
-                "ex:subject{} ex:predicate{} ex:object{} .\n",
-                i, i, i
+                "ex:subject{i} ex:predicate{i} ex:object{i} .\n"
             ));
         }
     }
@@ -338,8 +340,7 @@ fn generate_ntriples_star_data(size: usize) -> String {
             ));
         } else {
             data.push_str(&format!(
-                "<http://example.org/subject{}> <http://example.org/predicate{}> <http://example.org/object{}> .\n",
-                i, i, i
+                "<http://example.org/subject{i}> <http://example.org/predicate{i}> <http://example.org/object{i}> .\n"
             ));
         }
     }
@@ -374,9 +375,9 @@ fn generate_star_graph(size: usize) -> StarGraph {
         if i % 3 == 0 {
             // Add quoted triple
             let base_triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/predicate{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/object{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/subject{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/predicate{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/object{i}")).unwrap(),
             );
 
             let quoted_triple = StarTriple::new(
@@ -389,9 +390,9 @@ fn generate_star_graph(size: usize) -> StarGraph {
         } else {
             // Add regular triple
             let triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/predicate{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/object{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/subject{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/predicate{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/object{i}")).unwrap(),
             );
 
             graph.insert(triple).unwrap();
@@ -405,9 +406,9 @@ fn generate_test_triples(size: usize) -> Vec<StarTriple> {
     (0..size)
         .map(|i| {
             StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/subject{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/predicate{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/object{}", i)).unwrap(),
+                StarTerm::iri(&format!("http://example.org/subject{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/predicate{i}")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/object{i}")).unwrap(),
             )
         })
         .collect()
@@ -417,8 +418,8 @@ fn generate_quoted_triples(size: usize) -> Vec<StarTriple> {
     (0..size)
         .map(|i| {
             let base_triple = StarTriple::new(
-                StarTerm::iri(&format!("http://example.org/alice{}", i)).unwrap(),
-                StarTerm::iri(&format!("http://example.org/age")).unwrap(),
+                StarTerm::iri(&format!("http://example.org/alice{i}")).unwrap(),
+                StarTerm::iri("http://example.org/age").unwrap(),
                 StarTerm::literal(&format!("{}", 20 + (i % 50))).unwrap(),
             );
 

@@ -161,6 +161,7 @@ pub enum AuditEventType {
 /// Failed login attempt tracking
 #[derive(Debug, Clone)]
 struct FailedAttempt {
+    #[allow(dead_code)]
     username: String,
     attempts: u32,
     last_attempt: SystemTime,
@@ -249,7 +250,7 @@ impl SecurityManager {
 
         users.insert(username.clone(), user);
         info!("Created user: {}", username);
-        self.audit_system_event(&format!("User created: {}", username))
+        self.audit_system_event(&format!("User created: {username}"))
             .await;
 
         Ok(())
@@ -385,7 +386,7 @@ impl SecurityManager {
 
         user.permissions = permissions;
         info!("Updated permissions for user: {}", username);
-        self.audit_system_event(&format!("Updated permissions for user: {}", username))
+        self.audit_system_event(&format!("Updated permissions for user: {username}"))
             .await;
 
         Ok(())
@@ -400,7 +401,7 @@ impl SecurityManager {
 
         user.is_active = false;
         info!("Deactivated user: {}", username);
-        self.audit_system_event(&format!("User deactivated: {}", username))
+        self.audit_system_event(&format!("User deactivated: {username}"))
             .await;
 
         Ok(())
@@ -436,7 +437,7 @@ impl SecurityManager {
         hasher.update(password.as_bytes());
         hasher.update(salt.as_bytes());
         let result = hasher.finalize();
-        Ok(format!("{:x}", result))
+        Ok(format!("{result:x}"))
     }
 
     /// Verify password hash
@@ -635,6 +636,12 @@ pub struct RoleManager {
     roles: HashMap<String, HashSet<Permission>>,
 }
 
+impl Default for RoleManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RoleManager {
     pub fn new() -> Self {
         let mut roles = HashMap::new();
@@ -795,9 +802,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_failed_attempt_lockout() {
-        let mut config = AuthConfig::default();
-        config.max_failed_attempts = 2;
-        config.lockout_duration_minutes = 1;
+        let config = AuthConfig {
+            max_failed_attempts: 2,
+            lockout_duration_minutes: 1,
+            ..Default::default()
+        };
 
         let security_manager = SecurityManager::new(config, 1);
         security_manager.initialize().await.unwrap();

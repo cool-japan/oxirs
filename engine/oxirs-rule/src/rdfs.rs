@@ -530,7 +530,7 @@ impl RdfsReasoner {
             _ => {
                 // Check if triple follows from subproperty relations
                 let superproperties = self.context.get_superproperties(predicate);
-                superproperties.contains(&predicate.to_string())
+                superproperties.contains(predicate)
             }
         }
     }

@@ -78,26 +78,23 @@ pub use retrieval::*;
 pub use types::*;
 
 use anyhow::{anyhow, Result};
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use oxirs_core::{
-    model::{quad::Quad, term::Term, triple::Triple, NamedNode, Object, Subject},
+    model::{triple::Triple, NamedNode, Object, Subject},
     Store,
 };
 use oxirs_embed::{
-    models::{ComplEx, RotatE, TransE},
     EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple as EmbedTriple,
     Vector as EmbedVector,
 };
 use oxirs_vec::{
-    embeddings::{EmbeddableContent, EmbeddingManager as VecEmbeddingManager, EmbeddingStrategy},
     index::{
         AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType,
         SearchResult as VecSearchResult,
     },
-    similarity, Vector,
+    similarity,
 };
-use oxirs_vec::{SearchResult as VectorSearchResult, VectorIndex};
+use oxirs_vec::VectorIndex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -105,8 +102,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 /// RAG search result with metadata
@@ -431,7 +427,7 @@ impl RagEngine {
             // Create text for knowledge extraction from query and semantic results
             let mut extraction_text = query.to_string();
             for result in &context.semantic_results {
-                extraction_text.push_str(&format!(" {}", result.triple.object().to_string()));
+                extraction_text.push_str(&format!(" {}", result.triple.object()));
             }
 
             match knowledge_extractor

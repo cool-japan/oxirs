@@ -1,28 +1,25 @@
 //! Core streaming adaptation engine and configuration types
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
-use tokio_stream::{Stream, StreamExt};
 use uuid::Uuid;
 
 use oxirs_core::{
-    model::{NamedNode, Term, Triple},
+    model::Triple,
     Store,
 };
-use oxirs_shacl::{constraints::*, Shape, ShapeId, ValidationConfig, ValidationReport};
+use oxirs_shacl::ValidationReport;
 
-use crate::learning::{LearningConfig, ShapeLearner};
-use crate::neural_patterns::{NeuralPattern, NeuralPatternRecognizer};
-use crate::quantum_neural_patterns::{QuantumNeuralPatternRecognizer, QuantumPattern};
-use crate::self_adaptive_ai::{AdaptationStats, PerformanceMetrics, SelfAdaptiveAI};
+use crate::neural_patterns::NeuralPattern;
+use crate::self_adaptive_ai::{PerformanceMetrics, SelfAdaptiveAI};
 use crate::{Result, ShaclAiError};
 
 use super::{
-    metrics::RealTimeMetricsCollector, online_learning::OnlineLearningEngine,
+    metrics::RealTimeMetricsCollector,
     processors::StreamProcessor,
 };
 
@@ -259,7 +256,7 @@ impl StreamingAdaptationEngine {
     /// Publish adaptation event
     pub async fn publish_event(&self, event: AdaptationEvent) -> Result<()> {
         self.event_publisher.send(event).map_err(|e| {
-            ShaclAiError::StreamingAdaptation(format!("Failed to publish event: {}", e))
+            ShaclAiError::StreamingAdaptation(format!("Failed to publish event: {e}"))
         })?;
         Ok(())
     }
@@ -340,7 +337,7 @@ impl StreamChannel {
         }
 
         self.sender.send(data).map_err(|e| {
-            ShaclAiError::StreamingAdaptation(format!("Failed to send data: {}", e))
+            ShaclAiError::StreamingAdaptation(format!("Failed to send data: {e}"))
         })?;
 
         Ok(())

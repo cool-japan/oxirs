@@ -156,12 +156,12 @@ impl NamespaceManager {
     pub fn expand(&self, prefixed_name: &str) -> Result<String> {
         if let Some((prefix, local)) = prefixed_name.split_once(':') {
             if let Some(namespace) = self.prefixes.get(prefix) {
-                Ok(format!("{}{}", namespace, local))
+                Ok(format!("{namespace}{local}"))
             } else {
                 Err(anyhow!("Unknown prefix: {}", prefix))
             }
         } else if let Some(base) = &self.base_iri {
-            Ok(format!("{}{}", base, prefixed_name))
+            Ok(format!("{base}{prefixed_name}"))
         } else {
             Ok(prefixed_name.to_string())
         }
@@ -259,9 +259,9 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
             {
                 let node = NamedNode::new(value)?;
                 Ok(RdfTerm::NamedNode(node))
-            } else if value.starts_with("_:") {
+            } else if let Some(stripped) = value.strip_prefix("_:") {
                 // Blank node
-                let blank = BlankNode::new(&value[2..])?;
+                let blank = BlankNode::new(stripped)?;
                 Ok(RdfTerm::BlankNode(blank))
             } else {
                 // Try to expand as prefixed name
@@ -303,7 +303,7 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
                 .map(|arg| {
                     // Recursively convert arguments, but handle potential errors
                     match convert_term(arg, namespaces) {
-                        Ok(converted) => format!("{:?}", converted), // Simple string representation
+                        Ok(converted) => format!("{converted:?}"), // Simple string representation
                         Err(_) => "?".to_string(), // Fallback for unparseable terms
                     }
                 })

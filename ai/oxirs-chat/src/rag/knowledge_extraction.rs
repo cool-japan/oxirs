@@ -7,12 +7,12 @@
 //! - Temporal knowledge extraction
 //! - Multi-lingual knowledge extraction
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use oxirs_core::model::{triple::Triple, NamedNode, Object, Predicate, Subject};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
@@ -1042,7 +1042,7 @@ impl KnowledgeExtractionEngine {
                 entity_lower.contains("writer") ||
                 entity_lower.contains("scientist") ||
                 // Common person name patterns
-                entity.chars().next().map_or(false, |c| c.is_uppercase())
+                entity.chars().next().is_some_and(|c| c.is_uppercase())
             }
             "number" => {
                 entity.parse::<f64>().is_ok()
@@ -1091,15 +1091,15 @@ impl KnowledgeExtractionEngine {
     /// Convert relationship to RDF triple
     fn relationship_to_triple(&self, relationship: &ExtractedRelationship) -> Result<Triple> {
         // This is a simplified conversion - real implementation would be more sophisticated
-        let subject = NamedNode::new(&format!(
+        let subject = NamedNode::new(format!(
             "http://example.org/entity/{}",
             relationship.subject_entity
         ))?;
-        let predicate = NamedNode::new(&format!(
+        let predicate = NamedNode::new(format!(
             "http://example.org/predicate/{}",
             relationship.predicate
         ))?;
-        let object = NamedNode::new(&format!(
+        let object = NamedNode::new(format!(
             "http://example.org/entity/{}",
             relationship.object_entity
         ))?;
@@ -1173,7 +1173,7 @@ impl KnowledgeExtractionEngine {
         let mut count = 0;
 
         for entity in entities {
-            total_confidence += entity.confidence as f64;
+            total_confidence += entity.confidence;
             count += 1;
         }
 

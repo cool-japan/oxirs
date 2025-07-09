@@ -3,29 +3,6 @@
 //! Provides unified interface for multiple LLM providers including OpenAI, Anthropic Claude,
 //! and local models with intelligent routing and fallback strategies.
 
-use anyhow::{anyhow, Result};
-use async_openai::{
-    config::OpenAIConfig,
-    types::{
-        ChatCompletionRequestAssistantMessage, ChatCompletionRequestAssistantMessageContent,
-        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessage,
-        ChatCompletionRequestSystemMessageContent, ChatCompletionRequestUserMessage,
-        ChatCompletionRequestUserMessageContent, CreateChatCompletionRequest,
-        CreateChatCompletionRequestArgs, Role,
-    },
-    Client as OpenAIClient,
-};
-use futures_util::{Stream, StreamExt};
-use std::{
-    collections::HashMap,
-    path::PathBuf,
-    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
-    sync::Arc,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
-};
-use tokio::sync::{Mutex as TokioMutex, RwLock};
-use tokio::time::timeout;
-use tracing::{debug, error, info, warn};
 
 // Module declarations
 pub mod anthropic_provider;

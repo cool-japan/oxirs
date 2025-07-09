@@ -64,6 +64,12 @@ pub struct ValueStatistics {
     pub max_value: Option<String>,
 }
 
+impl Default for EnhancedBindProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedBindProcessor {
     pub fn new() -> Self {
         Self {
@@ -159,7 +165,7 @@ impl EnhancedBindProcessor {
 
         // Reconstruct BIND clause
         let optimized_bind = if optimized_expr != expression {
-            format!("BIND({} AS {})", optimized_expr, variable)
+            format!("BIND({optimized_expr} AS {variable})")
         } else {
             bind_clause.to_string()
         };
@@ -310,6 +316,12 @@ impl EnhancedBindProcessor {
     }
 }
 
+impl Default for EnhancedValuesProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedValuesProcessor {
     pub fn new() -> Self {
         Self {
@@ -400,10 +412,10 @@ impl EnhancedValuesProcessor {
         // Optimize based on selectivity and size
         let optimized = if rows.len() > 1000 {
             // Large VALUES clause - consider materialization
-            format!("MATERIALIZED_{}", values_clause)
+            format!("MATERIALIZED_{values_clause}")
         } else if selectivity < 0.01 {
             // Highly selective - push down
-            format!("PUSHED_DOWN_{}", values_clause)
+            format!("PUSHED_DOWN_{values_clause}")
         } else {
             values_clause.to_string()
         };
@@ -476,6 +488,12 @@ impl EnhancedValuesProcessor {
     }
 }
 
+impl Default for ConstantFolder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ConstantFolder {
     pub fn new() -> Self {
         Self {
@@ -538,6 +556,12 @@ impl ConstantFolder {
         // Simple string concat folding
         let folded = expression.replace("CONCAT(\"hello\", \"world\")", "\"helloworld\"");
         Ok(folded)
+    }
+}
+
+impl Default for SelectivityEstimator {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

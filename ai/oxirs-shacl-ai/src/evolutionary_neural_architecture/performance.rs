@@ -3,7 +3,7 @@
 use super::types::*;
 // MutationResults is now imported via super::types::*
 use super::population::NewEvaluations;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Architecture performance evaluator
 #[derive(Debug)]

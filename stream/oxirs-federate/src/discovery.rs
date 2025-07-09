@@ -118,7 +118,7 @@ impl ServiceDiscovery {
 
                 return Ok(Some(FederatedService {
                     id: service_id,
-                    name: format!("SPARQL Service at {}", full_endpoint),
+                    name: format!("SPARQL Service at {full_endpoint}"),
                     endpoint: full_endpoint,
                     service_type: ServiceType::Sparql,
                     capabilities,
@@ -158,7 +158,7 @@ impl ServiceDiscovery {
 
                 return Ok(Some(FederatedService {
                     id: service_id,
-                    name: format!("GraphQL Service at {}", full_endpoint),
+                    name: format!("GraphQL Service at {full_endpoint}"),
                     endpoint: full_endpoint,
                     service_type: ServiceType::GraphQL,
                     capabilities,
@@ -194,7 +194,7 @@ impl ServiceDiscovery {
 
                 Ok(Some(FederatedService {
                     id: service_id,
-                    name: format!("Hybrid Service at {}", endpoint),
+                    name: format!("Hybrid Service at {endpoint}"),
                     endpoint: endpoint.to_string(),
                     service_type: ServiceType::Hybrid,
                     capabilities,

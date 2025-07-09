@@ -3,20 +3,19 @@
 //! This module implements AI-powered quality assessment for RDF data and SHACL shapes.
 
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::time::Instant;
 
 use oxirs_core::{
-    model::{Literal, NamedNode, Term, Triple},
+    model::{NamedNode, Term},
     RdfTerm, Store,
 };
 
 use oxirs_shacl::{
-    constraints::*, Constraint, PropertyPath, Shape, ShapeId, Target, ValidationConfig,
-    ValidationReport, Validator,
+    Constraint, PropertyPath, Shape, Target, ValidationConfig, Validator,
 };
 
-use crate::{insights::QualityInsight, patterns::Pattern, Result, ShaclAiError};
+use crate::{insights::QualityInsight, Result, ShaclAiError};
 
 /// Training data for quality assessment models
 #[derive(Debug, Clone)]
@@ -470,7 +469,7 @@ impl QualityAssessor {
     ) -> Result<ConformanceResult> {
         tracing::debug!("Assessing SHACL shape conformance");
 
-        let mut validator = Validator::new();
+        let validator = Validator::new();
         let validation_config = ValidationConfig {
             fail_fast: false,
             max_violations: 1000,
@@ -534,7 +533,7 @@ impl QualityAssessor {
                             let signature = self.create_entity_signature(&current_signature);
                             entity_signatures
                                 .entry(signature)
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(prev_entity);
                             total_entities += 1;
                         }
@@ -553,7 +552,7 @@ impl QualityAssessor {
                 let signature = self.create_entity_signature(&current_signature);
                 entity_signatures
                     .entry(signature)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(entity);
                 total_entities += 1;
             }
@@ -857,11 +856,11 @@ impl QualityAssessor {
         instances: &[Term],
         constraint: &(oxirs_shacl::ConstraintComponentId, Constraint),
     ) -> Result<usize> {
-        let mut count = 0;
+        let count = 0;
 
         // TODO: Extract property path - constraints don't have paths directly
         // For now, return 0 as we need the shape's path instead
-        return Ok(0);
+        Ok(0)
 
         // TODO: Implement proper constraint-based instance counting
         /*
@@ -1349,7 +1348,7 @@ impl QualityAssessor {
         let query_engine = QueryEngine::new();
         let result = query_engine
             .query(query, store)
-            .map_err(|e| ShaclAiError::QualityAssessment(format!("Quality query failed: {}", e)))?;
+            .map_err(|e| ShaclAiError::QualityAssessment(format!("Quality query failed: {e}")))?;
 
         Ok(result)
     }

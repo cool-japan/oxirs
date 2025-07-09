@@ -1,6 +1,5 @@
 //! Types and configurations for shape learning
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -133,6 +132,7 @@ pub struct ShapeExample {
 
 /// Temporal pattern analysis results
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct TemporalPatterns {
     /// Whether regular intervals are detected
     pub has_regular_intervals: bool,
@@ -150,14 +150,3 @@ pub struct TemporalPatterns {
     pub date_range_days: i64,
 }
 
-impl Default for TemporalPatterns {
-    fn default() -> Self {
-        Self {
-            has_regular_intervals: false,
-            has_seasonal_pattern: false,
-            is_strictly_increasing: false,
-            total_values: 0,
-            date_range_days: 0,
-        }
-    }
-}

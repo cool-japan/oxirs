@@ -16,7 +16,7 @@ use tracing::{debug, info, warn};
 
 use crate::{
     llm::LLMResponse,
-    rag::{AssembledContext, ExtractedKnowledge},
+    rag::AssembledContext,
     Message,
 };
 
@@ -805,7 +805,7 @@ impl AdvancedCacheManager {
                                                                                 // Create a temporary cache manager for warming
             let cache_config = CacheConfig::default();
             let cache_manager = Arc::new(AdvancedCacheManager::new(cache_config));
-            let mut warming_service = CacheWarmingService::new(cache_manager, strategies.clone());
+            let warming_service = CacheWarmingService::new(cache_manager, strategies.clone());
 
             loop {
                 interval.tick().await;
@@ -1045,15 +1045,15 @@ impl CacheWarmingService {
                 // Threshold for prediction
                 // Predict similar queries
                 predictions.push(CachePrediction {
-                    key: format!("similar_to_{}", keyword),
+                    key: format!("similar_to_{keyword}"),
                     cache_type: PredictiveCacheType::Query,
                     confidence: (*frequency as f64 / patterns.total_messages as f64).min(1.0),
-                    context: format!("Predicted query related to: {}", keyword),
+                    context: format!("Predicted query related to: {keyword}"),
                 });
 
                 // Predict related embeddings
                 predictions.push(CachePrediction {
-                    key: format!("embedding_{}", keyword),
+                    key: format!("embedding_{keyword}"),
                     cache_type: PredictiveCacheType::Embedding,
                     confidence: (*frequency as f64 / patterns.total_messages as f64).min(1.0),
                     context: keyword.clone(),
@@ -1092,7 +1092,7 @@ impl CacheWarmingService {
     async fn warm_response_cache(&self, key: &str, context: &str) -> Result<()> {
         // Create a mock response for caching
         let mock_response = LLMResponse {
-            content: format!("Cached response for: {}", context),
+            content: format!("Cached response for: {context}"),
             model_used: "cache-warmer".to_string(),
             provider_used: "internal".to_string(),
             usage: crate::llm::Usage {
@@ -1155,7 +1155,7 @@ impl CacheWarmingService {
         self.cache_manager
             .cache_query_result(
                 key.to_string(),
-                format!("SELECT * WHERE {{ # Predicted query for: {} }}", context),
+                format!("SELECT * WHERE {{ # Predicted query for: {context} }}"),
                 mock_bindings,
                 100, // Mock execution time
             )

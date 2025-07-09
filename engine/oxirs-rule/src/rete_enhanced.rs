@@ -31,6 +31,12 @@ pub struct EnhancedToken {
     pub justification: Vec<String>,
 }
 
+impl Default for EnhancedToken {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EnhancedToken {
     pub fn new() -> Self {
         Self {
@@ -535,6 +541,7 @@ impl BetaJoinNode {
     }
 
     /// Evaluate a join condition
+    #[allow(clippy::only_used_in_recursion)]
     fn evaluate_condition(
         &self,
         condition: &JoinCondition,
@@ -680,7 +687,7 @@ fn parse_numeric(term: &Term) -> Option<f64> {
 /// Convert term to string for comparison
 fn term_to_string(term: &Term) -> String {
     match term {
-        Term::Variable(v) => format!("?{}", v),
+        Term::Variable(v) => format!("?{v}"),
         Term::Constant(c) => c.clone(),
         Term::Literal(l) => l.clone(),
         Term::Function { name, args } => {

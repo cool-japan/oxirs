@@ -1,7 +1,7 @@
 //! Neural Architecture Search engine implementation
 
 use super::types::{EvolutionaryConfig, NASInitResult};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Neural Architecture Search (NAS) engine
 #[derive(Debug)]

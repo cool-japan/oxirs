@@ -1,7 +1,7 @@
 //! Pattern mining algorithms implementations
 
 use super::config::PatternConfig;
-use super::types::{CardinalityType, HierarchyType, Pattern, PatternType};
+use super::types::{CardinalityType, Pattern, PatternType};
 use crate::{Result, ShaclAiError};
 use oxirs_core::{
     model::{NamedNode, Term},
@@ -107,7 +107,7 @@ impl<'a> PatternAlgorithms<'a> {
                 patterns.push(Pattern::PropertyUsage {
                     id: format!("frequent_itemset_{}_{}", item, uuid::Uuid::new_v4()),
                     property: NamedNode::new(item.clone()).map_err(|e| {
-                        ShaclAiError::PatternRecognition(format!("Invalid property IRI: {}", e))
+                        ShaclAiError::PatternRecognition(format!("Invalid property IRI: {e}"))
                     })?,
                     usage_count: *count,
                     support,
@@ -263,7 +263,7 @@ impl<'a> PatternAlgorithms<'a> {
 
         for shape in shapes {
             for constraint in &shape.constraints {
-                let constraint_type = format!("{:?}", constraint);
+                let constraint_type = format!("{constraint:?}");
                 *constraint_counts
                     .entry(constraint_type.clone())
                     .or_insert(0) += 1;
@@ -294,7 +294,7 @@ impl<'a> PatternAlgorithms<'a> {
 
         for shape in shapes {
             for target in &shape.targets {
-                let target_type = format!("{:?}", target);
+                let target_type = format!("{target:?}");
                 *target_counts.entry(target_type.clone()).or_insert(0) += 1;
             }
         }
@@ -411,15 +411,14 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?class (COUNT(?instance) as ?count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?instance a ?class .
                         FILTER(isIRI(?class))
                     }}
                 }}
                 GROUP BY ?class
                 ORDER BY DESC(?count)
-            "#,
-                graph
+            "#
             )
         } else {
             r#"
@@ -486,15 +485,14 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?property (COUNT(*) as ?count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?s ?property ?o .
                         FILTER(isIRI(?property))
                     }}
                 }}
                 GROUP BY ?property
                 ORDER BY DESC(?count)
-            "#,
-                graph
+            "#
             )
         } else {
             r#"
@@ -615,7 +613,7 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?property ?datatype (COUNT(*) as ?count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?s ?property ?o .
                         FILTER(isLiteral(?o) && datatype(?o) != <http://www.w3.org/2001/XMLSchema#string>)
                         BIND(datatype(?o) as ?datatype)
@@ -623,8 +621,7 @@ impl<'a> PatternAlgorithms<'a> {
                 }}
                 GROUP BY ?property ?datatype
                 ORDER BY DESC(?count)
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -691,7 +688,7 @@ impl<'a> PatternAlgorithms<'a> {
     ) -> Result<oxirs_core::query::QueryResult> {
         let query_engine = QueryEngine::new();
         let result = query_engine.query(query, store).map_err(|e| {
-            ShaclAiError::PatternRecognition(format!("Pattern query failed: {}", e))
+            ShaclAiError::PatternRecognition(format!("Pattern query failed: {e}"))
         })?;
 
         Ok(result)
@@ -709,14 +706,13 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?subject ?property ?class WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?subject ?property ?object .
                         ?subject a ?class .
                         FILTER(isIRI(?property) && isIRI(?class))
                     }}
                 }}
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -744,11 +740,11 @@ impl<'a> PatternAlgorithms<'a> {
                     {
                         subject_items
                             .entry(subject.as_str().to_string())
-                            .or_insert_with(std::collections::HashSet::new)
+                            .or_default()
                             .insert(property.as_str().to_string());
                         subject_items
                             .entry(subject.as_str().to_string())
-                            .or_insert_with(std::collections::HashSet::new)
+                            .or_default()
                             .insert(format!("class_{}", class.as_str()));
                     }
                 }
@@ -846,14 +842,13 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?subject ?prop1 ?prop2 WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?subject ?prop1 ?obj1 .
                         ?subject ?prop2 ?obj2 .
                         FILTER(?prop1 != ?prop2 && isIRI(?prop1) && isIRI(?prop2))
                     }}
                 }}
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -926,7 +921,7 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?class ?property (COUNT(DISTINCT ?subject) as ?count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?subject a ?class .
                         ?subject ?property ?object .
                         FILTER(isIRI(?class) && isIRI(?property))
@@ -934,8 +929,7 @@ impl<'a> PatternAlgorithms<'a> {
                 }}
                 GROUP BY ?class ?property
                 ORDER BY DESC(?count)
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -1058,7 +1052,7 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?node (COUNT(?connection) as ?degree) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         {{ ?node ?p ?connection }} UNION {{ ?connection ?p ?node }}
                         FILTER(isIRI(?node))
                     }}
@@ -1066,8 +1060,7 @@ impl<'a> PatternAlgorithms<'a> {
                 GROUP BY ?node
                 ORDER BY DESC(?degree)
                 LIMIT 100
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -1149,7 +1142,7 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?start ?end (COUNT(*) as ?path_count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?start ?p1 ?mid .
                         ?mid ?p2 ?end .
                         FILTER(?start != ?end && ?start != ?mid && ?mid != ?end)
@@ -1157,8 +1150,7 @@ impl<'a> PatternAlgorithms<'a> {
                 }}
                 GROUP BY ?start ?end
                 HAVING (COUNT(*) > 1)
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -1216,15 +1208,14 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?class (COUNT(?instance) as ?count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?instance a ?class .
                         FILTER(isIRI(?class))
                     }}
                 }}
                 GROUP BY ?class
                 ORDER BY DESC(?count)
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -1332,14 +1323,13 @@ impl<'a> PatternAlgorithms<'a> {
             format!(
                 r#"
                 SELECT ?property ?subject (COUNT(?object) as ?count) WHERE {{
-                    GRAPH <{}> {{
+                    GRAPH <{graph}> {{
                         ?subject ?property ?object .
                         FILTER(isIRI(?property))
                     }}
                 }}
                 GROUP BY ?property ?subject
-                "#,
-                graph
+                "#
             )
         } else {
             r#"
@@ -1367,7 +1357,7 @@ impl<'a> PatternAlgorithms<'a> {
                         if let Ok(count) = count_literal.value().parse::<u32>() {
                             property_counts
                                 .entry(property.clone())
-                                .or_insert_with(Vec::new)
+                                .or_default()
                                 .push(count);
                         }
                     }

@@ -6,8 +6,8 @@ use std::path::PathBuf;
 /// Start the OxiRS server
 pub async fn run(config: PathBuf, port: u16, host: String, graphql: bool) -> CommandResult {
     println!("Starting OxiRS server...");
-    println!("Configuration: {:?}", config);
-    println!("Address: {}:{}", host, port);
+    println!("Configuration: {config:?}");
+    println!("Address: {host}:{port}");
 
     if graphql {
         println!("GraphQL endpoint enabled");
@@ -19,7 +19,7 @@ pub async fn run(config: PathBuf, port: u16, host: String, graphql: bool) -> Com
 
     // For now, simulate server startup
     println!("Server startup simulated (full implementation pending)");
-    println!("Would be listening on http://{}:{}/", host, port);
+    println!("Would be listening on http://{host}:{port}/");
 
     // Keep the server "running" for demonstration
     println!("Press Ctrl+C to stop the server");

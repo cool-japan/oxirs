@@ -103,11 +103,12 @@ impl ModelRepository {
 
     /// Load model information from directory
     fn load_model_info(&self, model_name: &str) -> Result<ModelInfo> {
-        let model_path = format!("{}/{}", self.base_path, model_name);
-        let metadata_path = format!("{}/metadata.json", model_path);
+        let base_path = &self.base_path;
+        let model_path = format!("{base_path}/{model_name}");
+        let metadata_path = format!("{model_path}/metadata.json");
 
         if !Path::new(&metadata_path).exists() {
-            return Err(anyhow!("Model metadata not found: {}", metadata_path));
+            return Err(anyhow!("Model metadata not found: {metadata_path}"));
         }
 
         let metadata_content = fs::read_to_string(metadata_path)?;
@@ -130,11 +131,12 @@ impl ModelRepository {
         name: &str,
         description: Option<String>,
     ) -> Result<()> {
-        let model_path = format!("{}/{}", self.base_path, name);
+        let base_path = &self.base_path;
+        let model_path = format!("{base_path}/{name}");
         fs::create_dir_all(&model_path)?;
 
         // Save model data
-        let model_file = format!("{}/model.bin", model_path);
+        let model_file = format!("{model_path}/model.bin");
         model.save(&model_file)?;
 
         // Save metadata
@@ -144,7 +146,7 @@ impl ModelRepository {
             ..Default::default()
         };
 
-        let metadata_file = format!("{}/metadata.json", model_path);
+        let metadata_file = format!("{model_path}/metadata.json");
         let metadata_content = serde_json::to_string_pretty(&metadata)?;
         fs::write(metadata_file, metadata_content)?;
 
@@ -171,7 +173,8 @@ impl ModelRepository {
             .get(name)
             .ok_or_else(|| anyhow!("Model not found: {}", name))?;
 
-        let _model_file = format!("{}/model.bin", model_info.path);
+        let model_path = &model_info.path;
+        let _model_file = format!("{model_path}/model.bin");
 
         // This is a placeholder - in a real implementation, we'd need to:
         // 1. Determine the model type from metadata
@@ -229,8 +232,9 @@ impl CheckpointManager {
         epoch: usize,
         loss: f64,
     ) -> Result<String> {
-        let checkpoint_name = format!("checkpoint_epoch_{}_loss_{:.6}.bin", epoch, loss);
-        let checkpoint_path = format!("{}/{}", self.checkpoint_dir, checkpoint_name);
+        let checkpoint_name = format!("checkpoint_epoch_{epoch}_loss_{loss:.6}.bin");
+        let checkpoint_dir = &self.checkpoint_dir;
+        let checkpoint_path = format!("{checkpoint_dir}/{checkpoint_name}");
 
         model.save(&checkpoint_path)?;
 
@@ -321,7 +325,7 @@ impl ModelExporter {
 
         // Export relation embeddings
         for relation in model.get_relations() {
-            if let Ok(embedding) = model.get_relation_embedding(&relation) {
+            if let Ok(embedding) = model.getrelation_embedding(&relation) {
                 let values: Vec<String> = embedding.values.iter().map(|x| x.to_string()).collect();
                 writeln!(
                     file,

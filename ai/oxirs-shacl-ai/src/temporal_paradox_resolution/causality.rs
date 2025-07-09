@@ -4,7 +4,6 @@
 //! and causal dependency tracking for temporal paradox resolution.
 
 use crate::ShaclAiError;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -338,6 +337,12 @@ pub struct CausalLoop {
     pub stability: f64,
 }
 
+impl Default for QuantumLoopAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QuantumLoopAnalysis {
     /// Create a new quantum loop analysis system
     pub fn new() -> Self {
@@ -347,6 +352,12 @@ impl QuantumLoopAnalysis {
             coherence_requirement: 0.8,
             detection_method: QuantumDetectionMethod::EntanglementAnalysis,
         }
+    }
+}
+
+impl Default for LoopClassifier {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -396,6 +407,12 @@ impl CausalDependencyAnalyzer {
     }
 }
 
+impl Default for DependencyTracking {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DependencyTracking {
     /// Create a new dependency tracking system
     pub fn new() -> Self {
@@ -404,6 +421,12 @@ impl DependencyTracking {
             precision: 0.9,
             update_frequency: 1.0,
         }
+    }
+}
+
+impl Default for ImpactAssessment {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -418,6 +441,12 @@ impl ImpactAssessment {
     }
 }
 
+impl Default for ImpactQuantification {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ImpactQuantification {
     /// Create a new impact quantification system
     pub fn new() -> Self {
@@ -429,6 +458,12 @@ impl ImpactQuantification {
     }
 }
 
+impl Default for RiskEvaluation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RiskEvaluation {
     /// Create a new risk evaluation system
     pub fn new() -> Self {
@@ -437,6 +472,12 @@ impl RiskEvaluation {
             scoring: RiskScoring::new(),
             mitigation: Vec::new(),
         }
+    }
+}
+
+impl Default for RiskScoring {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

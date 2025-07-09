@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime},
 };
 use tokio::sync::RwLock;
 
@@ -339,7 +339,7 @@ impl HealthMonitor {
             interval.tick().await;
 
             if let Err(e) = self.perform_health_checks().await {
-                eprintln!("Health check failed: {}", e);
+                eprintln!("Health check failed: {e}");
             }
         }
     }
@@ -637,6 +637,12 @@ pub trait ComponentMonitor {
 /// System resource monitor
 pub struct SystemResourceMonitor;
 
+impl Default for SystemResourceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SystemResourceMonitor {
     pub fn new() -> Self {
         Self
@@ -688,6 +694,12 @@ impl ComponentMonitor for SystemResourceMonitor {
 /// Database monitor
 pub struct DatabaseMonitor;
 
+impl Default for DatabaseMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DatabaseMonitor {
     pub fn new() -> Self {
         Self
@@ -725,6 +737,12 @@ impl ComponentMonitor for DatabaseMonitor {
 
 /// Cache monitor
 pub struct CacheMonitor;
+
+impl Default for CacheMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl CacheMonitor {
     pub fn new() -> Self {
@@ -767,6 +785,12 @@ impl ComponentMonitor for CacheMonitor {
 
 /// LLM service monitor
 pub struct LLMMonitor;
+
+impl Default for LLMMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl LLMMonitor {
     pub fn new() -> Self {
@@ -1208,7 +1232,7 @@ impl SelfHealingSystem {
         self.update_average_recovery_time(recovery_time);
 
         // Update action success rate
-        if let Some(mut stored_action) = self.healing_actions.get_mut(&action.id) {
+        if let Some(stored_action) = self.healing_actions.get_mut(&action.id) {
             stored_action.success_rate = self.recovery_stats.successful_recoveries as f32
                 / self.recovery_stats.total_recoveries as f32;
         }
@@ -1301,7 +1325,7 @@ impl SelfHealingSystem {
     /// Check if system is in recovery mode
     pub fn is_in_recovery_mode(&self) -> bool {
         self.healing_actions.iter().any(|(_, action)| {
-            action.last_attempt.map_or(false, |last| {
+            action.last_attempt.is_some_and(|last| {
                 SystemTime::now()
                     .duration_since(last)
                     .unwrap_or(Duration::MAX)

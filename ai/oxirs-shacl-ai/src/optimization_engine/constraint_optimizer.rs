@@ -1,6 +1,6 @@
 //! Constraint optimizer for ordering and grouping strategies
 
-use crate::{shape::PropertyConstraint, Result, ShaclAiError};
+use crate::{shape::PropertyConstraint, Result};
 
 use super::types::OptimizationResult;
 
@@ -47,6 +47,12 @@ pub enum GroupingCriteria {
     ByComplexity, // Group by execution complexity
     ByDataAccess, // Group by data access patterns
     ByCache,      // Group by cache effectiveness
+}
+
+impl Default for ConstraintOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ConstraintOptimizer {

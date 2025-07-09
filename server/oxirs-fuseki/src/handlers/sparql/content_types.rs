@@ -29,6 +29,12 @@ pub struct ContentNegotiator {
     default_type: String,
 }
 
+impl Default for ContentNegotiator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ContentNegotiator {
     pub fn new() -> Self {
         Self {
@@ -114,7 +120,7 @@ impl ResponseFormatter {
             }
             content_types::SPARQL_RESULTS_XML | content_types::APPLICATION_XML => {
                 // TODO: Implement XML formatting
-                Ok(format!("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <!-- XML formatting not yet implemented -->\n  <results>{:?}</results>\n</sparql>", data))
+                Ok(format!("<?xml version=\"1.0\"?>\n<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n  <!-- XML formatting not yet implemented -->\n  <results>{data:?}</results>\n</sparql>"))
             }
             content_types::SPARQL_RESULTS_CSV => {
                 // TODO: Implement CSV formatting

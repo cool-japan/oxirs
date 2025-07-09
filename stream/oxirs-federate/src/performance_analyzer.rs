@@ -685,7 +685,7 @@ impl PerformanceAnalyzer {
                 if recent_metric.response_time_p95.as_millis() > 1000 {
                     analysis.contributing_factors.push(BottleneckFactor {
                         factor_type: FactorType::Latency,
-                        description: format!("Service {} has high response times", service_id),
+                        description: format!("Service {service_id} has high response times"),
                         weight: recent_metric.response_time_p95.as_millis() as f64 / 100.0,
                         metric_value: recent_metric.response_time_p95.as_millis() as f64,
                         threshold: 1000.0,

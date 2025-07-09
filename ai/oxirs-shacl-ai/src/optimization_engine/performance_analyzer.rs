@@ -2,7 +2,7 @@
 
 use crate::{
     shape::AiShape, shape_management::PerformanceProfile,
-    sophisticated_validation_optimization::RealTimeOptimizer, Result, ShaclAiError,
+    sophisticated_validation_optimization::RealTimeOptimizer, Result,
 };
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -208,7 +208,7 @@ impl PerformanceAnalyzer {
         let mut data = self.profiling_data.lock().unwrap();
         data.constraint_execution_times
             .entry(constraint_type.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(execution_time_ms);
     }
 
@@ -319,7 +319,7 @@ impl AdaptivePerformanceTuner {
                     // 50ms threshold
                     let record = TuningRecord {
                         timestamp: chrono::Utc::now(),
-                        parameter_name: format!("{}_timeout", constraint_type),
+                        parameter_name: format!("{constraint_type}_timeout"),
                         old_value: 100.0,          // Default timeout
                         new_value: avg_time * 2.0, // Double the average time
                         performance_impact: -0.1,  // Assume 10% improvement
@@ -327,7 +327,7 @@ impl AdaptivePerformanceTuner {
 
                     self.tuning_history.push(record);
                     self.current_parameters
-                        .insert(format!("{}_timeout", constraint_type), avg_time * 2.0);
+                        .insert(format!("{constraint_type}_timeout"), avg_time * 2.0);
                 }
             }
         }

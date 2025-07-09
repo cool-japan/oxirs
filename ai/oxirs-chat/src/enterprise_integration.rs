@@ -14,11 +14,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{info, warn};
 use uuid::Uuid;
 
 /// Enterprise integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct EnterpriseConfig {
     pub sso: SsoConfig,
     pub ldap: LdapConfig,
@@ -29,19 +30,6 @@ pub struct EnterpriseConfig {
     pub security: SecurityConfig,
 }
 
-impl Default for EnterpriseConfig {
-    fn default() -> Self {
-        Self {
-            sso: SsoConfig::default(),
-            ldap: LdapConfig::default(),
-            audit: AuditConfig::default(),
-            compliance: ComplianceConfig::default(),
-            workflow: WorkflowConfig::default(),
-            business_intelligence: BiConfig::default(),
-            security: SecurityConfig::default(),
-        }
-    }
-}
 
 /// SSO configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -183,6 +171,7 @@ impl Default for WorkflowConfig {
 
 /// Business Intelligence configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct BiConfig {
     pub enabled: bool,
     pub connectors: Vec<BiConnector>,
@@ -192,18 +181,6 @@ pub struct BiConfig {
     pub data_warehouse_config: DataWarehouseConfig,
 }
 
-impl Default for BiConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            connectors: Vec::new(),
-            dashboards: Vec::new(),
-            metrics: Vec::new(),
-            reporting_schedule: ReportingSchedule::default(),
-            data_warehouse_config: DataWarehouseConfig::default(),
-        }
-    }
-}
 
 /// Security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

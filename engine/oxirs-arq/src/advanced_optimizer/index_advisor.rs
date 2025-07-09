@@ -12,6 +12,7 @@ use crate::optimizer::IndexType;
 /// Index advisor for automatic index recommendation
 #[derive(Clone)]
 pub struct IndexAdvisor {
+    #[allow(dead_code)]
     query_patterns: HashMap<String, QueryPattern>,
     index_usage_stats: HashMap<IndexType, IndexUsageStats>,
     recommended_indexes: Vec<IndexRecommendation>,
@@ -70,7 +71,7 @@ impl IndexAdvisor {
     }
 
     /// Analyze query pattern and update recommendations
-    pub fn analyze_query_pattern(&mut self, patterns: &[TriplePattern]) -> anyhow::Result<()> {
+    pub fn analyze_query_pattern(&mut self, _patterns: &[TriplePattern]) -> anyhow::Result<()> {
         // Implementation will be extracted from the original file
         Ok(())
     }

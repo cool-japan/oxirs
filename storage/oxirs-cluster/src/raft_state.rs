@@ -391,7 +391,7 @@ impl RaftStateMachine {
         // Increment current term
         let mut term = self.current_term.write().await;
         *term += 1;
-        let current_term = *term;
+        let _current_term = *term;
         drop(term);
 
         // Vote for self
@@ -530,7 +530,7 @@ impl RaftStateMachine {
             let prev_log_index = self.get_prev_log_index_for_peer(peer).await;
             let prev_log_term = self.get_prev_log_term_for_peer(peer).await;
 
-            let request = AppendEntriesRequest {
+            let _request = AppendEntriesRequest {
                 term: current_term,
                 leader_id: self.node_id,
                 prev_log_index,
@@ -938,9 +938,11 @@ mod tests {
     #[tokio::test]
     async fn test_leader_election_timeout() {
         let peers = HashSet::new();
-        let mut config = RaftConfig::default();
-        config.election_timeout_min = 50;
-        config.election_timeout_max = 100;
+        let config = RaftConfig {
+            election_timeout_min: 50,
+            election_timeout_max: 100,
+            ..Default::default()
+        };
 
         let (state_machine, _) = RaftStateMachine::new(1, peers, config);
 

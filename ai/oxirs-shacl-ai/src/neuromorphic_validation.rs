@@ -4,19 +4,15 @@
 //! utilizing spiking neural networks, synaptic plasticity, and neural adaptation
 //! for ultra-efficient, biologically-inspired validation processing.
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use tracing::info;
 
-use oxirs_core::{
-    model::{NamedNode, Term, Triple},
-    Store,
-};
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport, Validator};
+use oxirs_core::Store;
+use oxirs_shacl::{Shape, ValidationConfig, ValidationReport, Validator};
 
 use crate::{Result, ShaclAiError};
 
@@ -382,18 +378,18 @@ impl NeuromorphicValidationNetwork {
 
     /// Create network with custom configuration
     pub fn with_config(topology: NetworkTopology, config: NeuromorphicConfig) -> Self {
-        let network = Self {
+        
+
+        // Initialize network structure
+        // This would be done in a separate initialization method in practice
+        Self {
             neurons: Arc::new(RwLock::new(HashMap::new())),
             synapses: Arc::new(RwLock::new(HashMap::new())),
             spike_queue: Arc::new(RwLock::new(VecDeque::new())),
             topology,
             config,
             stats: NeuromorphicStats::default(),
-        };
-
-        // Initialize network structure
-        // This would be done in a separate initialization method in practice
-        network
+        }
     }
 
     /// Initialize network neurons and synapses
@@ -405,21 +401,21 @@ impl NeuromorphicValidationNetwork {
 
         // Create input neurons
         for i in 0..self.topology.input_neurons {
-            let neuron_id = format!("input_{}", i);
+            let neuron_id = format!("input_{i}");
             let neuron = ValidationNeuron::new(neuron_id.clone(), NeuronType::Input);
             neurons.insert(neuron_id, neuron);
         }
 
         // Create hidden neurons
         for i in 0..self.topology.hidden_neurons {
-            let neuron_id = format!("hidden_{}", i);
+            let neuron_id = format!("hidden_{i}");
             let neuron = ValidationNeuron::new(neuron_id.clone(), NeuronType::Hidden);
             neurons.insert(neuron_id, neuron);
         }
 
         // Create output neurons
         for i in 0..self.topology.output_neurons {
-            let neuron_id = format!("output_{}", i);
+            let neuron_id = format!("output_{i}");
             let neuron = ValidationNeuron::new(neuron_id.clone(), NeuronType::Output);
             neurons.insert(neuron_id, neuron);
         }
@@ -427,7 +423,7 @@ impl NeuromorphicValidationNetwork {
         // Create inhibitory neurons if enabled
         if self.config.enable_inhibition {
             for i in 0..self.topology.inhibitory_neurons {
-                let neuron_id = format!("inhibitory_{}", i);
+                let neuron_id = format!("inhibitory_{i}");
                 let neuron = ValidationNeuron::new(neuron_id.clone(), NeuronType::Inhibitory);
                 neurons.insert(neuron_id, neuron);
             }
@@ -458,7 +454,7 @@ impl NeuromorphicValidationNetwork {
         for input_id in neurons.keys().filter(|id| id.starts_with("input_")) {
             for hidden_id in neurons.keys().filter(|id| id.starts_with("hidden_")) {
                 if rand::random::<f64>() < self.topology.connection_density {
-                    let synapse_id = format!("synapse_{}", synapse_counter);
+                    let synapse_id = format!("synapse_{synapse_counter}");
                     let synapse = ValidationSynapse {
                         synapse_id: synapse_id.clone(),
                         pre_neuron_id: input_id.clone(),
@@ -478,7 +474,7 @@ impl NeuromorphicValidationNetwork {
         for hidden_id in neurons.keys().filter(|id| id.starts_with("hidden_")) {
             for output_id in neurons.keys().filter(|id| id.starts_with("output_")) {
                 if rand::random::<f64>() < self.topology.connection_density {
-                    let synapse_id = format!("synapse_{}", synapse_counter);
+                    let synapse_id = format!("synapse_{synapse_counter}");
                     let synapse = ValidationSynapse {
                         synapse_id: synapse_id.clone(),
                         pre_neuron_id: hidden_id.clone(),
@@ -520,7 +516,7 @@ impl NeuromorphicValidationNetwork {
         let traditional_result = validator
             .validate_store(store, Some(config.clone()))
             .map_err(|e| {
-                ShaclAiError::ValidationPrediction(format!("Traditional validation failed: {}", e))
+                ShaclAiError::ValidationPrediction(format!("Traditional validation failed: {e}"))
             })?;
 
         // Create neuromorphic result
@@ -548,7 +544,7 @@ impl NeuromorphicValidationNetwork {
         // Simple encoding: convert validation complexity to spike patterns
         for shape in shapes {
             if input_neuron_index < self.topology.input_neurons {
-                let neuron_id = format!("input_{}", input_neuron_index);
+                let neuron_id = format!("input_{input_neuron_index}");
 
                 // Create spike train based on shape complexity
                 let complexity = self.calculate_shape_complexity(shape);

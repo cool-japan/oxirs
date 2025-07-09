@@ -768,7 +768,7 @@ impl OntologyAwareEmbedding {
                         if !neg_sims.is_empty() {
                             // InfoNCE loss
                             let exp_pos = pos_sim.exp();
-                            let sum_exp_neg: f32 = neg_sims.iter().map(|&x| x.exp()).sum();
+                            let sum_exp_neg: f32 = neg_sims.iter().copied().map(|x| x.exp()).sum();
                             let loss = -(exp_pos / (exp_pos + sum_exp_neg)).ln();
                             total_loss += loss;
                             count += 1;
@@ -796,7 +796,7 @@ impl OntologyAwareEmbedding {
 
         // Simplified mutual information between entity and relation embeddings
         for (entity, entity_emb) in &self.entity_embeddings {
-            for (_relation, relation_emb) in &self.relation_embeddings {
+            for relation_emb in self.relation_embeddings.values() {
                 // Check if this entity-relation pair appears in training data
                 let pair_exists = self
                     .triples
@@ -1034,7 +1034,7 @@ impl EmbeddingModel for OntologyAwareEmbedding {
             .ok_or_else(|| anyhow!("Entity not found: {}", entity))
     }
 
-    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
         self.relation_embeddings
             .get(relation)
             .map(|arr| Vector::new(arr.to_vec()))

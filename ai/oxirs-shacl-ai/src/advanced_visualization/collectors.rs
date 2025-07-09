@@ -2,11 +2,7 @@
 
 use std::collections::HashMap;
 
-use crate::federated_learning::{FederatedNode, FederationStats};
-use crate::neural_patterns::NeuralPattern;
-use crate::quantum_neural_patterns::{QuantumPattern, QuantumState};
-use crate::self_adaptive_ai::{AdaptationStats, PerformanceMetrics};
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 use super::core::{GraphEdge, GraphNode, TimeSeriesData, VisualizationData};
 

@@ -495,8 +495,7 @@ impl ZeroTrustSecurityManager {
                 ip_address: context.ip_address,
                 timestamp: SystemTime::now(),
                 description: format!(
-                    "Authorization denied - missing permissions: {:?}",
-                    missing_permissions
+                    "Authorization denied - missing permissions: {missing_permissions:?}"
                 ),
                 metadata: HashMap::new(),
                 threat_score: None,
@@ -627,7 +626,7 @@ impl ZeroTrustSecurityManager {
             if let Some(profile) = profiles.get(user_id) {
                 // Check for deviations from normal behavior
                 if self
-                    .is_unusual_access_time(&profile, SystemTime::now())
+                    .is_unusual_access_time(profile, SystemTime::now())
                     .await?
                 {
                     context.risk_factors.push(RiskFactor {
@@ -640,7 +639,7 @@ impl ZeroTrustSecurityManager {
                 }
 
                 if self
-                    .is_unusual_location(&profile, context.ip_address)
+                    .is_unusual_location(profile, context.ip_address)
                     .await?
                 {
                     context.risk_factors.push(RiskFactor {
@@ -712,14 +711,11 @@ impl ZeroTrustSecurityManager {
 
         // Simple permission extraction (in practice would be more sophisticated)
         for definition in &query.definitions {
-            match definition {
-                crate::ast::Definition::Operation(op) => match op.operation_type {
-                    OperationType::Query => permissions.push(Permission::ReadData),
-                    OperationType::Mutation => permissions.push(Permission::WriteData),
-                    OperationType::Subscription => permissions.push(Permission::ReadData),
-                },
-                _ => {}
-            }
+            if let crate::ast::Definition::Operation(op) = definition { match op.operation_type {
+                OperationType::Query => permissions.push(Permission::ReadData),
+                OperationType::Mutation => permissions.push(Permission::WriteData),
+                OperationType::Subscription => permissions.push(Permission::ReadData),
+            } }
         }
 
         Ok(permissions)
@@ -803,7 +799,7 @@ impl ZeroTrustSecurityManager {
         audit_logger.log_event(&event).await?;
 
         // Send event to subscribers
-        if let Err(_) = self.security_event_sender.send(event) {
+        if self.security_event_sender.send(event).is_err() {
             warn!("No security event subscribers");
         }
 
@@ -894,7 +890,9 @@ impl RateLimiter {
 /// Threat detector
 #[derive(Debug)]
 pub struct ThreatDetector {
+    #[allow(dead_code)]
     config: ThreatDetectionConfig,
+    #[allow(dead_code)]
     ml_models: HashMap<String, ThreatModel>,
 }
 
@@ -954,7 +952,9 @@ impl AuditLogger {
 /// Encryption manager
 #[derive(Debug)]
 pub struct EncryptionManager {
+    #[allow(dead_code)]
     config: EncryptionConfig,
+    #[allow(dead_code)]
     active_keys: HashMap<String, EncryptionKey>,
 }
 
@@ -968,7 +968,7 @@ impl EncryptionManager {
 
     pub async fn encrypt(&self, data: &str, _key_id: &str) -> Result<String> {
         // Implement encryption logic
-        Ok(format!("encrypted:{}", data))
+        Ok(format!("encrypted:{data}"))
     }
 
     pub async fn decrypt(&self, encrypted_data: &str, _key_id: &str) -> Result<String> {

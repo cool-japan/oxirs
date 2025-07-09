@@ -165,7 +165,7 @@ impl ReinforcementLearner {
     fn update_q_value(&mut self, state: State, action: Action, value: f64) {
         self.q_table
             .entry(state)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(action, value);
     }
 

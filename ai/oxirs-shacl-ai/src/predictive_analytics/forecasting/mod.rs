@@ -60,6 +60,12 @@ impl ForecastingModels {
 #[derive(Debug)]
 pub struct PerformanceForecaster;
 
+impl Default for PerformanceForecaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceForecaster {
     pub fn new() -> Self {
         Self
@@ -92,6 +98,12 @@ impl PerformanceForecaster {
 #[derive(Debug)]
 pub struct QualityForecaster;
 
+impl Default for QualityForecaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl QualityForecaster {
     pub fn new() -> Self {
         Self
@@ -121,6 +133,12 @@ impl QualityForecaster {
 #[derive(Debug)]
 pub struct UsageForecaster;
 
+impl Default for UsageForecaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl UsageForecaster {
     pub fn new() -> Self {
         Self
@@ -130,6 +148,12 @@ impl UsageForecaster {
 /// Anomaly forecasting model
 #[derive(Debug)]
 pub struct AnomalyForecaster;
+
+impl Default for AnomalyForecaster {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl AnomalyForecaster {
     pub fn new() -> Self {

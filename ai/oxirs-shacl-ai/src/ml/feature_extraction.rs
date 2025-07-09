@@ -3,7 +3,7 @@
 //! This module provides various feature extraction techniques for RDF graphs,
 //! including structural features, statistical features, and embeddings.
 
-use super::{EdgeFeatures, GlobalFeatures, GraphData, NodeFeatures};
+use super::GraphData;
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -207,7 +207,7 @@ impl FeatureExtractor {
             let motif_features = self.compute_motif_features(graph_data);
             features.extend(&motif_features);
             for size in &self.config.structural_features.motif_sizes {
-                names.push(format!("motif_{}_count", size));
+                names.push(format!("motif_{size}_count"));
             }
         }
 
@@ -269,11 +269,11 @@ impl FeatureExtractor {
         for edge in &graph_data.edges {
             adj_list
                 .entry(edge.source_id.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(edge.target_id.clone());
             adj_list
                 .entry(edge.target_id.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(edge.source_id.clone());
         }
 
@@ -327,11 +327,11 @@ impl FeatureExtractor {
         for edge in &graph_data.edges {
             adj_list
                 .entry(edge.source_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(edge.target_id.clone());
             adj_list
                 .entry(edge.target_id.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(edge.source_id.clone());
         }
 
@@ -629,7 +629,7 @@ impl FeatureExtractor {
             let node_embeddings = self.compute_node_embeddings(graph_data);
             features.extend(&node_embeddings);
             for i in 0..self.config.embedding_features.embedding_dim {
-                names.push(format!("node_embedding_{}", i));
+                names.push(format!("node_embedding_{i}"));
             }
         }
 
@@ -637,7 +637,7 @@ impl FeatureExtractor {
             let graph_embeddings = self.compute_graph_embeddings(graph_data);
             features.extend(&graph_embeddings);
             for i in 0..self.config.embedding_features.embedding_dim {
-                names.push(format!("graph_embedding_{}", i));
+                names.push(format!("graph_embedding_{i}"));
             }
         }
 
@@ -688,8 +688,8 @@ impl FeatureExtractor {
     /// Compute graph-level embeddings
     fn compute_graph_embeddings(&self, graph_data: &GraphData) -> Vec<f64> {
         // Average node embeddings as graph embedding
-        let node_embeddings = self.compute_node_embeddings(graph_data);
-        node_embeddings
+        
+        self.compute_node_embeddings(graph_data)
     }
 
     /// Extract temporal features

@@ -890,8 +890,10 @@ mod tests {
 
     #[test]
     fn test_reciprocal_rank_fusion() {
-        let mut config = ResultMergingConfig::default();
-        config.fusion_algorithm = RankFusionAlgorithm::ReciprocalRankFusion;
+        let config = ResultMergingConfig {
+            fusion_algorithm: RankFusionAlgorithm::ReciprocalRankFusion,
+            ..Default::default()
+        };
 
         let mut merger = AdvancedResultMerger::new(config);
 
@@ -918,8 +920,10 @@ mod tests {
 
     #[test]
     fn test_confidence_intervals() {
-        let mut config = ResultMergingConfig::default();
-        config.confidence_intervals = true;
+        let config = ResultMergingConfig {
+            confidence_intervals: true,
+            ..Default::default()
+        };
 
         let mut merger = AdvancedResultMerger::new(config);
 
@@ -941,8 +945,10 @@ mod tests {
 
     #[test]
     fn test_score_normalization() {
-        let mut config = ResultMergingConfig::default();
-        config.normalization_method = ScoreNormalizationMethod::MinMax;
+        let config = ResultMergingConfig {
+            normalization_method: ScoreNormalizationMethod::MinMax,
+            ..Default::default()
+        };
 
         let mut merger = AdvancedResultMerger::new(config);
 

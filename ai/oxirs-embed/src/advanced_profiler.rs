@@ -230,6 +230,7 @@ pub enum AlgorithmType {
 
 /// Pattern detection system
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct PatternDetector {
     /// Detected patterns
     patterns: Vec<PerformancePattern>,
@@ -354,6 +355,7 @@ pub struct TimeWindowRequirements {
 
 /// Anomaly detection system
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AnomalyDetector {
     /// Detection algorithms
     algorithms: Vec<AnomalyAlgorithm>,
@@ -537,6 +539,7 @@ pub struct AutocorrelationStructure {
 
 /// Optimization recommender system
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct OptimizationRecommender {
     /// Recommendation rules
     rules: Vec<RecommendationRule>,
@@ -853,6 +856,12 @@ impl AdvancedProfiler {
     }
 }
 
+impl Default for PerformanceCollector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PerformanceCollector {
     /// Create a new performance collector
     pub fn new() -> Self {
@@ -898,6 +907,12 @@ impl PerformanceCollector {
         } else {
             None
         }
+    }
+}
+
+impl Default for PerformanceAnalyzer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -981,6 +996,12 @@ impl PerformanceAnalyzer {
     }
 }
 
+impl Default for PatternDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PatternDetector {
     /// Create a new pattern detector
     pub fn new() -> Self {
@@ -1056,6 +1077,12 @@ impl PatternDetector {
     }
 }
 
+impl Default for AnomalyDetector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AnomalyDetector {
     /// Create a new anomaly detector
     pub fn new() -> Self {
@@ -1108,8 +1135,8 @@ impl AnomalyDetector {
     /// Run anomaly detection algorithm
     async fn run_anomaly_algorithm(
         &self,
-        algorithm: &AnomalyAlgorithm,
-        data: &VecDeque<MetricDataPoint>,
+        _algorithm: &AnomalyAlgorithm,
+        _data: &VecDeque<MetricDataPoint>,
     ) -> Result<Vec<PerformanceAnomaly>> {
         // Placeholder implementation
         Ok(vec![PerformanceAnomaly {
@@ -1132,6 +1159,12 @@ impl AnomalyDetector {
                 ],
             },
         }])
+    }
+}
+
+impl Default for OptimizationRecommender {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

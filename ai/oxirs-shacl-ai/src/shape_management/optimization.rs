@@ -5,11 +5,10 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::Duration;
 
 use crate::{
     shape::{PropertyConstraint, Shape as AiShape},
-    Result, ShaclAiError,
+    Result,
 };
 
 /// Shape optimizer for performance and structure improvements
@@ -131,6 +130,12 @@ pub struct ComplexityAnalysis {
     pub structural_complexity: f64,
     pub logical_complexity: f64,
     pub performance_implications: Vec<String>,
+}
+
+impl Default for ShapeOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ShapeOptimizer {

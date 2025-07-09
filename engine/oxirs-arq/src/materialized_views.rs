@@ -28,6 +28,7 @@ pub struct MaterializedViewManager {
     rewriter: QueryRewriter,
     maintenance_scheduler: MaintenanceScheduler,
     cost_model: Arc<Mutex<CostModel>>,
+    #[allow(dead_code)]
     statistics_collector: Arc<StatisticsCollector>,
     usage_statistics: Arc<RwLock<ViewUsageStatistics>>,
     recommendation_engine: ViewRecommendationEngine,
@@ -246,6 +247,7 @@ pub struct ViewStorage {
     /// In-memory storage for view data
     memory_storage: HashMap<String, ViewData>,
     /// Disk-based storage path
+    #[allow(dead_code)]
     disk_storage_path: Option<std::path::PathBuf>,
     /// Maximum memory usage allowed
     max_memory: usize,
@@ -275,7 +277,9 @@ pub struct StorageStatistics {
 /// Query rewriter for utilizing materialized views
 pub struct QueryRewriter {
     view_index: ViewIndex,
+    #[allow(dead_code)]
     rewrite_rules: Vec<RewriteRule>,
+    #[allow(dead_code)]
     cost_threshold: f64,
 }
 
@@ -283,10 +287,13 @@ pub struct QueryRewriter {
 #[derive(Debug)]
 pub struct ViewIndex {
     /// Index by pattern structure
+    #[allow(dead_code)]
     pattern_index: HashMap<String, Vec<String>>,
     /// Index by variables
+    #[allow(dead_code)]
     variable_index: HashMap<Variable, Vec<String>>,
     /// Index by predicates
+    #[allow(dead_code)]
     predicate_index: HashMap<String, Vec<String>>,
     /// Index by query characteristics
     characteristic_index: HashMap<QueryCharacteristic, Vec<String>>,
@@ -367,7 +374,7 @@ pub enum RewriteTransformation {
     /// Replace with view access
     ReplaceWithView(String),
     /// Partial replacement
-    PartialReplace(PartialReplacement),
+    PartialReplace(Box<PartialReplacement>),
     /// Join with view
     JoinWithView(JoinTransformation),
     /// Union with view
@@ -425,7 +432,9 @@ pub struct UnionTransformation {
 /// Maintenance scheduler for materialized views
 pub struct MaintenanceScheduler {
     scheduled_tasks: Arc<RwLock<VecDeque<MaintenanceTask>>>,
+    #[allow(dead_code)]
     active_tasks: Arc<RwLock<HashMap<String, ActiveTask>>>,
+    #[allow(dead_code)]
     config: SchedulerConfig,
 }
 
@@ -562,9 +571,13 @@ pub struct UsageRecord {
 
 /// Engine for recommending new materialized views
 pub struct ViewRecommendationEngine {
+    #[allow(dead_code)]
     query_patterns: Arc<RwLock<QueryPatternAnalyzer>>,
+    #[allow(dead_code)]
     cost_analyzer: CostAnalyzer,
+    #[allow(dead_code)]
     benefit_estimator: BenefitEstimator,
+    #[allow(dead_code)]
     recommendation_cache: Arc<RwLock<HashMap<String, ViewRecommendation>>>,
 }
 
@@ -572,10 +585,13 @@ pub struct ViewRecommendationEngine {
 #[derive(Debug)]
 pub struct QueryPatternAnalyzer {
     /// Observed query patterns
+    #[allow(dead_code)]
     patterns: HashMap<String, QueryPattern>,
     /// Pattern frequency
+    #[allow(dead_code)]
     pattern_frequency: HashMap<String, usize>,
     /// Pattern cost statistics
+    #[allow(dead_code)]
     pattern_costs: HashMap<String, CostStatistics>,
 }
 
@@ -663,15 +679,19 @@ pub struct CostStatistics {
 
 /// Cost analyzer for view recommendations
 pub struct CostAnalyzer {
+    #[allow(dead_code)]
     historical_costs: HashMap<String, Vec<f64>>,
+    #[allow(dead_code)]
     cost_models: HashMap<String, CostModel>,
 }
 
 /// Benefit estimator for materialized views
 pub struct BenefitEstimator {
     /// Historical benefit data
+    #[allow(dead_code)]
     benefit_history: HashMap<String, Vec<f64>>,
     /// Benefit prediction models
+    #[allow(dead_code)]
     prediction_models: HashMap<String, BenefitModel>,
 }
 
@@ -969,7 +989,7 @@ impl MaterializedViewManager {
         stats
             .usage_history
             .entry(view_id.to_string())
-            .or_insert_with(VecDeque::new)
+            .or_default()
             .push_back(usage_record);
 
         // Limit history size
@@ -995,7 +1015,7 @@ impl MaterializedViewManager {
 
         let mut hasher = DefaultHasher::new();
         for result in results {
-            format!("{:?}", result).hash(&mut hasher);
+            format!("{result:?}").hash(&mut hasher);
         }
         hasher.finish()
     }
@@ -1022,6 +1042,7 @@ impl MaterializedViewManager {
         })
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn analyze_algebra_dependencies(
         &self,
         algebra: &Algebra,
@@ -1121,6 +1142,7 @@ impl MaterializedViewManager {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn extract_variables_from_expression(
         &self,
         expression: &Expression,
@@ -1348,7 +1370,7 @@ impl ViewIndex {
         for characteristic in characteristics {
             self.characteristic_index
                 .entry(characteristic)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(view_id.clone());
         }
 
@@ -1422,10 +1444,7 @@ impl ViewRecommendationEngine {
 
     fn get_recommendations(&self) -> Result<Vec<ViewRecommendation>> {
         // Simplified recommendation logic
-        let mut recommendations = Vec::new();
-
-        // Basic recommendation based on common patterns
-        recommendations.push(ViewRecommendation {
+        let recommendations = vec![ViewRecommendation {
             view_definition: Algebra::Bgp(vec![]), // Placeholder
             estimated_benefit: 0.5,
             confidence: 0.7,
@@ -1434,7 +1453,7 @@ impl ViewRecommendationEngine {
             maintenance_strategy: MaintenanceStrategy::Lazy,
             supporting_patterns: vec!["common_pattern_1".to_string()],
             justification: "Frequently accessed pattern with high cost".to_string(),
-        });
+        }];
 
         Ok(recommendations)
     }

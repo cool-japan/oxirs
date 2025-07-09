@@ -3,21 +3,20 @@
 //! This module provides HTTP endpoints for OAuth2 and OpenID Connect authentication flows.
 
 use crate::{
-    auth::{AuthResult, AuthService},
-    error::{FusekiError, FusekiResult},
+    auth::AuthResult,
+    error::FusekiError,
     server::AppState,
 };
 use axum::{
     extract::{Query, State},
     http::{
-        header::{LOCATION, SET_COOKIE},
+        header::SET_COOKIE,
         HeaderMap, StatusCode,
     },
-    response::{IntoResponse, Json, Redirect, Response},
+    response::{IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{error, info, instrument, warn};
 
 /// OAuth2 authorization request parameters
 #[derive(Debug, Deserialize)]
@@ -175,7 +174,7 @@ pub async fn handle_oauth2_callback(
             expires_in: None,
             refresh_token: None,
             user: None,
-            message: format!("OAuth2 authorization failed: {}", error),
+            message: format!("OAuth2 authorization failed: {error}"),
         };
 
         return Ok((StatusCode::BAD_REQUEST, Json(error_response)).into_response());

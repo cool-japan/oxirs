@@ -13,6 +13,7 @@ use crate::types::Schema;
 
 /// Query planner for federated queries
 pub struct QueryPlanner {
+    #[allow(dead_code)]
     schema_stitcher: Arc<SchemaStitcher>,
     config: FederationConfig,
 }
@@ -121,10 +122,10 @@ impl QueryPlanner {
         for selection in &selection_set.selections {
             match selection {
                 Selection::Field(field) => {
-                    let service_id = self.determine_field_service(&field, schema).await?;
+                    let service_id = self.determine_field_service(field, schema).await?;
                     service_queries
                         .entry(service_id.clone())
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(field.name.clone());
 
                     // Recursively analyze nested selections
@@ -169,7 +170,7 @@ impl QueryPlanner {
         // For now, look for service prefix in field type
         for endpoint in &self.config.endpoints {
             let namespace = endpoint.namespace.as_deref().unwrap_or(&endpoint.id);
-            if field.name.starts_with(&format!("{}_", namespace)) {
+            if field.name.starts_with(&format!("{namespace}_")) {
                 return Ok(endpoint.id.clone());
             }
         }
@@ -181,7 +182,7 @@ impl QueryPlanner {
     /// Build a GraphQL query fragment for specific fields
     fn build_query_fragment(&self, fields: &[String]) -> String {
         let field_list = fields.join(" ");
-        format!("{{ {} }}", field_list)
+        format!("{{ {field_list} }}")
     }
 
     /// Optimize the ordering of execution steps
@@ -351,7 +352,7 @@ impl QueryPlanner {
     ) -> Result<serde_json::Value> {
         let mut merged = serde_json::Map::new();
 
-        for (_, result) in results {
+        for result in results.values() {
             if let serde_json::Value::Object(obj) = result {
                 for (key, value) in obj {
                     merged.insert(key.clone(), value.clone());

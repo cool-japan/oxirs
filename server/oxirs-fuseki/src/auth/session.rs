@@ -2,7 +2,7 @@
 
 use crate::auth::types::{AuthResult, User, UserSession};
 use crate::error::{FusekiError, FusekiResult};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;

@@ -20,9 +20,9 @@ fn test_adaptive_index_basic() {
     // Insert test data
     for i in 0..10 {
         let triple = Triple::new(
-            NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
             NamedNode::new("http://example.org/p").unwrap(),
-            Literal::new(&format!("value{}", i)),
+            Literal::new(format!("value{i}")),
         );
         manager.insert(triple).unwrap();
     }

@@ -1,13 +1,12 @@
 //! Core network structures for swarm neuromorphic networks
 
-use async_trait::async_trait;
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use oxirs_core::Store;
-use oxirs_shacl::{Shape, ValidationReport};
+use oxirs_shacl::Shape;
 
 use super::{
     config::{SwarmNetworkConfig, SwarmNodeConfig},
@@ -20,11 +19,7 @@ use super::{
     results::SwarmMetrics,
     types::{SwarmNodeId, SwarmPosition, SwarmValidationContext},
 };
-use crate::{
-    biological_neural_integration::{BiologicalNeuralIntegrator, BiologicalValidationContext},
-    neuromorphic_validation::{NeuromorphicValidationNetwork, SpikeEvent},
-    Result, ShaclAiError,
-};
+use crate::Result;
 
 /// Swarm neuromorphic network for distributed brain-like validation
 #[derive(Debug)]

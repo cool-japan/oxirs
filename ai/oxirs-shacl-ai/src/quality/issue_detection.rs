@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
 
-use oxirs_core::{model::Term, Store};
+use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
-use super::{QualityAssessmentData, QualityReport};
-use crate::{Result, ShaclAiError};
+use super::QualityReport;
+use crate::Result;
 
 /// Quality issue detection engine
 #[derive(Debug)]

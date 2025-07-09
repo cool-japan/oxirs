@@ -72,7 +72,7 @@ impl GraphQLFederation {
             unified
                 .schema_mapping
                 .entry(type_name.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(service_id.to_string());
         }
 
@@ -87,7 +87,7 @@ impl GraphQLFederation {
                         ));
                     }
                     FieldConflictResolution::Namespace => {
-                        let namespaced_name = format!("{}_{}", service_id, field_name);
+                        let namespaced_name = format!("{service_id}_{field_name}");
                         unified.queries.insert(namespaced_name, field_def.clone());
                     }
                     FieldConflictResolution::FirstWins => {
@@ -112,7 +112,7 @@ impl GraphQLFederation {
                         ));
                     }
                     FieldConflictResolution::Namespace => {
-                        let namespaced_name = format!("{}_{}", service_id, field_name);
+                        let namespaced_name = format!("{service_id}_{field_name}");
                         unified.mutations.insert(namespaced_name, field_def.clone());
                     }
                     FieldConflictResolution::FirstWins => {
@@ -647,11 +647,11 @@ impl GraphQLFederation {
         breaking_changes: &mut Vec<BreakingChange>,
     ) -> Result<()> {
         // Check for removed types
-        for (type_name, _) in &old_schema.types {
+        for type_name in old_schema.types.keys() {
             if !new_schema.types.contains_key(type_name) {
                 breaking_changes.push(BreakingChange {
                     change_type: BreakingChangeType::TypeRemoved,
-                    description: format!("Type '{}' was removed", type_name),
+                    description: format!("Type '{type_name}' was removed"),
                     severity: BreakingChangeSeverity::High,
                 });
             }
@@ -682,13 +682,12 @@ impl GraphQLFederation {
                 TypeKind::Interface { fields: new_fields },
             ) => {
                 // Check for removed fields
-                for (field_name, _) in old_fields {
+                for field_name in old_fields.keys() {
                     if !new_fields.contains_key(field_name) {
                         breaking_changes.push(BreakingChange {
                             change_type: BreakingChangeType::FieldRemoved,
                             description: format!(
-                                "Field '{}.{}' was removed",
-                                type_name, field_name
+                                "Field '{type_name}.{field_name}' was removed"
                             ),
                             severity: BreakingChangeSeverity::High,
                         });
@@ -736,14 +735,12 @@ impl GraphQLFederation {
                 ) = (&old_type.kind, &new_type.kind)
                 {
                     for (field_name, old_field) in old_fields {
-                        if !new_fields.contains_key(field_name) {
-                            if old_field.directives.iter().any(|d| d.name == "deprecated") {
+                        if !new_fields.contains_key(field_name)
+                            && old_field.directives.iter().any(|d| d.name == "deprecated") {
                                 warnings.push(format!(
-                                    "Deprecated field '{}.{}' was removed",
-                                    type_name, field_name
+                                    "Deprecated field '{type_name}.{field_name}' was removed"
                                 ));
                             }
-                        }
                     }
                 }
             }

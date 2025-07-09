@@ -7,9 +7,11 @@ use std::collections::HashMap;
 // Test data structures for SPARQL 1.2 features
 use oxirs_arq::extensions::CustomAggregate;
 use oxirs_fuseki::handlers::sparql::{extract_quoted_triple_patterns, Sparql12Features};
+use oxirs_fuseki::handlers::sparql::sparql12_features::{
+    AggregationEngine, BindValuesProcessor, PropertyPathOptimizer, ServiceDelegator, SubqueryOptimizer,
+};
 use oxirs_fuseki::handlers::sparql_refactored::{
-    contains_aggregation_functions, contains_sparql_star_features, AggregationEngine,
-    BindValuesProcessor, PropertyPathOptimizer, ServiceDelegator, SubqueryOptimizer,
+    contains_aggregation_functions, contains_sparql_star_features,
 };
 use oxirs_fuseki::property_path_optimizer::OptimizedPath;
 

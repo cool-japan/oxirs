@@ -210,6 +210,12 @@ pub struct RuntimeStatistics {
     pub peak_cpu_usage: f64,
 }
 
+impl Default for RuntimeStatistics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RuntimeStatistics {
     pub fn new() -> Self {
         Self {
@@ -268,6 +274,12 @@ pub struct EnhancedPerformanceMonitor {
     network_latency_samples: Vec<Duration>,
     error_counts: HashMap<String, usize>,
     bottlenecks: HashMap<BottleneckType, usize>,
+}
+
+impl Default for EnhancedPerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl EnhancedPerformanceMonitor {
@@ -389,6 +401,12 @@ pub struct LocalResourceMonitor {
     current_cpu_usage: f64,
     peak_memory_usage: u64,
     peak_cpu_usage: f64,
+}
+
+impl Default for LocalResourceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LocalResourceMonitor {

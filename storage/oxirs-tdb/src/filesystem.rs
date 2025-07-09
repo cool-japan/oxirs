@@ -356,17 +356,15 @@ impl TdbFileSystem {
         let mut data_path = None;
 
         if let Ok(entries) = fs::read_dir(root_path) {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let file_name = entry.file_name();
-                    let name = file_name.to_string_lossy();
+            for entry in entries.flatten() {
+                let file_name = entry.file_name();
+                let name = file_name.to_string_lossy();
 
-                    if name.starts_with("Data-") && entry.path().is_dir() {
-                        if let Ok(version_str) = name[5..].parse::<u32>() {
-                            if version_str > max_version {
-                                max_version = version_str;
-                                data_path = Some(entry.path());
-                            }
+                if name.starts_with("Data-") && entry.path().is_dir() {
+                    if let Ok(version_str) = name[5..].parse::<u32>() {
+                        if version_str > max_version {
+                            max_version = version_str;
+                            data_path = Some(entry.path());
                         }
                     }
                 }
@@ -378,7 +376,7 @@ impl TdbFileSystem {
         } else {
             // Create new data directory
             let version = 1;
-            let path = root_path.join(format!("Data-{:04}", version));
+            let path = root_path.join(format!("Data-{version:04}"));
             fs::create_dir_all(&path)?;
             Ok((path, version))
         }
@@ -458,7 +456,7 @@ impl TdbFileSystem {
         content.push_str(&format!("format_version={}\n", metadata.format_version));
 
         for (key, value) in &metadata.properties {
-            content.push_str(&format!("{}={}\n", key, value));
+            content.push_str(&format!("{key}={value}\n"));
         }
 
         fs::write(&metadata_path, content)?;
@@ -528,13 +526,13 @@ impl TdbFileSystem {
                 FileType::NodesData | FileType::NodesIndex => {
                     file.write_all(b"TDB2_NODES_V1\n")?;
                 }
-                ft if format!("{:?}", ft).contains("Data") => {
+                ft if format!("{ft:?}").contains("Data") => {
                     file.write_all(b"TDB2_TRIPLES_V1\n")?;
                 }
-                ft if format!("{:?}", ft).contains("Index") => {
+                ft if format!("{ft:?}").contains("Index") => {
                     file.write_all(b"TDB2_INDEX_V1\n")?;
                 }
-                ft if format!("{:?}", ft).contains("Btree") => {
+                ft if format!("{ft:?}").contains("Btree") => {
                     file.write_all(b"TDB2_BTREE_V1\n")?;
                 }
                 FileType::TransactionLog => {
@@ -562,7 +560,7 @@ impl TdbFileSystem {
 
     /// Open file with caching
     pub fn open_file(&self, file_type: &FileType, write_mode: bool) -> Result<Arc<Mutex<File>>> {
-        let file_key = format!("{:?}_{}", file_type, write_mode);
+        let file_key = format!("{file_type:?}_{write_mode}");
 
         // Check if file is already open
         {
@@ -579,6 +577,7 @@ impl TdbFileSystem {
                 .read(true)
                 .write(true)
                 .create(true)
+                .truncate(true)
                 .open(&path)?
         } else {
             OpenOptions::new().read(true).open(&path)?
@@ -597,7 +596,7 @@ impl TdbFileSystem {
 
     /// Close file handle
     pub fn close_file(&self, file_type: &FileType, write_mode: bool) -> Result<()> {
-        let file_key = format!("{:?}_{}", file_type, write_mode);
+        let file_key = format!("{file_type:?}_{write_mode}");
 
         let mut handles = self.file_handles.write().unwrap();
         handles.remove(&file_key);
@@ -712,7 +711,7 @@ impl TdbFileSystem {
         for file_type in required_files {
             let path = self.get_file_path(&file_type);
             if !path.exists() {
-                issues.push(format!("Missing required file: {:?}", path));
+                issues.push(format!("Missing required file: {path:?}"));
             }
         }
 
@@ -762,13 +761,13 @@ impl TdbFileSystem {
                 FileType::NodesData | FileType::NodesIndex => {
                     temp_file.write_all(b"TDB2_NODES_V1\n")?;
                 }
-                ft if format!("{:?}", ft).contains("Data") => {
+                ft if format!("{ft:?}").contains("Data") => {
                     temp_file.write_all(b"TDB2_TRIPLES_V1\n")?;
                 }
-                ft if format!("{:?}", ft).contains("Index") => {
+                ft if format!("{ft:?}").contains("Index") => {
                     temp_file.write_all(b"TDB2_INDEX_V1\n")?;
                 }
-                ft if format!("{:?}", ft).contains("Btree") => {
+                ft if format!("{ft:?}").contains("Btree") => {
                     temp_file.write_all(b"TDB2_BTREE_V1\n")?;
                 }
                 FileType::TransactionLog => {
@@ -833,13 +832,13 @@ impl TdbFileSystem {
                     FileType::NodesData | FileType::NodesIndex => {
                         temp_file.write_all(b"TDB2_NODES_V1\n")?;
                     }
-                    ft if format!("{:?}", ft).contains("Data") => {
+                    ft if format!("{ft:?}").contains("Data") => {
                         temp_file.write_all(b"TDB2_TRIPLES_V1\n")?;
                     }
-                    ft if format!("{:?}", ft).contains("Index") => {
+                    ft if format!("{ft:?}").contains("Index") => {
                         temp_file.write_all(b"TDB2_INDEX_V1\n")?;
                     }
-                    ft if format!("{:?}", ft).contains("Btree") => {
+                    ft if format!("{ft:?}").contains("Btree") => {
                         temp_file.write_all(b"TDB2_BTREE_V1\n")?;
                     }
                     FileType::TransactionLog => {
@@ -1017,7 +1016,7 @@ impl TdbFileSystem {
             let handles = self.file_handles.read().unwrap();
             handles
                 .keys()
-                .filter(|key| key.starts_with(&format!("{:?}_", file_type)))
+                .filter(|key| key.starts_with(&format!("{file_type:?}_")))
                 .cloned()
                 .collect()
         };

@@ -143,22 +143,22 @@ impl Term {
 impl Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Term::Iri(iri) => write!(f, "<{}>", iri),
+            Term::Iri(iri) => write!(f, "<{iri}>"),
             Term::Literal {
                 value,
                 datatype,
                 language,
             } => {
-                write!(f, "\"{}\"", value)?;
+                write!(f, "\"{value}\"")?;
                 if let Some(lang) = language {
-                    write!(f, "@{}", lang)?;
+                    write!(f, "@{lang}")?;
                 } else if let Some(dt) = datatype {
-                    write!(f, "^^<{}>", dt)?;
+                    write!(f, "^^<{dt}>")?;
                 }
                 Ok(())
             }
-            Term::BlankNode(id) => write!(f, "_:{}", id),
-            Term::Variable(name) => write!(f, "?{}", name),
+            Term::BlankNode(id) => write!(f, "_:{id}"),
+            Term::Variable(name) => write!(f, "?{name}"),
         }
     }
 }
@@ -1434,7 +1434,7 @@ impl NodeTable {
             .map(|(prefix, _)| prefix)
             .ok_or_else(|| anyhow!("Prefix ID {} not found", prefix_id))?;
 
-        let full_iri = format!("{}{}", prefix, suffix);
+        let full_iri = format!("{prefix}{suffix}");
         bincode::serialize(&full_iri)
             .map_err(|e| anyhow!("Failed to serialize reconstructed IRI: {}", e))
     }

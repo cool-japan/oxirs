@@ -167,7 +167,35 @@ impl MemoryMappedVectorIndex {
 
     /// Load an existing memory-mapped index
     pub fn load<P: AsRef<Path>>(path: P, config: IndexConfig) -> Result<Self> {
-        let mut index = Self::new(path, config)?;
+        let path = path.as_ref().to_path_buf();
+
+        // Open existing file without truncation
+        let data_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&path)
+            .context("Failed to open existing data file")?;
+
+        // Read and validate header
+        let mmap = unsafe { MmapOptions::new().map(&data_file)? };
+        let header = unsafe { std::ptr::read(mmap.as_ptr() as *const FileHeader) };
+        header.validate()?;
+
+        let mut index = Self {
+            config,
+            path,
+            header: Arc::new(RwLock::new(header)),
+            data_file: Arc::new(Mutex::new(data_file)),
+            data_mmap: Arc::new(RwLock::new(None)),
+            uri_map: Arc::new(RwLock::new(HashMap::new())),
+            uri_store: Arc::new(RwLock::new(Vec::new())),
+            write_buffer: Arc::new(Mutex::new(Vec::new())),
+            buffer_size: 1000,
+            advanced_mmap: None,
+            numa_allocator: Arc::new(NumaVectorAllocator::new()),
+            enable_lazy_loading: true,
+        };
+
         index.reload_mmap()?;
         index.load_uri_mappings()?;
         Ok(index)
@@ -734,7 +762,7 @@ impl VectorIndex for MemoryMappedVectorIndex {
         Ok(results)
     }
 
-    fn get_vector(&self, uri: &str) -> Option<&Vector> {
+    fn get_vector(&self, _uri: &str) -> Option<&Vector> {
         // Memory-mapped index doesn't store vectors in memory
         // We would need to read from disk, which doesn't fit the API
         // that returns a reference. Return None for now.
@@ -813,6 +841,9 @@ mod tests {
                 let vec = Vector::new(vec![i as f32, (i + 1) as f32, (i + 2) as f32]);
                 index.insert(format!("vec{i}"), vec)?;
             }
+            
+            // Explicitly flush the buffer to ensure data is persisted
+            index.flush_buffer()?;
         }
 
         // Load existing index

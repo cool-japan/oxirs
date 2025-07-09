@@ -8,7 +8,7 @@
 //! - Image attachments
 //! - File uploads
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -434,7 +434,7 @@ impl RichMessage {
                     markdown.push_str("\n\n");
                 }
                 RichContent::CodeSnippet { code, language, .. } => {
-                    markdown.push_str(&format!("```{}\n{}\n```\n\n", language, code));
+                    markdown.push_str(&format!("```{language}\n{code}\n```\n\n"));
                 }
                 RichContent::SparqlQuery {
                     query,
@@ -448,12 +448,12 @@ impl RichMessage {
 
                     if !valid {
                         if let Some(error) = error_message {
-                            markdown.push_str(&format!("⚠️ **Error**: {}\n", error));
+                            markdown.push_str(&format!("⚠️ **Error**: {error}\n"));
                         }
                     } else {
                         markdown.push_str("✅ **Valid SPARQL query**\n");
                     }
-                    markdown.push_str("\n");
+                    markdown.push('\n');
                 }
                 RichContent::GraphVisualization { nodes, edges, .. } => {
                     markdown.push_str(&format!(
@@ -486,18 +486,18 @@ impl RichMessage {
                                     .join(" | ")
                             ));
                         }
-                        markdown.push_str("\n");
+                        markdown.push('\n');
                     }
                 }
                 RichContent::Image { url, alt_text, .. } => {
                     let alt = alt_text.as_deref().unwrap_or("Image");
-                    markdown.push_str(&format!("![{}]({})\n\n", alt, url));
+                    markdown.push_str(&format!("![{alt}]({url})\n\n"));
                 }
                 RichContent::File { filename, .. } => {
-                    markdown.push_str(&format!("📎 **File**: {}\n\n", filename));
+                    markdown.push_str(&format!("📎 **File**: {filename}\n\n"));
                 }
                 RichContent::Chart { chart_type, .. } => {
-                    markdown.push_str(&format!("📈 **Chart**: {:?}\n\n", chart_type));
+                    markdown.push_str(&format!("📈 **Chart**: {chart_type:?}\n\n"));
                 }
                 RichContent::Timeline { events, .. } => {
                     markdown.push_str(&format!("📅 **Timeline**: {} events\n\n", events.len()));
@@ -617,10 +617,10 @@ impl RichMessage {
                     let mut img_tag = format!("<img src=\"{}\" alt=\"{}\"", url, html_escape(alt));
 
                     if let Some(w) = width {
-                        img_tag.push_str(&format!(" width=\"{}\"", w));
+                        img_tag.push_str(&format!(" width=\"{w}\""));
                     }
                     if let Some(h) = height {
-                        img_tag.push_str(&format!(" height=\"{}\"", h));
+                        img_tag.push_str(&format!(" height=\"{h}\""));
                     }
                     img_tag.push_str(" />");
                     html.push_str(&img_tag);
@@ -633,8 +633,7 @@ impl RichMessage {
                 }
                 RichContent::Chart { chart_type, .. } => {
                     html.push_str(&format!(
-                        "<div class=\"chart\">📈 <strong>Chart</strong>: {:?}</div>",
-                        chart_type
+                        "<div class=\"chart\">📈 <strong>Chart</strong>: {chart_type:?}</div>"
                     ));
                 }
                 RichContent::Timeline { events, .. } => {
@@ -845,8 +844,7 @@ impl RichContentProcessor {
             }
             _ => {
                 return Err(ChatError::Processing(format!(
-                    "Unsupported graph layout: {}",
-                    layout
+                    "Unsupported graph layout: {layout}"
                 )));
             }
         }

@@ -1,8 +1,6 @@
 //! Core types for error handling
 
-use oxirs_shacl::{Severity, ValidationViolation as Violation};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// Error severity levels
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -130,7 +128,7 @@ impl std::fmt::Display for RepairType {
             RepairType::DataTypeConversion => write!(f, "DataTypeConversion"),
             RepairType::CardinalityAdjustment => write!(f, "CardinalityAdjustment"),
             RepairType::PatternFix => write!(f, "PatternFix"),
-            RepairType::Custom(s) => write!(f, "Custom({})", s),
+            RepairType::Custom(s) => write!(f, "Custom({s})"),
         }
     }
 }

@@ -3,14 +3,8 @@
 //! These tests verify the performance analysis, bottleneck detection,
 //! and optimization recommendation capabilities.
 
-use oxirs_federate::{
-    monitoring::{AnomalyType, OptimizationCategory, PredictionType, RegressionType},
-    performance_analyzer::*,
-    semantic_enhancer::Priority,
-    FederatedService, FederationEngine, ServiceRegistry,
-};
-use std::time::{Duration, Instant, SystemTime};
-use tokio;
+use oxirs_federate::performance_analyzer::*;
+use std::time::{Duration, SystemTime};
 
 #[tokio::test]
 async fn test_performance_analyzer_creation() {
@@ -473,7 +467,7 @@ async fn test_service_comparison_analysis() {
     let analyzer = PerformanceAnalyzer::with_config(config);
 
     // Record metrics for multiple services
-    let services = vec!["service-fast", "service-slow", "service-medium"];
+    let services = ["service-fast", "service-slow", "service-medium"];
 
     for (i, service_id) in services.iter().enumerate() {
         let metrics = ServicePerformanceMetrics {
@@ -535,7 +529,7 @@ async fn test_service_comparison_analysis() {
 
 #[tokio::test]
 async fn test_alert_threshold_configuration() {
-    let mut config = AnalyzerConfig::default();
+    let config = AnalyzerConfig::default();
     let analyzer = PerformanceAnalyzer::new();
 
     // Configure custom alert thresholds

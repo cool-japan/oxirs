@@ -3,17 +3,27 @@
 //! This module provides a clean, modular implementation of the SPARQL protocol
 //! with all components properly separated for maintainability.
 
-// Re-export all the core functionality from submodules
-pub use crate::handlers::sparql::aggregation_engine::*;
-pub use crate::handlers::sparql::bind_processor::*;
+// Re-export core functionality from submodules (using specific imports to avoid conflicts)
 pub use crate::handlers::sparql::content_types::*;
 pub use crate::handlers::sparql::core::*;
 pub use crate::handlers::sparql::optimizers::*;
-pub use crate::handlers::sparql::service_delegation::*;
-pub use crate::handlers::sparql::sparql12_features::*;
+
+// Import specific items from modules that have conflicts
+pub use crate::handlers::sparql::aggregation_engine::{
+    EnhancedAggregationProcessor, AggregationFunction
+};
+pub use crate::handlers::sparql::bind_processor::{
+    EnhancedBindProcessor, EnhancedValuesProcessor
+};
+pub use crate::handlers::sparql::service_delegation::{
+    ServiceDelegationManager, ParallelServiceExecutor, ServiceResultMerger
+};
+pub use crate::handlers::sparql::sparql12_features::{
+    Sparql12Features, AggregationEngine
+};
 
 use crate::{
-    auth::{AuthUser, Permission},
+    auth::AuthUser,
     error::{FusekiError, FusekiResult},
     server::AppState,
 };
@@ -23,15 +33,9 @@ use axum::{
     response::IntoResponse,
     Form,
 };
-use serde::Deserialize;
 use std::sync::Arc;
-use tracing::{info, instrument};
 
-// Import the functions we need from the core module
-use crate::handlers::sparql::core::{
-    execute_sparql_query, execute_sparql_update, QueryContext, SparqlQueryParams,
-    SparqlUpdateParams,
-};
+// Functions are already available via the glob re-export from core module
 
 /// Main SPARQL query endpoint for GET requests
 pub async fn query_handler_get(
@@ -109,8 +113,7 @@ pub async fn query_handler_post(
         // Invalid content type - return error
         tracing::debug!("Invalid content type detected: {}", content_type);
         return FusekiError::bad_request(format!(
-            "Unsupported content type: {}. Expected 'application/sparql-query' or 'application/x-www-form-urlencoded'",
-            content_type
+            "Unsupported content type: {content_type}. Expected 'application/sparql-query' or 'application/x-www-form-urlencoded'"
         )).into_response();
     };
 
@@ -148,7 +151,7 @@ pub async fn update_handler(
     Form(params): Form<SparqlUpdateParams>,
 ) -> impl IntoResponse {
     use axum::Json;
-    use std::sync::Arc;
+    
 
     // Create query context
     let context = QueryContext::default();
@@ -329,7 +332,7 @@ pub fn contains_aggregation_functions(query: &str) -> bool {
         "SAMPLE",
     ]
     .iter()
-    .any(|func| upper.contains(&format!("{}(", func)))
+    .any(|func| upper.contains(&format!("{func}(")))
 }
 
 pub fn contains_sparql_star_features(query: &str) -> bool {

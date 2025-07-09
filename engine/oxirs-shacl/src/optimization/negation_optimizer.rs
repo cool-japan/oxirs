@@ -275,15 +275,13 @@ impl NegationOptimizer {
         context: &ConstraintContext,
         store: &dyn Store,
     ) -> Result<NegationOptimizationResult> {
-        let mut predictions_used = 0;
-
         // Use the conformance predictor to pre-filter likely non-conforming values
         let predicted_non_conforming = self
             .conformance_predictor
             .predict_non_conforming_values(&constraint.shape, &context.values);
 
         if !predicted_non_conforming.is_empty() {
-            predictions_used = predicted_non_conforming.len();
+            let predictions_used = predicted_non_conforming.len();
 
             // Create a modified context with only predicted non-conforming values
             let filtered_context = ConstraintContext {
@@ -758,13 +756,12 @@ mod tests {
 
     #[test]
     fn test_early_termination_optimization() {
-        let optimizer = NegationOptimizer::new();
+        let _optimizer = NegationOptimizer::new();
 
         // Test that early termination works for obvious violations
         let shape_id = ShapeId::new("test_shape");
         let focus_node = Term::NamedNode(NamedNode::new("http://example.org/focus").unwrap());
-        let shape_id = ShapeId::new("test_shape");
-        let context =
+        let _context =
             ConstraintContext::new(focus_node, shape_id).with_values(vec![Term::NamedNode(
                 NamedNode::new("http://example.org/test").unwrap(),
             )]);
@@ -775,7 +772,7 @@ mod tests {
 
     #[test]
     fn test_batch_negation_optimization() {
-        let optimizer = NegationOptimizer::new();
+        let _optimizer = NegationOptimizer::new();
 
         // Test batch optimization for multiple values
         let values: Vec<Term> = (0..10)
@@ -883,7 +880,7 @@ impl NegationOptimizer {
         for constraint in constraints {
             shape_groups
                 .entry(constraint.shape.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(constraint);
         }
 

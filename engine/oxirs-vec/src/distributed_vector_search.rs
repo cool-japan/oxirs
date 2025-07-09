@@ -220,10 +220,11 @@ impl DistributedVectorSearch {
 
     /// Register a new node in the cluster
     pub async fn register_node(&self, config: DistributedNodeConfig) -> Result<()> {
-        let mut nodes = self.nodes.write().unwrap();
-
-        info!("Registering node {} at {}", config.node_id, config.endpoint);
-        nodes.insert(config.node_id.clone(), config.clone());
+        {
+            let mut nodes = self.nodes.write().unwrap();
+            info!("Registering node {} at {}", config.node_id, config.endpoint);
+            nodes.insert(config.node_id.clone(), config.clone());
+        } // Drop nodes lock before await
 
         // Update load balancer
         let mut load_balancer = self.load_balancer.lock().await;
@@ -242,9 +243,12 @@ impl DistributedVectorSearch {
 
     /// Remove a node from the cluster
     pub async fn deregister_node(&self, node_id: &str) -> Result<()> {
-        let mut nodes = self.nodes.write().unwrap();
+        let config = {
+            let mut nodes = self.nodes.write().unwrap();
+            nodes.remove(node_id)
+        }; // Drop nodes lock before await
 
-        if let Some(config) = nodes.remove(node_id) {
+        if let Some(config) = config {
             info!("Deregistering node {} at {}", node_id, config.endpoint);
 
             // Update load balancer
@@ -335,7 +339,7 @@ impl DistributedVectorSearch {
 
     /// Select target nodes for query execution
     async fn select_target_nodes(&self, query: &DistributedQuery) -> Result<Vec<String>> {
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.nodes.read().unwrap().clone();
         let load_balancer = self.load_balancer.lock().await;
 
         match &self.partitioning_strategy {

@@ -1,8 +1,8 @@
 //! Production-ready HTTP server implementation with comprehensive middleware
 
 use crate::{
-    auth::{AuthService, AuthUser},
-    config::{MonitoringConfig, SecurityConfig, ServerConfig},
+    auth::AuthService,
+    config::ServerConfig,
     error::{FusekiError, FusekiResult},
     federation::{FederationConfig, FederationManager},
     handlers,
@@ -14,11 +14,11 @@ use crate::{
     websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
-    extract::{MatchedPath, Request, State},
-    http::{HeaderMap, Method, StatusCode},
-    middleware::{self, Next},
-    response::{Html, IntoResponse, Json, Response},
-    routing::{delete, get, post},
+    extract::{Request, State},
+    http::StatusCode,
+    middleware::Next,
+    response::{IntoResponse, Json, Response},
+    routing::get,
     Router,
 };
 use std::collections::HashMap;
@@ -26,16 +26,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::signal;
-use tower::{ServiceBuilder, make::Shared};
-use tower_http::{
-    compression::CompressionLayer,
-    cors::{Any, CorsLayer},
-    request_id::{MakeRequestId, RequestId, SetRequestIdLayer},
-    sensitive_headers::SetSensitiveRequestHeadersLayer,
-    timeout::TimeoutLayer,
-    trace::TraceLayer,
-};
-use tracing::{debug, error, info, warn, Span};
+use tower_http::request_id::{MakeRequestId, RequestId};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 #[cfg(feature = "rate-limit")]
@@ -219,7 +211,7 @@ impl Runtime {
         // Start the server
         let listener = tokio::net::TcpListener::bind(addr)
             .await
-            .map_err(|e| FusekiError::internal(format!("Failed to bind to {}: {}", addr, e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to bind to {addr}: {e}")))?;
 
         let graceful_shutdown =
             Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
@@ -227,7 +219,7 @@ impl Runtime {
         axum::serve(listener, app)
             .with_graceful_shutdown(graceful_shutdown)
             .await
-            .map_err(|e| FusekiError::internal(format!("Server error: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
 
         info!("Server shutdown complete");
         Ok(())
@@ -670,7 +662,7 @@ pub async fn performance_info_handler(
         let cache_stats = performance_service.get_cache_stats().await;
 
         let mut response = serde_json::to_value(metrics)
-            .map_err(|e| FusekiError::internal(format!("Failed to serialize metrics: {}", e)))?;
+            .map_err(|e| FusekiError::internal(format!("Failed to serialize metrics: {e}")))?;
 
         if let serde_json::Value::Object(ref mut map) = response {
             for (key, value) in cache_stats {
@@ -827,7 +819,7 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
                     .into_response(),
                 Err(e) => (
                     axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to generate metrics: {}", e),
+                    format!("Failed to generate metrics: {e}"),
                 )
                     .into_response(),
             }

@@ -54,6 +54,7 @@ pub enum NodeHealthLevel {
 
 /// Complete health status tracking for a node
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct NodeHealthStatus {
     /// Node identifier
     pub node_id: OxirsNodeId,
@@ -73,20 +74,6 @@ pub struct NodeHealthStatus {
     pub custom_checks: HashMap<String, bool>,
 }
 
-impl Default for NodeHealthStatus {
-    fn default() -> Self {
-        Self {
-            node_id: 0,
-            health: NodeHealth::default(),
-            last_heartbeat: 0,
-            failure_count: 0,
-            system_metrics: SystemMetrics::default(),
-            raft_metrics: None,
-            last_failure: None,
-            custom_checks: HashMap::new(),
-        }
-    }
-}
 
 /// System metrics for health assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -566,9 +553,9 @@ impl HealthMonitor {
     /// Start monitoring a specific node
     pub async fn start_monitoring(&self, node_id: OxirsNodeId, _address: String) {
         let mut statuses = self.node_statuses.write().await;
-        if !statuses.contains_key(&node_id) {
+        if let std::collections::hash_map::Entry::Vacant(e) = statuses.entry(node_id) {
             let status = NodeHealthStatus::new(node_id);
-            statuses.insert(node_id, status);
+            e.insert(status);
             info!("Started monitoring node {}", node_id);
         }
     }
@@ -584,7 +571,6 @@ impl HealthMonitor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::time::sleep;
 
     #[tokio::test]
     async fn test_health_monitor_creation() {

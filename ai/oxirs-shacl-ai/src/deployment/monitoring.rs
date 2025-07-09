@@ -16,6 +16,12 @@ pub struct MonitoringAutomation {
     observability_stack: ObservabilityStack,
 }
 
+impl Default for MonitoringAutomation {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MonitoringAutomation {
     pub fn new() -> Self {
         Self {
@@ -32,6 +38,12 @@ impl MonitoringAutomation {
 pub struct MetricsCollector {
     collector_type: MetricsCollectorType,
     metrics_config: MetricsConfig,
+}
+
+impl Default for MetricsCollector {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MetricsCollector {
@@ -117,6 +129,12 @@ pub struct FederationConfig {
 pub struct LogAggregator {
     aggregator_type: LogAggregatorType,
     log_config: LogConfig,
+}
+
+impl Default for LogAggregator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LogAggregator {
@@ -207,6 +225,12 @@ pub struct AlertingManager {
     escalation_policies: Vec<EscalationPolicy>,
 }
 
+impl Default for AlertingManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AlertingManager {
     pub fn new() -> Self {
         Self {
@@ -279,6 +303,12 @@ pub struct ObservabilityStack {
     tracing_system: TracingSystem,
     apm_tools: Vec<ApmTool>,
     dashboards: Vec<Dashboard>,
+}
+
+impl Default for ObservabilityStack {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ObservabilityStack {

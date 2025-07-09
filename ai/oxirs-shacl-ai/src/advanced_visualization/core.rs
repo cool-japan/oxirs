@@ -70,11 +70,11 @@ impl AdvancedVisualizationEngine {
         let renderers = self.renderers.read().await;
 
         let collector = collectors.get(&collector_name).ok_or_else(|| {
-            ShaclAiError::Visualization(format!("Collector '{}' not found", collector_name))
+            ShaclAiError::Visualization(format!("Collector '{collector_name}' not found"))
         })?;
 
         let renderer = renderers.get(&renderer_name).ok_or_else(|| {
-            ShaclAiError::Visualization(format!("Renderer '{}' not found", renderer_name))
+            ShaclAiError::Visualization(format!("Renderer '{renderer_name}' not found"))
         })?;
 
         // Collect data
@@ -111,8 +111,7 @@ impl AdvancedVisualizationEngine {
             Ok(active_viz.output.clone())
         } else {
             Err(ShaclAiError::Visualization(format!(
-                "Visualization '{}' not found",
-                visualization_id
+                "Visualization '{visualization_id}' not found"
             )))
         }
     }

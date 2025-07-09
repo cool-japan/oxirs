@@ -7,14 +7,12 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, Semaphore};
+use std::time::Duration;
 use tokio::time;
-use tracing::{debug, error, info, warn};
-use uuid::Uuid;
+use tracing::{debug, info, warn};
 
 /// Cross-module performance coordinator
 #[derive(Debug)]
@@ -655,7 +653,7 @@ impl CrossModulePerformanceCoordinator {
         }
 
         // Measure actual impact
-        tokio::time::sleep(Duration::from_secs(5)).await; // Allow time for changes to take effect
+        time::sleep(Duration::from_secs(5)).await; // Allow time for changes to take effect
         let actual_impact = self
             .measure_optimization_impact(&recommendation.module_name)
             .await?;
@@ -737,7 +735,7 @@ impl CrossModulePerformanceCoordinator {
     async fn apply_general_optimization(
         &self,
         module_name: &str,
-        recommendation: &OptimizationRecommendation,
+        _recommendation: &OptimizationRecommendation,
     ) -> Result<()> {
         debug!("Applying general optimization for module: {}", module_name);
 
@@ -842,7 +840,7 @@ impl CrossModulePerformanceCoordinator {
         Ok(())
     }
 
-    async fn get_baseline_metrics(&self, module_name: &str) -> Result<ModuleMetrics> {
+    async fn get_baseline_metrics(&self, _module_name: &str) -> Result<ModuleMetrics> {
         // Implementation would retrieve baseline metrics for the module
         Ok(ModuleMetrics {
             cpu_usage: 50.0,
@@ -870,7 +868,6 @@ impl CrossModulePerformanceCoordinator {
 }
 
 /// Additional supporting structures and implementations...
-
 /// Optimization recommendation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptimizationRecommendation {
@@ -1029,7 +1026,6 @@ impl OptimizationCache {
 }
 
 /// Helper implementations for other types...
-
 impl ResourceAllocator {
     fn new() -> Self {
         Self {

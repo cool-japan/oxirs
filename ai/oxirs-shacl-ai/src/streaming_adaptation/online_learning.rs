@@ -2,12 +2,12 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::time::{Duration, SystemTime};
+use std::time::SystemTime;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Online learning engine for streaming data
 #[derive(Debug)]

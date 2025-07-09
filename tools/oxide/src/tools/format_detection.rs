@@ -4,12 +4,9 @@
 //! capabilities for the Oxide CLI toolkit, supporting automatic MIME type detection,
 //! content-based analysis, and intelligent format conversion.
 
-use crate::{
-    cli::{error::CliError, output::OutputFormatter},
-    config::OxideConfig,
-};
+use crate::cli::{error::CliError, output::OutputFormatter};
 use oxirs_core::{
-    format::{FormatHandler, RdfFormat, RdfParseError},
+    format::{FormatHandler, RdfFormat},
     model::Graph,
 };
 use serde::{Deserialize, Serialize};
@@ -627,8 +624,7 @@ impl FormatDetector {
         match handler.parse_triples(reader) {
             Ok(_) => Ok(()),
             Err(e) => Err(CliError::invalid_format(format!(
-                "Validation failed: {}",
-                e
+                "Validation failed: {e}"
             ))),
         }
     }
@@ -661,7 +657,7 @@ impl FormatDetector {
                 }
             }
             Err(e) => {
-                return Err(CliError::from(format!("Failed to parse input: {}", e)));
+                return Err(CliError::from(format!("Failed to parse input: {e}")));
             }
         }
 
@@ -675,7 +671,7 @@ impl FormatDetector {
                 stats.conversion_time = start_time.elapsed();
                 Ok(stats)
             }
-            Err(e) => Err(CliError::from(format!("Failed to write output: {}", e))),
+            Err(e) => Err(CliError::from(format!("Failed to write output: {e}"))),
         }
     }
 }
@@ -773,8 +769,7 @@ fn parse_format(format_str: &str) -> Result<RdfFormat, CliError> {
         "trig" => Ok(RdfFormat::TriG),
         "nquads" | "nq" => Ok(RdfFormat::NQuads),
         _ => Err(CliError::invalid_format(format!(
-            "Unknown format: {}",
-            format_str
+            "Unknown format: {format_str}"
         ))),
     }
 }

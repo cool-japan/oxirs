@@ -99,10 +99,10 @@ impl AdvancedQueryPlanner {
         }
 
         // Analyze the query structure
-        let query_analysis = self.analyze_query_structure(&operations[0]).await?;
+        let query_analysis = self.analyze_query_structure(operations[0]).await?;
 
         // Build execution graph
-        let execution_graph = self.build_execution_graph(&operations[0], &query_analysis)?;
+        let execution_graph = self.build_execution_graph(operations[0], &query_analysis)?;
 
         // Apply optimizations
         let optimized_graph = self.optimize_execution_graph(execution_graph).await?;
@@ -188,7 +188,7 @@ impl AdvancedQueryPlanner {
         for (index, selection) in selection_set.selections.iter().enumerate() {
             match selection {
                 Selection::Field(field) => {
-                    let node_id = format!("{}_{}", parent_id, index);
+                    let node_id = format!("{parent_id}_{index}");
                     let estimated_cost = self.estimate_field_cost(field, analysis)?;
                     let can_parallelize =
                         analysis.parallelization_opportunities.contains(&field.name);
@@ -219,7 +219,7 @@ impl AdvancedQueryPlanner {
                     }
                 }
                 Selection::InlineFragment(fragment) => {
-                    let node_id = format!("{}_fragment_{}", parent_id, index);
+                    let node_id = format!("{parent_id}_fragment_{index}");
                     let node = ExecutionNode {
                         id: node_id.clone(),
                         node_type: ExecutionNodeType::Fragment,
@@ -237,7 +237,7 @@ impl AdvancedQueryPlanner {
                 }
                 Selection::FragmentSpread(_) => {
                     // Handle fragment spreads
-                    let node_id = format!("{}_spread_{}", parent_id, index);
+                    let node_id = format!("{parent_id}_spread_{index}");
                     let node = ExecutionNode {
                         id: node_id.clone(),
                         node_type: ExecutionNodeType::FragmentSpread,
@@ -435,6 +435,7 @@ impl AdvancedQueryPlanner {
         Ok(operations)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_query_complexity(&self, selection_set: &SelectionSet) -> Result<f64> {
         let mut complexity = 0.0;
 
@@ -458,6 +459,7 @@ impl AdvancedQueryPlanner {
         Ok(complexity)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_query_depth(&self, selection_set: &SelectionSet) -> Result<usize> {
         let mut max_depth = 1;
 
@@ -482,6 +484,7 @@ impl AdvancedQueryPlanner {
         Ok(max_depth)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn count_fields(&self, selection_set: &SelectionSet) -> usize {
         let mut count = 0;
 
@@ -607,6 +610,7 @@ impl AdvancedQueryPlanner {
         Ok(result)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn dfs_topological_sort(
         &self,
         graph: &ExecutionGraph,

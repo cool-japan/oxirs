@@ -5,11 +5,17 @@ use std::collections::HashMap;
 
 use super::traits::*;
 use super::types::*;
-use crate::{Result, ShaclAiError};
+use crate::Result;
 
 /// Natural language text validator
 #[derive(Debug)]
 pub struct NaturalLanguageValidator;
+
+impl Default for NaturalLanguageValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl NaturalLanguageValidator {
     pub fn new() -> Self {
@@ -60,6 +66,12 @@ impl TextValidator for NaturalLanguageValidator {
 /// Sentiment analysis validator
 #[derive(Debug)]
 pub struct SentimentValidator;
+
+impl Default for SentimentValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl SentimentValidator {
     pub fn new() -> Self {
@@ -154,6 +166,12 @@ impl SentimentValidator {
 #[derive(Debug)]
 pub struct LanguageDetectionValidator;
 
+impl Default for LanguageDetectionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LanguageDetectionValidator {
     pub fn new() -> Self {
         Self
@@ -241,6 +259,12 @@ impl LanguageDetectionValidator {
 #[derive(Debug)]
 pub struct EntityExtractionValidator;
 
+impl Default for EntityExtractionValidator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EntityExtractionValidator {
     pub fn new() -> Self {
         Self
@@ -304,6 +328,12 @@ pub struct TextQualityValidator {
     min_length: usize,
     max_length: usize,
     require_punctuation: bool,
+}
+
+impl Default for TextQualityValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TextQualityValidator {
@@ -402,6 +432,12 @@ impl TextValidator for TextQualityValidator {
 pub struct ProfanityValidator {
     profanity_list: Vec<String>,
     strict_mode: bool,
+}
+
+impl Default for ProfanityValidator {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl ProfanityValidator {

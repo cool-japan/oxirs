@@ -1,6 +1,6 @@
 //! Main pattern analyzer implementation
 
-use crate::{ModelTrainingResult, Result, ShaclAiError};
+use crate::{ModelTrainingResult, Result};
 use oxirs_core::Store;
 use oxirs_shacl::Shape;
 use std::time::Instant;

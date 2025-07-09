@@ -87,6 +87,7 @@ pub struct HybridQueryOptimizer {
     config: HybridOptimizerConfig,
     quantum_optimizer: QuantumQueryOptimizer,
     ml_optimizer: MLQueryOptimizer,
+    #[allow(dead_code)]
     performance_tracker: Arc<PerformanceTracker>,
     strategy_performance: Arc<RwLock<HashMap<String, StrategyPerformance>>>,
     optimization_history: Arc<RwLock<Vec<HybridOptimizationResult>>>,

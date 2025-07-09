@@ -186,6 +186,12 @@ pub struct VersionVector {
     pub timestamps: HashMap<u64, u64>,
 }
 
+impl Default for VersionVector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VersionVector {
     pub fn new() -> Self {
         Self {
@@ -597,8 +603,8 @@ impl OptimisticConcurrencyController {
             }
 
             // Priority-based conflict resolution
-            if self.config.enable_priority_conflict_resolution {
-                if tx_info.priority < other_tx.priority {
+            if self.config.enable_priority_conflict_resolution
+                && tx_info.priority < other_tx.priority {
                     // Check if there's any overlap in accessed keys
                     let tx_keys = tx_info.get_accessed_keys();
                     let other_keys = other_tx.get_accessed_keys();
@@ -619,7 +625,6 @@ impl OptimisticConcurrencyController {
                         }));
                     }
                 }
-            }
         }
 
         Ok(None)

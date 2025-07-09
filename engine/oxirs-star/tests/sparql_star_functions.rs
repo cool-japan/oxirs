@@ -3,7 +3,7 @@
 use oxirs_star::{
     functions::{Expression, ExpressionEvaluator, FunctionEvaluator, StarFunction},
     query::{BasicGraphPattern, QueryExecutor, TermPattern, TriplePattern},
-    StarGraph, StarStore, StarTerm, StarTriple,
+    StarStore, StarTerm, StarTriple,
 };
 use std::collections::HashMap;
 
@@ -334,9 +334,9 @@ fn test_sparql_star_end_to_end() {
 
     for (subj, pred, obj, conf, source) in facts {
         let fact = StarTriple::new(
-            StarTerm::iri(&format!("http://example.org/{}", subj)).unwrap(),
-            StarTerm::iri(&format!("http://example.org/{}", pred)).unwrap(),
-            StarTerm::iri(&format!("http://example.org/{}", obj)).unwrap(),
+            StarTerm::iri(&format!("http://example.org/{subj}")).unwrap(),
+            StarTerm::iri(&format!("http://example.org/{pred}")).unwrap(),
+            StarTerm::iri(&format!("http://example.org/{obj}")).unwrap(),
         );
 
         store.insert(&fact).unwrap();
@@ -387,7 +387,7 @@ fn test_sparql_star_end_to_end() {
     let bindings = executor.execute_bgp(&bgp).unwrap();
 
     // Should find facts about Alice
-    assert!(bindings.len() > 0);
+    assert!(!bindings.is_empty());
 
     for binding in &bindings {
         if let Some(fact) = binding.get("fact") {

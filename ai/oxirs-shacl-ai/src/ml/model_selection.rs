@@ -4,7 +4,7 @@
 //! their hyperparameters for shape learning tasks.
 
 use super::{
-    GraphData, LearnedShape, ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
+    ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
     ShapeTrainingData,
 };
 use rand::SeedableRng;
@@ -194,7 +194,7 @@ impl ModelSelector {
         let mut best_model = None;
 
         for (model_idx, model) in models.iter_mut().enumerate() {
-            let model_name = format!("model_{}", model_idx);
+            let model_name = format!("model_{model_idx}");
             let param_space = param_spaces.get(&model_name).ok_or_else(|| {
                 ModelError::InvalidParams("No parameter space defined".to_string())
             })?;
@@ -255,7 +255,7 @@ impl ModelSelector {
             // Randomly select a model
             let model_idx = rng.gen_range(0..models.len());
             let model = &mut models[model_idx];
-            let model_name = format!("model_{}", model_idx);
+            let model_name = format!("model_{model_idx}");
 
             let param_space = param_spaces.get(&model_name).ok_or_else(|| {
                 ModelError::InvalidParams("No parameter space defined".to_string())
@@ -318,7 +318,7 @@ impl ModelSelector {
         for _ in 0..5 {
             let model_idx = 0; // Simplified - use first model
             let model = &mut models[model_idx];
-            let model_name = format!("model_{}", model_idx);
+            let model_name = format!("model_{model_idx}");
 
             let param_space = param_spaces.get(&model_name).ok_or_else(|| {
                 ModelError::InvalidParams("No parameter space defined".to_string())
@@ -350,7 +350,7 @@ impl ModelSelector {
         for _ in 0..self.config.n_iter - 5 {
             let model_idx = 0;
             let model = &mut models[model_idx];
-            let model_name = format!("model_{}", model_idx);
+            let model_name = format!("model_{model_idx}");
 
             let param_space = param_spaces.get(&model_name).ok_or_else(|| {
                 ModelError::InvalidParams("No parameter space defined".to_string())
@@ -397,7 +397,7 @@ impl ModelSelector {
         // Initialize population
         for _ in 0..population_size {
             let model_idx = 0; // Simplified
-            let model_name = format!("model_{}", model_idx);
+            let model_name = format!("model_{model_idx}");
             let param_space = param_spaces.get(&model_name).ok_or_else(|| {
                 ModelError::InvalidParams("No parameter space defined".to_string())
             })?;
@@ -426,7 +426,7 @@ impl ModelSelector {
                     let metrics = model.train(training_data)?;
 
                     best_model = Some(BestModel {
-                        model_name: format!("model_{}", model_idx),
+                        model_name: format!("model_{model_idx}"),
                         params: params.clone(),
                         score,
                         metrics,

@@ -90,9 +90,9 @@ impl SimpleRdfProcessor {
         } else if object_str.starts_with('"') {
             // Literal
             self.parse_literal(&object_str)?
-        } else if object_str.starts_with("_:") {
+        } else if let Some(stripped) = object_str.strip_prefix("_:") {
             // Blank node
-            (object_str[2..].to_string(), ObjectType::BlankNode)
+            (stripped.to_string(), ObjectType::BlankNode)
         } else {
             return Err(anyhow!("Invalid object format"));
         };
@@ -115,16 +115,16 @@ impl SimpleRdfProcessor {
 
         // Check for language tag or datatype
         let remainder = &literal_str[end_quote + 1..];
-        if remainder.starts_with("@") {
+        if let Some(stripped) = remainder.strip_prefix("@") {
             // Language tag
-            let lang = remainder[1..].to_string();
+            let lang = stripped.to_string();
             Ok((
                 value.to_string(),
                 ObjectType::Literal(Some(value.to_string()), Some(lang)),
             ))
-        } else if remainder.starts_with("^^") {
+        } else if let Some(stripped) = remainder.strip_prefix("^^") {
             // Datatype
-            let datatype = remainder[2..]
+            let datatype = stripped
                 .trim_start_matches('<')
                 .trim_end_matches('>')
                 .to_string();
@@ -164,7 +164,7 @@ impl SimpleRdfProcessor {
                         ))
                     } else {
                         // Language
-                        RuleTerm::Literal(format!("{}@{}", value, lang_or_dt))
+                        RuleTerm::Literal(format!("{value}@{lang_or_dt}"))
                     }
                 } else {
                     RuleTerm::Literal(value.clone())

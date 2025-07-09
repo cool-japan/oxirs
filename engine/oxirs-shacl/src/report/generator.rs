@@ -117,7 +117,7 @@ impl ReportGenerator {
 
     fn generate_rdfxml(&self, report: &ValidationReport) -> Result<String> {
         // Convert to RDF/XML format
-        let turtle = report.to_turtle_with_config(&self.config)?;
+        let _turtle = report.to_turtle_with_config(&self.config)?;
 
         // Simple conversion (in practice, would use a proper RDF library)
         let rdfxml = format!(

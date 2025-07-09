@@ -56,13 +56,13 @@ impl Default for EvolutionaryConfig {
             diversity_requirements: DiversityRequirements::default(),
             performance_targets: PerformanceTargets::default(),
             nas_strategy: NASSearchStrategy::EvolutionarySearch,
-            search_space_config: SearchSpaceConfig::default(),
-            predictor_config: PredictorConfig::default(),
-            encoding_config: EncodingConfig::default(),
+            search_space_config: SearchSpaceConfig,
+            predictor_config: PredictorConfig,
+            encoding_config: EncodingConfig,
             genetic_operators: vec![GeneticOperator::default()],
             mutation_strategies: vec![MutationStrategy::default()],
-            crossover_strategies: vec![CrossoverStrategy::default()],
-            selection_strategies: vec![SelectionStrategy::default()],
+            crossover_strategies: vec![CrossoverStrategy],
+            selection_strategies: vec![SelectionStrategy],
         }
     }
 }
@@ -130,6 +130,7 @@ pub struct ResourceConstraints {
 
 /// Neural architecture representation
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct NeuralArchitecture {
     pub layers: Vec<LayerSpec>,
     pub connections: Vec<ConnectionSpec>,
@@ -137,16 +138,6 @@ pub struct NeuralArchitecture {
     pub hyperparameters: HyperparameterSpec,
 }
 
-impl Default for NeuralArchitecture {
-    fn default() -> Self {
-        Self {
-            layers: Vec::new(),
-            connections: Vec::new(),
-            topology: TopologySpec::default(),
-            hyperparameters: HyperparameterSpec::default(),
-        }
-    }
-}
 
 /// Layer specification for neural architecture
 #[derive(Debug, Clone)]
