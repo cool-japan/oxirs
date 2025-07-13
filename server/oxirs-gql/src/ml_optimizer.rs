@@ -14,6 +14,7 @@ use tracing::info;
 use crate::ast::{Document, OperationType, Selection, SelectionSet};
 use crate::optimizer::{QueryComplexity, QueryOptimizer};
 use crate::performance::{OperationMetrics, PerformanceTracker};
+use crate::system_monitor;
 
 /// ML optimizer configuration
 #[derive(Debug, Clone)]
@@ -304,6 +305,7 @@ impl FeatureStatistics {
         }
 
         let total_samples = self.sample_count + samples.len();
+        #[allow(clippy::needless_range_loop)]
         for i in 0..feature_count {
             let new_mean = sums[i] / samples.len() as f64;
             self.feature_means[i] = (self.feature_means[i] * self.sample_count as f64
@@ -321,6 +323,7 @@ impl FeatureStatistics {
             }
         }
 
+        #[allow(clippy::needless_range_loop)]
         for i in 0..feature_count {
             self.feature_stds[i] = (var_sums[i] / samples.len() as f64).sqrt().max(1e-6);
         }
@@ -538,10 +541,13 @@ impl MLQueryOptimizer {
 
         let features = self.extract_features(document)?;
 
+        // Get real memory usage measurement
+        let memory_usage_mb = system_monitor::get_current_memory_usage_mb().await;
+
         let sample = TrainingSample {
             features,
             execution_time_ms: metrics.execution_time.as_millis() as f64,
-            memory_usage_mb: 10.0, // Placeholder - would need actual memory measurement
+            memory_usage_mb,
             cache_hit: metrics.cache_hit,
             error_occurred: metrics.error_count > 0,
             timestamp: metrics.timestamp,
@@ -609,6 +615,8 @@ impl MLQueryOptimizer {
     }
 
     /// Analyze a selection set recursively
+    #[allow(clippy::only_used_in_recursion)]
+    #[allow(clippy::type_complexity)]
     fn analyze_selection_set(
         &self,
         selection_set: &SelectionSet,
@@ -775,7 +783,7 @@ mod tests {
                 ])
                 .unwrap(),
                 execution_time_ms: 100.0,
-                memory_usage_mb: 10.0,
+                memory_usage_mb: 50.0, // Realistic test value
                 cache_hit: false,
                 error_occurred: false,
                 timestamp: SystemTime::now(),

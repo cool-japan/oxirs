@@ -582,9 +582,11 @@ impl DeltaManager {
         let change_log = self.change_log.read().unwrap();
         let pending = self.pending_changes.read().unwrap();
 
-        let mut stats = ChangeStatistics::default();
-        stats.total_changes = change_log.len();
-        stats.pending_changes = pending.len();
+        let mut stats = ChangeStatistics {
+            total_changes: change_log.len(),
+            pending_changes: pending.len(),
+            ..Default::default()
+        };
 
         // Count by type
         for change in change_log.iter() {

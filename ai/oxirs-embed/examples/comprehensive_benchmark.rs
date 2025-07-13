@@ -213,7 +213,7 @@ async fn benchmark_transe(triples: &[Triple], config: ModelConfig) -> Result<Mod
 
     // Split data for evaluation
     let train_size = (triples.len() as f64 * 0.8) as usize;
-    let train_triples: Vec<_> = triples[..train_size]
+    let _train_triples: Vec<_> = triples[..train_size]
         .iter()
         .map(|t| {
             (
@@ -223,7 +223,7 @@ async fn benchmark_transe(triples: &[Triple], config: ModelConfig) -> Result<Mod
             )
         })
         .collect();
-    let test_triples: Vec<_> = triples[train_size..]
+    let _test_triples: Vec<_> = triples[train_size..]
         .iter()
         .map(|t| {
             (
@@ -307,7 +307,7 @@ async fn benchmark_model_impl<M: oxirs_embed::EmbeddingModel>(
 
     // Split data for evaluation
     let train_size = (triples.len() as f64 * 0.8) as usize;
-    let train_triples: Vec<_> = triples[..train_size]
+    let _train_triples: Vec<_> = triples[..train_size]
         .iter()
         .map(|t| {
             (
@@ -317,7 +317,7 @@ async fn benchmark_model_impl<M: oxirs_embed::EmbeddingModel>(
             )
         })
         .collect();
-    let test_triples: Vec<_> = triples[train_size..]
+    let _test_triples: Vec<_> = triples[train_size..]
         .iter()
         .map(|t| {
             (

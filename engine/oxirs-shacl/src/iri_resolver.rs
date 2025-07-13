@@ -3,6 +3,8 @@
 //! Provides comprehensive IRI expansion, validation, and resolution capabilities
 //! for SHACL validation operations.
 
+#![allow(dead_code)]
+
 use oxirs_core::model::{NamedNode, Term};
 use std::collections::HashMap;
 use url::Url;

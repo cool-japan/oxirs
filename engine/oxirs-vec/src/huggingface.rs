@@ -84,7 +84,7 @@ impl HuggingFaceEmbedder {
         // Check if model exists in cache directory
         let model_info = self.get_model_info(model_name).await?;
         self.model_cache.insert(model_name.to_string(), model_info);
-        
+
         tracing::info!("Loaded HuggingFace model: {}", model_name);
         Ok(())
     }
@@ -120,7 +120,9 @@ impl HuggingFaceEmbedder {
         let model_name = self.config.model_name.clone();
         self.load_model(&model_name).await?;
 
-        let model_info = self.model_cache.get(&self.config.model_name)
+        let model_info = self
+            .model_cache
+            .get(&self.config.model_name)
             .ok_or_else(|| anyhow!("Model not loaded: {}", self.config.model_name))?;
 
         let mut embeddings = Vec::with_capacity(contents.len());
@@ -142,7 +144,9 @@ impl HuggingFaceEmbedder {
     /// Generate a single embedding
     pub async fn embed(&mut self, content: &EmbeddableContent) -> Result<Vector> {
         let embeddings = self.embed_batch(&[content.clone()]).await?;
-        embeddings.into_iter().next()
+        embeddings
+            .into_iter()
+            .next()
             .ok_or_else(|| anyhow!("Failed to generate embedding"))
     }
 
@@ -150,21 +154,26 @@ impl HuggingFaceEmbedder {
     fn content_to_text(&self, content: &EmbeddableContent) -> String {
         match content {
             EmbeddableContent::Text(text) => text.clone(),
-            EmbeddableContent::RdfResource { uri, label, description, properties } => {
+            EmbeddableContent::RdfResource {
+                uri,
+                label,
+                description,
+                properties,
+            } => {
                 let mut text_parts = vec![uri.clone()];
-                
+
                 if let Some(label) = label {
                     text_parts.push(label.clone());
                 }
-                
+
                 if let Some(desc) = description {
                     text_parts.push(desc.clone());
                 }
-                
+
                 for (prop, values) in properties {
                     text_parts.push(format!("{}: {}", prop, values.join(", ")));
                 }
-                
+
                 text_parts.join(" ")
             }
             EmbeddableContent::SparqlQuery(query) => query.clone(),
@@ -173,7 +182,11 @@ impl HuggingFaceEmbedder {
     }
 
     /// Generate embeddings using transformer model
-    async fn generate_embeddings(&self, texts: &[String], model_info: &ModelInfo) -> Result<Vec<Vector>> {
+    async fn generate_embeddings(
+        &self,
+        texts: &[String],
+        model_info: &ModelInfo,
+    ) -> Result<Vec<Vector>> {
         // In a real implementation, this would use actual HuggingFace transformers
         // For now, simulate embedding generation
         let mut embeddings = Vec::with_capacity(texts.len());
@@ -257,15 +270,22 @@ impl HuggingFaceModelManager {
     }
 
     /// Get embeddings using specified model
-    pub async fn embed_with_model(&mut self, model_name: &str, content: &EmbeddableContent) -> Result<Vector> {
-        let embedder = self.embedders.get_mut(model_name)
+    pub async fn embed_with_model(
+        &mut self,
+        model_name: &str,
+        content: &EmbeddableContent,
+    ) -> Result<Vector> {
+        let embedder = self
+            .embedders
+            .get_mut(model_name)
             .ok_or_else(|| anyhow!("Model not found: {}", model_name))?;
         embedder.embed(content).await
     }
 
     /// Get embeddings using default model
     pub async fn embed(&mut self, content: &EmbeddableContent) -> Result<Vector> {
-        self.embed_with_model(&self.default_model.clone(), content).await
+        self.embed_with_model(&self.default_model.clone(), content)
+            .await
     }
 
     /// List available models
@@ -283,10 +303,10 @@ impl From<EmbeddingConfig> for HuggingFaceConfig {
             device: "cpu".to_string(),
             batch_size: 32,
             max_length: config.max_sequence_length,
-            pooling_strategy: if config.normalize { 
-                PoolingStrategy::Mean 
-            } else { 
-                PoolingStrategy::Cls 
+            pooling_strategy: if config.normalize {
+                PoolingStrategy::Mean
+            } else {
+                PoolingStrategy::Cls
             },
             trust_remote_code: false,
         }
@@ -306,9 +326,11 @@ mod tests {
     #[tokio::test]
     async fn test_model_loading() {
         let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
-        let result = embedder.load_model("sentence-transformers/all-MiniLM-L6-v2").await;
+        let result = embedder
+            .load_model("sentence-transformers/all-MiniLM-L6-v2")
+            .await;
         assert!(result.is_ok());
-        
+
         let dimensions = embedder.get_model_dimensions("sentence-transformers/all-MiniLM-L6-v2");
         assert_eq!(dimensions, Some(384));
     }
@@ -317,10 +339,10 @@ mod tests {
     async fn test_text_embedding() {
         let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
         let content = EmbeddableContent::Text("Hello, world!".to_string());
-        
+
         let result = embedder.embed(&content).await;
         assert!(result.is_ok());
-        
+
         let embedding = result.unwrap();
         assert_eq!(embedding.dimensions, 384);
     }
@@ -330,14 +352,14 @@ mod tests {
         let mut embedder = HuggingFaceEmbedder::with_default_config().unwrap();
         let mut properties = HashMap::new();
         properties.insert("type".to_string(), vec!["Person".to_string()]);
-        
+
         let content = EmbeddableContent::RdfResource {
             uri: "http://example.org/person/1".to_string(),
             label: Some("John Doe".to_string()),
             description: Some("A person in the knowledge graph".to_string()),
             properties,
         };
-        
+
         let result = embedder.embed(&content).await;
         assert!(result.is_ok());
     }
@@ -350,10 +372,10 @@ mod tests {
             EmbeddableContent::Text("Second text".to_string()),
             EmbeddableContent::Text("Third text".to_string()),
         ];
-        
+
         let result = embedder.embed_batch(&contents).await;
         assert!(result.is_ok());
-        
+
         let embeddings = result.unwrap();
         assert_eq!(embeddings.len(), 3);
     }
@@ -362,10 +384,10 @@ mod tests {
     async fn test_model_manager() {
         let mut manager = HuggingFaceModelManager::new("default".to_string());
         let config = HuggingFaceConfig::default();
-        
+
         let result = manager.add_model("default".to_string(), config);
         assert!(result.is_ok());
-        
+
         let models = manager.list_models();
         assert!(models.contains(&"default".to_string()));
     }
@@ -378,7 +400,7 @@ mod tests {
             max_sequence_length: 512,
             normalize: true,
         };
-        
+
         let hf_config: HuggingFaceConfig = embedding_config.into();
         assert_eq!(hf_config.model_name, "test-model");
         assert_eq!(hf_config.max_length, 512);
@@ -393,17 +415,18 @@ mod tests {
             PoolingStrategy::Max,
             PoolingStrategy::AttentionWeighted,
         ];
-        
+
         for strategy in strategies {
             let config = HuggingFaceConfig {
                 pooling_strategy: strategy,
                 ..Default::default()
             };
-            assert!(matches!(config.pooling_strategy, 
-                PoolingStrategy::Cls | 
-                PoolingStrategy::Mean | 
-                PoolingStrategy::Max | 
-                PoolingStrategy::AttentionWeighted
+            assert!(matches!(
+                config.pooling_strategy,
+                PoolingStrategy::Cls
+                    | PoolingStrategy::Mean
+                    | PoolingStrategy::Max
+                    | PoolingStrategy::AttentionWeighted
             ));
         }
     }

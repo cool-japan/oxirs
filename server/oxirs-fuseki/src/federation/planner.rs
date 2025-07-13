@@ -247,9 +247,9 @@ impl ServiceDiscovery for DefaultServiceDiscovery {
         Ok(discovered)
     }
 
-    async fn get_capabilities(&self, endpoint_url: &str) -> Result<EndpointCapabilities> {
+    async fn get_capabilities(&self, _endpoint_url: &str) -> Result<EndpointCapabilities> {
         // Query endpoint for its capabilities using SPARQL service description
-        let query = r#"
+        let _query = r#"
             SELECT ?feature ?function WHERE {
                 ?service a <http://www.w3.org/ns/sparql-service-description#Service> .
                 OPTIONAL { ?service <http://www.w3.org/ns/sparql-service-description#feature> ?feature }
@@ -263,7 +263,7 @@ impl ServiceDiscovery for DefaultServiceDiscovery {
     }
 
     async fn check_health(&self, endpoint_url: &str) -> Result<ServiceHealth> {
-        let start = std::time::Instant::now();
+        let _start = std::time::Instant::now();
 
         // Simple health check with ASK query
         let health_query = "ASK { ?s ?p ?o }";
@@ -367,7 +367,7 @@ impl CostEstimator for DefaultCostEstimator {
     async fn estimate_result_size(
         &self,
         pattern: &str,
-        endpoint: &ServiceEndpoint,
+        _endpoint: &ServiceEndpoint,
     ) -> Result<usize> {
         let stats = self.statistics.read().await;
 
@@ -902,7 +902,7 @@ impl QueryPlanner {
     /// Create a SPARQL sub-query from a pattern
     fn create_sub_query(&self, pattern: &str) -> Result<Query> {
         // Simple sub-query creation - wrap pattern in SELECT * WHERE
-        let sub_query_string = format!("SELECT * WHERE {{ {pattern} }}");
+        let _sub_query_string = format!("SELECT * WHERE {{ {pattern} }}");
 
         // For now, create a simple placeholder query
         // In a real implementation, this would use proper SPARQL parsing
@@ -1050,9 +1050,7 @@ impl QueryPlanner {
                             .await
                             .unwrap_or_else(|_| "Unknown error".to_string());
                         return Err(Error::ServiceError {
-                            message: format!(
-                                "Service {url} returned HTTP {status}: {error_text}"
-                            ),
+                            message: format!("Service {url} returned HTTP {status}: {error_text}"),
                         });
                     }
 
@@ -1259,6 +1257,27 @@ impl QueryPlanner {
             let count = pattern_stats.execution_count as f64;
             pattern_stats.success_rate = (pattern_stats.success_rate * (count - 1.0)) / count;
         }
+    }
+
+    /// Create execution plan for a federated query
+    pub async fn create_execution_plan(
+        &self,
+        query: &str,
+        service_patterns: &[crate::federated_query_optimizer::ServicePattern],
+    ) -> Result<crate::federated_query_optimizer::ExecutionPlan> {
+        // Create a simple implementation that delegates to the federated query optimizer
+        use crate::federated_query_optimizer::QueryPlanner as FederatedQueryPlanner;
+
+        // Create a temporary planner instance
+        let planner = FederatedQueryPlanner::new();
+
+        // Create execution plan
+        planner
+            .create_execution_plan(query, service_patterns)
+            .await
+            .map_err(|e| Error::QueryExecution {
+                message: format!("Failed to create execution plan: {}", e),
+            })
     }
 }
 

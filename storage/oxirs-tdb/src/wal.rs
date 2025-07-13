@@ -981,7 +981,10 @@ impl WalManager {
                     ..
                 } => {
                     // Redo the insert operation
-                    if let Ok(_) = self.redo_insert(*transaction_id, key.clone(), *value) {
+                    if self
+                        .redo_insert(*transaction_id, key.clone(), *value)
+                        .is_ok()
+                    {
                         operations_redone += 1;
                         debug!("Redone insert operation at LSN {}", record.lsn);
                     }
@@ -994,7 +997,10 @@ impl WalManager {
                     ..
                 } => {
                     // Redo the update operation
-                    if let Ok(_) = self.redo_update(*transaction_id, key.clone(), *new_value) {
+                    if self
+                        .redo_update(*transaction_id, key.clone(), *new_value)
+                        .is_ok()
+                    {
                         operations_redone += 1;
                         debug!("Redone update operation at LSN {}", record.lsn);
                     }
@@ -1006,7 +1012,7 @@ impl WalManager {
                     ..
                 } => {
                     // Redo the delete operation
-                    if let Ok(_) = self.redo_delete(*transaction_id, key.clone()) {
+                    if self.redo_delete(*transaction_id, key.clone()).is_ok() {
                         operations_redone += 1;
                         debug!("Redone delete operation at LSN {}", record.lsn);
                     }
@@ -1042,14 +1048,20 @@ impl WalManager {
                             key, deleted_value, ..
                         } => {
                             // CLR for delete means we need to insert
-                            if self.redo_insert(*transaction_id, key.clone(), *deleted_value).is_ok() {
+                            if self
+                                .redo_insert(*transaction_id, key.clone(), *deleted_value)
+                                .is_ok()
+                            {
                                 operations_redone += 1;
                                 debug!("Redone CLR insert at LSN {}", record.lsn);
                             }
                         }
                         LogRecordType::Update { key, old_value, .. } => {
                             // CLR for update means we restore old value
-                            if self.redo_update(*transaction_id, key.clone(), *old_value).is_ok() {
+                            if self
+                                .redo_update(*transaction_id, key.clone(), *old_value)
+                                .is_ok()
+                            {
                                 operations_redone += 1;
                                 debug!("Redone CLR update at LSN {}", record.lsn);
                             }
@@ -1341,9 +1353,10 @@ impl WalManager {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_secs();
-        let archive_path = self.config.wal_file_path.with_file_name(format!(
-            "wal_archive_{archive_before_lsn}_{timestamp}.log"
-        ));
+        let archive_path = self
+            .config
+            .wal_file_path
+            .with_file_name(format!("wal_archive_{archive_before_lsn}_{timestamp}.log"));
 
         // Read all log records
         let all_records = self.read_all_log_records()?;

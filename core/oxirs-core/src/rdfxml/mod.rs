@@ -8,7 +8,7 @@ mod parser;
 mod serializer;
 mod streaming;
 mod utils;
-mod wrapper;
+pub mod wrapper;
 
 pub use error::{RdfXmlParseError, RdfXmlSyntaxError};
 #[cfg(feature = "async-tokio")]

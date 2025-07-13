@@ -21,7 +21,7 @@ use kube::{
     Client,
 };
 
-use crate::DiscoveredEndpoint;
+use crate::auto_discovery::DiscoveredEndpoint;
 
 /// Kubernetes service discovery configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

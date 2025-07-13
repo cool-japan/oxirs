@@ -22,4 +22,3 @@ pub use population::{ArchitecturePopulationManager, EvolutionStrategyCoordinator
 pub use search_engine::NeuralArchitectureSearchEngine;
 pub use self_modification::SelfModificationEngine;
 pub use types::*;
-

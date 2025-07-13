@@ -4,6 +4,8 @@
 //! validation time by evaluating the most selective constraints first and
 //! implementing early termination for performance.
 
+#![allow(dead_code)]
+
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::time::{Duration, Instant};

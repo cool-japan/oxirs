@@ -154,7 +154,7 @@ impl SparqlResultsData {
 /// A single SPARQL binding (variable -> value mapping)
 pub type SparqlBinding = HashMap<String, SparqlValue>;
 
-/// A SPARQL value
+/// A SPARQL value with RDF-star support
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparqlValue {
     #[serde(rename = "type")]
@@ -162,6 +162,269 @@ pub struct SparqlValue {
     pub value: String,
     pub datatype: Option<String>,
     pub lang: Option<String>,
+    /// Additional quoted triple data for RDF-star support
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quoted_triple: Option<QuotedTripleValue>,
+}
+
+/// Quoted triple value for RDF-star support
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuotedTripleValue {
+    pub subject: Box<RdfTerm>,
+    pub predicate: Box<RdfTerm>,
+    pub object: Box<RdfTerm>,
+}
+
+/// RDF term representation for quoted triples
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RdfTerm {
+    /// IRI reference
+    IRI(String),
+    /// Blank node
+    BlankNode(String),
+    /// Literal value
+    Literal {
+        value: String,
+        datatype: Option<String>,
+        lang: Option<String>,
+    },
+    /// Nested quoted triple
+    QuotedTriple(QuotedTripleValue),
+}
+
+impl SparqlValue {
+    /// Create a new literal SPARQL value
+    pub fn literal(value: String, datatype: Option<String>, lang: Option<String>) -> Self {
+        Self {
+            value_type: "literal".to_string(),
+            value,
+            datatype,
+            lang,
+            quoted_triple: None,
+        }
+    }
+
+    /// Create a new IRI SPARQL value
+    pub fn iri(iri: String) -> Self {
+        Self {
+            value_type: "uri".to_string(),
+            value: iri,
+            datatype: None,
+            lang: None,
+            quoted_triple: None,
+        }
+    }
+
+    /// Create a new blank node SPARQL value
+    pub fn blank_node(id: String) -> Self {
+        Self {
+            value_type: "bnode".to_string(),
+            value: id,
+            datatype: None,
+            lang: None,
+            quoted_triple: None,
+        }
+    }
+
+    /// Create a new quoted triple SPARQL value for RDF-star
+    pub fn quoted_triple(subject: RdfTerm, predicate: RdfTerm, object: RdfTerm) -> Self {
+        let quoted_triple = QuotedTripleValue {
+            subject: Box::new(subject.clone()),
+            predicate: Box::new(predicate.clone()),
+            object: Box::new(object.clone()),
+        };
+
+        Self {
+            value_type: "quoted_triple".to_string(),
+            value: format!(
+                "<<{} {} {}>>",
+                quoted_triple.subject.to_string(),
+                quoted_triple.predicate.to_string(),
+                quoted_triple.object.to_string()
+            ),
+            datatype: None,
+            lang: None,
+            quoted_triple: Some(quoted_triple),
+        }
+    }
+
+    /// Check if this value represents a quoted triple
+    pub fn is_quoted_triple(&self) -> bool {
+        self.quoted_triple.is_some()
+    }
+
+    /// Get the quoted triple data if available
+    pub fn get_quoted_triple(&self) -> Option<&QuotedTripleValue> {
+        self.quoted_triple.as_ref()
+    }
+
+    /// Convert to compact encoded format for storage
+    pub fn to_encoded_format(&self) -> EncodedSparqlValue {
+        match &self.quoted_triple {
+            Some(qt) => EncodedSparqlValue::QuotedTriple {
+                subject: qt.subject.to_encoded_term(),
+                predicate: qt.predicate.to_encoded_term(),
+                object: qt.object.to_encoded_term(),
+            },
+            None => match self.value_type.as_str() {
+                "uri" => EncodedSparqlValue::IRI(self.value.clone()),
+                "bnode" => EncodedSparqlValue::BlankNode(self.value.clone()),
+                "literal" => EncodedSparqlValue::Literal {
+                    value: self.value.clone(),
+                    datatype: self.datatype.clone(),
+                    lang: self.lang.clone(),
+                },
+                _ => EncodedSparqlValue::Unknown(self.value.clone()),
+            },
+        }
+    }
+}
+
+impl RdfTerm {
+    /// Convert RDF term to string representation
+    pub fn to_string(&self) -> String {
+        match self {
+            RdfTerm::IRI(iri) => format!("<{}>", iri),
+            RdfTerm::BlankNode(id) => format!("_:{}", id),
+            RdfTerm::Literal {
+                value,
+                datatype,
+                lang,
+            } => {
+                let mut result = format!("\"{}\"", value);
+                if let Some(lang) = lang {
+                    result.push_str(&format!("@{}", lang));
+                } else if let Some(datatype) = datatype {
+                    result.push_str(&format!("^^<{}>", datatype));
+                }
+                result
+            }
+            RdfTerm::QuotedTriple(qt) => {
+                format!(
+                    "<<{} {} {}>>",
+                    qt.subject.to_string(),
+                    qt.predicate.to_string(),
+                    qt.object.to_string()
+                )
+            }
+        }
+    }
+
+    /// Convert to encoded term for storage optimization
+    pub fn to_encoded_term(&self) -> EncodedTerm {
+        match self {
+            RdfTerm::IRI(iri) => EncodedTerm::IRI(iri.clone()),
+            RdfTerm::BlankNode(id) => EncodedTerm::BlankNode(id.clone()),
+            RdfTerm::Literal {
+                value,
+                datatype,
+                lang,
+            } => EncodedTerm::Literal {
+                value: value.clone(),
+                datatype: datatype.clone(),
+                lang: lang.clone(),
+            },
+            RdfTerm::QuotedTriple(qt) => EncodedTerm::QuotedTriple {
+                subject: Box::new(qt.subject.to_encoded_term()),
+                predicate: Box::new(qt.predicate.to_encoded_term()),
+                object: Box::new(qt.object.to_encoded_term()),
+            },
+        }
+    }
+}
+
+/// Compact encoded format for efficient storage of SPARQL values
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EncodedSparqlValue {
+    IRI(String),
+    BlankNode(String),
+    Literal {
+        value: String,
+        datatype: Option<String>,
+        lang: Option<String>,
+    },
+    QuotedTriple {
+        subject: EncodedTerm,
+        predicate: EncodedTerm,
+        object: EncodedTerm,
+    },
+    Unknown(String),
+}
+
+/// Compact encoded format for RDF terms in storage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EncodedTerm {
+    IRI(String),
+    BlankNode(String),
+    Literal {
+        value: String,
+        datatype: Option<String>,
+        lang: Option<String>,
+    },
+    QuotedTriple {
+        subject: Box<EncodedTerm>,
+        predicate: Box<EncodedTerm>,
+        object: Box<EncodedTerm>,
+    },
+}
+
+impl EncodedSparqlValue {
+    /// Convert back to full SparqlValue for query processing
+    pub fn to_sparql_value(&self) -> SparqlValue {
+        match self {
+            EncodedSparqlValue::IRI(iri) => SparqlValue::iri(iri.clone()),
+            EncodedSparqlValue::BlankNode(id) => SparqlValue::blank_node(id.clone()),
+            EncodedSparqlValue::Literal {
+                value,
+                datatype,
+                lang,
+            } => SparqlValue::literal(value.clone(), datatype.clone(), lang.clone()),
+            EncodedSparqlValue::QuotedTriple {
+                subject,
+                predicate,
+                object,
+            } => SparqlValue::quoted_triple(
+                subject.to_rdf_term(),
+                predicate.to_rdf_term(),
+                object.to_rdf_term(),
+            ),
+            EncodedSparqlValue::Unknown(value) => SparqlValue {
+                value_type: "unknown".to_string(),
+                value: value.clone(),
+                datatype: None,
+                lang: None,
+                quoted_triple: None,
+            },
+        }
+    }
+}
+
+impl EncodedTerm {
+    /// Convert back to RDF term for processing
+    pub fn to_rdf_term(&self) -> RdfTerm {
+        match self {
+            EncodedTerm::IRI(iri) => RdfTerm::IRI(iri.clone()),
+            EncodedTerm::BlankNode(id) => RdfTerm::BlankNode(id.clone()),
+            EncodedTerm::Literal {
+                value,
+                datatype,
+                lang,
+            } => RdfTerm::Literal {
+                value: value.clone(),
+                datatype: datatype.clone(),
+                lang: lang.clone(),
+            },
+            EncodedTerm::QuotedTriple {
+                subject,
+                predicate,
+                object,
+            } => RdfTerm::QuotedTriple(QuotedTripleValue {
+                subject: Box::new(subject.to_rdf_term()),
+                predicate: Box::new(predicate.to_rdf_term()),
+                object: Box::new(object.to_rdf_term()),
+            }),
+        }
+    }
 }
 
 /// GraphQL response structure

@@ -390,7 +390,7 @@ impl InteractiveReportViewer {
     }
 
     /// Sort violations based on current sort configuration
-    fn sort_violations(&self, violations: &mut Vec<ValidationViolation>) {
+    fn sort_violations(&self, violations: &mut [ValidationViolation]) {
         violations.sort_by(|a, b| {
             let primary_cmp = match self.sort_config.sort_field {
                 SortField::Severity => a.result_severity.cmp(&b.result_severity),

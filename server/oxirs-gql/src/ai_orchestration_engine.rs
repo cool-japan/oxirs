@@ -104,6 +104,7 @@ pub enum ConsensusAlgorithm {
 }
 
 /// Comprehensive AI Orchestration Engine
+#[allow(dead_code)]
 pub struct AIOrchestrationEngine {
     config: AIOrchestrationConfig,
 
@@ -826,6 +827,7 @@ impl ConsciousnessLayer {
 }
 
 /// Decision engine for final optimization synthesis
+#[allow(dead_code)]
 pub struct DecisionEngine {
     decision_algorithm: DecisionAlgorithm,
     decision_history: VecDeque<DecisionEvent>,

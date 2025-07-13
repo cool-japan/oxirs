@@ -176,9 +176,7 @@ impl MultiModalEmbedding {
         self.unified_embeddings
             .insert(format!("{text}|{entity}"), unified_embedding.clone());
 
-        println!(
-            "Generated unified embedding with alignment score: {alignment_score:.3}"
-        );
+        println!("Generated unified embedding with alignment score: {alignment_score:.3}");
 
         Ok(unified_embedding)
     }
@@ -501,9 +499,7 @@ impl EmbeddingModel for MultiModalEmbedding {
             loss_history.push(epoch_loss as f64);
 
             if epoch % 10 == 0 {
-                println!(
-                    "Multi-modal training epoch {epoch}: Loss = {epoch_loss:.6}"
-                );
+                println!("Multi-modal training epoch {epoch}: Loss = {epoch_loss:.6}");
             }
 
             // Early stopping

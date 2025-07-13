@@ -318,7 +318,7 @@ fn normalize_iri(iri: &str) -> Result<String, OxirsError> {
     let mut in_authority = false;
     let mut after_scheme = false;
     let mut slash_count = 0;
-    
+
     for ch in iri.chars() {
         if in_scheme && ch == ':' {
             result.push(ch.to_ascii_lowercase());
@@ -342,15 +342,15 @@ fn normalize_iri(iri: &str) -> Result<String, OxirsError> {
             result.push(ch);
         }
     }
-    
+
     // Normalize percent encoding
     result = normalize_percent_encoding(&result);
-    
+
     // Normalize path
     if result.contains("./") {
         result = normalize_path_in_iri(&result);
     }
-    
+
     Ok(result)
 }
 
@@ -367,7 +367,7 @@ fn normalize_path_in_iri(iri: &str) -> String {
     } else {
         return iri.to_string();
     };
-    
+
     // Split path from query/fragment
     let (path_part, query_fragment) = if let Some(query_pos) = path_and_after.find('?') {
         path_and_after.split_at(query_pos)
@@ -376,10 +376,10 @@ fn normalize_path_in_iri(iri: &str) -> String {
     } else {
         (path_and_after, "")
     };
-    
+
     // Normalize the path part
     let normalized_path = normalize_path_segments(path_part);
-    
+
     format!("{prefix}{normalized_path}{query_fragment}")
 }
 
@@ -388,10 +388,10 @@ fn normalize_path_segments(path: &str) -> String {
     if path.is_empty() {
         return String::new();
     }
-    
+
     let segments: Vec<&str> = path.split('/').collect();
     let mut normalized_segments = Vec::new();
-    
+
     for segment in segments {
         match segment {
             "." => {
@@ -409,7 +409,7 @@ fn normalize_path_segments(path: &str) -> String {
             }
         }
     }
-    
+
     normalized_segments.join("/")
 }
 
@@ -417,7 +417,7 @@ fn normalize_path_segments(path: &str) -> String {
 fn normalize_percent_encoding(s: &str) -> String {
     let mut result = String::new();
     let mut chars = s.chars().peekable();
-    
+
     while let Some(ch) = chars.next() {
         if ch == '%' {
             if let (Some(hex1), Some(hex2)) = (chars.next(), chars.next()) {
@@ -431,7 +431,7 @@ fn normalize_percent_encoding(s: &str) -> String {
             result.push(ch);
         }
     }
-    
+
     result
 }
 

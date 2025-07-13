@@ -5,7 +5,31 @@
 //! predicate-based filtering, range-based selection, and ML-driven source prediction.
 
 use anyhow::Result;
+#[cfg(feature = "caching")]
 use bloom::{BloomFilter, ASMS};
+
+#[cfg(not(feature = "caching"))]
+mod cache_stubs {
+    #[derive(Debug, Clone)]
+    pub struct BloomFilter;
+
+    impl BloomFilter {
+        pub fn with_rate(_rate: f64, _capacity: u32) -> Self {
+            Self
+        }
+
+        pub fn insert<T>(&mut self, _item: &T) {}
+        pub fn contains<T>(&self, _item: &T) -> bool {
+            false
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ASMS;
+}
+
+#[cfg(not(feature = "caching"))]
+use cache_stubs::{BloomFilter, ASMS};
 use chrono::{DateTime, Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -13,7 +37,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
 
-use crate::ServiceRegistry;
+use crate::service_registry::ServiceRegistry;
 
 /// Triple pattern for SPARQL queries
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -461,7 +485,7 @@ impl AdvancedSourceSelector {
 
         // Fallback: select all available sources if no sources selected
         if selected_sources.is_empty() {
-            let all_services: Vec<_> = registry.get_all_services().collect();
+            let all_services: Vec<_> = registry.get_all_services().into_iter().collect();
             if !all_services.is_empty() {
                 selected_sources.extend(all_services.iter().map(|s| s.endpoint.clone()));
                 methods_used.push(SelectionMethod::Fallback);
@@ -484,6 +508,7 @@ impl AdvancedSourceSelector {
         // Generate fallback sources
         let fallback_sources: Vec<String> = registry
             .get_all_services()
+            .into_iter()
             .map(|s| s.endpoint.clone())
             .filter(|s| !final_sources.contains(s))
             .take(3)
@@ -599,7 +624,7 @@ impl AdvancedSourceSelector {
     }
 
     /// Update selection statistics
-    async fn update_statistics(&self, pattern_count: usize, selected_sources: usize) {
+    async fn update_statistics(&self, _pattern_count: usize, selected_sources: usize) {
         let mut stats = self.statistics.write().await;
         stats.total_selections += 1;
         stats.average_sources_per_query =
@@ -733,7 +758,7 @@ impl PatternCoverageAnalyzer {
 
             // Analyze coverage for this pattern
             let mut covering_sources = Vec::new();
-            let services: Vec<_> = registry.get_all_services().collect();
+            let services: Vec<_> = registry.get_all_services().into_iter().collect();
 
             for service in &services {
                 if let Some(stats) = self.service_statistics.read().await.get(&service.endpoint) {
@@ -884,7 +909,7 @@ impl PatternCoverageAnalyzer {
     /// Estimate result size for a pattern
     async fn estimate_result_size(
         &self,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
         covering_sources: &[SourceCoverage],
     ) -> Result<u64> {
         if covering_sources.is_empty() {
@@ -928,7 +953,6 @@ impl PatternCoverageAnalyzer {
             return Ok(0.0);
         }
 
-        let mut quality_score = 1.0;
         let mut valid_uris = 0;
         let mut total_uris = 0;
         let mut non_empty_values = 0;
@@ -961,14 +985,14 @@ impl PatternCoverageAnalyzer {
         };
 
         // Combine metrics
-        quality_score = (completeness * 0.6) + (uri_validity * 0.4);
+        let quality_score = (completeness * 0.6) + (uri_validity * 0.4);
 
-        Ok(quality_score.max(0.1).min(1.0)) // Clamp between 10% and 100%
+        Ok(quality_score.clamp(0.1, 1.0)) // Clamp between 10% and 100%
     }
 }
 
 impl PredicateBasedFilter {
-    pub fn new(config: &SourceSelectionConfig) -> Self {
+    pub fn new(_config: &SourceSelectionConfig) -> Self {
         Self {
             service_filters: Arc::new(RwLock::new(HashMap::new())),
             last_update: Arc::new(RwLock::new(Utc::now())),
@@ -978,7 +1002,7 @@ impl PredicateBasedFilter {
     pub async fn filter_by_predicates(
         &self,
         patterns: &[TriplePattern],
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
     ) -> Result<HashMap<String, f64>> {
         let mut matches = HashMap::new();
         let filters = self.service_filters.read().await;
@@ -997,15 +1021,17 @@ impl PredicateBasedFilter {
 
                 // Check subject membership (if not variable)
                 if !pattern.subject.starts_with('?')
-                    && filter.subject_filter.contains(&pattern.subject) {
-                        match_score += 0.5;
-                    }
+                    && filter.subject_filter.contains(&pattern.subject)
+                {
+                    match_score += 0.5;
+                }
 
                 // Check object membership (if not variable)
                 if !pattern.object.starts_with('?')
-                    && filter.object_filter.contains(&pattern.object) {
-                        match_score += 0.5;
-                    }
+                    && filter.object_filter.contains(&pattern.object)
+                {
+                    match_score += 0.5;
+                }
             }
 
             if total_patterns > 0.0 {
@@ -1077,7 +1103,7 @@ impl RangeBasedSelector {
     pub async fn select_by_ranges(
         &self,
         constraints: &[RangeConstraint],
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
     ) -> Result<HashMap<String, f64>> {
         let mut matches = HashMap::new();
         let range_indices = self.range_indices.read().await;
@@ -1162,12 +1188,14 @@ impl RangeBasedSelector {
         }
 
         // Analyze each predicate's values
+        let mut temporal_patterns = HashMap::new();
         for (predicate, values) in predicate_values {
             self.analyze_numeric_range(&predicate, &values, &mut numeric_ranges);
             self.analyze_string_range(&predicate, &values, &mut string_ranges);
             self.analyze_uri_patterns(&predicate, &values, &mut uri_patterns);
             self.analyze_datetime_range(&predicate, &values, &mut datetime_ranges);
             self.analyze_year_range(&predicate, &values, &mut year_ranges);
+            self.analyze_temporal_patterns(&predicate, &values, &mut temporal_patterns);
         }
 
         let range_index = ServiceRangeIndex {
@@ -1180,7 +1208,7 @@ impl RangeBasedSelector {
         let temporal_index = ServiceTemporalIndex {
             datetime_ranges,
             year_ranges,
-            temporal_patterns: HashMap::new(), // TODO: Implement pattern detection
+            temporal_patterns,
             last_updated: Utc::now(),
         };
 
@@ -1430,6 +1458,134 @@ impl RangeBasedSelector {
         }
     }
 
+    fn analyze_temporal_patterns(
+        &self,
+        predicate: &str,
+        values: &[String],
+        temporal_patterns: &mut HashMap<String, TemporalPattern>,
+    ) {
+        let mut datetime_values = Vec::new();
+
+        // Parse datetime values
+        for value in values {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(value) {
+                datetime_values.push(dt.with_timezone(&Utc));
+            }
+        }
+
+        // Need at least 3 values to detect patterns
+        if datetime_values.len() < 3 {
+            return;
+        }
+
+        // Sort datetime values
+        datetime_values.sort();
+
+        // Calculate intervals between consecutive timestamps
+        let mut intervals = Vec::new();
+        for i in 1..datetime_values.len() {
+            let interval = datetime_values[i].signed_duration_since(datetime_values[i - 1]);
+            intervals.push(interval.num_seconds().abs() as u64);
+        }
+
+        let pattern_type = self.detect_temporal_pattern_type(&intervals);
+        let confidence = self.calculate_pattern_confidence(&intervals, &pattern_type);
+
+        if confidence > 0.5 {
+            // Only store patterns with reasonable confidence
+            temporal_patterns.insert(
+                predicate.to_string(),
+                TemporalPattern {
+                    pattern_type,
+                    frequency: intervals.len() as u64,
+                    confidence,
+                },
+            );
+        }
+    }
+
+    fn detect_temporal_pattern_type(&self, intervals: &[u64]) -> TemporalPatternType {
+        if intervals.is_empty() {
+            return TemporalPatternType::Random;
+        }
+
+        // Calculate coefficient of variation
+        let mean = intervals.iter().sum::<u64>() as f64 / intervals.len() as f64;
+        let variance = intervals
+            .iter()
+            .map(|&x| {
+                let diff = x as f64 - mean;
+                diff * diff
+            })
+            .sum::<f64>()
+            / intervals.len() as f64;
+        let std_dev = variance.sqrt();
+        let coefficient_of_variation = std_dev / mean;
+
+        // Sequential: intervals are generally increasing
+        let is_sequential =
+            intervals.windows(2).filter(|w| w[1] > w[0]).count() > intervals.len() / 2;
+
+        // Periodic: low coefficient of variation (regular intervals)
+        let is_periodic = coefficient_of_variation < 0.3;
+
+        // Clustered: high variation with some very small intervals
+        let min_interval = *intervals.iter().min().unwrap();
+        let max_interval = *intervals.iter().max().unwrap();
+        let is_clustered = max_interval > min_interval * 10 && coefficient_of_variation > 1.0;
+
+        if is_sequential {
+            TemporalPatternType::Sequential
+        } else if is_periodic {
+            TemporalPatternType::Periodic
+        } else if is_clustered {
+            TemporalPatternType::Clustered
+        } else {
+            TemporalPatternType::Random
+        }
+    }
+
+    fn calculate_pattern_confidence(
+        &self,
+        intervals: &[u64],
+        pattern_type: &TemporalPatternType,
+    ) -> f64 {
+        if intervals.is_empty() {
+            return 0.0;
+        }
+
+        let mean = intervals.iter().sum::<u64>() as f64 / intervals.len() as f64;
+        let variance = intervals
+            .iter()
+            .map(|&x| {
+                let diff = x as f64 - mean;
+                diff * diff
+            })
+            .sum::<f64>()
+            / intervals.len() as f64;
+        let std_dev = variance.sqrt();
+        let coefficient_of_variation = std_dev / mean;
+
+        match pattern_type {
+            TemporalPatternType::Sequential => {
+                let increasing_count = intervals.windows(2).filter(|w| w[1] > w[0]).count();
+                increasing_count as f64 / (intervals.len() - 1) as f64
+            }
+            TemporalPatternType::Periodic => {
+                // Higher confidence for more regular intervals
+                1.0 - coefficient_of_variation.min(1.0)
+            }
+            TemporalPatternType::Clustered => {
+                // Confidence based on interval variation
+                coefficient_of_variation.min(2.0) / 2.0
+            }
+            TemporalPatternType::Random => {
+                // Low confidence for random patterns
+                0.3
+            }
+        }
+    }
+
     /// Analyze year ranges in predicate values
     fn analyze_year_range(
         &self,
@@ -1546,10 +1702,15 @@ impl MLSourcePredictor {
 
         let recommended_sources: Vec<String> = source_scores.keys().cloned().collect();
 
+        // Implement performance prediction based on historical data
+        let predicted_performance = self
+            .predict_performance_scores(features, &source_scores)
+            .await;
+
         let result = PredictionResult {
             recommended_sources,
             confidence_scores: source_scores.clone(),
-            predicted_performance: HashMap::new(), // TODO: Implement performance prediction
+            predicted_performance,
             feature_importance: self.feature_weights.clone(),
         };
 
@@ -1560,6 +1721,69 @@ impl MLSourcePredictor {
             .insert(feature_key, result.clone());
 
         Ok(result)
+    }
+
+    async fn predict_performance_scores(
+        &self,
+        features: &QueryFeatures,
+        source_scores: &HashMap<String, f64>,
+    ) -> HashMap<String, f64> {
+        let mut performance_predictions = HashMap::new();
+
+        for (source, confidence_score) in source_scores {
+            let predicted_performance =
+                self.calculate_performance_prediction(source, features, *confidence_score);
+            performance_predictions.insert(source.clone(), predicted_performance);
+        }
+
+        performance_predictions
+    }
+
+    fn calculate_performance_prediction(
+        &self,
+        source: &str,
+        features: &QueryFeatures,
+        confidence_score: f64,
+    ) -> f64 {
+        // Base performance prediction from historical data
+        let mut performance_score = 0.5; // Default baseline
+
+        // Find historical performance for similar queries
+        for sample in &self.training_data {
+            if sample.selected_sources.contains(&source.to_string()) {
+                let similarity = self.calculate_similarity_score(features, &sample.query_features);
+                if similarity > 0.7 {
+                    // Weight by similarity
+                    let historical_performance =
+                        self.extract_performance_score(&sample.actual_performance);
+                    performance_score += similarity * historical_performance;
+                }
+            }
+        }
+
+        // Adjust based on query complexity
+        let complexity_factor = 1.0 - (features.complexity_score / 10.0).min(0.5);
+        performance_score *= complexity_factor;
+
+        // Factor in confidence score
+        performance_score *= 0.5 + 0.5 * confidence_score;
+
+        // Normalize to [0, 1] range
+        performance_score.max(0.0).min(1.0)
+    }
+
+    fn extract_performance_score(&self, metrics: &PerformanceMetrics) -> f64 {
+        // Combine various performance metrics into a single score
+        let response_time_score = 1.0 - (metrics.execution_time_ms as f64).min(5000.0) / 5000.0;
+        let throughput_score = (metrics.result_count as f64 / 1000.0).min(1.0);
+        let error_rate_score = metrics.success_rate; // success_rate is the inverse of error_rate
+        let memory_score = 1.0 - (metrics.data_transfer_bytes as f64 / 1000000.0).min(1.0); // Use data transfer as proxy for memory
+
+        // Weighted combination
+        0.4 * response_time_score
+            + 0.3 * throughput_score
+            + 0.2 * error_rate_score
+            + 0.1 * memory_score
     }
 
     pub async fn train(&mut self, samples: Vec<SourcePredictionSample>) -> Result<()> {
@@ -1613,6 +1837,7 @@ impl MLSourcePredictor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::FederatedService;
 
     fn create_test_pattern(subject: &str, predicate: &str, object: &str) -> TriplePattern {
         TriplePattern {
@@ -1690,12 +1915,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_source_selector() {
-        let mut config = SourceSelectionConfig::default();
         // Disable all methods except fallback to test pure fallback scenario
-        config.enable_pattern_coverage = false;
-        config.enable_predicate_filtering = false;
-        config.enable_range_selection = false;
-        config.enable_ml_prediction = false;
+        let config = SourceSelectionConfig {
+            enable_pattern_coverage: false,
+            enable_predicate_filtering: false,
+            enable_range_selection: false,
+            enable_ml_prediction: false,
+            ..Default::default()
+        };
         let selector = AdvancedSourceSelector::new(config);
 
         let patterns = vec![

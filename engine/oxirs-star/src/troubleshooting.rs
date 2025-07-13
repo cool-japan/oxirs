@@ -1138,9 +1138,7 @@ impl DiagnosticAnalyzer {
             issues.push(DiagnosticIssue {
                 severity: IssueSeverity::Warning,
                 category: IssueCategory::Performance,
-                message: format!(
-                    "High number of quoted triples detected: {quoted_triple_count}"
-                ),
+                message: format!("High number of quoted triples detected: {quoted_triple_count}"),
                 location: None,
                 suggested_fixes: vec![
                     "Consider enabling reification fallback".to_string(),

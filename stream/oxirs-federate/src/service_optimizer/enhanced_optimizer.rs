@@ -17,9 +17,8 @@ use crate::{
     },
     service_optimizer::{
         types::{
-            CrossServiceJoin, ExecutionStrategy, JoinType, OptimizedQuery,
-            OptimizedServiceClause, ServiceExecutionStrategy,
-            ServicePerformanceUpdate,
+            CrossServiceJoin, ExecutionStrategy, JoinType, OptimizedQuery, OptimizedServiceClause,
+            ServiceExecutionStrategy, ServicePerformanceUpdate,
         },
         ServiceOptimizer, ServiceOptimizerConfig,
     },
@@ -190,7 +189,6 @@ impl EnhancedServiceOptimizer {
         services: &[FederatedService],
     ) -> Result<OptimizedQuery> {
         let mut optimized_services = Vec::new();
-        let mut cross_service_joins = Vec::new();
 
         // Generate optimized service clauses based on ML recommendations
         for (pattern_idx, pattern) in patterns.iter().enumerate() {
@@ -218,7 +216,7 @@ impl EnhancedServiceOptimizer {
         }
 
         // Identify cross-service joins
-        cross_service_joins =
+        let cross_service_joins =
             self.identify_cross_service_joins(&optimized_services, &analysis.join_graph_analysis);
 
         // Determine overall execution strategy
@@ -244,7 +242,6 @@ impl EnhancedServiceOptimizer {
         analysis: &PatternAnalysisResult,
     ) -> Result<EnhancedExecutionPlan> {
         let mut steps = Vec::new();
-        let mut parallelizable_groups = Vec::new();
 
         // Create service execution steps
         for (idx, service_clause) in optimized_query.services.iter().enumerate() {
@@ -281,7 +278,7 @@ impl EnhancedServiceOptimizer {
         }
 
         // Identify parallelizable groups
-        parallelizable_groups = self.identify_parallelizable_groups(&steps);
+        let parallelizable_groups = self.identify_parallelizable_groups(&steps);
 
         let total_duration = self.estimate_total_duration(&steps);
         let resource_requirements = self.aggregate_resource_requirements(&steps);
@@ -341,7 +338,7 @@ impl EnhancedServiceOptimizer {
     async fn calculate_ml_score(
         &self,
         service: &FederatedService,
-        pattern_id: &str,
+        _pattern_id: &str,
         base_score: f64,
     ) -> Result<f64> {
         // Simplified ML scoring - in practice would use actual ML model
@@ -350,7 +347,7 @@ impl EnhancedServiceOptimizer {
         let reliability_factor = service.performance.reliability_score;
 
         let ml_score = base_score * 0.5 + performance_factor * 0.3 + reliability_factor * 0.2;
-        Ok(ml_score.min(1.0).max(0.0))
+        Ok(ml_score.clamp(0.0, 1.0))
     }
 
     fn enhance_reasoning(
@@ -450,7 +447,7 @@ impl EnhancedServiceOptimizer {
     fn estimate_service_cost(
         &self,
         service: &FederatedService,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
         analysis: &PatternAnalysisResult,
     ) -> f64 {
         let base_cost = 10.0;

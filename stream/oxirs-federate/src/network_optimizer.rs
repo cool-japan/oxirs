@@ -345,7 +345,7 @@ impl NetworkOptimizer {
         service_id: &str,
         service: &FederatedService,
     ) -> Result<NetworkPerformanceMetrics> {
-        let start_time = Instant::now();
+        let _start_time = Instant::now();
 
         // Perform lightweight network test (ping-like)
         let latency = self.measure_latency(service).await?;
@@ -536,23 +536,23 @@ impl NetworkOptimizer {
         }
     }
 
-    async fn measure_latency(&self, service: &FederatedService) -> Result<f64> {
+    async fn measure_latency(&self, _service: &FederatedService) -> Result<f64> {
         // Simplified latency measurement
         // In a real implementation, this would perform actual network tests
         Ok(50.0) // Placeholder: 50ms
     }
 
-    async fn estimate_bandwidth(&self, service: &FederatedService) -> Result<f64> {
+    async fn estimate_bandwidth(&self, _service: &FederatedService) -> Result<f64> {
         // Simplified bandwidth estimation
         Ok(100.0) // Placeholder: 100 Mbps
     }
 
-    async fn estimate_packet_loss(&self, service: &FederatedService) -> Result<f64> {
+    async fn estimate_packet_loss(&self, _service: &FederatedService) -> Result<f64> {
         // Simplified packet loss estimation
         Ok(0.001) // Placeholder: 0.1% packet loss
     }
 
-    async fn measure_jitter(&self, service: &FederatedService) -> Result<f64> {
+    async fn measure_jitter(&self, _service: &FederatedService) -> Result<f64> {
         // Simplified jitter measurement
         Ok(5.0) // Placeholder: 5ms jitter
     }

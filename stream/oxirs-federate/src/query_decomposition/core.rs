@@ -10,7 +10,8 @@ use tracing::info;
 
 use crate::planner::planning::types::QueryInfo as PlanningQueryInfo;
 use crate::{
-    planner::{ExecutionPlan, ExecutionStep, StepType}, ServiceRegistry,
+    planner::{ExecutionPlan, ExecutionStep, StepType},
+    service_registry::ServiceRegistry,
 };
 
 use super::types::*;
@@ -128,7 +129,7 @@ impl QueryDecomposer {
     pub fn build_execution_plan(
         &self,
         component_plans: Vec<ComponentPlan>,
-        query_info: &PlanningQueryInfo,
+        _query_info: &PlanningQueryInfo,
     ) -> Result<ExecutionPlan> {
         let mut plan = ExecutionPlan {
             query_id: uuid::Uuid::new_v4().to_string(),
@@ -144,10 +145,10 @@ impl QueryDecomposer {
         let mut step_ids_by_component = Vec::new();
 
         // Create execution steps for each component
-        for (comp_idx, comp_plan) in component_plans.iter().enumerate() {
+        for comp_plan in component_plans.iter() {
             let mut component_step_ids = Vec::new();
 
-            for (step_idx, plan_step) in comp_plan.steps.iter().enumerate() {
+            for plan_step in comp_plan.steps.iter() {
                 let step = ExecutionStep {
                     step_id: uuid::Uuid::new_v4().to_string(),
                     step_type: StepType::ServiceQuery,

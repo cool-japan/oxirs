@@ -11,9 +11,6 @@ use std::time::{Duration, Instant, SystemTime};
 use tracing::info;
 use uuid::Uuid;
 
-use oxirs_core::Store;
-
-
 use crate::{
     advanced_validation_strategies::ValidationContext,
     neural_patterns::{NeuralPatternConfig, NeuralPatternRecognizer},
@@ -709,7 +706,7 @@ impl SophisticatedValidationOptimizer {
             + (diversity_confidence * 0.3)
             + (stability_confidence * 0.3);
 
-        Ok(confidence_score.min(1.0).max(0.0))
+        Ok(confidence_score.clamp(0.0, 1.0))
     }
 
     /// Cache optimization result
@@ -810,7 +807,7 @@ impl SophisticatedValidationOptimizer {
             + (accuracy_score * 0.25)
             + (throughput_score * 0.25);
 
-        Ok(overall_score.min(1.0).max(0.0))
+        Ok(overall_score.clamp(0.0, 1.0))
     }
 
     async fn analyze_performance_bottlenecks(
@@ -987,6 +984,7 @@ impl Default for OptimizationSolution {
 }
 
 /// Trait for optimization strategies
+#[allow(async_fn_in_trait)]
 pub trait OptimizationStrategy: Send + Sync {
     fn name(&self) -> &str;
     async fn optimize(&self, context: &OptimizationContext) -> Result<OptimizationResults>;
@@ -1510,7 +1508,7 @@ mod tests {
 
     #[test]
     fn test_optimization_objectives() {
-        let objectives = vec![
+        let objectives = [
             OptimizationObjective::MinimizeExecutionTime,
             OptimizationObjective::MaximizeAccuracy,
             OptimizationObjective::MinimizeMemoryUsage,

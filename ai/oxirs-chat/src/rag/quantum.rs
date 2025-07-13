@@ -48,7 +48,7 @@ impl QuantumRetrievalState {
     }
 
     /// Quantum interference for result optimization
-    pub fn interference_optimization(&self, results: &mut Vec<QuantumSearchResult>) {
+    pub fn interference_optimization(&self, results: &mut [QuantumSearchResult]) {
         for result in results.iter_mut() {
             let interference = (self.phase - result.quantum_probability * PI).sin();
             result.quantum_probability *= (1.0 + interference * 0.1).max(0.1);
@@ -63,7 +63,7 @@ impl QuantumRetrievalState {
     }
 
     /// Apply quantum tunneling effect for unexpected relevant results
-    pub fn quantum_tunneling(&self, results: &mut Vec<QuantumSearchResult>, barrier_height: f64) {
+    pub fn quantum_tunneling(&self, results: &mut [QuantumSearchResult], barrier_height: f64) {
         for result in results.iter_mut() {
             // Calculate tunneling probability based on barrier height
             let tunneling_prob = (-2.0 * barrier_height.sqrt()).exp();
@@ -85,7 +85,7 @@ impl QuantumRetrievalState {
     }
 
     /// Quantum error correction for result consistency
-    pub fn error_correction(&self, results: &mut Vec<QuantumSearchResult>) {
+    pub fn error_correction(&self, results: &mut [QuantumSearchResult]) {
         let mean_probability =
             results.iter().map(|r| r.quantum_probability).sum::<f64>() / results.len() as f64;
 
@@ -159,7 +159,7 @@ impl QuantumEntanglementManager {
     }
 
     /// Apply entanglement effects to search results
-    pub fn apply_entanglement(&self, results: &mut Vec<QuantumSearchResult>) {
+    pub fn apply_entanglement(&self, results: &mut [QuantumSearchResult]) {
         for &(idx1, idx2) in &self.entangled_pairs {
             if idx1 < results.len() && idx2 < results.len() {
                 let avg_probability =

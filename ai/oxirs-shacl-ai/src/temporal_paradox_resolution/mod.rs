@@ -10,7 +10,10 @@ pub mod timeline;
 pub mod types;
 
 // Re-export main types
-pub use causality::*;
-pub use core::*;
-pub use timeline::*;
+pub use causality::CausalDependencyAnalyzer;
+pub use core::{
+    MultiTimelineValidator, QuantumTemporalEngine, TemporalConsistencyEnforcer,
+    TemporalParadoxResolutionEngine, TemporalValidationProcessor, TemporalValidationResult,
+};
+pub use timeline::{Timeline, TimelineCoherenceManager};
 pub use types::*;

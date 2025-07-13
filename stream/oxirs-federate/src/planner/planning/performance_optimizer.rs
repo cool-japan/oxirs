@@ -123,7 +123,7 @@ impl PerformanceOptimizer {
     fn generate_optimization_suggestions(
         &self,
         metrics: &ExecutionMetrics,
-        context: &ExecutionContext,
+        _context: &ExecutionContext,
     ) -> Vec<String> {
         let mut suggestions = Vec::new();
 
@@ -482,9 +482,7 @@ impl PerformanceOptimizer {
             let diff_percent = ((current_time - historical_avg) / historical_avg) * 100.0;
 
             if diff_percent > 10.0 {
-                format!(
-                    "Performance degraded by {diff_percent:.1}% compared to historical average"
-                )
+                format!("Performance degraded by {diff_percent:.1}% compared to historical average")
             } else if diff_percent < -10.0 {
                 format!(
                     "Performance improved by {:.1}% compared to historical average",

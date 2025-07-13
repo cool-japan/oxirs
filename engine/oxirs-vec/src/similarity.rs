@@ -4,7 +4,10 @@ use crate::Vector;
 use anyhow::{anyhow, Result};
 use oxirs_core::simd::SimdOps;
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Similarity measurement configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -700,6 +703,7 @@ fn canberra_distance(a: &[f32], b: &[f32]) -> f32 {
 /// Similarity search result with metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SimilarityResult {
+    pub id: String,
     pub uri: String,
     pub similarity: f32,
     pub metrics: HashMap<String, f32>,
@@ -758,6 +762,7 @@ impl BatchSimilarityProcessor {
                 };
 
                 query_results.push(SimilarityResult {
+                    id: generate_similarity_id(candidate_uri, similarity),
                     uri: candidate_uri.clone(),
                     similarity,
                     metrics: HashMap::new(),
@@ -780,4 +785,20 @@ impl BatchSimilarityProcessor {
     pub fn clear_cache(&mut self) {
         self.cache.clear();
     }
+}
+
+/// Generate a unique ID for similarity results
+fn generate_similarity_id(uri: &str, similarity: f32) -> String {
+    let mut hasher = DefaultHasher::new();
+    uri.hash(&mut hasher);
+    similarity.to_bits().hash(&mut hasher);
+
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+
+    timestamp.hash(&mut hasher);
+
+    format!("sim_{:x}", hasher.finish())
 }

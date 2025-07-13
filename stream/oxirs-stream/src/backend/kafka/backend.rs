@@ -28,9 +28,12 @@ use async_trait::async_trait;
 use rdkafka::producer::Producer;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, atomic::{AtomicBool, AtomicU64, Ordering}};
+use std::sync::{
+    atomic::{AtomicBool, AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, Instant};
-use tokio::sync::{RwLock, mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -38,9 +41,9 @@ use uuid::Uuid;
 use rdkafka::{
     admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
     config::ClientConfig,
-    consumer::{Consumer, StreamConsumer, BaseConsumer, ConsumerContext, Rebalance},
+    consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance, StreamConsumer},
+    message::{BorrowedMessage, Message},
     producer::{FutureProducer, FutureRecord},
-    message::{Message, BorrowedMessage},
     util::Timeout,
     ClientContext,
 };
@@ -98,16 +101,29 @@ impl ClientContext for ConsumerRebalanceContext {}
 #[cfg(feature = "kafka")]
 impl ConsumerContext for ConsumerRebalanceContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
-        info!("Consumer {} pre-rebalance: {:?}", self.consumer_id, rebalance);
+        info!(
+            "Consumer {} pre-rebalance: {:?}",
+            self.consumer_id, rebalance
+        );
     }
 
     fn post_rebalance(&self, rebalance: &Rebalance) {
-        info!("Consumer {} post-rebalance: {:?}", self.consumer_id, rebalance);
+        info!(
+            "Consumer {} post-rebalance: {:?}",
+            self.consumer_id, rebalance
+        );
     }
 
-    fn commit_callback(&self, result: rdkafka::error::KafkaResult<()>, offsets: &rdkafka::TopicPartitionList) {
+    fn commit_callback(
+        &self,
+        result: rdkafka::error::KafkaResult<()>,
+        offsets: &rdkafka::TopicPartitionList,
+    ) {
         match result {
-            Ok(_) => debug!("Consumer {} committed offsets: {:?}", self.consumer_id, offsets),
+            Ok(_) => debug!(
+                "Consumer {} committed offsets: {:?}",
+                self.consumer_id, offsets
+            ),
             Err(e) => error!("Consumer {} commit failed: {}", self.consumer_id, e),
         }
     }
@@ -417,13 +433,17 @@ impl KafkaBackend {
 
     /// Create a persistent consumer for a consumer group
     #[cfg(feature = "kafka")]
-    pub async fn create_persistent_consumer(&mut self, group_id: &str, topics: Vec<String>) -> Result<ConsumerId> {
+    pub async fn create_persistent_consumer(
+        &mut self,
+        group_id: &str,
+        topics: Vec<String>,
+    ) -> Result<ConsumerId> {
         let consumer_id = Uuid::new_v4();
         let mut client_config = ClientConfig::new();
-        
+
         // Apply configuration from KafkaProducerConfig
         self.apply_client_config(&mut client_config);
-        
+
         // Consumer-specific configuration
         client_config
             .set("group.id", group_id)
@@ -439,7 +459,8 @@ impl KafkaBackend {
 
         // Subscribe to topics
         let topic_refs: Vec<&str> = topics.iter().map(|s| s.as_str()).collect();
-        consumer.subscribe(&topic_refs)
+        consumer
+            .subscribe(&topic_refs)
             .map_err(|e| anyhow::anyhow!("Failed to subscribe to topics: {}", e))?;
 
         let consumer_instance = ConsumerInstance {
@@ -456,22 +477,37 @@ impl KafkaBackend {
         let mut consumers = self.active_consumers.write().await;
         consumers.insert(consumer_id, consumer_instance);
 
-        info!("Created persistent consumer {} for group {}", consumer_id, group_id);
+        info!(
+            "Created persistent consumer {} for group {}",
+            consumer_id, group_id
+        );
         Ok(consumer_id)
     }
 
     #[cfg(not(feature = "kafka"))]
-    pub async fn create_persistent_consumer(&mut self, group_id: &str, topics: Vec<String>) -> Result<ConsumerId> {
+    pub async fn create_persistent_consumer(
+        &mut self,
+        group_id: &str,
+        topics: Vec<String>,
+    ) -> Result<ConsumerId> {
         let consumer_id = Uuid::new_v4();
-        info!("Mock consumer {} created for group {} with topics {:?}", consumer_id, group_id, topics);
+        info!(
+            "Mock consumer {} created for group {} with topics {:?}",
+            consumer_id, group_id, topics
+        );
         Ok(consumer_id)
     }
 
     /// Start streaming consumer with callback-based processing
     #[cfg(feature = "kafka")]
-    pub async fn start_streaming_consumer(&self, consumer_id: ConsumerId, callback: MessageCallback) -> Result<()> {
+    pub async fn start_streaming_consumer(
+        &self,
+        consumer_id: ConsumerId,
+        callback: MessageCallback,
+    ) -> Result<()> {
         let consumers = self.active_consumers.read().await;
-        let consumer_instance = consumers.get(&consumer_id)
+        let consumer_instance = consumers
+            .get(&consumer_id)
             .ok_or_else(|| anyhow::anyhow!("Consumer {} not found", consumer_id))?;
 
         if !consumer_instance.is_active.load(Ordering::SeqCst) {
@@ -536,20 +572,28 @@ impl KafkaBackend {
     }
 
     #[cfg(not(feature = "kafka"))]
-    pub async fn start_streaming_consumer(&self, consumer_id: ConsumerId, _callback: MessageCallback) -> Result<()> {
+    pub async fn start_streaming_consumer(
+        &self,
+        consumer_id: ConsumerId,
+        _callback: MessageCallback,
+    ) -> Result<()> {
         info!("Mock streaming consumer {} started", consumer_id);
         Ok(())
     }
 
     /// Process a Kafka message and convert it to StreamEvent
     #[cfg(feature = "kafka")]
-    async fn process_kafka_message(message: &BorrowedMessage<'_>, callback: &MessageCallback) -> Result<()> {
-        let payload = message.payload()
+    async fn process_kafka_message(
+        message: &BorrowedMessage<'_>,
+        callback: &MessageCallback,
+    ) -> Result<()> {
+        let payload = message
+            .payload()
             .ok_or_else(|| anyhow::anyhow!("Message has no payload"))?;
-        
+
         let kafka_event = KafkaEvent::from_bytes(payload)?;
         let stream_event = StreamEvent::from(kafka_event);
-        
+
         callback(stream_event)?;
         Ok(())
     }
@@ -572,7 +616,9 @@ impl KafkaBackend {
     pub async fn pause_consumer(&self, consumer_id: ConsumerId) -> Result<()> {
         let consumers = self.active_consumers.read().await;
         if let Some(instance) = consumers.get(&consumer_id) {
-            instance.consumer.pause(&instance.consumer.assignment()?)
+            instance
+                .consumer
+                .pause(&instance.consumer.assignment()?)
                 .map_err(|e| anyhow::anyhow!("Failed to pause consumer: {}", e))?;
             info!("Paused consumer {}", consumer_id);
         } else {
@@ -592,7 +638,9 @@ impl KafkaBackend {
     pub async fn resume_consumer(&self, consumer_id: ConsumerId) -> Result<()> {
         let consumers = self.active_consumers.read().await;
         if let Some(instance) = consumers.get(&consumer_id) {
-            instance.consumer.resume(&instance.consumer.assignment()?)
+            instance
+                .consumer
+                .resume(&instance.consumer.assignment()?)
                 .map_err(|e| anyhow::anyhow!("Failed to resume consumer: {}", e))?;
             info!("Resumed consumer {}", consumer_id);
         } else {
@@ -628,26 +676,30 @@ impl KafkaBackend {
 
     /// Get partition assignments for a consumer
     #[cfg(feature = "kafka")]
-    async fn get_partition_assignments(&self, consumer: &StreamConsumer) -> Result<Vec<PartitionAssignment>> {
+    async fn get_partition_assignments(
+        &self,
+        consumer: &StreamConsumer,
+    ) -> Result<Vec<PartitionAssignment>> {
         let assignment = consumer.assignment()?;
         let mut assignments = Vec::new();
-        
+
         for partition in assignment.elements() {
             let topic = partition.topic();
             let partition_id = partition.partition();
             let current_offset = partition.offset().to_raw().unwrap_or(-1);
-            
+
             // Get high water mark (latest offset)
-            let high_water_mark = consumer.fetch_watermarks(topic, partition_id, Duration::from_secs(1))
+            let high_water_mark = consumer
+                .fetch_watermarks(topic, partition_id, Duration::from_secs(1))
                 .map(|(_, high)| high)
                 .unwrap_or(-1);
-            
+
             let lag = if current_offset >= 0 && high_water_mark >= 0 {
                 high_water_mark - current_offset
             } else {
                 0
             };
-            
+
             assignments.push(PartitionAssignment {
                 topic: topic.to_string(),
                 partition: partition_id,
@@ -656,7 +708,7 @@ impl KafkaBackend {
                 lag,
             });
         }
-        
+
         Ok(assignments)
     }
 
@@ -667,15 +719,26 @@ impl KafkaBackend {
 
     /// Seek consumer to specific offset
     #[cfg(feature = "kafka")]
-    pub async fn seek_consumer_to_offset(&self, consumer_id: ConsumerId, topic: &str, partition: i32, offset: i64) -> Result<()> {
+    pub async fn seek_consumer_to_offset(
+        &self,
+        consumer_id: ConsumerId,
+        topic: &str,
+        partition: i32,
+        offset: i64,
+    ) -> Result<()> {
         let consumers = self.active_consumers.read().await;
         if let Some(instance) = consumers.get(&consumer_id) {
-            use rdkafka::{TopicPartitionList, Offset};
+            use rdkafka::{Offset, TopicPartitionList};
             let mut topic_partition_list = TopicPartitionList::new();
             topic_partition_list.add_partition_offset(topic, partition, Offset::Offset(offset))?;
-            instance.consumer.seek_partitions(topic_partition_list, Duration::from_secs(10))
+            instance
+                .consumer
+                .seek_partitions(topic_partition_list, Duration::from_secs(10))
                 .map_err(|e| anyhow::anyhow!("Failed to seek consumer: {}", e))?;
-            info!("Seeked consumer {} to offset {} on {}:{}", consumer_id, offset, topic, partition);
+            info!(
+                "Seeked consumer {} to offset {} on {}:{}",
+                consumer_id, offset, topic, partition
+            );
         } else {
             return Err(anyhow::anyhow!("Consumer {} not found", consumer_id));
         }
@@ -683,8 +746,17 @@ impl KafkaBackend {
     }
 
     #[cfg(not(feature = "kafka"))]
-    pub async fn seek_consumer_to_offset(&self, consumer_id: ConsumerId, topic: &str, partition: i32, offset: i64) -> Result<()> {
-        info!("Mock consumer {} seeked to offset {} on {}:{}", consumer_id, offset, topic, partition);
+    pub async fn seek_consumer_to_offset(
+        &self,
+        consumer_id: ConsumerId,
+        topic: &str,
+        partition: i32,
+        offset: i64,
+    ) -> Result<()> {
+        info!(
+            "Mock consumer {} seeked to offset {} on {}:{}",
+            consumer_id, offset, topic, partition
+        );
         Ok(())
     }
 

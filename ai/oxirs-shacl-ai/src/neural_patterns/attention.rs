@@ -173,7 +173,7 @@ impl CrossPatternAttention {
     }
 
     /// Convert single pattern to embedding
-    async fn pattern_to_embedding(&self, pattern: &Pattern) -> Result<Array1<f64>> {
+    async fn pattern_to_embedding(&self, _pattern: &Pattern) -> Result<Array1<f64>> {
         // TODO: Implement proper pattern embedding
         // This would extract features from the pattern structure, constraints, etc.
         let embedding_dim = self.config.embedding_dim;

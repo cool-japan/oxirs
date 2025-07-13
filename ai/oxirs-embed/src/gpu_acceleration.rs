@@ -769,7 +769,7 @@ impl OutOfCoreProcessor {
         // Calculate optimal chunk size based on data size and memory constraints
         let item_size = std::mem::size_of::<T>();
         let max_items_per_chunk = self.chunk_size / item_size;
-        let chunk_size = max_items_per_chunk.min(1000).max(1); // Between 1 and 1000 items
+        let chunk_size = max_items_per_chunk.clamp(1, 1000); // Between 1 and 1000 items
 
         info!(
             "Processing {} items in chunks of {}",
@@ -813,7 +813,7 @@ impl OutOfCoreProcessor {
 
         let item_size = std::mem::size_of::<T>();
         let max_items_per_chunk = self.chunk_size / item_size;
-        let chunk_size = max_items_per_chunk.min(1000).max(1);
+        let chunk_size = max_items_per_chunk.clamp(1, 1000);
 
         let mut results = Vec::new();
         let mut start_idx = 0;

@@ -16,7 +16,6 @@ use crate::{
     server::AppState,
     store::Store,
 };
-use std::sync::Arc;
 use axum::{
     body::Body,
     extract::{Query, State},
@@ -27,6 +26,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, instrument};
 
@@ -78,7 +78,7 @@ pub async fn graph_store_handler(
 
     // Determine target graph
     let graph_uri = determine_target_graph(&params)?;
-    let is_default_graph = graph_uri.is_none();
+    let _is_default_graph = graph_uri.is_none();
 
     debug!("Graph Store operation: {} on graph {:?}", method, graph_uri);
 
@@ -163,7 +163,7 @@ fn determine_target_graph(params: &GraphStoreParams) -> FusekiResult<Option<Stri
 }
 
 /// Check permissions for graph store operations
-fn check_graph_store_permissions(method: &Method, graph_uri: &Option<String>) -> FusekiResult<()> {
+fn check_graph_store_permissions(method: &Method, _graph_uri: &Option<String>) -> FusekiResult<()> {
     // In a full implementation, this would check user permissions
     // For now, we'll implement basic validation
 
@@ -188,7 +188,7 @@ fn check_graph_store_permissions(method: &Method, graph_uri: &Option<String>) ->
 
 /// Handle GET request - retrieve graph content
 async fn handle_graph_retrieve(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
     headers: &HeaderMap,
 ) -> FusekiResult<Response> {
@@ -196,7 +196,7 @@ async fn handle_graph_retrieve(
     let response_format = determine_rdf_response_format(headers);
 
     // Retrieve graph data from store
-    let graph_data = retrieve_graph_from_store(store, graph_uri, &response_format).await?;
+    let graph_data = retrieve_graph_from_store(_store, graph_uri, &response_format).await?;
 
     if graph_data.is_empty() {
         // Graph doesn't exist or is empty
@@ -214,7 +214,7 @@ async fn handle_graph_retrieve(
 
 /// Handle PUT request - replace graph content
 async fn handle_graph_replace(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
     headers: &HeaderMap,
     body: Body,
@@ -226,7 +226,7 @@ async fn handle_graph_replace(
     let rdf_data = read_rdf_body(body, &content_type).await?;
 
     // Replace graph content in store
-    let result = replace_graph_in_store(store, graph_uri, &rdf_data, &content_type).await?;
+    let result = replace_graph_in_store(_store, graph_uri, &rdf_data, &content_type).await?;
 
     // Return success response
     let response = GraphResult {
@@ -243,7 +243,7 @@ async fn handle_graph_replace(
 
 /// Handle POST request - add to graph content
 async fn handle_graph_add(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
     headers: &HeaderMap,
     body: Body,
@@ -255,7 +255,7 @@ async fn handle_graph_add(
     let rdf_data = read_rdf_body(body, &content_type).await?;
 
     // Add to graph content in store
-    let result = add_to_graph_in_store(store, graph_uri, &rdf_data, &content_type).await?;
+    let result = add_to_graph_in_store(_store, graph_uri, &rdf_data, &content_type).await?;
 
     // Return success response
     let response = GraphResult {
@@ -271,9 +271,9 @@ async fn handle_graph_add(
 }
 
 /// Handle DELETE request - remove graph content
-async fn handle_graph_delete(store: &Store, graph_uri: &Option<String>) -> FusekiResult<Response> {
+async fn handle_graph_delete(_store: &Store, graph_uri: &Option<String>) -> FusekiResult<Response> {
     // Delete graph from store
-    let result = delete_graph_from_store(store, graph_uri).await?;
+    let result = delete_graph_from_store(_store, graph_uri).await?;
 
     if !result.existed {
         return Ok(StatusCode::NOT_FOUND.into_response());
@@ -423,7 +423,7 @@ struct GraphDeletionResult {
 
 /// Retrieve graph data from store
 async fn retrieve_graph_from_store(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
     format: &str,
 ) -> FusekiResult<String> {
@@ -460,7 +460,7 @@ async fn retrieve_graph_from_store(
 
 /// Replace graph content in store
 async fn replace_graph_in_store(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
     rdf_data: &str,
     content_type: &str,
@@ -483,7 +483,7 @@ async fn replace_graph_in_store(
 
 /// Add triples to graph in store
 async fn add_to_graph_in_store(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
     rdf_data: &str,
     content_type: &str,
@@ -506,7 +506,7 @@ async fn add_to_graph_in_store(
 
 /// Delete graph from store
 async fn delete_graph_from_store(
-    store: &Store,
+    _store: &Store,
     graph_uri: &Option<String>,
 ) -> FusekiResult<GraphDeletionResult> {
     // Mock implementation

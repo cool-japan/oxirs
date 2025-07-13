@@ -220,6 +220,7 @@ impl StreamingWindow {
 
 /// Analytics engine for time-series and OLAP processing
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AnalyticsEngine {
     /// Configuration
     config: AnalyticsConfig,
@@ -803,6 +804,7 @@ mod tests {
 
     /// Types of anomalies
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    #[allow(clippy::enum_variant_names)]
     pub enum AnomalyType {
         /// Point anomaly (single data point)
         PointAnomaly,

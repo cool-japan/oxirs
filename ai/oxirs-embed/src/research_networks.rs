@@ -603,7 +603,8 @@ impl ResearchNetworkAnalyzer {
         let target_embedding = self.generate_author_embedding(author_id).await?;
         let embeddings_data: Vec<(String, AuthorEmbedding)> = {
             let embeddings = self.author_embeddings.read().unwrap();
-            embeddings.iter()
+            embeddings
+                .iter()
                 .filter(|(other_id, _)| *other_id != author_id)
                 .map(|(id, emb)| (id.clone(), emb.clone()))
                 .collect()

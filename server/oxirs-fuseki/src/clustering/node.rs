@@ -209,14 +209,14 @@ impl ClusterNode {
     /// Start message processing loop
     async fn start_message_processing(&self) -> FusekiResult<()> {
         let mut receiver = self.communication.receive_messages().await?;
-        let node_info = self.node_info.clone();
+        let _node_info = self.node_info.clone();
         let cluster_members = self.cluster_members.clone();
         let last_heartbeats = self.last_heartbeats.clone();
         let metrics = self.metrics.clone();
         let event_sender = self.event_sender.clone();
 
         tokio::spawn(async move {
-            while let Some((sender_id, message)) = receiver.recv().await {
+            while let Some((_sender_id, message)) = receiver.recv().await {
                 // Update metrics
                 {
                     let mut m = metrics.write().await;
@@ -466,6 +466,7 @@ impl ClusterNode {
 
 /// Basic TCP-based node communication implementation
 pub struct TcpNodeCommunication {
+    #[allow(dead_code)]
     bind_addr: SocketAddr,
     known_nodes: Arc<RwLock<HashMap<String, SocketAddr>>>,
 }
@@ -513,7 +514,7 @@ impl NodeCommunication for TcpNodeCommunication {
     }
 
     async fn receive_messages(&self) -> FusekiResult<mpsc::Receiver<(String, NodeMessage)>> {
-        let (sender, receiver) = mpsc::channel(1000);
+        let (_sender, receiver) = mpsc::channel(1000);
 
         // TODO: Implement actual TCP message receiving
         tokio::spawn(async move {

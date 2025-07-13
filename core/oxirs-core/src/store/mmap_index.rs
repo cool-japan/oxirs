@@ -568,30 +568,30 @@ impl MmapIndex {
 
         // Acquire write lock once for the entire bulk operation
         let _lock = self.write_lock.lock();
-        
+
         // Sort entries by key for better tree insertion order and cache locality
         let mut sorted_entries = entries.to_vec();
         sorted_entries.sort_by(|a, b| a.0.cmp(&b.0));
-        
+
         // Insert all entries with the lock held once
         for (key, entry) in &sorted_entries {
             // Call the core insert logic without header updates
             self.insert_core(key, *entry)?;
         }
-        
+
         // Batch update the header count once at the end
         {
             let mut header = self.header.write();
             header.entry_count += sorted_entries.len() as u64;
         }
-        
+
         Ok(())
     }
 
     /// Internal insert implementation (assumes write lock is already held)
     fn insert_internal(&self, key: &str, entry: IndexEntry) -> Result<()> {
         self.insert_core(key, entry)?;
-        
+
         // Update header entry count
         let mut header = self.header.write();
         header.entry_count += 1;

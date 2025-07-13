@@ -464,7 +464,7 @@ impl PerformanceService {
         debug!("Applying consciousness-inspired optimization");
 
         // Artificial intuition based on query patterns
-        let intuitive_optimizations = self.analyze_query_intuition(query).await;
+        let _intuitive_optimizations = self.analyze_query_intuition(query).await;
 
         // Apply gut-feeling based reorderings
         let mut optimized_query = query.to_string();

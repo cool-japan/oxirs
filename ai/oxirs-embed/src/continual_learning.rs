@@ -15,8 +15,7 @@ use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
 
 /// Configuration for continual learning
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ContinualLearningConfig {
     pub base_config: ModelConfig,
     /// Memory management configuration
@@ -30,7 +29,6 @@ pub struct ContinualLearningConfig {
     /// Replay configuration
     pub replay_config: ReplayConfig,
 }
-
 
 /// Memory management configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -18,6 +18,84 @@ use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
+/// Memory-optimized batch iterator for large datasets
+pub struct MemoryOptimizedBatchIterator<T> {
+    /// Data source
+    data: Vec<T>,
+    /// Current position
+    position: usize,
+    /// Batch size
+    batch_size: usize,
+    /// Memory usage tracker
+    memory_usage: usize,
+    /// Maximum memory threshold (bytes)
+    max_memory_bytes: usize,
+}
+
+impl<T> MemoryOptimizedBatchIterator<T> {
+    /// Create a new memory-optimized batch iterator
+    pub fn new(data: Vec<T>, batch_size: usize, max_memory_mb: usize) -> Self {
+        Self {
+            data,
+            position: 0,
+            batch_size,
+            memory_usage: 0,
+            max_memory_bytes: max_memory_mb * 1024 * 1024,
+        }
+    }
+
+    /// Get the next batch with memory optimization
+    pub fn next_batch(&mut self) -> Option<Vec<T>>
+    where
+        T: Clone,
+    {
+        if self.position >= self.data.len() {
+            return None;
+        }
+
+        let mut batch = Vec::new();
+        let mut current_memory = 0;
+        let item_size = std::mem::size_of::<T>();
+
+        // Collect items for batch while respecting memory limits
+        while self.position < self.data.len()
+            && batch.len() < self.batch_size
+            && current_memory + item_size <= self.max_memory_bytes
+        {
+            batch.push(self.data[self.position].clone());
+            self.position += 1;
+            current_memory += item_size;
+        }
+
+        self.memory_usage = current_memory;
+
+        if batch.is_empty() {
+            None
+        } else {
+            Some(batch)
+        }
+    }
+
+    /// Get current memory usage
+    pub fn get_memory_usage(&self) -> usize {
+        self.memory_usage
+    }
+
+    /// Get progress percentage
+    pub fn get_progress(&self) -> f64 {
+        if self.data.is_empty() {
+            1.0
+        } else {
+            self.position as f64 / self.data.len() as f64
+        }
+    }
+
+    /// Check if iterator is finished
+    pub fn is_finished(&self) -> bool {
+        self.position >= self.data.len()
+    }
+}
+
 /// Batch processing manager for offline embedding generation
 pub struct BatchProcessingManager {
     /// Active batch jobs
@@ -855,14 +933,11 @@ impl BatchProcessingManager {
     /// Validate a batch job before submission
     async fn validate_job(&self, job: &BatchJob) -> Result<()> {
         // Validate input source exists
-        match &job.input.input_type {
-            InputType::EntityFile => {
-                if !Path::new(&job.input.source).exists() {
-                    return Err(anyhow!("Input file does not exist: {}", job.input.source));
-                }
+        if let InputType::EntityFile = &job.input.input_type {
+            if !Path::new(&job.input.source).exists() {
+                return Err(anyhow!("Input file does not exist: {}", job.input.source));
             }
-            _ => {} // Other validations would be implemented
-        }
+        } // Other validations would be implemented
 
         // Validate output path is writable
         if let Some(parent) = Path::new(&job.output.path).parent() {
@@ -1009,5 +1084,78 @@ mod tests {
         assert!(incremental.enabled);
         assert!(incremental.last_processed.is_some());
         assert_eq!(incremental.timestamp_field, "updated_at");
+    }
+
+    #[test]
+    fn test_memory_optimized_batch_iterator() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let mut iterator = MemoryOptimizedBatchIterator::new(data.clone(), 3, 1); // 1MB limit
+
+        // Test first batch
+        let batch1 = iterator.next_batch().unwrap();
+        assert_eq!(batch1.len(), 3);
+        assert_eq!(batch1, vec![1, 2, 3]);
+        assert_eq!(iterator.get_progress(), 0.3);
+        assert!(!iterator.is_finished());
+
+        // Test second batch
+        let batch2 = iterator.next_batch().unwrap();
+        assert_eq!(batch2.len(), 3);
+        assert_eq!(batch2, vec![4, 5, 6]);
+        assert_eq!(iterator.get_progress(), 0.6);
+
+        // Test third batch
+        let batch3 = iterator.next_batch().unwrap();
+        assert_eq!(batch3.len(), 3);
+        assert_eq!(batch3, vec![7, 8, 9]);
+        assert_eq!(iterator.get_progress(), 0.9);
+
+        // Test final batch
+        let batch4 = iterator.next_batch().unwrap();
+        assert_eq!(batch4.len(), 1);
+        assert_eq!(batch4, vec![10]);
+        assert_eq!(iterator.get_progress(), 1.0);
+        assert!(iterator.is_finished());
+
+        // Test empty batch
+        let batch5 = iterator.next_batch();
+        assert!(batch5.is_none());
+    }
+
+    #[test]
+    fn test_memory_optimized_batch_iterator_empty() {
+        let data: Vec<i32> = vec![];
+        let mut iterator = MemoryOptimizedBatchIterator::new(data, 3, 1);
+
+        assert_eq!(iterator.get_progress(), 1.0);
+        assert!(iterator.is_finished());
+        assert!(iterator.next_batch().is_none());
+    }
+
+    #[test]
+    fn test_memory_optimized_batch_iterator_single_item() {
+        let data = vec![42];
+        let mut iterator = MemoryOptimizedBatchIterator::new(data, 5, 1);
+
+        let batch = iterator.next_batch().unwrap();
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0], 42);
+        assert_eq!(iterator.get_progress(), 1.0);
+        assert!(iterator.is_finished());
+    }
+
+    #[test]
+    fn test_memory_optimized_batch_iterator_memory_tracking() {
+        let data = vec![1, 2, 3, 4, 5];
+        let mut iterator = MemoryOptimizedBatchIterator::new(data, 3, 1);
+
+        // Process one batch and check memory usage
+        let _batch = iterator.next_batch().unwrap();
+        let memory_usage = iterator.get_memory_usage();
+        assert!(memory_usage > 0);
+
+        // Memory usage should be roughly 3 * size_of::<i32>()
+        let expected_memory = 3 * std::mem::size_of::<i32>();
+        assert_eq!(memory_usage, expected_memory);
     }
 }

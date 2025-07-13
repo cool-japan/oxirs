@@ -251,7 +251,7 @@ pub enum PatternType {
     Semantic,
 }
 
-trait PatternMatcherTrait: std::fmt::Debug + Send + Sync {
+pub trait PatternMatcherTrait: std::fmt::Debug + Send + Sync {
     fn matches(&self, query: &str) -> bool;
     fn extract_bindings(&self, query: &str) -> HashMap<String, String>;
     fn clone_box(&self) -> Box<dyn PatternMatcherTrait + Send + Sync>;
@@ -438,7 +438,7 @@ impl AdvancedSubqueryOptimizer {
     fn extract_exists_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         let mut subqueries = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         // Find EXISTS patterns
         let exists_positions: Vec<_> = query_upper.match_indices("EXISTS").collect();
         for (pos, _) in exists_positions {
@@ -449,31 +449,33 @@ impl AdvancedSubqueryOptimizer {
             } else {
                 SubqueryType::Exists
             };
-            
+
             // Find the opening brace after EXISTS
             if let Some(brace_start) = query[pos..].find('{') {
                 let abs_brace_start = pos + brace_start;
-                
+
                 // Find the matching closing brace
-                if let Some(subquery_content) = self.extract_balanced_braces(&query[abs_brace_start..]) {
+                if let Some(subquery_content) =
+                    self.extract_balanced_braces(&query[abs_brace_start..])
+                {
                     subqueries.push(SubqueryInfo {
                         id: format!("subquery_{pos}"),
                         query_text: subquery_content.clone(),
                         subquery_type,
                         is_correlated: self.detect_correlation(&subquery_content, query),
                         outer_vars: self.extract_variables(&subquery_content),
-                        estimated_size: 10, // Default size estimate
+                        estimated_size: 10,         // Default size estimate
                         estimated_selectivity: 0.1, // Default selectivity estimate
-                        estimated_cost: 100.0, // Default cost estimate
+                        estimated_cost: 100.0,      // Default cost estimate
                         filter_count: subquery_content.matches("FILTER").count(),
                         join_count: subquery_content.matches(" . ").count(),
                         outer_cardinality: 1000, // Default cardinality estimate
-                        dependencies: vec![], // No dependencies by default
+                        dependencies: vec![],    // No dependencies by default
                     });
                 }
             }
         }
-        
+
         if subqueries.is_empty() {
             None
         } else {
@@ -483,20 +485,22 @@ impl AdvancedSubqueryOptimizer {
 
     fn extract_scalar_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         let mut subqueries = Vec::new();
-        
+
         // Look for scalar subqueries in FILTER clauses
         let query_upper = query.to_uppercase();
         let mut search_pos = 0;
-        
+
         while let Some(filter_pos) = query_upper[search_pos..].find("FILTER(") {
             let abs_filter_pos = search_pos + filter_pos + 7; // Skip "FILTER("
-            
+
             // Look for SELECT within the filter
             if let Some(select_pos) = query_upper[abs_filter_pos..].find("SELECT") {
                 let abs_select_pos = abs_filter_pos + select_pos;
-                
+
                 // Find the subquery by looking for balanced parentheses
-                if let Some(subquery_content) = self.extract_parentheses_content(&query[abs_select_pos..]) {
+                if let Some(subquery_content) =
+                    self.extract_parentheses_content(&query[abs_select_pos..])
+                {
                     subqueries.push(SubqueryInfo {
                         id: format!("scalar_subquery_{}", subqueries.len()),
                         query_text: subquery_content.clone(),
@@ -513,10 +517,10 @@ impl AdvancedSubqueryOptimizer {
                     });
                 }
             }
-            
+
             search_pos = abs_filter_pos;
         }
-        
+
         if subqueries.is_empty() {
             None
         } else {
@@ -535,16 +539,18 @@ impl AdvancedSubqueryOptimizer {
             // Find subquery patterns within braces - look for { SELECT patterns specifically
             let mut chars = where_clause.chars().peekable();
             let mut pos = 0;
-            
+
             while let Some(ch) = chars.next() {
                 if ch == '{' {
                     // Found an opening brace, check if it contains SELECT
-                    let remaining: String = chars.clone().collect();
-                    
+                    let _remaining: String = chars.clone().collect();
+
                     // Extract the content until the matching closing brace
-                    if let Some(subquery_content) = self.extract_balanced_braces(&where_clause[pos..]) {
+                    if let Some(subquery_content) =
+                        self.extract_balanced_braces(&where_clause[pos..])
+                    {
                         let subquery_text = subquery_content.trim();
-                        
+
                         // Check if this is actually a SELECT subquery
                         if subquery_text.to_lowercase().contains("select") {
                             subqueries.push(SubqueryInfo {
@@ -553,7 +559,7 @@ impl AdvancedSubqueryOptimizer {
                                 subquery_type: SubqueryType::From,
                                 is_correlated: self.detect_correlation(subquery_text, query),
                                 outer_vars: self.extract_variables(subquery_text),
-                                estimated_size: 100, // Default estimate
+                                estimated_size: 100,        // Default estimate
                                 estimated_selectivity: 0.1, // Default selectivity
                                 estimated_cost: 1.0,
                                 filter_count: 0,
@@ -578,18 +584,20 @@ impl AdvancedSubqueryOptimizer {
     fn extract_in_subqueries(&self, query: &str) -> Option<Vec<SubqueryInfo>> {
         let mut subqueries = Vec::new();
         let query_upper = query.to_uppercase();
-        
+
         // Find IN (...SELECT...) patterns
         let mut search_pos = 0;
         while let Some(in_pos) = query_upper[search_pos..].find(" IN ") {
             let abs_in_pos = search_pos + in_pos;
-            
+
             // Look for opening parenthesis after IN
             if let Some(paren_start) = query[abs_in_pos + 4..].find('(') {
                 let abs_paren_start = abs_in_pos + 4 + paren_start;
-                
+
                 // Check if there's a SELECT inside the parentheses
-                if let Some(subquery_content) = self.extract_parentheses_content(&query[abs_paren_start..]) {
+                if let Some(subquery_content) =
+                    self.extract_parentheses_content(&query[abs_paren_start..])
+                {
                     if subquery_content.to_uppercase().contains("SELECT") {
                         subqueries.push(SubqueryInfo {
                             id: format!("in_subquery_{}", subqueries.len()),
@@ -597,9 +605,9 @@ impl AdvancedSubqueryOptimizer {
                             subquery_type: SubqueryType::In,
                             is_correlated: self.detect_correlation(&subquery_content, query),
                             outer_vars: self.extract_variables(&subquery_content),
-                            estimated_size: 50, // Default estimate
+                            estimated_size: 50,         // Default estimate
                             estimated_selectivity: 0.2, // Default selectivity
-                            estimated_cost: 75.0, // Default cost
+                            estimated_cost: 75.0,       // Default cost
                             filter_count: subquery_content.matches("FILTER").count(),
                             join_count: subquery_content.matches(" . ").count(),
                             outer_cardinality: 1000, // Default cardinality
@@ -610,7 +618,7 @@ impl AdvancedSubqueryOptimizer {
             }
             search_pos = abs_in_pos + 4;
         }
-        
+
         if subqueries.is_empty() {
             None
         } else {
@@ -711,31 +719,33 @@ impl AdvancedSubqueryOptimizer {
         // Extract variables from the outer query (excluding the subquery itself)
         let outer_query_without_subquery = outer_query.replace(subquery, "");
         let outer_vars = self.extract_variables(&outer_query_without_subquery);
-        
+
         // Extract variables that are SELECT-ed (projected) by the subquery
-        let subquery_projected_vars = if let Some(select_pos) = subquery.to_lowercase().find("select") {
-            let select_part = &subquery[select_pos..];
-            if let Some(where_pos) = select_part.to_lowercase().find("where") {
-                let select_clause = &select_part[..where_pos];
-                self.extract_variables(select_clause)
+        let subquery_projected_vars =
+            if let Some(select_pos) = subquery.to_lowercase().find("select") {
+                let select_part = &subquery[select_pos..];
+                if let Some(where_pos) = select_part.to_lowercase().find("where") {
+                    let select_clause = &select_part[..where_pos];
+                    self.extract_variables(select_clause)
+                } else {
+                    self.extract_variables(select_part)
+                }
             } else {
-                self.extract_variables(select_part)
-            }
-        } else {
-            Vec::new()
-        };
-        
+                Vec::new()
+            };
+
         // Get only the truly outer variables (not projected by the subquery)
-        let truly_outer_vars: Vec<_> = outer_vars.iter()
+        let truly_outer_vars: Vec<_> = outer_vars
+            .iter()
             .filter(|var| !subquery_projected_vars.contains(var))
             .collect();
-        
+
         // True correlation: subquery references variables from truly outer scope
         // Look for truly outer variables used within the subquery WHERE clause
         let subquery_lower = subquery.to_lowercase();
         if let Some(where_pos) = subquery_lower.find("where") {
             let subquery_where = &subquery[where_pos..];
-            
+
             // Check if any truly outer variables are referenced in subquery WHERE clause
             truly_outer_vars.iter().any(|var| {
                 let var_pattern = format!("?{var}");
@@ -811,8 +821,8 @@ impl AdvancedSubqueryOptimizer {
     fn rewrite_filter_pushdown(
         &self,
         query: &str,
-        subquery: &SubqueryInfo,
-        filter: &str,
+        _subquery: &SubqueryInfo,
+        _filter: &str,
     ) -> FusekiResult<String> {
         // Push filter into subquery
         Ok(query.to_string())
@@ -822,7 +832,7 @@ impl AdvancedSubqueryOptimizer {
         // Convert IN (SELECT ...) to JOIN
         let in_pattern = format!(" IN ({})", subquery.query_text);
         let join_pattern = format!(" . {{ {} }}", subquery.query_text);
-        
+
         Ok(query.replace(&in_pattern, &join_pattern))
     }
 
@@ -835,7 +845,7 @@ impl AdvancedSubqueryOptimizer {
                 let join_pattern = format!("{{ {} }}", subquery.query_text);
                 return Ok(query.replace(&exists_pattern, &join_pattern));
             }
-            
+
             // For scalar subqueries in filters, convert to join with aggregation
             if subquery.subquery_type == SubqueryType::Scalar {
                 let subquery_pattern = format!("({})", subquery.query_text);
@@ -843,7 +853,7 @@ impl AdvancedSubqueryOptimizer {
                 return Ok(query.replace(&subquery_pattern, &join_pattern));
             }
         }
-        
+
         Ok(query.to_string())
     }
 
@@ -881,12 +891,12 @@ impl AdvancedSubqueryOptimizer {
         })
     }
 
-    fn identify_parallelization(&self, steps: &[ExecutionStep]) -> Vec<ParallelGroup> {
+    fn identify_parallelization(&self, _steps: &[ExecutionStep]) -> Vec<ParallelGroup> {
         // Group independent subqueries that can be executed in parallel
         Vec::new()
     }
 
-    fn estimate_cost_reduction(&self, subqueries: &[SubqueryInfo]) -> f64 {
+    fn estimate_cost_reduction(&self, _subqueries: &[SubqueryInfo]) -> f64 {
         // Estimate overall cost reduction from optimizations
         0.3 // Placeholder
     }
@@ -1194,7 +1204,7 @@ impl MaterializationManager {
     async fn materialize_view(
         &self,
         key: String,
-        subquery: &SubqueryInfo,
+        _subquery: &SubqueryInfo,
         results: Vec<HashMap<String, serde_json::Value>>,
     ) -> FusekiResult<()> {
         let size_bytes = serde_json::to_vec(&results)?.len();

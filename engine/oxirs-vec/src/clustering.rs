@@ -668,7 +668,7 @@ impl ClusteringEngine {
             size,
             avg_intra_similarity,
             density: avg_intra_similarity, // Simplified density measure
-            silhouette_score: 0.0,         // TODO: Implement proper silhouette calculation
+            silhouette_score: 0.0, // Simplified for individual cluster stats - use quality metrics for full silhouette score
         })
     }
 
@@ -777,7 +777,7 @@ impl ClusteringEngine {
     ) -> Result<ClusteringQualityMetrics> {
         // Simplified quality metrics - in practice these would be more sophisticated
         let mut within_cluster_ss = 0.0;
-        let silhouette_scores = Vec::new();
+        let mut silhouette_scores = Vec::new();
 
         for cluster in clusters {
             if cluster.members.len() > 1 {
@@ -801,19 +801,276 @@ impl ClusteringEngine {
             }
         }
 
+        // Calculate silhouette scores for all points
+        for (cluster_idx, cluster) in clusters.iter().enumerate() {
+            let cluster_vectors: Vec<(usize, &Vector)> = cluster
+                .members
+                .iter()
+                .filter_map(|member| {
+                    resources
+                        .iter()
+                        .enumerate()
+                        .find(|(_, (id, _))| id == member)
+                        .map(|(idx, (_, v))| (idx, v))
+                })
+                .collect();
+
+            // For each point in this cluster
+            for (point_idx, point_vector) in &cluster_vectors {
+                if cluster_vectors.len() <= 1 {
+                    // Single point cluster gets silhouette score of 0
+                    silhouette_scores.push(0.0);
+                    continue;
+                }
+
+                // Calculate average distance to other points in same cluster (a)
+                let mut intra_cluster_dist = 0.0;
+                let mut intra_count = 0;
+                for (other_idx, other_vector) in &cluster_vectors {
+                    if point_idx != other_idx {
+                        let dist = self.calculate_distance(point_vector, other_vector)?;
+                        intra_cluster_dist += dist;
+                        intra_count += 1;
+                    }
+                }
+                let a = if intra_count > 0 {
+                    intra_cluster_dist / intra_count as f32
+                } else {
+                    0.0
+                };
+
+                // Calculate minimum average distance to points in other clusters (b)
+                let mut min_inter_cluster_dist = f32::INFINITY;
+                for (other_cluster_idx, other_cluster) in clusters.iter().enumerate() {
+                    if cluster_idx != other_cluster_idx {
+                        let other_cluster_vectors: Vec<&Vector> = other_cluster
+                            .members
+                            .iter()
+                            .filter_map(|member| {
+                                resources
+                                    .iter()
+                                    .find(|(id, _)| id == member)
+                                    .map(|(_, v)| v)
+                            })
+                            .collect();
+
+                        if !other_cluster_vectors.is_empty() {
+                            let mut inter_cluster_dist = 0.0;
+                            for other_vector in &other_cluster_vectors {
+                                let dist = self.calculate_distance(point_vector, other_vector)?;
+                                inter_cluster_dist += dist;
+                            }
+                            let avg_dist = inter_cluster_dist / other_cluster_vectors.len() as f32;
+                            min_inter_cluster_dist = min_inter_cluster_dist.min(avg_dist);
+                        }
+                    }
+                }
+                let b = min_inter_cluster_dist;
+
+                // Calculate silhouette score for this point
+                let silhouette = if a.max(b) > 0.0 {
+                    (b - a) / a.max(b)
+                } else {
+                    0.0
+                };
+                silhouette_scores.push(silhouette);
+            }
+        }
+
         let silhouette_score = if !silhouette_scores.is_empty() {
             silhouette_scores.iter().sum::<f32>() / silhouette_scores.len() as f32
         } else {
             0.0
         };
 
+        // Calculate Davies-Bouldin Index
+        let davies_bouldin_index = self.calculate_davies_bouldin_index(resources, clusters)?;
+
+        // Calculate Calinski-Harabasz Index
+        let calinski_harabasz_index =
+            self.calculate_calinski_harabasz_index(resources, clusters, within_cluster_ss)?;
+
+        // Calculate between-cluster sum of squares
+        let between_cluster_ss = self.calculate_between_cluster_ss(resources, clusters)?;
+
         Ok(ClusteringQualityMetrics {
             silhouette_score,
-            davies_bouldin_index: 0.0,    // TODO: Implement
-            calinski_harabasz_index: 0.0, // TODO: Implement
+            davies_bouldin_index,
+            calinski_harabasz_index,
             within_cluster_ss,
-            between_cluster_ss: 0.0, // TODO: Implement
+            between_cluster_ss,
         })
+    }
+
+    /// Calculate Davies-Bouldin Index (lower is better)
+    fn calculate_davies_bouldin_index(
+        &self,
+        resources: &[(String, Vector)],
+        clusters: &[Cluster],
+    ) -> Result<f32> {
+        if clusters.len() <= 1 {
+            return Ok(0.0);
+        }
+
+        let mut db_sum = 0.0;
+        for i in 0..clusters.len() {
+            let mut max_ratio: f32 = 0.0;
+
+            // Get vectors for cluster i
+            let cluster_i_vectors: Vec<&Vector> = clusters[i]
+                .members
+                .iter()
+                .filter_map(|member| {
+                    resources
+                        .iter()
+                        .find(|(id, _)| id == member)
+                        .map(|(_, v)| v)
+                })
+                .collect();
+
+            if cluster_i_vectors.is_empty() {
+                continue;
+            }
+
+            // Calculate centroid for cluster i
+            let centroid_i = self.compute_centroid(&cluster_i_vectors)?;
+
+            // Calculate average distance to centroid for cluster i
+            let mut avg_dist_i = 0.0;
+            for vector in &cluster_i_vectors {
+                avg_dist_i += self.calculate_distance(vector, &centroid_i)?;
+            }
+            avg_dist_i /= cluster_i_vectors.len() as f32;
+
+            for (j, cluster_j) in clusters.iter().enumerate() {
+                if i == j {
+                    continue;
+                }
+
+                // Get vectors for cluster j
+                let cluster_j_vectors: Vec<&Vector> = cluster_j
+                    .members
+                    .iter()
+                    .filter_map(|member| {
+                        resources
+                            .iter()
+                            .find(|(id, _)| id == member)
+                            .map(|(_, v)| v)
+                    })
+                    .collect();
+
+                if cluster_j_vectors.is_empty() {
+                    continue;
+                }
+
+                // Calculate centroid for cluster j
+                let centroid_j = self.compute_centroid(&cluster_j_vectors)?;
+
+                // Calculate average distance to centroid for cluster j
+                let mut avg_dist_j = 0.0;
+                for vector in &cluster_j_vectors {
+                    avg_dist_j += self.calculate_distance(vector, &centroid_j)?;
+                }
+                avg_dist_j /= cluster_j_vectors.len() as f32;
+
+                // Calculate distance between centroids
+                let centroid_distance = self.calculate_distance(&centroid_i, &centroid_j)?;
+
+                // Calculate Davies-Bouldin ratio
+                if centroid_distance > 0.0 {
+                    let ratio: f32 = (avg_dist_i + avg_dist_j) / centroid_distance;
+                    max_ratio = max_ratio.max(ratio);
+                }
+            }
+            db_sum += max_ratio;
+        }
+
+        Ok(db_sum / clusters.len() as f32)
+    }
+
+    /// Calculate Calinski-Harabasz Index (higher is better)
+    fn calculate_calinski_harabasz_index(
+        &self,
+        resources: &[(String, Vector)],
+        clusters: &[Cluster],
+        within_cluster_ss: f32,
+    ) -> Result<f32> {
+        if clusters.len() <= 1 || resources.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Calculate overall centroid
+        let all_vectors: Vec<&Vector> = resources.iter().map(|(_, v)| v).collect();
+        let overall_centroid = self.compute_centroid(&all_vectors)?;
+
+        // Calculate between-cluster sum of squares
+        let mut between_cluster_ss = 0.0;
+        for cluster in clusters {
+            let cluster_vectors: Vec<&Vector> = cluster
+                .members
+                .iter()
+                .filter_map(|member| {
+                    resources
+                        .iter()
+                        .find(|(id, _)| id == member)
+                        .map(|(_, v)| v)
+                })
+                .collect();
+
+            if !cluster_vectors.is_empty() {
+                let cluster_centroid = self.compute_centroid(&cluster_vectors)?;
+                let distance_sq = self.calculate_distance(&cluster_centroid, &overall_centroid)?;
+                between_cluster_ss += cluster_vectors.len() as f32 * distance_sq * distance_sq;
+            }
+        }
+
+        // Calinski-Harabasz = (between_cluster_ss / (k-1)) / (within_cluster_ss / (n-k))
+        let k = clusters.len() as f32;
+        let n = resources.len() as f32;
+
+        if k >= n || within_cluster_ss <= 0.0 {
+            return Ok(0.0);
+        }
+
+        let ch_index = (between_cluster_ss / (k - 1.0)) / (within_cluster_ss / (n - k));
+        Ok(ch_index)
+    }
+
+    /// Calculate between-cluster sum of squares
+    fn calculate_between_cluster_ss(
+        &self,
+        resources: &[(String, Vector)],
+        clusters: &[Cluster],
+    ) -> Result<f32> {
+        if clusters.is_empty() || resources.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Calculate overall centroid
+        let all_vectors: Vec<&Vector> = resources.iter().map(|(_, v)| v).collect();
+        let overall_centroid = self.compute_centroid(&all_vectors)?;
+
+        let mut between_cluster_ss = 0.0;
+        for cluster in clusters {
+            let cluster_vectors: Vec<&Vector> = cluster
+                .members
+                .iter()
+                .filter_map(|member| {
+                    resources
+                        .iter()
+                        .find(|(id, _)| id == member)
+                        .map(|(_, v)| v)
+                })
+                .collect();
+
+            if !cluster_vectors.is_empty() {
+                let cluster_centroid = self.compute_centroid(&cluster_vectors)?;
+                let distance = self.calculate_distance(&cluster_centroid, &overall_centroid)?;
+                between_cluster_ss += cluster_vectors.len() as f32 * distance * distance;
+            }
+        }
+
+        Ok(between_cluster_ss)
     }
 }
 

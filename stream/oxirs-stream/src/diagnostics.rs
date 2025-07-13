@@ -181,10 +181,8 @@ pub struct Recommendation {
 }
 
 // Type aliases for complex types
-type HealthMonitorMap = HashMap<
-    String,
-    Arc<RwLock<HealthMonitor<Box<dyn crate::connection_pool::PooledConnection>>>>,
->;
+type HealthMonitorMap =
+    HashMap<String, Arc<RwLock<HealthMonitor<Box<dyn crate::connection_pool::PooledConnection>>>>>;
 type EventBuffer = Arc<RwLock<VecDeque<(StreamEvent, DateTime<Utc>)>>>;
 
 /// Diagnostic analyzer for generating reports
@@ -728,9 +726,7 @@ impl DiagnosticAnalyzer {
                 .map(|dt| DateTime::from_naive_utc_and_offset(dt, Utc))
                 .unwrap_or(error.timestamp);
 
-            let bucket = timeline_buckets
-                .entry(bucket_time)
-                .or_default();
+            let bucket = timeline_buckets.entry(bucket_time).or_default();
             *bucket.entry(error.error_type.clone()).or_insert(0) += 1;
         }
 

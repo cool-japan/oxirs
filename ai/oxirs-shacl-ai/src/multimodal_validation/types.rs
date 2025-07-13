@@ -102,8 +102,7 @@ pub struct MultiModalContent {
 }
 
 /// Metadata for content
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ContentMetadata {
     /// MIME type
     pub mime_type: Option<String>,
@@ -126,7 +125,6 @@ pub struct ContentMetadata {
     /// Additional properties
     pub properties: HashMap<String, String>,
 }
-
 
 /// Result of content analysis
 #[derive(Debug, Clone)]

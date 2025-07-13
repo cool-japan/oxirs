@@ -360,7 +360,7 @@ impl FederatedCoordinator {
     async fn distribute_global_model(&self, participants: &[String]) -> Result<()> {
         let current_model = self.current_model.read().await;
 
-        if let Some(model_weights) = current_model.as_ref() {
+        if let Some(_model_weights) = current_model.as_ref() {
             // Simulate model distribution
             for participant_id in participants {
                 // In real implementation, this would send model via network
@@ -418,7 +418,7 @@ impl FederatedCoordinator {
         // Simulate aggregation process
         tokio::time::sleep(Duration::from_millis(200)).await;
 
-        let total_samples: usize = updates.iter().map(|u| u.data_contribution).sum();
+        let _total_samples: usize = updates.iter().map(|u| u.data_contribution).sum();
         let aggregated_weights = vec![0u8; 1000]; // Mock aggregated weights
 
         Ok(AggregationResult {
@@ -436,7 +436,7 @@ impl FederatedCoordinator {
         }
 
         // Calculate weights based on data contribution and quality
-        let total_weight: f32 = updates
+        let _total_weight: f32 = updates
             .iter()
             .map(|u| u.data_contribution as f32 * self.get_node_quality(&u.node_id))
             .sum();

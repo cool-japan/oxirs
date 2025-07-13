@@ -4,10 +4,11 @@
 //! including subject routing, wildcard subscriptions, clustering, and queue groups
 //! for high-performance, scalable federation.
 
+#![allow(unexpected_cfgs)]
+
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -432,7 +433,7 @@ impl SubjectRoutingEngine {
             return false;
         }
 
-        for (i, (pattern_part, message_part)) in
+        for (_i, (pattern_part, message_part)) in
             pattern_parts.iter().zip(message_parts.iter()).enumerate()
         {
             if *pattern_part == "*" {
@@ -582,8 +583,8 @@ impl RequestReplyHandler {
     /// Send a request and wait for reply
     pub async fn send_request(
         &mut self,
-        request: FederationMessage,
-        subject: &str,
+        _request: FederationMessage,
+        _subject: &str,
     ) -> Result<FederationMessage> {
         let request_id = Uuid::new_v4().to_string();
         let (sender, receiver) = tokio::sync::oneshot::channel();
@@ -921,7 +922,10 @@ impl NatsFederationClient {
         };
 
         // Serialize message
+        #[cfg(feature = "nats")]
         let payload = serde_json::to_string(&message)?;
+        #[cfg(not(feature = "nats"))]
+        let _payload = serde_json::to_string(&message)?;
 
         #[cfg(feature = "nats")]
         {
@@ -957,7 +961,8 @@ impl NatsFederationClient {
     /// Send request with reply pattern
     pub async fn send_request_reply(
         &self,
-        request: FederationMessage,
+        #[cfg(feature = "nats")] request: FederationMessage,
+        #[cfg(not(feature = "nats"))] _request: FederationMessage,
         target_subject: &str,
     ) -> Result<FederationMessage> {
         #[cfg(feature = "nats")]
@@ -993,8 +998,6 @@ impl NatsFederationClient {
                 metadata: serde_json::Value::Null,
             });
         }
-
-        Err(anyhow!("NATS client not initialized"))
     }
 
     /// Get message type for routing

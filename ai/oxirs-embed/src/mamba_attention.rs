@@ -578,11 +578,12 @@ impl crate::EmbeddingModel for MambaEmbedding {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
 
-        let relation_idx = self.relations.get(relation).ok_or_else(|| {
-            EmbeddingError::RelationNotFound {
-                relation: relation.to_string(),
-            }
-        })?;
+        let relation_idx =
+            self.relations
+                .get(relation)
+                .ok_or_else(|| EmbeddingError::RelationNotFound {
+                    relation: relation.to_string(),
+                })?;
 
         let embedding = self.relation_embeddings.row(*relation_idx);
         Ok(Vector::new(embedding.to_vec()))

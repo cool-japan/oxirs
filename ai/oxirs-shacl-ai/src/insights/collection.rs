@@ -1,8 +1,7 @@
 //! Insight collection and management
 
 use super::types::{
-    DataInsight, PerformanceInsight, QualityInsight, ShapeInsight,
-    ValidationInsight,
+    DataInsight, PerformanceInsight, QualityInsight, ShapeInsight, ValidationInsight,
 };
 use crate::analytics::InsightSeverity;
 use chrono::{DateTime, Utc};

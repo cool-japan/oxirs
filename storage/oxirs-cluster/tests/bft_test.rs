@@ -1,6 +1,7 @@
 //! Tests for Byzantine fault tolerance functionality
 
 #[cfg(feature = "bft")]
+#[allow(clippy::assertions_on_constants)]
 mod bft_tests {
     use oxirs_cluster::bft::{BftConfig, BftConsensus, BftMessage};
     use oxirs_cluster::ClusterError;
@@ -147,6 +148,7 @@ mod bft_feature_tests {
     fn test_bft_feature_disabled() {
         // When BFT feature is disabled, ensure the modules are not available
         // This test just verifies the feature flag works correctly
-        assert!(true, "BFT feature is disabled");
+        // No assertion needed - the fact that this test compiles and runs
+        // means the feature flag is working correctly
     }
 }

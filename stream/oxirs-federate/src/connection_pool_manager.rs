@@ -234,7 +234,7 @@ impl ConnectionPoolManager {
         let pools = self.pools.read().await;
         let mut adjustments = Vec::new();
 
-        for (service_id, pool) in pools.iter() {
+        for (_service_id, pool) in pools.iter() {
             if let Some(adjustment) = self.optimizer.analyze_and_adjust(pool).await? {
                 adjustments.push(adjustment);
             }
@@ -282,7 +282,7 @@ impl ConnectionPoolManager {
         let global_metrics = self.metrics.read().await;
         let mut service_stats = Vec::new();
 
-        for (service_id, pool) in pools.iter() {
+        for (_service_id, pool) in pools.iter() {
             let pool_metrics = pool.metrics.read().await;
             service_stats.push(pool_metrics.clone());
         }
@@ -598,7 +598,7 @@ impl<'a> Drop for ConnectionPermit<'a> {
     fn drop(&mut self) {
         // Update metrics when permit is released
         let pool = self.pool.clone();
-        let duration = self.acquired_at.elapsed();
+        let _duration = self.acquired_at.elapsed();
 
         tokio::spawn(async move {
             let mut metrics = pool.metrics.write().await;
@@ -707,7 +707,7 @@ mod tests {
         };
 
         let _pool = manager.get_pool(&service).await.unwrap();
-        let adjustments = manager.optimize_pools().await.unwrap();
+        let _adjustments = manager.optimize_pools().await.unwrap();
 
         // Should handle optimization without errors
         // adjustments.len() is always >= 0, so this assertion is unnecessary

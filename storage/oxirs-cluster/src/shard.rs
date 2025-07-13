@@ -363,6 +363,17 @@ impl ShardRouter {
                 }
             }
 
+            ShardingStrategy::Hash { num_shards } => {
+                if let Some(subj) = subject {
+                    // Query targets specific subject, route to its shard
+                    Ok(vec![self.hash_route(subj, *num_shards)])
+                } else {
+                    // For hash sharding by subject, when subject is unknown we must search all shards
+                    // because triples with the target predicate/object could be in any shard
+                    Ok((0..*num_shards).collect())
+                }
+            }
+
             _ => {
                 // For other strategies, we need to check all shards
                 let shards = self.shards.read().await;
@@ -410,6 +421,9 @@ impl ShardRouter {
                 primary_node: shard.primary_node,
             });
         }
+
+        // Sort distribution by shard_id to ensure consistent ordering
+        distribution.sort_by_key(|d| d.shard_id);
 
         ShardingStatistics {
             total_shards: shards.len(),

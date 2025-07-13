@@ -174,7 +174,7 @@ impl QuantumConsciousnessSynthesisEngine {
     /// Synthesize final result
     async fn synthesize_final_result(
         &self,
-        validation_query: &str,
+        _validation_query: &str,
         consciousness_states: &[ConsciousnessState],
         quantum_intuition: &QuantumIntuitionResult,
         sentient_validation: &SentientValidationResult,

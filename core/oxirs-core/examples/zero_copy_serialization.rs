@@ -60,11 +60,8 @@ fn basic_example() -> Result<(), Box<dyn std::error::Error>> {
         println!("Subject: {}", iri.as_str());
     }
     println!("Predicate: {}", deserialized.predicate.as_str());
-    match &deserialized.object {
-        ZeroCopyTerm::NamedNode(iri) => {
-            println!("Object: {}", iri.as_str());
-        }
-        _ => {}
+    if let ZeroCopyTerm::NamedNode(iri) = &deserialized.object {
+        println!("Object: {}", iri.as_str());
     }
 
     Ok(())
@@ -83,9 +80,9 @@ fn mmap_example() -> Result<(), Box<dyn std::error::Error>> {
 
         for i in 0..1000 {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/person/{}", i))?,
+                NamedNode::new(format!("http://example.org/person/{i}"))?,
                 NamedNode::new("http://example.org/name")?,
-                Literal::new(&format!("Person {}", i)),
+                Literal::new(format!("Person {i}")),
             );
             writer.write_triple(&triple)?;
         }
@@ -108,9 +105,8 @@ fn mmap_example() -> Result<(), Box<dyn std::error::Error>> {
             count += 1;
 
             if count <= 3 {
-                match &triple.subject {
-                    ZeroCopyTerm::NamedNode(iri) => println!("  Subject: {}", iri.as_str()),
-                    _ => {}
+                if let ZeroCopyTerm::NamedNode(iri) = &triple.subject {
+                    println!("  Subject: {}", iri.as_str())
                 }
             }
         }
@@ -162,7 +158,7 @@ fn bytes_example() -> Result<(), Box<dyn std::error::Error>> {
             ZeroCopyTerm::Literal(lit) => {
                 print!("  Literal: \"{}\"", lit.value());
                 if let Some(lang) = lit.language() {
-                    print!("@{}", lang);
+                    print!("@{lang}");
                 } else if let Some(dt) = lit.datatype() {
                     print!("^^<{}>", dt.as_str());
                 }
@@ -174,10 +170,13 @@ fn bytes_example() -> Result<(), Box<dyn std::error::Error>> {
             ZeroCopyTerm::Variable(v) => {
                 println!("  Variable: ?{}", v.as_str());
             }
+            ZeroCopyTerm::QuotedTriple(_qt) => {
+                println!("  QuotedTriple: << <subject> <predicate> <object> >>");
+            }
         }
         count += 1;
     }
-    println!("Deserialized {} terms", count);
+    println!("Deserialized {count} terms");
 
     Ok(())
 }
@@ -204,9 +203,9 @@ fn performance_example() -> Result<(), Box<dyn std::error::Error>> {
     let serialize_rate = iterations as f64 / serialize_time.as_secs_f64();
 
     println!("Serialization performance:");
-    println!("  Iterations: {}", iterations);
-    println!("  Time: {:?}", serialize_time);
-    println!("  Rate: {:.0} triples/second", serialize_rate);
+    println!("  Iterations: {iterations}");
+    println!("  Time: {serialize_time:?}");
+    println!("  Rate: {serialize_rate:.0} triples/second");
     println!(
         "  Throughput: {:.2} MB/second",
         (total_size as f64 / 1024.0 / 1024.0) / serialize_time.as_secs_f64()
@@ -227,8 +226,8 @@ fn performance_example() -> Result<(), Box<dyn std::error::Error>> {
     let deserialize_rate = iterations as f64 / deserialize_time.as_secs_f64();
 
     println!("\nDeserialization performance (zero-copy):");
-    println!("  Iterations: {}", iterations);
-    println!("  Time: {:?}", deserialize_time);
+    println!("  Iterations: {iterations}");
+    println!("  Time: {deserialize_time:?}");
     println!("  Rate: {:.0} triples/second", deserialize_rate);
 
     Ok(())

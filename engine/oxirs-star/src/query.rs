@@ -958,7 +958,9 @@ impl QueryParser {
         let parts = Self::tokenize_pattern(line)?;
 
         if parts.len() != 3 {
-            return Err(StarError::query_error(format!("Invalid triple pattern: {line}")));
+            return Err(StarError::query_error(format!(
+                "Invalid triple pattern: {line}"
+            )));
         }
 
         let subject = Self::parse_term_pattern(&parts[0])?;

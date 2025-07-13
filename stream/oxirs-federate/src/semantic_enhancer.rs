@@ -644,7 +644,7 @@ impl SemanticEnhancer {
             });
         }
 
-        let resolver = self.entity_resolver.read().await;
+        let _resolver = self.entity_resolver.read().await;
 
         // Find potential matches
         let candidates = self
@@ -687,7 +687,7 @@ impl SemanticEnhancer {
             return Ok(vec![]);
         }
 
-        let aligner = self.schema_aligner.read().await;
+        let _aligner = self.schema_aligner.read().await;
         let mut alignments = Vec::new();
 
         for source_element in source_schema {
@@ -739,7 +739,7 @@ impl SemanticEnhancer {
             });
         }
 
-        let assessor = self.quality_assessor.read().await;
+        let _assessor = self.quality_assessor.read().await;
 
         // Calculate individual quality metrics
         let completeness = self.assess_completeness(data, schema).await;

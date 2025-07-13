@@ -131,8 +131,7 @@ pub struct ShapeExample {
 }
 
 /// Temporal pattern analysis results
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TemporalPatterns {
     /// Whether regular intervals are detected
     pub has_regular_intervals: bool,
@@ -149,4 +148,3 @@ pub struct TemporalPatterns {
     /// Date range in days
     pub date_range_days: i64,
 }
-

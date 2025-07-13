@@ -26,9 +26,7 @@ use tokio::sync::{RwLock, Semaphore};
 use uuid::Uuid;
 
 // Import OxiRS components
-use oxirs_stream::{
-    EventMetadata, SparqlOperationType, StreamBackendType, StreamConfig,
-};
+use oxirs_stream::{EventMetadata, SparqlOperationType, StreamBackendType, StreamConfig};
 // TODO: Fix imports when StreamConsumer/StreamProducer are implemented
 // use oxirs_stream::StreamConsumer as Consumer;
 use oxirs_stream::StreamEvent as Event;

@@ -818,8 +818,7 @@ pub mod utils {
     ) -> FaissIndexType {
         if num_vectors < 1000 || accuracy_requirement > 0.99 {
             FaissIndexType::IndexFlatL2
-        } else if dimension > 1000
-            || memory_constraint.is_some_and(|mem| mem < 1024 * 1024 * 1024)
+        } else if dimension > 1000 || memory_constraint.is_some_and(|mem| mem < 1024 * 1024 * 1024)
         {
             FaissIndexType::IndexIVFPQ
         } else if num_vectors > 100000 {

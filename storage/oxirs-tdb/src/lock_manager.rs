@@ -220,9 +220,10 @@ impl LockTableEntry {
         // Check compatibility with all granted locks
         for grant in self.granted.values() {
             if grant.transaction_id != request.transaction_id
-                && !request.mode.is_compatible_with(&grant.mode) {
-                    return false;
-                }
+                && !request.mode.is_compatible_with(&grant.mode)
+            {
+                return false;
+            }
         }
 
         // For upgrade requests, check if no other waiters exist
@@ -233,9 +234,10 @@ impl LockTableEntry {
         // Check if there are waiting requests that should be granted first
         for waiting_request in &self.waiting {
             if waiting_request.transaction_id != request.transaction_id
-                && waiting_request.requested_at < request.requested_at {
-                    return false;
-                }
+                && waiting_request.requested_at < request.requested_at
+            {
+                return false;
+            }
         }
 
         true
@@ -315,10 +317,7 @@ impl DeadlockDetector {
     /// Add a wait-for edge
     #[allow(dead_code)]
     fn add_edge(&mut self, waiter: TransactionId, holder: TransactionId) {
-        self.wait_for
-            .entry(waiter)
-            .or_default()
-            .insert(holder);
+        self.wait_for.entry(waiter).or_default().insert(holder);
     }
 
     /// Remove all edges for a transaction

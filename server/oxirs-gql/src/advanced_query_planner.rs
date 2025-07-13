@@ -68,9 +68,12 @@ impl Default for CostModelWeights {
 /// Advanced GraphQL query execution planner
 pub struct AdvancedQueryPlanner {
     config: QueryPlannerConfig,
+    #[allow(dead_code)]
     schema: Arc<Schema>,
+    #[allow(dead_code)]
     execution_stats: Arc<RwLock<ExecutionStatistics>>,
     ml_model: Arc<RwLock<MLPredictionModel>>,
+    #[allow(dead_code)]
     graph_analyzer: GraphAnalyzer,
 }
 
@@ -786,6 +789,7 @@ impl AdvancedQueryPlanner {
 
 /// Graph analyzer for advanced graph theory operations
 pub struct GraphAnalyzer {
+    #[allow(dead_code)]
     schema: Arc<Schema>,
 }
 

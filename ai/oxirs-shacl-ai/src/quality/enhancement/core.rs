@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-
 use crate::quality::QualityReport;
 use crate::Result;
 
@@ -74,8 +73,7 @@ pub enum EnhancementStrategy {
 }
 
 /// Recommendation models for different enhancement types
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct RecommendationModels {
     pub data_enhancement_model: Option<DataEnhancementModel>,
     pub process_optimization_model: Option<ProcessOptimizationModel>,
@@ -319,7 +317,6 @@ impl Default for QualityEnhancementEngine {
         Self::new(EnhancementConfig::default())
     }
 }
-
 
 impl Default for EnhancementStatistics {
     fn default() -> Self {

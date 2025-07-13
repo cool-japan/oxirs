@@ -621,9 +621,8 @@ impl DomainAdapter {
                     (*adapted_value - stats.mean[i]) / (stats.variance[i].sqrt() + 1e-8);
 
                 // Apply adaptation weights
-                *adapted_value =
-                    normalized * self.adaptation_weights[i] * self.adaptation_strength
-                        + *adapted_value * (1.0 - self.adaptation_strength);
+                *adapted_value = normalized * self.adaptation_weights[i] * self.adaptation_strength
+                    + *adapted_value * (1.0 - self.adaptation_strength);
             }
         }
 
@@ -1448,14 +1447,20 @@ impl ContrastiveOptimizer {
     pub fn step_schedule(&mut self) {
         // Update learning rate based on schedule
         match self.lr_schedule {
-            LearningRateSchedule::StepDecay { step_size: _, gamma } => {
+            LearningRateSchedule::StepDecay {
+                step_size: _,
+                gamma,
+            } => {
                 // Implement step decay
                 self.learning_rate *= gamma;
             }
             LearningRateSchedule::ExponentialDecay { gamma } => {
                 self.learning_rate *= gamma;
             }
-            LearningRateSchedule::CosineAnnealing { min_lr, max_epochs: _ } => {
+            LearningRateSchedule::CosineAnnealing {
+                min_lr,
+                max_epochs: _,
+            } => {
                 // Simplified cosine annealing
                 let progress = 0.01; // Would track actual progress
                 let lr_range = self.learning_rate - min_lr;

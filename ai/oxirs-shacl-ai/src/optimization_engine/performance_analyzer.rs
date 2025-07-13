@@ -1,7 +1,7 @@
 //! Performance analyzer for runtime optimization
 
 use crate::{
-    shape::AiShape, shape_management::PerformanceProfile,
+    shape::AiShape, shape_management::optimization::PerformanceProfile,
     sophisticated_validation_optimization::RealTimeOptimizer, Result,
 };
 use std::collections::HashMap;

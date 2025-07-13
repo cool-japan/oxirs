@@ -60,7 +60,7 @@ impl QuantumFourierTransform {
     /// Apply inverse quantum Fourier transform
     pub fn apply_inverse_qft(&self, pattern: &mut QuantumPattern) -> Result<()> {
         // Inverse QFT is complex conjugate transpose
-        let inverse_matrix = self.transform_matrix.conjugate_transpose();
+        let inverse_matrix = self.transform_matrix.adjoint();
 
         let input_vector = nalgebra::DVector::from_vec(pattern.quantum_state.amplitudes.clone());
         let output_vector = inverse_matrix * input_vector;

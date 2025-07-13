@@ -20,11 +20,9 @@ use crate::{
 };
 
 use oxirs_core::query::{
-        algebra::AlgebraTriplePattern,
-        pattern_optimizer::{
-            IndexStats, IndexType, PatternOptimizer,
-        },
-    };
+    algebra::AlgebraTriplePattern,
+    pattern_optimizer::{IndexStats, IndexType, PatternOptimizer},
+};
 
 // Re-export main types
 pub use caching::{AccessPattern, AdaptivePlanCache, CacheStatistics, CachedPlan};

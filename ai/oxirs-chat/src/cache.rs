@@ -14,11 +14,7 @@ use std::{
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::{
-    llm::LLMResponse,
-    rag::AssembledContext,
-    Message,
-};
+use crate::{llm::LLMResponse, rag::AssembledContext, Message};
 
 /// Cache configuration with different strategies and policies
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -192,6 +188,7 @@ struct CacheEntry<T> {
     access_count: usize,
     ttl: Duration,
     size_bytes: usize,
+    #[allow(dead_code)]
     compression_used: bool,
 }
 
@@ -394,10 +391,12 @@ impl<T: Clone> CacheTier<T> {
         }
     }
 
+    #[allow(dead_code)]
     fn size(&self) -> usize {
         self.entries.len()
     }
 
+    #[allow(dead_code)]
     fn total_size_bytes(&self) -> usize {
         self.total_size
     }
@@ -793,11 +792,11 @@ impl AdvancedCacheManager {
 
     /// Start cache warming task
     fn start_warming_task(&self) {
-        let response_cache = Arc::clone(&self.response_cache);
-        let context_cache = Arc::clone(&self.context_cache);
-        let embedding_cache = Arc::clone(&self.embedding_cache);
-        let query_cache = Arc::clone(&self.query_cache);
-        let hit_stats = Arc::clone(&self.hit_stats);
+        let _response_cache = Arc::clone(&self.response_cache);
+        let _context_cache = Arc::clone(&self.context_cache);
+        let _embedding_cache = Arc::clone(&self.embedding_cache);
+        let _query_cache = Arc::clone(&self.query_cache);
+        let _hit_stats = Arc::clone(&self.hit_stats);
         let strategies = self.config.warming_strategies.clone();
 
         tokio::spawn(async move {
@@ -855,7 +854,7 @@ impl AdvancedCacheManager {
         let mut optimized_config = self.config.clone();
 
         // Adjust cache sizes based on hit rates
-        if let Some(response_stats) = detailed_stats.get("response") {
+        if let Some(_response_stats) = detailed_stats.get("response") {
             if stats.response_hits > 0 && stats.hit_rate() > 0.8 {
                 // High hit rate - increase cache size
                 optimized_config.response_cache.max_size =
@@ -883,6 +882,7 @@ impl AdvancedCacheManager {
 /// Cache warming service for proactive cache population
 pub struct CacheWarmingService {
     cache_manager: Arc<AdvancedCacheManager>,
+    #[allow(dead_code)]
     strategies: Vec<WarmingStrategy>,
 }
 
@@ -909,10 +909,11 @@ impl CacheWarmingService {
             // For now, we'll create a placeholder
             let dummy_embedding = vec![0.0f32; 768]; // Typical embedding size
 
-            if let Ok(_) = self
+            if self
                 .cache_manager
                 .cache_embedding(embedding_key, dummy_embedding)
                 .await
+                .is_ok()
             {
                 warmed_count += 1;
             }
@@ -937,33 +938,36 @@ impl CacheWarmingService {
             match prediction.cache_type {
                 PredictiveCacheType::Response => {
                     // Pre-generate likely responses
-                    if let Ok(_) = self
+                    if self
                         .warm_response_cache(&prediction.key, &prediction.context)
                         .await
+                        .is_ok()
                     {
                         warmed_count += 1;
                     }
                 }
                 PredictiveCacheType::Context => {
                     // Pre-build likely contexts
-                    if let Ok(_) = self
+                    if self
                         .warm_context_cache(&prediction.key, &prediction.context)
                         .await
+                        .is_ok()
                     {
                         warmed_count += 1;
                     }
                 }
                 PredictiveCacheType::Embedding => {
                     // Pre-compute embeddings for likely queries
-                    if let Ok(_) = self.warm_embedding_cache(&prediction.key).await {
+                    if self.warm_embedding_cache(&prediction.key).await.is_ok() {
                         warmed_count += 1;
                     }
                 }
                 PredictiveCacheType::Query => {
                     // Pre-execute likely SPARQL queries
-                    if let Ok(_) = self
+                    if self
                         .warm_query_cache(&prediction.key, &prediction.context)
                         .await
+                        .is_ok()
                     {
                         warmed_count += 1;
                     }
@@ -1113,7 +1117,7 @@ impl CacheWarmingService {
     }
 
     /// Warm context cache with predicted contexts
-    async fn warm_context_cache(&self, key: &str, context: &str) -> Result<()> {
+    async fn warm_context_cache(&self, key: &str, _context: &str) -> Result<()> {
         // Create a mock context for caching
         let mock_context = AssembledContext {
             retrieved_triples: None,

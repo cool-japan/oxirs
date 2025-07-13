@@ -208,7 +208,7 @@ pub async fn ldap_login(
 /// Test LDAP connection
 pub async fn test_ldap_connection(
     State(state): State<AppState>,
-    Query(params): Query<LdapTestParams>,
+    Query(_params): Query<LdapTestParams>,
 ) -> Result<Response, StatusCode> {
     debug!("Testing LDAP connection");
 
@@ -378,8 +378,6 @@ pub async fn get_ldap_config(State(state): State<AppState>) -> Result<Response, 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::auth::AuthService;
-    use crate::config::{LdapConfig, SecurityConfig};
 
     #[tokio::test]
     async fn test_ldap_login_response_serialization() {

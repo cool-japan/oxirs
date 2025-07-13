@@ -45,6 +45,8 @@ pub struct AuthService {
     ldap_service: Option<ldap::LdapService>,
     #[cfg(feature = "saml")]
     saml_provider: Option<Arc<saml::SamlProvider>>,
+    /// Storage for MFA challenges
+    mfa_challenges: Arc<RwLock<HashMap<String, MfaChallenge>>>,
 }
 
 impl AuthService {
@@ -81,6 +83,7 @@ impl AuthService {
             ldap_service,
             #[cfg(feature = "saml")]
             saml_provider: None, // TODO: Initialize from config when SAML config is added
+            mfa_challenges: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -184,16 +187,50 @@ impl AuthService {
         state: &str,
         redirect_uri: &str,
     ) -> FusekiResult<AuthResult> {
-        let token = self
+        let oauth2_service = self
             .oauth2_service
             .as_ref()
-            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?;
+
+        // Exchange authorization code for access token
+        let token = oauth2_service
             .exchange_code_for_token(code, state, redirect_uri)
             .await?;
 
-        // Convert OAuth2Token to AuthResult - this would need to be implemented
-        // For now, return a placeholder
-        Ok(AuthResult::Unauthenticated)
+        // Get user information using the access token
+        let user_info = oauth2_service.get_user_info(&token.access_token).await?;
+
+        // Extract user details from OAuth2 user info
+        let username = user_info.sub.clone();
+        let email = user_info.email.clone();
+        let full_name = user_info.name.clone();
+
+        // Create user object with default permissions
+        // In a real implementation, you might want to map OAuth2 groups/roles to internal roles
+        let roles = vec!["user".to_string()]; // Default role for OAuth2 users
+
+        // Compute permissions for the roles
+        let mut permissions = std::collections::HashSet::new();
+        for role in &roles {
+            if let Some(role_permissions) =
+                permissions::PermissionChecker::get_role_permissions(role)
+            {
+                permissions.extend(role_permissions);
+            }
+        }
+        let permissions: Vec<_> = permissions.into_iter().collect();
+
+        let user = User {
+            username: username.clone(),
+            roles,
+            email,
+            full_name,
+            last_login: Some(chrono::Utc::now()),
+            permissions,
+        };
+
+        debug!("Successful OAuth2 authentication for user: {}", username);
+        Ok(AuthResult::Authenticated(user))
     }
 
     /// Check if OAuth2 authentication is enabled
@@ -212,6 +249,44 @@ impl AuthService {
             .as_ref()
             .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
             .generate_authorization_url(redirect_uri, scopes, use_pkce)
+            .await
+    }
+
+    /// Validate OAuth2 access token (delegating to OAuth2Service)
+    pub async fn validate_access_token(&self, access_token: &str) -> FusekiResult<bool> {
+        self.oauth2_service
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .validate_access_token(access_token)
+            .await
+    }
+
+    /// Get OAuth configuration for discovery endpoint
+    pub fn get_oauth_config(&self) -> Option<&crate::config::OAuthConfig> {
+        self.config.oauth.as_ref()
+    }
+
+    /// Get OAuth2 user information (delegating to OAuth2Service)
+    pub async fn get_oauth2_user_info(
+        &self,
+        access_token: &str,
+    ) -> FusekiResult<oauth::OIDCUserInfo> {
+        self.oauth2_service
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .get_user_info(access_token)
+            .await
+    }
+
+    /// Refresh OAuth2 access token (delegating to OAuth2Service)
+    pub async fn refresh_oauth2_token(
+        &self,
+        refresh_token: &str,
+    ) -> FusekiResult<oauth::OAuth2Token> {
+        self.oauth2_service
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("OAuth2 not configured"))?
+            .refresh_token(refresh_token)
             .await
     }
 
@@ -248,22 +323,38 @@ impl AuthService {
         users.get(username).cloned()
     }
 
-    /// Hash a password (placeholder implementation)
+    /// Hash a password using bcrypt
     pub fn hash_password(&self, password: &str) -> FusekiResult<String> {
-        // TODO: Replace with proper bcrypt hashing
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        #[cfg(feature = "auth")]
+        {
+            use bcrypt::{hash, DEFAULT_COST};
+            hash(password, DEFAULT_COST)
+                .map_err(|e| FusekiError::authentication(format!("Failed to hash password: {e}")))
+        }
+        #[cfg(not(feature = "auth"))]
+        {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
 
-        let mut hasher = DefaultHasher::new();
-        password.hash(&mut hasher);
-        Ok(format!("hash_{:x}", hasher.finish()))
+            let mut hasher = DefaultHasher::new();
+            password.hash(&mut hasher);
+            Ok(format!("hash_{:x}", hasher.finish()))
+        }
     }
 
-    /// Verify password against hash (placeholder implementation)
+    /// Verify password against bcrypt hash
     pub fn verify_password(&self, password: &str, hash: &str) -> FusekiResult<bool> {
-        // TODO: Replace with proper bcrypt verification
-        let computed_hash = self.hash_password(password)?;
-        Ok(computed_hash == hash)
+        #[cfg(feature = "auth")]
+        {
+            use bcrypt::verify;
+            verify(password, hash)
+                .map_err(|e| FusekiError::authentication(format!("Failed to verify password: {e}")))
+        }
+        #[cfg(not(feature = "auth"))]
+        {
+            let computed_hash = self.hash_password(password)?;
+            Ok(computed_hash == hash)
+        }
     }
 
     /// Add or update user
@@ -333,59 +424,69 @@ impl AuthService {
         }
     }
 
-    /// Store MFA challenge (placeholder)
+    /// Store MFA challenge
     pub async fn store_mfa_challenge(
         &self,
-        _challenge_id: &str,
-        _challenge: MfaChallenge,
+        challenge_id: &str,
+        challenge: MfaChallenge,
     ) -> FusekiResult<()> {
-        // TODO: Implement MFA challenge storage
+        let mut challenges = self.mfa_challenges.write().await;
+        challenges.insert(challenge_id.to_string(), challenge);
+        debug!("Stored MFA challenge: {}", challenge_id);
         Ok(())
     }
 
-    /// Get MFA challenge (placeholder)
+    /// Get MFA challenge
     pub async fn get_mfa_challenge(
         &self,
-        _challenge_id: &str,
+        challenge_id: &str,
     ) -> FusekiResult<Option<MfaChallenge>> {
-        // TODO: Implement MFA challenge retrieval
-        Ok(None)
+        let challenges = self.mfa_challenges.read().await;
+        Ok(challenges.get(challenge_id).cloned())
     }
 
-    /// Remove MFA challenge (placeholder)
-    pub async fn remove_mfa_challenge(&self, _challenge_id: &str) -> FusekiResult<bool> {
-        // TODO: Implement MFA challenge removal
-        Ok(true)
+    /// Remove MFA challenge
+    pub async fn remove_mfa_challenge(&self, challenge_id: &str) -> FusekiResult<bool> {
+        let mut challenges = self.mfa_challenges.write().await;
+        let removed = challenges.remove(challenge_id).is_some();
+        if removed {
+            debug!("Removed MFA challenge: {}", challenge_id);
+        }
+        Ok(removed)
     }
 
     /// Store MFA email for user
-    pub async fn store_mfa_email(&self, username: &str, email: &str) -> FusekiResult<()> {
+    pub async fn store_mfa_email(&self, username: &str, _email: &str) -> FusekiResult<()> {
         // TODO: Implement MFA email storage in user profile
         info!("Storing MFA email for user: {}", username);
         Ok(())
     }
 
     /// Get user's SMS phone number
-    pub async fn get_user_sms_phone(&self, username: &str) -> FusekiResult<Option<String>> {
+    pub async fn get_user_sms_phone(&self, _username: &str) -> FusekiResult<Option<String>> {
         // TODO: Implement SMS phone retrieval from user profile
         Ok(Some("+1-555-0123".to_string())) // Placeholder
     }
 
     /// Get user's MFA email
-    pub async fn get_user_mfa_email(&self, username: &str) -> FusekiResult<Option<String>> {
+    pub async fn get_user_mfa_email(&self, _username: &str) -> FusekiResult<Option<String>> {
         // TODO: Implement MFA email retrieval from user profile
         Ok(Some("user@example.com".to_string())) // Placeholder
     }
 
     /// Store WebAuthn challenge
-    pub async fn store_webauthn_challenge(&self, username: &str, challenge: &str) -> FusekiResult<()> {
+    pub async fn store_webauthn_challenge(
+        &self,
+        username: &str,
+        _challenge: &str,
+    ) -> FusekiResult<()> {
         // TODO: Implement WebAuthn challenge storage
         info!("Storing WebAuthn challenge for user: {}", username);
         Ok(())
     }
 
     /// Store SMS phone number for user
-    pub async fn store_sms_phone(&self, username: &str, phone: &str) -> FusekiResult<()> {
+    pub async fn store_sms_phone(&self, username: &str, _phone: &str) -> FusekiResult<()> {
         // TODO: Implement SMS phone storage in user profile
         info!("Storing SMS phone for user: {}", username);
         Ok(())
@@ -394,10 +495,12 @@ impl AuthService {
     /// Update MFA challenge (placeholder)
     pub async fn update_mfa_challenge(
         &self,
-        _challenge_id: &str,
-        _challenge: MfaChallenge,
+        challenge_id: &str,
+        challenge: MfaChallenge,
     ) -> FusekiResult<()> {
-        // TODO: Implement MFA challenge update
+        let mut challenges = self.mfa_challenges.write().await;
+        challenges.insert(challenge_id.to_string(), challenge);
+        debug!("Updated MFA challenge: {}", challenge_id);
         Ok(())
     }
 
@@ -439,7 +542,6 @@ impl AuthService {
         // TODO: Implement TOTP secret storage
         Ok(())
     }
-
 
     /// Cleanup LDAP cache
     pub async fn cleanup_ldap_cache(&self) {
@@ -487,11 +589,11 @@ where
 {
     type Rejection = StatusCode;
 
-    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
         // Try to extract authorization header
         if let Some(auth_header) = parts.headers.typed_get::<Authorization<Bearer>>() {
             // Extract token from header
-            let token = auth_header.token();
+            let _token = auth_header.token();
 
             // Get auth service from app state (this would need to be properly implemented)
             // For now, return unauthorized
@@ -541,6 +643,7 @@ impl axum::response::IntoResponse for AuthError {
 }
 
 /// Helper function to decode basic auth
+#[allow(dead_code)]
 fn decode_basic_auth(encoded: &str) -> Result<(String, String), Box<dyn std::error::Error + Send>> {
     use base64::{engine::general_purpose::STANDARD, Engine};
 

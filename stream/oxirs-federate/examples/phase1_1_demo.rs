@@ -8,8 +8,12 @@
 
 use anyhow::Result;
 use oxirs_federate::{
-    service::AuthType, AuthConfig, AuthCredentials, AutoDiscovery, AutoDiscoveryConfig,
-    FederatedService, ServiceAuthConfig, ServiceDiscovery, ServiceRegistry, ServiceType,
+    auth::AuthConfig,
+    auto_discovery::{AutoDiscovery, AutoDiscoveryConfig},
+    discovery::ServiceDiscovery,
+    service::{AuthCredentials, AuthType},
+    service_registry::ServiceRegistry,
+    FederatedService, ServiceAuthConfig, ServiceType,
 };
 use std::time::Duration;
 use tokio::time::sleep;
@@ -63,11 +67,11 @@ async fn demo_service_registry() -> Result<()> {
 
     // Add authentication configuration
     graphql_service.auth = Some(ServiceAuthConfig {
-        auth_type: AuthType::ApiKey,
+        auth_type: AuthType::Basic,
         credentials: AuthCredentials {
-            api_key: Some("example-api-key".to_string()),
-            api_key_header: Some("X-API-Key".to_string()),
-            ..Default::default()
+            username: Some("admin".to_string()),
+            password: Some("secret".to_string()),
+            ..AuthCredentials::default()
         },
     });
 
@@ -83,21 +87,22 @@ async fn demo_service_registry() -> Result<()> {
     }
 
     // Get registry statistics
-    let stats = registry.get_stats().await;
+    let stats = registry.get_stats().await.unwrap();
     info!("📊 Registry Stats:");
-    info!("  - Total services: {}", stats.total_services);
-    info!("  - Healthy services: {}", stats.healthy_services);
     info!(
-        "  - Capabilities distribution: {:?}",
-        stats.capabilities_distribution
+        "  - Total services: {}",
+        stats.total_sparql_endpoints + stats.total_graphql_services
     );
+    info!("  - Healthy services: {}", stats.healthy_services);
+    info!("  - SPARQL endpoints: {}", stats.total_sparql_endpoints);
+    info!("  - GraphQL services: {}", stats.total_graphql_services);
 
     // Perform health check
     match registry.health_check().await {
         Ok(health) => {
             info!("🏥 Health Check Results:");
-            info!("  - Overall status: {:?}", health.overall_status);
-            info!("  - Service statuses: {:?}", health.service_statuses);
+            info!("  - Number of services checked: {}", health.len());
+            info!("  - Service statuses: {:?}", health);
         }
         Err(e) => warn!("Health check failed: {}", e),
     }
@@ -222,38 +227,21 @@ async fn demo_extended_metadata() -> Result<()> {
     }
 
     // Enable extended metadata collection
-    match registry.enable_extended_metadata("wikidata").await {
-        Ok(_) => info!("✅ Extended metadata enabled for Wikidata service"),
-        Err(e) => warn!("Failed to enable extended metadata: {}", e),
-    }
+    registry.enable_extended_metadata("wikidata");
+    info!("✅ Extended metadata enabled for Wikidata service");
 
-    // Perform comprehensive assessment
-    match registry.assess_service_comprehensively("wikidata").await {
-        Ok(_) => info!("✅ Comprehensive service assessment completed"),
-        Err(e) => warn!("Comprehensive assessment failed: {}", e),
-    }
+    // Note: Comprehensive assessment methods are not available in current ServiceRegistry API
+    info!("ℹ️ Advanced metadata collection features would be available here");
 
-    // Collect dataset statistics
-    match registry.collect_dataset_statistics("wikidata").await {
-        Ok(_) => info!("✅ Dataset statistics collected"),
-        Err(e) => warn!("Dataset statistics collection failed: {}", e),
-    }
-
-    // Collect vocabulary information
-    match registry.collect_vocabulary_info("wikidata").await {
-        Ok(_) => info!("✅ Vocabulary information collected"),
-        Err(e) => warn!("Vocabulary collection failed: {}", e),
-    }
-
-    // Get connection pool statistics
-    let pool_stats = registry.get_connection_pool_stats().await;
-    info!("🔗 Connection Pool Stats:");
-    for (service_id, stats) in pool_stats {
-        info!(
-            "  - {}: {}/{} connections",
-            service_id, stats.active_connections, stats.max_connections
-        );
-    }
+    // Note: Connection pool statistics not available in current ServiceRegistry API
+    // let pool_stats = registry.get_connection_pool_stats().await;
+    // info!("🔗 Connection Pool Stats:");
+    // for (service_id, stats) in pool_stats {
+    //     info!(
+    //         "  - {}: {}/{} connections",
+    //         service_id, stats.active_connections, stats.max_connections
+    //     );
+    // }
 
     Ok(())
 }

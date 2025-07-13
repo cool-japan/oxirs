@@ -303,9 +303,7 @@ impl ModelCompressionManager {
         model_weights: &HashMap<String, Array2<f32>>,
         compression_target: CompressionTarget,
     ) -> Result<CompressedModel> {
-        println!(
-            "🗜️  Starting model compression with target: {compression_target:?}"
-        );
+        println!("🗜️  Starting model compression with target: {compression_target:?}");
 
         let mut compressed_weights = model_weights.clone();
         let mut compression_stats = CompressionStats::default();
@@ -692,9 +690,7 @@ impl DistillationProcessor {
             distillation_loss *= 0.95; // Gradual improvement
 
             if epoch % 5 == 0 {
-                println!(
-                    "  📉 Epoch {epoch}: Distillation loss = {distillation_loss:.4}"
-                );
+                println!("  📉 Epoch {epoch}: Distillation loss = {distillation_loss:.4}");
             }
         }
 
@@ -786,9 +782,7 @@ impl NASProcessor {
             self.evolve_population()?;
 
             if generation % 5 == 0 {
-                println!(
-                    "  🧬 Generation {generation}: Best score = {best_score:.4}"
-                );
+                println!("  🧬 Generation {generation}: Best score = {best_score:.4}");
             }
         }
 
@@ -1012,7 +1006,7 @@ impl NASProcessor {
                     {
                         layer.output_dim =
                             (layer.output_dim as f32 * (0.8 + rng.r#gen::<f32>() * 0.4)) as usize;
-                        layer.output_dim = layer.output_dim.max(32).min(1024);
+                        layer.output_dim = layer.output_dim.clamp(32, 1024);
                     }
                 }
             }

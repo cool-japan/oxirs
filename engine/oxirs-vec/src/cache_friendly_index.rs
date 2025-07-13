@@ -303,7 +303,6 @@ impl CacheFriendlyVectorIndex {
 
     /// Sequential search with cache-friendly access pattern
     fn search_sequential(&self, query: &[f32], k: usize) -> Vec<(usize, f32)> {
-
         let count = self.hot_data.vectors_soa.count.load(Ordering::Relaxed);
         let metric = self.config.similarity_config.primary_metric;
 
@@ -332,7 +331,11 @@ impl CacheFriendlyVectorIndex {
                         let mut dot_product = 0.0f32;
 
                         // Process dimensions in groups for better vectorization
-                        for (dim, &query_val) in query.iter().enumerate().take(self.hot_data.vectors_soa.dimensions) {
+                        for (dim, &query_val) in query
+                            .iter()
+                            .enumerate()
+                            .take(self.hot_data.vectors_soa.dimensions)
+                        {
                             let vec_val =
                                 unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
                             dot_product += query_val * vec_val;
@@ -344,8 +347,13 @@ impl CacheFriendlyVectorIndex {
                     crate::similarity::SimilarityMetric::Euclidean => {
                         // Compute Euclidean distance directly without reconstructing vector
                         let mut sum_sq_diff = 0.0f32;
-                        for (dim, &query_val) in query.iter().enumerate().take(self.hot_data.vectors_soa.dimensions) {
-                            let vec_val = unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
+                        for (dim, &query_val) in query
+                            .iter()
+                            .enumerate()
+                            .take(self.hot_data.vectors_soa.dimensions)
+                        {
+                            let vec_val =
+                                unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
                             let diff = query_val - vec_val;
                             sum_sq_diff += diff * diff;
                         }
@@ -356,8 +364,13 @@ impl CacheFriendlyVectorIndex {
                         // For other metrics, use simplified approach to avoid stack overflow
                         // Just use cosine similarity as fallback
                         let mut dot_product = 0.0f32;
-                        for (dim, &query_val) in query.iter().enumerate().take(self.hot_data.vectors_soa.dimensions) {
-                            let vec_val = unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
+                        for (dim, &query_val) in query
+                            .iter()
+                            .enumerate()
+                            .take(self.hot_data.vectors_soa.dimensions)
+                        {
+                            let vec_val =
+                                unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
                             dot_product += query_val * vec_val;
                         }
                         let vec_norm = self.hot_data.norms.as_slice()[idx];
@@ -443,14 +456,17 @@ impl CacheFriendlyVectorIndex {
 
     /// Compute similarity for a specific index
     fn compute_similarity_at(&self, query: &[f32], idx: usize) -> f32 {
-
         let metric = self.config.similarity_config.primary_metric;
 
         match metric {
             crate::similarity::SimilarityMetric::Cosine => {
                 let mut dot_product = 0.0f32;
 
-                for (dim, &query_val) in query.iter().enumerate().take(self.hot_data.vectors_soa.dimensions) {
+                for (dim, &query_val) in query
+                    .iter()
+                    .enumerate()
+                    .take(self.hot_data.vectors_soa.dimensions)
+                {
                     let vec_val = unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
                     dot_product += query_val * vec_val;
                 }
@@ -462,7 +478,11 @@ impl CacheFriendlyVectorIndex {
             crate::similarity::SimilarityMetric::Euclidean => {
                 // Compute Euclidean distance directly without reconstructing vector
                 let mut sum_sq_diff = 0.0f32;
-                for (dim, &query_val) in query.iter().enumerate().take(self.hot_data.vectors_soa.dimensions) {
+                for (dim, &query_val) in query
+                    .iter()
+                    .enumerate()
+                    .take(self.hot_data.vectors_soa.dimensions)
+                {
                     let vec_val = unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
                     let diff = query_val - vec_val;
                     sum_sq_diff += diff * diff;
@@ -474,7 +494,11 @@ impl CacheFriendlyVectorIndex {
                 // For other metrics, use simplified approach to avoid stack overflow
                 // Just use cosine similarity as fallback
                 let mut dot_product = 0.0f32;
-                for (dim, &query_val) in query.iter().enumerate().take(self.hot_data.vectors_soa.dimensions) {
+                for (dim, &query_val) in query
+                    .iter()
+                    .enumerate()
+                    .take(self.hot_data.vectors_soa.dimensions)
+                {
                     let vec_val = unsafe { *self.hot_data.vectors_soa.data[dim].ptr.add(idx) };
                     dot_product += query_val * vec_val;
                 }

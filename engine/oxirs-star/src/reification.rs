@@ -612,12 +612,13 @@ impl AdvancedReificator {
 
     /// Check if a term matches a term type
     fn matches_term_type(&self, term: &StarTerm, term_type: &TermType) -> bool {
-        matches!((term, term_type), 
-            (StarTerm::NamedNode(_), TermType::NamedNode) 
-            | (StarTerm::BlankNode(_), TermType::BlankNode) 
-            | (StarTerm::Literal(_), TermType::Literal) 
-            | (StarTerm::QuotedTriple(_), TermType::QuotedTriple) 
-            | (StarTerm::Variable(_), TermType::Variable)
+        matches!(
+            (term, term_type),
+            (StarTerm::NamedNode(_), TermType::NamedNode)
+                | (StarTerm::BlankNode(_), TermType::BlankNode)
+                | (StarTerm::Literal(_), TermType::Literal)
+                | (StarTerm::QuotedTriple(_), TermType::QuotedTriple)
+                | (StarTerm::Variable(_), TermType::Variable)
         )
     }
 

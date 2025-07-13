@@ -604,8 +604,8 @@ fn has_admin_permission(user: &User) -> bool {
 }
 
 async fn extract_authenticated_user(
-    headers: &HeaderMap,
-    auth_service: &AuthService,
+    _headers: &HeaderMap,
+    _auth_service: &AuthService,
 ) -> FusekiResult<User> {
     // Simplified extraction - in production would use proper auth middleware
     Ok(User {
@@ -644,49 +644,49 @@ pub struct ApiKeyService {
 }
 
 impl ApiKeyService {
-    pub async fn store_api_key(&self, api_key: &ApiKey) -> FusekiResult<()> {
+    pub async fn store_api_key(&self, _api_key: &ApiKey) -> FusekiResult<()> {
         // Store in database
         Ok(())
     }
 
-    pub async fn get_api_key(&self, key_id: &str) -> FusekiResult<Option<ApiKey>> {
+    pub async fn get_api_key(&self, _key_id: &str) -> FusekiResult<Option<ApiKey>> {
         // Retrieve from database
         Ok(None)
     }
 
-    pub async fn get_api_key_by_hash(&self, key_hash: &str) -> FusekiResult<Option<ApiKey>> {
+    pub async fn get_api_key_by_hash(&self, _key_hash: &str) -> FusekiResult<Option<ApiKey>> {
         // Retrieve by hash from database
         Ok(None)
     }
 
     pub async fn list_api_keys(
         &self,
-        owner: Option<&str>,
-        active_only: bool,
-        scope: Option<&ApiKeyScope>,
-        limit: usize,
-        offset: usize,
+        _owner: Option<&str>,
+        _active_only: bool,
+        _scope: Option<&ApiKeyScope>,
+        _limit: usize,
+        _offset: usize,
     ) -> FusekiResult<Vec<ApiKey>> {
         // List from database with filters
         Ok(vec![])
     }
 
-    pub async fn update_api_key(&self, api_key: &ApiKey) -> FusekiResult<()> {
+    pub async fn update_api_key(&self, _api_key: &ApiKey) -> FusekiResult<()> {
         // Update in database
         Ok(())
     }
 
-    pub async fn revoke_api_key(&self, key_id: &str) -> FusekiResult<()> {
+    pub async fn revoke_api_key(&self, _key_id: &str) -> FusekiResult<()> {
         // Mark as inactive in database
         Ok(())
     }
 
-    pub async fn update_usage(&self, api_key: &ApiKey) -> FusekiResult<()> {
+    pub async fn update_usage(&self, _api_key: &ApiKey) -> FusekiResult<()> {
         // Update usage statistics
         Ok(())
     }
 
-    pub async fn get_usage_stats(&self, key_id: &str) -> FusekiResult<ApiKeyUsageStats> {
+    pub async fn get_usage_stats(&self, _key_id: &str) -> FusekiResult<ApiKeyUsageStats> {
         // Calculate usage statistics
         Ok(ApiKeyUsageStats {
             total_requests: 0,
@@ -701,15 +701,15 @@ impl ApiKeyService {
 
     pub async fn check_rate_limit(
         &self,
-        key_id: &str,
-        rate_limit: &RateLimit,
+        _key_id: &str,
+        _rate_limit: &RateLimit,
     ) -> FusekiResult<bool> {
         // Check rate limiting
         Ok(true)
     }
 }
 
-async fn get_api_key_service(state: &AppState) -> FusekiResult<ApiKeyService> {
+async fn get_api_key_service(_state: &AppState) -> FusekiResult<ApiKeyService> {
     // In production, extract from state
     Ok(ApiKeyService {})
 }

@@ -33,8 +33,7 @@ mod conversion {
     pub fn star_term_to_subject(term: &StarTerm) -> StarResult<Subject> {
         match term {
             StarTerm::NamedNode(nn) => {
-                let named_node =
-                    CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
+                let named_node = CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
                 Ok(Subject::NamedNode(named_node))
             }
             StarTerm::BlankNode(bn) => {
@@ -56,8 +55,7 @@ mod conversion {
     pub fn star_term_to_predicate(term: &StarTerm) -> StarResult<Predicate> {
         match term {
             StarTerm::NamedNode(nn) => {
-                let named_node =
-                    CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
+                let named_node = CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
                 Ok(Predicate::NamedNode(named_node))
             }
             _ => Err(StarError::invalid_term_type(
@@ -69,8 +67,7 @@ mod conversion {
     pub fn star_term_to_object(term: &StarTerm) -> StarResult<Object> {
         match term {
             StarTerm::NamedNode(nn) => {
-                let named_node =
-                    CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
+                let named_node = CoreNamedNode::new(&nn.iri).map_err(StarError::CoreError)?;
                 Ok(Object::NamedNode(named_node))
             }
             StarTerm::BlankNode(bn) => {
@@ -81,9 +78,7 @@ mod conversion {
                 let core_literal = if let Some(ref language) = lit.language {
                     // Language-tagged literal
                     oxirs_core::model::Literal::new_language_tagged_literal(&lit.value, language)
-                        .map_err(|e| {
-                            StarError::parse_error(format!("Invalid language tag: {e}"))
-                        })?
+                        .map_err(|e| StarError::parse_error(format!("Invalid language tag: {e}")))?
                 } else if let Some(ref datatype) = lit.datatype {
                     // Typed literal
                     let core_datatype =
@@ -618,8 +613,8 @@ impl StarStore {
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
         eprintln!("DEBUG: Created core quad for insertion: {core_quad:?}");
         let mut core_store = self.core_store.write().unwrap();
-        let result = CoreStore::insert_quad(&mut core_store, core_quad)
-            .map_err(StarError::CoreError);
+        let result =
+            CoreStore::insert_quad(&mut core_store, core_quad).map_err(StarError::CoreError);
         eprintln!("DEBUG: Core store insert result: {result:?}");
         result?;
 
@@ -1874,10 +1869,9 @@ impl<'a> Iterator for StreamingTripleIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         // If we've exhausted the current chunk, load the next one
-        if self.current_index >= self.current_chunk.len()
-            && !self.load_next_chunk() {
-                return None;
-            }
+        if self.current_index >= self.current_chunk.len() && !self.load_next_chunk() {
+            return None;
+        }
 
         // Return the next triple from the current chunk
         let triple = self.current_chunk.get(self.current_index).cloned();

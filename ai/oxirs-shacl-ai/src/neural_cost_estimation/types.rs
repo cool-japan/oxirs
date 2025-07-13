@@ -1,9 +1,7 @@
 //! Core data types for neural cost estimation
 
-
 use ndarray::{Array1, Array2};
 use std::time::{Duration, SystemTime};
-
 
 /// Cost prediction result
 #[derive(Debug, Clone)]

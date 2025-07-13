@@ -320,9 +320,7 @@ fn generate_turtle_star_data(size: usize) -> String {
             ));
         } else {
             // Generate regular triple
-            data.push_str(&format!(
-                "ex:subject{i} ex:predicate{i} ex:object{i} .\n"
-            ));
+            data.push_str(&format!("ex:subject{i} ex:predicate{i} ex:object{i} .\n"));
         }
     }
 

@@ -1,5 +1,7 @@
 //! Tests for SPARQL vector integration
 
+#![allow(unused_imports, clippy::useless_vec)]
+
 use oxirs_vec::{
     embeddings::{EmbeddableContent, EmbeddingStrategy},
     sparql_integration::{

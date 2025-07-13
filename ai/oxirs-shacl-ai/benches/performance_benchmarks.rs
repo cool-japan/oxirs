@@ -208,7 +208,16 @@ fn bench_insights(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::new("generate_insights", size), size, |b, _| {
             b.iter(|| {
-                let validation_data = insights::ValidationData {};
+                let validation_data = insights::ValidationData {
+                    total_validations: 100,
+                    successful_validations: 95,
+                    failed_validations: 5,
+                    error_types: std::collections::HashMap::new(),
+                    avg_validation_time: std::time::Duration::from_millis(10),
+                    shapes_validated: vec![],
+                    violations_by_shape: std::collections::HashMap::new(),
+                    historical_success_rates: vec![],
+                };
                 black_box(insight_engine.generate_insights(&validation_data))
             })
         });

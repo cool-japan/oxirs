@@ -25,7 +25,6 @@ use oxirs_core::{
     Store,
 };
 
-
 #[cfg(test)]
 use oxirs_core::ConcreteStore;
 
@@ -382,20 +381,25 @@ pub struct MultiGraphValidationEngine {
     shapes: Arc<RwLock<IndexMap<ShapeId, Shape>>>,
 
     /// Graph-specific shape mappings
+    #[allow(dead_code)]
     graph_shape_mappings: HashMap<GraphName, HashSet<ShapeId>>,
 
     /// Cross-graph constraint cache
+    #[allow(dead_code)]
     cross_graph_cache: Arc<RwLock<HashMap<String, CrossGraphCacheEntry>>>,
 
     /// Remote endpoint clients
+    #[allow(dead_code)]
     remote_clients: HashMap<GraphName, RemoteGraphClient>,
 
     /// Validation statistics
+    #[allow(dead_code)]
     stats: Arc<RwLock<MultiGraphStats>>,
 }
 
 /// Cache entry for cross-graph queries
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct CrossGraphCacheEntry {
     /// Cached query results
     results: Vec<QueryResult>,
@@ -408,6 +412,7 @@ struct CrossGraphCacheEntry {
 }
 
 /// Client for remote graph validation
+#[allow(dead_code)]
 struct RemoteGraphClient {
     /// Endpoint configuration
     config: RemoteEndpointConfig,
@@ -675,25 +680,30 @@ impl MultiGraphValidationEngine {
         graph_results: &HashMap<GraphName, GraphValidationResult>,
     ) -> Result<Vec<CrossGraphViolation>> {
         let mut violations = Vec::new();
-        let shapes = self.shapes.read().unwrap();
 
-        tracing::info!(
-            "Evaluating cross-graph constraints across {} graphs",
-            stores.len()
-        );
+        // Clone the shapes data we need before any await calls
+        let cross_graph_shapes: Vec<_> = {
+            let shapes = self.shapes.read().unwrap();
 
-        // Identify shapes with cross-graph constraints
-        let cross_graph_shapes: Vec<_> = shapes
-            .values()
-            .filter(|shape| self.has_cross_graph_constraints(shape))
-            .collect();
+            tracing::info!(
+                "Evaluating cross-graph constraints across {} graphs",
+                stores.len()
+            );
+
+            // Identify shapes with cross-graph constraints and clone them
+            shapes
+                .values()
+                .filter(|shape| self.has_cross_graph_constraints(shape))
+                .cloned()
+                .collect()
+        }; // shapes guard is dropped here
 
         tracing::debug!(
             "Found {} shapes with cross-graph constraints",
             cross_graph_shapes.len()
         );
 
-        for shape in cross_graph_shapes {
+        for shape in &cross_graph_shapes {
             let shape_violations = self
                 .evaluate_shape_cross_graph_constraints(shape, stores, graph_results)
                 .await?;
@@ -1279,6 +1289,7 @@ impl MultiGraphValidationEngine {
 
 /// Result of validating a single graph
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct GraphValidationResult {
     /// Graph identifier
     graph_name: GraphName,

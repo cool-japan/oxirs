@@ -8,7 +8,9 @@ pub mod config;
 pub mod message;
 
 // Re-export commonly used types
-pub use backend::{KafkaBackend, ConsumerId, ConsumerMetrics, MessageCallback, PartitionAssignment};
+pub use backend::{
+    ConsumerId, ConsumerMetrics, KafkaBackend, MessageCallback, PartitionAssignment,
+};
 pub use config::{
     KafkaAcks, KafkaCompressionType, KafkaProducerConfig, KafkaProducerStats, KafkaSecurityConfig,
     PartitionStrategy, SaslConfig, SaslMechanism, SchemaRegistryConfig, SecurityProtocol,

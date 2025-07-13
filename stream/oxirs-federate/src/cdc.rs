@@ -476,10 +476,16 @@ pub struct CdcStatistics {
     pub total_conflicts: u64,
     /// Conflicts resolved automatically
     pub auto_resolved_conflicts: u64,
+    /// Conflicts resolved manually
+    pub manual_resolved_conflicts: u64,
     /// Manual resolutions pending
     pub pending_manual_resolutions: u64,
     /// Average processing latency
     pub avg_processing_latency: Duration,
+    /// Total processing time across all operations
+    pub total_processing_time: Duration,
+    /// Processing time per service
+    pub processing_time_per_service: HashMap<String, Duration>,
     /// Synchronization success rate
     pub sync_success_rate: f64,
     /// Data consistency score
@@ -513,6 +519,7 @@ impl CdcProcessor {
             return Ok(());
         }
 
+        let processing_start = std::time::Instant::now();
         let _permit = self.processing_semaphore.acquire().await?;
 
         // Generate change ID if not provided
@@ -538,12 +545,17 @@ impl CdcProcessor {
             log.prune_changes(self.config.change_retention_period);
         }
 
+        let mut conflicts_resolved = 0u64;
+        let mut conflicts_detected = 0u64;
+
         // Check for conflicts
         if let Some(conflict) = self.detect_conflict(&change).await? {
+            conflicts_detected = 1;
             change.conflict_info = Some(conflict);
 
             // Attempt automatic resolution
             if let Some(resolved_change) = self.resolve_conflict(&change).await? {
+                conflicts_resolved = 1;
                 self.apply_change(&resolved_change).await?;
             } else {
                 // Queue for manual resolution
@@ -557,17 +569,38 @@ impl CdcProcessor {
         // Publish change notification
         self.publish_change_notification(&change).await?;
 
+        let processing_time = processing_start.elapsed();
+
         // Update statistics
         {
             let mut stats = self.statistics.write().await;
             stats.total_changes_processed += 1;
+            stats.total_conflicts += conflicts_detected;
+            stats.auto_resolved_conflicts += conflicts_resolved;
+            stats.total_processing_time += processing_time;
+
             *stats
                 .changes_per_service
                 .entry(change.source_service.clone())
                 .or_insert(0) += 1;
+
+            // Update processing time per service
+            *stats
+                .processing_time_per_service
+                .entry(change.source_service.clone())
+                .or_insert(Duration::ZERO) += processing_time;
+
+            // Update average processing latency
+            if stats.total_changes_processed > 0 {
+                stats.avg_processing_latency =
+                    stats.total_processing_time / stats.total_changes_processed as u32;
+            }
         }
 
-        debug!("Recorded change: {}", change.change_id);
+        debug!(
+            "Recorded change: {} (processed in {:?})",
+            change.change_id, processing_time
+        );
         Ok(())
     }
 
@@ -615,13 +648,30 @@ impl CdcProcessor {
             }
         }
 
+        let processing_start = std::time::Instant::now();
+
+        let conflicts_detected =
+            changes.iter().filter(|c| c.conflict_info.is_some()).count() as u64;
+        let conflicts_resolved = changes
+            .iter()
+            .filter(|c| {
+                if let Some(conflict_info) = &c.conflict_info {
+                    conflict_info.resolved_at.is_some()
+                } else {
+                    false
+                }
+            })
+            .count() as u64;
+
+        let processing_time = processing_start.elapsed();
+
         let statistics = UpdateStatistics {
             total_changes: changes.len() as u64,
             successful_updates: changes.len() as u64, // Assume all successful for now
             failed_updates: 0,
-            conflicts_detected: changes.iter().filter(|c| c.conflict_info.is_some()).count() as u64,
-            conflicts_resolved: 0, // TODO: Track resolved conflicts
-            processing_time: Duration::from_millis(0), // TODO: Track processing time
+            conflicts_detected,
+            conflicts_resolved,
+            processing_time,
         };
 
         Ok(IncrementalUpdate {
@@ -702,6 +752,75 @@ impl CdcProcessor {
         self.statistics.read().await.clone()
     }
 
+    /// Manually resolve a conflict
+    pub async fn resolve_manual_conflict(
+        &self,
+        change_id: &str,
+        resolved_data: ChangeData,
+    ) -> Result<()> {
+        let mut resolver = self.conflict_resolver.write().await;
+
+        // Find and remove the change from manual resolution queue
+        if let Some(pos) = resolver
+            .manual_resolution_queue
+            .iter()
+            .position(|c| c.change_id == change_id)
+        {
+            let mut change = resolver.manual_resolution_queue.remove(pos).unwrap();
+
+            // Mark as resolved
+            if let Some(ref mut conflict_info) = change.conflict_info {
+                conflict_info.resolved_at = Some(SystemTime::now());
+            }
+
+            // Update data with resolved data
+            change.data = resolved_data.clone();
+
+            // Apply the resolved change
+            self.apply_change(&change).await?;
+
+            // Update statistics
+            {
+                let mut stats = self.statistics.write().await;
+                stats.manual_resolved_conflicts += 1;
+                if stats.pending_manual_resolutions > 0 {
+                    stats.pending_manual_resolutions -= 1;
+                }
+            }
+
+            // Record resolution in history
+            let resolution = ConflictResolution {
+                resolution_id: Uuid::new_v4().to_string(),
+                conflicting_changes: vec![change_id.to_string()],
+                strategy: ConflictResolutionStrategy::Manual,
+                resolved_data,
+                resolved_at: SystemTime::now(),
+                success: true,
+            };
+
+            resolver.resolution_history.push_back(resolution);
+
+            // Keep resolution history bounded
+            while resolver.resolution_history.len() > 1000 {
+                resolver.resolution_history.pop_front();
+            }
+
+            info!("Manually resolved conflict for change: {}", change_id);
+            Ok(())
+        } else {
+            Err(anyhow!(
+                "Change with ID {} not found in manual resolution queue",
+                change_id
+            ))
+        }
+    }
+
+    /// Get pending manual resolutions
+    pub async fn get_pending_manual_resolutions(&self) -> Result<Vec<ChangeRecord>> {
+        let resolver = self.conflict_resolver.read().await;
+        Ok(resolver.manual_resolution_queue.iter().cloned().collect())
+    }
+
     /// Start background synchronization task
     pub async fn start_background_sync(&self) -> Result<()> {
         let processor = self.clone();
@@ -776,15 +895,23 @@ impl CdcProcessor {
     }
 
     async fn resolve_conflict(&self, change: &ChangeRecord) -> Result<Option<ChangeRecord>> {
-        let resolver = self.conflict_resolver.read().await;
+        let _resolver = self.conflict_resolver.read().await;
 
         match self.config.conflict_resolution {
             ConflictResolutionStrategy::LastWriterWins => {
-                // Return the newer change
-                Ok(Some(change.clone()))
+                // Return the newer change with resolved timestamp
+                let mut resolved_change = change.clone();
+                if let Some(ref mut conflict_info) = resolved_change.conflict_info {
+                    conflict_info.resolved_at = Some(SystemTime::now());
+                }
+                Ok(Some(resolved_change))
             }
             ConflictResolutionStrategy::FirstWriterWins => {
-                // Don't apply this change
+                // Don't apply this change but mark as resolved
+                let mut resolved_change = change.clone();
+                if let Some(ref mut conflict_info) = resolved_change.conflict_info {
+                    conflict_info.resolved_at = Some(SystemTime::now());
+                }
                 Ok(None)
             }
             ConflictResolutionStrategy::Manual => {
@@ -792,8 +919,12 @@ impl CdcProcessor {
                 Ok(None)
             }
             _ => {
-                // For now, default to last writer wins
-                Ok(Some(change.clone()))
+                // For now, default to last writer wins with resolved timestamp
+                let mut resolved_change = change.clone();
+                if let Some(ref mut conflict_info) = resolved_change.conflict_info {
+                    conflict_info.resolved_at = Some(SystemTime::now());
+                }
+                Ok(Some(resolved_change))
             }
         }
     }

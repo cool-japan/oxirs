@@ -68,6 +68,7 @@ struct ValidationWorkItem {
 
 /// Result of parallel validation work
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct ValidationWorkResult {
     /// Work item that was processed
     work_item: ValidationWorkItem,

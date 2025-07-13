@@ -513,8 +513,8 @@ impl ExplanationEngine {
 
     async fn generate_response_explanation(
         &self,
-        query: &str,
-        response: &str,
+        _query: &str,
+        _response: &str,
         reasoning_trace: &[IntermediateStep],
     ) -> Result<ResponseExplanation> {
         let reasoning_steps: Vec<_> = reasoning_trace
@@ -595,7 +595,7 @@ impl ExplanationEngine {
     async fn collect_evidence(
         &self,
         sources: &[DataSource],
-        reasoning_trace: &[IntermediateStep],
+        _reasoning_trace: &[IntermediateStep],
         response: &str,
     ) -> Result<Vec<Evidence>> {
         let mut evidence = Vec::new();
@@ -618,9 +618,9 @@ impl ExplanationEngine {
 
     async fn generate_alternative_views(
         &self,
-        query: &str,
-        response: &str,
-        sources: &[DataSource],
+        _query: &str,
+        _response: &str,
+        _sources: &[DataSource],
     ) -> Result<Vec<AlternativeView>> {
         Ok(vec![AlternativeView {
             viewpoint_id: "alt_1".to_string(),
@@ -652,15 +652,15 @@ impl ExplanationEngine {
             .to_string()
     }
 
-    fn extract_reference(&self, context: &str) -> String {
+    fn extract_reference(&self, _context: &str) -> String {
         // Simple extraction - in practice would use NLP
         "reference".to_string()
     }
 
     async fn check_assumption_validity(
         &self,
-        assumption: &str,
-        sources: &[DataSource],
+        _assumption: &str,
+        _sources: &[DataSource],
     ) -> Result<ValidationStatus> {
         // Check if assumption is supported by sources
         Ok(ValidationStatus::Supported)
@@ -668,24 +668,24 @@ impl ExplanationEngine {
 
     async fn find_supporting_evidence(
         &self,
-        assumption: &str,
-        sources: &[DataSource],
+        _assumption: &str,
+        _sources: &[DataSource],
     ) -> Result<Vec<String>> {
         Ok(vec!["Supporting evidence from reliable sources".to_string()])
     }
 
     async fn find_contradicting_evidence(
         &self,
-        assumption: &str,
-        sources: &[DataSource],
+        _assumption: &str,
+        _sources: &[DataSource],
     ) -> Result<Vec<String>> {
         Ok(vec![])
     }
 
     async fn calculate_assumption_confidence(
         &self,
-        assumption: &str,
-        sources: &[DataSource],
+        _assumption: &str,
+        _sources: &[DataSource],
     ) -> Result<f32> {
         Ok(0.8)
     }
@@ -722,7 +722,7 @@ impl CitationGenerator {
     async fn generate_attribution(
         &self,
         sources: &[DataSource],
-        explanation: &ResponseExplanation,
+        _explanation: &ResponseExplanation,
     ) -> Result<SourceAttribution> {
         let primary_sources: Vec<DataSource> = sources
             .iter()
@@ -768,7 +768,7 @@ impl ConfidenceCalculator {
         &self,
         sources: &[DataSource],
         reasoning_trace: &[IntermediateStep],
-        context: &[Message],
+        _context: &[Message],
     ) -> Result<ConfidenceIndicators> {
         let data_confidence =
             sources.iter().map(|s| s.reliability_score).sum::<f32>() / sources.len() as f32;
@@ -814,7 +814,7 @@ impl AmbiguityDetector {
     async fn detect_ambiguities(
         &self,
         query: &str,
-        context: &[Message],
+        _context: &[Message],
     ) -> Result<Vec<ClarificationRequest>> {
         let mut requests = Vec::new();
 
@@ -861,7 +861,7 @@ impl AmbiguityDetector {
             .any(|word| query.to_lowercase().contains(word))
     }
 
-    fn generate_term_options(&self, query: &str) -> Vec<ClarificationOption> {
+    fn generate_term_options(&self, _query: &str) -> Vec<ClarificationOption> {
         vec![
             ClarificationOption {
                 option_id: "opt_1".to_string(),
@@ -880,7 +880,7 @@ impl AmbiguityDetector {
         ]
     }
 
-    fn generate_reference_options(&self, query: &str) -> Vec<ClarificationOption> {
+    fn generate_reference_options(&self, _query: &str) -> Vec<ClarificationOption> {
         vec![ClarificationOption {
             option_id: "ref_1".to_string(),
             description: "Previous entity mentioned".to_string(),
@@ -902,8 +902,8 @@ impl UncertaintyAnalyzer {
     async fn quantify_uncertainty(
         &self,
         confidence: &ConfidenceIndicators,
-        sources: &[DataSource],
-        reasoning_trace: &[IntermediateStep],
+        _sources: &[DataSource],
+        _reasoning_trace: &[IntermediateStep],
     ) -> Result<UncertaintyQuantification> {
         let uncertainty_level = match confidence.overall_confidence {
             x if x > 0.8 => UncertaintyLevel::Low,
@@ -960,8 +960,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_explanation_engine_creation() {
-        let engine = ExplanationEngine::new();
-        assert!(true); // Basic creation test
+        let _engine = ExplanationEngine::new();
+        // Basic creation test - engine creation should not panic
     }
 
     #[tokio::test]

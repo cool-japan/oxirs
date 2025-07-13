@@ -8,6 +8,7 @@ pub mod graph;
 pub mod iri;
 pub mod literal;
 pub mod node;
+pub mod optimized_terms; // Oxigraph-inspired performance optimizations
 pub mod pattern;
 pub mod quad;
 pub mod star;
@@ -20,6 +21,7 @@ pub use graph::*;
 pub use iri::*;
 pub use literal::*;
 pub use node::*;
+pub use optimized_terms::*; // Oxigraph-inspired optimizations
 pub use pattern::*;
 pub use quad::*;
 pub use star::*;

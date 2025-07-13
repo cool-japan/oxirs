@@ -719,7 +719,7 @@ impl IndexedGraph {
     pub fn par_fold<F, R>(&self, init: R, fold_fn: F) -> R
     where
         F: Fn(R, &Triple) -> R + Send + Sync,
-        R: Send + Sync + Clone + 'static,
+        R: Send + Sync + Clone + 'static + std::ops::Add<Output = R>,
     {
         use rayon::prelude::*;
 
@@ -727,14 +727,7 @@ impl IndexedGraph {
         all_triples
             .into_par_iter()
             .fold(|| init.clone(), |acc, triple| fold_fn(acc, &triple))
-            .reduce(
-                || init.clone(),
-                |acc1, _acc2| {
-                    // For a proper fold, we need a reduce function that makes sense
-                    // This is a simplified version - in practice, you'd want a proper combine function
-                    acc1
-                },
-            )
+            .reduce(|| init.clone(), |acc1, acc2| acc1 + acc2)
     }
 
     /// Iterator over all triples in the graph

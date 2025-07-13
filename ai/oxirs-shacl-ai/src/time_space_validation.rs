@@ -738,8 +738,8 @@ impl TimeSpaceValidator {
     /// Create spacetime validation report
     async fn create_spacetime_validation_report(
         &self,
-        temporal: &TemporalValidationResults,
-        spatial: &SpatialAnalysisResults,
+        _temporal: &TemporalValidationResults,
+        _spatial: &SpatialAnalysisResults,
     ) -> Result<ValidationReport> {
         // Simplified implementation - would create comprehensive report
         Ok(ValidationReport::default())

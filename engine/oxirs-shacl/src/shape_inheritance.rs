@@ -3,6 +3,8 @@
 //! Provides support for SHACL shape inheritance, composition, deactivation,
 //! and advanced shape management features.
 
+#![allow(dead_code)]
+
 use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 
@@ -977,7 +979,10 @@ mod tests {
         {
             assert_eq!(count.min_count, 1);
         } else {
-            assert!(false, "Expected MinCount constraint, got: {:?}", resolved.get(&ConstraintComponentId::new("minCount")));
+            panic!(
+                "Expected MinCount constraint, got: {:?}",
+                resolved.get(&ConstraintComponentId::new("minCount"))
+            );
         }
 
         // Test priority-based resolution
@@ -992,7 +997,10 @@ mod tests {
         {
             assert_eq!(count.min_count, 2);
         } else {
-            assert!(false, "Expected MinCount constraint, got: {:?}", resolved.get(&ConstraintComponentId::new("minCount")));
+            panic!(
+                "Expected MinCount constraint, got: {:?}",
+                resolved.get(&ConstraintComponentId::new("minCount"))
+            );
         }
     }
 }

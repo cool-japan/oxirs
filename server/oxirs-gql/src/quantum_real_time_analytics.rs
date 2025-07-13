@@ -95,7 +95,9 @@ pub struct QuantumRealTimeAnalyticsEngine {
     quantum_state: Arc<AsyncRwLock<QuantumState>>,
     measurement_history: Arc<AsyncMutex<VecDeque<QuantumMeasurement>>>,
     analytics_metrics: Arc<AsyncRwLock<QuantumAnalyticsMetrics>>,
+    #[allow(dead_code)]
     ai_predictor: Arc<AIQueryPredictor>,
+    #[allow(dead_code)]
     quantum_optimizer: Arc<QuantumQueryOptimizer>,
     monitoring_task: Option<tokio::task::JoinHandle<()>>,
 }

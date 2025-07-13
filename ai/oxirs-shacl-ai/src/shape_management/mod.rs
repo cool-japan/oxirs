@@ -12,14 +12,12 @@ pub mod version_control;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::AtomicUsize;
 
-
-
 // Re-export important types
-pub use collaboration::*;
-pub use library::*;
-pub use optimization::*;
-pub use reusability::*;
-pub use version_control::*;
+pub use collaboration::CollaborationEngine;
+pub use library::ShapeLibrary;
+pub use optimization::ShapeOptimizer;
+pub use reusability::ReusabilityManager;
+pub use version_control::ShapeVersionControl;
 
 /// Configuration for shape management
 #[derive(Debug, Clone, Serialize, Deserialize)]

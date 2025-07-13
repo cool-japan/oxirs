@@ -114,7 +114,7 @@ async fn test_oauth2_handler_authorization_flow() {
             "/auth/oauth2/authorize",
             axum::routing::get(initiate_oauth2_flow),
         )
-        .with_state(state);
+        .with_state(std::sync::Arc::new(state));
 
     // Test authorization endpoint
     let response = app

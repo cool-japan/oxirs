@@ -11,7 +11,6 @@ use oxirs_gql::{
     parser::parse_document,
     rdf_scalars::RdfScalars,
     schema::{SchemaGenerationConfig, SchemaGenerator},
-    types::Schema,
     GraphQLConfig, GraphQLServer, RdfStore,
 };
 use std::sync::Arc;
@@ -33,9 +32,11 @@ async fn main() -> Result<()> {
     let schema_generator = SchemaGenerator::new().with_config(SchemaGenerationConfig::default());
 
     // Generate schema from FOAF ontology (mock)
-    let schema_sdl = schema_generator.generate_from_ontology("http://xmlns.com/foaf/0.1/").await?;
+    let schema_sdl = schema_generator
+        .generate_from_ontology("http://xmlns.com/foaf/0.1/")
+        .await?;
     println!("📄 Generated GraphQL Schema:");
-    println!("{}", schema_sdl);
+    println!("{schema_sdl}");
 
     // 3. Parse a sample GraphQL query
     println!("\n🔍 Parsing GraphQL query...");
@@ -59,7 +60,7 @@ async fn main() -> Result<()> {
             println!("   Operation: {:?}", document.definitions[0]);
         }
         Err(e) => {
-            println!("❌ Failed to parse query: {}", e);
+            println!("❌ Failed to parse query: {e}");
         }
     }
 

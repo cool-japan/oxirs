@@ -36,13 +36,12 @@ fn test_union_target_query_generation() {
 
     let query = selector.generate_target_query(&union_target, None).unwrap();
 
-    println!("Generated union query: {}", query);
+    println!("Generated union query: {query}");
 
     // Should contain UNION clause
     assert!(
         query.contains("UNION"),
-        "Query should contain UNION clause. Actual query: {}",
-        query
+        "Query should contain UNION clause. Actual query: {query}"
     );
     assert!(query.contains("SELECT DISTINCT ?target"));
     assert!(query.contains("http://example.org/Person"));
@@ -160,7 +159,7 @@ fn test_hierarchical_target_query_generation() {
         .generate_target_query(&hierarchical_target, None)
         .unwrap();
 
-    println!("Generated hierarchical subclass query: {}", query);
+    println!("Generated hierarchical subclass query: {query}");
 
     // Should contain hierarchical relationship pattern
     assert!(query.contains("SELECT DISTINCT ?target"));
@@ -168,8 +167,7 @@ fn test_hierarchical_target_query_generation() {
     assert!(query.contains("subClassOf"));
     assert!(
         query.contains("BIND"),
-        "Query should contain BIND statement. Actual query: {}",
-        query
+        "Query should contain BIND statement. Actual query: {query}"
     );
 }
 
@@ -200,29 +198,25 @@ fn test_path_based_target_query_generation() {
 
     let query = selector.generate_target_query(&path_target, None).unwrap();
 
-    println!("Generated path-based query: {}", query);
+    println!("Generated path-based query: {query}");
 
     // Should contain path traversal and filters
     assert!(query.contains("SELECT DISTINCT ?target"));
     assert!(
         query.contains("http://example.org/alice"),
-        "Query should contain alice IRI. Actual query: {}",
-        query
+        "Query should contain alice IRI. Actual query: {query}"
     );
     assert!(
         query.contains("http://foaf.org/spec/knows"),
-        "Query should contain knows property. Actual query: {}",
-        query
+        "Query should contain knows property. Actual query: {query}"
     );
     assert!(
         query.contains("FILTER(isIRI(?target))"),
-        "Query should contain IRI filter. Actual query: {}",
-        query
+        "Query should contain IRI filter. Actual query: {query}"
     );
     assert!(
         query.contains("http://example.org/active"),
-        "Query should contain active property. Actual query: {}",
-        query
+        "Query should contain active property. Actual query: {query}"
     );
 }
 
@@ -334,23 +328,20 @@ fn test_hierarchical_target_with_custom_property() {
         .generate_target_query(&hierarchical_target, None)
         .unwrap();
 
-    println!("Generated hierarchical query: {}", query);
+    println!("Generated hierarchical query: {query}");
 
     assert!(query.contains("SELECT DISTINCT ?target"));
     assert!(
         query.contains("http://example.org/ceo"),
-        "Query should contain CEO IRI. Actual query: {}",
-        query
+        "Query should contain CEO IRI. Actual query: {query}"
     );
     assert!(
         query.contains("http://example.org/reportsTo"),
-        "Query should contain reportsTo property. Actual query: {}",
-        query
+        "Query should contain reportsTo property. Actual query: {query}"
     );
     assert!(
         query.contains("+"),
-        "Query should use + pattern for descendants only. Actual query: {}",
-        query
+        "Query should use + pattern for descendants only. Actual query: {query}"
     );
 }
 

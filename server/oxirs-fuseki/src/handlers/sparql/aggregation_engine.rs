@@ -271,7 +271,7 @@ mod tests {
 
     #[test]
     fn test_group_concat_optimization() {
-        let mut processor = EnhancedAggregationProcessor::new();
+        let processor = EnhancedAggregationProcessor::new();
 
         // Test function support
         assert!(processor.is_supported("GROUP_CONCAT"));
@@ -284,7 +284,7 @@ mod tests {
 
     #[test]
     fn test_sample_optimization() {
-        let mut processor = EnhancedAggregationProcessor::new();
+        let processor = EnhancedAggregationProcessor::new();
 
         // Test function support
         assert!(processor.is_supported("SAMPLE"));

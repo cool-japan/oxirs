@@ -497,7 +497,7 @@ impl DistributedTracingManager {
         // Remove from active traces
         let trace_context = self.active_traces.write().await.remove(trace_id);
 
-        if let Some(context) = trace_context {
+        if let Some(_context) = trace_context {
             let analysis = self.analyze_trace(trace_id).await?;
 
             // Update trace duration metrics

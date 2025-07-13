@@ -8,6 +8,9 @@
 //! - Validation optimization and prediction
 //! - Data quality assessment and improvement suggestions
 //!
+
+#![allow(ambiguous_glob_reexports)]
+// #![allow(dead_code)] - Keep this disabled to fix dead code warnings
 //! ## Features
 //!
 //! - Shape mining and discovery from RDF graphs
@@ -384,7 +387,7 @@ use thiserror::Error;
 
 use oxirs_core::{model::Term, OxirsError, Store};
 
-use oxirs_shacl::{Shape, ShapeId, ValidationConfig, ValidationReport};
+use oxirs_shacl::{ShapeId, ValidationConfig, ValidationReport};
 
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
@@ -487,6 +490,7 @@ pub use ai_orchestrator::{
     PerformanceRequirements as AiPerformanceRequirements, PredictiveInsights, QualityAnalysis,
     SelectedModel,
 };
+#[allow(ambiguous_glob_reexports)]
 pub use analytics::*;
 pub use collaborative_development::*;
 pub use deployment::*;
@@ -525,10 +529,10 @@ pub use neural_cost_estimation::{
     UncertaintyQuantifier,
 };
 pub use neural_patterns::{
-    AdvancedPatternCorrelationAnalyzer, AnalysisMetadata, AnalysisQualityMetrics,
-    AttentionFlowDynamics, AttentionHead, AttentionHotspot, AttentionInsights, AttentionPathway,
-    CausalMechanism, CausalRelationship, CentralityScores, ClusterCharacteristics,
-    CorrelationAnalysisConfig, CorrelationAnalysisResult, CorrelationAnalysisStats,
+    attention::AttentionHead, AdvancedPatternCorrelationAnalyzer, AnalysisQualityMetrics,
+    AttentionFlowDynamics, AttentionHotspot, AttentionInsights, AttentionPathway, CausalMechanism,
+    CausalRelationship, CentralityScores, ClusterCharacteristics, CorrelationAnalysisConfig,
+    CorrelationAnalysisMetadata, CorrelationAnalysisResult, CorrelationAnalysisStats,
     CorrelationCluster, CorrelationEvidence, CorrelationType, CrossPatternAttention,
     CrossScaleInteraction, EmergencePattern, GraphStatistics, HierarchyLevel, HierarchyMetrics,
     HotspotType, InteractionType, LearnedConstraintPattern, MechanismType, MultiScaleFinding,
@@ -554,13 +558,10 @@ pub use optimization_engine::{
 pub use patterns::*;
 pub use performance_analytics::*;
 pub use performance_benchmarking::{
-    AccessPattern, BenchmarkConfig, BenchmarkReport, BenchmarkResult, BenchmarkStatus,
-    BenchmarkSummary, BenchmarkType, CacheBehavior, DataDistribution, EfficiencyMetrics,
-    ImplementationComplexity, LatencyMetrics, MeasurementConfig, PerformanceBenchmarkFramework,
-    PerformanceRecommendation, PerformanceRecommendationType, PrecisionLevel,
-    QualityMetrics as BenchmarkQualityMetrics,
-    RecommendationPriority as BenchmarkRecommendationPriority, ResourceMetrics,
-    ScalabilityAnalysis, SuccessCriteria, TargetComponent, ThroughputMetrics, WorkloadConfig,
+    AccessPattern, BenchmarkConfig, BenchmarkResult, BenchmarkStatus, BenchmarkType, CacheBehavior,
+    DataDistribution, ExecutionSummary as BenchmarkSummary, MeasurementConfig,
+    PerformanceBenchmarkFramework, PrecisionLevel, ResourceUsageSummary as ResourceMetrics,
+    SuccessCriteria, TargetComponent, ThroughputSummary as ThroughputMetrics, WorkloadConfig,
 };
 pub use photonic_computing::{
     CoherenceProperties, ConnectionType, GateType,
@@ -618,9 +619,9 @@ pub use version_control::*;
 
 // Ultrathink Mode Exports
 pub use blockchain_validation::{
-    AuditTrailResult, BlockchainEvent, BlockchainValidationConfig, BlockchainValidationResult,
-    BlockchainValidator, CrossChainAggregation, CrossChainValidationResult, PrivacyLevel,
-    PrivateValidationResult, SmartContractValidationResult, ValidationMode,
+    BlockchainEvent, BlockchainValidationConfig, BlockchainValidationResult, BlockchainValidator,
+    CrossChainAggregation, CrossChainValidationResult, PrivacyLevel, PrivateValidationResult,
+    SmartContractValidationResult, ValidationMode,
 };
 pub use collective_consciousness::{
     AgentCapabilities, AgentStats, AgentStatus, CollectiveConfig, CollectiveConsciousnessNetwork,
@@ -1031,7 +1032,7 @@ impl ShaclAiAssistant {
         &mut self,
         store: &dyn Store,
         graph_name: Option<&str>,
-    ) -> Result<Vec<Shape>> {
+    ) -> Result<Vec<oxirs_shacl::Shape>> {
         tracing::info!("Starting AI-powered shape learning");
 
         // Analyze patterns in the data
@@ -1048,9 +1049,7 @@ impl ShaclAiAssistant {
         let learned_shapes = self
             .shape_learner
             .lock()
-            .map_err(|e| {
-                ShaclAiError::ShapeLearning(format!("Failed to lock shape learner: {e}"))
-            })?
+            .map_err(|e| ShaclAiError::ShapeLearning(format!("Failed to lock shape learner: {e}")))?
             .learn_shapes_from_patterns(store, &patterns, graph_name)?;
         tracing::info!("Learned {} shapes from data", learned_shapes.len());
 
@@ -1087,12 +1086,16 @@ impl ShaclAiAssistant {
     pub fn extract_shapes_from_comprehensive_result(
         &self,
         result: &ComprehensiveLearningResult,
-    ) -> Vec<Shape> {
+    ) -> Vec<oxirs_shacl::Shape> {
         result.shapes.to_vec()
     }
 
     /// Assess data quality with AI insights
-    pub fn assess_quality(&self, store: &dyn Store, shapes: &[Shape]) -> Result<QualityReport> {
+    pub fn assess_quality(
+        &self,
+        store: &dyn Store,
+        shapes: &[oxirs_shacl::Shape],
+    ) -> Result<QualityReport> {
         tracing::info!("Starting AI-powered quality assessment");
 
         let report = self
@@ -1107,9 +1110,7 @@ impl ShaclAiAssistant {
         let insights = self
             .analytics_engine
             .lock()
-            .map_err(|e| {
-                ShaclAiError::Analytics(format!("Failed to lock analytics engine: {e}"))
-            })?
+            .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock analytics engine: {e}")))?
             .generate_quality_insights(store, shapes, &report)?;
 
         Ok(QualityReport {
@@ -1122,7 +1123,7 @@ impl ShaclAiAssistant {
     pub fn predict_validation(
         &self,
         store: &dyn Store,
-        shapes: &[Shape],
+        shapes: &[oxirs_shacl::Shape],
         config: &ValidationConfig,
     ) -> Result<ValidationPrediction> {
         tracing::info!("Predicting validation outcomes using AI");
@@ -1141,7 +1142,7 @@ impl ShaclAiAssistant {
     pub fn optimize_validation(
         &self,
         store: &dyn Store,
-        shapes: &[Shape],
+        shapes: &[oxirs_shacl::Shape],
     ) -> Result<OptimizedValidationStrategy> {
         tracing::info!("Optimizing validation strategy with AI");
 
@@ -1157,16 +1158,14 @@ impl ShaclAiAssistant {
     pub fn generate_insights(
         &self,
         store: &dyn Store,
-        shapes: &[Shape],
+        shapes: &[oxirs_shacl::Shape],
         validation_history: &[ValidationReport],
     ) -> Result<ValidationInsights> {
         tracing::info!("Generating AI-powered validation insights");
 
         self.analytics_engine
             .lock()
-            .map_err(|e| {
-                ShaclAiError::Analytics(format!("Failed to lock analytics engine: {e}"))
-            })?
+            .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock analytics engine: {e}")))?
             .generate_comprehensive_insights(store, shapes, validation_history)
     }
 
@@ -1175,7 +1174,7 @@ impl ShaclAiAssistant {
         &self,
         validation_report: &ValidationReport,
         store: &dyn Store,
-        shapes: &[Shape],
+        shapes: &[oxirs_shacl::Shape],
     ) -> Result<SmartErrorAnalysis> {
         tracing::info!(
             "Processing validation errors with intelligent analysis and repair suggestions"
@@ -1268,9 +1267,7 @@ impl ShaclAiAssistant {
                 .validation_predictor
                 .lock()
                 .map_err(|e| {
-                    ShaclAiError::ModelTraining(format!(
-                        "Failed to lock validation predictor: {e}"
-                    ))
+                    ShaclAiError::ModelTraining(format!("Failed to lock validation predictor: {e}"))
                 })?
                 .train_model(&training_data.prediction_data)
             {
@@ -1321,9 +1318,7 @@ impl ShaclAiAssistant {
             shapes_learned: self
                 .shape_learner
                 .lock()
-                .map_err(|e| {
-                    ShaclAiError::Analytics(format!("Failed to lock shape learner: {e}"))
-                })?
+                .map_err(|e| ShaclAiError::Analytics(format!("Failed to lock shape learner: {e}")))?
                 .get_statistics()
                 .total_shapes_learned,
             quality_assessments: self
@@ -1377,8 +1372,7 @@ impl Default for ShaclAiAssistant {
 }
 
 /// Configuration for SHACL-AI operations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ShaclAiConfig {
     /// Shape learning configuration
     pub learning: LearningConfig,
@@ -1401,7 +1395,6 @@ pub struct ShaclAiConfig {
     /// Global AI settings
     pub global: GlobalAiConfig,
 }
-
 
 /// Global AI configuration settings
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1539,7 +1532,6 @@ impl Default for ShaclAiAssistantBuilder {
 }
 
 /// Data types for insight generation
-
 /// Validation data for insight analysis
 #[derive(Debug, Clone)]
 pub struct ValidationData {
@@ -1558,7 +1550,7 @@ impl ValidationData {
         self.validation_reports
             .iter()
             .flat_map(|r| &r.violations)
-            .filter_map(|v| Some(v.source_shape.clone()))
+            .map(|v| v.source_shape.clone())
             .collect()
     }
 

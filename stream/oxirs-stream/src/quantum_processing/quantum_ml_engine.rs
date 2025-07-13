@@ -366,8 +366,13 @@ impl QuantumMLEngine {
             QuantumGate::Y(qubit) => self.apply_pauli_y(state, *qubit).await,
             QuantumGate::Z(qubit) => self.apply_pauli_z(state, *qubit).await,
             QuantumGate::CNOT(control, target) => self.apply_cnot(state, *control, *target).await,
-            QuantumGate::CPhase(phase, control, target) => self.apply_cphase(state, *phase, *control, *target).await,
-            QuantumGate::Toffoli(control1, control2, target) => self.apply_toffoli(state, *control1, *control2, *target).await,
+            QuantumGate::CPhase(phase, control, target) => {
+                self.apply_cphase(state, *phase, *control, *target).await
+            }
+            QuantumGate::Toffoli(control1, control2, target) => {
+                self.apply_toffoli(state, *control1, *control2, *target)
+                    .await
+            }
         }
     }
 

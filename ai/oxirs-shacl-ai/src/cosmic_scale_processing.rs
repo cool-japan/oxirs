@@ -338,7 +338,7 @@ impl CosmicScaleProcessor {
         let chunk_size = shapes.len() / self.stellar_nodes.len().max(1);
 
         for node_ref in self.stellar_nodes.iter() {
-            let node_id = node_ref.key();
+            let _node_id = node_ref.key();
             let node = node_ref.value();
             let start_idx = stellar_results.len() * chunk_size;
             let end_idx = (start_idx + chunk_size).min(shapes.len());
@@ -582,7 +582,7 @@ impl CosmicScaleProcessor {
     /// Combine validation reports from stellar nodes
     async fn combine_validation_reports(
         &self,
-        stellar_results: &[StellarValidationResult],
+        _stellar_results: &[StellarValidationResult],
     ) -> Result<ValidationReport> {
         // Simplified implementation - would combine all reports
         Ok(ValidationReport::new())

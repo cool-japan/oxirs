@@ -1236,7 +1236,7 @@ impl MLOptimizer {
         let mut cost = 1.0;
 
         // Base cost factors
-        let pattern_cost = order.len() as f64 * 0.5;
+        let _pattern_cost = order.len() as f64 * 0.5;
         let selectivity_factor = (1.0 - features.selectivity).max(0.1);
         let complexity_factor = features.complexity_score + 1.0;
 
@@ -1587,7 +1587,7 @@ mod tests {
 
     #[test]
     fn test_linear_regression_model() {
-        let mut model = LinearRegressionModel::new(5);
+        let model = LinearRegressionModel::new(5);
         assert_eq!(model.weights.len(), 5);
         assert_eq!(model.bias, 0.0);
         assert_eq!(model.iterations, 0);

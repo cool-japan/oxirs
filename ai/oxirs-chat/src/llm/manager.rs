@@ -223,10 +223,7 @@ impl UsageTracker {
         self.total_tokens += tokens;
         self.total_cost += cost;
 
-        let provider_stats = self
-            .provider_usage
-            .entry(provider.to_string())
-            .or_insert_with(ProviderUsage::new);
+        let provider_stats = self.provider_usage.entry(provider.to_string()).or_default();
 
         provider_stats.requests += 1;
         provider_stats.tokens += tokens;
@@ -334,7 +331,7 @@ impl TokenBucket {
 }
 
 impl RateLimiter {
-    pub fn new(config: &super::config::RateLimitConfig) -> Self {
+    pub fn new(_config: &super::config::RateLimitConfig) -> Self {
         Self {
             enabled: true, // Always enabled for simplicity
             buckets: Arc::new(TokioMutex::new(HashMap::new())),
@@ -655,7 +652,7 @@ impl EnhancedLLMManager {
 
     /// Create a new enhanced LLM manager with persistence capabilities
     pub async fn with_persistence<P: AsRef<std::path::Path>>(
-        store: Arc<dyn oxirs_core::Store>,
+        _store: Arc<dyn oxirs_core::Store>,
         persistence_path: P,
     ) -> Result<Self> {
         // Create persistence directory if it doesn't exist
@@ -861,9 +858,11 @@ impl EnhancedLLMManager {
     /// Get detailed metrics
     pub async fn get_detailed_metrics(&self) -> DetailedMetrics {
         let sessions = self.sessions.lock().await;
-        let mut metrics = DetailedMetrics::default();
-        metrics.total_sessions = sessions.len();
-        metrics.active_sessions = sessions.len(); // Simplified - all sessions are considered active
+        let mut metrics = DetailedMetrics {
+            total_sessions: sessions.len(),
+            active_sessions: sessions.len(),
+            ..Default::default()
+        };
 
         // Count total messages across all sessions
         let mut total_messages = 0;

@@ -107,7 +107,6 @@ pub struct PropertyCharacteristics {
     pub is_irreflexive: bool,
 }
 
-
 /// OWL knowledge base context
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct OwlContext {
@@ -130,7 +129,6 @@ pub struct OwlContext {
     /// Known inconsistencies
     pub inconsistencies: Vec<String>,
 }
-
 
 impl OwlContext {
     /// Add class equivalence

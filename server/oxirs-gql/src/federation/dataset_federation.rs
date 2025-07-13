@@ -364,7 +364,7 @@ impl JoinOptimizer {
     }
 
     /// Optimize join order for federated steps
-    pub fn optimize_joins(&self, steps: &mut Vec<FederatedStep>) {
+    pub fn optimize_joins(&self, steps: &mut [FederatedStep]) {
         // Simple optimization: prioritize endpoints with better statistics
         steps.sort_by(|a, b| {
             // Prefer steps with smaller expected result sizes

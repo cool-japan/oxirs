@@ -140,10 +140,9 @@ ex:subject2 rdf:type ex:Class2 ;
 "#
         }
         _ => {
-            return Err(format!(
-                "Export format '{format}' serialization not yet implemented"
-            )
-            .into());
+            return Err(
+                format!("Export format '{format}' serialization not yet implemented").into(),
+            );
         }
     };
 

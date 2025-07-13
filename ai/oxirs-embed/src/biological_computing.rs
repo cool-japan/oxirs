@@ -300,7 +300,7 @@ impl Cell {
     }
 
     pub fn update_energy(&mut self, delta: f32) {
-        self.energy = (self.energy + delta).max(0.0).min(2.0);
+        self.energy = (self.energy + delta).clamp(0.0, 2.0);
     }
 
     pub fn age_cell(&mut self) {
@@ -781,9 +781,8 @@ impl GeneRegulatoryNetwork {
             let current_level = self.expression_levels[&gene.id];
             let regulation_effect = self.calculate_regulation_effect(&gene.id);
 
-            let new_level = (current_level + regulation_effect * self.regulation_strength)
-                .max(0.0)
-                .min(10.0); // Cap expression levels
+            let new_level =
+                (current_level + regulation_effect * self.regulation_strength).clamp(0.0, 10.0); // Cap expression levels
 
             new_levels.insert(gene.id, new_level);
         }
@@ -1669,6 +1668,6 @@ mod tests {
         let cut_site = vec![Nucleotide::G, Nucleotide::C];
         let fragments = seq.restrict(&cut_site);
 
-        assert!(fragments.len() >= 1);
+        assert!(!fragments.is_empty());
     }
 }

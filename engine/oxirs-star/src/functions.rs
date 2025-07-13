@@ -145,9 +145,7 @@ impl FunctionEvaluator {
         match term {
             StarTerm::QuotedTriple(triple) => Ok(triple.predicate.clone()),
             _ => Err(StarError::QueryError {
-                message: format!(
-                    "PREDICATE function expects a quoted triple, got: {term:?}"
-                ),
+                message: format!("PREDICATE function expects a quoted triple, got: {term:?}"),
                 query_fragment: None,
                 position: None,
                 suggestion: None,

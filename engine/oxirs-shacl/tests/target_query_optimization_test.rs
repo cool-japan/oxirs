@@ -117,18 +117,16 @@ fn test_inverse_property_hierarchical() {
         .generate_target_query(&hierarchical_target, None)
         .unwrap();
 
-    println!("Generated inverse property hierarchical query: {}", query);
+    println!("Generated inverse property hierarchical query: {query}");
 
     assert!(query.contains("SELECT DISTINCT ?target"));
     assert!(
         query.contains("http://example.org/leaf"),
-        "Query should contain leaf IRI. Actual query: {}",
-        query
+        "Query should contain leaf IRI. Actual query: {query}"
     );
     assert!(
         query.contains("^<http://example.org/parent>"),
-        "Query should have inverse syntax. Actual query: {}",
-        query
+        "Query should have inverse syntax. Actual query: {query}"
     );
 }
 
@@ -280,38 +278,32 @@ fn test_multiple_complex_intersection() {
         .generate_target_query(&intersection_target, None)
         .unwrap();
 
-    println!("Generated multiple complex intersection query: {}", query);
+    println!("Generated multiple complex intersection query: {query}");
 
     assert!(query.contains("SELECT DISTINCT ?target"));
     assert!(
         query.contains("?target_0"),
-        "Query should contain target_0 variable. Actual query: {}",
-        query
+        "Query should contain target_0 variable. Actual query: {query}"
     );
     assert!(
         query.contains("?target_1"),
-        "Query should contain target_1 variable. Actual query: {}",
-        query
+        "Query should contain target_1 variable. Actual query: {query}"
     );
     assert!(
         query.contains("?target_2"),
-        "Query should contain target_2 variable. Actual query: {}",
-        query
+        "Query should contain target_2 variable. Actual query: {query}"
     );
     assert!(
         query.contains("FILTER(?target = ?target_1)"),
-        "Query should contain target comparison filter. Actual query: {}",
-        query
+        "Query should contain target comparison filter. Actual query: {query}"
     );
     assert!(
         query.contains("FILTER(?target = ?target_2)"),
-        "Query should contain target comparison filter. Actual query: {}",
-        query
+        "Query should contain target comparison filter. Actual query: {query}"
     );
     assert!(
         query.contains("BIND(?target_0 AS ?target)"),
-        "Query should contain target binding. Actual query: {}",
-        query
+        "Query should contain target binding. Actual query: {query}"
     );
 }
 
@@ -350,7 +342,7 @@ fn test_large_union_target_performance() {
     let mut targets = Vec::new();
     for i in 1..=20 {
         targets.push(Target::Class(
-            NamedNode::new(&format!("http://example.org/Class{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/Class{i}")).unwrap(),
         ));
     }
 

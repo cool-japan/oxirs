@@ -42,8 +42,7 @@ impl Default for GraphAwareConfig {
 }
 
 /// Graph hierarchy for hierarchical search
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GraphHierarchy {
     /// Parent-child relationships between graphs
     pub parent_child: HashMap<String, Vec<String>>,
@@ -52,7 +51,6 @@ pub struct GraphHierarchy {
     /// Graph priority weights for search ranking
     pub graph_weights: HashMap<String, f32>,
 }
-
 
 /// Graph context for search operations
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -820,7 +820,10 @@ mod tests {
     #[tokio::test]
     async fn test_alert_system() {
         let config = TelemetryConfig::default();
-        let alert_config = AlertConfig { latency_threshold_ms: 10.0, ..Default::default() }; // Very low threshold for testing
+        let alert_config = AlertConfig {
+            latency_threshold_ms: 10.0,
+            ..Default::default()
+        }; // Very low threshold for testing
 
         let observability = StreamObservability::new(config, alert_config);
         let mut alert_receiver = observability.subscribe_to_alerts();

@@ -25,8 +25,6 @@ use tokio::time::interval;
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use oxirs_core::Store;
-
 use crate::universal_knowledge_integration::{
     UniversalKnowledgeConfig, UniversalKnowledgeIntegration,
 };
@@ -535,35 +533,35 @@ impl OmniscientValidation {
     /// Helper methods for perfect validation achievement
     async fn apply_omniscient_understanding(
         &self,
-        challenge: &ValidationChallenge,
+        _challenge: &ValidationChallenge,
     ) -> Result<OmniscientUnderstanding> {
         Ok(OmniscientUnderstanding::default()) // Placeholder
     }
 
     async fn achieve_perfect_constraint_satisfaction(
         &self,
-        understanding: &OmniscientUnderstanding,
+        _understanding: &OmniscientUnderstanding,
     ) -> Result<PerfectConstraintSatisfaction> {
         Ok(PerfectConstraintSatisfaction::default()) // Placeholder
     }
 
     async fn guarantee_universal_correctness(
         &self,
-        satisfaction: &PerfectConstraintSatisfaction,
+        _satisfaction: &PerfectConstraintSatisfaction,
     ) -> Result<UniversalCorrectness> {
         Ok(UniversalCorrectness::default()) // Placeholder
     }
 
     async fn provide_complete_certainty(
         &self,
-        correctness: &UniversalCorrectness,
+        _correctness: &UniversalCorrectness,
     ) -> Result<CompleteCertainty> {
         Ok(CompleteCertainty::default()) // Placeholder
     }
 
     async fn calculate_complete_understanding(
         &self,
-        synthesis: &PerfectValidationSynthesis,
+        _synthesis: &PerfectValidationSynthesis,
     ) -> Result<f64> {
         Ok(1.0) // Perfect understanding
     }
@@ -681,14 +679,14 @@ impl UniversalKnowledgeOmniscience {
     // Helper methods
     async fn analyze_omniscience_requirements(
         &mut self,
-        context: &OmniscientValidationContext,
+        _context: &OmniscientValidationContext,
     ) -> Result<OmniscienceAnalysis> {
         Ok(OmniscienceAnalysis) // Placeholder
     }
 
     async fn integrate_universal_knowledge(
         &mut self,
-        analysis: &OmniscienceAnalysis,
+        _analysis: &OmniscienceAnalysis,
     ) -> Result<UniversalKnowledgeIntegration> {
         Ok(UniversalKnowledgeIntegration::new(
             UniversalKnowledgeConfig::default(),
@@ -697,26 +695,26 @@ impl UniversalKnowledgeOmniscience {
 
     async fn generate_transcendent_understanding(
         &mut self,
-        integration: &UniversalKnowledgeIntegration,
+        _integration: &UniversalKnowledgeIntegration,
     ) -> Result<TranscendentUnderstanding> {
         Ok(TranscendentUnderstanding) // Placeholder
     }
 
     async fn synthesize_infinite_wisdom(
         &mut self,
-        understanding: &TranscendentUnderstanding,
+        _understanding: &TranscendentUnderstanding,
     ) -> Result<InfiniteWisdom> {
         Ok(InfiniteWisdom) // Placeholder
     }
 
     async fn monitor_complete_awareness(
         &mut self,
-        wisdom: &InfiniteWisdom,
+        _wisdom: &InfiniteWisdom,
     ) -> Result<CompleteAwareness> {
         Ok(CompleteAwareness) // Placeholder
     }
 
-    async fn calculate_omniscience_level(&self, awareness: &CompleteAwareness) -> Result<f64> {
+    async fn calculate_omniscience_level(&self, _awareness: &CompleteAwareness) -> Result<f64> {
         Ok(1.0) // Perfect omniscience
     }
 }
@@ -852,9 +850,9 @@ impl OmniscientValidationMetrics {
     pub async fn update_omniscient_metrics(
         &mut self,
         knowledge_omniscience: &UniversalOmniscience,
-        consciousness_transcendence: &ConsciousnessTranscendence,
+        _consciousness_transcendence: &ConsciousnessTranscendence,
         perfect_reasoning: &PerfectReasoning,
-        infinite_validation: &InfiniteValidation,
+        _infinite_validation: &InfiniteValidation,
         perfect_synthesis: &PerfectValidationSynthesis,
         quality_assurance: &AllKnowingQualityAssurance,
     ) {
@@ -891,7 +889,6 @@ impl OmniscientValidationMetrics {
 }
 
 /// Supporting component types and implementations
-
 // Core component placeholder implementations
 macro_rules! impl_omniscient_component {
     ($name:ident) => {

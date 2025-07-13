@@ -218,8 +218,8 @@ impl MemoryMappedVectorIndex {
             // Create advanced memory map if lazy loading is enabled
             if self.enable_lazy_loading {
                 // Calculate optimal page count based on file size
-                let optimal_pages = ((file_len as usize / VECTOR_PAGE_SIZE) / 10)
-                    .clamp(1000, 50000);
+                let optimal_pages =
+                    ((file_len as usize / VECTOR_PAGE_SIZE) / 10).clamp(1000, 50000);
 
                 // Create advanced memory mapping with cloned mmap
                 let cloned_mmap = unsafe { MmapOptions::new().map(&*file)? };
@@ -841,7 +841,7 @@ mod tests {
                 let vec = Vector::new(vec![i as f32, (i + 1) as f32, (i + 2) as f32]);
                 index.insert(format!("vec{i}"), vec)?;
             }
-            
+
             // Explicitly flush the buffer to ensure data is persisted
             index.flush_buffer()?;
         }

@@ -32,7 +32,7 @@ impl PermissionChecker {
     }
 
     /// Get permissions for a specific role
-    fn get_role_permissions(role: &str) -> Option<HashSet<Permission>> {
+    pub fn get_role_permissions(role: &str) -> Option<HashSet<Permission>> {
         let mut permissions = HashSet::new();
 
         match role {
@@ -127,7 +127,7 @@ impl PermissionChecker {
     /// Check if user can access a specific dataset
     pub fn can_access_dataset(
         user: &User,
-        dataset: &str,
+        _dataset: &str,
         required_permission: &Permission,
     ) -> bool {
         // Check for dataset-specific permissions

@@ -11,12 +11,9 @@ use std::time::{Duration, SystemTime};
 use tokio::sync::{Mutex, RwLock};
 
 use oxirs_core::Store;
-use oxirs_shacl::{
-    constraints::*, Shape, ValidationViolation,
-};
+use oxirs_shacl::{Shape, ValidationViolation};
 
-use crate::quality::QualityAssessor;
-use crate::Result;
+use crate::{quality::QualityAssessor as ConcreteQualityAssessor, Result};
 
 pub mod audio_validators;
 pub mod document_validators;
@@ -52,7 +49,7 @@ pub struct MultiModalValidator {
     /// Semantic analyzers
     semantic_analyzers: Arc<RwLock<HashMap<String, Box<dyn SemanticAnalyzer>>>>,
     /// Quality assessor for multi-modal content
-    quality_assessor: Arc<Mutex<QualityAssessor>>,
+    quality_assessor: Arc<Mutex<dyn QualityAssessor>>,
     /// Configuration
     config: MultiModalConfig,
     /// Content cache for performance
@@ -162,7 +159,7 @@ impl MultiModalValidator {
             video_validators: Arc::new(RwLock::new(video_validators)),
             document_validators: Arc::new(RwLock::new(document_validators)),
             semantic_analyzers: Arc::new(RwLock::new(semantic_analyzers)),
-            quality_assessor: Arc::new(Mutex::new(QualityAssessor::new())),
+            quality_assessor: Arc::new(Mutex::new(ConcreteQualityAssessor::new())),
             config,
             content_cache: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -171,7 +168,7 @@ impl MultiModalValidator {
     /// Validate multi-modal content against SHACL shapes
     pub async fn validate_multimodal_content(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         shapes: &[Shape],
         content_refs: &[MultiModalContentRef],
     ) -> Result<MultiModalValidationReport> {
@@ -593,9 +590,9 @@ impl MultiModalValidator {
 
     async fn validate_against_shape(
         &self,
-        content: &MultiModalContent,
-        analysis: &ContentAnalysis,
-        shape: &Shape,
+        _content: &MultiModalContent,
+        _analysis: &ContentAnalysis,
+        _shape: &Shape,
     ) -> Result<Vec<ValidationViolation>> {
         // Implementation for validating content against a specific shape
         Ok(vec![])
@@ -603,8 +600,8 @@ impl MultiModalValidator {
 
     async fn extract_semantic_insights(
         &self,
-        content: &MultiModalContent,
-        analysis: &ContentAnalysis,
+        _content: &MultiModalContent,
+        _analysis: &ContentAnalysis,
     ) -> Result<Vec<SemanticInsight>> {
         // Implementation for extracting semantic insights
         Ok(vec![])
@@ -612,8 +609,8 @@ impl MultiModalValidator {
 
     async fn perform_cross_modal_validation(
         &self,
-        content_analyses: &[ContentAnalysis],
-        shapes: &[Shape],
+        _content_analyses: &[ContentAnalysis],
+        _shapes: &[Shape],
     ) -> Result<Vec<ValidationViolation>> {
         // Implementation for cross-modal validation
         Ok(vec![])
@@ -667,12 +664,12 @@ impl MultiModalValidator {
         Ok(())
     }
 
-    async fn calculate_quality_score(&self, analysis: &ContentAnalysis) -> Result<f64> {
+    async fn calculate_quality_score(&self, _analysis: &ContentAnalysis) -> Result<f64> {
         // Implementation for calculating quality score
         Ok(0.8)
     }
 
-    async fn calculate_confidence_score(&self, analysis: &ContentAnalysis) -> Result<f64> {
+    async fn calculate_confidence_score(&self, _analysis: &ContentAnalysis) -> Result<f64> {
         // Implementation for calculating confidence score
         Ok(0.9)
     }

@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::{debug, warn};
 
-use crate::{FederatedService, ServiceCapability, ServiceRegistry};
+use crate::{service_registry::ServiceRegistry, FederatedService, ServiceCapability};
 
 use super::types::*;
 
@@ -20,8 +20,16 @@ impl QueryDecomposer {
     ) -> Result<Vec<ComponentPlan>> {
         let mut plans = Vec::new();
 
-        // Get available services
-        let services = registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
+        // Get available services with SPARQL capability
+        let services: Vec<_> = registry
+            .get_all_services()
+            .into_iter()
+            .filter(|service| {
+                service
+                    .capabilities
+                    .contains(&ServiceCapability::SparqlQuery)
+            })
+            .collect();
         if services.is_empty() {
             return Err(anyhow!("No available services for query execution"));
         }
@@ -36,19 +44,22 @@ impl QueryDecomposer {
 
         // Strategy 2: Distribute component across multiple services
         if component.patterns.len() > self.config.min_patterns_for_distribution {
-            let distributed_plans = self.create_distributed_plans(component, &services)?;
+            let service_refs: Vec<&FederatedService> = services.iter().collect();
+            let distributed_plans = self.create_distributed_plans(component, &service_refs)?;
             plans.extend(distributed_plans);
         }
 
         // Strategy 3: Specialized service assignment based on predicates
-        let specialized_plan = self.create_specialized_service_plan(component, &services)?;
+        let service_refs: Vec<&FederatedService> = services.iter().collect();
+        let specialized_plan = self.create_specialized_service_plan(component, &service_refs)?;
         if let Some(plan) = specialized_plan {
             plans.push(plan);
         }
 
         if plans.is_empty() {
             // Fallback: force distribution even for small components
-            let forced_plan = self.create_forced_distribution_plan(component, &services)?;
+            let service_refs: Vec<&FederatedService> = services.iter().collect();
+            let forced_plan = self.create_forced_distribution_plan(component, &service_refs)?;
             plans.push(forced_plan);
         }
 
@@ -726,7 +737,7 @@ impl QueryDecomposer {
         satellite_patterns: &[(usize, crate::planner::TriplePattern)],
         services: &[&FederatedService],
         center_service: &FederatedService,
-        central_variable: &str,
+        _central_variable: &str,
     ) -> Result<Vec<(String, Vec<(usize, crate::planner::TriplePattern)>)>> {
         let mut distribution = Vec::new();
 

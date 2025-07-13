@@ -37,7 +37,6 @@ pub struct VisionLanguageGraphConfig {
     pub joint_training_config: JointTrainingConfig,
 }
 
-
 /// Vision encoder configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VisionEncoderConfig {
@@ -868,7 +867,9 @@ impl VisionEncoder {
 
                 // Flatten patch
                 let patch_owned = patch.to_owned();
-                let flattened_patch = patch_owned.into_shape_with_order(c * patch_h * patch_w).unwrap();
+                let flattened_patch = patch_owned
+                    .into_shape_with_order(c * patch_h * patch_w)
+                    .unwrap();
 
                 // Project to embedding space
                 if let Some(patch_embedding_matrix) = self.vit_parameters.get("patch_embedding") {

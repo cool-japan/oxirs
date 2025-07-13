@@ -5,11 +5,11 @@ use tracing::{debug, info, warn};
 
 use oxirs_core::Store;
 
-use super::types::*;
-use super::patterns::*;
-use super::cache::IntelligentPatternCache;
 use super::algorithms::*;
+use super::cache::IntelligentPatternCache;
+use super::patterns::*;
 use super::sparql::*;
+use super::types::*;
 use crate::Result;
 
 /// Advanced pattern mining engine
@@ -186,7 +186,7 @@ impl AdvancedPatternMiningEngine {
         &mut self,
         store: &dyn Store,
         graph_name: Option<&str>,
-        min_support: f64,
+        _min_support: f64,
     ) -> crate::Result<Vec<AdvancedPattern>> {
         // Placeholder implementation for sequential pattern mining
         self.mine_patterns(store, graph_name)
@@ -197,7 +197,7 @@ impl AdvancedPatternMiningEngine {
         &mut self,
         store: &dyn Store,
         graph_name: Option<&str>,
-        max_size: usize,
+        _max_size: usize,
     ) -> crate::Result<Vec<AdvancedPattern>> {
         // Placeholder implementation for graph pattern mining
         self.mine_patterns(store, graph_name)
@@ -208,7 +208,7 @@ impl AdvancedPatternMiningEngine {
         &mut self,
         store: &dyn Store,
         graph_name: Option<&str>,
-        granularity: crate::advanced_pattern_mining::TimeGranularity,
+        _granularity: crate::advanced_pattern_mining::TimeGranularity,
     ) -> crate::Result<Vec<AdvancedPattern>> {
         // Placeholder implementation for enhanced temporal pattern mining
         self.mine_patterns(store, graph_name)
@@ -218,7 +218,7 @@ impl AdvancedPatternMiningEngine {
     pub fn rank_patterns_advanced(
         &self,
         patterns: &mut [AdvancedPattern],
-        criteria: &crate::advanced_pattern_mining::PatternRankingCriteria,
+        _criteria: &crate::advanced_pattern_mining::PatternRankingCriteria,
     ) -> Vec<f64> {
         // Placeholder implementation for advanced pattern ranking
         patterns.iter().map(|p| p.quality_score).collect()
@@ -237,13 +237,13 @@ impl AdvancedPatternMiningEngine {
     }
 
     /// Get cached patterns
-    pub fn get_cached_patterns(&self, cache_key: &str) -> Option<Vec<AdvancedPattern>> {
+    pub fn get_cached_patterns(&self, _cache_key: &str) -> Option<Vec<AdvancedPattern>> {
         // Placeholder implementation for getting cached patterns
         None
     }
 
     /// Cache patterns
-    pub fn cache_patterns(&mut self, cache_key: String, patterns: Vec<AdvancedPattern>) {
+    pub fn cache_patterns(&mut self, _cache_key: String, _patterns: Vec<AdvancedPattern>) {
         // Placeholder implementation for caching patterns
     }
 
@@ -293,7 +293,10 @@ impl AdvancedPatternMiningEngine {
                 process_property_frequency_results(&mut self.frequency_tables, results)?;
             }
             Err(e) => {
-                warn!("Failed to execute property frequency query: {}, using fallback analysis", e);
+                warn!(
+                    "Failed to execute property frequency query: {}, using fallback analysis",
+                    e
+                );
                 fallback_property_analysis(&mut self.frequency_tables, store, graph_name)?;
             }
         }
@@ -321,7 +324,10 @@ impl AdvancedPatternMiningEngine {
                 process_class_frequency_results(&mut self.frequency_tables, results)?;
             }
             Err(e) => {
-                warn!("Failed to execute class frequency query: {}, using fallback analysis", e);
+                warn!(
+                    "Failed to execute class frequency query: {}, using fallback analysis",
+                    e
+                );
                 fallback_class_analysis(&mut self.frequency_tables, store, graph_name)?;
             }
         }
@@ -352,7 +358,10 @@ impl AdvancedPatternMiningEngine {
                 process_value_pattern_results(&mut self.frequency_tables, results)?;
             }
             Err(e) => {
-                warn!("Failed to execute value pattern query: {}, using fallback analysis", e);
+                warn!(
+                    "Failed to execute value pattern query: {}, using fallback analysis",
+                    e
+                );
                 fallback_value_pattern_analysis(&mut self.frequency_tables, store, graph_name)?;
             }
         }
@@ -383,7 +392,10 @@ impl AdvancedPatternMiningEngine {
                 process_co_occurrence_results(&mut self.frequency_tables, results)?;
             }
             Err(e) => {
-                warn!("Failed to execute co-occurrence query: {}, using fallback analysis", e);
+                warn!(
+                    "Failed to execute co-occurrence query: {}, using fallback analysis",
+                    e
+                );
                 fallback_co_occurrence_analysis(&mut self.frequency_tables, store, graph_name)?;
             }
         }

@@ -50,9 +50,9 @@ fn test_query_pattern_detection() {
     for i in 0..20 {
         for pred in &predicates {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/person{}", i)).unwrap(),
-                NamedNode::new(&format!("http://example.org/{}", pred)).unwrap(),
-                Literal::new(&format!("{} value {}", pred, i)),
+                NamedNode::new(format!("http://example.org/person{i}")).unwrap(),
+                NamedNode::new(format!("http://example.org/{pred}")).unwrap(),
+                Literal::new(format!("{pred} value {i}")),
             );
             manager.insert(triple).unwrap();
         }
@@ -121,7 +121,7 @@ fn test_adaptive_index_updates() {
     let pred = NamedNode::new("http://example.org/type").unwrap();
     for i in 0..5 {
         let triple = Triple::new(
-            NamedNode::new(&format!("http://example.org/resource{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/resource{i}")).unwrap(),
             pred.clone(),
             NamedNode::new("http://example.org/Document").unwrap(),
         );
@@ -164,9 +164,9 @@ fn test_concurrent_adaptive_queries() {
     // Insert data
     for i in 0..100 {
         let triple = Triple::new(
-            NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
-            NamedNode::new(&format!("http://example.org/p{}", i % 10)).unwrap(),
-            Literal::new(&format!("value{}", i)),
+            NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
+            NamedNode::new(format!("http://example.org/p{}", i % 10)).unwrap(),
+            Literal::new(format!("value{i}")),
         );
         manager.insert(triple).unwrap();
     }
@@ -177,7 +177,7 @@ fn test_concurrent_adaptive_queries() {
             let manager = manager.clone();
             thread::spawn(move || {
                 let pred = Predicate::NamedNode(
-                    NamedNode::new(&format!("http://example.org/p{}", thread_id)).unwrap(),
+                    NamedNode::new(format!("http://example.org/p{thread_id}")).unwrap(),
                 );
 
                 for _ in 0..10 {
@@ -213,9 +213,9 @@ fn test_index_benefit_estimation() {
     for i in 0..1000 {
         let pred = if i % 10 == 0 { "p2" } else { "p1" };
         let triple = Triple::new(
-            NamedNode::new(&format!("http://example.org/s{}", i)).unwrap(),
-            NamedNode::new(&format!("http://example.org/{}", pred)).unwrap(),
-            Literal::new(&format!("value{}", i)),
+            NamedNode::new(format!("http://example.org/s{i}")).unwrap(),
+            NamedNode::new(format!("http://example.org/{pred}")).unwrap(),
+            Literal::new(format!("value{i}")),
         );
         manager.insert(triple).unwrap();
     }

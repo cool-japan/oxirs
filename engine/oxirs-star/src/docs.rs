@@ -618,8 +618,7 @@ This example shows the core concepts of RDF-star: creating quoted triples and us
                     section.push_str(&format!("```rust\n{}\n```\n\n", example.code));
 
                     if let Some(output) = &example.expected_output {
-                        section
-                            .push_str(&format!("**Expected Output:**\n```\n{output}\n```\n\n"));
+                        section.push_str(&format!("**Expected Output:**\n```\n{output}\n```\n\n"));
                     }
                 }
             }

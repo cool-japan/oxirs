@@ -526,7 +526,7 @@ impl RealTimeVectorUpdater {
         stats.total_batches += 1;
         stats.total_updates += successful_ops;
         stats.failed_updates += failed_ops;
-        
+
         // Update average processing time
         let total_time = stats.average_processing_time.as_nanos() as f64
             * (stats.total_batches - 1) as f64
@@ -595,12 +595,23 @@ impl RealTimeVectorSearch {
         // Convert to SimilarityResult
         let results: Vec<crate::similarity::SimilarityResult> = search_results
             .into_iter()
-            .map(|(uri, similarity)| crate::similarity::SimilarityResult {
-                uri,
-                similarity,
-                metrics: std::collections::HashMap::new(),
-                metadata: None,
-            })
+            .enumerate()
+            .map(
+                |(idx, (uri, similarity))| crate::similarity::SimilarityResult {
+                    id: format!(
+                        "rt_{}_{}",
+                        idx,
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis()
+                    ),
+                    uri,
+                    similarity,
+                    metrics: std::collections::HashMap::new(),
+                    metadata: None,
+                },
+            )
             .collect();
 
         // Cache results

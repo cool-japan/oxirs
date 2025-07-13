@@ -65,7 +65,6 @@ pub enum FailoverState {
     Unavailable,
 }
 
-
 /// Failover event
 #[derive(Debug, Clone)]
 pub enum FailoverEvent {

@@ -10,17 +10,13 @@ pub use crate::handlers::sparql::optimizers::*;
 
 // Import specific items from modules that have conflicts
 pub use crate::handlers::sparql::aggregation_engine::{
-    EnhancedAggregationProcessor, AggregationFunction
+    AggregationFunction, EnhancedAggregationProcessor,
 };
-pub use crate::handlers::sparql::bind_processor::{
-    EnhancedBindProcessor, EnhancedValuesProcessor
-};
+pub use crate::handlers::sparql::bind_processor::{EnhancedBindProcessor, EnhancedValuesProcessor};
 pub use crate::handlers::sparql::service_delegation::{
-    ServiceDelegationManager, ParallelServiceExecutor, ServiceResultMerger
+    ParallelServiceExecutor, ServiceDelegationManager, ServiceResultMerger,
 };
-pub use crate::handlers::sparql::sparql12_features::{
-    Sparql12Features, AggregationEngine
-};
+pub use crate::handlers::sparql::sparql12_features::{AggregationEngine, Sparql12Features};
 
 use crate::{
     auth::AuthUser,
@@ -45,13 +41,7 @@ pub async fn query_handler_get(
     user: Option<AuthUser>,
 ) -> impl IntoResponse {
     // Delegate to the SPARQL query handler
-    crate::handlers::sparql::core::sparql_query(
-        Query(params),
-        State(state),
-        headers,
-        user,
-    )
-    .await
+    crate::handlers::sparql::core::sparql_query(Query(params), State(state), headers, user).await
 }
 
 /// Main SPARQL query endpoint for POST requests
@@ -66,7 +56,7 @@ pub async fn query_handler_post(
         .get("content-type")
         .and_then(|h| h.to_str().ok())
         .unwrap_or("");
-    
+
     tracing::debug!("POST /sparql request with content-type: {}", content_type);
 
     let params = if content_type.contains("application/x-www-form-urlencoded") {
@@ -75,7 +65,7 @@ pub async fn query_handler_post(
         let mut query = None;
         let mut default_graph_uri = None;
         let mut named_graph_uri = None;
-        
+
         for part in body_str.split('&') {
             if let Some((key, value)) = part.split_once('=') {
                 let decoded_value = urlencoding::decode(value).unwrap_or_default().to_string();
@@ -91,7 +81,7 @@ pub async fn query_handler_post(
                 }
             }
         }
-        
+
         SparqlQueryParams {
             query,
             default_graph_uri,
@@ -118,14 +108,9 @@ pub async fn query_handler_post(
     };
 
     // Delegate to the SPARQL query handler
-    crate::handlers::sparql::core::sparql_query(
-        Query(params),
-        State(state),
-        headers,
-        user,
-    )
-    .await
-    .into_response()
+    crate::handlers::sparql::core::sparql_query(Query(params), State(state), headers, user)
+        .await
+        .into_response()
 }
 
 /// Main SPARQL query endpoint (backwards compatibility)
@@ -136,13 +121,7 @@ pub async fn query_handler(
     user: Option<AuthUser>,
 ) -> impl IntoResponse {
     // For backwards compatibility, delegate directly to sparql_query
-    crate::handlers::sparql::core::sparql_query(
-        Query(params),
-        State(state),
-        headers,
-        user,
-    )
-    .await
+    crate::handlers::sparql::core::sparql_query(Query(params), State(state), headers, user).await
 }
 
 /// Main SPARQL update endpoint with enhanced features
@@ -151,7 +130,6 @@ pub async fn update_handler(
     Form(params): Form<SparqlUpdateParams>,
 ) -> impl IntoResponse {
     use axum::Json;
-    
 
     // Create query context
     let context = QueryContext::default();
@@ -209,8 +187,8 @@ impl EnhancedSparqlService {
     pub async fn process_query(
         &mut self,
         query: &str,
-        context: QueryContext,
-        headers: &HeaderMap,
+        _context: QueryContext,
+        _headers: &HeaderMap,
     ) -> FusekiResult<String> {
         // 1. Security validation
         if self.injection_detector.detect_injection(query)? {
@@ -271,7 +249,7 @@ impl EnhancedSparqlService {
     pub async fn process_update(
         &mut self,
         update: &str,
-        context: QueryContext,
+        _context: QueryContext,
     ) -> FusekiResult<String> {
         // Security validation for updates
         if self.injection_detector.detect_injection(update)? {
@@ -337,19 +315,19 @@ pub fn contains_aggregation_functions(query: &str) -> bool {
 
 pub fn contains_sparql_star_features(query: &str) -> bool {
     let upper = query.to_uppercase();
-    
+
     // Check for quoted triple syntax
     let has_quoted_triples = upper.contains("<<") && upper.contains(">>");
-    
+
     // Check for SPARQL-star functions
-    let has_star_functions = upper.contains("SUBJECT(") 
+    let has_star_functions = upper.contains("SUBJECT(")
         || upper.contains("PREDICATE(")
         || upper.contains("OBJECT(")
         || upper.contains("ISTRIPLE(");
-    
+
     // Check for annotation syntax
     let has_annotations = query.contains("{|") && query.contains("|}");
-    
+
     has_quoted_triples || has_star_functions || has_annotations
 }
 

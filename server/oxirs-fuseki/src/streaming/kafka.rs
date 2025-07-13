@@ -119,7 +119,7 @@ impl KafkaConsumer {
 impl StreamConsumer for KafkaConsumer {
     async fn subscribe(
         &self,
-        handler: Box<dyn crate::streaming::EventHandler>,
+        _handler: Box<dyn crate::streaming::EventHandler>,
     ) -> FusekiResult<()> {
         tracing::info!("Subscribing to Kafka events with handler");
 

@@ -143,7 +143,7 @@ impl GraphQLFederation {
     /// Create execution plan with entity resolution
     fn create_execution_plan(
         &self,
-        query: &ParsedQuery,
+        _query: &ParsedQuery,
         field_ownership: &FieldOwnership,
         entity_requirements: &[EntityReference],
     ) -> Result<ExecutionPlan> {
@@ -354,8 +354,7 @@ impl GraphQLFederation {
 
         // Handle fragment spreads and inline fragments
         if field_str.starts_with("...") {
-            // TODO: Implement fragment handling
-            return Ok(None);
+            return self.parse_fragment(field_str);
         }
 
         // Parse field name and alias
@@ -384,6 +383,7 @@ impl GraphQLFederation {
             alias,
             arguments,
             selection_set,
+            fragment: None,
         }))
     }
 
@@ -421,6 +421,93 @@ impl GraphQLFederation {
             }
         }
         Ok(Vec::new())
+    }
+
+    /// Parse fragment spreads and inline fragments
+    fn parse_fragment(&self, fragment_str: &str) -> Result<Option<Selection>> {
+        let fragment_str = fragment_str.trim();
+
+        if fragment_str.starts_with("... on ") {
+            // Inline fragment: ... on TypeName { selection }
+            return self.parse_inline_fragment(fragment_str);
+        } else if fragment_str.starts_with("...") {
+            // Fragment spread: ...fragmentName
+            return self.parse_fragment_spread(fragment_str);
+        }
+
+        Ok(None)
+    }
+
+    /// Parse inline fragment (... on TypeName { fields })
+    fn parse_inline_fragment(&self, fragment_str: &str) -> Result<Option<Selection>> {
+        let fragment_str = fragment_str.trim();
+
+        if !fragment_str.starts_with("... on ") {
+            return Ok(None);
+        }
+
+        let content = &fragment_str[7..]; // Remove "... on "
+
+        // Extract type condition and selection set
+        let type_condition = if let Some(brace_pos) = content.find('{') {
+            Some(content[..brace_pos].trim().to_string())
+        } else {
+            Some(content.trim().to_string())
+        };
+
+        // Parse the selection set if present
+        let selection_set = if let Some(start) = content.find('{') {
+            if let Some(end) = content.rfind('}') {
+                let nested_content = &content[start + 1..end];
+                self.parse_selection_set(&format!("{{{nested_content}}}"))?
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        };
+
+        let inline_fragment = InlineFragment {
+            type_condition,
+            selection_set,
+            directives: Vec::new(), // TODO: Parse directives if needed
+        };
+
+        Ok(Some(Selection {
+            name: "__inline_fragment".to_string(),
+            alias: None,
+            arguments: HashMap::new(),
+            selection_set: Vec::new(),
+            fragment: Some(FragmentType::Inline(inline_fragment)),
+        }))
+    }
+
+    /// Parse fragment spread (...fragmentName)
+    fn parse_fragment_spread(&self, fragment_str: &str) -> Result<Option<Selection>> {
+        let fragment_str = fragment_str.trim();
+
+        if !fragment_str.starts_with("...") {
+            return Ok(None);
+        }
+
+        let fragment_name = fragment_str[3..].trim().to_string();
+
+        if fragment_name.is_empty() {
+            return Ok(None);
+        }
+
+        let fragment_spread = FragmentSpread {
+            name: fragment_name,
+            directives: Vec::new(), // TODO: Parse directives if needed
+        };
+
+        Ok(Some(Selection {
+            name: "__fragment_spread".to_string(),
+            alias: None,
+            arguments: HashMap::new(),
+            selection_set: Vec::new(),
+            fragment: Some(FragmentType::Spread(fragment_spread)),
+        }))
     }
 
     /// Analyze which services own which fields

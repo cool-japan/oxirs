@@ -113,9 +113,7 @@ fn comprehensive_testing_example() -> anyhow::Result<()> {
     ];
 
     for (fact_count, rule_count, description) in test_cases {
-        println!(
-            "\n🔬 Testing {description}: {fact_count} facts, {rule_count} rules"
-        );
+        println!("\n🔬 Testing {description}: {fact_count} facts, {rule_count} rules");
 
         let facts = generate_test_facts(fact_count);
         let rules = generate_test_rules(rule_count);

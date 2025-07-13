@@ -438,8 +438,7 @@ impl StarParser {
                     })?;
                 }
                 Err(e) => {
-                    let error_msg =
-                        format!("Failed to parse triple pattern '{triple_str}': {e}");
+                    let error_msg = format!("Failed to parse triple pattern '{triple_str}': {e}");
                     context.add_error(error_msg.clone(), line.to_string(), ErrorSeverity::Error);
 
                     if context.strict_mode {
@@ -782,8 +781,7 @@ impl StarParser {
 
                 // Validate the constructed triple
                 if let Err(validation_error) = triple.validate() {
-                    let error_msg =
-                        format!("Invalid triple at depth {depth}: {validation_error}");
+                    let error_msg = format!("Invalid triple at depth {depth}: {validation_error}");
                     context.add_error(error_msg.clone(), pattern.to_string(), ErrorSeverity::Error);
                     return Err(StarError::parse_error(error_msg));
                 }
@@ -809,7 +807,9 @@ impl StarParser {
             Ok(term) => {
                 // Log a warning that we fell back to regular parsing
                 context.add_error(
-                    format!("Quoted triple parsing failed, parsed as regular term: {original_error}"),
+                    format!(
+                        "Quoted triple parsing failed, parsed as regular term: {original_error}"
+                    ),
                     term_str.to_string(),
                     ErrorSeverity::Warning,
                 );
@@ -1376,7 +1376,8 @@ impl StarParser {
 
         // Variable: ?name (for SPARQL-star)
         if let Some(name) = term_str.strip_prefix('?') {
-            return StarTerm::variable(name).map_err(|e| anyhow::anyhow!("Invalid variable: {}", e));
+            return StarTerm::variable(name)
+                .map_err(|e| anyhow::anyhow!("Invalid variable: {}", e));
         }
 
         Err(anyhow::anyhow!("Unrecognized term format: {}", term_str))
@@ -1427,7 +1428,10 @@ impl StarParser {
             Ok(StarTerm::literal_with_language(&value, lang)
                 .map_err(|e| anyhow::anyhow!("Invalid literal: {}", e))?)
         } else if let Some(datatype_str) = remaining.strip_prefix("^^") {
-            let datatype = if let Some(stripped) = datatype_str.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
+            let datatype = if let Some(stripped) = datatype_str
+                .strip_prefix('<')
+                .and_then(|s| s.strip_suffix('>'))
+            {
                 stripped.to_string()
             } else {
                 context.resolve_prefix(datatype_str)?
@@ -1578,7 +1582,7 @@ impl StarParser {
         // Try different graph name formats with recovery
 
         // Check for quoted graph names (common mistake)
-        if graph_name.starts_with('"') && graph_name.ends_with('"') {
+        if graph_name.starts_with('"') && graph_name.ends_with('"') && graph_name.len() >= 2 {
             let inner = &graph_name[1..graph_name.len() - 1];
             context.add_error(
                 format!("Graph names should not be quoted strings. Converting '{inner}' to IRI"),
@@ -1618,7 +1622,9 @@ impl StarParser {
                         match &term {
                             StarTerm::NamedNode(_) | StarTerm::BlankNode(_) => Some(term),
                             _ => {
-                                let error_msg = format!("Graph name must be an IRI or blank node, found: {term:?}");
+                                let error_msg = format!(
+                                    "Graph name must be an IRI or blank node, found: {term:?}"
+                                );
                                 context.add_error(
                                     error_msg.clone(),
                                     statement.to_string(),
@@ -2179,7 +2185,10 @@ ex:graph1 {
 
     #[test]
     fn test_trig_star_error_recovery() {
-        let config = StarConfig { strict_mode: false, ..Default::default() }; // Enable error recovery
+        let config = StarConfig {
+            strict_mode: false,
+            ..Default::default()
+        }; // Enable error recovery
         let parser = StarParser::with_config(config);
 
         // TriG with errors that should be recoverable

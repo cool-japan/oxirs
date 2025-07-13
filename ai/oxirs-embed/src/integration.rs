@@ -83,9 +83,7 @@ impl VectorStoreBridge {
                 }
                 Err(e) => {
                     warn!("Failed to get embedding for relation {}: {}", relation, e);
-                    sync_stats
-                        .errors
-                        .push(format!("Relation {relation}: {e}"));
+                    sync_stats.errors.push(format!("Relation {relation}: {e}"));
                 }
             }
         }
@@ -654,11 +652,8 @@ impl UserProfile {
 
         for domain in &domains {
             if query.to_lowercase().contains(domain) {
-                let current = self
-                    .domain_preferences
-                    .get(&domain.to_string())
-                    .copied()
-                    .unwrap_or(0.0);
+                #[allow(clippy::unnecessary_to_owned)]
+                let current = self.domain_preferences.get(*domain).copied().unwrap_or(0.0);
                 self.domain_preferences
                     .insert(domain.to_string(), current + 0.1);
             }

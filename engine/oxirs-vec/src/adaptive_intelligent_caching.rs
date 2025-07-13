@@ -1698,9 +1698,7 @@ impl AccessTracker {
 
     pub fn on_store(&mut self, key: &CacheKey) {
         // Record that an item was stored
-        self.access_times
-            .entry(key.clone())
-            .or_default();
+        self.access_times.entry(key.clone()).or_default();
     }
 
     pub fn on_remove(&mut self, key: &CacheKey) {

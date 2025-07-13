@@ -4,13 +4,23 @@
 //! including pattern coverage analysis, predicate-based filtering, and range-based selection.
 
 use anyhow::Result;
+#[cfg(feature = "caching")]
 use bloom::ASMS;
+
+#[cfg(not(feature = "caching"))]
+mod cache_stubs {
+    #[derive(Debug, Clone)]
+    pub struct ASMS;
+}
+
+#[cfg(not(feature = "caching"))]
+use cache_stubs::ASMS;
 use std::collections::{HashMap, HashSet};
 use tracing::info;
 
 use super::{types::*, ServiceOptimizer};
 use crate::planner::TriplePattern;
-use crate::{FederatedService, ServiceCapability, ServiceRegistry};
+use crate::{service_registry::ServiceRegistry, FederatedService, ServiceCapability};
 
 impl ServiceOptimizer {
     /// Perform triple pattern coverage analysis for source selection
@@ -276,24 +286,29 @@ impl ServiceOptimizer {
         let mut score = 0.0;
 
         // Text-related predicates
-        if (predicate.contains("label") || predicate.contains("name") || predicate.contains("title"))
-            && capabilities.contains(&ServiceCapability::FullTextSearch) {
-                score += 0.2;
-            }
+        if (predicate.contains("label")
+            || predicate.contains("name")
+            || predicate.contains("title"))
+            && capabilities.contains(&ServiceCapability::FullTextSearch)
+        {
+            score += 0.2;
+        }
 
         // Geospatial predicates
         if (predicate.contains("geo")
             || predicate.contains("location")
             || predicate.contains("coordinate"))
-            && capabilities.contains(&ServiceCapability::Geospatial) {
-                score += 0.3;
-            }
+            && capabilities.contains(&ServiceCapability::Geospatial)
+        {
+            score += 0.3;
+        }
 
         // Temporal predicates
         if (predicate.contains("date") || predicate.contains("time") || predicate.contains("year"))
-            && capabilities.contains(&ServiceCapability::TemporalQueries) {
-                score += 0.2;
-            }
+            && capabilities.contains(&ServiceCapability::TemporalQueries)
+        {
+            score += 0.2;
+        }
 
         score
     }
@@ -466,18 +481,21 @@ impl ServiceOptimizer {
         // Check range type based on data_type field
         if range.data_type.contains("temporal") || range.data_type.contains("date") {
             if (predicate.contains("date") || predicate.contains("time"))
-                && (desc_lower.contains("historical") || desc_lower.contains("temporal")) {
-                    affinity += 0.2;
-                }
+                && (desc_lower.contains("historical") || desc_lower.contains("temporal"))
+            {
+                affinity += 0.2;
+            }
         } else if range.is_numeric || range.data_type.contains("numeric") {
             if (predicate.contains("price") || predicate.contains("value"))
-                && (desc_lower.contains("economic") || desc_lower.contains("financial")) {
-                    affinity += 0.2;
-                }
-        } else if (range.data_type.contains("geospatial") || range.data_type.contains("geo"))
-            && (desc_lower.contains("geographic") || desc_lower.contains("spatial")) {
-                affinity += 0.3;
+                && (desc_lower.contains("economic") || desc_lower.contains("financial"))
+            {
+                affinity += 0.2;
             }
+        } else if (range.data_type.contains("geospatial") || range.data_type.contains("geo"))
+            && (desc_lower.contains("geographic") || desc_lower.contains("spatial"))
+        {
+            affinity += 0.3;
+        }
 
         affinity
     }
@@ -791,9 +809,9 @@ impl ServiceOptimizer {
             pattern_count: patterns.len(),
             variable_count: self.count_variables(patterns),
             join_count: self.count_joins(patterns),
-            filter_count: 0,     // TODO: implement filter counting
-            has_optional: false, // TODO: implement optional detection
-            has_union: false,    // TODO: implement union detection
+            filter_count: self.count_filters(context),
+            has_optional: self.detect_optional(context),
+            has_union: self.detect_union(context),
             complexity_score: self.calculate_patterns_complexity(patterns),
             estimated_selectivity: self.estimate_query_selectivity(patterns),
             selectivity_estimate: self.estimate_query_selectivity(patterns),
@@ -809,7 +827,7 @@ impl ServiceOptimizer {
     /// Find similar queries in historical data
     fn find_similar_queries(
         &self,
-        features: &QueryFeatures,
+        _features: &QueryFeatures,
         historical_data: &[HistoricalQueryData],
     ) -> Vec<SimilarQuery> {
         let mut similar_queries = Vec::new();
@@ -932,7 +950,9 @@ impl ServiceOptimizer {
     fn extract_namespace(&self, uri: &str) -> Option<String> {
         if let Some(hash_pos) = uri.rfind('#') {
             Some(uri[..hash_pos].to_string())
-        } else { uri.rfind('/').map(|slash_pos| uri[..slash_pos].to_string()) }
+        } else {
+            uri.rfind('/').map(|slash_pos| uri[..slash_pos].to_string())
+        }
     }
 
     fn classify_pattern_type(&self, pattern: &TriplePattern) -> String {
@@ -1123,5 +1143,72 @@ impl ServiceOptimizer {
             }
         }
         join_count
+    }
+
+    /// Count FILTER expressions in the query
+    fn count_filters(&self, context: &QueryContext) -> usize {
+        // For SPARQL queries, estimate filter count based on complexity
+        match context.query_type {
+            QueryType::Select | QueryType::Construct => {
+                // SELECT and CONSTRUCT queries commonly use filters
+                if context.complexity_score > 2.0 {
+                    // High complexity queries likely have filters
+                    (context.complexity_score / 2.0) as usize
+                } else {
+                    0
+                }
+            }
+            QueryType::Ask => {
+                // ASK queries often use filters for conditions
+                if context.complexity_score > 1.5 {
+                    1
+                } else {
+                    0
+                }
+            }
+            QueryType::Describe => {
+                // DESCRIBE queries rarely use filters
+                0
+            }
+        }
+    }
+
+    /// Detect if the query contains OPTIONAL clauses
+    fn detect_optional(&self, context: &QueryContext) -> bool {
+        match context.query_type {
+            QueryType::Select | QueryType::Construct => {
+                // SPARQL OPTIONAL detection
+                // Heuristic: medium-high complexity queries often have optionals
+                context.complexity_score > 1.8 && context.estimated_execution_time.as_millis() > 500
+            }
+            QueryType::Ask => {
+                // ASK queries less commonly use OPTIONAL
+                context.complexity_score > 2.2
+            }
+            QueryType::Describe => {
+                // DESCRIBE queries typically don't use OPTIONAL
+                false
+            }
+        }
+    }
+
+    /// Detect if the query contains UNION clauses
+    fn detect_union(&self, context: &QueryContext) -> bool {
+        match context.query_type {
+            QueryType::Select | QueryType::Construct => {
+                // SPARQL UNION detection
+                // Heuristic: very high complexity suggests unions or complex structures
+                context.complexity_score > 2.5
+                    && context.estimated_execution_time.as_millis() > 1000
+            }
+            QueryType::Ask => {
+                // ASK queries might use UNION for complex conditions
+                context.complexity_score > 3.0
+            }
+            QueryType::Describe => {
+                // DESCRIBE queries rarely use UNION
+                false
+            }
+        }
     }
 }

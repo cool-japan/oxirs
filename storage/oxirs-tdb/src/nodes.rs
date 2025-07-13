@@ -1457,7 +1457,6 @@ impl NodeTable {
         if cache.len() >= self.config.cache_size {
             // Remove oldest entry (this is a simplified implementation)
             if let Some((&oldest_id, _)) = cache.iter().next() {
-                let oldest_id = oldest_id;
                 cache.remove(&oldest_id);
             }
         }

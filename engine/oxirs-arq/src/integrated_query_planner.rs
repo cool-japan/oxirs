@@ -17,7 +17,10 @@ use tracing::{debug, info, span, Level};
 use crate::advanced_optimizer::{AdvancedOptimizer, AdvancedOptimizerConfig};
 use crate::algebra::{Algebra, Expression, Term, TriplePattern, Variable};
 // use crate::bgp_optimizer::BGPOptimizer;
-use crate::bgp_optimizer_types::{IndexUsagePlan, OptimizedBGP, PatternSelectivity, SelectivityFactors, SelectivityInfo, IndexAssignment};
+use crate::bgp_optimizer_types::{
+    IndexAssignment, IndexUsagePlan, OptimizedBGP, PatternSelectivity, SelectivityFactors,
+    SelectivityInfo,
+};
 use crate::cost_model::{CostEstimate, CostModel};
 use crate::optimizer::{IndexStatistics, IndexType, Statistics};
 use crate::statistics_collector::StatisticsCollector;
@@ -28,7 +31,7 @@ pub struct IntegratedQueryPlanner {
     config: IntegratedPlannerConfig,
     cost_model: Arc<Mutex<CostModel>>,
     #[allow(dead_code)]
-    statistics_collector: Arc<StatisticsCollector>,
+    statistics_collector: Arc<Mutex<StatisticsCollector>>,
     #[allow(dead_code)]
     statistics: Statistics,
     #[allow(dead_code)]
@@ -288,7 +291,7 @@ impl IntegratedQueryPlanner {
     pub fn new(config: IntegratedPlannerConfig) -> Result<Self> {
         let cost_config = crate::cost_model::CostModelConfig::default();
         let cost_model = Arc::new(Mutex::new(CostModel::new(cost_config)));
-        let statistics_collector = Arc::new(StatisticsCollector::new());
+        let statistics_collector = Arc::new(Mutex::new(StatisticsCollector::new()));
         let statistics = Statistics::new();
         let index_stats = IndexStatistics::default();
 
@@ -299,10 +302,12 @@ impl IntegratedQueryPlanner {
             ..Default::default()
         };
 
+        // Create a separate StatisticsCollector for the AdvancedOptimizer to avoid type conflicts
+        let advanced_optimizer_stats = Arc::new(StatisticsCollector::new());
         let advanced_optimizer = AdvancedOptimizer::new(
             advanced_config,
             cost_model.clone(),
-            statistics_collector.clone(),
+            advanced_optimizer_stats,
         );
 
         let streaming_executor = if config.streaming_threshold > 0 {
@@ -1032,12 +1037,17 @@ impl IntegratedQueryPlanner {
         }
 
         // Update statistics collector with actual execution data
-        // TODO: Implement update_execution_statistics method on StatisticsCollector
-        // self.statistics_collector.update_execution_statistics(
-        //     record.actual_duration,
-        //     record.actual_cardinality,
-        //     record.memory_used,
-        // );
+        if let Ok(mut stats_collector) = self.statistics_collector.lock() {
+            if let Err(e) = stats_collector.update_execution_statistics(
+                record.actual_duration,
+                record.actual_cardinality,
+                record.memory_used,
+            ) {
+                tracing::warn!("Failed to update execution statistics: {}", e);
+            }
+        } else {
+            tracing::warn!("Failed to acquire lock for statistics collector");
+        }
 
         debug!("Updated cost model with execution feedback");
         Ok(())

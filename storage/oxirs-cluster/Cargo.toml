@@ -38,7 +38,7 @@ chrono.workspace = true
 parking_lot = "0.12"
 
 # TLS and encryption dependencies
-rustls = "0.23"
+rustls = { version = "0.23", features = ["ring"] }
 tokio-rustls = "0.26"
 rustls-pemfile = "2.2"
 rcgen = "0.13"

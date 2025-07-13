@@ -23,8 +23,6 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, info};
 
-use oxirs_core::Store;
-
 use crate::Result;
 
 /// Universal knowledge integration system for omniscient SHACL validation
@@ -559,85 +557,85 @@ impl UniversalKnowledgeIntegration {
     /// Helper methods for analysis and calculation
     async fn analyze_validation_domains(
         &self,
-        context: &UniversalValidationContext,
+        _context: &UniversalValidationContext,
     ) -> Result<DomainAnalysis> {
         Ok(DomainAnalysis) // Placeholder
     }
 
     async fn construct_scientific_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<ScientificQuery>> {
         Ok(vec![ScientificQuery]) // Placeholder
     }
 
     async fn construct_cultural_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<CulturalQuery>> {
         Ok(vec![CulturalQuery]) // Placeholder
     }
 
     async fn construct_technical_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<TechnicalQuery>> {
         Ok(vec![TechnicalQuery]) // Placeholder
     }
 
     async fn construct_historical_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<HistoricalQuery>> {
         Ok(vec![HistoricalQuery]) // Placeholder
     }
 
     async fn construct_linguistic_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<LinguisticQuery>> {
         Ok(vec![LinguisticQuery]) // Placeholder
     }
 
     async fn construct_philosophical_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<PhilosophicalQuery>> {
         Ok(vec![PhilosophicalQuery]) // Placeholder
     }
 
     async fn construct_mathematical_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<MathematicalQuery>> {
         Ok(vec![MathematicalQuery]) // Placeholder
     }
 
     async fn construct_artistic_queries(
         &self,
-        analysis: &DomainAnalysis,
+        _analysis: &DomainAnalysis,
     ) -> Result<Vec<ArtisticQuery>> {
         Ok(vec![ArtisticQuery]) // Placeholder
     }
 
     async fn execute_omniscient_validation(
         &self,
-        mapping: &UniversalOntologyMapping,
-        context: &UniversalValidationContext,
+        _mapping: &UniversalOntologyMapping,
+        _context: &UniversalValidationContext,
     ) -> Result<OmniscientValidationResult> {
         Ok(OmniscientValidationResult) // Placeholder
     }
 
     async fn calculate_omniscience_level(
         &self,
-        result: &OmniscientValidationResult,
+        _result: &OmniscientValidationResult,
     ) -> Result<f64> {
         Ok(0.95) // Placeholder
     }
 
     async fn calculate_understanding_completeness(
         &self,
-        result: &OmniscientValidationResult,
+        _result: &OmniscientValidationResult,
     ) -> Result<f64> {
         Ok(0.98) // Placeholder
     }
@@ -764,28 +762,28 @@ impl ScientificKnowledgeIntegrator {
     // Helper methods
     async fn analyze_literature(
         &mut self,
-        results: &[ResearchResult],
+        _results: &[ResearchResult],
     ) -> Result<Vec<LiteratureInsight>> {
         Ok(vec![LiteratureInsight]) // Placeholder
     }
 
     async fn validate_through_peer_review(
         &mut self,
-        insights: &[LiteratureInsight],
+        _insights: &[LiteratureInsight],
     ) -> Result<Vec<ValidatedKnowledge>> {
         Ok(vec![ValidatedKnowledge]) // Placeholder
     }
 
     async fn build_citation_context(
         &mut self,
-        knowledge: &[ValidatedKnowledge],
+        _knowledge: &[ValidatedKnowledge],
     ) -> Result<CitationContext> {
         Ok(CitationContext) // Placeholder
     }
 
     async fn track_scientific_consensus(
         &mut self,
-        knowledge: &[ValidatedKnowledge],
+        _knowledge: &[ValidatedKnowledge],
     ) -> Result<ConsensusStatus> {
         Ok(ConsensusStatus) // Placeholder
     }
@@ -866,19 +864,19 @@ impl CulturalKnowledgeIntegrator {
     // Helper methods
     async fn extract_cultural_insights(
         &mut self,
-        queries: &[CulturalQuery],
+        _queries: &[CulturalQuery],
     ) -> Result<Vec<CulturalInsight>> {
         Ok(vec![CulturalInsight]) // Placeholder
     }
 
     async fn collect_cultural_wisdom(
         &mut self,
-        insights: &[CulturalInsight],
+        _insights: &[CulturalInsight],
     ) -> Result<Vec<CulturalWisdom>> {
         Ok(vec![CulturalWisdom]) // Placeholder
     }
 
-    async fn calculate_context_depth(&self, wisdom: &[CulturalWisdom]) -> Result<f64> {
+    async fn calculate_context_depth(&self, _wisdom: &[CulturalWisdom]) -> Result<f64> {
         Ok(0.85) // Placeholder
     }
 }
@@ -1010,7 +1008,7 @@ impl UniversalKnowledgeMetrics {
     pub async fn update_knowledge_metrics(
         &mut self,
         synthesis: &KnowledgeSynthesis,
-        mapping: &UniversalOntologyMapping,
+        _mapping: &UniversalOntologyMapping,
         validation: &KnowledgeEnhancedValidation,
         quality: &KnowledgeQualityValidation,
     ) {

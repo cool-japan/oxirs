@@ -1,8 +1,6 @@
 //! Core neural cost estimation engine implementation
 
-use crate::{
-    Result, ShaclAiError,
-};
+use crate::{Result, ShaclAiError};
 
 use ndarray::{Array1, Array2};
 use oxirs_core::query::algebra::AlgebraTriplePattern;
@@ -203,14 +201,27 @@ impl NeuralCostEstimationEngine {
 
     /// Train the model with historical data
     pub fn train_with_historical_data(&mut self) -> Result<TrainingStatistics> {
-        // TODO: Fix lifetime issue with historical data access
-        // For now, return default training statistics
-        let historical_data = TrainingData::default();
+        // Get training data from historical data manager
+        let training_data = {
+            match self.historical_data.write() {
+                Ok(mut historical_manager) => historical_manager.get_training_data()?.clone(),
+                Err(_) => {
+                    return Err(ShaclAiError::DataProcessing(
+                        "Failed to lock historical data manager".to_string(),
+                    ));
+                }
+            }
+        };
+
+        // Validate training data
+        if training_data.features.is_empty() || training_data.targets.is_empty() {
+            return Ok(TrainingStatistics::default());
+        }
 
         // Train deep network
         let training_stats = match self.deep_network.lock() {
             Ok(mut network) => {
-                network.train_on_batch(&historical_data.features, &historical_data.targets)?
+                network.train_on_batch(&training_data.features, &training_data.targets)?
             }
             _ => {
                 return Err(ShaclAiError::DataProcessing(
@@ -221,7 +232,7 @@ impl NeuralCostEstimationEngine {
 
         // Update ensemble models
         if let Ok(mut ensemble) = self.ensemble_predictor.lock() {
-            ensemble.train(&historical_data.features, &historical_data.targets)?;
+            ensemble.train(&training_data.features, &training_data.targets)?;
         }
 
         Ok(training_stats)
@@ -257,7 +268,7 @@ pub struct QueryExecutionContext {
 }
 
 /// Training data for neural network
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TrainingData {
     pub features: Array2<f64>,
     pub targets: Array1<f64>,

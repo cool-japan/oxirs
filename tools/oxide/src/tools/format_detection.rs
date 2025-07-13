@@ -623,9 +623,7 @@ impl FormatDetector {
         let handler = FormatHandler::new(format);
         match handler.parse_triples(reader) {
             Ok(_) => Ok(()),
-            Err(e) => Err(CliError::invalid_format(format!(
-                "Validation failed: {e}"
-            ))),
+            Err(e) => Err(CliError::invalid_format(format!("Validation failed: {e}"))),
         }
     }
 

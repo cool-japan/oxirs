@@ -5,7 +5,7 @@
 
 use crate::error::{RuleRecognizerError, TurtleParseError, TurtleResult};
 use crate::toolkit::lexer::{TokenOrLineJump, TokenRecognizer};
-use oxirs_core::model::{Quad, Triple};
+// use oxirs_core::model::{Quad, Triple};
 use std::io::{BufRead, Read};
 use std::marker::PhantomData;
 
@@ -137,7 +137,7 @@ pub trait AsyncParser<Output> {
 }
 
 /// Context for parsing operations
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ParsingContext {
     /// Base IRI for resolving relative IRIs
     pub base_iri: Option<String>,
@@ -145,16 +145,6 @@ pub struct ParsingContext {
     pub prefixes: std::collections::HashMap<String, String>,
     /// Blank node ID generator state
     pub blank_node_counter: usize,
-}
-
-impl Default for ParsingContext {
-    fn default() -> Self {
-        Self {
-            base_iri: None,
-            prefixes: std::collections::HashMap::new(),
-            blank_node_counter: 0,
-        }
-    }
 }
 
 impl ParsingContext {
@@ -176,9 +166,7 @@ impl ParsingContext {
 
     /// Resolve a prefixed name
     pub fn resolve_prefixed_name(&self, prefix: &str, local: &str) -> Option<String> {
-        self.prefixes
-            .get(prefix)
-            .map(|iri| format!("{}{}", iri, local))
+        self.prefixes.get(prefix).map(|iri| format!("{iri}{local}"))
     }
 
     /// Generate a new blank node ID
@@ -193,7 +181,7 @@ impl ParsingContext {
         if let Some(ref base) = self.base_iri {
             // Simple resolution - in practice would use proper IRI resolution
             if iri.starts_with('#') || iri.starts_with('/') {
-                format!("{}{}", base, iri)
+                format!("{base}{iri}")
             } else {
                 iri.to_string()
             }

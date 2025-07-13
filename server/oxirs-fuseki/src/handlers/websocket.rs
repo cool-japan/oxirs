@@ -257,7 +257,7 @@ impl SubscriptionManager {
     /// Get subscription metrics
     pub async fn get_subscription_metrics(
         &self,
-        subscription_id: &str,
+        _subscription_id: &str,
     ) -> Option<SubscriptionMetrics> {
         // Implementation would return actual metrics
         Some(SubscriptionMetrics {
@@ -369,7 +369,7 @@ async fn handle_websocket_connection(
     socket: WebSocket,
     state: AppState,
     subscription_manager: SubscriptionManager,
-    params: WebSocketParams,
+    _params: WebSocketParams,
 ) {
     info!("WebSocket connection established");
 
@@ -763,7 +763,7 @@ async fn execute_subscription_query(
 }
 
 /// Get or create subscription manager for the application state
-async fn get_or_create_subscription_manager(state: &AppState) -> SubscriptionManager {
+async fn get_or_create_subscription_manager(_state: &AppState) -> SubscriptionManager {
     // In a full implementation, this would be stored in AppState
     // For now, create a new manager
     SubscriptionManager::new()
@@ -846,8 +846,8 @@ async fn detect_store_changes(
 
 /// Check transaction log for recent changes
 async fn check_transaction_log_changes(
-    store: &crate::store::Store,
-    since: DateTime<Utc>,
+    _store: &crate::store::Store,
+    _since: DateTime<Utc>,
 ) -> FusekiResult<Vec<ChangeNotification>> {
     // This would interface with the actual transaction log
     // For now, simulate with a more realistic approach
@@ -928,7 +928,7 @@ fn batch_and_deduplicate_changes(changes: Vec<ChangeNotification>) -> Vec<Change
 }
 
 /// Get list of graphs in the store
-async fn get_store_graphs(store: &crate::store::Store) -> FusekiResult<Vec<String>> {
+async fn get_store_graphs(_store: &crate::store::Store) -> FusekiResult<Vec<String>> {
     // This would query the store for all named graphs
     // For now, return a simulated list
     Ok(vec![
@@ -940,7 +940,7 @@ async fn get_store_graphs(store: &crate::store::Store) -> FusekiResult<Vec<Strin
 
 /// Calculate checksum for a graph
 async fn calculate_graph_checksum(
-    store: &crate::store::Store,
+    _store: &crate::store::Store,
     graph_name: &str,
 ) -> FusekiResult<u64> {
     // This would calculate a hash of all triples in the graph

@@ -10,6 +10,7 @@ use oxirs_embed::{
 };
 
 #[tokio::main]
+#[allow(clippy::field_reassign_with_default)]
 async fn main() -> Result<()> {
     println!("🚀 OxiRS Embed Multi-Modal Demonstration");
     println!("==========================================\n");
@@ -276,14 +277,10 @@ async fn main() -> Result<()> {
     let transfer_results = model
         .cross_domain_transfer("scientific", "biomedical")
         .await?;
-    println!(
-        "  🔄 Scientific → Biomedical transfer loss: {transfer_results:.3}"
-    );
+    println!("  🔄 Scientific → Biomedical transfer loss: {transfer_results:.3}");
 
     let transfer_results = model.cross_domain_transfer("general", "legal").await?;
-    println!(
-        "  🔄 General → Legal transfer loss: {transfer_results:.3}"
-    );
+    println!("  🔄 General → Legal transfer loss: {transfer_results:.3}");
 
     // Show model statistics
     println!("\n📊 Multi-Modal Model Statistics:");

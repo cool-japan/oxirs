@@ -688,7 +688,7 @@ impl FeatureExtractor {
     /// Compute graph-level embeddings
     fn compute_graph_embeddings(&self, graph_data: &GraphData) -> Vec<f64> {
         // Average node embeddings as graph embedding
-        
+
         self.compute_node_embeddings(graph_data)
     }
 

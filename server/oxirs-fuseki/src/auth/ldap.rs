@@ -17,6 +17,7 @@ use tracing::{debug, info, warn};
 
 /// LDAP authentication service
 #[derive(Clone)]
+#[allow(dead_code)]
 pub struct LdapService {
     config: Arc<LdapConfig>,
     connection_pool: Arc<RwLock<LdapConnectionPool>>,

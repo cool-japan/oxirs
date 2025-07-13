@@ -11,9 +11,8 @@ use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
 use super::extended_dimensions::{
-    CorrelationAnalysis, DistributionAnalysis, EntropyCalculation,
-    InformationContentMeasure, OutlierDetectionResult,
-    RedundancyAssessment,
+    CorrelationAnalysis, DistributionAnalysis, EntropyCalculation, InformationContentMeasure,
+    OutlierDetectionResult, RedundancyAssessment,
 };
 use crate::Result;
 
@@ -140,8 +139,7 @@ pub struct AdvancedSemanticMetrics {
 }
 
 /// Machine learning predictions for quality
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MachineLearningPredictions {
     pub quality_score_prediction: QualityScorePrediction,
     pub issue_likelihood: IssueLikelihood,
@@ -1188,7 +1186,6 @@ impl Default for AdvancedSemanticMetrics {
         }
     }
 }
-
 
 impl QualityModels {
     fn new() -> Self {

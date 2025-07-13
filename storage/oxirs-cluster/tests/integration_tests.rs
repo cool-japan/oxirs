@@ -3,6 +3,13 @@
 //! This module provides end-to-end integration testing for the distributed
 //! RDF storage cluster including consensus, replication, and fault tolerance.
 
+#![allow(
+    unused_imports,
+    unused_variables,
+    clippy::uninlined_format_args,
+    clippy::empty_line_after_doc_comments
+)]
+
 use anyhow::Result;
 use oxirs_cluster::*;
 use std::collections::HashMap;
@@ -56,6 +63,15 @@ pub struct TestMetrics {
 impl TestCluster {
     /// Create a new test cluster
     pub async fn new(config: IntegrationTestConfig) -> Result<Self> {
+        // Initialize global shared storage for testing
+        let shared_storage = oxirs_cluster::raft::init_global_shared_storage();
+
+        // Clear any existing data
+        {
+            let mut state = shared_storage.write().await;
+            *state = oxirs_cluster::raft::RdfApp::default();
+        }
+
         let mut nodes = Vec::new();
 
         // Create cluster nodes
@@ -400,7 +416,8 @@ impl TestCluster {
 
     async fn find_leader(&self) -> Result<&ClusterNode> {
         for node in &self.nodes {
-            if node.is_leader().await {
+            // Only check nodes that are active (running and not isolated)
+            if node.is_active().await.unwrap_or(false) && node.is_leader().await {
                 return Ok(node);
             }
         }
@@ -568,5 +585,63 @@ mod tests {
         assert!(cluster.metrics.consensus_latency < Duration::from_millis(100));
 
         cluster.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_replication_fix() {
+        use oxirs_cluster::*;
+
+        // Initialize global shared storage for testing
+        oxirs_cluster::raft::init_global_shared_storage();
+
+        let config = IntegrationTestConfig {
+            num_nodes: 3,
+            test_duration: Duration::from_secs(5),
+            concurrent_operations: 10,
+            failure_scenarios: false,
+            network_partition: false,
+            byzantine_faults: false,
+        };
+
+        let mut cluster = TestCluster::new(config).await.unwrap();
+        cluster.start().await.unwrap();
+
+        // Insert test data through leader
+        let leader = cluster.find_leader().await.unwrap();
+        for i in 0..5 {
+            let subject = format!("http://test.org/subject_{}", i);
+            let predicate = "http://test.org/predicate";
+            let object = format!("\"test_object_{}\"", i);
+
+            leader
+                .insert_triple(&subject, predicate, &object)
+                .await
+                .unwrap();
+        }
+
+        // Wait for replication
+        sleep(Duration::from_millis(100)).await;
+
+        // Verify ALL nodes have the same data (this should now work with our fix)
+        let expected_count = 5;
+        for node in &cluster.nodes {
+            let count = node.count_triples().await.unwrap();
+            assert_eq!(
+                count,
+                expected_count,
+                "Replication failed! Node {} has {} triples, expected {}",
+                node.id(),
+                count,
+                expected_count
+            );
+        }
+
+        cluster.shutdown().await.unwrap();
+
+        println!(
+            "✅ Replication fix verified! All {} nodes have {} triples",
+            cluster.nodes.len(),
+            expected_count
+        );
     }
 }

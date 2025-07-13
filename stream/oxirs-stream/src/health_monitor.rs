@@ -724,7 +724,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_dead_connection_detection() {
-        let config = HealthCheckConfig { failure_threshold: 2, ..Default::default() };
+        let config = HealthCheckConfig {
+            failure_threshold: 2,
+            ..Default::default()
+        };
 
         let monitor = HealthMonitor::<TestConnection>::new(config);
         monitor

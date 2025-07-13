@@ -1,6 +1,6 @@
 //! Tests for SHACL qualified cardinality constraints
 
-use oxirs_core::{model::*, ConcreteStore, Store};
+use oxirs_core::{model::*, ConcreteStore};
 use oxirs_shacl::*;
 
 // Helper function to insert quads with graceful handling of unimplemented store features

@@ -28,11 +28,10 @@ pub use types::*;
 mod tests {
     use super::*;
     use crate::{
-        cost_estimation::OptimizationLevel,
         planner::{QueryInfo, QueryType, TriplePattern},
-        FederatedService, ServiceCapability, ServiceRegistry,
+        query_decomposition::cost_estimation::OptimizationLevel,
+        FederatedService, FilterExpression, ServiceCapability,
     };
-    use std::collections::HashSet;
 
     fn create_test_service() -> FederatedService {
         use crate::service::{ServiceMetadata, ServicePerformance, ServiceType};
@@ -241,10 +240,7 @@ mod tests {
 
     // Helper function for creating circular query
     fn create_circular_query() -> crate::planner::planning::types::QueryInfo {
-        use crate::planner::planning::types::{
-            FilterExpression, QueryInfo, QueryType, TriplePattern,
-        };
-        use std::collections::HashSet;
+        use crate::planner::planning::types::{QueryInfo, QueryType, TriplePattern};
 
         QueryInfo {
             query_type: QueryType::Select,
@@ -281,10 +277,7 @@ mod tests {
 
     // Helper function for creating complex query
     fn create_complex_query() -> crate::planner::planning::types::QueryInfo {
-        use crate::planner::planning::types::{
-            FilterExpression, QueryInfo, QueryType, TriplePattern,
-        };
-        use std::collections::HashSet;
+        use crate::planner::planning::types::{QueryInfo, QueryType, TriplePattern};
 
         QueryInfo {
             query_type: QueryType::Select,
@@ -318,9 +311,7 @@ mod tests {
 
     // Helper function for creating large query
     fn create_large_query() -> crate::planner::planning::types::QueryInfo {
-        use crate::planner::planning::types::{
-            FilterExpression, QueryInfo, QueryType, TriplePattern,
-        };
+        use crate::planner::planning::types::{QueryInfo, QueryType, TriplePattern};
         use std::collections::HashSet;
 
         let mut patterns = Vec::new();
@@ -328,13 +319,13 @@ mod tests {
 
         for i in 0..10 {
             patterns.push(TriplePattern {
-                subject: Some(format!("?s{}", i)),
-                predicate: Some(format!("pred{}", i)),
-                object: Some(format!("?o{}", i)),
-                pattern_string: format!("?s{} pred{} ?o{}", i, i, i),
+                subject: Some(format!("?s{i}")),
+                predicate: Some(format!("pred{i}")),
+                object: Some(format!("?o{i}")),
+                pattern_string: format!("?s{i} pred{i} ?o{i}"),
             });
-            variables.insert(format!("?s{}", i));
-            variables.insert(format!("?o{}", i));
+            variables.insert(format!("?s{i}"));
+            variables.insert(format!("?o{i}"));
         }
 
         QueryInfo {
@@ -350,10 +341,7 @@ mod tests {
 
     // Helper function for creating filter query
     fn create_filter_query() -> crate::planner::planning::types::QueryInfo {
-        use crate::planner::planning::types::{
-            FilterExpression, QueryInfo, QueryType, TriplePattern,
-        };
-        use std::collections::HashSet;
+        use crate::planner::planning::types::{QueryInfo, QueryType, TriplePattern};
 
         QueryInfo {
             query_type: QueryType::Select,

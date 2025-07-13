@@ -7,10 +7,7 @@
 //! - Intelligent graph traversal with scoring
 
 use anyhow::{anyhow, Result};
-use oxirs_core::{
-    model::NamedNode,
-    Store,
-};
+use oxirs_core::{model::NamedNode, Store};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -606,7 +603,7 @@ impl GraphExplorer {
 
         let entity_types = self.get_entity_types(entity).await?;
         let entity_properties = self.get_entity_properties(entity).await?;
-        let entity_neighbors = self.get_entity_neighbors(entity).await?;
+        let _entity_neighbors = self.get_entity_neighbors(entity).await?;
 
         // Find entities with similar types
         for entity_type in &entity_types {
@@ -814,7 +811,7 @@ impl GraphExplorer {
 
     async fn generate_property_path_guidance(
         &self,
-        entity: &str,
+        _entity: &str,
         schema_info: &SchemaInfo,
     ) -> Result<Vec<QueryGuidance>> {
         let mut guidance = Vec::new();
@@ -837,7 +834,7 @@ impl GraphExplorer {
 
     async fn generate_type_constraint_guidance(
         &self,
-        entity: &str,
+        _entity: &str,
         schema_info: &SchemaInfo,
     ) -> Result<Vec<QueryGuidance>> {
         let mut guidance = Vec::new();
@@ -858,12 +855,12 @@ impl GraphExplorer {
 
     async fn generate_cardinality_guidance(
         &self,
-        entity: &str,
+        _entity: &str,
         schema_info: &SchemaInfo,
     ) -> Result<Vec<QueryGuidance>> {
         let mut guidance = Vec::new();
 
-        for (property, (min_card, max_card)) in &schema_info.cardinality_constraints {
+        for (property, (_min_card, max_card)) in &schema_info.cardinality_constraints {
             if let Some(max) = max_card {
                 if *max == 1 {
                     guidance.push(QueryGuidance {
@@ -883,7 +880,7 @@ impl GraphExplorer {
 
     async fn generate_best_practice_guidance(
         &self,
-        entity: &str,
+        _entity: &str,
         schema_info: &SchemaInfo,
         intent: &str,
     ) -> Result<Vec<QueryGuidance>> {
@@ -919,7 +916,7 @@ impl GraphExplorer {
 
     async fn generate_consistency_guidance(
         &self,
-        entity: &str,
+        _entity: &str,
         schema_info: &SchemaInfo,
     ) -> Result<Vec<QueryGuidance>> {
         let mut guidance = Vec::new();
@@ -969,8 +966,8 @@ impl GraphExplorer {
 
     async fn validate_property_domain_range(
         &self,
-        property: &str,
-        entities: &[String],
+        _property: &str,
+        _entities: &[String],
     ) -> Result<bool> {
         // Check if property usage matches domain/range constraints
         // This would query the schema for property constraints
@@ -1010,22 +1007,22 @@ impl GraphExplorer {
         Ok(issues)
     }
 
-    async fn get_superclasses(&self, class: &str) -> Result<Vec<String>> {
+    async fn get_superclasses(&self, _class: &str) -> Result<Vec<String>> {
         // This would execute: SELECT ?super WHERE { <class> rdfs:subClassOf ?super }
         Ok(vec!["http://www.w3.org/2002/07/owl#Thing".to_string()])
     }
 
-    async fn get_subclasses(&self, class: &str) -> Result<Vec<String>> {
+    async fn get_subclasses(&self, _class: &str) -> Result<Vec<String>> {
         // This would execute: SELECT ?sub WHERE { ?sub rdfs:subClassOf <class> }
         Ok(vec![])
     }
 
-    async fn get_equivalent_classes(&self, class: &str) -> Result<Vec<String>> {
+    async fn get_equivalent_classes(&self, _class: &str) -> Result<Vec<String>> {
         // This would execute: SELECT ?equiv WHERE { <class> owl:equivalentClass ?equiv }
         Ok(vec![])
     }
 
-    async fn get_disjoint_classes(&self, class: &str) -> Result<Vec<String>> {
+    async fn get_disjoint_classes(&self, _class: &str) -> Result<Vec<String>> {
         // This would execute: SELECT ?disjoint WHERE { <class> owl:disjointWith ?disjoint }
         Ok(vec![])
     }
@@ -1051,7 +1048,7 @@ impl GraphExplorer {
         Ok(depth)
     }
 
-    async fn count_class_instances(&self, class: &str) -> Result<u32> {
+    async fn count_class_instances(&self, _class: &str) -> Result<u32> {
         // This would execute: SELECT (COUNT(?instance) as ?count) WHERE { ?instance rdf:type <class> }
         Ok(42) // Mock value
     }
@@ -1068,7 +1065,7 @@ impl GraphExplorer {
 
     async fn validate_against_single_shape(
         &self,
-        entity: &str,
+        _entity: &str,
         shape: &ShaclShape,
         properties: &HashMap<String, Vec<String>>,
     ) -> Result<ShapeValidationResult> {
@@ -1124,7 +1121,7 @@ impl GraphExplorer {
         Ok(result)
     }
 
-    async fn count_property_values(&self, entity: &str, property: &str) -> Result<u32> {
+    async fn count_property_values(&self, _entity: &str, _property: &str) -> Result<u32> {
         // This would execute: SELECT (COUNT(?value) as ?count) WHERE { <entity> <property> ?value }
         Ok(1) // Mock value
     }
@@ -1132,8 +1129,10 @@ impl GraphExplorer {
     async fn is_functional_property(&self, property: &str) -> Result<bool> {
         // Check if property is declared as functional in the ontology
         // This would query the schema/ontology for functional property declarations
-        let functional_properties = ["http://xmlns.com/foaf/0.1/name",
-            "http://purl.org/dc/elements/1.1/title"];
+        let functional_properties = [
+            "http://xmlns.com/foaf/0.1/name",
+            "http://purl.org/dc/elements/1.1/title",
+        ];
         Ok(functional_properties.contains(&property))
     }
 
@@ -1286,7 +1285,7 @@ impl GraphExplorer {
         // This would use SPARQL queries like: SELECT ?p ?o WHERE { <entity> ?p ?o }
         // For now, implementing a basic version that would be replaced with actual SPARQL
 
-        let entity_node =
+        let _entity_node =
             NamedNode::new(entity).map_err(|e| anyhow!("Invalid entity URI: {}", e))?;
 
         // Note: This is a simplified implementation
@@ -1428,7 +1427,7 @@ impl Eq for PathStateOrdered {}
 
 impl PartialOrd for PathStateOrdered {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.state.score.partial_cmp(&other.state.score)
+        Some(self.cmp(other))
     }
 }
 

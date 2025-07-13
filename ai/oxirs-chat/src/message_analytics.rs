@@ -752,7 +752,7 @@ impl QualityAssessor {
     pub async fn assess(
         &self,
         message: &Message,
-        response: Option<&Message>,
+        _response: Option<&Message>,
     ) -> Result<QualityAssessment> {
         let text = message.content.to_text();
         let clarity_score = if text.len() > 10 { 0.8 } else { 0.4 };

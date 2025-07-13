@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use crate::{shape::Shape as AiShape, Result};
 use oxirs_shacl::ShapeId;
 
-use super::ShapePattern;
+use super::reusability::ShapePattern;
 
 /// Shape library for organizing and discovering shapes
 #[derive(Debug)]
@@ -219,7 +219,7 @@ impl ShapeLibrary {
         &self.pattern_repository
     }
 
-    pub fn search_shapes(&self, query: &ShapeSearchQuery) -> Result<Vec<ShapeSearchResult>> {
+    pub fn search_shapes(&self, _query: &ShapeSearchQuery) -> Result<Vec<ShapeSearchResult>> {
         // This would implement comprehensive search logic
         // For now, return empty results
         Ok(Vec::new())
@@ -227,8 +227,7 @@ impl ShapeLibrary {
 
     pub fn add_shape(&mut self, shape: &AiShape, entry: ShapeEntry) -> Result<()> {
         // Add shape to catalog
-        self.shape_catalog
-            .insert(shape.id().into(), entry.clone());
+        self.shape_catalog.insert(shape.id().into(), entry.clone());
 
         // Update search indices
         self.update_search_indices(&entry)?;
@@ -391,15 +390,16 @@ impl SearchIndex {
     }
 }
 
-impl ToString for ComplexityRange {
-    fn to_string(&self) -> String {
-        match self {
-            ComplexityRange::VeryLow => "very_low".to_string(),
-            ComplexityRange::Low => "low".to_string(),
-            ComplexityRange::Medium => "medium".to_string(),
-            ComplexityRange::High => "high".to_string(),
-            ComplexityRange::VeryHigh => "very_high".to_string(),
-        }
+impl std::fmt::Display for ComplexityRange {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            ComplexityRange::VeryLow => "very_low",
+            ComplexityRange::Low => "low",
+            ComplexityRange::Medium => "medium",
+            ComplexityRange::High => "high",
+            ComplexityRange::VeryHigh => "very_high",
+        };
+        write!(f, "{}", s)
     }
 }
 

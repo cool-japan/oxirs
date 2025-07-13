@@ -3,7 +3,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-
 /// Advanced pattern mining configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdvancedPatternMiningConfig {
@@ -158,7 +157,6 @@ pub enum PatternRankingCriteria {
     Novelty,
     Complexity,
 }
-
 
 /// Cache tuning state
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -499,7 +499,9 @@ impl EventStore {
         // Queue for persistence if enabled
         if self.config.enable_persistence {
             self.persistence_manager
-                .queue_operation(PersistenceOperation::StoreEvent(Box::new(stored_event.clone())))
+                .queue_operation(PersistenceOperation::StoreEvent(Box::new(
+                    stored_event.clone(),
+                )))
                 .await?;
         }
 
@@ -1131,8 +1133,7 @@ impl EventMetadataAccessor for StreamEvent {
             _ => {
                 // For unmatched event types, return a static reference
                 use once_cell::sync::Lazy;
-                static DEFAULT_METADATA: Lazy<EventMetadata> =
-                    Lazy::new(EventMetadata::default);
+                static DEFAULT_METADATA: Lazy<EventMetadata> = Lazy::new(EventMetadata::default);
                 &DEFAULT_METADATA
             }
         }

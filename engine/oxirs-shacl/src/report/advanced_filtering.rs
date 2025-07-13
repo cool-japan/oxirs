@@ -416,7 +416,10 @@ impl ReportFilterEngine {
                 })
                 .cloned()
                 .collect()),
-            FilterFunction::ViolationThreshold { operator: _, value: _ } => {
+            FilterFunction::ViolationThreshold {
+                operator: _,
+                value: _,
+            } => {
                 // This would typically be applied at the report level, not violation level
                 // For now, we'll pass through all violations
                 Ok(violations.to_vec())

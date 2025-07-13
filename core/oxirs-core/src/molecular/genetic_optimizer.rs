@@ -585,40 +585,11 @@ impl GeneticGraphOptimizer {
 
     /// Mutate a structure
     fn mutate(&self, structure: &mut GraphStructure) -> Result<(), OxirsError> {
-        let mutation_types = [
-            "index_parameter",
-            "storage_parameter",
-            "access_pattern",
-            "compression_level",
-            "cache_size",
-        ];
+        let mutation_types = ["storage_parameter", "compression_level", "cache_size"];
 
         let mutation_type = &mutation_types[fastrand::usize(..mutation_types.len())];
 
         match *mutation_type {
-            "index_parameter" => {
-                if !structure.indexing_genes.secondary_indexes.is_empty() {
-                    let index_idx =
-                        fastrand::usize(..structure.indexing_genes.secondary_indexes.len());
-                    let param_idx = fastrand::usize(
-                        ..structure.indexing_genes.secondary_indexes[index_idx]
-                            .parameters
-                            .len(),
-                    );
-                    let old_value =
-                        structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx];
-                    structure.indexing_genes.secondary_indexes[index_idx].parameters[param_idx] =
-                        fastrand::f64();
-
-                    structure.mutations.push(MutationType::IndexMutation {
-                        index_id: format!("secondary_{index_idx}"),
-                        old_value: old_value.to_string(),
-                        new_value: structure.indexing_genes.secondary_indexes[index_idx].parameters
-                            [param_idx]
-                            .to_string(),
-                    });
-                }
-            }
             "storage_parameter" => {
                 let old_value = structure.storage_genes.block_size as f64;
                 structure.storage_genes.block_size = 4096 * fastrand::u32(1..33);
@@ -649,7 +620,17 @@ impl GeneticGraphOptimizer {
                     new_value: structure.storage_genes.caching.cache_size_mb as f64,
                 });
             }
-            _ => {}
+            _ => {
+                // Fallback: always mutate cache size to ensure a mutation occurs
+                let old_size = structure.storage_genes.caching.cache_size_mb;
+                structure.storage_genes.caching.cache_size_mb = 64 + fastrand::u32(..1936);
+
+                structure.mutations.push(MutationType::StorageMutation {
+                    parameter: "cache_size_mb".to_string(),
+                    old_value: old_size as f64,
+                    new_value: structure.storage_genes.caching.cache_size_mb as f64,
+                });
+            }
         }
 
         Ok(())

@@ -650,6 +650,7 @@ impl EncryptionStrategy for AesEncryptionStrategy {
 }
 
 /// GraphQL query cache manager
+#[allow(dead_code)]
 pub struct GraphQLQueryCache {
     cache: Arc<dyn DistributedCache>,
     config: CacheConfig,

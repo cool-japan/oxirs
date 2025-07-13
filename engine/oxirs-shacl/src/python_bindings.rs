@@ -3,6 +3,8 @@
 //! This module provides comprehensive Python bindings for the OxiRS SHACL validation engine,
 //! enabling seamless integration with Python data validation pipelines and ML workflows.
 
+#![allow(dead_code)]
+
 use crate::{
     validation::engine::{ValidationEngine, ValidationConfig, ValidationStrategy},
     validation::stats::ValidationStatistics,

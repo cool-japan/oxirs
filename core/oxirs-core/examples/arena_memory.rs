@@ -151,7 +151,7 @@ fn example_scoped_arena() -> Result<(), Box<dyn std::error::Error>> {
     // Initial allocation in parent
     parent_arena.alloc_str("parent allocation");
     let initial_bytes = parent_arena.allocated_bytes();
-    println!("Parent arena initial: {} bytes", initial_bytes);
+    println!("Parent arena initial: {initial_bytes} bytes");
 
     // Create a scope for temporary allocations
     {
@@ -198,20 +198,17 @@ fn benchmark_arena_vs_heap() -> Result<(), Box<dyn std::error::Error>> {
     }
     let arena_duration = start.elapsed();
 
-    println!("Allocations: {}", NUM_ALLOCATIONS);
-    println!("Heap allocation time: {:?}", heap_duration);
-    println!("Arena allocation time: {:?}", arena_duration);
+    println!("Allocations: {NUM_ALLOCATIONS}");
+    println!("Heap allocation time: {heap_duration:?}");
+    println!("Arena allocation time: {arena_duration:?}");
     println!("Arena allocated bytes: {}", arena.allocated_bytes());
 
     let speedup = heap_duration.as_secs_f64() / arena_duration.as_secs_f64();
-    println!("Arena speedup: {:.2}x faster", speedup);
+    println!("Arena speedup: {speedup:.2}x faster");
 
     // Memory fragmentation comparison
     println!("\nMemory characteristics:");
-    println!(
-        "  Heap: {} individual allocations (fragmented)",
-        NUM_ALLOCATIONS
-    );
+    println!("  Heap: {NUM_ALLOCATIONS} individual allocations (fragmented)");
     println!("  Arena: 1 contiguous allocation (cache-friendly)");
 
     Ok(())

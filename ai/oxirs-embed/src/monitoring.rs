@@ -14,8 +14,7 @@ use tokio::task::JoinHandle;
 use tracing::{debug, error, info, warn};
 
 /// Comprehensive performance metrics for embedding systems
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PerformanceMetrics {
     /// Request latency metrics
     pub latency: LatencyMetrics,
@@ -367,7 +366,6 @@ impl Default for ExportConfig {
     }
 }
 
-
 impl Default for LatencyMetrics {
     fn default() -> Self {
         Self {
@@ -540,30 +538,30 @@ impl PerformanceMonitor {
         window.push_back(latency_ms);
 
         // Update metrics
-        let mut metrics = self.metrics.write().unwrap();
-        metrics.latency.total_measurements += 1;
+        {
+            let mut metrics = self.metrics.write().unwrap();
+            metrics.latency.total_measurements += 1;
 
-        // Update min/max
-        metrics.latency.max_latency_ms = metrics.latency.max_latency_ms.max(latency_ms);
-        metrics.latency.min_latency_ms = metrics.latency.min_latency_ms.min(latency_ms);
+            // Update min/max
+            metrics.latency.max_latency_ms = metrics.latency.max_latency_ms.max(latency_ms);
+            metrics.latency.min_latency_ms = metrics.latency.min_latency_ms.min(latency_ms);
 
-        // Update average (rolling average)
-        let alpha = 0.1; // Exponential smoothing factor
-        metrics.latency.avg_embedding_time_ms =
-            alpha * latency_ms + (1.0 - alpha) * metrics.latency.avg_embedding_time_ms;
+            // Update average (rolling average)
+            let alpha = 0.1; // Exponential smoothing factor
+            metrics.latency.avg_embedding_time_ms =
+                alpha * latency_ms + (1.0 - alpha) * metrics.latency.avg_embedding_time_ms;
 
-        // Calculate percentiles from window
-        let mut sorted_latencies: Vec<f64> = window.iter().copied().collect();
-        sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            // Calculate percentiles from window
+            let mut sorted_latencies: Vec<f64> = window.iter().copied().collect();
+            sorted_latencies.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        if !sorted_latencies.is_empty() {
-            let len = sorted_latencies.len();
-            metrics.latency.p50_latency_ms = sorted_latencies[len * 50 / 100];
-            metrics.latency.p95_latency_ms = sorted_latencies[len * 95 / 100];
-            metrics.latency.p99_latency_ms = sorted_latencies[len * 99 / 100];
+            if !sorted_latencies.is_empty() {
+                let len = sorted_latencies.len();
+                metrics.latency.p50_latency_ms = sorted_latencies[len * 50 / 100];
+                metrics.latency.p95_latency_ms = sorted_latencies[len * 95 / 100];
+                metrics.latency.p99_latency_ms = sorted_latencies[len * 99 / 100];
+            }
         }
-
-        drop(metrics);
 
         // Check for alerts
         if self.config.enable_alerting {
@@ -582,16 +580,16 @@ impl PerformanceMonitor {
         window.push_back(requests_per_second);
 
         // Update metrics
-        let mut metrics = self.metrics.write().unwrap();
-        metrics.throughput.requests_per_second = requests_per_second;
-        metrics.throughput.peak_throughput =
-            metrics.throughput.peak_throughput.max(requests_per_second);
+        {
+            let mut metrics = self.metrics.write().unwrap();
+            metrics.throughput.requests_per_second = requests_per_second;
+            metrics.throughput.peak_throughput =
+                metrics.throughput.peak_throughput.max(requests_per_second);
 
-        // Calculate average throughput
-        let avg_throughput = window.iter().sum::<f64>() / window.len() as f64;
-        metrics.throughput.requests_per_second = avg_throughput;
-
-        drop(metrics);
+            // Calculate average throughput
+            let avg_throughput = window.iter().sum::<f64>() / window.len() as f64;
+            metrics.throughput.requests_per_second = avg_throughput;
+        }
 
         // Check for alerts
         if self.config.enable_alerting {
@@ -610,36 +608,38 @@ impl PerformanceMonitor {
         error_log.push_back(error_event.clone());
 
         // Update metrics
-        let mut metrics = self.metrics.write().unwrap();
-        metrics.errors.total_errors += 1;
-        metrics.errors.last_error = Some(error_event.timestamp);
+        {
+            let mut metrics = self.metrics.write().unwrap();
+            metrics.errors.total_errors += 1;
+            metrics.errors.last_error = Some(error_event.timestamp);
 
-        // Update error counts by type
-        *metrics
-            .errors
-            .errors_by_type
-            .entry(error_event.error_type.clone())
-            .or_insert(0) += 1;
+            // Update error counts by type
+            *metrics
+                .errors
+                .errors_by_type
+                .entry(error_event.error_type.clone())
+                .or_insert(0) += 1;
 
-        // Update error type counters
-        if let ErrorSeverity::Critical = error_event.severity { metrics.errors.critical_errors += 1 }
+            // Update error type counters
+            if let ErrorSeverity::Critical = error_event.severity {
+                metrics.errors.critical_errors += 1
+            }
 
-        if error_event.error_type.contains("timeout") {
-            metrics.errors.timeout_errors += 1;
-        } else if error_event.error_type.contains("model") {
-            metrics.errors.model_errors += 1;
-        } else {
-            metrics.errors.system_errors += 1;
+            if error_event.error_type.contains("timeout") {
+                metrics.errors.timeout_errors += 1;
+            } else if error_event.error_type.contains("model") {
+                metrics.errors.model_errors += 1;
+            } else {
+                metrics.errors.system_errors += 1;
+            }
+
+            // Calculate error rate
+            let total_requests = metrics.throughput.total_requests;
+            if total_requests > 0 {
+                metrics.errors.error_rate_per_hour =
+                    (metrics.errors.total_errors as f64 / total_requests as f64) * 3600.0;
+            }
         }
-
-        // Calculate error rate
-        let total_requests = metrics.throughput.total_requests;
-        if total_requests > 0 {
-            metrics.errors.error_rate_per_hour =
-                (metrics.errors.total_errors as f64 / total_requests as f64) * 3600.0;
-        }
-
-        drop(metrics);
 
         // Handle critical errors immediately
         if matches!(error_event.severity, ErrorSeverity::Critical) {
@@ -649,20 +649,21 @@ impl PerformanceMonitor {
 
     /// Update resource metrics
     pub async fn update_resource_metrics(&self, resources: ResourceMetrics) {
-        let mut metrics = self.metrics.write().unwrap();
+        {
+            let mut metrics = self.metrics.write().unwrap();
 
-        // Update peak values
-        metrics.resources.peak_memory_mb = metrics
-            .resources
-            .peak_memory_mb
-            .max(resources.memory_usage_mb);
-        metrics.resources.peak_gpu_memory_mb = metrics
-            .resources
-            .peak_gpu_memory_mb
-            .max(resources.gpu_memory_usage_mb);
+            // Update peak values
+            metrics.resources.peak_memory_mb = metrics
+                .resources
+                .peak_memory_mb
+                .max(resources.memory_usage_mb);
+            metrics.resources.peak_gpu_memory_mb = metrics
+                .resources
+                .peak_gpu_memory_mb
+                .max(resources.gpu_memory_usage_mb);
 
-        metrics.resources = resources.clone();
-        drop(metrics);
+            metrics.resources = resources.clone();
+        }
 
         // Check resource alerts
         if self.config.enable_alerting {
@@ -672,9 +673,10 @@ impl PerformanceMonitor {
 
     /// Update cache metrics
     pub async fn update_cache_metrics(&self, cache_metrics: CacheMetrics) {
-        let mut metrics = self.metrics.write().unwrap();
-        metrics.cache = cache_metrics.clone();
-        drop(metrics);
+        {
+            let mut metrics = self.metrics.write().unwrap();
+            metrics.cache = cache_metrics.clone();
+        }
 
         // Check cache performance alerts
         if self.config.enable_alerting

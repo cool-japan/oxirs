@@ -212,6 +212,7 @@ fn test_qualified_validation_stats() {
     assert!(summary.contains("conformance_rate"));
 }
 
+#[allow(dead_code)]
 fn create_test_engine() -> ValidationEngine<'static> {
     let shapes = Box::leak(Box::new(IndexMap::new()));
     let config = ValidationConfig::default();

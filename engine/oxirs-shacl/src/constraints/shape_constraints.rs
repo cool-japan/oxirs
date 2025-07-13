@@ -212,21 +212,15 @@ impl QualifiedValueShapeConstraint {
 
         // For each value, check if it conforms to the qualified shape
         for (i, value) in values.iter().enumerate() {
-            eprintln!(
-                "DEBUG count_conforming_values: checking value[{i}] = {value:?}"
-            );
+            eprintln!("DEBUG count_conforming_values: checking value[{i}] = {value:?}");
             let conforms = self.value_conforms_to_shape(value, store, context)?;
-            eprintln!(
-                "DEBUG count_conforming_values: value[{i}] conforms = {conforms}"
-            );
+            eprintln!("DEBUG count_conforming_values: value[{i}] conforms = {conforms}");
             if conforms {
                 conforming_count += 1;
             }
         }
 
-        eprintln!(
-            "DEBUG count_conforming_values: total conforming_count = {conforming_count}"
-        );
+        eprintln!("DEBUG count_conforming_values: total conforming_count = {conforming_count}");
         Ok(conforming_count)
     }
 
@@ -714,10 +708,53 @@ impl ClosedConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement closed constraint evaluation
+        // For closed constraint, we need to check that the focus node
+        // only has properties that are in the allowed list (or are ignored)
+
+        // Get all properties for the focus node
+        let focus_node_as_subject = match &context.focus_node {
+            Term::NamedNode(node) => Subject::from(node.clone()),
+            Term::BlankNode(node) => Subject::from(node.clone()),
+            _ => {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(context.focus_node.clone()),
+                    Some("Focus node is not a valid subject for closed constraint".to_string()),
+                ));
+            }
+        };
+
+        // Find all quads where the focus node is the subject
+        let quads = store.find_quads(Some(&focus_node_as_subject), None, None, None)?;
+
+        // Extract all predicates (properties) used by the focus node
+        let mut used_properties = HashSet::new();
+        for quad in quads {
+            let predicate_term: Term = quad.predicate().clone().into();
+            used_properties.insert(predicate_term);
+        }
+
+        // Check if any used property is not in the allowed list and not ignored
+        for property in &used_properties {
+            // Skip if property is in the ignore list
+            if self.ignore_properties.contains(property) {
+                continue;
+            }
+
+            // Check if property is in allowed list
+            if !self.allowed_properties.contains(property) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(property.clone()),
+                    Some(format!(
+                        "Property {property} is not allowed in closed shape (allowed: {:?})",
+                        self.allowed_properties
+                    )),
+                ));
+            }
+        }
+
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }

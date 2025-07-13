@@ -1,6 +1,27 @@
 //! Type definitions for service optimization
 
+#[cfg(feature = "caching")]
 use bloom::BloomFilter as ExternalBloomFilter;
+
+#[cfg(not(feature = "caching"))]
+mod cache_stubs {
+    #[derive(Debug, Clone)]
+    pub struct ExternalBloomFilter;
+
+    impl ExternalBloomFilter {
+        pub fn with_rate(_rate: f64, _capacity: u32) -> Self {
+            Self
+        }
+
+        pub fn insert<T>(&mut self, _item: &T) {}
+        pub fn contains<T>(&self, _item: &T) -> bool {
+            false
+        }
+    }
+}
+
+#[cfg(not(feature = "caching"))]
+use cache_stubs::ExternalBloomFilter;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -716,5 +737,45 @@ impl BloomFilter {
 
     pub fn insert(&mut self, _item: &str) {
         // Placeholder implementation
+    }
+}
+
+/// Machine learning features for result size prediction
+#[derive(Debug, Clone, Default)]
+pub struct MLFeatures {
+    pub pattern_complexity: f64,
+    pub variable_count: f64,
+    pub service_load: f64,
+    pub service_response_time: f64,
+    pub estimated_dataset_size: f64,
+    pub pattern_specificity: f64,
+    pub historical_avg_size: f64,
+}
+
+/// Machine learning model weights for linear regression
+#[derive(Debug, Clone)]
+pub struct MLModelWeights {
+    pub intercept: f64,
+    pub pattern_complexity: f64,
+    pub variable_count: f64,
+    pub service_load: f64,
+    pub service_response_time: f64,
+    pub estimated_dataset_size: f64,
+    pub pattern_specificity: f64,
+    pub historical_avg_size: f64,
+}
+
+/// Extension methods for StatisticsCache to support ML features
+impl StatisticsCache {
+    pub fn get_historical_size(&self, key: &str) -> Option<u64> {
+        // Use existing service_stats for historical size data
+        // Since avg_result_size field doesn't exist, estimate from response time
+        if let Some(stats) = self.service_stats.get(key) {
+            // Heuristic: slower response time usually means more results
+            let estimated_size = (stats.avg_response_time.as_millis() as u64 * 10).max(100);
+            Some(estimated_size)
+        } else {
+            None
+        }
     }
 }

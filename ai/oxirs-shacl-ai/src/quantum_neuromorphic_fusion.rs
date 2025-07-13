@@ -21,8 +21,6 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, info};
 
-use oxirs_core::Store;
-
 use crate::Result;
 
 /// Quantum neuromorphic fusion system for hybrid quantum-biological processing
@@ -796,7 +794,7 @@ impl BiologicalQuantumEntanglementCoordinator {
 
     async fn calculate_fidelity_degradation_rate(
         &self,
-        measurements: &[FidelityMeasurement],
+        _measurements: &[FidelityMeasurement],
     ) -> Result<f64> {
         // Calculate the rate at which entanglement fidelity is degrading
         Ok(0.01) // Placeholder implementation
@@ -804,7 +802,7 @@ impl BiologicalQuantumEntanglementCoordinator {
 
     async fn identify_critical_entanglements(
         &self,
-        measurements: &[FidelityMeasurement],
+        _measurements: &[FidelityMeasurement],
     ) -> Result<Vec<CriticalEntanglement>> {
         // Identify entanglements that need immediate attention
         Ok(Vec::new()) // Placeholder implementation
@@ -812,7 +810,7 @@ impl BiologicalQuantumEntanglementCoordinator {
 
     async fn restore_critical_entanglement(
         &mut self,
-        critical_entanglement: &CriticalEntanglement,
+        _critical_entanglement: &CriticalEntanglement,
     ) -> Result<()> {
         // Restore a specific critical entanglement
         Ok(()) // Placeholder implementation
@@ -828,7 +826,7 @@ impl BiologicalQuantumEntanglementCoordinator {
 
     async fn calculate_optimal_coherence_time(
         &self,
-        pairs: &[BiologicalQuantumEntanglementPair],
+        _pairs: &[BiologicalQuantumEntanglementPair],
     ) -> Result<Duration> {
         // Calculate optimal coherence time
         Ok(Duration::from_millis(100)) // Placeholder implementation
@@ -836,7 +834,7 @@ impl BiologicalQuantumEntanglementCoordinator {
 
     async fn analyze_bell_state_distribution(
         &self,
-        pairs: &[BiologicalQuantumEntanglementPair],
+        _pairs: &[BiologicalQuantumEntanglementPair],
     ) -> Result<BellStateDistribution> {
         // Analyze the distribution of Bell states
         Ok(BellStateDistribution) // Placeholder implementation
@@ -958,10 +956,10 @@ impl QuantumFusionMetrics {
 
     pub async fn update_fusion_metrics(
         &mut self,
-        quantum_preparation: &QuantumPreparation,
+        _quantum_preparation: &QuantumPreparation,
         entanglement_setup: &EntanglementSetup,
         tunneling_processing: &TunnelingProcessing,
-        optimization_results: &OptimizationResults,
+        _optimization_results: &OptimizationResults,
         final_measurement: &QuantumBiologicalMeasurement,
     ) {
         self.total_quantum_biological_validations += 1;

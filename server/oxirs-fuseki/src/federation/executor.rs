@@ -1,19 +1,13 @@
 //! Federated query executor for parallel service execution
 
-use futures::{
-    future::join_all,
-    stream::StreamExt,
-};
+use futures::future::join_all;
 use reqwest::Client;
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{
-    sync::Semaphore,
-    time::timeout,
-};
+use tokio::{sync::Semaphore, time::timeout};
 
 use oxirs_arq::query::{Query, QueryType};
 use oxirs_core::query::QueryResults;
@@ -183,7 +177,7 @@ impl FederatedExecutor {
                 let step = step.clone();
                 async move {
                     // Create a temporary context for this step
-                    let start = std::time::Instant::now();
+                    let _start = std::time::Instant::now();
                     let primary_service =
                         step.services.iter().find(|s| s.is_primary).ok_or_else(|| {
                             FusekiError::Configuration {
@@ -438,15 +432,24 @@ impl FederatedExecutor {
                         }
                     })?;
 
-                // Extract bindings count for metadata
-                let result_count = json
-                    .get("results")
-                    .and_then(|r| r.get("bindings"))
-                    .and_then(|b| b.as_array())
-                    .map(|arr| arr.len())
-                    .unwrap_or(0);
-
-                QueryResults::Solutions(vec![]) // TODO: Parse actual bindings
+                // Parse actual bindings from JSON
+                let variable_bindings = self.parse_sparql_json_bindings(&json)?;
+                // Convert VariableBinding to Solution
+                let solutions: Vec<oxirs_core::query::Solution> = variable_bindings
+                    .into_iter()
+                    .map(|vb| {
+                        let mut solution = oxirs_core::query::Solution::new();
+                        for var_name in vb.variables() {
+                            if let Some(term) = vb.get(var_name) {
+                                if let Ok(var) = oxirs_core::model::Variable::new(var_name) {
+                                    solution.bind(var, term.clone());
+                                }
+                            }
+                        }
+                        solution
+                    })
+                    .collect();
+                QueryResults::Solutions(solutions)
             }
             QueryType::Ask => {
                 let json: serde_json::Value =
@@ -464,9 +467,27 @@ impl FederatedExecutor {
                 QueryResults::Boolean(boolean_result)
             }
             QueryType::Construct | QueryType::Describe => {
-                // Parse N-Triples or Turtle
-                QueryResults::Graph(Default::default()) // TODO: Parse actual graph
+                // Parse N-Triples or Turtle response
+                let quads = self.parse_graph_response(&response_text)?;
+                // Convert Quads to Triples (drop graph information)
+                let triples: Vec<oxirs_core::model::Triple> = quads
+                    .into_iter()
+                    .map(|quad| {
+                        oxirs_core::model::Triple::new(
+                            quad.subject().clone(),
+                            quad.predicate().clone(),
+                            quad.object().clone(),
+                        )
+                    })
+                    .collect();
+                QueryResults::Graph(triples)
             }
+        };
+
+        let result_count = match &results {
+            QueryResults::Solutions(solutions) => solutions.len(),
+            QueryResults::Boolean(_) => 1,
+            QueryResults::Graph(graph) => graph.len(),
         };
 
         Ok(QueryResult {
@@ -474,7 +495,7 @@ impl FederatedExecutor {
             metadata: QueryMetadata {
                 execution_time: None, // Will be set by caller
                 service_id: None,
-                result_count: 0, // TODO: Set actual count
+                result_count,
             },
         })
     }
@@ -551,6 +572,255 @@ impl FederatedExecutor {
         }
 
         groups
+    }
+
+    /// Parse SPARQL JSON bindings into Solutions
+    fn parse_sparql_json_bindings(
+        &self,
+        json: &serde_json::Value,
+    ) -> FusekiResult<Vec<oxirs_core::rdf_store::VariableBinding>> {
+        let bindings_array = json
+            .get("results")
+            .and_then(|r| r.get("bindings"))
+            .and_then(|b| b.as_array())
+            .ok_or_else(|| FusekiError::QueryExecution {
+                message: "Invalid SPARQL JSON format: missing results.bindings".to_string(),
+            })?;
+
+        let mut solutions = Vec::new();
+
+        for binding_obj in bindings_array {
+            let mut variable_binding = oxirs_core::rdf_store::VariableBinding::new();
+
+            if let Some(binding_map) = binding_obj.as_object() {
+                for (var_name, term_obj) in binding_map {
+                    if let Some(term) = self.parse_sparql_json_term(term_obj)? {
+                        variable_binding.bind(var_name.clone(), term);
+                    }
+                }
+            }
+
+            solutions.push(variable_binding);
+        }
+
+        Ok(solutions)
+    }
+
+    /// Parse a single SPARQL JSON term
+    fn parse_sparql_json_term(
+        &self,
+        term_obj: &serde_json::Value,
+    ) -> FusekiResult<Option<oxirs_core::model::Term>> {
+        let term_type = term_obj
+            .get("type")
+            .and_then(|t| t.as_str())
+            .ok_or_else(|| FusekiError::QueryExecution {
+                message: "Invalid SPARQL JSON term: missing type".to_string(),
+            })?;
+
+        let value = term_obj
+            .get("value")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| FusekiError::QueryExecution {
+                message: "Invalid SPARQL JSON term: missing value".to_string(),
+            })?;
+
+        let term = match term_type {
+            "uri" => oxirs_core::model::Term::NamedNode(
+                oxirs_core::model::NamedNode::new(value).unwrap(),
+            ),
+            "bnode" => oxirs_core::model::Term::BlankNode(
+                oxirs_core::model::BlankNode::new(value).unwrap(),
+            ),
+            "literal" => {
+                let language = term_obj
+                    .get("xml:lang")
+                    .and_then(|l| l.as_str())
+                    .map(|s| s.to_string());
+
+                let datatype = term_obj
+                    .get("datatype")
+                    .and_then(|d| d.as_str())
+                    .map(|s| oxirs_core::model::NamedNode::new(s).unwrap());
+
+                oxirs_core::model::Term::Literal(if let Some(lang) = language {
+                    oxirs_core::model::Literal::new_language_tagged_literal(value, lang).unwrap()
+                } else if let Some(dt) = datatype {
+                    oxirs_core::model::Literal::new_typed_literal(value, dt)
+                } else {
+                    oxirs_core::model::Literal::new_simple_literal(value)
+                })
+            }
+            _ => {
+                return Err(FusekiError::QueryExecution {
+                    message: format!("Unknown SPARQL JSON term type: {}", term_type),
+                });
+            }
+        };
+
+        Ok(Some(term))
+    }
+
+    /// Parse graph response from N-Triples or Turtle
+    fn parse_graph_response(
+        &self,
+        response_text: &str,
+    ) -> FusekiResult<Vec<oxirs_core::model::Quad>> {
+        let mut quads = Vec::new();
+
+        // Simple N-Triples parsing (lines ending with '.')
+        for line in response_text.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+
+            if line.ends_with('.') {
+                if let Some(quad) = self.parse_ntriples_line(line)? {
+                    quads.push(quad);
+                }
+            }
+        }
+
+        Ok(quads)
+    }
+
+    /// Parse a single N-Triples line into a Quad
+    fn parse_ntriples_line(&self, line: &str) -> FusekiResult<Option<oxirs_core::model::Quad>> {
+        let line = line.trim_end_matches('.');
+        let parts = self.split_ntriples_terms(line)?;
+
+        if parts.len() < 3 {
+            return Ok(None);
+        }
+
+        let subject = self.parse_ntriples_term(&parts[0])?;
+        let predicate = self.parse_ntriples_term(&parts[1])?;
+        let object = self.parse_ntriples_term(&parts[2])?;
+
+        // Default graph for federation results
+        let graph = oxirs_core::model::GraphName::NamedNode(
+            oxirs_core::model::NamedNode::new("http://default-graph").unwrap(),
+        );
+
+        let subject_pos: oxirs_core::model::Subject =
+            subject
+                .try_into()
+                .map_err(|_| FusekiError::QueryExecution {
+                    message: "Invalid subject term".to_string(),
+                })?;
+        let predicate_pos: oxirs_core::model::Predicate =
+            predicate
+                .try_into()
+                .map_err(|_| FusekiError::QueryExecution {
+                    message: "Invalid predicate term".to_string(),
+                })?;
+        let object_pos: oxirs_core::model::Object = object.into();
+
+        Ok(Some(oxirs_core::model::Quad::new(
+            subject_pos,
+            predicate_pos,
+            object_pos,
+            graph,
+        )))
+    }
+
+    /// Split N-Triples line into terms
+    fn split_ntriples_terms(&self, line: &str) -> FusekiResult<Vec<String>> {
+        let mut terms = Vec::new();
+        let mut current_term = String::new();
+        let mut in_quotes = false;
+        let chars = line.chars();
+
+        for ch in chars {
+            match ch {
+                '"' if !in_quotes => {
+                    in_quotes = true;
+                    current_term.push(ch);
+                }
+                '"' if in_quotes => {
+                    in_quotes = false;
+                    current_term.push(ch);
+                }
+                ' ' | '\t' if !in_quotes => {
+                    if !current_term.is_empty() {
+                        terms.push(current_term.trim().to_string());
+                        current_term.clear();
+                    }
+                }
+                _ => {
+                    current_term.push(ch);
+                }
+            }
+        }
+
+        if !current_term.is_empty() {
+            terms.push(current_term.trim().to_string());
+        }
+
+        Ok(terms)
+    }
+
+    /// Parse N-Triples term
+    fn parse_ntriples_term(&self, term_str: &str) -> FusekiResult<oxirs_core::model::Term> {
+        let term_str = term_str.trim();
+
+        if term_str.starts_with('<') && term_str.ends_with('>') {
+            // IRI
+            let iri = &term_str[1..term_str.len() - 1];
+            Ok(oxirs_core::model::Term::NamedNode(
+                oxirs_core::model::NamedNode::new(iri).unwrap(),
+            ))
+        } else if let Some(bnode) = term_str.strip_prefix("_:") {
+            // Blank node
+            Ok(oxirs_core::model::Term::BlankNode(
+                oxirs_core::model::BlankNode::new(bnode).unwrap(),
+            ))
+        } else if term_str.starts_with('"') {
+            // Literal
+            self.parse_ntriples_literal(term_str)
+        } else {
+            Err(FusekiError::QueryExecution {
+                message: format!("Invalid N-Triples term: {}", term_str),
+            })
+        }
+    }
+
+    /// Parse N-Triples literal
+    fn parse_ntriples_literal(&self, literal_str: &str) -> FusekiResult<oxirs_core::model::Term> {
+        if let Some(end_quote) = literal_str[1..].find('"') {
+            let value = &literal_str[1..end_quote + 1];
+            let rest = &literal_str[end_quote + 2..];
+
+            if let Some(lang) = rest.strip_prefix('@') {
+                // Language tag
+                Ok(oxirs_core::model::Term::Literal(
+                    oxirs_core::model::Literal::new_language_tagged_literal(value, lang).unwrap(),
+                ))
+            } else if let Some(datatype) = rest.strip_prefix("^^") {
+                // Datatype
+                let datatype = if datatype.starts_with('<') && datatype.ends_with('>') {
+                    &datatype[1..datatype.len() - 1]
+                } else {
+                    datatype
+                };
+                Ok(oxirs_core::model::Term::Literal(
+                    oxirs_core::model::Literal::new_typed_literal(
+                        value,
+                        oxirs_core::model::NamedNode::new(datatype).unwrap(),
+                    ),
+                ))
+            } else {
+                // Plain literal
+                Ok(oxirs_core::model::Term::Literal(
+                    oxirs_core::model::Literal::new_simple_literal(value),
+                ))
+            }
+        } else {
+            Err(FusekiError::QueryExecution {
+                message: format!("Invalid N-Triples literal: {}", literal_str),
+            })
+        }
     }
 
     /// Report execution metrics
@@ -633,7 +903,7 @@ impl FederatedResultMerger {
     async fn merge_join(
         &self,
         results: Vec<QueryResult>,
-        vars: &[String],
+        _vars: &[String],
     ) -> FusekiResult<QueryResult> {
         // TODO: Implement proper result join
         Ok(results.into_iter().next().unwrap())
@@ -646,7 +916,7 @@ mod tests {
 
     #[test]
     fn test_result_merger() {
-        let merger = FederatedResultMerger::new(FederatedMergeStrategy::Union);
+        let _merger = FederatedResultMerger::new(FederatedMergeStrategy::Union);
         // Test would go here with proper QueryResult implementation
     }
 }

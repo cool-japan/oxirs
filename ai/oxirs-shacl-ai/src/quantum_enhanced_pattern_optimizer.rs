@@ -17,10 +17,8 @@ use oxirs_core::{
     model::Variable,
     query::{
         algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
-        pattern_optimizer::{
-            IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy,
-        },
-    }, Store,
+        pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy},
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -206,9 +204,7 @@ impl QuantumSuperpositionStates {
         let num_indices = index_performance.len();
         let num_states = self.amplitudes.shape()[2];
 
-        for index_idx in 0..num_indices {
-            let performance = index_performance[index_idx];
-
+        for (index_idx, &performance) in index_performance.iter().enumerate().take(num_indices) {
             // Update amplitudes based on performance
             for state_idx in 0..num_states {
                 let current_amplitude = self.amplitudes[[pattern_idx, index_idx, state_idx]];
@@ -842,11 +838,11 @@ impl QuantumEnhancedPatternOptimizer {
                         self.calculate_pattern_correlation(&patterns[i], &patterns[j]);
 
                     if correlation > self.config.entanglement_threshold {
-                        let _ = entanglement.create_entanglement(
+                        std::mem::drop(entanglement.create_entanglement(
                             uuid::Uuid::new_v4(), // agent_a
                             uuid::Uuid::new_v4(), // agent_b
                             crate::quantum_consciousness_entanglement::BellState::PhiPlus,
-                        );
+                        ));
                     }
                 }
             }
@@ -977,7 +973,11 @@ impl QuantumEnhancedPatternOptimizer {
     }
 
     /// Estimate cost using quantum-enhanced methods
-    fn estimate_quantum_cost(&self, pattern: &AlgebraTriplePattern, index_type: IndexType) -> f64 {
+    fn estimate_quantum_cost(
+        &self,
+        _pattern: &AlgebraTriplePattern,
+        _index_type: IndexType,
+    ) -> f64 {
         // Base cost from classical optimizer
         let classical_cost = 100.0; // Simplified
 

@@ -14,8 +14,15 @@ pub use config::{
     AiOrchestratorConfig, ModelSelectionStrategy,
     PerformanceRequirements as ConfigPerformanceRequirements,
 };
-pub use core::*;
-pub use metrics::*;
+pub use core::{
+    AiOrchestrator, ComprehensiveLearningResult,
+    LearningPerformanceStats as CoreLearningPerformanceStats, OptimizationRecommendation,
+    PredictiveInsights,
+};
+pub use metrics::{
+    AiOrchestratorStats, ConfidenceDistribution,
+    LearningPerformanceStats as MetricsLearningPerformanceStats,
+};
 pub use model_selection::*;
 pub use types::{
     AdaptiveLearningInsights, ConfidentShape, DataCharacteristics, LearningMetadata,

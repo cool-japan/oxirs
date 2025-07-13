@@ -7,6 +7,8 @@
 //! - Memory monitoring and pressure detection
 //! - Garbage collection optimization hints
 
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};

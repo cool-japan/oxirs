@@ -66,6 +66,7 @@ async fn main() -> Result<()> {
 }
 
 /// Integrated AI Platform showcasing OxiRS capabilities
+#[allow(dead_code)]
 struct AIPlatform {
     // GPU acceleration infrastructure
     gpu_manager: GpuAccelerationManager,
@@ -220,7 +221,8 @@ impl AIPlatform {
         println!("   ✅ Intelligent caching initialized (1GB, LRU + compression)");
 
         // Initialize evaluation infrastructure
-        let test_triples = [(
+        let _test_triples = [
+            (
                 "gene:BRCA1".to_string(),
                 "causes".to_string(),
                 "disease:breast_cancer".to_string(),
@@ -229,8 +231,10 @@ impl AIPlatform {
                 "drug:imatinib".to_string(),
                 "inhibits".to_string(),
                 "protein:BCR_ABL".to_string(),
-            )];
-        let validation_triples = [(
+            ),
+        ];
+        let _validation_triples = [
+            (
                 "gene:TP53".to_string(),
                 "tumor_suppressor".to_string(),
                 "pathway:apoptosis".to_string(),
@@ -239,7 +243,8 @@ impl AIPlatform {
                 "drug:trastuzumab".to_string(),
                 "targets".to_string(),
                 "protein:HER2".to_string(),
-            )];
+            ),
+        ];
         let evaluation_suite =
             AdvancedEvaluator::new(oxirs_embed::evaluation::AdvancedEvaluationConfig::default());
         let benchmark_suite = HashMap::new();
@@ -426,9 +431,7 @@ impl AIPlatform {
         ];
 
         for (drug, confidence, mechanism) in drug_candidates {
-            println!(
-                "   🏆 {drug}: {confidence:.2} confidence ({mechanism})"
-            );
+            println!("   🏆 {drug}: {confidence:.2} confidence ({mechanism})");
         }
 
         // Performance metrics
@@ -469,14 +472,16 @@ impl AIPlatform {
         // Real-time query processing
         println!("\n🔄 Real-time query processing:");
 
-        let queries = ["What are the side effects of ibuprofen?",
+        let queries = [
+            "What are the side effects of ibuprofen?",
             "Find genes associated with Alzheimer's disease",
             "Predict drug interactions for warfarin",
             "Identify biomarkers for pancreatic cancer",
-            "What pathways are involved in diabetes?"];
+            "What pathways are involved in diabetes?",
+        ];
 
         for (i, query) in queries.iter().enumerate() {
-            let start = Instant::now();
+            let _start = Instant::now();
 
             // Simulate query processing stages
             println!("\n   🔍 Query {}: \"{}\"", i + 1, query);
@@ -569,9 +574,7 @@ impl AIPlatform {
         ];
 
         for (fold, precision, recall, f1) in cv_results {
-            println!(
-                "      {fold}: P={precision:.1}%, R={recall:.1}%, F1={f1:.1}%"
-            );
+            println!("      {fold}: P={precision:.1}%, R={recall:.1}%, F1={f1:.1}%");
         }
 
         // Robustness evaluation

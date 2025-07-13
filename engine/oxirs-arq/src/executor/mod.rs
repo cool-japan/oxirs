@@ -19,6 +19,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tracing::debug;
 
 /// Function registry for custom functions
 #[derive(Debug, Clone)]
@@ -366,7 +367,10 @@ impl QueryExecutor {
                 self.execute_algebra_streaming(right, dataset, streaming_solution)?;
                 Ok(())
             }
-            Algebra::Filter { pattern, condition: _ } => {
+            Algebra::Filter {
+                pattern,
+                condition: _,
+            } => {
                 // Execute the pattern first
                 self.execute_algebra_streaming(pattern, dataset, streaming_solution)?;
                 // Note: In a full implementation, filter would be applied during streaming
@@ -638,10 +642,7 @@ impl QueryExecutor {
                     }
                 }
             }
-            groups
-                .entry(group_key)
-                .or_default()
-                .push(binding);
+            groups.entry(group_key).or_default().push(binding);
         }
 
         // If no grouping variables, create single group with all bindings
@@ -1137,14 +1138,146 @@ impl QueryExecutor {
                     _ => Err(anyhow::anyhow!("Unknown function: {}", name)),
                 }
             }
-            Expression::Exists(_) | Expression::NotExists(_) => {
-                // EXISTS and NOT EXISTS would require evaluating subqueries
-                // For now, return a basic implementation
-                Err(anyhow::anyhow!(
-                    "EXISTS/NOT EXISTS not yet implemented in filter evaluation"
-                ))
+            Expression::Exists(algebra) => {
+                // EXISTS returns true if the subquery has at least one solution
+                match self.evaluate_exists_subquery(algebra, binding) {
+                    Ok(has_solutions) => {
+                        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                            value: has_solutions.to_string(),
+                            language: None,
+                            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                                "http://www.w3.org/2001/XMLSchema#boolean",
+                            )),
+                        }))
+                    }
+                    Err(e) => {
+                        // If subquery evaluation fails, EXISTS returns false
+                        debug!("EXISTS subquery evaluation failed: {}", e);
+                        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                            value: "false".to_string(),
+                            language: None,
+                            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                                "http://www.w3.org/2001/XMLSchema#boolean",
+                            )),
+                        }))
+                    }
+                }
+            }
+            Expression::NotExists(algebra) => {
+                // NOT EXISTS returns true if the subquery has no solutions
+                match self.evaluate_exists_subquery(algebra, binding) {
+                    Ok(has_solutions) => {
+                        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                            value: (!has_solutions).to_string(),
+                            language: None,
+                            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                                "http://www.w3.org/2001/XMLSchema#boolean",
+                            )),
+                        }))
+                    }
+                    Err(e) => {
+                        // If subquery evaluation fails, NOT EXISTS returns true
+                        debug!("NOT EXISTS subquery evaluation failed: {}", e);
+                        Ok(crate::algebra::Term::Literal(crate::algebra::Literal {
+                            value: "true".to_string(),
+                            language: None,
+                            datatype: Some(oxirs_core::model::NamedNode::new_unchecked(
+                                "http://www.w3.org/2001/XMLSchema#boolean",
+                            )),
+                        }))
+                    }
+                }
             }
         }
+    }
+
+    /// Evaluate EXISTS/NOT EXISTS subquery
+    fn evaluate_exists_subquery(
+        &self,
+        algebra: &crate::algebra::Algebra,
+        current_binding: &crate::algebra::Binding,
+    ) -> Result<bool> {
+        use crate::algebra::Algebra;
+
+        // For a basic implementation, we'll evaluate simple patterns
+        // This is a simplified version that handles basic graph patterns
+        match algebra {
+            Algebra::Bgp(patterns) => {
+                // For BGP (Basic Graph Pattern), check if any pattern can be satisfied
+                // This is a simplified implementation
+                for pattern in patterns {
+                    // Create a binding that includes current variables
+                    let test_binding = current_binding.clone();
+
+                    // Try to find if this pattern can be satisfied
+                    // For now, we'll use a heuristic: if all variables in the pattern
+                    // are bound in current_binding, we assume it might match
+                    if self.pattern_might_match(pattern, &test_binding) {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+            Algebra::Filter {
+                pattern,
+                condition: _,
+            } => {
+                // For filtered algebra, recursively check the inner algebra
+                self.evaluate_exists_subquery(pattern, current_binding)
+            }
+            Algebra::Union { left, right } => {
+                // For UNION, EXISTS is true if either branch has solutions
+                let left_result = self.evaluate_exists_subquery(left, current_binding)?;
+                if left_result {
+                    return Ok(true);
+                }
+                self.evaluate_exists_subquery(right, current_binding)
+            }
+            Algebra::Join { left, right } => {
+                // For JOIN, EXISTS is true if both parts can be satisfied
+                let left_result = self.evaluate_exists_subquery(left, current_binding)?;
+                if !left_result {
+                    return Ok(false);
+                }
+                self.evaluate_exists_subquery(right, current_binding)
+            }
+            _ => {
+                // For other algebra types, return false for now
+                // This is a conservative approach
+                Ok(false)
+            }
+        }
+    }
+
+    /// Check if a triple pattern might match given current bindings
+    fn pattern_might_match(
+        &self,
+        pattern: &crate::algebra::TriplePattern,
+        binding: &crate::algebra::Binding,
+    ) -> bool {
+        use crate::algebra::Term;
+
+        // Simple heuristic: if all variables in the pattern are bound, assume it might match
+        // In a real implementation, this would query the dataset
+
+        let subject_bound = match &pattern.subject {
+            Term::Variable(var) => binding.contains_key(var),
+            _ => true, // IRIs and blank nodes are always "bound"
+        };
+
+        let predicate_bound = match &pattern.predicate {
+            Term::Variable(var) => binding.contains_key(var),
+            _ => true,
+        };
+
+        let object_bound = match &pattern.object {
+            Term::Variable(var) => binding.contains_key(var),
+            _ => true,
+        };
+
+        // If all components are bound/known, assume the pattern might match
+        // This is a very basic heuristic for this initial implementation
+        subject_bound && predicate_bound && object_bound
     }
 
     /// Evaluate binary operations

@@ -559,7 +559,9 @@ impl StarProfiler {
                 bottlenecks.push(PerformanceBottleneck {
                     operation: operation.clone(),
                     severity,
-                    description: format!("Operation consumes {time_percentage:.1}% of total execution time"),
+                    description: format!(
+                        "Operation consumes {time_percentage:.1}% of total execution time"
+                    ),
                     suggestions,
                     time_percentage,
                 });

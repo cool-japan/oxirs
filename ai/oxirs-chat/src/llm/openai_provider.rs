@@ -6,8 +6,7 @@ use anyhow::{anyhow, Result};
 use async_openai::{
     config::OpenAIConfig,
     types::{
-        ChatCompletionRequestMessage,
-        ChatCompletionRequestSystemMessageContent,
+        ChatCompletionRequestMessage, ChatCompletionRequestSystemMessageContent,
         CreateChatCompletionRequestArgs,
     },
     Client as OpenAIClient,
@@ -230,7 +229,8 @@ impl LLMProvider for OpenAIProvider {
                         let content = chunk
                             .choices
                             .first()
-                            .and_then(|choice| choice.delta.content.as_ref()).cloned()
+                            .and_then(|choice| choice.delta.content.as_ref())
+                            .cloned()
                             .unwrap_or_default();
 
                         let is_final = chunk

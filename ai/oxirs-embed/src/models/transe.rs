@@ -185,7 +185,7 @@ impl TransE {
                     1.0 // Maximum distance for zero vectors
                 } else {
                     let cosine_sim = dot_product / (norm_h_plus_r * norm_t);
-                    1.0 - cosine_sim.max(-1.0).min(1.0) // Clamp to [-1, 1] and convert to distance
+                    1.0 - cosine_sim.clamp(-1.0, 1.0) // Clamp to [-1, 1] and convert to distance
                 }
             }
         };
@@ -226,7 +226,7 @@ impl TransE {
             DistanceMetric::Cosine => {
                 let norm = pos_diff.mapv(|x| x * x).sum().sqrt();
                 if norm > 1e-10 {
-                    1.0 - (pos_diff.dot(&pos_diff) / (norm * norm)).max(-1.0).min(1.0)
+                    1.0 - (pos_diff.dot(&pos_diff) / (norm * norm)).clamp(-1.0, 1.0)
                 } else {
                     0.0
                 }
@@ -239,7 +239,7 @@ impl TransE {
             DistanceMetric::Cosine => {
                 let norm = neg_diff.mapv(|x| x * x).sum().sqrt();
                 if norm > 1e-10 {
-                    1.0 - (neg_diff.dot(&neg_diff) / (norm * norm)).max(-1.0).min(1.0)
+                    1.0 - (neg_diff.dot(&neg_diff) / (norm * norm)).clamp(-1.0, 1.0)
                 } else {
                     0.0
                 }
@@ -758,10 +758,7 @@ mod tests {
 
         // Scores may differ due to different distance metrics
         // This tests that the cosine distance implementation works
-        println!(
-            "L1 score: {}, L2 score: {}, Cosine score: {}",
-            score_l1, score_l2, score_cosine
-        );
+        println!("L1 score: {score_l1}, L2 score: {score_l2}, Cosine score: {score_cosine}");
 
         Ok(())
     }

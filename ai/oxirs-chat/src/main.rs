@@ -409,9 +409,7 @@ fn parse_rdf_content(
                     }
                 }
                 Err(e) => {
-                    return Err(
-                        format!("Failed to parse RDF format {format_debug}: {e}").into(),
-                    );
+                    return Err(format!("Failed to parse RDF format {format_debug}: {e}").into());
                 }
             }
         }

@@ -13,7 +13,7 @@ use tokio::time::{interval, sleep};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::{executor::GraphQLResponse, ServiceRegistry};
+use crate::{executor::GraphQLResponse, service_registry::ServiceRegistry};
 
 /// Request batching configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -348,7 +348,7 @@ impl RequestBatcher {
     /// Choose optimal batching strategy based on current conditions
     pub async fn choose_batching_strategy(
         &self,
-        service_id: &str,
+        _service_id: &str,
         queue_depth: usize,
     ) -> BatchingStrategy {
         let metrics = self.performance_metrics.read().await;
@@ -629,7 +629,7 @@ impl RequestBatcher {
     async fn execute_simple_grouped_batch(
         &self,
         batch: &RequestBatch,
-        service_registry: &ServiceRegistry,
+        _service_registry: &ServiceRegistry,
     ) -> Result<Vec<GraphQLResponse>> {
         // Simple parallel execution
         let mut tasks = Vec::new();

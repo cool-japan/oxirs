@@ -609,9 +609,7 @@ impl RecommendationEvaluator {
             let avg_precision = results.precision_scores.get(&5).copied().unwrap_or(0.0);
             let personalization = results.personalization_score;
 
-            let satisfaction = (avg_precision * 0.7 + personalization * 0.3)
-                .min(1.0)
-                .max(0.0);
+            let satisfaction = (avg_precision * 0.7 + personalization * 0.3).clamp(0.0, 1.0);
 
             satisfaction_scores.insert(user_id.clone(), satisfaction);
         }

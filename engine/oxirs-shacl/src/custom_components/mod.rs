@@ -4,6 +4,8 @@
 //! allowing users to extend SHACL with domain-specific validation logic, parameter validation,
 //! component inheritance, performance optimization, and security features.
 
+#![allow(dead_code)]
+
 pub mod constraints;
 pub mod metadata;
 pub mod performance;

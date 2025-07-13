@@ -180,8 +180,6 @@ impl TransformerPreprocessor {
         result = result.replace("const", "constant");
         result = result.replace("struct", "structure");
         result = result.replace("enum", "enumeration");
-        result = result.replace("class", "class");
-        result = result.replace("interface", "interface");
 
         // Common type names
         result = result.replace("Vec<i32>", "vector of integers");

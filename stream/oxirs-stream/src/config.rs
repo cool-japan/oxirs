@@ -906,7 +906,10 @@ mod tests {
         let manager = ConfigBuilder::new().build().await.unwrap();
 
         // Test invalid configuration
-        let invalid_config = StreamConfig { max_connections: 0, ..Default::default() };
+        let invalid_config = StreamConfig {
+            max_connections: 0,
+            ..Default::default()
+        };
 
         assert!(manager.validate_config(&invalid_config).is_err());
     }

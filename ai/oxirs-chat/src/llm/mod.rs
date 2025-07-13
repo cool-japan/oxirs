@@ -3,7 +3,6 @@
 //! Provides unified interface for multiple LLM providers including OpenAI, Anthropic Claude,
 //! and local models with intelligent routing and fallback strategies.
 
-
 // Module declarations
 pub mod anthropic_provider;
 pub mod circuit_breaker;

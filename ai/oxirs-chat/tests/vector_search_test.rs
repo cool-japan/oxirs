@@ -1,5 +1,5 @@
 use oxirs_chat::rag::{RAGConfig, RAGSystem, SimpleEmbeddingModel};
-use oxirs_core::{ConcreteStore, Literal, NamedNode, Store, Triple};
+use oxirs_core::{ConcreteStore, Literal, NamedNode, Triple};
 use oxirs_vec::{
     index::AdvancedVectorIndex,
     index::{DistanceMetric, IndexConfig, IndexType},
@@ -194,9 +194,7 @@ async fn test_rag_system_with_vector_index() {
                         .as_ref()
                         .map(|t| t.len())
                         .unwrap_or(0);
-                    println!(
-                        "✅ Knowledge retrieval succeeded, found {triple_count} triples"
-                    );
+                    println!("✅ Knowledge retrieval succeeded, found {triple_count} triples");
                     // Don't require non-empty results - the simple embedding model may not find good matches
                 }
                 Err(e) => {
@@ -214,9 +212,7 @@ async fn test_rag_system_with_vector_index() {
 
 #[tokio::test]
 async fn test_cosine_similarity() {
-    
-
-    let dimension = 4;
+    let _dimension = 4;
     let config = IndexConfig {
         index_type: IndexType::Hnsw,
         max_connections: 16,

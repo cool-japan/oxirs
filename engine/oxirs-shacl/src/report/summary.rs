@@ -238,7 +238,7 @@ impl ValidationSummary {
             - ((errors * 1.0 + warnings * 0.5)
                 / (self.nodes_validated as f64).max(total_violations));
 
-        weighted_score.max(0.0).min(1.0)
+        weighted_score.clamp(0.0, 1.0)
     }
 
     /// Check if data quality is acceptable (customizable threshold)

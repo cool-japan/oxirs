@@ -57,7 +57,7 @@ impl QueryPlanner {
     pub async fn plan_sparql(
         &self,
         query_info: &QueryInfo,
-        service_registry: &crate::ServiceRegistry,
+        service_registry: &crate::service_registry::ServiceRegistry,
     ) -> Result<ExecutionPlan> {
         self.inner.plan_sparql(query_info, service_registry).await
     }
@@ -75,7 +75,7 @@ impl QueryPlanner {
     pub async fn plan_graphql(
         &self,
         query_info: &QueryInfo,
-        service_registry: &crate::ServiceRegistry,
+        service_registry: &crate::service_registry::ServiceRegistry,
     ) -> Result<ExecutionPlan> {
         self.inner.plan_graphql(query_info, service_registry).await
     }

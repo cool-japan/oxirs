@@ -358,10 +358,8 @@ impl RdfResolver {
 
         match self.store.get_subjects(limit) {
             Ok(subjects) => {
-                let graphql_subjects: Vec<Value> = subjects
-                    .into_iter()
-                    .map(Value::StringValue)
-                    .collect();
+                let graphql_subjects: Vec<Value> =
+                    subjects.into_iter().map(Value::StringValue).collect();
                 Ok(Value::ListValue(graphql_subjects))
             }
             Err(err) => {
@@ -379,10 +377,8 @@ impl RdfResolver {
 
         match self.store.get_predicates(limit) {
             Ok(predicates) => {
-                let graphql_predicates: Vec<Value> = predicates
-                    .into_iter()
-                    .map(Value::StringValue)
-                    .collect();
+                let graphql_predicates: Vec<Value> =
+                    predicates.into_iter().map(Value::StringValue).collect();
                 Ok(Value::ListValue(graphql_predicates))
             }
             Err(err) => {
@@ -467,7 +463,7 @@ impl RdfResolver {
                                 }
                             }
                             // Note: Term::Triple is not currently supported
-                            _ => Value::StringValue("Unknown term type".to_string())
+                            _ => Value::StringValue("Unknown term type".to_string()),
                         };
                         row.insert(var.name().to_string(), value);
                     }

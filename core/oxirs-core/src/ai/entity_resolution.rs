@@ -387,46 +387,51 @@ impl EntityResolver {
     /// Post-process clusters
     fn post_process_clusters(&self, clusters: Vec<EntityCluster>) -> Result<Vec<EntityCluster>> {
         let mut processed_clusters = clusters;
-        
+
         // Step 1: Merge overlapping clusters
         processed_clusters = self.merge_overlapping_clusters(processed_clusters)?;
-        
+
         // Step 2: Split large clusters
         processed_clusters = self.split_large_clusters(processed_clusters)?;
-        
+
         // Step 3: Validate cluster quality
         processed_clusters = self.validate_cluster_quality(processed_clusters)?;
-        
+
         Ok(processed_clusters)
     }
 
     /// Merge clusters that have overlapping entities
-    fn merge_overlapping_clusters(&self, clusters: Vec<EntityCluster>) -> Result<Vec<EntityCluster>> {
+    fn merge_overlapping_clusters(
+        &self,
+        clusters: Vec<EntityCluster>,
+    ) -> Result<Vec<EntityCluster>> {
         let mut merged_clusters = Vec::new();
         let mut processed = vec![false; clusters.len()];
-        
+
         for (i, cluster_a) in clusters.iter().enumerate() {
             if processed[i] {
                 continue;
             }
-            
+
             let mut merged_cluster = cluster_a.clone();
             processed[i] = true;
-            
+
             // Find overlapping clusters
             for (j, cluster_b) in clusters.iter().enumerate().skip(i + 1) {
                 if processed[j] {
                     continue;
                 }
-                
+
                 // Check for entity overlap
-                let overlap_count = cluster_a.entities.iter()
+                let overlap_count = cluster_a
+                    .entities
+                    .iter()
                     .filter(|entity| cluster_b.entities.contains(entity))
                     .count();
-                
+
                 let min_size = cluster_a.entities.len().min(cluster_b.entities.len());
                 let overlap_ratio = overlap_count as f64 / min_size as f64;
-                
+
                 // Merge if overlap ratio exceeds threshold
                 if overlap_ratio > 0.3 {
                     // Merge entities
@@ -435,11 +440,12 @@ impl EntityResolver {
                             merged_cluster.entities.push(entity.clone());
                         }
                     }
-                    
+
                     // Update cluster properties
                     merged_cluster.size = merged_cluster.entities.len();
-                    merged_cluster.confidence = (merged_cluster.confidence + cluster_b.confidence) / 2.0;
-                    
+                    merged_cluster.confidence =
+                        (merged_cluster.confidence + cluster_b.confidence) / 2.0;
+
                     // Record merge decision
                     merged_cluster.merge_decisions.push(MergeDecision {
                         source_entity: cluster_b.id.clone(),
@@ -449,14 +455,14 @@ impl EntityResolver {
                         confidence: overlap_ratio as f32,
                         features_used: vec![FeatureType::StructuralSimilarity],
                     });
-                    
+
                     processed[j] = true;
                 }
             }
-            
+
             merged_clusters.push(merged_cluster);
         }
-        
+
         Ok(merged_clusters)
     }
 
@@ -464,37 +470,41 @@ impl EntityResolver {
     fn split_large_clusters(&self, clusters: Vec<EntityCluster>) -> Result<Vec<EntityCluster>> {
         let mut split_clusters = Vec::new();
         let max_cluster_size = 50; // Configurable threshold
-        
+
         for cluster in clusters {
             if cluster.entities.len() <= max_cluster_size {
                 split_clusters.push(cluster);
                 continue;
             }
-            
+
             // Split large cluster using similarity-based grouping
             let sub_clusters = self.split_cluster_by_similarity(&cluster, max_cluster_size)?;
             split_clusters.extend(sub_clusters);
         }
-        
+
         Ok(split_clusters)
     }
 
     /// Split a cluster by similarity into smaller sub-clusters
-    fn split_cluster_by_similarity(&self, cluster: &EntityCluster, max_size: usize) -> Result<Vec<EntityCluster>> {
+    fn split_cluster_by_similarity(
+        &self,
+        cluster: &EntityCluster,
+        max_size: usize,
+    ) -> Result<Vec<EntityCluster>> {
         let mut sub_clusters = Vec::new();
         let mut remaining_entities = cluster.entities.clone();
         let mut cluster_id_counter = 0;
-        
+
         while !remaining_entities.is_empty() {
             let mut current_cluster_entities = Vec::new();
             let seed_entity = remaining_entities.remove(0);
             current_cluster_entities.push(seed_entity.clone());
-            
+
             // Add similar entities to current cluster
             let mut i = 0;
             while i < remaining_entities.len() && current_cluster_entities.len() < max_size {
                 let entity = &remaining_entities[i];
-                
+
                 // Check similarity with entities in current cluster
                 let mut max_similarity = 0.0;
                 for cluster_entity in &current_cluster_entities {
@@ -503,7 +513,7 @@ impl EntityResolver {
                         max_similarity = similarity;
                     }
                 }
-                
+
                 // Add to cluster if similarity exceeds threshold
                 if max_similarity > 0.7 {
                     current_cluster_entities.push(remaining_entities.remove(i));
@@ -511,7 +521,7 @@ impl EntityResolver {
                     i += 1;
                 }
             }
-            
+
             // Create sub-cluster
             let canonical_entity = current_cluster_entities[0].clone();
             let sub_cluster = EntityCluster {
@@ -529,42 +539,42 @@ impl EntityResolver {
                     features_used: vec![FeatureType::StructuralSimilarity],
                 }],
             };
-            
+
             sub_clusters.push(sub_cluster);
             cluster_id_counter += 1;
         }
-        
+
         Ok(sub_clusters)
     }
 
     /// Validate cluster quality and filter out low-quality clusters
     fn validate_cluster_quality(&self, clusters: Vec<EntityCluster>) -> Result<Vec<EntityCluster>> {
         let mut validated_clusters = Vec::new();
-        
+
         for cluster in clusters {
             // Quality metrics
             let min_cluster_size = 2;
             let min_confidence = 0.5;
-            
+
             // Check minimum size
             if cluster.entities.len() < min_cluster_size {
                 continue;
             }
-            
+
             // Check minimum confidence
             if cluster.confidence < min_confidence {
                 continue;
             }
-            
+
             // Calculate internal similarity
             let internal_similarity = self.calculate_cluster_internal_similarity(&cluster)?;
             if internal_similarity < 0.6 {
                 continue;
             }
-            
+
             validated_clusters.push(cluster);
         }
-        
+
         Ok(validated_clusters)
     }
 
@@ -573,18 +583,19 @@ impl EntityResolver {
         if cluster.entities.len() < 2 {
             return Ok(1.0);
         }
-        
+
         let mut total_similarity = 0.0;
         let mut comparison_count = 0;
-        
+
         for i in 0..cluster.entities.len() {
             for j in (i + 1)..cluster.entities.len() {
-                let similarity = self.calculate_entity_similarity(&cluster.entities[i], &cluster.entities[j])?;
+                let similarity =
+                    self.calculate_entity_similarity(&cluster.entities[i], &cluster.entities[j])?;
                 total_similarity += similarity;
                 comparison_count += 1;
             }
         }
-        
+
         if comparison_count > 0 {
             Ok(total_similarity / comparison_count as f64)
         } else {
@@ -593,18 +604,30 @@ impl EntityResolver {
     }
 
     /// Calculate similarity between two entities (helper method)
-    fn calculate_entity_similarity(&self, entity1: &EntityRecord, entity2: &EntityRecord) -> Result<f64> {
+    fn calculate_entity_similarity(
+        &self,
+        entity1: &EntityRecord,
+        entity2: &EntityRecord,
+    ) -> Result<f64> {
         // Simple string similarity based on labels from attributes
-        let label1 = entity1.attributes.get("label").unwrap_or(&entity1.uri).to_lowercase();
-        let label2 = entity2.attributes.get("label").unwrap_or(&entity2.uri).to_lowercase();
-        
+        let label1 = entity1
+            .attributes
+            .get("label")
+            .unwrap_or(&entity1.uri)
+            .to_lowercase();
+        let label2 = entity2
+            .attributes
+            .get("label")
+            .unwrap_or(&entity2.uri)
+            .to_lowercase();
+
         // Jaccard similarity on character n-grams
         let ngrams1: std::collections::HashSet<String> = self.generate_character_ngrams(&label1, 2);
         let ngrams2: std::collections::HashSet<String> = self.generate_character_ngrams(&label2, 2);
-        
+
         let intersection = ngrams1.intersection(&ngrams2).count();
         let union = ngrams1.union(&ngrams2).count();
-        
+
         if union > 0 {
             Ok(intersection as f64 / union as f64)
         } else {
@@ -616,14 +639,14 @@ impl EntityResolver {
     fn generate_character_ngrams(&self, text: &str, n: usize) -> std::collections::HashSet<String> {
         let mut ngrams = std::collections::HashSet::new();
         let chars: Vec<char> = text.chars().collect();
-        
+
         if chars.len() >= n {
             for i in 0..=(chars.len() - n) {
                 let ngram: String = chars[i..i + n].iter().collect();
                 ngrams.insert(ngram);
             }
         }
-        
+
         ngrams
     }
 }
@@ -758,7 +781,7 @@ impl ClusteringAlgorithm for HierarchicalClusterer {
                     decision: DecisionType::Merge,
                     confidence: 0.8,
                     features_used: vec![FeatureType::StructuralSimilarity],
-                }]
+                }],
             };
 
             clusters.push(cluster);
@@ -876,7 +899,7 @@ mod tests {
     async fn test_entity_resolution() {
         let config = AiConfig::default();
         let mut resolver = EntityResolver::new(&config).unwrap();
-        
+
         // Use a lower similarity threshold for testing
         resolver.config.similarity_threshold = 0.3;
 

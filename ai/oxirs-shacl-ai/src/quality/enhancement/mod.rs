@@ -13,7 +13,6 @@ pub use core::{
     Priority, ProcessOptimizationModel, QualityEnhancementEngine, RecommendationModels,
 };
 
-
 /// Create a default quality enhancement engine
 pub fn create_default_engine() -> QualityEnhancementEngine {
     QualityEnhancementEngine::default()
@@ -49,7 +48,6 @@ pub fn create_aggressive_config() -> EnhancementConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quality::QualityReport;
 
     #[test]
     fn test_engine_creation() {

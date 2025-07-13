@@ -4,6 +4,8 @@
 //! enabling efficient concurrent validation, streaming operations, and integration
 //! with async I/O systems.
 
+#![allow(dead_code)]
+
 #[cfg(feature = "async")]
 use std::future::Future;
 #[cfg(feature = "async")]
@@ -43,6 +45,7 @@ pub struct AsyncValidationEngine {
     concurrency_limiter: Arc<Semaphore>,
 
     /// Channel for streaming validation results
+    #[allow(dead_code)]
     result_sender: Option<mpsc::UnboundedSender<ValidationEvent>>,
 }
 
@@ -146,7 +149,7 @@ pub enum ValidationEvent {
     Completed {
         report: ValidationReport,
         total_duration: Duration,
-        statistics: ValidationStats,
+        statistics: Box<ValidationStats>,
     },
 
     /// Error occurred
@@ -304,6 +307,7 @@ impl AsyncValidationEngineBuilder {
         let concurrency_limiter = Arc::new(Semaphore::new(self.async_config.max_concurrent_tasks));
 
         Ok(AsyncValidationEngine {
+            #[allow(clippy::arc_with_non_send_sync)]
             engine: Arc::new(RwLock::new(engine)),
             async_config: self.async_config,
             concurrency_limiter,
@@ -362,7 +366,7 @@ impl AsyncValidationEngine {
         events.push(ValidationEvent::Completed {
             report: report.clone(),
             total_duration: stats.total_duration,
-            statistics: engine.get_statistics().clone(),
+            statistics: Box::new(engine.get_statistics().clone()),
         });
 
         Ok(AsyncValidationResult {
@@ -466,7 +470,7 @@ impl AsyncValidationEngine {
         events.push(ValidationEvent::Completed {
             report: final_report.clone(),
             total_duration: stats.total_duration,
-            statistics,
+            statistics: Box::new(statistics),
         });
 
         Ok(AsyncValidationResult {
@@ -603,7 +607,7 @@ impl AsyncValidationEngine {
             let _ = tx.send(ValidationEvent::Completed {
                 report: final_report.clone(),
                 total_duration: stats.total_duration,
-                statistics,
+                statistics: Box::new(statistics),
             });
 
             Ok(AsyncValidationResult {
@@ -620,7 +624,7 @@ impl AsyncValidationEngine {
     async fn validate_store_internal(
         &self,
         store: &dyn Store,
-        _events: &mut Vec<ValidationEvent>,
+        _events: &mut [ValidationEvent],
         stats: &mut AsyncValidationStats,
     ) -> Result<ValidationReport> {
         let mut engine = self.engine.write().await;

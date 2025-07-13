@@ -545,7 +545,8 @@ impl QueryBus {
 }
 
 // Type alias for complex projection type
-type ProjectionMap = Arc<RwLock<HashMap<String, Box<dyn ReadModelProjection<Event = StreamEvent>>>>>;
+type ProjectionMap =
+    Arc<RwLock<HashMap<String, Box<dyn ReadModelProjection<Event = StreamEvent>>>>>;
 
 /// Read model manager for handling projections
 pub struct ReadModelManager {

@@ -19,7 +19,8 @@ use crate::{
 };
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade}, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        State,
     },
     response::{IntoResponse, Response},
 };
@@ -333,7 +334,8 @@ impl SubscriptionManager {
     ) -> FusekiResult<()> {
         info!("New WebSocket connection: {}", connection_id);
         self.metrics
-            .increment_counter("websocket.connections.total", 1).await;
+            .increment_counter("websocket.connections.total", 1)
+            .await;
 
         let (sender, receiver) = ws.split();
         let (tx, rx) = mpsc::channel(100);
@@ -368,7 +370,8 @@ impl SubscriptionManager {
 
         info!("WebSocket connection closed: {}", connection_id);
         self.metrics
-            .increment_counter("websocket.connections.closed", 1).await;
+            .increment_counter("websocket.connections.closed", 1)
+            .await;
 
         Ok(())
     }
@@ -534,7 +537,8 @@ impl SubscriptionManager {
         self.evaluate_subscription(&subscription_id).await?;
 
         self.metrics
-            .increment_counter("websocket.subscriptions.created", 1).await;
+            .increment_counter("websocket.subscriptions.created", 1)
+            .await;
         info!(
             "Created subscription {} for connection {}",
             subscription_id, connection_id
@@ -577,7 +581,7 @@ impl SubscriptionManager {
     }
 
     /// Handle authentication
-    async fn handle_auth(&self, connection_id: &str, token: &str) -> FusekiResult<()> {
+    async fn handle_auth(&self, connection_id: &str, _token: &str) -> FusekiResult<()> {
         // TODO: Implement actual authentication
         // For now, just update connection state
         if let Some(mut conn) = self.connections.get_mut(connection_id) {
@@ -741,7 +745,8 @@ impl SubscriptionManager {
         }
 
         self.metrics
-            .increment_counter("websocket.notifications.sent", 1).await;
+            .increment_counter("websocket.notifications.sent", 1)
+            .await;
 
         Ok(())
     }
@@ -750,7 +755,7 @@ impl SubscriptionManager {
     async fn apply_notification_filter(
         &self,
         subscription: &Subscription,
-        result: &QueryResult,
+        _result: &QueryResult,
         filter: &NotificationFilter,
     ) -> FusekiResult<bool> {
         // Check minimum change threshold
@@ -987,7 +992,7 @@ impl QueryExecutor {
     async fn execute_sparql_query(
         &self,
         query: &str,
-        parameters: &QueryParameters,
+        _parameters: &QueryParameters,
     ) -> FusekiResult<Vec<HashMap<String, serde_json::Value>>> {
         // Placeholder implementation
         // In real implementation, this would:

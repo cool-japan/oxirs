@@ -89,8 +89,8 @@ impl HashIndexConfig {
         }
 
         // Handle remaining bytes
-        for j in i..data.len() {
-            hash ^= (data[j] as u64) << ((j - i) * 8);
+        for (offset, &byte) in data.iter().enumerate().skip(i) {
+            hash ^= (byte as u64) << ((offset - i) * 8);
         }
 
         hash ^ (hash >> 32)
@@ -559,6 +559,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::uninlined_format_args)]
 mod tests {
     use super::*;
 

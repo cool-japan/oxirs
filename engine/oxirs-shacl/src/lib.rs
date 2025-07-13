@@ -1061,7 +1061,7 @@ impl Validator {
             shape_dependencies: petgraph::Graph::new(),
             target_cache: HashMap::new(),
             config: ValidationConfig::default(),
-            import_manager: shape_import::ShapeImportManager::default(),
+            import_manager: shape_import::ShapeImportManager::with_default_config(),
         }
     }
 
@@ -1072,12 +1072,15 @@ impl Validator {
             shape_dependencies: petgraph::Graph::new(),
             target_cache: HashMap::new(),
             config,
-            import_manager: shape_import::ShapeImportManager::default(),
+            import_manager: shape_import::ShapeImportManager::with_default_config(),
         }
     }
 
     /// Create a new validator with custom import configuration
-    pub fn with_import_config(config: ValidationConfig, import_config: shape_import::ShapeImportConfig) -> Self {
+    pub fn with_import_config(
+        config: ValidationConfig,
+        import_config: shape_import::ShapeImportConfig,
+    ) -> Self {
         Self {
             shapes: IndexMap::new(),
             shape_dependencies: petgraph::Graph::new(),
@@ -1178,7 +1181,7 @@ impl Validator {
     }
 
     /// Load shapes from RDF data with automatic import processing
-    /// 
+    ///
     /// This method processes import directives (owl:imports, sh:include, sh:imports)
     /// found in the RDF data and recursively loads referenced shapes.
     pub fn load_shapes_with_imports(
@@ -1202,7 +1205,7 @@ impl Validator {
 
         // Extract and process import directives
         let import_directives = self.import_manager.extract_import_directives(rdf_data)?;
-        
+
         for directive in import_directives {
             match self.import_manager.import_shapes(&directive, 0) {
                 Ok(import_result) => {
@@ -1214,7 +1217,7 @@ impl Validator {
                             total_count += 1;
                         }
                     }
-                    
+
                     // Merge warnings and dependency chain
                     warnings.extend(import_result.warnings);
                     dependency_chain.extend(import_result.dependency_chain);
@@ -1255,14 +1258,14 @@ impl Validator {
         directive: &shape_import::ImportDirective,
     ) -> Result<shape_import::ImportResult> {
         let import_result = self.import_manager.import_shapes(directive, 0)?;
-        
+
         // Add imported shapes to validator
-        let mut added_count = 0;
+        let mut _added_count = 0;
         let mut warnings = import_result.warnings.clone();
-        
+
         for shape in &import_result.shapes {
             match self.add_shape(shape.clone()) {
-                Ok(()) => added_count += 1,
+                Ok(()) => _added_count += 1,
                 Err(e) => warnings.push(format!("Failed to add shape {}: {}", shape.id, e)),
             }
         }
@@ -1313,7 +1316,8 @@ impl Validator {
     /// Resolve and load external references found in loaded shapes
     pub fn resolve_external_references(&mut self) -> Result<Vec<shape_import::ImportResult>> {
         let mut current_shapes: Vec<Shape> = self.shapes.values().cloned().collect();
-        self.import_manager.resolve_external_references(&mut current_shapes)
+        self.import_manager
+            .resolve_external_references(&mut current_shapes)
     }
 
     /// Get import statistics
@@ -1338,14 +1342,13 @@ impl Validator {
         allow_file: bool,
         max_resource_size: usize,
     ) {
-        self.import_manager = shape_import::ShapeImportManager::new(
-            shape_import::ShapeImportConfig {
+        self.import_manager =
+            shape_import::ShapeImportManager::new(shape_import::ShapeImportConfig {
                 allow_http,
                 allow_file,
                 max_resource_size,
                 ..shape_import::ShapeImportConfig::default()
-            }
-        );
+            });
     }
 
     /// Validate data in a store against all loaded shapes
@@ -1437,15 +1440,13 @@ impl Validator {
                 // We'll allow all target types but log a warning for unusual combinations
                 if !shape.targets.is_empty() {
                     for target in &shape.targets {
-                        match target {
-                            Target::Class(_) => {
-                                tracing::debug!(
-                                    "Property shape '{}' has a class target, which is valid but unusual",
-                                    shape.id
-                                );
-                            }
-                            _ => {} // All target types are valid for property shapes
+                        if let Target::Class(_) = target {
+                            tracing::debug!(
+                                "Property shape '{}' has a class target, which is valid but unusual",
+                                shape.id
+                            );
                         }
+                        // All target types are valid for property shapes
                     }
                 }
             }

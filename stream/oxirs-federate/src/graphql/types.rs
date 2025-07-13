@@ -213,6 +213,7 @@ pub struct ResolvedEntity {
 pub struct GraphQLFederation {
     pub schemas: Arc<RwLock<HashMap<String, FederatedSchema>>>,
     pub config: GraphQLFederationConfig,
+    pub cache: Option<Arc<crate::cache::FederationCache>>,
 }
 
 /// Federated schema definition
@@ -414,12 +415,44 @@ pub enum GraphQLOperationType {
 }
 
 /// Selection in a GraphQL query
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Selection {
     pub name: String,
     pub alias: Option<String>,
     pub arguments: HashMap<String, serde_json::Value>,
     pub selection_set: Vec<Selection>,
+    pub fragment: Option<FragmentType>,
+}
+
+/// Type of fragment in a selection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum FragmentType {
+    Spread(FragmentSpread),
+    Inline(InlineFragment),
+}
+
+/// Fragment definition
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FragmentDefinition {
+    pub name: String,
+    pub type_condition: String,
+    pub selection_set: Vec<Selection>,
+    pub directives: Vec<String>,
+}
+
+/// Fragment spread (e.g., ...fragmentName)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FragmentSpread {
+    pub name: String,
+    pub directives: Vec<String>,
+}
+
+/// Inline fragment (e.g., ... on TypeName { fields })
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InlineFragment {
+    pub type_condition: Option<String>,
+    pub selection_set: Vec<Selection>,
+    pub directives: Vec<String>,
 }
 
 /// Variable definition in GraphQL query

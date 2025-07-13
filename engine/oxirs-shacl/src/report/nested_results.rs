@@ -374,8 +374,10 @@ impl NestedViolationBuilder {
         if let Some(ref mut nested_results) = self.nested_results {
             nested_results.logical_context = Some(context);
         } else {
-            let mut nested_results = NestedValidationResults::default();
-            nested_results.logical_context = Some(context);
+            let nested_results = NestedValidationResults {
+                logical_context: Some(context),
+                ..Default::default()
+            };
             self.nested_results = Some(nested_results);
         }
         self
@@ -386,8 +388,10 @@ impl NestedViolationBuilder {
         if let Some(ref mut nested_results) = self.nested_results {
             nested_results.shape_context = Some(context);
         } else {
-            let mut nested_results = NestedValidationResults::default();
-            nested_results.shape_context = Some(context);
+            let nested_results = NestedValidationResults {
+                shape_context: Some(context),
+                ..Default::default()
+            };
             self.nested_results = Some(nested_results);
         }
         self
@@ -398,8 +402,10 @@ impl NestedViolationBuilder {
         if let Some(ref mut nested_results) = self.nested_results {
             nested_results.qualified_context = Some(context);
         } else {
-            let mut nested_results = NestedValidationResults::default();
-            nested_results.qualified_context = Some(context);
+            let nested_results = NestedValidationResults {
+                qualified_context: Some(context),
+                ..Default::default()
+            };
             self.nested_results = Some(nested_results);
         }
         self

@@ -68,14 +68,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Print some basic stats
         let count = store.triple_count()?;
-        println!("Loaded {} triples", count);
+        println!("Loaded {count} triples");
 
         // Show a few sample subjects
         let subjects = store.get_subjects(Some(5))?;
         if !subjects.is_empty() {
             println!("Sample subjects:");
             for subject in subjects {
-                println!("  {}", subject);
+                println!("  {subject}");
             }
         }
     }
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     let store_arc = Arc::new(store);
 
-    println!("🚀 Starting OxiRS GraphQL server on http://{}", addr);
+    println!("🚀 Starting OxiRS GraphQL server on http://{addr}");
 
     // Use the enhanced core GraphQL implementation with real SPARQL integration
     println!("🔧 Using enhanced GraphQL implementation with real SPARQL query execution");
@@ -101,12 +101,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = GraphQLServer::new(store_arc).with_config(config);
 
     if args.playground {
-        println!("📊 GraphQL Playground available at http://{}/", addr);
+        println!("📊 GraphQL Playground available at http://{addr}/");
     }
     if args.graphiql {
         println!("📊 GraphiQL interface: planned for future release");
     }
-    println!("🔍 GraphQL endpoint: http://{}/graphql", addr);
+    println!("🔍 GraphQL endpoint: http://{addr}/graphql");
     println!("✨ Enhancement: Real SPARQL query execution now implemented");
 
     server.start(&addr.to_string()).await?;

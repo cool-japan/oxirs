@@ -368,7 +368,7 @@ impl AdvancedPropertyPathOptimizer {
 
         // Estimate cost and cardinality
         let cost_estimate = self.estimate_total_cost(&execution_plan).await?;
-        let cardinality_estimate = self.estimate_result_cardinality(&rewritten_path).await?;
+        let _cardinality_estimate = self.estimate_result_cardinality(&rewritten_path).await?;
 
         let optimized = OptimizedPath {
             original_pattern: path.to_string(),
@@ -416,26 +416,26 @@ impl AdvancedPropertyPathOptimizer {
         }
 
         // Handle inverse
-        if path.starts_with('^') {
-            let inner = self.parse_property_path(&path[1..])?;
+        if let Some(stripped) = path.strip_prefix('^') {
+            let inner = self.parse_property_path(stripped)?;
             return Ok(PathPattern::Inverse(Box::new(inner)));
         }
 
         // Handle zero or more
-        if path.ends_with('*') {
-            let inner = self.parse_property_path(&path[..path.len() - 1])?;
+        if let Some(stripped) = path.strip_suffix('*') {
+            let inner = self.parse_property_path(stripped)?;
             return Ok(PathPattern::ZeroOrMore(Box::new(inner)));
         }
 
         // Handle one or more
-        if path.ends_with('+') {
-            let inner = self.parse_property_path(&path[..path.len() - 1])?;
+        if let Some(stripped) = path.strip_suffix('+') {
+            let inner = self.parse_property_path(stripped)?;
             return Ok(PathPattern::OneOrMore(Box::new(inner)));
         }
 
         // Handle optional
-        if path.ends_with('?') {
-            let inner = self.parse_property_path(&path[..path.len() - 1])?;
+        if let Some(stripped) = path.strip_suffix('?') {
+            let inner = self.parse_property_path(stripped)?;
             return Ok(PathPattern::Optional(Box::new(inner)));
         }
 
@@ -533,7 +533,7 @@ impl AdvancedPropertyPathOptimizer {
         for condition in conditions {
             match condition {
                 RewriteCondition::PathLength { min, max } => {
-                    let length = self.estimate_path_length(path);
+                    let length = Self::estimate_path_length(path);
                     if let Some(min) = min {
                         if length < *min {
                             return Ok(false);
@@ -604,7 +604,7 @@ impl AdvancedPropertyPathOptimizer {
 
     /// Factor out common prefixes in alternatives
     fn factor_common_prefix(&self, path: &PathPattern) -> FusekiResult<PathPattern> {
-        if let PathPattern::Alternative(alts) = path {
+        if let PathPattern::Alternative(_alts) = path {
             // Simplified implementation - would be more sophisticated in production
             Ok(path.clone())
         } else {
@@ -618,11 +618,11 @@ impl AdvancedPropertyPathOptimizer {
         path: &PathPattern,
     ) -> FusekiResult<PathCharacteristics> {
         Ok(PathCharacteristics {
-            estimated_length: self.estimate_path_length(path),
+            estimated_length: Self::estimate_path_length(path),
             has_cycles: self.detect_cycles(path),
-            has_alternatives: self.has_alternatives(path),
-            has_repetition: self.has_repetition(path),
-            has_inverse: self.has_inverse(path),
+            has_alternatives: Self::has_alternatives(path),
+            has_repetition: Self::has_repetition(path),
+            has_inverse: Self::has_inverse(path),
             is_linear: self.is_linear_path(path),
             estimated_branching_factor: self.estimate_branching_factor(path).await?,
             can_use_index: self.can_use_index(path).await?,
@@ -861,7 +861,7 @@ impl AdvancedPropertyPathOptimizer {
         let path_str = self.path_to_string(path);
 
         // Check for exact path index match
-        if let Some(path_index) = index_info.path_indexes.get(&path_str) {
+        if let Some(_path_index) = index_info.path_indexes.get(&path_str) {
             return Ok(path_str);
         }
 
@@ -876,20 +876,20 @@ impl AdvancedPropertyPathOptimizer {
     }
 
     /// Helper functions for path analysis
-    fn estimate_path_length(&self, path: &PathPattern) -> usize {
+    fn estimate_path_length(path: &PathPattern) -> usize {
         match path {
             PathPattern::Property(_) => 1,
-            PathPattern::Sequence(seq) => seq.iter().map(|p| self.estimate_path_length(p)).sum(),
+            PathPattern::Sequence(seq) => seq.iter().map(|p| Self::estimate_path_length(p)).sum(),
             PathPattern::Alternative(alts) => alts
                 .iter()
-                .map(|p| self.estimate_path_length(p))
+                .map(|p| Self::estimate_path_length(p))
                 .max()
                 .unwrap_or(0),
-            PathPattern::Inverse(inner) => self.estimate_path_length(inner),
+            PathPattern::Inverse(inner) => Self::estimate_path_length(inner),
             PathPattern::ZeroOrMore(_) | PathPattern::OneOrMore(_) => 5, // Estimate
-            PathPattern::Optional(inner) => self.estimate_path_length(inner),
+            PathPattern::Optional(inner) => Self::estimate_path_length(inner),
             PathPattern::Repetition { pattern, min, max } => {
-                let base_len = self.estimate_path_length(pattern);
+                let base_len = Self::estimate_path_length(pattern);
                 base_len * max.unwrap_or(*min + 2)
             }
             _ => 1,
@@ -901,44 +901,45 @@ impl AdvancedPropertyPathOptimizer {
         matches!(path, PathPattern::ZeroOrMore(_) | PathPattern::OneOrMore(_))
     }
 
-    fn has_alternatives(&self, path: &PathPattern) -> bool {
+    fn has_alternatives(path: &PathPattern) -> bool {
         match path {
             PathPattern::Alternative(_) => true,
-            PathPattern::Sequence(seq) => seq.iter().any(|p| self.has_alternatives(p)),
+            PathPattern::Sequence(seq) => seq.iter().any(|p| Self::has_alternatives(p)),
             PathPattern::Inverse(inner)
             | PathPattern::ZeroOrMore(inner)
             | PathPattern::OneOrMore(inner)
-            | PathPattern::Optional(inner) => self.has_alternatives(inner),
+            | PathPattern::Optional(inner) => Self::has_alternatives(inner),
             _ => false,
         }
     }
 
-    fn has_repetition(&self, path: &PathPattern) -> bool {
+    fn has_repetition(path: &PathPattern) -> bool {
         match path {
             PathPattern::ZeroOrMore(_)
             | PathPattern::OneOrMore(_)
             | PathPattern::Repetition { .. } => true,
-            PathPattern::Sequence(seq) => seq.iter().any(|p| self.has_repetition(p)),
-            PathPattern::Alternative(alts) => alts.iter().any(|p| self.has_repetition(p)),
+            PathPattern::Sequence(seq) => seq.iter().any(|p| Self::has_repetition(p)),
+            PathPattern::Alternative(alts) => alts.iter().any(|p| Self::has_repetition(p)),
             PathPattern::Inverse(inner) | PathPattern::Optional(inner) => {
-                self.has_repetition(inner)
+                Self::has_repetition(inner)
             }
             _ => false,
         }
     }
 
-    fn has_inverse(&self, path: &PathPattern) -> bool {
+    fn has_inverse(path: &PathPattern) -> bool {
         match path {
             PathPattern::Inverse(_) => true,
-            PathPattern::Sequence(seq) => seq.iter().any(|p| self.has_inverse(p)),
-            PathPattern::Alternative(alts) => alts.iter().any(|p| self.has_inverse(p)),
+            PathPattern::Sequence(seq) => seq.iter().any(|p| Self::has_inverse(p)),
+            PathPattern::Alternative(alts) => alts.iter().any(|p| Self::has_inverse(p)),
             PathPattern::ZeroOrMore(inner)
             | PathPattern::OneOrMore(inner)
-            | PathPattern::Optional(inner) => self.has_inverse(inner),
+            | PathPattern::Optional(inner) => Self::has_inverse(inner),
             _ => false,
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn is_linear_path(&self, path: &PathPattern) -> bool {
         match path {
             PathPattern::Property(_) => true,
@@ -948,6 +949,7 @@ impl AdvancedPropertyPathOptimizer {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_branching_factor<'a>(
         &'a self,
         path: &'a PathPattern,
@@ -1156,28 +1158,30 @@ impl AdvancedPropertyPathOptimizer {
             PathExecutionStrategy::IndexLookup { index_name } => {
                 hints.push(format!("Using index: {index_name}"));
             }
-            PathExecutionStrategy::BidirectionalMeet { meet_point } => {
-                if let Some(point) = meet_point {
-                    hints.push(format!("Bidirectional search meeting at depth {point}"));
-                }
+            PathExecutionStrategy::BidirectionalMeet {
+                meet_point: Some(point),
+            } => {
+                hints.push(format!("Bidirectional search meeting at depth {point}"));
             }
+            PathExecutionStrategy::BidirectionalMeet { meet_point: None } => {}
             PathExecutionStrategy::ParallelAlternatives => {
                 hints.push("Executing alternatives in parallel".to_string());
             }
             _ => {}
         }
 
-        if self.has_repetition(path) {
+        if Self::has_repetition(path) {
             hints.push("Consider limiting depth for repetition operators".to_string());
         }
 
-        if self.has_inverse(path) {
+        if Self::has_inverse(path) {
             hints.push("Inverse traversal may be slower without index".to_string());
         }
 
         hints
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn path_to_string(&self, path: &PathPattern) -> String {
         match path {
             PathPattern::Property(prop) => prop.clone(),

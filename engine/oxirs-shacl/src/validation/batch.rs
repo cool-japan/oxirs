@@ -6,6 +6,8 @@
 //! - Error recovery and graceful degradation
 //! - Detailed performance analytics
 
+#![allow(dead_code)]
+
 use std::collections::{HashMap, VecDeque};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -23,10 +25,14 @@ use crate::{
     Result, ShaclError, ShapeId, ValidationReport,
 };
 
+type ProgressCallbackFn = Box<dyn Fn(BatchProgress) + Send + Sync>;
+type ProgressCallbacks = Arc<Mutex<Vec<ProgressCallbackFn>>>;
+
 /// Enhanced batch validation engine with comprehensive features
 #[derive(Debug)]
 pub struct EnhancedBatchValidationEngine {
     /// Core streaming engine
+    #[allow(dead_code)]
     streaming_engine: StreamingValidationEngine,
     /// Configuration for batch processing
     config: BatchValidationConfig,
@@ -100,7 +106,7 @@ pub struct BatchProgressTracker {
     /// Cancellation flag
     cancelled: AtomicBool,
     /// Progress callback functions
-    progress_callbacks: Arc<Mutex<Vec<Box<dyn Fn(BatchProgress) + Send + Sync>>>>,
+    progress_callbacks: ProgressCallbacks,
 }
 
 impl std::fmt::Debug for BatchProgressTracker {
@@ -253,6 +259,7 @@ pub struct BatchErrorHandler {
     /// Current error count
     error_count: AtomicUsize,
     /// Error recovery strategies
+    #[allow(dead_code)]
     recovery_strategies: Vec<ErrorRecoveryStrategy>,
     /// Error log
     error_log: Arc<Mutex<Vec<BatchValidationError>>>,
@@ -425,6 +432,7 @@ pub struct BatchPerformanceAnalytics {
     /// Error rate history
     error_rate_history: VecDeque<f64>,
     /// Constraint performance breakdown
+    #[allow(dead_code)]
     constraint_performance: HashMap<String, ConstraintPerformanceMetrics>,
     /// Batch processing times
     batch_times: Vec<Duration>,

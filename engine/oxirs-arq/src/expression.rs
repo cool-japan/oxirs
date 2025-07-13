@@ -647,7 +647,10 @@ impl ExpressionEvaluator {
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             )
                         } else {
-                            bail!("Invalid date/dateTime format: {lex}", lex = lit.lexical_form)
+                            bail!(
+                                "Invalid date/dateTime format: {lex}",
+                                lex = lit.lexical_form
+                            )
                         }
                     }
                     _ => bail!("YEAR function can only be applied to date/dateTime literals"),
@@ -690,7 +693,10 @@ impl ExpressionEvaluator {
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             )
                         } else {
-                            bail!("Invalid date/dateTime format: {lex}", lex = lit.lexical_form)
+                            bail!(
+                                "Invalid date/dateTime format: {lex}",
+                                lex = lit.lexical_form
+                            )
                         }
                     }
                     _ => bail!("MONTH function can only be applied to date/dateTime literals"),
@@ -733,7 +739,10 @@ impl ExpressionEvaluator {
                                 "http://www.w3.org/2001/XMLSchema#integer",
                             )
                         } else {
-                            bail!("Invalid date/dateTime format: {lex}", lex = lit.lexical_form)
+                            bail!(
+                                "Invalid date/dateTime format: {lex}",
+                                lex = lit.lexical_form
+                            )
                         }
                     }
                     _ => bail!("DAY function can only be applied to date/dateTime literals"),
@@ -780,7 +789,10 @@ impl ExpressionEvaluator {
     fn builtin_bnode(&self, args: &[Term]) -> Result<Term> {
         if args.is_empty() {
             // Generate new blank node
-            Ok(Term::blank_node(&format!("b{uuid}", uuid = uuid::Uuid::new_v4())))
+            Ok(Term::blank_node(&format!(
+                "b{uuid}",
+                uuid = uuid::Uuid::new_v4()
+            )))
         } else if args.len() == 1 {
             let str_val = self.builtin_str(&[args[0].clone()])?;
             if let Term::Literal(lit) = str_val {

@@ -353,7 +353,9 @@ enum BridgeStatus {
     Paused,
     Stopped,
     #[allow(dead_code)]
-    Failed { reason: String },
+    Failed {
+        reason: String,
+    },
 }
 
 /// Bridge configuration

@@ -361,9 +361,7 @@ impl BenchmarkSuite {
 
         let dataset = BenchmarkDataset {
             name: name.to_string(),
-            description: format!(
-                "Random dataset with {size} vectors of {dimensions} dimensions"
-            ),
+            description: format!("Random dataset with {size} vectors of {dimensions} dimensions"),
             train_vectors,
             query_vectors,
             ground_truth: None,
@@ -497,9 +495,7 @@ impl BenchmarkSuite {
 
         let dataset = BenchmarkDataset {
             name: name.to_string(),
-            description: format!(
-                "Uniform dataset with {size} vectors of {dimensions} dimensions"
-            ),
+            description: format!("Uniform dataset with {size} vectors of {dimensions} dimensions"),
             train_vectors,
             query_vectors,
             ground_truth: None,

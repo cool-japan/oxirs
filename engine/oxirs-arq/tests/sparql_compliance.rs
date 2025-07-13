@@ -5,10 +5,9 @@
 
 use oxirs_arq::algebra::Term;
 use oxirs_arq::{
-    Algebra, BinaryOperator, Expression, Literal, QueryExecutor, Solution, TriplePattern, Variable,
+    Algebra, BinaryOperator, Expression, Literal, QueryExecutor, TriplePattern, Variable,
 };
 use oxirs_core::model::NamedNode;
-use std::collections::HashMap;
 
 /// Mock dataset for testing
 struct MockDataset {
@@ -282,7 +281,7 @@ mod basic_tests {
                         Term::Literal(lit) => Some(lit.value.as_str()),
                         _ => None,
                     })
-                    .map_or(false, |name| name == "Charlie")
+                    == Some("Charlie")
             })
             .unwrap();
 
@@ -501,7 +500,7 @@ mod aggregation_tests {
 
         println!("Solution length: {}", solution.len());
         for (i, binding) in solution.iter().enumerate() {
-            println!("Binding {}: {:?}", i, binding);
+            println!("Binding {i}: {binding:?}");
         }
 
         assert_eq!(solution.len(), 1);
@@ -560,7 +559,7 @@ mod aggregation_tests {
                         Term::Iri(iri) => Some(iri.as_str()),
                         _ => None,
                     })
-                    .map_or(false, |iri| iri.contains("alice"))
+                    .is_some_and(|iri| iri.contains("alice"))
             })
             .unwrap();
 

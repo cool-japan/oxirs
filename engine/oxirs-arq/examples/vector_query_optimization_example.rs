@@ -4,10 +4,18 @@
 //! capabilities in oxirs-arq to enhance SPARQL query performance with semantic
 //! vector search integration.
 
+#![allow(
+    unused_imports,
+    unused_variables,
+    dead_code,
+    clippy::uninlined_format_args,
+    clippy::print_literal
+)]
+
 use anyhow::Result;
 use oxirs_arq::{
     algebra::{Term, TriplePattern},
-    executor::{QueryExecutor},
+    executor::QueryExecutor,
     integrated_query_planner::IntegratedPlannerConfig,
     vector_query_optimizer::{
         IndexAccuracyStats, IndexPerformanceStats, VectorDistanceMetric, VectorIndexInfo,
@@ -47,7 +55,7 @@ fn create_vector_enabled_executor() -> Result<QueryExecutor> {
     let executor = QueryExecutor::new();
 
     // Configure vector optimization
-    let vector_config = VectorOptimizerConfig {
+    let _vector_config = VectorOptimizerConfig {
         enable_vector_optimization: true,
         similarity_threshold: 0.8,
         max_vector_candidates: 1000,
@@ -64,7 +72,7 @@ fn create_vector_enabled_executor() -> Result<QueryExecutor> {
     };
 
     // Configure integrated planner
-    let planner_config = IntegratedPlannerConfig {
+    let _planner_config = IntegratedPlannerConfig {
         adaptive_optimization: true,
         cross_query_optimization: true,
         streaming_threshold: 256 * 1024 * 1024, // 256MB
@@ -88,11 +96,11 @@ fn create_vector_enabled_executor() -> Result<QueryExecutor> {
 }
 
 /// Register sample vector indices for demonstration
-fn register_sample_vector_indices(executor: &QueryExecutor) -> Result<()> {
+fn register_sample_vector_indices(_executor: &QueryExecutor) -> Result<()> {
     println!("\n📝 Registering vector indices...");
 
     // Register HNSW index for entities
-    let entity_index = VectorIndexInfo {
+    let _entity_index = VectorIndexInfo {
         index_type: VectorIndexType::Hnsw,
         dimension: 768,
         size: 1_000_000, // 1M entities
@@ -131,7 +139,7 @@ fn register_sample_vector_indices(executor: &QueryExecutor) -> Result<()> {
     println!("✅ Registered HNSW entity index (1M vectors, 768-dim)");
 
     // Register IVF-PQ index for properties
-    let property_index = VectorIndexInfo {
+    let _property_index = VectorIndexInfo {
         index_type: VectorIndexType::IvfPq,
         dimension: 384,
         size: 500_000, // 500K properties
@@ -170,7 +178,7 @@ fn register_sample_vector_indices(executor: &QueryExecutor) -> Result<()> {
     println!("✅ Registered IVF-PQ property index (500K vectors, 384-dim)");
 
     // Register flat index for literals (smaller, exact search)
-    let literal_index = VectorIndexInfo {
+    let _literal_index = VectorIndexInfo {
         index_type: VectorIndexType::FlatIndex,
         dimension: 256,
         size: 100_000, // 100K literals

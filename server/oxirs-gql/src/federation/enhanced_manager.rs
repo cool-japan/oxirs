@@ -26,8 +26,7 @@ use crate::ast::{Document, OperationType, Value};
 use crate::types::Schema;
 
 /// Enhanced federation manager configuration
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EnhancedFederationConfig {
     pub service_discovery: ServiceDiscoveryConfig,
     pub load_balancing: LoadBalancingConfig,
@@ -37,7 +36,6 @@ pub struct EnhancedFederationConfig {
     pub caching: FederationCacheConfig,
     pub real_time_sync: SyncConfig,
 }
-
 
 /// Load balancing configuration
 #[derive(Debug, Clone)]
@@ -868,6 +866,7 @@ impl EnhancedFederationManager {
     }
 
     /// Calculate complexity of a selection set recursively
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_selection_complexity(
         &self,
         selection_set: &crate::ast::SelectionSet,

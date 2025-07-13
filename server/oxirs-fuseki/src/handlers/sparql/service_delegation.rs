@@ -264,7 +264,7 @@ impl ServiceDelegationManager {
         // Find the service URL and the query block
         let service_start = text.find("SERVICE")?;
         let url_start = text[service_start..].find('<')?;
-        let url_end = text[service_start + url_start..].find('>')?;
+        let _url_end = text[service_start + url_start..].find('>')?;
 
         let block_start = text[service_start..].find('{')?;
         let mut brace_count = 0;
@@ -303,9 +303,7 @@ impl ServiceDelegationManager {
         let optimized_inner = self.optimize_for_endpoint(&inner_query, &endpoint).await?;
 
         // Reconstruct the SERVICE clause
-        Ok(format!(
-            "SERVICE <{service_url}> {{ {optimized_inner} }}"
-        ))
+        Ok(format!("SERVICE <{service_url}> {{ {optimized_inner} }}"))
     }
 
     /// Parse SERVICE clause to extract URL and inner query
@@ -949,7 +947,7 @@ impl EndpointDiscovery {
     }
 
     /// Static discovery (configuration-based)
-    async fn discover_static(&self, url: &str) -> FusekiResult<ServiceEndpoint> {
+    async fn discover_static(&self, _url: &str) -> FusekiResult<ServiceEndpoint> {
         // Would read from static configuration
         Err(crate::error::FusekiError::server_error(
             "Static discovery not configured",
@@ -1041,7 +1039,7 @@ impl HealthMonitor {
     }
 
     /// Check health of a specific endpoint
-    async fn check_endpoint_health(&self, url: &str) -> FusekiResult<ServiceHealth> {
+    async fn check_endpoint_health(&self, _url: &str) -> FusekiResult<ServiceHealth> {
         // Simple health check - in practice would make HTTP request
         tokio::time::sleep(Duration::from_millis(10)).await;
 
@@ -1635,7 +1633,6 @@ impl LoadBalancerV2 {
             LoadBalancingStrategyV2::Adaptive => {
                 self.adaptive_selection(available_endpoints, query_complexity)
             }
-            _ => available_endpoints.first().cloned(),
         }
     }
 
@@ -1692,11 +1689,10 @@ impl LoadBalancerV2 {
 
                 // Feature support score (20% weight)
                 if let Some(complexity) = query_complexity {
-                    let feature_score = if complexity > 0.7
-                        && ep.supported_features.contains("complex_queries")
+                    let feature_score = if (complexity > 0.7
+                        && ep.supported_features.contains("complex_queries"))
+                        || (complexity < 0.3 && ep.supported_features.contains("fast_queries"))
                     {
-                        1.0
-                    } else if complexity < 0.3 && ep.supported_features.contains("fast_queries") {
                         1.0
                     } else {
                         0.5

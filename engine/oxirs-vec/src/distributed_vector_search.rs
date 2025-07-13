@@ -472,6 +472,15 @@ impl DistributedVectorSearch {
         let mut results = Vec::new();
         for i in 0..query.k.min(10) {
             results.push(SimilarityResult {
+                id: format!(
+                    "dist_{}_{}_{}",
+                    node_id,
+                    i,
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis()
+                ),
                 uri: format!("{node_id}:vector_{i}"),
                 similarity: 0.9 - (i as f32 * 0.1),
                 metadata: Some(HashMap::new()),

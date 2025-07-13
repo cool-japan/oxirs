@@ -1,8 +1,8 @@
 //! Performance optimization functionality
 
 use crate::performance_analytics::{
-    config::PerformanceOptimizationConfig, 
-    types::{OptimizationRecommendation, PerformanceStatistics, ResourceUtilization}
+    config::PerformanceOptimizationConfig,
+    types::{OptimizationRecommendation, PerformanceStatistics, ResourceUtilization},
 };
 use std::time::SystemTime;
 use uuid::Uuid;
@@ -61,7 +61,7 @@ impl PerformanceOptimizer {
     /// Add performance snapshot for historical analysis
     pub fn add_performance_snapshot(&mut self, snapshot: PerformanceSnapshot) {
         self.performance_history.push(snapshot);
-        
+
         // Keep only recent history (last 100 snapshots)
         if self.performance_history.len() > 100 {
             self.performance_history.remove(0);
@@ -75,32 +75,39 @@ impl PerformanceOptimizer {
         if let Some(state) = &self.current_state {
             // Analyze response time performance (using 5000ms as threshold)
             if state.avg_response_time_ms > 5000.0 {
-                recommendations.push(self.create_response_time_recommendation(state.avg_response_time_ms));
+                recommendations
+                    .push(self.create_response_time_recommendation(state.avg_response_time_ms));
             }
 
             // Analyze memory usage
             if state.memory_usage_percent > self.config.target_memory_percent {
-                recommendations.push(self.create_memory_optimization_recommendation(state.memory_usage_percent));
+                recommendations.push(
+                    self.create_memory_optimization_recommendation(state.memory_usage_percent),
+                );
             }
 
             // Analyze CPU usage
             if state.cpu_usage_percent > self.config.target_cpu_percent {
-                recommendations.push(self.create_cpu_optimization_recommendation(state.cpu_usage_percent));
+                recommendations
+                    .push(self.create_cpu_optimization_recommendation(state.cpu_usage_percent));
             }
 
             // Analyze error rate
             if state.error_rate_percent > 1.0 {
-                recommendations.push(self.create_error_rate_recommendation(state.error_rate_percent));
+                recommendations
+                    .push(self.create_error_rate_recommendation(state.error_rate_percent));
             }
 
             // Analyze cache performance
             if state.cache_hit_rate < 0.8 {
-                recommendations.push(self.create_cache_optimization_recommendation(state.cache_hit_rate));
+                recommendations
+                    .push(self.create_cache_optimization_recommendation(state.cache_hit_rate));
             }
 
             // Analyze throughput optimization
             if state.throughput_rps < 100.0 {
-                recommendations.push(self.create_throughput_optimization_recommendation(state.throughput_rps));
+                recommendations
+                    .push(self.create_throughput_optimization_recommendation(state.throughput_rps));
             }
 
             // Generate trend-based recommendations
@@ -114,9 +121,18 @@ impl PerformanceOptimizer {
     }
 
     /// Create response time optimization recommendation
-    fn create_response_time_recommendation(&self, response_time: f64) -> OptimizationRecommendation {
-        let severity = if response_time > 10000.0 { "critical" } else if response_time > 5000.0 { "high" } else { "medium" };
-        
+    fn create_response_time_recommendation(
+        &self,
+        response_time: f64,
+    ) -> OptimizationRecommendation {
+        let severity = if response_time > 10000.0 {
+            "critical"
+        } else if response_time > 5000.0 {
+            "high"
+        } else {
+            "medium"
+        };
+
         OptimizationRecommendation {
             id: Uuid::new_v4().to_string(),
             recommendation_type: "Response Time Optimization".to_string(),
@@ -133,7 +149,10 @@ impl PerformanceOptimizer {
     }
 
     /// Create memory optimization recommendation
-    fn create_memory_optimization_recommendation(&self, memory_usage: f64) -> OptimizationRecommendation {
+    fn create_memory_optimization_recommendation(
+        &self,
+        memory_usage: f64,
+    ) -> OptimizationRecommendation {
         OptimizationRecommendation {
             id: Uuid::new_v4().to_string(),
             recommendation_type: "Memory Optimization".to_string(),
@@ -184,7 +203,10 @@ impl PerformanceOptimizer {
     }
 
     /// Create cache optimization recommendation
-    fn create_cache_optimization_recommendation(&self, hit_rate: f64) -> OptimizationRecommendation {
+    fn create_cache_optimization_recommendation(
+        &self,
+        hit_rate: f64,
+    ) -> OptimizationRecommendation {
         OptimizationRecommendation {
             id: Uuid::new_v4().to_string(),
             recommendation_type: "Cache Optimization".to_string(),
@@ -202,7 +224,10 @@ impl PerformanceOptimizer {
     }
 
     /// Create throughput optimization recommendation
-    fn create_throughput_optimization_recommendation(&self, throughput: f64) -> OptimizationRecommendation {
+    fn create_throughput_optimization_recommendation(
+        &self,
+        throughput: f64,
+    ) -> OptimizationRecommendation {
         OptimizationRecommendation {
             id: Uuid::new_v4().to_string(),
             recommendation_type: "Throughput Enhancement".to_string(),
@@ -224,7 +249,8 @@ impl PerformanceOptimizer {
 
         if self.performance_history.len() >= 10 {
             // Analyze response time trend
-            let recent_response_times: Vec<f64> = self.performance_history
+            let recent_response_times: Vec<f64> = self
+                .performance_history
                 .iter()
                 .rev()
                 .take(10)
@@ -250,7 +276,10 @@ impl PerformanceOptimizer {
     }
 
     /// Generate advanced optimization recommendations
-    fn generate_advanced_recommendations(&self, state: &SystemState) -> Vec<OptimizationRecommendation> {
+    fn generate_advanced_recommendations(
+        &self,
+        state: &SystemState,
+    ) -> Vec<OptimizationRecommendation> {
         let mut recommendations = Vec::new();
 
         // Advanced pattern-based recommendations
@@ -358,10 +387,10 @@ mod tests {
     fn test_system_state_update() {
         let mut optimizer = PerformanceOptimizer::new();
         let state = create_test_system_state();
-        
+
         optimizer.update_system_state(state);
         assert!(optimizer.current_state.is_some());
-        
+
         let stored_state = optimizer.current_state.as_ref().unwrap();
         assert_eq!(stored_state.avg_response_time_ms, 3000.0);
         assert_eq!(stored_state.memory_usage_percent, 65.0);
@@ -372,10 +401,13 @@ mod tests {
         let mut optimizer = PerformanceOptimizer::new();
         let state = create_test_system_state();
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
         // With normal performance, should generate no recommendations
-        assert!(recommendations.is_empty(), "Normal performance should not generate recommendations");
+        assert!(
+            recommendations.is_empty(),
+            "Normal performance should not generate recommendations"
+        );
     }
 
     #[test]
@@ -384,14 +416,21 @@ mod tests {
         let mut state = create_test_system_state();
         state.avg_response_time_ms = 7000.0; // Above 5000ms threshold
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        assert!(!recommendations.is_empty(), "High response time should generate recommendations");
-        
-        let response_time_rec = recommendations.iter()
+        assert!(
+            !recommendations.is_empty(),
+            "High response time should generate recommendations"
+        );
+
+        let response_time_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "Response Time Optimization");
-        assert!(response_time_rec.is_some(), "Should contain response time optimization recommendation");
-        
+        assert!(
+            response_time_rec.is_some(),
+            "Should contain response time optimization recommendation"
+        );
+
         let rec = response_time_rec.unwrap();
         assert!(rec.expected_improvement_percent > 0.0);
         assert!(rec.priority >= 5);
@@ -404,12 +443,16 @@ mod tests {
         let mut state = create_test_system_state();
         state.memory_usage_percent = 85.0; // Above default target
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let memory_rec = recommendations.iter()
+        let memory_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "Memory Optimization");
-        assert!(memory_rec.is_some(), "High memory usage should generate memory optimization recommendation");
-        
+        assert!(
+            memory_rec.is_some(),
+            "High memory usage should generate memory optimization recommendation"
+        );
+
         let rec = memory_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 30.0);
         assert!(rec.implementation_complexity <= 10);
@@ -421,12 +464,16 @@ mod tests {
         let mut state = create_test_system_state();
         state.cpu_usage_percent = 85.0; // Above default target
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let cpu_rec = recommendations.iter()
+        let cpu_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "CPU Optimization");
-        assert!(cpu_rec.is_some(), "High CPU usage should generate CPU optimization recommendation");
-        
+        assert!(
+            cpu_rec.is_some(),
+            "High CPU usage should generate CPU optimization recommendation"
+        );
+
         let rec = cpu_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 45.0);
         assert!(rec.tags.contains(&"cpu".to_string()));
@@ -438,12 +485,16 @@ mod tests {
         let mut state = create_test_system_state();
         state.error_rate_percent = 2.0; // Above 1% threshold
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let error_rec = recommendations.iter()
+        let error_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "Error Rate Reduction");
-        assert!(error_rec.is_some(), "High error rate should generate error rate reduction recommendation");
-        
+        assert!(
+            error_rec.is_some(),
+            "High error rate should generate error rate reduction recommendation"
+        );
+
         let rec = error_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 70.0);
         assert_eq!(rec.priority, 8);
@@ -455,12 +506,16 @@ mod tests {
         let mut state = create_test_system_state();
         state.cache_hit_rate = 0.7; // Below 0.8 threshold
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let cache_rec = recommendations.iter()
+        let cache_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "Cache Optimization");
-        assert!(cache_rec.is_some(), "Low cache hit rate should generate cache optimization recommendation");
-        
+        assert!(
+            cache_rec.is_some(),
+            "Low cache hit rate should generate cache optimization recommendation"
+        );
+
         let rec = cache_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 35.0);
         assert!(rec.tags.contains(&"cache".to_string()));
@@ -472,12 +527,16 @@ mod tests {
         let mut state = create_test_system_state();
         state.throughput_rps = 80.0; // Below 100 RPS threshold
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let throughput_rec = recommendations.iter()
+        let throughput_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "Throughput Enhancement");
-        assert!(throughput_rec.is_some(), "Low throughput should generate throughput enhancement recommendation");
-        
+        assert!(
+            throughput_rec.is_some(),
+            "Low throughput should generate throughput enhancement recommendation"
+        );
+
         let rec = throughput_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 50.0);
         assert!(rec.tags.contains(&"throughput".to_string()));
@@ -488,15 +547,19 @@ mod tests {
         let mut optimizer = PerformanceOptimizer::new();
         let state = create_high_load_system_state(); // Multiple issues
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        assert!(recommendations.len() >= 5, "Multiple issues should generate multiple recommendations");
-        
+        assert!(
+            recommendations.len() >= 5,
+            "Multiple issues should generate multiple recommendations"
+        );
+
         // Should have response time, memory, CPU, error rate, and cache recommendations
-        let rec_types: Vec<&str> = recommendations.iter()
+        let rec_types: Vec<&str> = recommendations
+            .iter()
             .map(|r| r.recommendation_type.as_str())
             .collect();
-        
+
         assert!(rec_types.contains(&"Response Time Optimization"));
         assert!(rec_types.contains(&"Memory Optimization"));
         assert!(rec_types.contains(&"CPU Optimization"));
@@ -511,12 +574,16 @@ mod tests {
         state.memory_usage_percent = 85.0; // Above 80%
         state.cpu_usage_percent = 85.0; // Above 80%
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let bottleneck_rec = recommendations.iter()
+        let bottleneck_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "Resource Bottleneck Resolution");
-        assert!(bottleneck_rec.is_some(), "High memory and CPU should generate bottleneck recommendation");
-        
+        assert!(
+            bottleneck_rec.is_some(),
+            "High memory and CPU should generate bottleneck recommendation"
+        );
+
         let rec = bottleneck_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 55.0);
         assert_eq!(rec.priority, 9);
@@ -530,12 +597,16 @@ mod tests {
         let mut optimizer = PerformanceOptimizer::with_config(config);
         let state = create_test_system_state();
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
-        let ai_rec = recommendations.iter()
+        let ai_rec = recommendations
+            .iter()
             .find(|r| r.recommendation_type == "AI-Driven Optimization");
-        assert!(ai_rec.is_some(), "High aggressiveness should generate AI optimization recommendation");
-        
+        assert!(
+            ai_rec.is_some(),
+            "High aggressiveness should generate AI optimization recommendation"
+        );
+
         let rec = ai_rec.unwrap();
         assert_eq!(rec.expected_improvement_percent, 40.0);
         assert!(rec.tags.contains(&"ai".to_string()));
@@ -545,8 +616,8 @@ mod tests {
     #[test]
     fn test_performance_snapshot_history() {
         let mut optimizer = PerformanceOptimizer::new();
-        
-        for i in 0..5 {
+
+        for _i in 0..5 {
             let snapshot = PerformanceSnapshot {
                 timestamp: SystemTime::now(),
                 performance_stats: PerformanceStatistics::default(),
@@ -554,11 +625,11 @@ mod tests {
             };
             optimizer.add_performance_snapshot(snapshot);
         }
-        
+
         assert_eq!(optimizer.performance_history.len(), 5);
-        
+
         // Add more than the limit (100) to test cleanup
-        for i in 0..98 {
+        for _i in 0..98 {
             let snapshot = PerformanceSnapshot {
                 timestamp: SystemTime::now(),
                 performance_stats: PerformanceStatistics::default(),
@@ -566,45 +637,64 @@ mod tests {
             };
             optimizer.add_performance_snapshot(snapshot);
         }
-        
-        assert_eq!(optimizer.performance_history.len(), 100, "Should maintain history limit of 100");
+
+        assert_eq!(
+            optimizer.performance_history.len(),
+            100,
+            "Should maintain history limit of 100"
+        );
     }
 
     #[test]
     fn test_degrading_trend_detection() {
         let optimizer = PerformanceOptimizer::new();
-        
+
         // Test degrading trend (increasing values)
         let degrading_values = vec![100.0, 120.0, 150.0, 180.0, 200.0];
-        assert!(optimizer.is_degrading_trend(&degrading_values), "Should detect degrading trend");
-        
+        assert!(
+            optimizer.is_degrading_trend(&degrading_values),
+            "Should detect degrading trend"
+        );
+
         // Test improving trend (decreasing values)
         let improving_values = vec![200.0, 180.0, 150.0, 120.0, 100.0];
-        assert!(!optimizer.is_degrading_trend(&improving_values), "Should not detect degrading trend for improving values");
-        
+        assert!(
+            !optimizer.is_degrading_trend(&improving_values),
+            "Should not detect degrading trend for improving values"
+        );
+
         // Test stable trend
         let stable_values = vec![100.0, 102.0, 98.0, 101.0, 99.0];
-        assert!(!optimizer.is_degrading_trend(&stable_values), "Should not detect degrading trend for stable values");
-        
+        assert!(
+            !optimizer.is_degrading_trend(&stable_values),
+            "Should not detect degrading trend for stable values"
+        );
+
         // Test insufficient data
         let insufficient_values = vec![100.0, 120.0];
-        assert!(!optimizer.is_degrading_trend(&insufficient_values), "Should not detect trend with insufficient data");
+        assert!(
+            !optimizer.is_degrading_trend(&insufficient_values),
+            "Should not detect trend with insufficient data"
+        );
     }
 
     #[test]
     fn test_config_access_and_update() {
         let mut optimizer = PerformanceOptimizer::new();
         let original_config = optimizer.get_config().clone();
-        
+
         let mut new_config = PerformanceOptimizationConfig::default();
         new_config.aggressiveness = 0.9;
         new_config.enable_auto_optimization = true;
-        
+
         optimizer.update_config(new_config);
-        
+
         assert_eq!(optimizer.get_config().aggressiveness, 0.9);
         assert!(optimizer.get_config().enable_auto_optimization);
-        assert_ne!(optimizer.get_config().aggressiveness, original_config.aggressiveness);
+        assert_ne!(
+            optimizer.get_config().aggressiveness,
+            original_config.aggressiveness
+        );
     }
 
     #[test]
@@ -613,22 +703,43 @@ mod tests {
         let mut state = create_test_system_state();
         state.avg_response_time_ms = 6000.0; // Trigger response time recommendation
         optimizer.update_system_state(state);
-        
+
         let recommendations = optimizer.generate_recommendations();
         let rec = &recommendations[0];
-        
+
         // Verify all required fields are set
         assert!(!rec.id.is_empty(), "Recommendation ID should not be empty");
-        assert!(!rec.recommendation_type.is_empty(), "Recommendation type should not be empty");
-        assert!(!rec.description.is_empty(), "Description should not be empty");
-        assert!(rec.expected_improvement_percent > 0.0, "Expected improvement should be positive");
-        assert!(rec.implementation_complexity >= 1 && rec.implementation_complexity <= 10, "Implementation complexity should be 1-10");
-        assert!(rec.priority >= 1 && rec.priority <= 10, "Priority should be 1-10");
-        assert!(rec.estimated_hours > 0.0, "Estimated hours should be positive");
+        assert!(
+            !rec.recommendation_type.is_empty(),
+            "Recommendation type should not be empty"
+        );
+        assert!(
+            !rec.description.is_empty(),
+            "Description should not be empty"
+        );
+        assert!(
+            rec.expected_improvement_percent > 0.0,
+            "Expected improvement should be positive"
+        );
+        assert!(
+            rec.implementation_complexity >= 1 && rec.implementation_complexity <= 10,
+            "Implementation complexity should be 1-10"
+        );
+        assert!(
+            rec.priority >= 1 && rec.priority <= 10,
+            "Priority should be 1-10"
+        );
+        assert!(
+            rec.estimated_hours > 0.0,
+            "Estimated hours should be positive"
+        );
         assert!(!rec.tags.is_empty(), "Tags should not be empty");
         // created_at timestamp should be recent (within last minute)
         let now = SystemTime::now();
         let duration = now.duration_since(rec.created_at).unwrap();
-        assert!(duration.as_secs() < 60, "Created timestamp should be recent");
+        assert!(
+            duration.as_secs() < 60,
+            "Created timestamp should be recent"
+        );
     }
 }

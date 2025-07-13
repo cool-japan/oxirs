@@ -100,8 +100,7 @@ pub struct ServiceMetadata {
 }
 
 /// Service health status
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum ServiceHealth {
     /// Service is healthy and accepting requests
     Healthy,
@@ -113,7 +112,6 @@ pub enum ServiceHealth {
     #[default]
     Unknown,
 }
-
 
 /// Service capabilities for query planning
 #[derive(Debug, Clone, Default)]
@@ -206,6 +204,56 @@ impl FederationManager {
             .filter(|(_, ep)| matches!(ep.health, ServiceHealth::Healthy))
             .map(|(id, ep)| (id.clone(), ep.clone()))
             .collect()
+    }
+
+    /// Create execution plan for a federated query
+    pub async fn create_execution_plan(
+        &self,
+        query: &str,
+    ) -> crate::error::FusekiResult<crate::federated_query_optimizer::ExecutionPlan> {
+        // Extract service patterns from the query
+        let service_patterns = self.extract_service_patterns(query)?;
+
+        // Delegate to the internal planner
+        self.planner
+            .create_execution_plan(query, &service_patterns)
+            .await
+    }
+
+    /// Extract service patterns from a SPARQL query
+    fn extract_service_patterns(
+        &self,
+        query: &str,
+    ) -> crate::error::FusekiResult<Vec<crate::federated_query_optimizer::ServicePattern>> {
+        use regex::Regex;
+
+        let mut patterns = Vec::new();
+
+        // Simple regex to find SERVICE clauses
+        let service_regex = Regex::new(r"SERVICE\s+<([^>]+)>\s*\{").unwrap();
+
+        for captures in service_regex.captures_iter(query) {
+            if let Some(endpoint) = captures.get(1) {
+                patterns.push(crate::federated_query_optimizer::ServicePattern {
+                    service_url: endpoint.as_str().to_string(),
+                    pattern: query.to_string(), // Simplified - should extract actual pattern
+                    is_silent: false,
+                    is_optional: false,
+                });
+            }
+        }
+
+        // If no SERVICE clauses found, create a default pattern for local execution
+        if patterns.is_empty() {
+            patterns.push(crate::federated_query_optimizer::ServicePattern {
+                service_url: "local".to_string(),
+                pattern: query.to_string(),
+                is_silent: false,
+                is_optional: false,
+            });
+        }
+
+        Ok(patterns)
     }
 }
 

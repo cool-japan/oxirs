@@ -5,7 +5,7 @@ use oxirs_chat::llm::providers::LLMProvider;
 use oxirs_chat::llm::types::{LLMRequest, LLMResponse, LLMResponseStream, Usage};
 use oxirs_chat::llm::LLMConfig;
 use oxirs_chat::*;
-use oxirs_core::{ConcreteStore, Store};
+use oxirs_core::ConcreteStore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::TempDir;
@@ -33,7 +33,8 @@ impl LLMProvider for MockLLMProvider {
         let response_content = format!(
             "Mock response to: {}",
             request
-                .messages.first()
+                .messages
+                .first()
                 .map(|m| m.content.as_str())
                 .unwrap_or("")
         );
@@ -56,8 +57,8 @@ impl LLMProvider for MockLLMProvider {
 
     async fn generate_stream(
         &self,
-        model: &str,
-        request: &LLMRequest,
+        _model: &str,
+        _request: &LLMRequest,
     ) -> Result<LLMResponseStream> {
         // For simplicity, not implementing streaming in mock
         unimplemented!("Streaming not implemented for mock provider")
@@ -81,6 +82,7 @@ impl LLMProvider for MockLLMProvider {
 }
 
 /// Create a test-friendly LLM config with mock provider
+#[allow(dead_code)]
 fn create_test_llm_config() -> LLMConfig {
     let mut providers = HashMap::new();
     providers.insert(

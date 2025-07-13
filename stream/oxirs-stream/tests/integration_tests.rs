@@ -238,9 +238,7 @@ mod memory_backend_tests {
         }
         let consume_duration = start.elapsed();
 
-        println!(
-            "Consumed {received_count} events in {consume_duration:?}"
-        );
+        println!("Consumed {received_count} events in {consume_duration:?}");
 
         assert_eq!(received_count, event_count);
         stream.close().await?;
@@ -881,9 +879,7 @@ mod performance_tests {
         let publish_duration = start.elapsed();
 
         let publish_throughput = event_count as f64 / publish_duration.as_secs_f64();
-        println!(
-            "Publish throughput: {publish_throughput:.0} events/second"
-        );
+        println!("Publish throughput: {publish_throughput:.0} events/second");
 
         // Benchmark consuming
         let start = std::time::Instant::now();
@@ -901,9 +897,7 @@ mod performance_tests {
         let consume_duration = start.elapsed();
 
         let consume_throughput = consumed_count as f64 / consume_duration.as_secs_f64();
-        println!(
-            "Consume throughput: {consume_throughput:.0} events/second"
-        );
+        println!("Consume throughput: {consume_throughput:.0} events/second");
 
         // Verify performance targets
         assert!(

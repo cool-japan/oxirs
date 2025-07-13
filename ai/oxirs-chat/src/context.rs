@@ -13,9 +13,7 @@ use std::{
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-use crate::{
-    analytics::ConversationAnalytics, Message, MessageRole,
-};
+use crate::{analytics::ConversationAnalytics, Message, MessageRole};
 
 /// Configuration for context management
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,7 +51,6 @@ impl Default for ContextConfig {
 /// Implements brain-inspired processing patterns for context understanding
 pub mod neuromorphic_context {
     use super::*;
-    
 
     /// Neuromorphic processing unit inspired by biological neurons
     #[derive(Debug, Clone)]
@@ -97,7 +94,7 @@ pub mod neuromorphic_context {
             let activation = self.determine_activation(soma_output);
 
             // Step 4: Axonal transmission
-            let axonal_output = if activation {
+            let _axonal_output = if activation {
                 self.axon.transmit_signal(soma_output)
             } else {
                 AxonalOutput::default()
@@ -493,13 +490,13 @@ pub mod neuromorphic_context {
 
     impl NeuromorphicContextManager {
         pub fn new(config: &ContextConfig) -> Self {
-            let mut processors = Vec::new();
-
             // Create specialized processors for different context aspects
-            processors.push(NeuromorphicProcessor::new(10)); // Semantic processor
-            processors.push(NeuromorphicProcessor::new(8)); // Temporal processor
-            processors.push(NeuromorphicProcessor::new(6)); // Emotional processor
-            processors.push(NeuromorphicProcessor::new(12)); // Contextual processor
+            let processors = vec![
+                NeuromorphicProcessor::new(10), // Semantic processor
+                NeuromorphicProcessor::new(8),  // Temporal processor
+                NeuromorphicProcessor::new(6),  // Emotional processor
+                NeuromorphicProcessor::new(12), // Contextual processor
+            ];
 
             Self {
                 processors,
@@ -1072,7 +1069,7 @@ pub mod neuromorphic_context {
                 .min(10.0)
         }
 
-        fn calculate_performance_improvement(&self, output: &NeuromorphicOutput) -> f64 {
+        fn calculate_performance_improvement(&self, _output: &NeuromorphicOutput) -> f64 {
             if self.learning_history.is_empty() {
                 return 0.0;
             }
@@ -1424,7 +1421,7 @@ impl AdvancedContextManager {
     pub async fn process_message(
         &mut self,
         message: &Message,
-        conversation_analytics: Option<&ConversationAnalytics>,
+        _conversation_analytics: Option<&ConversationAnalytics>,
     ) -> Result<ContextUpdate> {
         let start_time = SystemTime::now();
 
@@ -2307,7 +2304,7 @@ impl ContextWindow {
             (base_size as f32 * topic_complexity_factor * confidence_factor) as usize;
 
         // Clamp to reasonable bounds
-        adjusted_size.max(10).min(100)
+        adjusted_size.clamp(10, 100)
     }
 
     /// Rescore messages based on their relevance to the new topic
@@ -2398,7 +2395,7 @@ impl ContextWindow {
 
         // Apply diminishing returns for multiple keyword matches
         if keyword_matches > 0 {
-            relevance_score *= (1.0 - (keyword_matches as f32 * 0.05).min(0.3));
+            relevance_score *= 1.0 - (keyword_matches as f32 * 0.05).min(0.3);
         }
 
         // Check message metadata for additional topic relevance indicators

@@ -4,7 +4,7 @@
 //! specialized for different RDF formats.
 
 use crate::error::{TextPosition, TokenRecognizerError};
-use std::io::{BufRead, Read};
+use std::io::BufRead;
 
 /// A token recognizer that converts byte streams into tokens
 pub trait TokenRecognizer {

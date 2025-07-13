@@ -417,7 +417,10 @@ impl FaissIndex {
 
     /// Check if the index type requires training
     fn requires_training(&self) -> bool {
-        !matches!(self.config.index_type, FaissIndexType::FlatL2 | FaissIndexType::FlatIP)
+        !matches!(
+            self.config.index_type,
+            FaissIndexType::FlatL2 | FaissIndexType::FlatIP
+        )
     }
 
     /// Generate FAISS index string
@@ -439,12 +442,8 @@ impl FaissIndex {
                 let clusters = self.config.num_clusters.unwrap_or(1024);
                 format!("IVF{clusters},SQ8")
             }
-            FaissIndexType::HnswFlat => {
-                "HNSW32,Flat".to_string()
-            }
-            FaissIndexType::Lsh => {
-                "LSH".to_string()
-            }
+            FaissIndexType::HnswFlat => "HNSW32,Flat".to_string(),
+            FaissIndexType::Lsh => "LSH".to_string(),
             FaissIndexType::Auto => self.auto_select_index_type()?,
             FaissIndexType::Custom(s) => s.clone(),
         };

@@ -4,10 +4,7 @@ use ndarray::Array2;
 use std::collections::HashMap;
 use std::time::Instant;
 
-use crate::{
-    patterns::Pattern,
-    Result,
-};
+use crate::{patterns::Pattern, Result};
 
 use super::types::{
     CausalRelationship, CorrelationAnalysisConfig, CorrelationAnalysisResult,
@@ -216,7 +213,7 @@ impl AdvancedPatternCorrelationAnalyzer {
     /// Form clusters of correlated patterns
     async fn form_correlation_clusters(
         &self,
-        correlations: &[PatternCorrelation],
+        _correlations: &[PatternCorrelation],
     ) -> Result<Vec<CorrelationCluster>> {
         // TODO: Implement proper clustering algorithm (e.g., hierarchical clustering, k-means)
         Ok(Vec::new())
@@ -225,8 +222,8 @@ impl AdvancedPatternCorrelationAnalyzer {
     /// Identify causal relationships between patterns
     async fn identify_causal_relationships(
         &self,
-        patterns: &[Pattern],
-        correlations: &[PatternCorrelation],
+        _patterns: &[Pattern],
+        _correlations: &[PatternCorrelation],
     ) -> Result<Vec<CausalRelationship>> {
         // TODO: Implement causal inference (e.g., Granger causality, DAG learning)
         Ok(Vec::new())

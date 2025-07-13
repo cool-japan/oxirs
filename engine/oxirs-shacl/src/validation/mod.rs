@@ -5,9 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use oxirs_core::{
-    model::{Term, Triple},
-};
+use oxirs_core::model::{Term, Triple};
 
 use crate::{ConstraintComponentId, PropertyPath, Severity, ShapeId};
 
@@ -19,6 +17,7 @@ pub mod cache;
 pub mod constraint_validators;
 pub mod engine;
 pub mod error_recovery;
+pub mod ml_integration;
 pub mod multi_graph;
 pub mod stats;
 #[cfg(feature = "async")]
@@ -39,6 +38,7 @@ pub use cache::*;
 pub use constraint_validators::*;
 pub use engine::ValidationEngine;
 pub use error_recovery::*;
+pub use ml_integration::*;
 pub use multi_graph::{
     CrossGraphViolation, GraphSelectionStrategy, MultiGraphStats, MultiGraphValidationConfig,
     MultiGraphValidationEngine, MultiGraphValidationResult,
@@ -257,7 +257,6 @@ impl ValidationViolation {
 // We exclude the HashMap field from hashing to make this hashable
 impl std::hash::Hash for ValidationViolation {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-
         self.focus_node.hash(state);
         self.result_path.hash(state);
         self.value.hash(state);

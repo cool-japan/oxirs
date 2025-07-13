@@ -591,11 +591,10 @@ impl RaftStateMachine {
             self.transition_to_follower().await;
         }
 
-        let vote_granted = if request.term < *current_term {
-            false
-        } else if voted_for.is_some() && *voted_for != Some(request.candidate_id) {
-            false
-        } else if !self.is_candidate_log_up_to_date(&request).await {
+        let vote_granted = if request.term < *current_term
+            || (voted_for.is_some() && *voted_for != Some(request.candidate_id))
+            || !self.is_candidate_log_up_to_date(&request).await
+        {
             false
         } else {
             *voted_for = Some(request.candidate_id);

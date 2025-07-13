@@ -103,7 +103,7 @@ async fn demo_gpu_memory_management() -> Result<()> {
 
     // Allocate new blocks (should reuse deallocated ones)
     println!("\n♻️  Reallocating (should reuse freed blocks):");
-    for i in 0..2 {
+    for _i in 0..2 {
         let size_bytes = 256 * 1024 * 1024; // 256MB
         let block_id = memory_pool.allocate(size_bytes, 0)?;
         println!("   Reused block ID: {block_id}");

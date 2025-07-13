@@ -107,7 +107,6 @@ impl VariationalQuantumEigensolver {
             if (i >> control) & 1 == 1 {
                 let target_flipped = i ^ (1 << target);
                 if target_flipped < n_states {
-                    let i = i;
                     pattern.quantum_state.amplitudes.swap(i, target_flipped);
                 }
             }

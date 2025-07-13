@@ -1,6 +1,5 @@
 //! Query coordination for distributed execution
 
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -129,6 +128,7 @@ pub struct QueryCoordinator {
 }
 
 /// Connection to a remote node
+#[allow(dead_code)]
 struct NodeConnection {
     /// Node information
     node_info: NodeInfo,
@@ -140,6 +140,7 @@ struct NodeConnection {
 
 /// Coordinator request types
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 enum CoordinatorRequest {
     Query(DistributedQuery),
     Write(DistributedWrite),
@@ -154,6 +155,7 @@ enum CoordinatorResponse {
 
 /// Request tracking status
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct RequestStatus {
     /// Request start time
     start_time: Instant,
@@ -323,7 +325,7 @@ impl QueryCoordinator {
     }
 
     /// Get nodes for partitions
-    async fn get_nodes_for_partitions(&self, partitions: &[u32]) -> FusekiResult<Vec<String>> {
+    async fn get_nodes_for_partitions(&self, _partitions: &[u32]) -> FusekiResult<Vec<String>> {
         // TODO: Implement actual partition to node mapping
         // For now, return a dummy node list
         Ok(vec!["node1".to_string()])
@@ -395,13 +397,13 @@ impl QueryCoordinator {
     }
 
     /// Execute query locally
-    async fn execute_local_query(&self, query: &DistributedQuery) -> FusekiResult<QueryResult> {
+    async fn execute_local_query(&self, _query: &DistributedQuery) -> FusekiResult<QueryResult> {
         // TODO: Implement actual query execution
         Ok(QueryResult::Boolean(false))
     }
 
     /// Execute write locally
-    async fn execute_local_write(&self, write: &DistributedWrite) -> FusekiResult<()> {
+    async fn execute_local_write(&self, _write: &DistributedWrite) -> FusekiResult<()> {
         // TODO: Implement actual write execution
         Ok(())
     }
@@ -413,7 +415,6 @@ impl QueryCoordinator {
         required: usize,
     ) -> FusekiResult<Vec<CoordinatorResponse>> {
         let check_interval = Duration::from_millis(10);
-        let mut collected = Vec::new();
 
         loop {
             tokio::time::sleep(check_interval).await;
@@ -421,8 +422,8 @@ impl QueryCoordinator {
             let tracker = self.request_tracker.read().await;
             if let Some(status) = tracker.get(request_id) {
                 if status.responses.len() >= required {
-                    collected = status.responses.clone();
-                    break;
+                    let collected = status.responses.clone();
+                    return Ok(collected);
                 }
             } else {
                 return Err(FusekiError::Internal {
@@ -430,8 +431,6 @@ impl QueryCoordinator {
                 });
             }
         }
-
-        Ok(collected)
     }
 
     /// Merge query results from multiple nodes
@@ -473,6 +472,7 @@ impl QueryCoordinator {
 
 /// Read repair for eventual consistency
 pub struct ReadRepair {
+    #[allow(dead_code)]
     coordinator: Arc<QueryCoordinator>,
 }
 
@@ -483,7 +483,7 @@ impl ReadRepair {
     }
 
     /// Perform read repair
-    pub async fn repair(&self, key: &str, responses: Vec<QueryResponse>) -> FusekiResult<()> {
+    pub async fn repair(&self, _key: &str, responses: Vec<QueryResponse>) -> FusekiResult<()> {
         // Find the most recent value
         let latest = self.find_latest_value(&responses)?;
 
@@ -520,13 +520,13 @@ impl ReadRepair {
     }
 
     /// Check if two results are equal
-    fn results_equal(&self, a: &QueryResult, b: &QueryResult) -> bool {
+    fn results_equal(&self, _a: &QueryResult, _b: &QueryResult) -> bool {
         // TODO: Implement proper result comparison
         false
     }
 
     /// Repair nodes with stale data
-    async fn repair_nodes(&self, nodes: &[String], latest: &QueryResponse) -> FusekiResult<()> {
+    async fn repair_nodes(&self, _nodes: &[String], _latest: &QueryResponse) -> FusekiResult<()> {
         // TODO: Implement repair writes to stale nodes
         Ok(())
     }

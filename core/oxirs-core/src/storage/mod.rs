@@ -297,9 +297,8 @@ impl SimpleStorageEngine {
     /// Create a new simple storage engine
     pub async fn new(config: StorageConfig) -> Result<Self, OxirsError> {
         let base_path = std::path::PathBuf::from("/tmp/oxirs_storage");
-        std::fs::create_dir_all(&base_path).map_err(|e| {
-            OxirsError::Store(format!("Failed to create storage directory: {e}"))
-        })?;
+        std::fs::create_dir_all(&base_path)
+            .map_err(|e| OxirsError::Store(format!("Failed to create storage directory: {e}")))?;
 
         let mvcc_config = MvccConfig {
             max_versions_per_triple: 100,
@@ -367,40 +366,48 @@ impl StorageEngine for SimpleStorageEngine {
     }
 
     async fn store_triple(&self, triple: &crate::model::Triple) -> Result<(), OxirsError> {
-        let tx_id = self.mvcc_store.begin_transaction(IsolationLevel::Snapshot)
+        let tx_id = self
+            .mvcc_store
+            .begin_transaction(IsolationLevel::Snapshot)
             .map_err(|e| OxirsError::Store(format!("Failed to begin transaction: {e}")))?;
-        
-        self.mvcc_store.insert(tx_id, triple.clone())
+
+        self.mvcc_store
+            .insert(tx_id, triple.clone())
             .map_err(|e| OxirsError::Store(format!("Failed to insert triple: {e}")))?;
-        
-        self.mvcc_store.commit_transaction(tx_id)
+
+        self.mvcc_store
+            .commit_transaction(tx_id)
             .map_err(|e| OxirsError::Store(format!("Failed to commit transaction: {e}")))?;
 
         // Update statistics
         let mut stats = self.stats.write();
         stats.total_triples += 1;
         stats.tier_stats.hot.triple_count += 1;
-        
+
         Ok(())
     }
 
     async fn store_triples(&self, triples: &[crate::model::Triple]) -> Result<(), OxirsError> {
-        let tx_id = self.mvcc_store.begin_transaction(IsolationLevel::Snapshot)
+        let tx_id = self
+            .mvcc_store
+            .begin_transaction(IsolationLevel::Snapshot)
             .map_err(|e| OxirsError::Store(format!("Failed to begin transaction: {e}")))?;
-        
+
         for triple in triples {
-            self.mvcc_store.insert(tx_id, triple.clone())
+            self.mvcc_store
+                .insert(tx_id, triple.clone())
                 .map_err(|e| OxirsError::Store(format!("Failed to insert triple: {e}")))?;
         }
-        
-        self.mvcc_store.commit_transaction(tx_id)
+
+        self.mvcc_store
+            .commit_transaction(tx_id)
             .map_err(|e| OxirsError::Store(format!("Failed to commit transaction: {e}")))?;
 
         // Update statistics
         let mut stats = self.stats.write();
         stats.total_triples += triples.len() as u64;
         stats.tier_stats.hot.triple_count += triples.len() as u64;
-        
+
         Ok(())
     }
 
@@ -408,22 +415,27 @@ impl StorageEngine for SimpleStorageEngine {
         &self,
         pattern: &crate::model::TriplePattern,
     ) -> Result<Vec<crate::model::Triple>, OxirsError> {
-        let tx_id = self.mvcc_store.begin_transaction(IsolationLevel::Snapshot)
+        let tx_id = self
+            .mvcc_store
+            .begin_transaction(IsolationLevel::Snapshot)
             .map_err(|e| OxirsError::Store(format!("Failed to begin transaction: {e}")))?;
-        
+
         // Convert patterns to concrete terms for MVCC query
         let subject = Self::pattern_to_subject(pattern.subject());
         let predicate = Self::pattern_to_predicate(pattern.predicate());
         let object = Self::pattern_to_object(pattern.object());
-        
-        let results = self.mvcc_store.query(tx_id, subject.as_ref(), predicate.as_ref(), object.as_ref())
+
+        let results = self
+            .mvcc_store
+            .query(tx_id, subject.as_ref(), predicate.as_ref(), object.as_ref())
             .map_err(|e| OxirsError::Store(format!("Failed to query triples: {e}")))?;
-        
+
         // Filter results to match the pattern (in case of variables)
-        let filtered: Vec<_> = results.into_iter()
+        let filtered: Vec<_> = results
+            .into_iter()
             .filter(|triple| pattern.matches(triple))
             .collect();
-        
+
         Ok(filtered)
     }
 
@@ -431,39 +443,50 @@ impl StorageEngine for SimpleStorageEngine {
         &self,
         pattern: &crate::model::TriplePattern,
     ) -> Result<usize, OxirsError> {
-        let tx_id = self.mvcc_store.begin_transaction(IsolationLevel::Snapshot)
+        let tx_id = self
+            .mvcc_store
+            .begin_transaction(IsolationLevel::Snapshot)
             .map_err(|e| OxirsError::Store(format!("Failed to begin transaction: {e}")))?;
-        
+
         // Convert patterns to concrete terms for MVCC query
         let subject = Self::pattern_to_subject(pattern.subject());
         let predicate = Self::pattern_to_predicate(pattern.predicate());
         let object = Self::pattern_to_object(pattern.object());
-        
+
         // First query to find matching triples
-        let matching_triples = self.mvcc_store.query(tx_id, subject.as_ref(), predicate.as_ref(), object.as_ref())
+        let matching_triples = self
+            .mvcc_store
+            .query(tx_id, subject.as_ref(), predicate.as_ref(), object.as_ref())
             .map_err(|e| OxirsError::Store(format!("Failed to query triples for deletion: {e}")))?;
-        
+
         // Filter results to match the pattern exactly
-        let filtered: Vec<_> = matching_triples.into_iter()
+        let filtered: Vec<_> = matching_triples
+            .into_iter()
             .filter(|triple| pattern.matches(triple))
             .collect();
-        
+
         let deleted_count = filtered.len();
-        
+
         // Delete each matching triple
         for triple in &filtered {
-            self.mvcc_store.delete(tx_id, triple)
+            self.mvcc_store
+                .delete(tx_id, triple)
                 .map_err(|e| OxirsError::Store(format!("Failed to delete triple: {e}")))?;
         }
-        
-        self.mvcc_store.commit_transaction(tx_id)
+
+        self.mvcc_store
+            .commit_transaction(tx_id)
             .map_err(|e| OxirsError::Store(format!("Failed to commit transaction: {e}")))?;
 
         // Update statistics
         let mut stats = self.stats.write();
         stats.total_triples = stats.total_triples.saturating_sub(deleted_count as u64);
-        stats.tier_stats.hot.triple_count = stats.tier_stats.hot.triple_count.saturating_sub(deleted_count as u64);
-        
+        stats.tier_stats.hot.triple_count = stats
+            .tier_stats
+            .hot
+            .triple_count
+            .saturating_sub(deleted_count as u64);
+
         Ok(deleted_count)
     }
 
@@ -474,7 +497,8 @@ impl StorageEngine for SimpleStorageEngine {
 
     async fn optimize(&self) -> Result<(), OxirsError> {
         // Run garbage collection on MVCC store
-        self.mvcc_store.garbage_collect()
+        self.mvcc_store
+            .garbage_collect()
             .map_err(|e| OxirsError::Store(format!("Failed to optimize storage: {e}")))?;
         Ok(())
     }
@@ -482,49 +506,55 @@ impl StorageEngine for SimpleStorageEngine {
     async fn backup(&self, path: &Path) -> Result<(), OxirsError> {
         // Simple backup implementation - serialize current state to file
         let backup_path = path.join("oxirs_backup.json");
-        
+
         // Get all triples using a query that matches everything
         let all_pattern = crate::model::TriplePattern::new(None, None, None);
         let triples = self.query_triples(&all_pattern).await?;
-        
+
         let serialized = serde_json::to_string_pretty(&triples)
             .map_err(|e| OxirsError::Store(format!("Failed to serialize backup: {e}")))?;
-        
+
         std::fs::write(&backup_path, serialized)
             .map_err(|e| OxirsError::Store(format!("Failed to write backup: {e}")))?;
-        
+
         Ok(())
     }
 
     async fn restore(&self, path: &Path) -> Result<(), OxirsError> {
         // Simple restore implementation - deserialize from file
         let backup_path = path.join("oxirs_backup.json");
-        
+
         let serialized = std::fs::read_to_string(&backup_path)
             .map_err(|e| OxirsError::Store(format!("Failed to read backup: {e}")))?;
-        
+
         let triples: Vec<crate::model::Triple> = serde_json::from_str(&serialized)
             .map_err(|e| OxirsError::Store(format!("Failed to deserialize backup: {e}")))?;
-        
+
         self.store_triples(&triples).await?;
-        
+
         Ok(())
     }
 }
 
 impl SimpleStorageEngine {
     /// Convert a subject pattern to a concrete subject term
-    fn pattern_to_subject(pattern: Option<&crate::model::pattern::SubjectPattern>) -> Option<crate::model::Subject> {
+    fn pattern_to_subject(
+        pattern: Option<&crate::model::pattern::SubjectPattern>,
+    ) -> Option<crate::model::Subject> {
         pattern?.try_into().ok()
     }
 
     /// Convert a predicate pattern to a concrete predicate term
-    fn pattern_to_predicate(pattern: Option<&crate::model::pattern::PredicatePattern>) -> Option<crate::model::Predicate> {
+    fn pattern_to_predicate(
+        pattern: Option<&crate::model::pattern::PredicatePattern>,
+    ) -> Option<crate::model::Predicate> {
         pattern?.try_into().ok()
     }
 
     /// Convert an object pattern to a concrete object term
-    fn pattern_to_object(pattern: Option<&crate::model::pattern::ObjectPattern>) -> Option<crate::model::Object> {
+    fn pattern_to_object(
+        pattern: Option<&crate::model::pattern::ObjectPattern>,
+    ) -> Option<crate::model::Object> {
         pattern?.try_into().ok()
     }
 }

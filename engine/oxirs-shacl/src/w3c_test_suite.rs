@@ -6,6 +6,8 @@
 //!
 //! The W3C SHACL test suite is available at: https://w3c.github.io/data-shapes/data-shapes-test-suite/
 
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::time::Instant;
@@ -687,7 +689,7 @@ impl W3cTestSuiteRunner {
         let mut skipped = 0;
         let mut error = 0;
 
-        let category_stats: HashMap<TestCategory, (usize, usize)> = HashMap::new();
+        let _category_stats: HashMap<TestCategory, (usize, usize)> = HashMap::new();
         let mut issue_counts: HashMap<ComplianceIssueType, usize> = HashMap::new();
 
         for result in self.results.values() {

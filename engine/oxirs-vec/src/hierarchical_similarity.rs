@@ -49,8 +49,7 @@ impl Default for HierarchicalSimilarityConfig {
 }
 
 /// Concept hierarchy for ontology-based similarity
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConceptHierarchy {
     /// Parent-child relationships (child -> parent)
     pub child_to_parent: HashMap<String, String>,
@@ -63,7 +62,6 @@ pub struct ConceptHierarchy {
     /// Concept weights for similarity computation
     pub concept_weights: HashMap<String, f32>,
 }
-
 
 impl ConceptHierarchy {
     /// Add a parent-child relationship to the hierarchy
@@ -89,7 +87,8 @@ impl ConceptHierarchy {
         // Find the one with the highest level (closest to concepts)
         common_ancestors
             .into_iter()
-            .max_by_key(|ancestor| self.concept_levels.get(*ancestor).unwrap_or(&0)).cloned()
+            .max_by_key(|ancestor| self.concept_levels.get(*ancestor).unwrap_or(&0))
+            .cloned()
     }
 
     /// Get all ancestors of a concept

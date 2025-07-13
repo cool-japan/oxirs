@@ -439,7 +439,7 @@ impl HybridRetriever {
             .await
     }
 
-    fn apply_fusion_scoring(&self, results: &mut Vec<SearchResult>) {
+    fn apply_fusion_scoring(&self, results: &mut [SearchResult]) {
         for result in results.iter_mut() {
             let mut fused_score = 0.0;
             let mut total_weight = 0.0;

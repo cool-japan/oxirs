@@ -4,6 +4,8 @@
 //! version tracking, backward compatibility analysis, migration paths, and
 //! schema evolution management.
 
+#![allow(dead_code)]
+
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;

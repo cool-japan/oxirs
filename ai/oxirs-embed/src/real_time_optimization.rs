@@ -460,7 +460,8 @@ impl DynamicArchitectureOptimizer {
         // Mutate embedding dimension
         if rand::random::<f32>() < 0.3 {
             let adjustment = if rand::random::<bool>() { 1.1 } else { 0.9 };
-            new_config.embedding_dim = ((new_config.embedding_dim as f32 * adjustment) as usize).clamp(32, 1024);
+            new_config.embedding_dim =
+                ((new_config.embedding_dim as f32 * adjustment) as usize).clamp(32, 1024);
         }
 
         // Mutate number of layers
@@ -679,7 +680,8 @@ impl DynamicArchitectureOptimizer {
         // Mutate dropout rates
         for dropout_rate in &mut config.dropout_rates {
             if rand::random::<f32>() < 0.2 {
-                *dropout_rate = (*dropout_rate + (rand::random::<f32>() - 0.5) * 0.1).clamp(0.0, 0.5);
+                *dropout_rate =
+                    (*dropout_rate + (rand::random::<f32>() - 0.5) * 0.1).clamp(0.0, 0.5);
             }
         }
 
@@ -1243,7 +1245,7 @@ impl RealTimeOptimizer {
     }
 
     /// Start real-time optimization loop
-    pub async fn start_optimization_loop<M: EmbeddingModel + Send + 'static>(
+    pub async fn start_optimization_loop<M: EmbeddingModel + Send + Clone + 'static>(
         &mut self,
         model: Arc<Mutex<M>>,
     ) -> Result<()> {
@@ -1262,7 +1264,8 @@ impl RealTimeOptimizer {
             }
 
             if self.config.enable_architecture_opt {
-                self.optimize_architecture(&current_metrics, &model).await?;
+                self.optimize_architecture::<M>(&current_metrics, &model)
+                    .await?;
             }
 
             if self.config.enable_resource_opt {
@@ -1323,20 +1326,21 @@ impl RealTimeOptimizer {
         Ok(())
     }
 
-    async fn optimize_architecture<M: EmbeddingModel>(
+    async fn optimize_architecture<M: EmbeddingModel + Clone + Send + Sync>(
         &mut self,
         current_metrics: &PerformanceMetrics,
         model: &Arc<Mutex<M>>,
     ) -> Result<()> {
         // Note: This method needs refactoring to avoid holding mutex across await
         // For now, we'll allow this warning as it may require architectural changes
-        #[allow(clippy::await_holding_lock)]
-        let new_architecture = {
+        let cloned_model = {
             let model_guard = model.lock().unwrap();
-            self.architecture_optimizer
-                .optimize_architecture(current_metrics, &*model_guard)
-                .await?
+            (*model_guard).clone()
         };
+        let new_architecture = self
+            .architecture_optimizer
+            .optimize_architecture(current_metrics, &cloned_model)
+            .await?;
 
         info!(
             "Architecture optimization completed: {:?}",

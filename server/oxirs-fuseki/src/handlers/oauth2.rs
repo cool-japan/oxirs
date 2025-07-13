@@ -2,20 +2,14 @@
 //!
 //! This module provides HTTP endpoints for OAuth2 and OpenID Connect authentication flows.
 
-use crate::{
-    auth::AuthResult,
-    error::FusekiError,
-    server::AppState,
-};
+use crate::{auth::AuthResult, error::FusekiError, server::AppState};
 use axum::{
     extract::{Query, State},
-    http::{
-        header::SET_COOKIE,
-        HeaderMap, StatusCode,
-    },
+    http::{header::SET_COOKIE, HeaderMap, StatusCode},
     response::{IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{error, info, instrument, warn};
 
 /// OAuth2 authorization request parameters
@@ -74,7 +68,7 @@ pub struct OAuth2UserInfoResponse {
 /// Initiate OAuth2 authorization flow
 #[instrument(skip(state))]
 pub async fn initiate_oauth2_flow(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<OAuth2AuthParams>,
 ) -> Result<Json<OAuth2AuthResponse>, FusekiError> {
     let auth_service = state
@@ -95,13 +89,14 @@ pub async fn initiate_oauth2_flow(
     // Determine redirect URI
     let redirect_uri = params.redirect_uri.unwrap_or_else(|| {
         format!(
-            "{}://{}/auth/oauth2/callback",
+            "{}://{}:{}/auth/oauth2/callback",
             if state.config.server.tls.is_some() {
                 "https"
             } else {
                 "http"
             },
-            format!("{}:{}", state.config.server.host, state.config.server.port)
+            state.config.server.host,
+            state.config.server.port
         )
     });
 
@@ -151,7 +146,7 @@ pub async fn initiate_oauth2_flow(
 /// Handle OAuth2 authorization callback
 #[instrument(skip(state))]
 pub async fn handle_oauth2_callback(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<OAuth2CallbackParams>,
 ) -> Result<Response, FusekiError> {
     let auth_service = state
@@ -180,27 +175,31 @@ pub async fn handle_oauth2_callback(
         return Ok((StatusCode::BAD_REQUEST, Json(error_response)).into_response());
     }
 
-    let code = params
+    let _code = params
         .code
         .ok_or_else(|| FusekiError::bad_request("Missing authorization code"))?;
 
-    let state_param = params
+    let _state_param = params
         .state
         .ok_or_else(|| FusekiError::bad_request("Missing state parameter"))?;
 
     // Determine redirect URI (should match the one used in authorization)
-    let redirect_uri = format!(
-        "{}://{}/auth/oauth2/callback",
+    let _redirect_uri = format!(
+        "{}://{}:{}/auth/oauth2/callback",
         if state.config.server.tls.is_some() {
             "https"
         } else {
             "http"
         },
-        format!("{}:{}", state.config.server.host, state.config.server.port)
+        state.config.server.host,
+        state.config.server.port
     );
 
-    // TODO: Implement complete_oauth2_flow method
-    match Err(FusekiError::authentication("OAuth2 flow not implemented")) {
+    // Complete OAuth2 authentication flow
+    match auth_service
+        .complete_oauth2_authentication(&_code, &_state_param, &_redirect_uri)
+        .await
+    {
         Ok(AuthResult::Authenticated(user)) => {
             info!(
                 "OAuth2 authentication successful for user: {}",
@@ -255,57 +254,84 @@ pub async fn handle_oauth2_callback(
 }
 
 /// Refresh OAuth2 access token
-#[instrument(skip(state, request))]
+#[instrument(skip(state, _request))]
 pub async fn refresh_oauth2_token(
-    State(state): State<AppState>,
-    Json(request): Json<OAuth2RefreshRequest>,
+    State(state): State<Arc<AppState>>,
+    Json(_request): Json<OAuth2RefreshRequest>,
 ) -> Result<Json<OAuth2TokenResponse>, FusekiError> {
     let auth_service = state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
-    // TODO: Implement is_oauth2_enabled method
-    // For now, assume OAuth2 is not enabled
-    return Err(FusekiError::service_unavailable(
-        "OAuth2 authentication not configured",
-    ));
+    // Check if OAuth2 is enabled
+    if !auth_service.is_oauth2_enabled() {
+        return Ok(Json(OAuth2TokenResponse {
+            success: false,
+            access_token: None,
+            token_type: None,
+            expires_in: None,
+            refresh_token: None,
+            user: None,
+            message: "OAuth2 authentication not configured".to_string(),
+        }));
+    }
 
-    // TODO: Implement refresh_oauth2_token method
-    Err(FusekiError::authentication(
-        "OAuth2 refresh not implemented",
-    ))
+    // Refresh the access token
+    match auth_service
+        .refresh_oauth2_token(&_request.refresh_token)
+        .await
+    {
+        Ok(token) => {
+            info!("Successfully refreshed OAuth2 access token");
+            Ok(Json(OAuth2TokenResponse {
+                success: true,
+                access_token: Some(token.access_token),
+                token_type: Some(token.token_type),
+                expires_in: Some(token.expires_in),
+                refresh_token: token.refresh_token,
+                user: None, // User info not included in token refresh
+                message: "Token refreshed successfully".to_string(),
+            }))
+        }
+        Err(e) => {
+            warn!("Failed to refresh OAuth2 token: {}", e);
+            Err(e)
+        }
+    }
 }
 
 /// Get OAuth2 user information
-#[instrument(skip(state, headers))]
+#[instrument(skip(state, _headers))]
 pub async fn get_oauth2_user_info(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+    _headers: HeaderMap,
 ) -> Result<Json<OAuth2UserInfoResponse>, FusekiError> {
     let auth_service = state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
-    // TODO: Implement is_oauth2_enabled method
-    // For now, assume OAuth2 is not enabled
-    return Err(FusekiError::service_unavailable(
-        "OAuth2 authentication not configured",
-    ));
+    // Check if OAuth2 is enabled
+    if !auth_service.is_oauth2_enabled() {
+        return Ok(Json(OAuth2UserInfoResponse {
+            success: false,
+            user_info: None,
+            message: "OAuth2 authentication not configured".to_string(),
+        }));
+    }
 
     // Extract access token from Authorization header
-    let access_token = extract_bearer_token(&headers)
+    let access_token = extract_bearer_token(&_headers)
         .ok_or_else(|| FusekiError::authentication("Missing or invalid authorization header"))?;
 
-    // TODO: Implement get_oidc_user_info method
-    match Err(FusekiError::authentication(
-        "OIDC user info not implemented",
-    )) as Result<_, FusekiError>
-    {
+    // Get user info from OAuth2 provider
+    match auth_service.get_oauth2_user_info(&access_token).await {
         Ok(user_info) => {
-            info!("Retrieved OAuth2 user info");
-
+            info!(
+                "Successfully retrieved OAuth2 user info for user: {}",
+                user_info.sub
+            );
             Ok(Json(OAuth2UserInfoResponse {
                 success: true,
                 user_info: Some(user_info),
@@ -313,45 +339,55 @@ pub async fn get_oauth2_user_info(
             }))
         }
         Err(e) => {
-            error!("Failed to retrieve OAuth2 user info: {}", e);
-            Err(e)
+            warn!("Failed to retrieve OAuth2 user info: {}", e);
+            Ok(Json(OAuth2UserInfoResponse {
+                success: false,
+                user_info: None,
+                message: format!("Failed to retrieve user information: {e}"),
+            }))
         }
     }
 }
 
 /// Validate OAuth2 access token
-#[instrument(skip(state, headers))]
+#[instrument(skip(state, _headers))]
 pub async fn validate_oauth2_token(
-    State(state): State<AppState>,
-    headers: HeaderMap,
+    State(state): State<Arc<AppState>>,
+    _headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let auth_service = state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
-    // TODO: Implement is_oauth2_enabled method
-    // For now, assume OAuth2 is not enabled
-    return Err(FusekiError::service_unavailable(
-        "OAuth2 authentication not configured",
-    ));
+    // Check if OAuth2 is enabled
+    if !auth_service.is_oauth2_enabled() {
+        return Err(FusekiError::service_unavailable(
+            "OAuth2 authentication not configured",
+        ));
+    }
 
     // Extract access token from Authorization header
-    let access_token = extract_bearer_token(&headers)
+    let access_token = extract_bearer_token(&_headers)
         .ok_or_else(|| FusekiError::authentication("Missing or invalid authorization header"))?;
 
-    // TODO: Implement validate_oauth2_token method
-    match Err(FusekiError::authentication(
-        "OAuth2 token validation not implemented",
-    )) as Result<bool, FusekiError>
-    {
-        Ok(is_valid) => Ok(Json(serde_json::json!({
-            "valid": is_valid,
-            "message": if is_valid { "Token is valid" } else { "Token is invalid or expired" },
-            "timestamp": chrono::Utc::now()
-        }))),
+    // Validate the access token
+    match auth_service.validate_access_token(&access_token).await {
+        Ok(valid) => {
+            if valid {
+                Ok(Json(serde_json::json!({
+                    "valid": true,
+                    "message": "Token is valid"
+                })))
+            } else {
+                Ok(Json(serde_json::json!({
+                    "valid": false,
+                    "message": "Token is invalid or expired"
+                })))
+            }
+        }
         Err(e) => {
-            error!("Failed to validate OAuth2 token: {}", e);
+            warn!("OAuth2 token validation failed: {}", e);
             Err(e)
         }
     }
@@ -360,20 +396,22 @@ pub async fn validate_oauth2_token(
 /// Get OAuth2 configuration and capabilities
 #[instrument(skip(state))]
 pub async fn get_oauth2_config(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let auth_service = state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
-    // TODO: Implement is_oauth2_enabled method
-    // For now, assume OAuth2 is not enabled
-    return Err(FusekiError::service_unavailable(
-        "OAuth2 authentication not configured",
-    ));
+    // Check if OAuth2 is enabled
+    if !auth_service.is_oauth2_enabled() {
+        return Ok(Json(serde_json::json!({
+            "enabled": false,
+            "message": "OAuth2 authentication not configured"
+        })));
+    }
 
-    // Get OAuth2 configuration from the config (without sensitive data)
+    // Get OAuth2 configuration from the server config (without sensitive data)
     let oauth_config = &state.config.security.oauth;
 
     if let Some(oauth_config) = oauth_config {
@@ -383,7 +421,9 @@ pub async fn get_oauth2_config(
             "authorization_endpoint": oauth_config.auth_url,
             "supported_scopes": oauth_config.scopes,
             "client_id": oauth_config.client_id,
-            // Don't expose client_secret, token_url, or user_info_url for security
+            "token_endpoint": oauth_config.token_url,
+            "user_info_endpoint": oauth_config.user_info_url,
+            // Don't expose client_secret for security reasons
         });
 
         Ok(Json(config_info))
@@ -398,23 +438,45 @@ pub async fn get_oauth2_config(
 /// OAuth2 discovery endpoint (OpenID Connect Discovery)
 #[instrument(skip(state))]
 pub async fn oauth2_discovery(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let auth_service = state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
-    // TODO: Implement is_oauth2_enabled method
-    // For now, assume OAuth2 is not enabled
-    return Err(FusekiError::service_unavailable(
-        "OAuth2 authentication not configured",
-    ));
+    // Get OAuth configuration from the auth service
+    let oauth_config = auth_service
+        .get_oauth_config()
+        .ok_or_else(|| FusekiError::service_unavailable("OAuth2 authentication not configured"))?;
 
-    // TODO: Implement oauth2_service() method
-    Err(FusekiError::service_unavailable(
-        "OAuth2 service not available",
-    ))
+    // Construct the server base URL from the request
+    let base_url = format!(
+        "http://{}:{}",
+        state.config.server.host, state.config.server.port
+    );
+
+    // Build OIDC discovery document according to RFC 8414
+    let discovery_doc = serde_json::json!({
+        "issuer": base_url,
+        "authorization_endpoint": oauth_config.auth_url,
+        "token_endpoint": oauth_config.token_url,
+        "userinfo_endpoint": oauth_config.user_info_url,
+        "jwks_uri": format!("{}/auth/oauth2/jwks", base_url),
+        "scopes_supported": oauth_config.scopes,
+        "response_types_supported": ["code", "token", "id_token", "code id_token", "code token", "id_token token", "code id_token token"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "subject_types_supported": ["public"],
+        "id_token_signing_alg_values_supported": ["RS256"],
+        "code_challenge_methods_supported": ["S256"],
+        "claims_supported": ["sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "email", "email_verified", "name", "given_name", "family_name"],
+        "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post"],
+        "revocation_endpoint": format!("{}/auth/oauth2/revoke", base_url),
+        "introspection_endpoint": format!("{}/auth/oauth2/introspect", base_url),
+        "end_session_endpoint": format!("{}/auth/oauth2/logout", base_url)
+    });
+
+    Ok(Json(discovery_doc))
 }
 
 /// Extract Bearer token from Authorization header
@@ -422,11 +484,9 @@ fn extract_bearer_token(headers: &HeaderMap) -> Option<String> {
     let auth_header = headers.get("authorization")?;
     let auth_str = auth_header.to_str().ok()?;
 
-    if auth_str.starts_with("Bearer ") {
-        Some(auth_str[7..].to_string())
-    } else {
-        None
-    }
+    auth_str
+        .strip_prefix("Bearer ")
+        .map(|stripped| stripped.to_string())
 }
 
 #[cfg(test)]

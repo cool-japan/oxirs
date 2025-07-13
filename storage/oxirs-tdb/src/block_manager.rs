@@ -136,10 +136,7 @@ impl FreeBlockTracker {
         let id = metadata.id;
 
         // Add to size index
-        self.blocks_by_size
-            .entry(size)
-            .or_default()
-            .insert(id);
+        self.blocks_by_size.entry(size).or_default().insert(id);
 
         // Update metadata
         self.block_metadata.insert(id, metadata);
@@ -1081,6 +1078,7 @@ impl Default for BlockManager {
 }
 
 #[cfg(test)]
+#[allow(clippy::uninlined_format_args)]
 mod tests {
     use super::*;
 
@@ -1182,7 +1180,7 @@ mod tests {
             }
             println!("Final debug - blocks_by_size contents:");
             for (size, ids) in &free_blocks.blocks_by_size {
-                println!("  Size {}: {:?}", size, ids);
+                println!("  Size {size}: {ids:?}");
             }
         }
 

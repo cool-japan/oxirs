@@ -2,7 +2,15 @@
 //!
 //! These tests verify the integration of various components in the federation engine.
 
-use oxirs_federate::service::{AuthType, ServiceAuthConfig, ServiceMetadata};
+use oxirs_federate::auto_discovery::{AutoDiscovery, AutoDiscoveryConfig};
+use oxirs_federate::cache::FederationCache;
+use oxirs_federate::capability_assessment::CapabilityAssessor;
+use oxirs_federate::planner::QueryPlanner;
+use oxirs_federate::query_decomposition::QueryDecomposer;
+use oxirs_federate::service::{AuthType, ServiceAuthConfig, ServiceCapability, ServiceMetadata};
+use oxirs_federate::service_client::{create_client, ClientConfig};
+use oxirs_federate::service_registry::RegistryConfig;
+use oxirs_federate::service_registry::ServiceRegistry;
 use oxirs_federate::*;
 use std::time::Duration;
 
@@ -76,10 +84,7 @@ async fn test_extended_metadata() {
     registry.register(service).await.unwrap();
 
     // Enable extended metadata
-    registry
-        .enable_extended_metadata("metadata-test")
-        .await
-        .unwrap();
+    registry.enable_extended_metadata("metadata-test");
 
     let service = registry.get_service("metadata-test").unwrap();
     assert!(service.extended_metadata.is_some());
@@ -275,14 +280,13 @@ async fn test_complex_query_planning() {
     let planner = QueryPlanner::new();
 
     // Create registry with fast test configuration
-    let config = ServiceRegistryConfig {
-        require_healthy_on_register: false,
+    let config = RegistryConfig {
         health_check_interval: Duration::from_secs(1),
         service_timeout: Duration::from_millis(100), // Very short timeout for tests
-        max_retry_attempts: 1,
-        enable_capability_detection: false, // Disable to speed up tests
+        max_retries: 1,
         connection_pool_size: 1,
-        enable_rate_limiting: false,
+        auto_discovery: false,
+        capability_refresh_interval: Duration::from_secs(300),
     };
     let mut registry = ServiceRegistry::with_config(config);
 
@@ -354,7 +358,11 @@ async fn test_monitoring_and_stats() {
 
     // Get federation stats
     let stats = engine.get_stats().await;
-    assert_eq!(stats.registry.total_services, 1);
+    let reg_stats = stats.unwrap().registry;
+    assert_eq!(
+        reg_stats.total_sparql_endpoints + reg_stats.total_graphql_services,
+        1
+    );
 
     // Get cache stats
     let cache_stats = engine.get_cache_stats().await;

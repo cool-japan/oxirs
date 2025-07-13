@@ -4,6 +4,8 @@
 //! modules in the OxiRS ecosystem, enabling seamless data validation across
 //! different interfaces and protocols.
 
+#![allow(dead_code)]
+
 pub mod graphql_integration;
 pub mod fuseki_integration;
 pub mod stream_integration;

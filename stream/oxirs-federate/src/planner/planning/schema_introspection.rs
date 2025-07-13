@@ -241,7 +241,7 @@ impl SchemaIntrospector {
         );
 
         // Query for federation support
-        let federation_query = r#"
+        let _federation_query = r#"
             query FederationIntrospection {
                 _service {
                     sdl

@@ -4,19 +4,19 @@
 //! SHACL validation, including context-aware validation, adaptive constraint selection,
 //! multi-objective optimization, and dynamic strategy selection.
 
+pub mod advanced_strategies;
 pub mod config;
 pub mod core;
 pub mod manager;
 pub mod strategies;
-pub mod advanced_strategies;
 pub mod types;
 
 // Re-export main types and traits
+pub use advanced_strategies::*;
 pub use config::*;
 pub use core::*;
 pub use manager::*;
 pub use strategies::*;
-pub use advanced_strategies::*;
 pub use types::*;
 
 #[cfg(test)]
@@ -64,7 +64,7 @@ mod tests {
             specificity: 0.85,
             false_positive_rate: 0.08,
             false_negative_rate: 0.12,
-            Matthews_correlation_coefficient: 0.75,
+            matthews_correlation_coefficient: 0.75,
             area_under_roc_curve: 0.89,
         };
 
@@ -104,13 +104,18 @@ mod tests {
         let strategy = QuantumEnhancedStrategy::new();
         assert_eq!(strategy.name(), "QuantumEnhanced");
         assert!(!strategy.description().is_empty());
-        assert!(strategy.parameters().contains_key("quantum_coherence_threshold"));
+        assert!(strategy
+            .parameters()
+            .contains_key("quantum_coherence_threshold"));
         assert!(strategy.parameters().contains_key("entanglement_strength"));
-        
+
         let capabilities = strategy.capabilities();
         assert!(capabilities.supports_temporal_validation);
         assert!(capabilities.supports_parallel_processing);
-        assert_eq!(capabilities.computational_complexity, ComputationalComplexity::Logarithmic);
+        assert_eq!(
+            capabilities.computational_complexity,
+            ComputationalComplexity::Logarithmic
+        );
     }
 
     #[test]
@@ -120,7 +125,7 @@ mod tests {
         assert!(!strategy.description().is_empty());
         assert!(strategy.parameters().contains_key("spike_threshold"));
         assert!(strategy.parameters().contains_key("plasticity_strength"));
-        
+
         let capabilities = strategy.capabilities();
         assert!(capabilities.supports_temporal_validation);
         assert!(capabilities.supports_uncertainty_quantification);
@@ -133,10 +138,13 @@ mod tests {
         assert!(!strategy.description().is_empty());
         assert!(strategy.parameters().contains_key("prior_strength"));
         assert!(strategy.parameters().contains_key("mcmc_iterations"));
-        
+
         let capabilities = strategy.capabilities();
         assert!(capabilities.supports_uncertainty_quantification);
-        assert_eq!(capabilities.computational_complexity, ComputationalComplexity::LogLinear);
+        assert_eq!(
+            capabilities.computational_complexity,
+            ComputationalComplexity::LogLinear
+        );
     }
 
     #[test]
@@ -146,7 +154,7 @@ mod tests {
         assert!(!strategy.description().is_empty());
         assert!(strategy.parameters().contains_key("adaptation_rate"));
         assert!(strategy.parameters().contains_key("forgetting_factor"));
-        
+
         let capabilities = strategy.capabilities();
         assert!(capabilities.supports_temporal_validation);
         assert!(capabilities.supports_incremental_validation);

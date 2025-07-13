@@ -38,7 +38,7 @@ impl UpdateManager {
         }
     }
 
-    pub async fn perform_update(&mut self, spec: &UpdateSpec) -> Result<UpdateResult> {
+    pub async fn perform_update(&mut self, _spec: &UpdateSpec) -> Result<UpdateResult> {
         // Placeholder implementation
         Ok(UpdateResult {
             success: true,

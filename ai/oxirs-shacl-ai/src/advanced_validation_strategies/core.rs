@@ -7,9 +7,9 @@ use std::time::Duration;
 use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
-use crate::Result;
 use super::config::*;
 use super::types::*;
+use crate::Result;
 
 /// Trait for validation strategies
 pub trait ValidationStrategy: Send + Sync + std::fmt::Debug {
@@ -76,7 +76,7 @@ pub struct QualityMetrics {
     pub specificity: f64,
     pub false_positive_rate: f64,
     pub false_negative_rate: f64,
-    pub Matthews_correlation_coefficient: f64,
+    pub matthews_correlation_coefficient: f64,
     pub area_under_roc_curve: f64,
 }
 

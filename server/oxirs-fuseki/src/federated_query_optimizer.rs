@@ -28,6 +28,9 @@ use tokio::{
     time::timeout,
 };
 
+/// Type alias for query decomposition function
+type QueryDecomposeFn = Box<dyn Fn(&str) -> Vec<QueryFragment> + Send + Sync>;
+
 /// Federated query optimizer for distributed SPARQL execution
 pub struct FederatedQueryOptimizer {
     /// Remote endpoint registry
@@ -140,7 +143,7 @@ pub struct DecompositionRule {
     pub name: String,
     pub pattern: String,
     pub applicability_check: Box<dyn Fn(&str) -> bool + Send + Sync>,
-    pub decompose: Box<dyn Fn(&str) -> Vec<QueryFragment> + Send + Sync>,
+    pub decompose: QueryDecomposeFn,
 }
 
 /// Fragment of a decomposed query
@@ -350,6 +353,23 @@ pub struct ExecutionPlan {
     pub join_plan: JoinPlan,
     pub timeout_ms: u64,
     pub optimization_hints: HashMap<String, String>,
+    /// Execution steps for performance testing
+    pub execution_steps: Vec<String>,
+    /// Estimated cost of execution
+    pub estimated_cost: f64,
+    /// Resource requirements for the execution plan
+    pub resource_requirements: ResourceRequirements,
+}
+
+/// Resource requirements for execution plan
+#[derive(Debug, Clone)]
+pub struct ResourceRequirements {
+    /// Required service endpoints
+    pub required_endpoints: Vec<String>,
+    /// Estimated memory requirements in MB
+    pub estimated_memory_mb: f64,
+    /// Estimated CPU requirements
+    pub estimated_cpu_cores: f64,
 }
 
 /// Results from federated query execution
@@ -659,7 +679,7 @@ impl QueryPlanner {
                 applicability_check: Box::new(|query| {
                     query.contains("?s") && query.contains("?p") && query.contains("?o")
                 }),
-                decompose: Box::new(|query| {
+                decompose: Box::new(|_query| {
                     // Decompose triple patterns across endpoints
                     vec![]
                 }),
@@ -669,7 +689,7 @@ impl QueryPlanner {
                 name: "UnionDecomposition".to_string(),
                 pattern: "union".to_string(),
                 applicability_check: Box::new(|query| query.to_uppercase().contains("UNION")),
-                decompose: Box::new(|query| {
+                decompose: Box::new(|_query| {
                     // Split UNION branches for parallel execution
                     vec![]
                 }),
@@ -679,7 +699,7 @@ impl QueryPlanner {
                 name: "OptionalDecomposition".to_string(),
                 pattern: "optional".to_string(),
                 applicability_check: Box::new(|query| query.to_uppercase().contains("OPTIONAL")),
-                decompose: Box::new(|query| {
+                decompose: Box::new(|_query| {
                     // Handle OPTIONAL patterns
                     vec![]
                 }),
@@ -700,12 +720,37 @@ impl QueryPlanner {
         let join_plan = self.join_optimizer.optimize_joins(&fragments).await?;
 
         // Create execution plan
+        let required_endpoints: Vec<String> = service_patterns
+            .iter()
+            .map(|p| p.service_url.clone())
+            .collect();
+
+        let execution_steps: Vec<String> = fragments
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                format!(
+                    "Execute fragment {} ({}) at {:?}",
+                    i, f.sparql, f.target_endpoints
+                )
+            })
+            .collect();
+
+        let estimated_cost = fragments.iter().map(|f| f.estimated_cost).sum::<f64>(); // Sum of fragment costs
+
         Ok(ExecutionPlan {
             query_id: uuid::Uuid::new_v4().to_string(),
-            fragments,
+            fragments: fragments.clone(),
             join_plan,
             timeout_ms: 30000,
             optimization_hints: HashMap::new(),
+            execution_steps,
+            estimated_cost,
+            resource_requirements: ResourceRequirements {
+                required_endpoints,
+                estimated_memory_mb: fragments.len() as f64 * 5.0,
+                estimated_cpu_cores: (fragments.len() as f64 / 2.0).max(1.0),
+            },
         })
     }
 
@@ -919,7 +964,7 @@ impl CardinalityEstimator {
         if query.contains("LIMIT") {
             if let Some(limit_pos) = query.find("LIMIT") {
                 let limit_str = &query[limit_pos + 5..].trim();
-                
+
                 // Extract the limit value (handle both cases: with space after or at end of query)
                 let limit_val = if let Some(space_pos) = limit_str.find(' ') {
                     &limit_str[..space_pos]
@@ -927,7 +972,7 @@ impl CardinalityEstimator {
                     // No space found, use the entire remaining string
                     limit_str
                 };
-                
+
                 if let Ok(limit) = limit_val.parse::<u64>() {
                     return Ok(limit);
                 }
@@ -1021,7 +1066,7 @@ impl FederatedExecutor {
                 .await
             {
                 Ok(results) => return Ok(results),
-                Err(e) if retries < self.retry_policy.max_retries => {
+                Err(_e) if retries < self.retry_policy.max_retries => {
                     retries += 1;
                     let backoff = self.calculate_backoff(retries);
                     tokio::time::sleep(backoff).await;
@@ -1516,9 +1561,12 @@ mod uuid {
         pub fn new_v4() -> Self {
             Uuid
         }
+    }
 
-        pub fn to_string(&self) -> String {
-            format!(
+    impl std::fmt::Display for Uuid {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
                 "{:x}-{:x}-{:x}-{:x}",
                 rand::random::<u32>(),
                 rand::random::<u16>(),

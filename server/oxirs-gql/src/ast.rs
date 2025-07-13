@@ -137,8 +137,14 @@ impl Type {
     pub fn name(&self) -> String {
         match self {
             Type::NamedType(name) => name.clone(),
-            Type::ListType(inner) => { let name = inner.name(); format!("[{name}]") },
-            Type::NonNullType(inner) => { let name = inner.name(); format!("{name}!") },
+            Type::ListType(inner) => {
+                let name = inner.name();
+                format!("[{name}]")
+            }
+            Type::NonNullType(inner) => {
+                let name = inner.name();
+                format!("{name}!")
+            }
         }
     }
 }

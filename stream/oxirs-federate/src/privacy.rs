@@ -30,8 +30,7 @@ pub enum PrivacyError {
 }
 
 /// Privacy protection level
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum PrivacyLevel {
     /// No privacy protection
     None,
@@ -49,7 +48,6 @@ pub enum PrivacyLevel {
     /// Maximum privacy protection
     Maximum,
 }
-
 
 impl PrivacyLevel {
     /// Get numeric privacy score
@@ -398,7 +396,7 @@ impl PrivacyManager {
     /// Apply privacy protection to query
     pub async fn apply_privacy_protection(
         &self,
-        query: &str,
+        _query: &str,
         user_id: &str,
         policy_id: &str,
         data: &mut serde_json::Value,
@@ -734,10 +732,10 @@ impl PrivacyManager {
     ) -> Result<serde_json::Value, PrivacyError> {
         // Basic SMPC-like join implementation using existing privacy techniques
         // In a full implementation, this would use proper SMPC protocols
-        
+
         // First, perform a standard join
         let mut result = Vec::new();
-        
+
         if let (serde_json::Value::Array(left_records), serde_json::Value::Array(right_records)) =
             (left_data, right_data)
         {
@@ -753,7 +751,7 @@ impl PrivacyManager {
                                     break;
                                 }
                             }
-                            
+
                             if keys_match {
                                 // Merge records and apply privacy protection
                                 let mut joined_record = left_obj.clone();
@@ -762,9 +760,10 @@ impl PrivacyManager {
                                         joined_record.insert(k.clone(), v.clone());
                                     }
                                 }
-                                
+
                                 // Apply differential privacy noise to sensitive fields
-                                let privacy_protected = self.apply_smpc_protection(&joined_record).await?;
+                                let privacy_protected =
+                                    self.apply_smpc_protection(&joined_record).await?;
                                 result.push(privacy_protected);
                             }
                         }
@@ -772,17 +771,17 @@ impl PrivacyManager {
                 }
             }
         }
-        
+
         Ok(serde_json::Value::Array(result))
     }
-    
+
     /// Apply SMPC-like privacy protection to a record
     async fn apply_smpc_protection(
         &self,
         record: &serde_json::value::Map<String, serde_json::Value>,
     ) -> Result<serde_json::Value, PrivacyError> {
         let mut protected_record = record.clone();
-        
+
         // Add noise to numeric fields (simulating SMPC protection)
         for (key, value) in &mut protected_record {
             match value {
@@ -793,7 +792,7 @@ impl PrivacyManager {
                         let protected_value = f + noise;
                         *value = serde_json::Value::Number(
                             serde_json::Number::from_f64(protected_value)
-                                .unwrap_or_else(|| serde_json::Number::from(0))
+                                .unwrap_or_else(|| serde_json::Number::from(0)),
                         );
                     }
                 }
@@ -807,18 +806,19 @@ impl PrivacyManager {
                 _ => {} // Leave other types unchanged
             }
         }
-        
+
         Ok(serde_json::Value::Object(protected_record))
     }
-    
+
     /// Check if a field is a quasi-identifier that needs protection
     fn is_quasi_identifier(&self, field_name: &str) -> bool {
         // Common quasi-identifiers that might be used in joins
-        matches!(field_name.to_lowercase().as_str(),
+        matches!(
+            field_name.to_lowercase().as_str(),
             "age" | "zipcode" | "postal_code" | "birth_year" | "education" | "occupation"
         )
     }
-    
+
     /// Generalize string values for k-anonymity
     fn generalize_string_value(&self, value: &str) -> String {
         // Simple generalization: replace with ranges or categories
@@ -1183,12 +1183,11 @@ impl DataAnonymizer {
                     *value = serde_json::Value::String(masked);
                 }
             }
-            AnonymizationTechnique::Suppression => {
-                // Replace with a fixed suppression value
-                *value = serde_json::Value::String("[SUPPRESSED]".to_string());
-            }
-            AnonymizationTechnique::Generalization => {
-                // Generalize to broader categories
+            // Removed duplicate unreachable patterns
+            // AnonymizationTechnique::Suppression and AnonymizationTechnique::Generalization
+            // are already handled above
+            _ => {
+                // Handle any other cases if needed
                 if let Some(s) = value.as_str() {
                     let generalized = generalize_value(s);
                     *value = serde_json::Value::String(generalized);
@@ -1196,45 +1195,6 @@ impl DataAnonymizer {
                     // Generalize numbers to ranges
                     let generalized_range = generalize_number(n);
                     *value = serde_json::Value::String(generalized_range);
-                }
-            }
-            AnonymizationTechnique::Perturbation => {
-                // Add random noise to the data
-                if let Some(n) = value.as_f64() {
-                    use rand::Rng;
-                    let mut rng = rand::thread_rng();
-                    let noise = rng.gen_range(-0.1..0.1) * n; // 10% noise
-                    *value = serde_json::Value::Number(serde_json::Number::from_f64(n + noise).unwrap_or_else(|| serde_json::Number::from(0)));
-                } else if let Some(s) = value.as_str() {
-                    // Add character perturbation for strings
-                    let perturbed = perturb_string(s);
-                    *value = serde_json::Value::String(perturbed);
-                }
-            }
-            AnonymizationTechnique::Substitution => {
-                // Replace with synthetic but realistic data
-                if let Some(s) = value.as_str() {
-                    let substituted = substitute_value(s);
-                    *value = serde_json::Value::String(substituted);
-                } else if let Some(n) = value.as_f64() {
-                    // Generate synthetic numeric value in similar range
-                    use rand::Rng;
-                    let mut rng = rand::thread_rng();
-                    let magnitude = n.abs().log10().floor();
-                    let synthetic = rng.gen_range(10f64.powf(magnitude)..10f64.powf(magnitude + 1.0));
-                    *value = serde_json::Value::Number(serde_json::Number::from_f64(synthetic).unwrap_or_else(|| serde_json::Number::from(0)));
-                }
-            }
-            AnonymizationTechnique::Encryption => {
-                // Format-preserving encryption (simplified)
-                if let Some(s) = value.as_str() {
-                    let encrypted = encrypt_preserving_format(s);
-                    *value = serde_json::Value::String(encrypted);
-                } else {
-                    // For non-string values, convert to encrypted string
-                    let json_str = value.to_string();
-                    let encrypted = encrypt_preserving_format(&json_str);
-                    *value = serde_json::Value::String(encrypted);
                 }
             }
         }
@@ -1286,11 +1246,11 @@ fn perturb_string(value: &str) -> String {
     use rand::Rng;
     let mut rng = rand::thread_rng();
     let chars: Vec<char> = value.chars().collect();
-    
+
     if chars.is_empty() {
         return value.to_string();
     }
-    
+
     // Randomly change one character
     let mut result = chars.clone();
     if !result.is_empty() {
@@ -1305,7 +1265,7 @@ fn perturb_string(value: &str) -> String {
             result[idx] = replacement;
         }
     }
-    
+
     result.into_iter().collect()
 }
 
@@ -1320,7 +1280,9 @@ fn substitute_value(value: &str) -> String {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let len = value.len();
-        (0..len).map(|_| char::from(rng.gen_range(b'0'..=b'9'))).collect()
+        (0..len)
+            .map(|_| char::from(rng.gen_range(b'0'..=b'9')))
+            .collect()
     } else if value.chars().all(|c| c.is_ascii_alphabetic()) {
         // Text substitution
         "synthetic_data".to_string()
@@ -1334,18 +1296,18 @@ fn substitute_value(value: &str) -> String {
 fn encrypt_preserving_format(value: &str) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
-    
+
     // Simple format-preserving encryption using hash and character mapping
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     let hash = hasher.finish();
-    
+
     let chars: Vec<char> = value.chars().collect();
     let mut result = String::new();
-    
+
     for (i, c) in chars.iter().enumerate() {
         let char_hash = hash.wrapping_add(i as u64);
-        
+
         if c.is_ascii_digit() {
             // Preserve numeric format
             let digit = (char_hash % 10) as u8;
@@ -1363,7 +1325,7 @@ fn encrypt_preserving_format(value: &str) -> String {
             result.push(*c);
         }
     }
-    
+
     result
 }
 

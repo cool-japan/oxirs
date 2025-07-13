@@ -1224,7 +1224,6 @@ pub mod convenience {
         Ok(added_count)
     }
 
-
     /// Quick function to compute similarity between two embedding vectors
     pub fn cosine_similarity(a: &[f64], b: &[f64]) -> Result<f64> {
         if a.len() != b.len() {
@@ -1424,10 +1423,7 @@ pub mod parallel_utils {
         R: Send,
         F: Fn(&[T]) -> Result<Vec<R>> + Sync + Send,
     {
-        let results: Result<Vec<Vec<R>>> = items
-            .par_chunks(batch_size)
-            .map(processor)
-            .collect();
+        let results: Result<Vec<Vec<R>>> = items.par_chunks(batch_size).map(processor).collect();
 
         Ok(results?.into_iter().flatten().collect())
     }

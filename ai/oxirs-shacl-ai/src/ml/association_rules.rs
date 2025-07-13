@@ -263,10 +263,7 @@ impl AssociationRuleLearner {
                     });
 
                     tree.nodes[current_node].children.insert(item, new_idx);
-                    tree.header_table
-                        .entry(item)
-                        .or_default()
-                        .push(new_idx);
+                    tree.header_table.entry(item).or_default().push(new_idx);
                     current_node = new_idx;
                 }
             }
@@ -296,10 +293,7 @@ impl AssociationRuleLearner {
 
         for (tid, transaction) in transactions.iter().enumerate() {
             for &item in &transaction.items {
-                vertical_db
-                    .entry(item)
-                    .or_default()
-                    .insert(tid);
+                vertical_db.entry(item).or_default().insert(tid);
             }
         }
 
@@ -331,8 +325,7 @@ impl AssociationRuleLearner {
                 let union: HashSet<usize> = itemsets[i].union(&itemsets[j]).cloned().collect();
                 if union.len() == k {
                     // Check if all subsets are frequent (pruning)
-                    if !self.config.pruning_enabled || self.all_subsets_frequent(&union, itemsets)
-                    {
+                    if !self.config.pruning_enabled || self.all_subsets_frequent(&union, itemsets) {
                         candidates.push(union);
                     }
                 }

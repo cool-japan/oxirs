@@ -171,6 +171,7 @@ pub struct AdvancedSPARQLOptimizer {
     config: OptimizerConfig,
     query_analyzer: QueryAnalyzer,
     rewriter: QueryRewriter,
+    #[allow(dead_code)]
     cost_estimator: CostEstimator,
     optimization_cache: HashMap<String, OptimizationResult>,
 }
@@ -191,7 +192,7 @@ impl AdvancedSPARQLOptimizer {
         &mut self,
         query: &str,
         intent: &QueryIntent,
-        generation_result: Option<&SPARQLGenerationResult>,
+        _generation_result: Option<&SPARQLGenerationResult>,
     ) -> Result<OptimizationResult> {
         let start_time = SystemTime::now();
 
@@ -406,7 +407,7 @@ impl AdvancedSPARQLOptimizer {
 
 /// Query analysis component
 struct QueryAnalyzer {
-    config: OptimizerConfig,
+    _config: OptimizerConfig,
     complexity_patterns: Vec<ComplexityPattern>,
 }
 
@@ -416,27 +417,27 @@ impl QueryAnalyzer {
             ComplexityPattern {
                 pattern: Regex::new(r"(?i)\bUNION\b").unwrap(),
                 complexity_weight: 2.0,
-                description: "UNION operations increase complexity".to_string(),
+                _description: "UNION operations increase complexity".to_string(),
             },
             ComplexityPattern {
                 pattern: Regex::new(r"(?i)\bOPTIONAL\b").unwrap(),
                 complexity_weight: 1.5,
-                description: "OPTIONAL patterns add complexity".to_string(),
+                _description: "OPTIONAL patterns add complexity".to_string(),
             },
             ComplexityPattern {
                 pattern: Regex::new(r"(?i)\bFILTER\s+regex\(").unwrap(),
                 complexity_weight: 3.0,
-                description: "REGEX filters are expensive".to_string(),
+                _description: "REGEX filters are expensive".to_string(),
             },
             ComplexityPattern {
                 pattern: Regex::new(r"\{\s*SELECT").unwrap(),
                 complexity_weight: 2.5,
-                description: "Subqueries increase complexity".to_string(),
+                _description: "Subqueries increase complexity".to_string(),
             },
         ];
 
         Self {
-            config: config.clone(),
+            _config: config.clone(),
             complexity_patterns,
         }
     }
@@ -688,7 +689,7 @@ impl QueryRewriter {
     async fn rewrite_query(
         &mut self,
         query: &str,
-        analysis: &QueryAnalysis,
+        _analysis: &QueryAnalysis,
         intent: &QueryIntent,
     ) -> Result<String> {
         self.applied_optimizations.clear();
@@ -832,7 +833,7 @@ impl CostEstimator {
 struct ComplexityPattern {
     pattern: Regex,
     complexity_weight: f32,
-    description: String,
+    _description: String,
 }
 
 /// Optimization statistics

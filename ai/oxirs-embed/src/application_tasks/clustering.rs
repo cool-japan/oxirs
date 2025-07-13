@@ -204,7 +204,7 @@ impl ClusteringEvaluator {
             }
 
             // Update centroids
-            for c in 0..k {
+            for (c, centroid) in centroids.iter_mut().enumerate().take(k) {
                 let cluster_points: Vec<_> = embeddings
                     .iter()
                     .enumerate()
@@ -222,7 +222,7 @@ impl ClusteringEvaluator {
                     for value in &mut new_centroid {
                         *value /= cluster_points.len() as f32;
                     }
-                    centroids[c] = new_centroid;
+                    *centroid = new_centroid;
                 }
             }
         }

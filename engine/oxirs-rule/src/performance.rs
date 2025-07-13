@@ -142,9 +142,7 @@ impl RuleEngineProfiler {
                     .or_default()
                     .push(duration);
             } else {
-                warn!(
-                    "Operation stack mismatch: expected '{name}', got '{operation_name}'"
-                );
+                warn!("Operation stack mismatch: expected '{name}', got '{operation_name}'");
             }
         } else {
             warn!("No operation to end for '{operation_name}'");
@@ -370,7 +368,10 @@ impl PerformanceTestHarness {
             engine.forward_chain(&facts).unwrap_or_default()
         });
 
-        info!("Forward chaining derived {derived_fact_count} facts", derived_fact_count = derived_facts.len());
+        info!(
+            "Forward chaining derived {derived_fact_count} facts",
+            derived_fact_count = derived_facts.len()
+        );
 
         // Test backward chaining performance (if we have a goal)
         if let Some(goal) = facts.first() {
@@ -380,16 +381,17 @@ impl PerformanceTestHarness {
         }
 
         let metrics = self.profiler.generate_report();
-        info!("Performance test completed in {total_time:?}", total_time = metrics.total_time);
+        info!(
+            "Performance test completed in {total_time:?}",
+            total_time = metrics.total_time
+        );
 
         metrics
     }
 
     /// Run a memory stress test
     pub fn run_memory_stress_test(&mut self, scale_factor: usize) -> PerformanceMetrics {
-        info!(
-            "Starting memory stress test with scale factor {scale_factor}"
-        );
+        info!("Starting memory stress test with scale factor {scale_factor}");
 
         let mut engine = RuleEngine::new();
 
@@ -767,7 +769,10 @@ impl ParallelRuleEngine {
                     metrics.rule_loading_time += start_time.elapsed();
                 }
 
-                info!("Added {rule_count} rules to parallel engine", rule_count = rules.len());
+                info!(
+                    "Added {rule_count} rules to parallel engine",
+                    rule_count = rules.len()
+                );
                 Ok(())
             }
             _ => Err("Failed to acquire rule storage lock".to_string()),
@@ -1020,7 +1025,10 @@ impl IncrementalReasoningEngine {
 
         // Identify which rules are affected by the new facts
         let affected_rules = self.identify_affected_rules(&new_facts)?;
-        info!("Identified {rule_count} affected rules", rule_count = affected_rules.len());
+        info!(
+            "Identified {rule_count} affected rules",
+            rule_count = affected_rules.len()
+        );
 
         // Perform incremental reasoning only on affected rules
         let new_derived_facts = self.reason_incrementally(new_facts, affected_rules)?;
@@ -1254,7 +1262,7 @@ impl IncrementalReasoningEngine {
 
                         Ok(derived_facts)
                     }
-                    Err(e) => Err(format!("Full reasoning failed: {e}"))
+                    Err(e) => Err(format!("Full reasoning failed: {e}")),
                 }
             }
             _ => Err("Failed to acquire engine lock".to_string()),

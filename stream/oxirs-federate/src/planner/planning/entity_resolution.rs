@@ -131,11 +131,10 @@ impl EntityResolver {
             );
 
             // Extract entity references from the step query
-            let entity_refs = Self::extract_entity_references(&step.query)
-                .unwrap_or_else(|e| {
-                    debug!("Failed to extract entity references from query: {}", e);
-                    Vec::new()
-                });
+            let entity_refs = Self::extract_entity_references(&step.query).unwrap_or_else(|e| {
+                debug!("Failed to extract entity references from query: {}", e);
+                Vec::new()
+            });
 
             // Batch resolve entities for this service
             let entities = Self::batch_resolve_entities(&step.service_name, &entity_refs).await?;
@@ -165,7 +164,7 @@ impl EntityResolver {
 
         let mut resolved_entities = Vec::new();
 
-        for (typename, refs) in entities_by_type {
+        for (typename, _refs) in entities_by_type {
             // For now, create a basic query structure - this should be enhanced
             // to properly build GraphQL _entities queries from EntityReference data
             let entities_query = format!(
@@ -208,7 +207,7 @@ impl EntityResolver {
             reprs_json.push(serde_json::Value::Object(repr_obj));
         }
 
-        let representations_str = serde_json::to_string(&reprs_json)?;
+        let _representations_str = serde_json::to_string(&reprs_json)?;
 
         let query = format!(
             r#"
@@ -231,7 +230,7 @@ impl EntityResolver {
     }
 
     /// Execute query against a specific GraphQL service
-    async fn execute_service_query(service_id: &str, query: &str) -> Result<GraphQLResponse> {
+    async fn execute_service_query(service_id: &str, _query: &str) -> Result<GraphQLResponse> {
         debug!("Executing GraphQL query against service: {}", service_id);
 
         // Mock implementation - would make actual HTTP request to service
@@ -508,7 +507,7 @@ impl EntityResolver {
     pub async fn stitch_entity_response(
         original_query: &str,
         resolved_entities: &HashMap<String, Vec<EntityData>>,
-        variables: Option<serde_json::Value>,
+        _variables: Option<serde_json::Value>,
     ) -> Result<GraphQLResponse> {
         debug!(
             "Stitching final GraphQL response from {} services",
@@ -518,7 +517,7 @@ impl EntityResolver {
         // Combine all entity data into a unified response
         let mut combined_data = serde_json::Map::new();
 
-        for (service_id, entities) in resolved_entities {
+        for (_service_id, entities) in resolved_entities {
             for entity in entities {
                 // Merge entity fields into response based on query structure
                 Self::merge_entity_into_response(&mut combined_data, entity, original_query)?;

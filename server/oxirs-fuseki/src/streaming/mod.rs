@@ -21,8 +21,7 @@ use tokio::sync::{mpsc, RwLock};
 use url::Url;
 
 /// Streaming configuration
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct StreamingConfig {
     /// Enable Kafka integration
     pub kafka: Option<KafkaConfig>,
@@ -33,7 +32,6 @@ pub struct StreamingConfig {
     /// Pipeline configuration
     pub pipeline: PipelineConfig,
 }
-
 
 /// Kafka configuration
 #[derive(Debug, Clone)]
@@ -296,9 +294,9 @@ mod triple_serde {
                 let object = object.ok_or_else(|| de::Error::missing_field("object"))?;
 
                 // Parse subject
-                let subject = if subject.starts_with("_:") {
+                let subject = if let Some(stripped) = subject.strip_prefix("_:") {
                     Subject::BlankNode(
-                        BlankNode::new(&subject[2..])
+                        BlankNode::new(stripped)
                             .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if subject.starts_with('<') && subject.ends_with('>') {
@@ -321,9 +319,9 @@ mod triple_serde {
                 };
 
                 // Parse object
-                let object = if object.starts_with("_:") {
+                let object = if let Some(stripped) = object.strip_prefix("_:") {
                     Term::BlankNode(
-                        BlankNode::new(&object[2..])
+                        BlankNode::new(stripped)
                             .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if object.starts_with('<') && object.ends_with('>') {
@@ -434,9 +432,9 @@ mod quad_serde {
                     graph_name.ok_or_else(|| de::Error::missing_field("graph_name"))?;
 
                 // Parse subject
-                let subject = if subject.starts_with("_:") {
+                let subject = if let Some(stripped) = subject.strip_prefix("_:") {
                     Subject::BlankNode(
-                        BlankNode::new(&subject[2..])
+                        BlankNode::new(stripped)
                             .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if subject.starts_with('<') && subject.ends_with('>') {
@@ -459,9 +457,9 @@ mod quad_serde {
                 };
 
                 // Parse object
-                let object = if object.starts_with("_:") {
+                let object = if let Some(stripped) = object.strip_prefix("_:") {
                     Term::BlankNode(
-                        BlankNode::new(&object[2..])
+                        BlankNode::new(stripped)
                             .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else if object.starts_with('<') && object.ends_with('>') {
@@ -485,9 +483,9 @@ mod quad_serde {
                         NamedNode::new(iri)
                             .map_err(|e| de::Error::custom(format!("Invalid graph IRI: {e}")))?,
                     )
-                } else if graph_name.starts_with("_:") {
+                } else if let Some(stripped) = graph_name.strip_prefix("_:") {
                     GraphName::BlankNode(
-                        BlankNode::new(&graph_name[2..])
+                        BlankNode::new(stripped)
                             .map_err(|e| de::Error::custom(format!("Invalid blank node: {e}")))?,
                     )
                 } else {

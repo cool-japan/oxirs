@@ -495,7 +495,7 @@ impl CapabilityAssessor {
     /// Add authentication headers
     fn add_auth_headers(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
         use crate::service::AuthType;
-        use base64::encode;
+        use base64::{engine::general_purpose, Engine as _};
 
         match &auth.auth_type {
             AuthType::Basic => {
@@ -503,7 +503,7 @@ impl CapabilityAssessor {
                     (&auth.credentials.username, &auth.credentials.password)
                 {
                     let credentials = format!("{username}:{password}");
-                    let encoded = encode(credentials.as_bytes());
+                    let encoded = general_purpose::STANDARD.encode(credentials.as_bytes());
                     let auth_value = format!("Basic {encoded}");
                     headers.insert("Authorization", HeaderValue::from_str(&auth_value)?);
                 }

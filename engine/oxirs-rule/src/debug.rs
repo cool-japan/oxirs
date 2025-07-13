@@ -291,9 +291,7 @@ impl DebuggableRuleEngine {
                 .rule_execution_counts
                 .get(*rule)
                 .unwrap_or(&0);
-            report.push_str(&format!(
-                "  {rule}: {time:?} (executed {count} times)\n"
-            ));
+            report.push_str(&format!("  {rule}: {time:?} (executed {count} times)\n"));
         }
         report.push('\n');
 
@@ -315,7 +313,14 @@ impl DebuggableRuleEngine {
             for (fact, path) in &self.debug_session.derivations {
                 report.push_str(&format!("  Fact: {fact}\n"));
                 report.push_str(&format!("  Depth: {}\n", path.total_depth));
-                report.push_str(&format!("  Rules involved: {}\n", path.involved_rules.iter().cloned().collect::<Vec<_>>().join(", ")));
+                report.push_str(&format!(
+                    "  Rules involved: {}\n",
+                    path.involved_rules
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
                 for step in &path.steps {
                     report.push_str(&format!(
                         "    Step {}: {} -> {:?}\n",

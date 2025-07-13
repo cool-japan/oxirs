@@ -226,6 +226,7 @@ impl FusekiError {
             FusekiError::Yaml(..) => "yaml_error",
             FusekiError::Toml(..) => "toml_error",
             FusekiError::Http(..) => "http_error",
+            #[cfg(feature = "auth")]
             FusekiError::Jwt(..) => "jwt_error",
         }
     }
@@ -291,12 +292,10 @@ impl IntoResponse for FusekiError {
         let status = self.status_code();
 
         // Extract request ID from tracing context if available
-        let request_id = tracing::Span::current()
-            .field("request_id")
-            .and({
-                // This is a simplified extraction - in practice you'd use a proper context
-                None::<String>
-            });
+        let request_id = tracing::Span::current().field("request_id").and({
+            // This is a simplified extraction - in practice you'd use a proper context
+            None::<String>
+        });
 
         // Log the error
         self.log(request_id.as_deref());
@@ -418,7 +417,7 @@ impl FusekiError {
         }
     }
 
-    pub fn method_not_allowed(message: impl Into<String>) -> Self {
+    pub fn method_not_allowed(_message: impl Into<String>) -> Self {
         Self::MethodNotAllowed
     }
 

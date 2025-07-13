@@ -350,9 +350,10 @@ impl OAuth2Service {
             )));
         }
 
-        let user_info: OIDCUserInfo = response.json().await.map_err(|e| {
-            FusekiError::authentication(format!("Failed to parse user info: {e}"))
-        })?;
+        let user_info: OIDCUserInfo = response
+            .json()
+            .await
+            .map_err(|e| FusekiError::authentication(format!("Failed to parse user info: {e}")))?;
 
         debug!(
             "Successfully retrieved user info for subject: {}",
@@ -604,7 +605,6 @@ mod urlencoding {
         percent_encoding::utf8_percent_encode(input, percent_encoding::NON_ALPHANUMERIC).to_string()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

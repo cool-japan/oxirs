@@ -71,7 +71,7 @@ impl Default for CoordinatorConfig {
 }
 
 /// Module performance monitor
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModulePerformanceMonitor {
     /// Module name
     module_name: String,
@@ -393,8 +393,11 @@ impl CrossModulePerformanceCoordinator {
         module_name: &str,
         metrics: ModuleMetrics,
     ) -> Result<()> {
-        let monitors = self.module_monitors.read().unwrap();
-        if let Some(monitor) = monitors.get(module_name) {
+        let monitor = {
+            let monitors = self.module_monitors.read().unwrap();
+            monitors.get(module_name).cloned()
+        };
+        if let Some(monitor) = monitor {
             monitor.update_metrics(metrics).await?;
         } else {
             return Err(anyhow!("Module '{}' not registered", module_name));
@@ -447,12 +450,18 @@ impl CrossModulePerformanceCoordinator {
 
     /// Collect performance data from all modules
     async fn collect_performance_data(&self) -> Result<HashMap<String, ModuleMetrics>> {
-        let monitors = self.module_monitors.read().unwrap();
+        let monitor_list = {
+            let monitors = self.module_monitors.read().unwrap();
+            monitors
+                .iter()
+                .map(|(name, monitor)| (name.clone(), monitor.clone()))
+                .collect::<Vec<_>>()
+        };
         let mut data = HashMap::new();
 
-        for (module_name, monitor) in monitors.iter() {
+        for (module_name, monitor) in monitor_list {
             let metrics = monitor.get_current_metrics().await?;
-            data.insert(module_name.clone(), metrics);
+            data.insert(module_name, metrics);
         }
 
         Ok(data)
@@ -858,8 +867,11 @@ impl CrossModulePerformanceCoordinator {
     }
 
     async fn get_current_module_metrics(&self, module_name: &str) -> Result<ModuleMetrics> {
-        let monitors = self.module_monitors.read().unwrap();
-        if let Some(monitor) = monitors.get(module_name) {
+        let monitor = {
+            let monitors = self.module_monitors.read().unwrap();
+            monitors.get(module_name).cloned()
+        };
+        if let Some(monitor) = monitor {
             monitor.get_current_metrics().await
         } else {
             Err(anyhow!("Module '{}' not found", module_name))
@@ -1356,7 +1368,7 @@ impl ModulePerformanceMonitor {
 }
 
 /// Resource tracker for monitoring resource usage
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ResourceTracker {
     /// CPU usage history
     cpu_history: Arc<RwLock<VecDeque<f64>>>,

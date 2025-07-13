@@ -341,7 +341,6 @@ impl InnerDictionary {
         id
     }
 
-
     fn get_string(&self, id: StringId) -> Option<&str> {
         self.entries.get(&id).map(|entry| entry.value.as_str())
     }
@@ -594,6 +593,7 @@ impl Clone for StringDictionary {
 }
 
 #[cfg(test)]
+#[allow(clippy::uninlined_format_args)]
 mod tests {
     use super::*;
     use std::thread;

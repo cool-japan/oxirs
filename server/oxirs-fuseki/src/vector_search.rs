@@ -609,7 +609,7 @@ impl VectorSearchEngine {
         &self,
         sparql_result: crate::store::QueryResult,
         vector_results: &HashMap<String, VectorSearchResult>,
-        hybrid_scoring: &HybridScoring,
+        _hybrid_scoring: &HybridScoring,
     ) -> FusekiResult<serde_json::Value> {
         // This is a simplified implementation of hybrid scoring
         // In a full implementation, this would combine SPARQL and vector scores

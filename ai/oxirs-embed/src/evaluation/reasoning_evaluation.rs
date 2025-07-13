@@ -185,7 +185,10 @@ impl ReasoningTaskEvaluator {
     }
 
     /// Evaluate a model on reasoning tasks
-    pub async fn evaluate(&self, _model: &dyn EmbeddingModel) -> Result<ReasoningEvaluationResults> {
+    pub async fn evaluate(
+        &self,
+        _model: &dyn EmbeddingModel,
+    ) -> Result<ReasoningEvaluationResults> {
         info!("Starting reasoning task evaluation");
 
         // Placeholder implementation

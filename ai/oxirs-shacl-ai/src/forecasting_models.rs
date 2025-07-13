@@ -509,10 +509,8 @@ impl QualityForecastingModel {
                 // Feature importance from attention weights
                 for (i, feature) in engineered_features.iter().enumerate() {
                     let importance = 1.0 / (i + 1) as f64 * (1.0 - loss); // Higher importance for successful features
-                    self.model_parameters.insert(
-                        format!("{target_metric}_{feature}_importance"),
-                        importance,
-                    );
+                    self.model_parameters
+                        .insert(format!("{target_metric}_{feature}_importance"), importance);
                 }
             }
         }
@@ -537,10 +535,8 @@ impl QualityForecastingModel {
             // Feature importance (simplified)
             for (i, feature) in self.features.iter().enumerate() {
                 let importance = 1.0 / (i + 1) as f64; // Decreasing importance
-                self.model_parameters.insert(
-                    format!("{target_metric}_{feature}_importance"),
-                    importance,
-                );
+                self.model_parameters
+                    .insert(format!("{target_metric}_{feature}_importance"), importance);
             }
         }
 

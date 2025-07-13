@@ -612,7 +612,7 @@ impl ZeroTrustSecurityManager {
             AuthenticationLevel::BiometricVerified => score += 0.3,
         }
 
-        Ok(score.max(0.0).min(1.0))
+        Ok(score.clamp(0.0, 1.0))
     }
 
     /// Analyze user behavior
@@ -711,11 +711,13 @@ impl ZeroTrustSecurityManager {
 
         // Simple permission extraction (in practice would be more sophisticated)
         for definition in &query.definitions {
-            if let crate::ast::Definition::Operation(op) = definition { match op.operation_type {
-                OperationType::Query => permissions.push(Permission::ReadData),
-                OperationType::Mutation => permissions.push(Permission::WriteData),
-                OperationType::Subscription => permissions.push(Permission::ReadData),
-            } }
+            if let crate::ast::Definition::Operation(op) = definition {
+                match op.operation_type {
+                    OperationType::Query => permissions.push(Permission::ReadData),
+                    OperationType::Mutation => permissions.push(Permission::WriteData),
+                    OperationType::Subscription => permissions.push(Permission::ReadData),
+                }
+            }
         }
 
         Ok(permissions)

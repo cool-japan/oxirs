@@ -4,7 +4,7 @@
 //! RDF triples and quads back to text formats.
 
 use crate::error::TurtleResult;
-use oxirs_core::model::{Quad, Triple};
+// use oxirs_core::model::{Quad, Triple};
 use std::io::Write;
 
 /// A generic serializer trait for RDF formats
@@ -180,14 +180,14 @@ impl<W: Write> FormattedWriter<W> {
     /// Abbreviate an IRI using prefixes if possible
     pub fn abbreviate_iri(&self, iri: &str) -> String {
         if !self.config.use_prefixes {
-            return format!("<{}>", iri);
+            return format!("<{iri}>");
         }
 
         // Try to find a matching prefix
         for (prefix, prefix_iri) in &self.config.prefixes {
             if iri.starts_with(prefix_iri) {
                 let local = &iri[prefix_iri.len()..];
-                return format!("{}:{}", prefix, local);
+                return format!("{prefix}:{local}");
             }
         }
 
@@ -195,11 +195,11 @@ impl<W: Write> FormattedWriter<W> {
         if let Some(ref base) = self.config.base_iri {
             if iri.starts_with(base) {
                 let relative = &iri[base.len()..];
-                return format!("<{}>", relative);
+                return format!("<{relative}>");
             }
         }
 
-        format!("<{}>", iri)
+        format!("<{iri}>")
     }
 
     /// Escape a string literal

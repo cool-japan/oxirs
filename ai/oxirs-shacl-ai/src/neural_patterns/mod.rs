@@ -11,9 +11,9 @@ pub mod recognizer;
 pub mod types;
 
 // Re-export main types and functions
-pub use attention::*;
-pub use correlation::*;
-pub use hierarchies::*;
-pub use learning::*;
-pub use recognizer::*;
+pub use attention::CrossPatternAttention;
+pub use correlation::AdvancedPatternCorrelationAnalyzer;
+pub use hierarchies::PatternHierarchyAnalyzer;
+pub use learning::NeuralPatternLearner;
+pub use recognizer::NeuralPatternRecognizer;
 pub use types::*;

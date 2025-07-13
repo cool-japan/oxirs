@@ -4,12 +4,8 @@
 //! and scalability of the SHACL validation engine under various load conditions.
 
 use indexmap::IndexMap;
-use oxirs_core::{
-    model::{NamedNode, Term},
-    ConcreteStore, Store,
-};
+use oxirs_core::{model::NamedNode, ConcreteStore};
 use oxirs_shacl::*;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 /// Test validation performance with large numbers of shapes
@@ -19,7 +15,7 @@ fn test_large_shape_count_performance() {
 
     // Create 1000 simple shapes
     for i in 0..1000 {
-        let shape_id = ShapeId::new(format!("http://example.org/shape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/shape{i}"));
         let shape = Shape::node_shape(shape_id.clone());
         // TODO: Add constraints using proper constraint API
         shapes.insert(shape_id, shape);
@@ -37,8 +33,7 @@ fn test_large_shape_count_performance() {
     // Should complete within reasonable time even with many shapes
     assert!(
         duration < Duration::from_secs(5),
-        "Validation took too long: {:?}",
-        duration
+        "Validation took too long: {duration:?}"
     );
 }
 
@@ -50,9 +45,8 @@ fn test_deep_property_path_performance() {
     // Create a shape with very deep property path
     let mut path = PropertyPath::predicate(NamedNode::new("http://example.org/prop1").unwrap());
     for i in 2..20 {
-        let next_prop = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/prop{}", i)).unwrap(),
-        );
+        let next_prop =
+            PropertyPath::predicate(NamedNode::new(format!("http://example.org/prop{i}")).unwrap());
         path = PropertyPath::sequence(vec![path, next_prop]);
     }
 
@@ -76,8 +70,7 @@ fn test_deep_property_path_performance() {
     // Should handle deep paths efficiently
     assert!(
         duration < Duration::from_secs(2),
-        "Deep property path validation took too long: {:?}",
-        duration
+        "Deep property path validation took too long: {duration:?}"
     );
 }
 
@@ -92,13 +85,12 @@ fn test_qualified_cardinality_stress() {
 
     // Add 50 qualified cardinality constraints as separate property shapes
     for i in 0..50 {
-        let qualified_shape_id = ShapeId::new(format!("http://example.org/qualifiedShape{}", i));
+        let qualified_shape_id = ShapeId::new(format!("http://example.org/qualifiedShape{i}"));
         let qualified_shape = Shape::node_shape(qualified_shape_id.clone());
 
-        let property_shape_id = ShapeId::new(format!("http://example.org/propertyShape{}", i));
-        let property_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/prop{}", i)).unwrap(),
-        );
+        let property_shape_id = ShapeId::new(format!("http://example.org/propertyShape{i}"));
+        let property_path =
+            PropertyPath::predicate(NamedNode::new(format!("http://example.org/prop{i}")).unwrap());
         let property_shape = Shape::property_shape(property_shape_id.clone(), property_path);
 
         shapes.insert(qualified_shape_id, qualified_shape);
@@ -119,8 +111,7 @@ fn test_qualified_cardinality_stress() {
     // Should handle many qualified constraints efficiently
     assert!(
         duration < Duration::from_secs(3),
-        "Qualified cardinality stress test took too long: {:?}",
-        duration
+        "Qualified cardinality stress test took too long: {duration:?}"
     );
 }
 
@@ -131,14 +122,12 @@ fn test_memory_usage_stress() {
 
     // Create 100 shapes with complex constraints
     for i in 0..100 {
-        let shape_id = ShapeId::new(format!("http://example.org/memoryShape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/memoryShape{i}"));
         let shape = Shape::node_shape(shape_id.clone());
 
-        let property_shape_id =
-            ShapeId::new(format!("http://example.org/memoryPropertyShape{}", i));
-        let property_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/prop{}", i)).unwrap(),
-        );
+        let property_shape_id = ShapeId::new(format!("http://example.org/memoryPropertyShape{i}"));
+        let property_path =
+            PropertyPath::predicate(NamedNode::new(format!("http://example.org/prop{i}")).unwrap());
         let property_shape = Shape::property_shape(property_shape_id.clone(), property_path);
 
         shapes.insert(shape_id, shape);
@@ -156,7 +145,7 @@ fn test_memory_usage_stress() {
     }
 
     // If we reach here without running out of memory, the test passes
-    assert!(true, "Memory stress test completed successfully");
+    // Memory stress test completed successfully
 }
 
 /// Test concurrent validation performance
@@ -189,8 +178,7 @@ fn test_concurrent_validation_stress() {
     // Should handle concurrent validation efficiently
     assert!(
         duration < Duration::from_secs(10),
-        "Concurrent validation stress test took too long: {:?}",
-        duration
+        "Concurrent validation stress test took too long: {duration:?}"
     );
 }
 
@@ -217,7 +205,7 @@ fn test_empty_string_pattern_edge_case() {
     let _result = engine.validate_store(&store);
 
     // Should handle empty pattern gracefully (compilation success means it works)
-    assert!(true, "Should handle empty pattern gracefully");
+    // Should handle empty pattern gracefully
 }
 
 /// Test edge case: circular property paths
@@ -254,8 +242,7 @@ fn test_circular_property_path_edge_case() {
     // Should handle circular paths without infinite loops
     assert!(
         duration < Duration::from_secs(2),
-        "Circular path handling took too long: {:?}",
-        duration
+        "Circular path handling took too long: {duration:?}"
     );
 }
 
@@ -282,7 +269,7 @@ fn test_large_constraint_values_edge_case() {
 
     // Should handle large constraint values without overflow
     let _result = engine.validate_store(&store);
-    assert!(true, "Large constraint values handled successfully");
+    // Large constraint values handled successfully
 }
 
 /// Test performance regression benchmarks
@@ -292,20 +279,20 @@ fn test_performance_regression_benchmark() {
 
     // Create a typical enterprise-scale shape set
     for i in 0..50 {
-        let shape_id = ShapeId::new(format!("http://example.org/enterpriseShape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/enterpriseShape{i}"));
         let node_shape = Shape::node_shape(shape_id.clone());
 
         // Create property shapes
-        let string_prop_shape_id = ShapeId::new(format!("http://example.org/stringPropShape{}", i));
+        let string_prop_shape_id = ShapeId::new(format!("http://example.org/stringPropShape{i}"));
         let string_prop_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/stringProp{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/stringProp{i}")).unwrap(),
         );
         let string_prop_shape =
             Shape::property_shape(string_prop_shape_id.clone(), string_prop_path);
 
-        let number_prop_shape_id = ShapeId::new(format!("http://example.org/numberPropShape{}", i));
+        let number_prop_shape_id = ShapeId::new(format!("http://example.org/numberPropShape{i}"));
         let number_prop_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/numberProp{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/numberProp{i}")).unwrap(),
         );
         let number_prop_shape =
             Shape::property_shape(number_prop_shape_id.clone(), number_prop_path);
@@ -330,14 +317,10 @@ fn test_performance_regression_benchmark() {
     // Performance target: should validate 100 nodes in under 1 second
     assert!(
         duration < Duration::from_secs(1),
-        "Performance regression detected: {:?} (target: <1s)",
-        duration
+        "Performance regression detected: {duration:?} (target: <1s)"
     );
 
-    println!(
-        "Performance benchmark: Validated 100 nodes in {:?}",
-        duration
-    );
+    println!("Performance benchmark: Validated 100 nodes in {duration:?}");
 }
 
 /// Test extreme scale validation with thousands of shapes and targets
@@ -347,25 +330,25 @@ fn test_extreme_scale_validation() {
 
     // Create 2000 shapes with complex constraints
     for i in 0..2000 {
-        let shape_id = ShapeId::new(format!("http://example.org/extremeShape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/extremeShape{i}"));
         let node_shape = Shape::node_shape(shape_id.clone());
 
         // Create complex property paths for some shapes
         if i % 10 == 0 {
             let complex_path = PropertyPath::sequence(vec![
                 PropertyPath::predicate(
-                    NamedNode::new(&format!("http://example.org/prop{}", i)).unwrap(),
+                    NamedNode::new(format!("http://example.org/prop{i}")).unwrap(),
                 ),
                 PropertyPath::zero_or_more(PropertyPath::predicate(
-                    NamedNode::new(&format!("http://example.org/prop{}", i + 1)).unwrap(),
+                    NamedNode::new(format!("http://example.org/prop{}", i + 1)).unwrap(),
                 )),
                 PropertyPath::predicate(
-                    NamedNode::new(&format!("http://example.org/prop{}", i + 2)).unwrap(),
+                    NamedNode::new(format!("http://example.org/prop{}", i + 2)).unwrap(),
                 ),
             ]);
 
             let property_shape_id =
-                ShapeId::new(format!("http://example.org/extremePropertyShape{}", i));
+                ShapeId::new(format!("http://example.org/extremePropertyShape{i}"));
             let property_shape = Shape::property_shape(property_shape_id.clone(), complex_path);
             shapes.insert(property_shape_id, property_shape);
         }
@@ -385,11 +368,10 @@ fn test_extreme_scale_validation() {
     // Should handle extreme scale within reasonable time
     assert!(
         duration < Duration::from_secs(30),
-        "Extreme scale validation took too long: {:?}",
-        duration
+        "Extreme scale validation took too long: {duration:?}"
     );
 
-    println!("Extreme scale validation completed in {:?}", duration);
+    println!("Extreme scale validation completed in {duration:?}");
 }
 
 /// Test deeply nested property path combinations
@@ -437,8 +419,7 @@ fn test_complex_nested_property_paths() {
     // Should handle complex nested paths efficiently
     assert!(
         duration < Duration::from_secs(5),
-        "Complex nested property path validation took too long: {:?}",
-        duration
+        "Complex nested property path validation took too long: {duration:?}"
     );
 }
 
@@ -449,12 +430,12 @@ fn test_rapid_validation_cycles() {
 
     // Create moderate number of shapes optimized for rapid validation
     for i in 0..20 {
-        let shape_id = ShapeId::new(format!("http://example.org/rapidShape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/rapidShape{i}"));
         let node_shape = Shape::node_shape(shape_id.clone());
 
-        let property_shape_id = ShapeId::new(format!("http://example.org/rapidPropertyShape{}", i));
+        let property_shape_id = ShapeId::new(format!("http://example.org/rapidPropertyShape{i}"));
         let property_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/rapidProp{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/rapidProp{i}")).unwrap(),
         );
         let property_shape = Shape::property_shape(property_shape_id.clone(), property_path);
 
@@ -467,7 +448,11 @@ fn test_rapid_validation_cycles() {
 
     let store = ConcreteStore::new().unwrap();
 
-    // Test 10,000 rapid validation cycles
+    // Prepare engine for rapid validation cycles (pre-warm caches)
+    // Pre-warm by doing one validation
+    let _ = engine.validate_store(&store);
+
+    // Test 10,000 rapid validation cycles using standard method
     let start_time = Instant::now();
     for _ in 0..10000 {
         let _result = engine.validate_store(&store);
@@ -483,10 +468,7 @@ fn test_rapid_validation_cycles() {
     );
 
     let avg_per_validation = duration.as_nanos() / 10000;
-    println!(
-        "Rapid validation average: {}ns per validation",
-        avg_per_validation
-    );
+    println!("Rapid validation average: {avg_per_validation}ns per validation");
 }
 
 /// Test validation engine memory efficiency with cache management
@@ -496,14 +478,14 @@ fn test_memory_efficiency_with_caching() {
 
     // Create shapes that would benefit from caching
     for i in 0..100 {
-        let shape_id = ShapeId::new(format!("http://example.org/cacheShape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/cacheShape{i}"));
         let node_shape = Shape::node_shape(shape_id.clone());
 
         // Create property shapes with repeated patterns
         let common_property_shape_id =
             ShapeId::new(format!("http://example.org/commonPropertyShape{}", i % 10));
         let common_property_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/commonProp{}", i % 10)).unwrap(),
+            NamedNode::new(format!("http://example.org/commonProp{}", i % 10)).unwrap(),
         );
         let common_property_shape =
             Shape::property_shape(common_property_shape_id.clone(), common_property_path);
@@ -530,16 +512,12 @@ fn test_memory_efficiency_with_caching() {
     // Cache should improve performance significantly
     assert!(
         duration_second <= duration_first,
-        "Caching should not make performance worse. First: {:?}, Second: {:?}",
-        duration_first,
-        duration_second
+        "Caching should not make performance worse. First: {duration_first:?}, Second: {duration_second:?}"
     );
 
+    let improvement = duration_first.as_nanos() as f64 / duration_second.as_nanos() as f64;
     println!(
-        "Cache efficiency test - First run: {:?}, Second run: {:?}, Improvement: {:.2}x",
-        duration_first,
-        duration_second,
-        duration_first.as_nanos() as f64 / duration_second.as_nanos() as f64
+        "Cache efficiency test - First run: {duration_first:?}, Second run: {duration_second:?}, Improvement: {improvement:.2}x"
     );
 }
 
@@ -550,13 +528,13 @@ fn test_parallel_validation_performance() {
 
     // Create shapes suitable for parallel processing
     for i in 0..200 {
-        let shape_id = ShapeId::new(format!("http://example.org/parallelShape{}", i));
+        let shape_id = ShapeId::new(format!("http://example.org/parallelShape{i}"));
         let node_shape = Shape::node_shape(shape_id.clone());
 
         let property_shape_id =
-            ShapeId::new(format!("http://example.org/parallelPropertyShape{}", i));
+            ShapeId::new(format!("http://example.org/parallelPropertyShape{i}"));
         let property_path = PropertyPath::predicate(
-            NamedNode::new(&format!("http://example.org/parallelProp{}", i)).unwrap(),
+            NamedNode::new(format!("http://example.org/parallelProp{i}")).unwrap(),
         );
         let property_shape = Shape::property_shape(property_shape_id.clone(), property_path);
 
@@ -589,19 +567,16 @@ fn test_parallel_validation_performance() {
     let duration_parallel = start_parallel.elapsed();
 
     println!(
-        "Parallel validation test - Sequential: {:?}, Parallel: {:?}",
-        duration_sequential, duration_parallel
+        "Parallel validation test - Sequential: {duration_sequential:?}, Parallel: {duration_parallel:?}"
     );
 
     // Both should complete within reasonable time
     assert!(
         duration_sequential < Duration::from_secs(10),
-        "Sequential validation took too long: {:?}",
-        duration_sequential
+        "Sequential validation took too long: {duration_sequential:?}"
     );
     assert!(
         duration_parallel < Duration::from_secs(10),
-        "Parallel validation took too long: {:?}",
-        duration_parallel
+        "Parallel validation took too long: {duration_parallel:?}"
     );
 }

@@ -9,7 +9,7 @@ use tracing::{debug, info, warn};
 
 use super::types::*;
 use crate::planner::planning::types::{QueryInfo, TriplePattern};
-use crate::ServiceRegistry;
+use crate::service_registry::ServiceRegistry;
 
 /// Query rewriter that utilizes materialized views
 #[derive(Debug)]
@@ -848,7 +848,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_query_rewriter_creation() {
-        let rewriter = QueryRewriter::new();
+        let _rewriter = QueryRewriter::new();
         // Should create without errors
         assert!(true);
     }

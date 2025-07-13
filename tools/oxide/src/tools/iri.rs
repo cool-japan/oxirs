@@ -232,9 +232,7 @@ fn normalize_path(iri: &str) -> String {
             let query_and_fragment = &rest[path_end..];
 
             let normalized_path = normalize_path_segments(path);
-            return format!(
-                "{scheme_and_colon}{normalized_path}{query_and_fragment}"
-            );
+            return format!("{scheme_and_colon}{normalized_path}{query_and_fragment}");
         }
     }
 

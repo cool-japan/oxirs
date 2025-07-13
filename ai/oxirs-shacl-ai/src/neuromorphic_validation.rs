@@ -378,8 +378,6 @@ impl NeuromorphicValidationNetwork {
 
     /// Create network with custom configuration
     pub fn with_config(topology: NetworkTopology, config: NeuromorphicConfig) -> Self {
-        
-
         // Initialize network structure
         // This would be done in a separate initialization method in practice
         Self {
@@ -532,7 +530,7 @@ impl NeuromorphicValidationNetwork {
     /// Encode validation input as spike patterns
     async fn encode_validation_input(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         shapes: &[Shape],
     ) -> Result<Vec<SpikeEvent>> {
         let mut spikes = Vec::new();
@@ -981,7 +979,7 @@ mod tests {
 
     #[test]
     fn test_validation_decision_types() {
-        let decisions = vec![
+        let decisions = [
             ValidationDecision::Valid,
             ValidationDecision::PartiallyValid,
             ValidationDecision::Invalid,

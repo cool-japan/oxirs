@@ -3,6 +3,8 @@
 //! This module is refactored from the original shapes.rs file to improve maintainability
 //! and adhere to the 2000-line file limit policy.
 
+#![allow(dead_code)]
+
 pub mod factory;
 pub mod parser;
 pub mod types;

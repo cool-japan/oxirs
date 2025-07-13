@@ -494,7 +494,6 @@ impl Default for DiversityCalculator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Utc;
 
     fn create_test_result(id: &str, content: &str, score: f64) -> SearchResult {
         SearchResult::new(

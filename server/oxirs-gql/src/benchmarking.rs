@@ -17,6 +17,7 @@ use crate::hybrid_optimizer::{HybridOptimizerConfig, HybridQueryOptimizer};
 use crate::ml_optimizer::{MLOptimizerConfig, MLQueryOptimizer};
 use crate::performance::PerformanceTracker;
 use crate::quantum_optimizer::{QuantumOptimizerConfig, QuantumQueryOptimizer};
+use crate::system_monitor;
 
 /// Benchmarking configuration
 #[derive(Debug, Clone)]
@@ -199,6 +200,7 @@ pub struct PerformanceBenchmarkSuite {
     quantum_optimizer: Option<Arc<QuantumQueryOptimizer>>,
     hybrid_optimizer: Option<Arc<HybridQueryOptimizer>>,
     cache: Option<Arc<GraphQLQueryCache>>,
+    #[allow(dead_code)]
     federation_manager: Option<Arc<EnhancedFederationManager>>,
     results: Arc<RwLock<Vec<BenchmarkResult>>>,
 }
@@ -534,6 +536,10 @@ impl PerformanceBenchmarkSuite {
         total_time: Duration,
     ) -> Result<BenchmarkResult> {
         if response_times.is_empty() {
+            // Get real system metrics even when no response times are available
+            let memory_usage_mb = system_monitor::get_current_memory_usage_mb().await;
+            let cpu_usage_percent = system_monitor::get_current_cpu_usage_percent().await;
+
             return Ok(BenchmarkResult {
                 scenario: format!("{scenario:?}"),
                 strategy: format!("{strategy:?}"),
@@ -549,8 +555,8 @@ impl PerformanceBenchmarkSuite {
                 p99_response_time: Duration::from_millis(0),
                 requests_per_second: 0.0,
                 throughput_mbps: 0.0,
-                memory_usage_mb: 0.0,
-                cpu_usage_percent: 0.0,
+                memory_usage_mb,
+                cpu_usage_percent,
                 cache_hit_rate: 0.0,
                 error_rate: 100.0,
                 detailed_metrics: None,
@@ -611,6 +617,15 @@ impl PerformanceBenchmarkSuite {
             0.0
         };
 
+        // Get real system metrics
+        let memory_usage_mb = system_monitor::get_current_memory_usage_mb().await;
+        let cpu_usage_percent = system_monitor::get_current_cpu_usage_percent().await;
+
+        // Calculate throughput based on actual request data and estimated response size
+        let avg_response_size_bytes = 2048.0; // Estimated average GraphQL response size
+        let throughput_mbps =
+            system_monitor::calculate_throughput_mbps(requests_per_second, avg_response_size_bytes);
+
         Ok(BenchmarkResult {
             scenario: format!("{scenario:?}"),
             strategy: format!("{strategy:?}"),
@@ -625,9 +640,9 @@ impl PerformanceBenchmarkSuite {
             p95_response_time,
             p99_response_time,
             requests_per_second,
-            throughput_mbps: requests_per_second * 0.001, // Simplified calculation
-            memory_usage_mb: 0.0,                         // Would require actual memory monitoring
-            cpu_usage_percent: 0.0,                       // Would require actual CPU monitoring
+            throughput_mbps,
+            memory_usage_mb,
+            cpu_usage_percent,
             cache_hit_rate,
             error_rate,
             detailed_metrics: None, // Could be populated if enabled

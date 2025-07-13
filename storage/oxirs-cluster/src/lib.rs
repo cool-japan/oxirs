@@ -393,9 +393,10 @@ impl ClusterNode {
         );
 
         // Start discovery service
-        self.discovery.start().await.map_err(|e| {
-            ClusterError::Other(format!("Failed to start discovery service: {e}"))
-        })?;
+        self.discovery
+            .start()
+            .await
+            .map_err(|e| ClusterError::Other(format!("Failed to start discovery service: {e}")))?;
 
         // Discover initial nodes
         let discovered_nodes = self
@@ -1010,9 +1011,7 @@ impl ClusterNode {
             region_manager
                 .perform_region_failover(failed_region, target_region)
                 .await
-                .map_err(|e| {
-                    ClusterError::Other(format!("Failed to perform region failover: {e}"))
-                })
+                .map_err(|e| ClusterError::Other(format!("Failed to perform region failover: {e}")))
         } else {
             Err(ClusterError::Config(
                 "Multi-region not configured".to_string(),

@@ -13,10 +13,10 @@ pub mod optimization;
 pub mod types;
 
 // Re-export main types and functions
-pub use alerts::*;
-pub use config::*;
-pub use dashboard::*;
-pub use engine::*;
-pub use monitoring::*;
-pub use optimization::*;
+pub use alerts::AlertEngine;
+pub use config::PerformanceAnalyticsConfig;
+pub use dashboard::DashboardProvider;
+pub use engine::PerformanceAnalyticsEngine;
+pub use monitoring::RealTimeMonitor;
+pub use optimization::PerformanceOptimizer;
 pub use types::*;

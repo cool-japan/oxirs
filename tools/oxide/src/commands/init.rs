@@ -35,10 +35,9 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
     match format.as_str() {
         "tdb2" | "memory" => {}
         _ => {
-            return Err(format!(
-                "Unsupported format '{format}'. Supported formats: tdb2, memory"
-            )
-            .into());
+            return Err(
+                format!("Unsupported format '{format}'. Supported formats: tdb2, memory").into(),
+            );
         }
     }
 

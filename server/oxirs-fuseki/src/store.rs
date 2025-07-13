@@ -14,6 +14,9 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
+/// Type alias for dataset storage mapping
+type DatasetMap = Arc<RwLock<HashMap<String, Arc<RwLock<dyn CoreStore>>>>>;
+
 /// SPARQL query result formats
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ResultFormat {
@@ -60,7 +63,7 @@ pub struct Store {
     /// Default dataset store
     default_store: Arc<RwLock<dyn CoreStore>>,
     /// Named datasets
-    datasets: Arc<RwLock<HashMap<String, Arc<RwLock<dyn CoreStore>>>>>,
+    datasets: DatasetMap,
     /// Query engine for SPARQL execution
     query_engine: Arc<QueryEngine>,
     /// Store metadata
@@ -199,9 +202,10 @@ impl Store {
         match name {
             None => Ok(Arc::clone(&self.default_store)),
             Some(dataset_name) => {
-                let datasets = self.datasets.read().map_err(|e| {
-                    FusekiError::store(format!("Failed to acquire read lock: {e}"))
-                })?;
+                let datasets = self
+                    .datasets
+                    .read()
+                    .map_err(|e| FusekiError::store(format!("Failed to acquire read lock: {e}")))?;
 
                 datasets
                     .get(dataset_name)
@@ -298,18 +302,13 @@ impl Store {
         debug!("Executing SPARQL update: {}", sparql.trim());
 
         let store = self.get_dataset(dataset_name)?;
-        let mut store_guard = store.write().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire store write lock: {e}"))
-        })?;
-
-        let mut quads_inserted = 0;
-        let mut quads_deleted = 0;
+        let mut store_guard = store
+            .write()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store write lock: {e}")))?;
 
         // Parse and execute the update operation
-        let (operation_type, inserted, deleted) =
+        let (operation_type, quads_inserted, quads_deleted) =
             self.execute_sparql_update(&mut *store_guard, sparql)?;
-        quads_inserted = inserted;
-        quads_deleted = deleted;
 
         let execution_time = start_time.elapsed();
 
@@ -396,25 +395,137 @@ impl Store {
         store: &mut dyn CoreStore,
         sparql: &str,
     ) -> FusekiResult<(&'static str, usize, usize)> {
-        let quad_count = store.len().map_err(|e| {
-            FusekiError::update_execution(format!("Failed to get store size: {e}"))
-        })?;
+        let sparql_upper = sparql.to_uppercase();
 
-        // Check if clearing specific graph or all
-        if sparql.to_uppercase().contains("CLEAR ALL")
-            || sparql.to_uppercase().contains("CLEAR DEFAULT")
-        {
-            store.clear_all().map_err(|e| {
-                FusekiError::update_execution(format!("Failed to clear store: {e}"))
+        // Check if clearing all graphs
+        if sparql_upper.contains("CLEAR ALL") {
+            let quad_count = store.len().map_err(|e| {
+                FusekiError::update_execution(format!("Failed to get store size: {e}"))
             })?;
-            Ok(("CLEAR", 0, quad_count))
-        } else {
-            // For now, clear everything (TODO: implement named graph clearing)
+
             store.clear_all().map_err(|e| {
-                FusekiError::update_execution(format!("Failed to clear store: {e}"))
+                FusekiError::update_execution(format!("Failed to clear all graphs: {e}"))
             })?;
-            Ok(("CLEAR", 0, quad_count))
+
+            info!("Cleared all graphs: {} quads removed", quad_count);
+            return Ok(("CLEAR ALL", 0, quad_count));
         }
+
+        // Check if clearing default graph
+        if sparql_upper.contains("CLEAR DEFAULT") || !sparql_upper.contains("CLEAR GRAPH <") {
+            return self.clear_default_graph(store);
+        }
+
+        // Extract named graph IRI for specific graph clearing
+        if let Some(graph_iri) = self.extract_graph_iri(sparql)? {
+            return self.clear_named_graph(store, &graph_iri);
+        }
+
+        // If no specific graph identified, clear default graph
+        self.clear_default_graph(store)
+    }
+
+    /// Clear the default graph
+    fn clear_default_graph(
+        &self,
+        store: &mut dyn CoreStore,
+    ) -> FusekiResult<(&'static str, usize, usize)> {
+        // Get all quads in the default graph
+        let default_quads = store
+            .find_quads(
+                None,
+                None,
+                None,
+                Some(&oxirs_core::model::GraphName::DefaultGraph),
+            )
+            .map_err(|e| {
+                FusekiError::update_execution(format!("Failed to query default graph: {e}"))
+            })?;
+
+        let mut deleted_count = 0;
+        for quad in default_quads {
+            if store.remove_quad(&quad).map_err(|e| {
+                FusekiError::update_execution(format!(
+                    "Failed to remove quad from default graph: {e}"
+                ))
+            })? {
+                deleted_count += 1;
+            }
+        }
+
+        info!("Cleared default graph: {} quads removed", deleted_count);
+        Ok(("CLEAR DEFAULT", 0, deleted_count))
+    }
+
+    /// Clear a specific named graph
+    fn clear_named_graph(
+        &self,
+        store: &mut dyn CoreStore,
+        graph_iri: &str,
+    ) -> FusekiResult<(&'static str, usize, usize)> {
+        // Create the named graph reference
+        let named_node = oxirs_core::model::NamedNode::new(graph_iri).map_err(|e| {
+            FusekiError::update_execution(format!("Invalid graph IRI '{graph_iri}': {e}"))
+        })?;
+        let graph_name = oxirs_core::model::GraphName::NamedNode(named_node);
+
+        // Get all quads in the specified named graph
+        let graph_quads = store
+            .find_quads(None, None, None, Some(&graph_name))
+            .map_err(|e| {
+                FusekiError::update_execution(format!(
+                    "Failed to query named graph '{graph_iri}': {e}"
+                ))
+            })?;
+
+        let mut deleted_count = 0;
+        for quad in graph_quads {
+            if store.remove_quad(&quad).map_err(|e| {
+                FusekiError::update_execution(format!(
+                    "Failed to remove quad from named graph '{graph_iri}': {e}"
+                ))
+            })? {
+                deleted_count += 1;
+            }
+        }
+
+        info!(
+            "Cleared named graph '{}': {} quads removed",
+            graph_iri, deleted_count
+        );
+        Ok(("CLEAR GRAPH", 0, deleted_count))
+    }
+
+    /// Extract graph IRI from CLEAR GRAPH statement
+    fn extract_graph_iri(&self, sparql: &str) -> FusekiResult<Option<String>> {
+        let sparql_upper = sparql.to_uppercase();
+
+        // Look for "CLEAR GRAPH <IRI>" pattern
+        if let Some(start_pos) = sparql_upper.find("CLEAR GRAPH") {
+            let remaining = &sparql[start_pos + "CLEAR GRAPH".len()..];
+
+            // Find opening angle bracket
+            if let Some(open_bracket) = remaining.find('<') {
+                // Find closing angle bracket
+                if let Some(close_bracket) = remaining[open_bracket + 1..].find('>') {
+                    let iri = &remaining[open_bracket + 1..open_bracket + 1 + close_bracket];
+                    return Ok(Some(iri.trim().to_string()));
+                }
+            }
+
+            // Also check for prefixed names (simplified)
+            let tokens: Vec<&str> = remaining.split_whitespace().collect();
+            if let Some(first_token) = tokens.first() {
+                if !first_token.starts_with('<') && first_token.contains(':') {
+                    // This might be a prefixed name like "ex:graph"
+                    // For now, treat it as a simple IRI (proper prefix resolution would be more complex)
+                    warn!("Prefixed graph names not fully supported yet: {first_token}");
+                    return Ok(Some(format!("urn:x-local:{first_token}")));
+                }
+            }
+        }
+
+        Ok(None)
     }
 
     /// Execute INSERT DATA operation
@@ -429,9 +540,10 @@ impl Store {
 
         let mut inserted_count = 0;
         for quad in quads {
-            if store.insert_quad(quad).map_err(|e| {
-                FusekiError::update_execution(format!("Failed to insert quad: {e}"))
-            })? {
+            if store
+                .insert_quad(quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
+            {
                 inserted_count += 1;
             }
         }
@@ -451,9 +563,10 @@ impl Store {
 
         let mut deleted_count = 0;
         for quad in quads {
-            if store.remove_quad(&quad).map_err(|e| {
-                FusekiError::update_execution(format!("Failed to remove quad: {e}"))
-            })? {
+            if store
+                .remove_quad(&quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to remove quad: {e}")))?
+            {
                 deleted_count += 1;
             }
         }
@@ -557,9 +670,10 @@ impl Store {
 
         let mut inserted_count = 0;
         for quad in quads {
-            if store.insert_quad(quad).map_err(|e| {
-                FusekiError::update_execution(format!("Failed to insert quad: {e}"))
-            })? {
+            if store
+                .insert_quad(quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
+            {
                 inserted_count += 1;
             }
         }
@@ -666,9 +780,9 @@ impl Store {
         dataset_name: Option<&str>,
     ) -> FusekiResult<usize> {
         let store = self.get_dataset(dataset_name)?;
-        let store_guard = store.write().map_err(|e| {
-            FusekiError::store(format!("Failed to acquire store write lock: {e}"))
-        })?;
+        let store_guard = store
+            .write()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store write lock: {e}")))?;
 
         let core_format = match format {
             RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,

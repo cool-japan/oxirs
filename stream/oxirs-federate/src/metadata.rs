@@ -42,8 +42,7 @@ pub struct ExtendedServiceMetadata {
 }
 
 /// Service Level Agreement information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ServiceSLA {
     /// Guaranteed uptime percentage (e.g., 99.9)
     pub uptime_guarantee: Option<f64>,
@@ -78,8 +77,7 @@ pub struct ResponseTimeTargets {
 }
 
 /// Rate limit information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RateLimitInfo {
     /// Requests per minute limit
     pub requests_per_minute: Option<usize>,
@@ -114,8 +112,7 @@ pub struct MaintenanceWindow {
 }
 
 /// Dataset statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct DatasetStatistics {
     /// Total number of triples
     pub triple_count: Option<u64>,
@@ -351,7 +348,6 @@ impl ExtendedServiceMetadata {
     }
 }
 
-
 impl Default for ResponseTimeTargets {
     fn default() -> Self {
         Self {
@@ -362,8 +358,6 @@ impl Default for ResponseTimeTargets {
         }
     }
 }
-
-
 
 impl Default for HealthMetrics {
     fn default() -> Self {

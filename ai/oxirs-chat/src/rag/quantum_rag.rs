@@ -26,7 +26,7 @@ pub struct QuantumRetrievalState {
 
 impl QuantumRetrievalState {
     pub fn new(query_complexity: f64) -> Self {
-        let normalized_complexity = query_complexity.max(0.0).min(1.0);
+        let normalized_complexity = query_complexity.clamp(0.0, 1.0);
         Self {
             amplitude: (normalized_complexity * PI / 4.0).sin(),
             phase: normalized_complexity * PI / 2.0,
@@ -78,7 +78,7 @@ impl QuantumRetrievalState {
     }
 
     /// Advanced quantum interference for result optimization
-    pub fn interference_optimization(&self, results: &mut Vec<QuantumSearchResult>) -> Result<()> {
+    pub fn interference_optimization(&self, results: &mut [QuantumSearchResult]) -> Result<()> {
         if results.is_empty() {
             return Ok(());
         }
@@ -381,7 +381,7 @@ impl QuantumEntanglementManager {
     }
 
     /// Apply quantum correlation to search results
-    pub fn apply_quantum_correlations(&self, results: &mut Vec<QuantumSearchResult>) -> Result<()> {
+    pub fn apply_quantum_correlations(&self, results: &mut [QuantumSearchResult]) -> Result<()> {
         // Collect document data first to avoid borrowing conflicts
         let document_data: Vec<_> = results
             .iter()
@@ -677,13 +677,13 @@ impl MultiDimensionalQuantumState {
         let n = dimension.state_vector.len();
         let mut transformed = vec![0.0; n];
 
-        for k in 0..n {
+        for (k, transformed_k) in transformed.iter_mut().enumerate().take(n) {
             let mut sum = 0.0;
             for j in 0..n {
                 let angle = -2.0 * PI * (k * j) as f64 / n as f64;
                 sum += dimension.state_vector[j] * angle.cos();
             }
-            transformed[k] = sum / (n as f64).sqrt();
+            *transformed_k = sum / (n as f64).sqrt();
         }
 
         dimension.state_vector = transformed;

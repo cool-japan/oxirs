@@ -289,7 +289,7 @@ impl AdaptiveLoadBalancer {
     pub async fn select_service(
         &self,
         query_hash: Option<u64>,
-        query_type: &str,
+        _query_type: &str,
     ) -> Result<String> {
         let start_time = Instant::now();
 
@@ -682,7 +682,7 @@ impl AdaptiveLoadBalancer {
             avg_response_times.values().sum::<f64>() / avg_response_times.len() as f64;
 
         // Adjust weights based on relative performance
-        for (service_id, service_metrics) in metrics.iter_mut() {
+        for (_service_id, service_metrics) in metrics.iter_mut() {
             if let Some(&avg_time) = avg_response_times.get(&service_metrics.service_id) {
                 let performance_ratio = overall_avg / avg_time;
                 let target_weight = performance_ratio.min(2.0).max(0.1); // Limit weight range

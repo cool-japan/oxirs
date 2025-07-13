@@ -101,7 +101,7 @@ fn bench_batch_builder_strategies(c: &mut Criterion) {
         CoalescingStrategy::OptimizeOrder,
     ] {
         group.bench_with_input(
-            BenchmarkId::new("strategy", format!("{:?}", strategy)),
+            BenchmarkId::new("strategy", format!("{strategy:?}")),
             &dataset,
             |b, dataset| {
                 b.iter(|| {
@@ -132,9 +132,9 @@ fn bench_parallel_query_patterns(c: &mut Criterion) {
     for i in 0..10000 {
         for j in 0..10 {
             let triple = Triple::new(
-                Subject::NamedNode(NamedNode::new(&format!("http://s/{}", i)).unwrap()),
-                Predicate::NamedNode(NamedNode::new(&format!("http://p/{}", j)).unwrap()),
-                Object::NamedNode(NamedNode::new(&format!("http://o/{}-{}", i, j)).unwrap()),
+                Subject::NamedNode(NamedNode::new(format!("http://s/{i}")).unwrap()),
+                Predicate::NamedNode(NamedNode::new(format!("http://p/{j}")).unwrap()),
+                Object::NamedNode(NamedNode::new(format!("http://o/{i}-{j}")).unwrap()),
             );
             graph.insert(&triple);
         }
@@ -145,7 +145,7 @@ fn bench_parallel_query_patterns(c: &mut Criterion) {
             .map(|i| {
                 (
                     Some(Subject::NamedNode(
-                        NamedNode::new(&format!("http://s/{}", i)).unwrap(),
+                        NamedNode::new(format!("http://s/{i}")).unwrap(),
                     )),
                     None,
                     None,
@@ -387,7 +387,7 @@ fn bench_graph_parallel_methods(c: &mut Criterion) {
             .map(|i| {
                 (
                     Some(Subject::NamedNode(
-                        NamedNode::new(&format!("http://s/{}", i)).unwrap(),
+                        NamedNode::new(format!("http://s/{i}")).unwrap(),
                     )),
                     None,
                     None,
@@ -409,7 +409,7 @@ fn bench_graph_parallel_methods(c: &mut Criterion) {
                 (
                     None,
                     Some(Predicate::NamedNode(
-                        NamedNode::new(&format!("http://p/{}", i)).unwrap(),
+                        NamedNode::new(format!("http://p/{i}")).unwrap(),
                     )),
                     None,
                 )

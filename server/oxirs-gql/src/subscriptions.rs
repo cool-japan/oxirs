@@ -316,7 +316,7 @@ impl SubscriptionManager {
                 // Handle authentication if enabled
                 let is_authenticated = if self.config.enable_authentication {
                     let auth_result = self.authenticate_connection(payload).await?;
-                    
+
                     if !auth_result {
                         let error = SubscriptionMessage::ConnectionError {
                             payload: Some(serde_json::json!({
@@ -784,15 +784,16 @@ impl SubscriptionManager {
 
         match &self.config.auth_method {
             AuthenticationMethod::None => Ok(true),
-            
+
             AuthenticationMethod::BearerToken { valid_tokens } => {
-                if let Some(token) = payload.get("authorization")
+                if let Some(token) = payload
+                    .get("authorization")
                     .or_else(|| payload.get("Authorization"))
-                    .and_then(|v| v.as_str()) {
-                    
+                    .and_then(|v| v.as_str())
+                {
                     // Remove "Bearer " prefix if present
                     let token = token.strip_prefix("Bearer ").unwrap_or(token);
-                    
+
                     if valid_tokens.contains(&token.to_string()) {
                         info!("WebSocket connection authenticated with Bearer token");
                         Ok(true)
@@ -805,12 +806,13 @@ impl SubscriptionManager {
                     Ok(false)
                 }
             }
-            
+
             AuthenticationMethod::ApiKey { valid_keys } => {
-                if let Some(api_key) = payload.get("apiKey")
+                if let Some(api_key) = payload
+                    .get("apiKey")
                     .or_else(|| payload.get("api_key"))
-                    .and_then(|v| v.as_str()) {
-                    
+                    .and_then(|v| v.as_str())
+                {
                     if valid_keys.contains(&api_key.to_string()) {
                         info!("WebSocket connection authenticated with API key");
                         Ok(true)
@@ -823,13 +825,14 @@ impl SubscriptionManager {
                     Ok(false)
                 }
             }
-            
+
             AuthenticationMethod::JWT { secret: _ } => {
                 // Simplified JWT validation - in production, use a proper JWT library
-                if let Some(jwt) = payload.get("jwt")
+                if let Some(jwt) = payload
+                    .get("jwt")
                     .or_else(|| payload.get("token"))
-                    .and_then(|v| v.as_str()) {
-                    
+                    .and_then(|v| v.as_str())
+                {
                     // Basic JWT structure validation (header.payload.signature)
                     let parts: Vec<&str> = jwt.split('.').collect();
                     if parts.len() == 3 {

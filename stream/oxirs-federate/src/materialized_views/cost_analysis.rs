@@ -9,7 +9,7 @@ use tracing::debug;
 
 use crate::planner::planning::types::QueryInfo;
 use crate::planner::planning::TriplePattern;
-use crate::ServiceRegistry;
+use crate::service_registry::ServiceRegistry;
 
 use super::types::*;
 
@@ -37,7 +37,6 @@ impl ViewCostAnalyzer {
     ) -> Result<ViewCreationCost> {
         debug!("Estimating creation cost for view: {}", definition.name);
 
-        let mut total_cost = 0.0;
         let mut storage_cost = 0.0;
         let mut computation_cost = 0.0;
         let mut network_cost = 0.0;
@@ -51,7 +50,7 @@ impl ViewCostAnalyzer {
         // Estimate network cost for data transfer
         network_cost += self.estimate_network_cost(definition, registry).await?;
 
-        total_cost = computation_cost + storage_cost + network_cost;
+        let total_cost = computation_cost + storage_cost + network_cost;
 
         Ok(ViewCreationCost {
             total_cost,
@@ -157,7 +156,7 @@ impl ViewCostAnalyzer {
 
         // Estimate based on service data if available
         for pattern in &definition.source_patterns {
-            if let Some(service) = registry.get_service(&pattern.service_id) {
+            if let Some(_service) = registry.get_service(&pattern.service_id) {
                 // Use service metadata to improve estimates
                 estimated_rows *= pattern.estimated_selectivity;
             }
@@ -175,7 +174,7 @@ impl ViewCostAnalyzer {
         let mut total_transfer = 0.0;
 
         for pattern in &definition.source_patterns {
-            if let Some(service) = registry.get_service(&pattern.service_id) {
+            if let Some(_service) = registry.get_service(&pattern.service_id) {
                 // Estimate data transfer based on service location and pattern selectivity
                 total_transfer += 1000.0 * pattern.estimated_selectivity; // KB
             }
@@ -187,7 +186,7 @@ impl ViewCostAnalyzer {
     async fn estimate_direct_query_cost(
         &self,
         query_info: &QueryInfo,
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
     ) -> Result<f64> {
         let base_cost = query_info.patterns.len() as f64 * 10.0;
         let filter_cost = query_info.filters.len() as f64 * 5.0;

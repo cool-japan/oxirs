@@ -57,7 +57,7 @@ pub fn create_engine_with_config(config: StreamingConfig) -> Result<StreamingAda
 }
 
 /// Utility function to register all default stream processors
-pub async fn register_default_processors(engine: &StreamingAdaptationEngine) -> Result<()> {
+pub async fn register_default_processors(_engine: &StreamingAdaptationEngine) -> Result<()> {
     // This would register the default processors in a real implementation
     tracing::info!("Registered default stream processors");
     Ok(())

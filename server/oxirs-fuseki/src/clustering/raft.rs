@@ -12,14 +12,11 @@ use tokio::{
     time::interval,
 };
 
-use crate::{
-    clustering::RaftConfig,
-    error::FusekiResult,
-    store::Store,
-};
+use crate::{clustering::RaftConfig, error::FusekiResult, store::Store};
 
 /// Raft node states
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[allow(dead_code)]
 enum RaftState {
     Follower,
     Candidate,
@@ -63,6 +60,7 @@ pub struct ClusterConfig {
 
 /// Persistent state (must be durable)
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct PersistentState {
     /// Current term
     current_term: u64,
@@ -83,6 +81,7 @@ struct VolatileState {
 
 /// Volatile state on leaders
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 struct LeaderState {
     /// Next log index to send to each server
     next_index: HashMap<String, u64>,
@@ -178,6 +177,7 @@ pub struct InstallSnapshotResponse {
 }
 
 /// Raft consensus node
+#[allow(dead_code)]
 pub struct RaftNode {
     /// Node ID
     id: String,
@@ -204,6 +204,7 @@ pub struct RaftNode {
     store: Arc<Store>,
 }
 
+#[allow(dead_code)]
 impl RaftNode {
     /// Create a new Raft node
     pub async fn new(id: String, config: RaftConfig, store: Arc<Store>) -> FusekiResult<Self> {
@@ -647,7 +648,7 @@ impl RaftNode {
             if let Some(entry) = persistent.log.get(i as usize - 1) {
                 // Apply to state machine
                 match &entry.command {
-                    Command::Set { key, value } => {
+                    Command::Set { key, value: _ } => {
                         // TODO: Apply to store
                         tracing::debug!("Applied Set({}, ...)", key);
                     }
@@ -655,7 +656,7 @@ impl RaftNode {
                         // TODO: Apply to store
                         tracing::debug!("Applied Delete({})", key);
                     }
-                    Command::ConfigChange { config } => {
+                    Command::ConfigChange { config: _ } => {
                         // TODO: Apply configuration change
                         tracing::debug!("Applied ConfigChange");
                     }
@@ -720,7 +721,7 @@ impl RaftNodeRefs {
         // Implementation would be similar to RaftNode::send_heartbeats
     }
 
-    async fn handle_append_entries(&self, req: AppendEntriesRequest) -> AppendEntriesResponse {
+    async fn handle_append_entries(&self, _req: AppendEntriesRequest) -> AppendEntriesResponse {
         // Implementation would be similar to RaftNode::handle_append_entries
         AppendEntriesResponse {
             term: 0,
@@ -729,7 +730,7 @@ impl RaftNodeRefs {
         }
     }
 
-    async fn handle_request_vote(&self, req: RequestVoteRequest) -> RequestVoteResponse {
+    async fn handle_request_vote(&self, _req: RequestVoteRequest) -> RequestVoteResponse {
         // Implementation would be similar to RaftNode::handle_request_vote
         RequestVoteResponse {
             term: 0,
@@ -739,22 +740,22 @@ impl RaftNodeRefs {
 
     async fn handle_install_snapshot(
         &self,
-        req: InstallSnapshotRequest,
+        _req: InstallSnapshotRequest,
     ) -> InstallSnapshotResponse {
         // Implementation would be similar to RaftNode::handle_install_snapshot
         InstallSnapshotResponse { term: 0 }
     }
 
-    async fn apply_committed_entries(&self, start: u64, end: u64) {
+    async fn apply_committed_entries(&self, _start: u64, _end: u64) {
         // Implementation would be similar to RaftNode::apply_committed_entries
     }
 
-    async fn append_log_entry(&self, command: Command) -> FusekiResult<u64> {
+    async fn append_log_entry(&self, _command: Command) -> FusekiResult<u64> {
         // Implementation would be similar to RaftNode::append_log_entry
         Ok(0)
     }
 
-    async fn send_rpc(&self, target: &str, message: RpcMessage) -> FusekiResult<()> {
+    async fn send_rpc(&self, _target: &str, _message: RpcMessage) -> FusekiResult<()> {
         // Implementation would be similar to RaftNode::send_rpc
         Ok(())
     }

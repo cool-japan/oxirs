@@ -3,7 +3,6 @@
 //! This module provides sophisticated cost estimation algorithms for different
 //! execution strategies, including network costs, join costs, and resource utilization.
 
-
 use super::types::*;
 
 impl CostEstimator {
@@ -80,7 +79,7 @@ impl CostEstimator {
         let processing_factor = processing_time / 1000.0;
 
         // Use the public method instead of accessing private field
-        let base_cost = 100.0; // Default base cost
+        let _base_cost = 100.0; // Default base cost
         (latency_factor + processing_factor) * 10.0 // Default network cost factor
     }
 }

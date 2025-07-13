@@ -4,7 +4,6 @@
 //! variable binding propagation, result streaming, cross-service joins, and optimization.
 
 use anyhow::{anyhow, Result};
-use futures::StreamExt;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Client,
@@ -373,6 +372,7 @@ impl ServiceExecutor {
                                 value: value.to_string(),
                                 datatype: None,
                                 lang: None,
+                                quoted_triple: None,
                             },
                         );
                     }
@@ -574,7 +574,7 @@ impl JoinExecutor {
         &self,
         left: &SparqlResults,
         right: &SparqlResults,
-        service_executor: &ServiceExecutor,
+        _service_executor: &ServiceExecutor,
     ) -> Result<SparqlResults> {
         debug!(
             "Executing bind join with {} left bindings, {} right bindings",
@@ -608,8 +608,7 @@ impl JoinExecutor {
         // Process bindings in batches to avoid overwhelming the remote service
         for batch in bind_side.results.bindings.chunks(batch_size) {
             // Convert batch to SparqlBinding format for VALUES clause injection
-            let sparql_bindings: Vec<SparqlBinding> =
-                batch.iter().cloned().collect();
+            let sparql_bindings: Vec<SparqlBinding> = batch.to_vec();
 
             // Execute query with bindings (this would call the remote service)
             // For now, simulate by filtering the query_side results
@@ -951,7 +950,7 @@ impl JoinExecutor {
     ) -> Result<SparqlResults> {
         let left_size = left.results.bindings.len();
         let right_size = right.results.bindings.len();
-        let total_size = left_size + right_size;
+        let _total_size = left_size + right_size;
 
         debug!(
             "Choosing adaptive join strategy for {} x {} bindings",

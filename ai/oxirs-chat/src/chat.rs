@@ -432,18 +432,18 @@ impl ChatPersonalizer {
     async fn generate_adaptation_rationale(
         &self,
         profile: &UserProfile,
-        query: &str,
+        _query: &str,
     ) -> Result<String> {
         let mut rationale = String::new();
 
         rationale.push_str(&format!(
-            "Response adapted for {} expertise level",
-            format!("{:?}", profile.expertise_level)
+            "Response adapted for {:?} expertise level",
+            profile.expertise_level
         ));
 
         rationale.push_str(&format!(
-            " with {} detail level",
-            format!("{:?}", profile.communication_style.detail_level)
+            " with {:?} detail level",
+            profile.communication_style.detail_level
         ));
 
         if profile.accessibility_needs.screen_reader_compatible {
@@ -679,7 +679,7 @@ impl ContentAdapter {
         &self,
         base_response: &str,
         profile: &UserProfile,
-        query: &str,
+        _query: &str,
     ) -> Result<String> {
         let mut adapted_response = base_response.to_string();
 

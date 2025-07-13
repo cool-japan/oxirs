@@ -4,8 +4,8 @@
 //! while maintaining compatibility and providing smooth migration paths.
 
 use crate::version_control::{
-    ChangeType, CompatibilityLevel, ImpactAnalysis, MigrationComplexity,
-    ShapeChange, ShapeVersion, ShapeVersionControl,
+    ChangeType, CompatibilityLevel, ImpactAnalysis, MigrationComplexity, ShapeChange, ShapeVersion,
+    ShapeVersionControl,
 };
 use crate::ShaclAiError;
 use chrono::{DateTime, Utc};

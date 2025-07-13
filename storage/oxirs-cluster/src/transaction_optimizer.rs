@@ -111,10 +111,7 @@ impl TwoPhaseOptimizer {
         // Group operations by shard for batch processing
         let mut shard_ops: HashMap<ShardId, Vec<TransactionOp>> = HashMap::new();
         for (shard_id, op) in &transaction.operations {
-            shard_ops
-                .entry(*shard_id)
-                .or_default()
-                .push(op.clone());
+            shard_ops.entry(*shard_id).or_default().push(op.clone());
         }
 
         // Determine parallel groups (shards that can be prepared in parallel)

@@ -521,6 +521,7 @@ impl QueryValidator {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn get_inner_type_name(&self, graphql_type: &GraphQLType) -> String {
         match graphql_type {
             GraphQLType::NonNull(inner) => self.get_inner_type_name(inner),
@@ -566,6 +567,7 @@ impl QueryValidator {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn is_value_compatible_with_type(&self, value: &Value, ast_type: &crate::ast::Type) -> bool {
         match (value, ast_type) {
             (Value::NullValue, crate::ast::Type::NonNullType(_)) => false,

@@ -252,7 +252,19 @@ impl QueryExecutor {
                 .await
             }
             OperationType::Subscription => {
-                Err(anyhow!("Subscription execution not yet implemented"))
+                let subscription_type = schema
+                    .subscription_type
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("Schema does not define a subscription type"))?;
+
+                self.execute_selection_set(
+                    &operation.selection_set,
+                    subscription_type,
+                    &execution_context,
+                    &schema,
+                    Vec::new(),
+                )
+                .await
             }
         }
     }
@@ -587,6 +599,7 @@ impl QueryExecutor {
         })
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn serialize_scalar_value(&self, value: &Value) -> Result<JsonValue> {
         match value {
             Value::NullValue => Ok(JsonValue::Null),

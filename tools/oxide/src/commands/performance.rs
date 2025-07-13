@@ -6,9 +6,7 @@
 use crate::{
     cli::{error::CliError, output::OutputFormatter},
     config::Config,
-    tools::performance::{
-        MonitoringConfig, PerformanceMonitor, ProfilingResult,
-    },
+    tools::performance::{MonitoringConfig, PerformanceMonitor, ProfilingResult},
 };
 use clap::{Args, Subcommand};
 use serde_json;
@@ -413,9 +411,8 @@ impl CompareCommand {
                 format!("Failed to read baseline file: {e}"),
             ))
         })?;
-        let baseline: ProfilingResult = serde_json::from_str(&baseline_data).map_err(|e| {
-            CliError::serialization_error(format!("Failed to parse baseline: {e}"))
-        })?;
+        let baseline: ProfilingResult = serde_json::from_str(&baseline_data)
+            .map_err(|e| CliError::serialization_error(format!("Failed to parse baseline: {e}")))?;
 
         // Load current results
         let current_data = fs::read_to_string(&self.current).await.map_err(|e| {
@@ -424,9 +421,8 @@ impl CompareCommand {
                 format!("Failed to read current file: {e}"),
             ))
         })?;
-        let current: ProfilingResult = serde_json::from_str(&current_data).map_err(|e| {
-            CliError::serialization_error(format!("Failed to parse current: {e}"))
-        })?;
+        let current: ProfilingResult = serde_json::from_str(&current_data)
+            .map_err(|e| CliError::serialization_error(format!("Failed to parse current: {e}")))?;
 
         // Perform comparison
         let config = MonitoringConfig::default();

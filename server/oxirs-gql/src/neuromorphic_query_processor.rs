@@ -277,6 +277,7 @@ pub struct NeuromorphicQueryProcessor {
     neurons: Arc<AsyncRwLock<Vec<Neuron>>>,
     synapses: Arc<AsyncRwLock<Vec<Synapse>>>,
     memory_patterns: Arc<AsyncRwLock<HashMap<String, MemoryPattern>>>,
+    #[allow(dead_code)]
     ai_predictor: Arc<AIQueryPredictor>,
     processing_stats: Arc<AsyncRwLock<ProcessingStats>>,
 }

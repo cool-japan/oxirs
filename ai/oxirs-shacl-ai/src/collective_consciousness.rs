@@ -27,8 +27,7 @@ use oxirs_core::Store;
 use oxirs_shacl::{Shape, ShapeId, ValidationConfig};
 
 use crate::consciousness_validation::{
-    ConsciousnessLevel, ConsciousnessValidationResult, ConsciousnessValidator,
-    EmotionalContext,
+    ConsciousnessLevel, ConsciousnessValidationResult, ConsciousnessValidator, EmotionalContext,
 };
 use crate::{Result, ShaclAiError};
 
@@ -809,7 +808,7 @@ impl CollectiveConsciousnessNetwork {
         }
 
         // Set up communication channels for the agent
-        let (sender, receiver) = mpsc::unbounded_channel();
+        let (sender, _receiver) = mpsc::unbounded_channel();
         self.message_hub.p2p_channels.insert(agent_id, sender);
 
         // Subscribe to global messages
@@ -868,7 +867,6 @@ impl CollectiveConsciousnessNetwork {
         let mut interdimensional_patterns = Vec::new();
         let mut reality_syntheses = Vec::new();
         let mut quantum_effects = Vec::new();
-        let mut consciousness_elevations = Vec::new();
 
         // Step 1: Distribute validation tasks to specialized agents
         let task_assignments = self.assign_validation_tasks(&validation_context).await?;
@@ -922,7 +920,7 @@ impl CollectiveConsciousnessNetwork {
         let amplification_factor = self.calculate_amplification_factor(&agent_results);
 
         // Step 9: Check for consciousness elevation opportunities
-        consciousness_elevations = self
+        let consciousness_elevations = self
             .evaluate_consciousness_elevation(&agent_results, &synthesized_insights)
             .await?;
 

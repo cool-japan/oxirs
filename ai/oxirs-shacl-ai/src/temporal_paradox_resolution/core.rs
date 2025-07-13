@@ -167,8 +167,8 @@ impl TemporalParadoxResolutionEngine {
     /// Detect temporal paradoxes
     async fn detect_temporal_paradoxes(
         &self,
-        validation_query: &str,
-        timeline_context: Option<&TimelineContext>,
+        _validation_query: &str,
+        _timeline_context: Option<&TimelineContext>,
     ) -> Result<Vec<ParadoxDetectionResult>, ShaclAiError> {
         // Implementation placeholder
         Ok(Vec::new())
@@ -177,8 +177,8 @@ impl TemporalParadoxResolutionEngine {
     /// Apply paradox resolution strategies
     async fn apply_paradox_resolution_strategies(
         &self,
-        paradoxes: &[ParadoxDetectionResult],
-        validation_query: &str,
+        _paradoxes: &[ParadoxDetectionResult],
+        _validation_query: &str,
     ) -> Result<Vec<ParadoxResolutionResult>, ShaclAiError> {
         // Implementation placeholder
         Ok(Vec::new())
@@ -326,8 +326,8 @@ impl MultiTimelineValidator {
     /// Validate across multiple timelines
     pub async fn validate_across_timelines(
         &self,
-        validation_query: &str,
-        timeline_context: Option<&TimelineContext>,
+        _validation_query: &str,
+        _timeline_context: Option<&TimelineContext>,
     ) -> Result<Vec<TimelineAnalysisResult>, ShaclAiError> {
         // Placeholder implementation
         Ok(Vec::new())
@@ -348,9 +348,9 @@ impl TemporalConsistencyEnforcer {
     /// Enforce temporal consistency
     pub async fn enforce_temporal_consistency(
         &self,
-        timeline_analysis: &[TimelineAnalysisResult],
-        causality_analysis: &CausalityAnalysisResult,
-        resolution_results: &[ParadoxResolutionResult],
+        _timeline_analysis: &[TimelineAnalysisResult],
+        _causality_analysis: &CausalityAnalysisResult,
+        _resolution_results: &[ParadoxResolutionResult],
     ) -> Result<TemporalConsistencyMetrics, ShaclAiError> {
         // Placeholder implementation
         Ok(TemporalConsistencyMetrics {
@@ -390,8 +390,8 @@ impl CausalDependencyAnalyzer {
     /// Analyze causal relationships
     pub async fn analyze_causal_relationships(
         &self,
-        validation_query: &str,
-        timeline_analysis: &[TimelineAnalysisResult],
+        _validation_query: &str,
+        _timeline_analysis: &[TimelineAnalysisResult],
     ) -> Result<CausalityAnalysisResult, ShaclAiError> {
         // Placeholder implementation
         Ok(CausalityAnalysisResult {

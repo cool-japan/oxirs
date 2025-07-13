@@ -84,7 +84,6 @@ impl QuantumTeleportation {
                 // Apply Pauli-X correction
                 let half_len = pattern.quantum_state.amplitudes.len() / 2;
                 for i in 0..half_len {
-                    let i = i;
                     pattern.quantum_state.amplitudes.swap(i, i + half_len);
                 }
             }

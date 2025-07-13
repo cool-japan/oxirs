@@ -583,8 +583,10 @@ impl EvolutionaryOptimizer {
         let mut child2_genome = parent2.genome.clone();
 
         // Single-point crossover
-        child1_genome[crossover_point..parent1.genome.len()].copy_from_slice(&parent2.genome[crossover_point..]);
-        child2_genome[crossover_point..parent1.genome.len()].copy_from_slice(&parent1.genome[crossover_point..]);
+        child1_genome[crossover_point..parent1.genome.len()]
+            .copy_from_slice(&parent2.genome[crossover_point..]);
+        child2_genome[crossover_point..parent1.genome.len()]
+            .copy_from_slice(&parent1.genome[crossover_point..]);
 
         (
             Individual {

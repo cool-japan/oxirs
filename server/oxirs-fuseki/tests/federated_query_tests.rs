@@ -221,6 +221,13 @@ async fn test_cost_estimation() {
         },
         timeout_ms: 30000,
         optimization_hints: HashMap::new(),
+        execution_steps: vec!["Query fragment f1".to_string()],
+        estimated_cost: 1.0,
+        resource_requirements: ResourceRequirements {
+            required_endpoints: vec!["http://endpoint1.org/sparql".to_string()],
+            estimated_memory_mb: 100.0,
+            estimated_cpu_cores: 1.0,
+        },
     };
 
     let cost = estimator.estimate_cost(&plan).await.unwrap();
@@ -396,6 +403,16 @@ async fn test_parallel_execution_strategy() {
         },
         timeout_ms: 30000,
         optimization_hints: HashMap::new(),
+        execution_steps: vec!["Execute f1".to_string(), "Execute f2".to_string()],
+        estimated_cost: 20.0,
+        resource_requirements: ResourceRequirements {
+            required_endpoints: vec![
+                "http://mock.endpoint1.org/sparql".to_string(),
+                "http://mock.endpoint2.org/sparql".to_string(),
+            ],
+            estimated_memory_mb: 200.0,
+            estimated_cpu_cores: 2.0,
+        },
     };
 
     // Test that we can create the strategy and plan
@@ -442,6 +459,21 @@ async fn test_adaptive_execution_strategy() {
         },
         timeout_ms: 30000,
         optimization_hints: HashMap::new(),
+        execution_steps: vec![
+            "Execute f1".to_string(),
+            "Execute f2".to_string(),
+            "Execute f3".to_string(),
+        ],
+        estimated_cost: 35.0,
+        resource_requirements: ResourceRequirements {
+            required_endpoints: vec![
+                "http://endpoint1.org/sparql".to_string(),
+                "http://endpoint2.org/sparql".to_string(),
+                "http://endpoint3.org/sparql".to_string(),
+            ],
+            estimated_memory_mb: 350.0,
+            estimated_cpu_cores: 3.0,
+        },
     };
 
     // Test that we can create the strategy and plan

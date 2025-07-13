@@ -119,7 +119,7 @@ impl HnswIndex {
             .unwrap_or(1);
 
         // Use a heuristic to determine optimal thread count
-        
+
         (work_size / 1000).max(1).min(max_threads)
     }
 }

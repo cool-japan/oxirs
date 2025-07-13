@@ -1,6 +1,5 @@
 //! Visualization renderers for different output formats
 
-
 use crate::{Result, ShaclAiError};
 
 use super::core::{
@@ -128,7 +127,7 @@ impl VisualizationRenderer for HeatmapRenderer {
         options: &RenderOptions,
     ) -> Result<VisualizationOutput> {
         match data {
-            VisualizationData::Heatmap { matrix, labels } => {
+            VisualizationData::Heatmap { matrix, labels: _ } => {
                 let output = VisualizationOutput {
                     id: uuid::Uuid::new_v4().to_string(),
                     visualization_type: VisualizationType::Heatmap,

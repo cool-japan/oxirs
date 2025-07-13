@@ -1,5 +1,12 @@
 //! Comprehensive tests for MVCC implementation
 
+#![allow(
+    unused_imports,
+    unused_variables,
+    clippy::uninlined_format_args,
+    clippy::useless_vec
+)]
+
 use oxirs_cluster::mvcc::{HLCTimestamp, HybridLogicalClock, MVCCConfig, MVCCManager};
 use oxirs_cluster::mvcc_storage::{CompactionStrategy, MVCCStorage};
 use oxirs_cluster::transaction::IsolationLevel;

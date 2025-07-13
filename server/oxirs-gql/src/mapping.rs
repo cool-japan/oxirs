@@ -300,14 +300,18 @@ impl RdfGraphQLMapper {
     ) -> Result<()> {
         match field.name.as_str() {
             "insertTriple" => {
-                let args: Vec<(String, Value)> = field.arguments.iter()
+                let args: Vec<(String, Value)> = field
+                    .arguments
+                    .iter()
                     .map(|arg| (arg.name.clone(), arg.value.clone()))
                     .collect();
                 let triple = self.extract_triple_from_arguments(&args)?;
                 builder.add_insert_data(&triple);
             }
             "insertTriples" => {
-                let args: Vec<(String, Value)> = field.arguments.iter()
+                let args: Vec<(String, Value)> = field
+                    .arguments
+                    .iter()
                     .map(|arg| (arg.name.clone(), arg.value.clone()))
                     .collect();
                 let triples = self.extract_triples_from_arguments(&args)?;
@@ -316,14 +320,18 @@ impl RdfGraphQLMapper {
                 }
             }
             "deleteTriple" => {
-                let args: Vec<(String, Value)> = field.arguments.iter()
+                let args: Vec<(String, Value)> = field
+                    .arguments
+                    .iter()
                     .map(|arg| (arg.name.clone(), arg.value.clone()))
                     .collect();
                 let triple = self.extract_triple_from_arguments(&args)?;
                 builder.add_delete_data(&triple);
             }
             "deleteTriples" => {
-                let args: Vec<(String, Value)> = field.arguments.iter()
+                let args: Vec<(String, Value)> = field
+                    .arguments
+                    .iter()
                     .map(|arg| (arg.name.clone(), arg.value.clone()))
                     .collect();
                 let triples = self.extract_triples_from_arguments(&args)?;
@@ -333,7 +341,9 @@ impl RdfGraphQLMapper {
             }
             "updateTriple" => {
                 // Update = Delete old + Insert new
-                let args: Vec<(String, Value)> = field.arguments.iter()
+                let args: Vec<(String, Value)> = field
+                    .arguments
+                    .iter()
                     .map(|arg| (arg.name.clone(), arg.value.clone()))
                     .collect();
                 if let Ok(old_triple) = self.extract_old_triple_from_arguments(&args) {
@@ -344,10 +354,7 @@ impl RdfGraphQLMapper {
                 }
             }
             _ => {
-                return Err(anyhow!(
-                    "Unsupported mutation operation: {}",
-                    field.name
-                ));
+                return Err(anyhow!("Unsupported mutation operation: {}", field.name));
             }
         }
         Ok(())
@@ -375,7 +382,9 @@ impl RdfGraphQLMapper {
 
         match (subject, predicate, object) {
             (Some(s), Some(p), Some(o)) => Ok(format!("{s} {p} {o} .")),
-            _ => Err(anyhow!("Missing required arguments: subject, predicate, or object")),
+            _ => Err(anyhow!(
+                "Missing required arguments: subject, predicate, or object"
+            )),
         }
     }
 
@@ -386,7 +395,8 @@ impl RdfGraphQLMapper {
                     let mut result = Vec::new();
                     for triple_value in triple_list {
                         if let Value::ObjectValue(triple_obj) = triple_value {
-                            let triple_args: Vec<(String, Value)> = triple_obj.iter()
+                            let triple_args: Vec<(String, Value)> = triple_obj
+                                .iter()
                                 .map(|(k, v)| (k.clone(), v.clone()))
                                 .collect();
                             result.push(self.extract_triple_from_arguments(&triple_args)?);
@@ -403,7 +413,8 @@ impl RdfGraphQLMapper {
         for (arg_name, arg_value) in arguments {
             if arg_name == "old" {
                 if let Value::ObjectValue(old_obj) = arg_value {
-                    let old_args: Vec<(String, Value)> = old_obj.iter()
+                    let old_args: Vec<(String, Value)> = old_obj
+                        .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
                     return self.extract_triple_from_arguments(&old_args);
@@ -417,7 +428,8 @@ impl RdfGraphQLMapper {
         for (arg_name, arg_value) in arguments {
             if arg_name == "new" {
                 if let Value::ObjectValue(new_obj) = arg_value {
-                    let new_args: Vec<(String, Value)> = new_obj.iter()
+                    let new_args: Vec<(String, Value)> = new_obj
+                        .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect();
                     return self.extract_triple_from_arguments(&new_args);
@@ -441,16 +453,24 @@ impl RdfGraphQLMapper {
                     Ok(format!("\"{}\"", s.replace('\"', "\\\"")))
                 }
             }
-            Value::IntValue(i) => Ok(format!("\"{i}\"^^<http://www.w3.org/2001/XMLSchema#integer>")),
-            Value::FloatValue(f) => Ok(format!("\"{f}\"^^<http://www.w3.org/2001/XMLSchema#decimal>")),
-            Value::BooleanValue(b) => Ok(format!("\"{b}\"^^<http://www.w3.org/2001/XMLSchema#boolean>")),
+            Value::IntValue(i) => Ok(format!(
+                "\"{i}\"^^<http://www.w3.org/2001/XMLSchema#integer>"
+            )),
+            Value::FloatValue(f) => Ok(format!(
+                "\"{f}\"^^<http://www.w3.org/2001/XMLSchema#decimal>"
+            )),
+            Value::BooleanValue(b) => Ok(format!(
+                "\"{b}\"^^<http://www.w3.org/2001/XMLSchema#boolean>"
+            )),
             Value::ObjectValue(obj) => {
                 // Handle typed literals
-                if let (Some(Value::StringValue(value)), Some(Value::StringValue(datatype))) = 
-                    (obj.get("value"), obj.get("datatype")) {
+                if let (Some(Value::StringValue(value)), Some(Value::StringValue(datatype))) =
+                    (obj.get("value"), obj.get("datatype"))
+                {
                     Ok(format!("\"{value}\"^^<{datatype}>"))
-                } else if let (Some(Value::StringValue(value)), Some(Value::StringValue(lang))) = 
-                    (obj.get("value"), obj.get("language")) {
+                } else if let (Some(Value::StringValue(value)), Some(Value::StringValue(lang))) =
+                    (obj.get("value"), obj.get("language"))
+                {
                     Ok(format!("\"{value}\"@{lang}"))
                 } else {
                     Err(anyhow!("Invalid RDF term object format"))
@@ -714,17 +734,15 @@ impl RdfGraphQLMapper {
                         }
                     } else {
                         // Fallback
-                        builder.add_where_pattern(&format!(
-                            "{subject_var} <{prop_uri}> {field_var}"
-                        ));
+                        builder
+                            .add_where_pattern(&format!("{subject_var} <{prop_uri}> {field_var}"));
                     }
                 } else {
                     // Fallback to predicate mapping
                     let predicate = self.field_to_predicate(&field.name);
                     let field_var = format!("?{}", field.name);
                     builder.add_select(&field_var);
-                    builder
-                        .add_where_pattern(&format!("{subject_var} {predicate} {field_var}"));
+                    builder.add_where_pattern(&format!("{subject_var} {predicate} {field_var}"));
                 }
             }
         }
@@ -799,16 +817,16 @@ impl RdfGraphQLMapper {
     fn pluralize(&self, word: &str) -> String {
         if word.ends_with('s') || word.ends_with("sh") || word.ends_with("ch") {
             format!("{word}es")
-        } else if word.ends_with('y') {
-            format!("{}ies", &word[..word.len() - 1])
+        } else if let Some(stripped) = word.strip_suffix('y') {
+            format!("{stripped}ies")
         } else {
             format!("{word}s")
         }
     }
 
     fn singularize(&self, word: &str) -> String {
-        if word.ends_with("ies") {
-            format!("{}y", &word[..word.len() - 3])
+        if let Some(stripped) = word.strip_suffix("ies") {
+            format!("{stripped}y")
         } else if word.ends_with("es") && (word.ends_with("shes") || word.ends_with("ches")) {
             word[..word.len() - 2].to_string()
         } else if word.ends_with('s') && word.len() > 1 {
@@ -894,7 +912,9 @@ impl RdfGraphQLMapper {
     fn extract_offset_from_field(&self, field: &Field) -> Option<usize> {
         for arg in &field.arguments {
             if arg.name == "offset" {
-                if let Value::IntValue(i) = &arg.value { return Some(*i as usize) }
+                if let Value::IntValue(i) = &arg.value {
+                    return Some(*i as usize);
+                }
             }
         }
         None
@@ -903,7 +923,9 @@ impl RdfGraphQLMapper {
     fn extract_where_from_field(&self, field: &Field) -> Option<String> {
         for arg in &field.arguments {
             if arg.name == "where" {
-                if let Value::StringValue(s) = &arg.value { return Some(s.clone()) }
+                if let Value::StringValue(s) = &arg.value {
+                    return Some(s.clone());
+                }
             }
         }
         None
@@ -1028,13 +1050,15 @@ impl SparqlQueryBuilder {
     #[allow(dead_code)]
     fn add_insert_where(&mut self, triple: &str, condition: &str) {
         self.is_update_query = true;
-        self.insert_where.push(format!("{triple} WHERE {{ {condition} }}"));
+        self.insert_where
+            .push(format!("{triple} WHERE {{ {condition} }}"));
     }
 
     #[allow(dead_code)]
     fn add_delete_where(&mut self, triple: &str, condition: &str) {
         self.is_update_query = true;
-        self.delete_where.push(format!("{triple} WHERE {{ {condition} }}"));
+        self.delete_where
+            .push(format!("{triple} WHERE {{ {condition} }}"));
     }
 
     fn build(&self) -> Result<String> {

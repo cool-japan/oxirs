@@ -1,6 +1,5 @@
 //! Type definitions for photonic computing
 
-
 /// Wavelength range for optical processing
 #[derive(Debug, Clone)]
 pub struct WavelengthRange {

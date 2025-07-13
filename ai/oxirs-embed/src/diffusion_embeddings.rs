@@ -195,10 +195,7 @@ impl NoiseScheduler {
             BetaSchedule::Linear => Array1::linspace(beta_start, beta_end, num_timesteps),
             BetaSchedule::Cosine => {
                 let steps = Array1::linspace(0.0, 1.0, num_timesteps + 1);
-                let alpha_bar = steps.mapv(|s| {
-                    
-                    (s * std::f64::consts::PI / 2.0).cos().powi(2)
-                });
+                let alpha_bar = steps.mapv(|s| (s * std::f64::consts::PI / 2.0).cos().powi(2));
 
                 let mut betas = Array1::zeros(num_timesteps);
                 for i in 0..num_timesteps {

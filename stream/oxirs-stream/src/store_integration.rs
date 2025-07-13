@@ -261,9 +261,10 @@ impl StoreChangeDetector {
                     self.start_polling_detection(*poll_interval).await
                 }
                 ChangeDetectionStrategy::EventSourcing { .. } => self.start_event_sourcing().await,
-                ChangeDetectionStrategy::Hybrid { primary: _, fallback: _ } => {
-                    self.start_hybrid_detection().await
-                }
+                ChangeDetectionStrategy::Hybrid {
+                    primary: _,
+                    fallback: _,
+                } => self.start_hybrid_detection().await,
             }
         })
     }

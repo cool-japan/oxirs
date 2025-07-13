@@ -429,7 +429,7 @@ impl PerformanceOptimizer {
     async fn calculate_estimated_savings(
         &self,
         optimizations: &[OptimizationType],
-        processing_time: Duration,
+        _processing_time: Duration,
     ) -> Result<EstimatedSavings, Box<dyn std::error::Error + Send + Sync>> {
         let mut time_saved = Duration::from_millis(0);
         let mut cost_saved = 0.0;

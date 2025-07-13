@@ -5,7 +5,6 @@
 //! entity resolution, and result stitching.
 
 use anyhow::{anyhow, Result};
-use futures::TryStreamExt;
 use reqwest::{
     header::{HeaderMap, HeaderValue, ACCEPT, CONTENT_TYPE},
     Client,
@@ -16,9 +15,9 @@ use tokio::time::timeout;
 use tracing::{debug, error, instrument, warn};
 
 use crate::{
+    executor::types::{QueryResultData, StepResult},
     planner::{ExecutionPlan, ExecutionStep, StepType},
     service_client::GraphQLRequest,
-    QueryResultData, StepResult,
 };
 
 use super::types::*;
@@ -136,7 +135,7 @@ pub async fn execute_step(
 
 /// Execute a SPARQL service query
 pub async fn execute_service_query(step: &ExecutionStep) -> Result<QueryResultData> {
-    let service_id = step
+    let _service_id = step
         .service_id
         .as_ref()
         .ok_or_else(|| anyhow!("Service ID required for service query"))?;
@@ -181,7 +180,7 @@ pub async fn execute_service_query(step: &ExecutionStep) -> Result<QueryResultDa
 
 /// Execute a GraphQL query
 pub async fn execute_graphql_query(step: &ExecutionStep) -> Result<QueryResultData> {
-    let service_id = step
+    let _service_id = step
         .service_id
         .as_ref()
         .ok_or_else(|| anyhow!("Service ID required for GraphQL query"))?;
@@ -244,26 +243,26 @@ pub async fn execute_join(
     match input_results.first() {
         Some(QueryResultData::Sparql(first_result)) => {
             let mut joined_result = first_result.clone();
-            
+
             // Join with additional results based on common variables
             for result_data in input_results.iter().skip(1) {
                 if let QueryResultData::Sparql(other_result) = result_data {
                     joined_result = perform_sparql_join(&joined_result, other_result)?;
                 }
             }
-            
+
             Ok(QueryResultData::Sparql(joined_result))
         }
         Some(QueryResultData::GraphQL(first_response)) => {
             let mut joined_response = first_response.clone();
-            
+
             // Join GraphQL responses by merging their data fields
             for result_data in input_results.iter().skip(1) {
                 if let QueryResultData::GraphQL(other_response) = result_data {
                     joined_response = perform_graphql_join(&joined_response, other_response)?;
                 }
             }
-            
+
             Ok(QueryResultData::GraphQL(joined_response))
         }
         _ => Err(anyhow!("No valid results to join")),
@@ -335,7 +334,8 @@ pub async fn execute_filter(
         }
         QueryResultData::ServiceResult(service_result) => {
             // Apply filters to service results (JSON data)
-            let filtered_result = apply_service_result_filters(&service_result, &step.query_fragment)?;
+            let filtered_result =
+                apply_service_result_filters(&service_result, &step.query_fragment)?;
             Ok(QueryResultData::ServiceResult(filtered_result))
         }
     }
@@ -400,12 +400,14 @@ pub async fn execute_aggregate(
         }
         QueryResultData::GraphQL(graphql_response) => {
             // Perform GraphQL aggregation on the response data
-            let aggregated_response = aggregate_graphql_response(&graphql_response, &step.query_fragment)?;
+            let aggregated_response =
+                aggregate_graphql_response(&graphql_response, &step.query_fragment)?;
             Ok(QueryResultData::GraphQL(aggregated_response))
         }
         QueryResultData::ServiceResult(service_result) => {
             // Perform aggregation on service results (JSON data)
-            let aggregated_result = aggregate_service_result(&service_result, &step.query_fragment)?;
+            let aggregated_result =
+                aggregate_service_result(&service_result, &step.query_fragment)?;
             Ok(QueryResultData::ServiceResult(aggregated_result))
         }
     }
@@ -472,15 +474,18 @@ pub async fn execute_entity_resolution(
     // Perform entity resolution based on the data type
     match input_data {
         QueryResultData::Sparql(sparql_results) => {
-            let resolved_results = perform_sparql_entity_resolution(&sparql_results, &step.query_fragment)?;
+            let resolved_results =
+                perform_sparql_entity_resolution(&sparql_results, &step.query_fragment)?;
             Ok(QueryResultData::Sparql(resolved_results))
         }
         QueryResultData::GraphQL(graphql_response) => {
-            let resolved_response = perform_graphql_entity_resolution(&graphql_response, &step.query_fragment)?;
+            let resolved_response =
+                perform_graphql_entity_resolution(&graphql_response, &step.query_fragment)?;
             Ok(QueryResultData::GraphQL(resolved_response))
         }
         QueryResultData::ServiceResult(service_result) => {
-            let resolved_result = perform_service_entity_resolution(&service_result, &step.query_fragment)?;
+            let resolved_result =
+                perform_service_entity_resolution(&service_result, &step.query_fragment)?;
             Ok(QueryResultData::ServiceResult(resolved_result))
         }
     }
@@ -513,8 +518,9 @@ pub async fn execute_result_stitching(
     }
 
     // Perform intelligent result stitching based on data types
-    let stitched_result = perform_intelligent_result_stitching(&input_data_list, &step.query_fragment)?;
-    
+    let stitched_result =
+        perform_intelligent_result_stitching(&input_data_list, &step.query_fragment)?;
+
     debug!("Successfully stitched {} results", input_data_list.len());
     Ok(stitched_result)
 }
@@ -582,9 +588,9 @@ pub fn sort_sparql_results(results: &SparqlResults, order_expr: &str) -> Result<
 
 /// Order clause for sorting
 #[derive(Debug, Clone)]
-struct OrderClause {
-    variable: String,
-    descending: bool,
+pub struct OrderClause {
+    pub variable: String,
+    pub descending: bool,
 }
 
 /// Parse ORDER BY expression into order clauses
@@ -744,13 +750,13 @@ pub fn compare_typed_literals(
 // These would need to be properly implemented based on the original file
 
 /// Perform GROUP BY aggregation
-pub fn perform_group_by_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+pub fn perform_group_by_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     // Simplified implementation - would need proper GROUP BY logic
     Ok(results.clone())
 }
 
 /// Perform COUNT aggregation
-pub fn perform_count_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+pub fn perform_count_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     let count = results.results.bindings.len();
 
     let count_binding = {
@@ -762,6 +768,7 @@ pub fn perform_count_aggregation(results: &SparqlResults, expr: &str) -> Result<
                 value: count.to_string(),
                 datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
                 lang: None,
+                quoted_triple: None,
             },
         );
         binding
@@ -778,25 +785,25 @@ pub fn perform_count_aggregation(results: &SparqlResults, expr: &str) -> Result<
 }
 
 /// Perform SUM aggregation
-pub fn perform_sum_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+pub fn perform_sum_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     // Simplified implementation - would need proper SUM logic
     Ok(results.clone())
 }
 
 /// Perform AVG aggregation
-pub fn perform_avg_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+pub fn perform_avg_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     // Simplified implementation - would need proper AVG logic
     Ok(results.clone())
 }
 
 /// Perform MIN aggregation
-pub fn perform_min_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+pub fn perform_min_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     // Simplified implementation - would need proper MIN logic
     Ok(results.clone())
 }
 
 /// Perform MAX aggregation
-pub fn perform_max_aggregation(results: &SparqlResults, expr: &str) -> Result<SparqlResults> {
+pub fn perform_max_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     // Simplified implementation - would need proper MAX logic
     Ok(results.clone())
 }
@@ -823,7 +830,7 @@ pub fn apply_service_result_filters(
 ) -> Result<serde_json::Value> {
     // Basic filtering implementation - could be enhanced with JSON path expressions
     // For now, implement basic property filtering
-    
+
     if let Some(filter_expr) = extract_filter_expression(query_fragment) {
         let filtered_result = apply_json_filter(service_result, &filter_expr)?;
         Ok(filtered_result)
@@ -844,7 +851,7 @@ fn extract_filter_expression(query_fragment: &str) -> Option<String> {
 }
 
 /// Apply JSON filter to data
-fn apply_json_filter(data: &serde_json::Value, filter_expr: &str) -> Result<serde_json::Value> {
+fn apply_json_filter(data: &serde_json::Value, _filter_expr: &str) -> Result<serde_json::Value> {
     // Basic implementation - would need proper filter parsing
     // For now, just return the data unchanged for complex filters
     Ok(data.clone())
@@ -857,14 +864,14 @@ pub fn aggregate_graphql_response(
 ) -> Result<GraphQLResponse> {
     // Basic aggregation implementation for GraphQL
     // This would typically involve combining fields or calculating aggregates
-    
+
     let mut aggregated_data = response.data.clone();
-    
+
     // Look for aggregation operations in the query fragment
     if query_fragment.contains("count") {
         aggregated_data = apply_count_aggregation_to_json(&aggregated_data)?;
     }
-    
+
     Ok(GraphQLResponse {
         data: aggregated_data,
         errors: response.errors.clone(),
@@ -894,23 +901,23 @@ pub fn aggregate_service_result(
     query_fragment: &str,
 ) -> Result<serde_json::Value> {
     // Implement aggregation operations on JSON service results
-    
+
     if query_fragment.contains("COUNT") {
         return apply_count_aggregation_to_json(service_result);
     }
-    
+
     if query_fragment.contains("SUM") {
         return apply_sum_aggregation_to_json(service_result, query_fragment);
     }
-    
+
     if query_fragment.contains("AVG") {
         return apply_avg_aggregation_to_json(service_result, query_fragment);
     }
-    
+
     if query_fragment.contains("MIN") || query_fragment.contains("MAX") {
         return apply_minmax_aggregation_to_json(service_result, query_fragment);
     }
-    
+
     // No aggregation specified, return as-is
     Ok(service_result.clone())
 }
@@ -918,7 +925,7 @@ pub fn aggregate_service_result(
 /// Apply SUM aggregation to JSON data
 fn apply_sum_aggregation_to_json(
     data: &serde_json::Value,
-    query_fragment: &str,
+    _query_fragment: &str,
 ) -> Result<serde_json::Value> {
     // Extract field name and sum numeric values
     match data {
@@ -945,7 +952,7 @@ fn apply_sum_aggregation_to_json(
 /// Apply AVG aggregation to JSON data
 fn apply_avg_aggregation_to_json(
     data: &serde_json::Value,
-    query_fragment: &str,
+    _query_fragment: &str,
 ) -> Result<serde_json::Value> {
     // Calculate average of numeric values
     match data {
@@ -960,7 +967,7 @@ fn apply_avg_aggregation_to_json(
                     }
                 })
                 .collect();
-            
+
             if !values.is_empty() {
                 let avg = values.iter().sum::<f64>() / values.len() as f64;
                 Ok(serde_json::json!({"avg": avg}))
@@ -978,7 +985,7 @@ fn apply_minmax_aggregation_to_json(
     query_fragment: &str,
 ) -> Result<serde_json::Value> {
     let is_min = query_fragment.contains("MIN");
-    
+
     match data {
         serde_json::Value::Array(arr) => {
             let values: Vec<f64> = arr
@@ -991,14 +998,14 @@ fn apply_minmax_aggregation_to_json(
                     }
                 })
                 .collect();
-            
+
             if !values.is_empty() {
                 let result = if is_min {
                     values.iter().fold(f64::INFINITY, |a, &b| a.min(b))
                 } else {
                     values.iter().fold(f64::NEG_INFINITY, |a, &b| a.max(b))
                 };
-                
+
                 let key = if is_min { "min" } else { "max" };
                 Ok(serde_json::json!({key: result}))
             } else {
@@ -1016,15 +1023,15 @@ pub fn sort_service_result(
     query_fragment: &str,
 ) -> Result<serde_json::Value> {
     // Implement sorting for JSON service results
-    
+
     match service_result {
         serde_json::Value::Array(arr) => {
             let mut sorted_arr = arr.clone();
-            
+
             // Extract sort criteria from query fragment
             let sort_key = extract_sort_key(query_fragment);
             let descending = query_fragment.contains("DESC");
-            
+
             // Sort the array based on the specified key
             sorted_arr.sort_by(|a, b| {
                 let a_val = if let Some(key) = &sort_key {
@@ -1032,20 +1039,20 @@ pub fn sort_service_result(
                 } else {
                     a.as_str().unwrap_or("")
                 };
-                
+
                 let b_val = if let Some(key) = &sort_key {
                     b.get(key).and_then(|v| v.as_str()).unwrap_or("")
                 } else {
                     b.as_str().unwrap_or("")
                 };
-                
+
                 if descending {
                     b_val.cmp(a_val)
                 } else {
                     a_val.cmp(b_val)
                 }
             });
-            
+
             Ok(serde_json::Value::Array(sorted_arr))
         }
         _ => Ok(service_result.clone()),
@@ -1069,27 +1076,27 @@ fn extract_sort_key(query_fragment: &str) -> Option<String> {
 fn apply_sparql_filters(results: &SparqlResults, filter_expr: &str) -> Result<SparqlResults> {
     // Parse simple FILTER expressions like "FILTER(?price > 100)"
     let filter_expr = filter_expr.trim();
-    
+
     // Extract filter conditions
     let filter_conditions = extract_filter_conditions(filter_expr);
-    
+
     let mut filtered_bindings = Vec::new();
-    
+
     for binding in &results.results.bindings {
         let mut keep_binding = true;
-        
+
         for condition in &filter_conditions {
             if !evaluate_filter_condition(binding, condition) {
                 keep_binding = false;
                 break;
             }
         }
-        
+
         if keep_binding {
             filtered_bindings.push(binding.clone());
         }
     }
-    
+
     Ok(SparqlResults {
         head: results.head.clone(),
         results: SparqlResultsData {
@@ -1101,19 +1108,19 @@ fn apply_sparql_filters(results: &SparqlResults, filter_expr: &str) -> Result<Sp
 /// Extract filter conditions from FILTER expression
 fn extract_filter_conditions(filter_expr: &str) -> Vec<FilterCondition> {
     let mut conditions = Vec::new();
-    
+
     // Simple parsing for basic conditions like "?var > value" or "?var = value"
     if let Some(filter_start) = filter_expr.find("FILTER") {
         let filter_content = &filter_expr[filter_start + 6..].trim();
         if filter_content.starts_with('(') && filter_content.ends_with(')') {
-            let inner = &filter_content[1..filter_content.len()-1];
-            
+            let inner = &filter_content[1..filter_content.len() - 1];
+
             // Parse simple comparison expressions
             for op in &[" >= ", " <= ", " > ", " < ", " = ", " != "] {
                 if let Some(op_pos) = inner.find(op) {
                     let var_part = inner[..op_pos].trim().trim_start_matches('?');
                     let value_part = inner[op_pos + op.len()..].trim();
-                    
+
                     conditions.push(FilterCondition {
                         variable: var_part.to_string(),
                         operator: op.trim().to_string(),
@@ -1124,7 +1131,7 @@ fn extract_filter_conditions(filter_expr: &str) -> Vec<FilterCondition> {
             }
         }
     }
-    
+
     conditions
 }
 
@@ -1132,33 +1139,41 @@ fn extract_filter_conditions(filter_expr: &str) -> Vec<FilterCondition> {
 fn evaluate_filter_condition(binding: &SparqlBinding, condition: &FilterCondition) -> bool {
     if let Some(sparql_value) = binding.get(&condition.variable) {
         let binding_value = &sparql_value.value;
-        
+
         match condition.operator.as_str() {
             "=" => binding_value == &condition.value,
             "!=" => binding_value != &condition.value,
             ">" => {
-                if let (Ok(left), Ok(right)) = (binding_value.parse::<f64>(), condition.value.parse::<f64>()) {
+                if let (Ok(left), Ok(right)) =
+                    (binding_value.parse::<f64>(), condition.value.parse::<f64>())
+                {
                     left > right
                 } else {
                     binding_value > &condition.value
                 }
             }
             "<" => {
-                if let (Ok(left), Ok(right)) = (binding_value.parse::<f64>(), condition.value.parse::<f64>()) {
+                if let (Ok(left), Ok(right)) =
+                    (binding_value.parse::<f64>(), condition.value.parse::<f64>())
+                {
                     left < right
                 } else {
                     binding_value < &condition.value
                 }
             }
             ">=" => {
-                if let (Ok(left), Ok(right)) = (binding_value.parse::<f64>(), condition.value.parse::<f64>()) {
+                if let (Ok(left), Ok(right)) =
+                    (binding_value.parse::<f64>(), condition.value.parse::<f64>())
+                {
                     left >= right
                 } else {
                     binding_value >= &condition.value
                 }
             }
             "<=" => {
-                if let (Ok(left), Ok(right)) = (binding_value.parse::<f64>(), condition.value.parse::<f64>()) {
+                if let (Ok(left), Ok(right)) =
+                    (binding_value.parse::<f64>(), condition.value.parse::<f64>())
+                {
                     left <= right
                 } else {
                     binding_value <= &condition.value
@@ -1177,7 +1192,7 @@ fn perform_sparql_join(left: &SparqlResults, right: &SparqlResults) -> Result<Sp
     let left_vars: std::collections::HashSet<_> = left.head.vars.iter().collect();
     let right_vars: std::collections::HashSet<_> = right.head.vars.iter().collect();
     let common_vars: Vec<_> = left_vars.intersection(&right_vars).cloned().collect();
-    
+
     // Combine all variables
     let mut all_vars = left.head.vars.clone();
     for var in &right.head.vars {
@@ -1185,19 +1200,19 @@ fn perform_sparql_join(left: &SparqlResults, right: &SparqlResults) -> Result<Sp
             all_vars.push(var.clone());
         }
     }
-    
+
     let mut joined_bindings = Vec::new();
-    
+
     // Perform inner join based on common variables
     for left_binding in &left.results.bindings {
         for right_binding in &right.results.bindings {
             let mut is_joinable = true;
-            
+
             // Check if common variables have compatible values
             for common_var in &common_vars {
                 let left_val = left_binding.get(*common_var);
                 let right_val = right_binding.get(*common_var);
-                
+
                 match (left_val, right_val) {
                     (Some(left_v), Some(right_v)) => {
                         if left_v.value != right_v.value {
@@ -1213,7 +1228,7 @@ fn perform_sparql_join(left: &SparqlResults, right: &SparqlResults) -> Result<Sp
                     }
                 }
             }
-            
+
             if is_joinable {
                 // Merge the bindings
                 let mut merged_binding = left_binding.clone();
@@ -1224,7 +1239,7 @@ fn perform_sparql_join(left: &SparqlResults, right: &SparqlResults) -> Result<Sp
             }
         }
     }
-    
+
     Ok(SparqlResults {
         head: SparqlHead { vars: all_vars },
         results: SparqlResultsData {
@@ -1247,23 +1262,21 @@ pub fn perform_graphql_join(
     right: &GraphQLResponse,
 ) -> Result<GraphQLResponse> {
     debug!("Performing GraphQL join operation");
-    
+
     // Combine errors from both responses
     let mut combined_errors = left.errors.clone();
     combined_errors.extend(right.errors.clone());
-    
+
     // Merge extensions if they exist
     let combined_extensions = match (&left.extensions, &right.extensions) {
-        (Some(left_ext), Some(right_ext)) => {
-            Some(merge_json_values(left_ext, right_ext)?)
-        }
+        (Some(left_ext), Some(right_ext)) => Some(merge_json_values(left_ext, right_ext)?),
         (Some(ext), None) | (None, Some(ext)) => Some(ext.clone()),
         (None, None) => None,
     };
-    
+
     // Merge the data fields intelligently
     let merged_data = merge_graphql_data(&left.data, &right.data)?;
-    
+
     Ok(GraphQLResponse {
         data: merged_data,
         errors: combined_errors,
@@ -1280,7 +1293,7 @@ fn merge_graphql_data(
         // Both are objects - merge their fields
         (serde_json::Value::Object(left_obj), serde_json::Value::Object(right_obj)) => {
             let mut merged = left_obj.clone();
-            
+
             for (key, right_value) in right_obj {
                 match merged.get(key) {
                     Some(left_value) => {
@@ -1294,17 +1307,17 @@ fn merge_graphql_data(
                     }
                 }
             }
-            
+
             Ok(serde_json::Value::Object(merged))
         }
-        
+
         // Both are arrays - concatenate them
         (serde_json::Value::Array(left_arr), serde_json::Value::Array(right_arr)) => {
             let mut merged = left_arr.clone();
             merged.extend(right_arr.clone());
             Ok(serde_json::Value::Array(merged))
         }
-        
+
         // One is array, other is not - convert non-array to array and concatenate
         (serde_json::Value::Array(arr), value) | (value, serde_json::Value::Array(arr)) => {
             let mut merged = arr.clone();
@@ -1313,17 +1326,13 @@ fn merge_graphql_data(
             }
             Ok(serde_json::Value::Array(merged))
         }
-        
+
         // Both are null - return null
-        (serde_json::Value::Null, serde_json::Value::Null) => {
-            Ok(serde_json::Value::Null)
-        }
-        
+        (serde_json::Value::Null, serde_json::Value::Null) => Ok(serde_json::Value::Null),
+
         // One is null - return the non-null value
-        (serde_json::Value::Null, value) | (value, serde_json::Value::Null) => {
-            Ok(value.clone())
-        }
-        
+        (serde_json::Value::Null, value) | (value, serde_json::Value::Null) => Ok(value.clone()),
+
         // Different primitive types - prefer left value but warn
         (left_val, right_val) => {
             warn!(
@@ -1363,23 +1372,26 @@ pub fn perform_sparql_entity_resolution(
     query_fragment: &str,
 ) -> Result<SparqlResults> {
     debug!("Performing SPARQL entity resolution");
-    
+
     // Extract entity resolution keys from query fragment
     let resolution_keys = extract_entity_resolution_keys(query_fragment);
-    
+
     if resolution_keys.is_empty() {
         debug!("No resolution keys found, returning original results");
         return Ok(results.clone());
     }
-    
+
     // Group bindings by entity keys
     let mut entity_groups: HashMap<String, Vec<SparqlBinding>> = HashMap::new();
-    
+
     for binding in &results.results.bindings {
         let entity_key = compute_entity_key(binding, &resolution_keys);
-        entity_groups.entry(entity_key).or_default().push(binding.clone());
+        entity_groups
+            .entry(entity_key)
+            .or_default()
+            .push(binding.clone());
     }
-    
+
     // Merge bindings within each entity group
     let mut resolved_bindings = Vec::new();
     for (_, group_bindings) in entity_groups {
@@ -1392,7 +1404,7 @@ pub fn perform_sparql_entity_resolution(
             resolved_bindings.push(merged_binding);
         }
     }
-    
+
     Ok(SparqlResults {
         head: results.head.clone(),
         results: SparqlResultsData {
@@ -1407,12 +1419,12 @@ pub fn perform_graphql_entity_resolution(
     query_fragment: &str,
 ) -> Result<GraphQLResponse> {
     debug!("Performing GraphQL entity resolution");
-    
+
     // Extract entity resolution configuration from query fragment
     let resolution_config = extract_graphql_resolution_config(query_fragment);
-    
+
     let resolved_data = resolve_graphql_entities(&response.data, &resolution_config)?;
-    
+
     Ok(GraphQLResponse {
         data: resolved_data,
         errors: response.errors.clone(),
@@ -1426,19 +1438,19 @@ pub fn perform_service_entity_resolution(
     query_fragment: &str,
 ) -> Result<serde_json::Value> {
     debug!("Performing service entity resolution");
-    
+
     // Extract resolution configuration
     let resolution_config = extract_service_resolution_config(query_fragment);
-    
+
     let resolved_result = resolve_service_entities(result, &resolution_config)?;
-    
+
     Ok(resolved_result)
 }
 
 /// Extract entity resolution keys from query fragment
 fn extract_entity_resolution_keys(query_fragment: &str) -> Vec<String> {
     let mut keys = Vec::new();
-    
+
     // Look for @key directives or similar annotations
     if let Some(start) = query_fragment.find("@key") {
         if let Some(end) = query_fragment[start..].find(')') {
@@ -1455,7 +1467,7 @@ fn extract_entity_resolution_keys(query_fragment: &str) -> Vec<String> {
             }
         }
     }
-    
+
     // If no explicit keys found, use common entity identifiers
     if keys.is_empty() {
         for common_key in &["id", "uri", "identifier", "key"] {
@@ -1464,14 +1476,14 @@ fn extract_entity_resolution_keys(query_fragment: &str) -> Vec<String> {
             }
         }
     }
-    
+
     keys
 }
 
 /// Compute entity key from binding
 fn compute_entity_key(binding: &SparqlBinding, resolution_keys: &[String]) -> String {
     let mut key_parts = Vec::new();
-    
+
     for key in resolution_keys {
         if let Some(value) = binding.get(key) {
             key_parts.push(format!("{}:{}", key, value.value));
@@ -1479,7 +1491,7 @@ fn compute_entity_key(binding: &SparqlBinding, resolution_keys: &[String]) -> St
             key_parts.push(format!("{key}:null"));
         }
     }
-    
+
     key_parts.join("|")
 }
 
@@ -1488,19 +1500,21 @@ fn merge_sparql_bindings(bindings: &[SparqlBinding]) -> Result<SparqlBinding> {
     if bindings.is_empty() {
         return Ok(HashMap::new());
     }
-    
+
     let mut merged = bindings[0].clone();
-    
+
     for binding in bindings.iter().skip(1) {
         for (var, value) in binding {
             match merged.get(var) {
                 Some(existing_value) => {
                     // If values differ, prefer non-null, more specific, or first value
                     if existing_value.value != value.value
-                        && existing_value.value.is_empty() && !value.value.is_empty() {
-                            merged.insert(var.clone(), value.clone());
-                        }
-                        // Otherwise keep existing value
+                        && existing_value.value.is_empty()
+                        && !value.value.is_empty()
+                    {
+                        merged.insert(var.clone(), value.clone());
+                    }
+                    // Otherwise keep existing value
                 }
                 None => {
                     merged.insert(var.clone(), value.clone());
@@ -1508,7 +1522,7 @@ fn merge_sparql_bindings(bindings: &[SparqlBinding]) -> Result<SparqlBinding> {
             }
         }
     }
-    
+
     Ok(merged)
 }
 
@@ -1538,7 +1552,7 @@ enum MergeStrategy {
 /// Extract GraphQL resolution configuration
 fn extract_graphql_resolution_config(query_fragment: &str) -> GraphQLResolutionConfig {
     let entity_key_fields = extract_entity_resolution_keys(query_fragment);
-    
+
     GraphQLResolutionConfig {
         entity_key_fields,
         merge_strategy: MergeStrategy::PreferNonNull,
@@ -1548,7 +1562,7 @@ fn extract_graphql_resolution_config(query_fragment: &str) -> GraphQLResolutionC
 /// Extract service resolution configuration
 fn extract_service_resolution_config(query_fragment: &str) -> ServiceResolutionConfig {
     let entity_key_fields = extract_entity_resolution_keys(query_fragment);
-    
+
     ServiceResolutionConfig {
         entity_key_fields,
         merge_strategy: MergeStrategy::PreferNonNull,
@@ -1562,18 +1576,19 @@ fn resolve_graphql_entities(
 ) -> Result<serde_json::Value> {
     match data {
         serde_json::Value::Array(arr) => {
-            let resolved_items = resolve_entity_array(arr, &config.entity_key_fields, &config.merge_strategy)?;
+            let resolved_items =
+                resolve_entity_array(arr, &config.entity_key_fields, &config.merge_strategy)?;
             Ok(serde_json::Value::Array(resolved_items))
         }
         serde_json::Value::Object(obj) => {
             let mut resolved_obj = obj.clone();
-            
+
             // Recursively resolve nested arrays and objects
             for (key, value) in obj {
                 let resolved_value = resolve_graphql_entities(value, config)?;
                 resolved_obj.insert(key.clone(), resolved_value);
             }
-            
+
             Ok(serde_json::Value::Object(resolved_obj))
         }
         _ => Ok(data.clone()),
@@ -1587,18 +1602,19 @@ fn resolve_service_entities(
 ) -> Result<serde_json::Value> {
     match data {
         serde_json::Value::Array(arr) => {
-            let resolved_items = resolve_entity_array(arr, &config.entity_key_fields, &config.merge_strategy)?;
+            let resolved_items =
+                resolve_entity_array(arr, &config.entity_key_fields, &config.merge_strategy)?;
             Ok(serde_json::Value::Array(resolved_items))
         }
         serde_json::Value::Object(obj) => {
             let mut resolved_obj = obj.clone();
-            
+
             // Recursively resolve nested arrays and objects
             for (key, value) in obj {
                 let resolved_value = resolve_service_entities(value, config)?;
                 resolved_obj.insert(key.clone(), resolved_value);
             }
-            
+
             Ok(serde_json::Value::Object(resolved_obj))
         }
         _ => Ok(data.clone()),
@@ -1614,14 +1630,17 @@ fn resolve_entity_array(
     if key_fields.is_empty() {
         return Ok(arr.to_vec());
     }
-    
+
     let mut entity_groups: HashMap<String, Vec<serde_json::Value>> = HashMap::new();
-    
+
     for item in arr {
         let entity_key = compute_json_entity_key(item, key_fields);
-        entity_groups.entry(entity_key).or_default().push(item.clone());
+        entity_groups
+            .entry(entity_key)
+            .or_default()
+            .push(item.clone());
     }
-    
+
     let mut resolved_entities = Vec::new();
     for (_, group) in entity_groups {
         if group.len() == 1 {
@@ -1631,14 +1650,14 @@ fn resolve_entity_array(
             resolved_entities.push(merged_entity);
         }
     }
-    
+
     Ok(resolved_entities)
 }
 
 /// Compute entity key from JSON object
 fn compute_json_entity_key(item: &serde_json::Value, key_fields: &[String]) -> String {
     let mut key_parts = Vec::new();
-    
+
     if let serde_json::Value::Object(obj) = item {
         for field in key_fields {
             if let Some(value) = obj.get(field) {
@@ -1648,7 +1667,7 @@ fn compute_json_entity_key(item: &serde_json::Value, key_fields: &[String]) -> S
             }
         }
     }
-    
+
     key_parts.join("|")
 }
 
@@ -1660,13 +1679,13 @@ fn merge_json_entities(
     if entities.is_empty() {
         return Ok(serde_json::Value::Null);
     }
-    
+
     if entities.len() == 1 {
         return Ok(entities[0].clone());
     }
-    
+
     let mut merged = serde_json::Map::new();
-    
+
     // Collect all keys from all entities
     let mut all_keys = HashSet::new();
     for entity in entities {
@@ -1676,27 +1695,23 @@ fn merge_json_entities(
             }
         }
     }
-    
+
     // Merge each field according to strategy
     for key in all_keys {
         let values: Vec<&serde_json::Value> = entities
             .iter()
             .filter_map(|e| e.as_object().and_then(|obj| obj.get(&key)))
             .collect();
-        
+
         if values.is_empty() {
             continue;
         }
-        
+
         let merged_value = match merge_strategy {
             MergeStrategy::PreferFirst => values[0].clone(),
             MergeStrategy::PreferLast => values[values.len() - 1].clone(),
             MergeStrategy::PreferNonNull => {
-                (*values
-                    .iter()
-                    .find(|v| !v.is_null())
-                    .unwrap_or(&values[0]))
-                    .clone()
+                (*values.iter().find(|v| !v.is_null()).unwrap_or(&values[0])).clone()
             }
             MergeStrategy::Concatenate => {
                 if values.iter().all(|v| v.is_string()) {
@@ -1719,10 +1734,10 @@ fn merge_json_entities(
                 }
             }
         };
-        
+
         merged.insert(key, merged_value);
     }
-    
+
     Ok(serde_json::Value::Object(merged))
 }
 
@@ -1731,38 +1746,43 @@ pub fn perform_intelligent_result_stitching(
     results: &[QueryResultData],
     query_fragment: &str,
 ) -> Result<QueryResultData> {
-    debug!("Performing intelligent result stitching on {} results", results.len());
-    
+    debug!(
+        "Performing intelligent result stitching on {} results",
+        results.len()
+    );
+
     if results.is_empty() {
         return Err(anyhow!("No results to stitch"));
     }
-    
+
     if results.len() == 1 {
         return Ok(results[0].clone());
     }
-    
+
     // Determine stitching strategy based on result types
     let stitching_strategy = determine_stitching_strategy(results, query_fragment);
-    
+
     match stitching_strategy {
         StitchingStrategy::SparqlUnion => stitch_sparql_results_union(results),
         StitchingStrategy::SparqlJoin => stitch_sparql_results_join(results),
         StitchingStrategy::GraphQLMerge => stitch_graphql_results_merge(results),
         StitchingStrategy::GraphQLNested => stitch_graphql_results_nested(results, query_fragment),
         StitchingStrategy::ServiceMerge => stitch_service_results_merge(results),
-        StitchingStrategy::HeterogeneousStitch => stitch_heterogeneous_results(results, query_fragment),
+        StitchingStrategy::HeterogeneousStitch => {
+            stitch_heterogeneous_results(results, query_fragment)
+        }
     }
 }
 
 /// Result stitching strategies
 #[derive(Debug, Clone, PartialEq)]
 enum StitchingStrategy {
-    SparqlUnion,          // Union SPARQL results
-    SparqlJoin,           // Join SPARQL results on common variables
-    GraphQLMerge,         // Merge GraphQL responses by combining data fields
-    GraphQLNested,        // Create nested GraphQL structure
-    ServiceMerge,         // Merge service results as JSON
-    HeterogeneousStitch,  // Stitch different result types together
+    SparqlUnion,         // Union SPARQL results
+    SparqlJoin,          // Join SPARQL results on common variables
+    GraphQLMerge,        // Merge GraphQL responses by combining data fields
+    GraphQLNested,       // Create nested GraphQL structure
+    ServiceMerge,        // Merge service results as JSON
+    HeterogeneousStitch, // Stitch different result types together
 }
 
 /// Determine the best stitching strategy based on result types and query
@@ -1771,10 +1791,19 @@ fn determine_stitching_strategy(
     query_fragment: &str,
 ) -> StitchingStrategy {
     // Count result types
-    let sparql_count = results.iter().filter(|r| matches!(r, QueryResultData::Sparql(_))).count();
-    let graphql_count = results.iter().filter(|r| matches!(r, QueryResultData::GraphQL(_))).count();
-    let service_count = results.iter().filter(|r| matches!(r, QueryResultData::ServiceResult(_))).count();
-    
+    let sparql_count = results
+        .iter()
+        .filter(|r| matches!(r, QueryResultData::Sparql(_)))
+        .count();
+    let graphql_count = results
+        .iter()
+        .filter(|r| matches!(r, QueryResultData::GraphQL(_)))
+        .count();
+    let service_count = results
+        .iter()
+        .filter(|r| matches!(r, QueryResultData::ServiceResult(_)))
+        .count();
+
     // Determine strategy based on result type homogeneity
     if sparql_count == results.len() {
         // All SPARQL results
@@ -1804,10 +1833,10 @@ fn determine_stitching_strategy(
 /// Stitch SPARQL results using UNION strategy
 fn stitch_sparql_results_union(results: &[QueryResultData]) -> Result<QueryResultData> {
     debug!("Stitching SPARQL results using UNION strategy");
-    
+
     let mut all_bindings = Vec::new();
     let mut all_vars = Vec::new();
-    
+
     for result in results {
         if let QueryResultData::Sparql(sparql_result) = result {
             // Collect variables (use the union of all variables)
@@ -1816,84 +1845,88 @@ fn stitch_sparql_results_union(results: &[QueryResultData]) -> Result<QueryResul
                     all_vars.push(var.clone());
                 }
             }
-            
+
             // Add all bindings
             all_bindings.extend(sparql_result.results.bindings.clone());
         }
     }
-    
+
     let stitched_result = SparqlResults {
         head: SparqlHead { vars: all_vars },
         results: SparqlResultsData {
             bindings: all_bindings,
         },
     };
-    
+
     Ok(QueryResultData::Sparql(stitched_result))
 }
 
 /// Stitch SPARQL results using JOIN strategy
 fn stitch_sparql_results_join(results: &[QueryResultData]) -> Result<QueryResultData> {
     debug!("Stitching SPARQL results using JOIN strategy");
-    
+
     if results.len() < 2 {
         return Ok(results[0].clone());
     }
-    
+
     // Start with the first result and join with subsequent results
     let mut current_result = match &results[0] {
         QueryResultData::Sparql(sparql_result) => sparql_result.clone(),
         _ => return Err(anyhow!("Expected SPARQL result for JOIN stitching")),
     };
-    
+
     for result in results.iter().skip(1) {
         if let QueryResultData::Sparql(sparql_result) = result {
             current_result = perform_sparql_join(&current_result, sparql_result)?;
         }
     }
-    
+
     Ok(QueryResultData::Sparql(current_result))
 }
 
 /// Stitch GraphQL results using MERGE strategy
 fn stitch_graphql_results_merge(results: &[QueryResultData]) -> Result<QueryResultData> {
     debug!("Stitching GraphQL results using MERGE strategy");
-    
+
     let mut current_response = match &results[0] {
         QueryResultData::GraphQL(graphql_response) => graphql_response.clone(),
         _ => return Err(anyhow!("Expected GraphQL result for MERGE stitching")),
     };
-    
+
     for result in results.iter().skip(1) {
         if let QueryResultData::GraphQL(graphql_response) = result {
             current_response = perform_graphql_join(&current_response, graphql_response)?;
         }
     }
-    
+
     Ok(QueryResultData::GraphQL(current_response))
 }
 
 /// Stitch GraphQL results using NESTED strategy
-fn stitch_graphql_results_nested(results: &[QueryResultData], query_fragment: &str) -> Result<QueryResultData> {
+fn stitch_graphql_results_nested(
+    results: &[QueryResultData],
+    query_fragment: &str,
+) -> Result<QueryResultData> {
     debug!("Stitching GraphQL results using NESTED strategy");
-    
+
     let mut nested_data = serde_json::Map::new();
     let mut combined_errors = Vec::new();
     let mut combined_extensions = serde_json::Map::new();
-    
+
     // Create nested structure based on query fragment
     let nested_fields = extract_nested_field_names(query_fragment);
-    
+
     for (i, result) in results.iter().enumerate() {
         if let QueryResultData::GraphQL(graphql_response) = result {
             // Use extracted field name or generate one
-            let field_name = nested_fields.get(i)
+            let field_name = nested_fields
+                .get(i)
                 .cloned()
                 .unwrap_or_else(|| format!("result{i}"));
-            
+
             nested_data.insert(field_name, graphql_response.data.clone());
             combined_errors.extend(graphql_response.errors.clone());
-            
+
             if let Some(extensions) = &graphql_response.extensions {
                 if let serde_json::Value::Object(ext_obj) = extensions {
                     for (key, value) in ext_obj {
@@ -1903,7 +1936,7 @@ fn stitch_graphql_results_nested(results: &[QueryResultData], query_fragment: &s
             }
         }
     }
-    
+
     let stitched_response = GraphQLResponse {
         data: serde_json::Value::Object(nested_data),
         errors: combined_errors,
@@ -1913,37 +1946,40 @@ fn stitch_graphql_results_nested(results: &[QueryResultData], query_fragment: &s
             Some(serde_json::Value::Object(combined_extensions))
         },
     };
-    
+
     Ok(QueryResultData::GraphQL(stitched_response))
 }
 
 /// Stitch service results using MERGE strategy
 fn stitch_service_results_merge(results: &[QueryResultData]) -> Result<QueryResultData> {
     debug!("Stitching service results using MERGE strategy");
-    
+
     let mut merged_result = serde_json::Value::Object(serde_json::Map::new());
-    
+
     for result in results {
         if let QueryResultData::ServiceResult(service_result) = result {
             merged_result = merge_json_values(&merged_result, service_result)?;
         }
     }
-    
+
     Ok(QueryResultData::ServiceResult(merged_result))
 }
 
 /// Stitch heterogeneous results (different types)
-fn stitch_heterogeneous_results(results: &[QueryResultData], query_fragment: &str) -> Result<QueryResultData> {
+fn stitch_heterogeneous_results(
+    results: &[QueryResultData],
+    query_fragment: &str,
+) -> Result<QueryResultData> {
     debug!("Stitching heterogeneous results");
-    
+
     // Convert all results to a common JSON format for stitching
     let mut converted_results = Vec::new();
-    
+
     for result in results {
         let json_result = convert_result_to_json(result)?;
         converted_results.push(json_result);
     }
-    
+
     // Merge all JSON results
     let mut merged = serde_json::Value::Object(serde_json::Map::new());
     for (i, json_result) in converted_results.iter().enumerate() {
@@ -1952,7 +1988,7 @@ fn stitch_heterogeneous_results(results: &[QueryResultData], query_fragment: &st
             obj.insert(field_name, json_result.clone());
         }
     }
-    
+
     // Determine the best result type to return based on query fragment
     if query_fragment.contains("SELECT") || query_fragment.contains("sparql") {
         // Convert back to SPARQL if possible
@@ -1973,15 +2009,9 @@ fn stitch_heterogeneous_results(results: &[QueryResultData], query_fragment: &st
 /// Convert any result type to JSON for heterogeneous stitching
 fn convert_result_to_json(result: &QueryResultData) -> Result<serde_json::Value> {
     match result {
-        QueryResultData::Sparql(sparql_result) => {
-            Ok(serde_json::to_value(sparql_result)?)
-        }
-        QueryResultData::GraphQL(graphql_response) => {
-            Ok(serde_json::to_value(graphql_response)?)
-        }
-        QueryResultData::ServiceResult(service_result) => {
-            Ok(service_result.clone())
-        }
+        QueryResultData::Sparql(sparql_result) => Ok(serde_json::to_value(sparql_result)?),
+        QueryResultData::GraphQL(graphql_response) => Ok(serde_json::to_value(graphql_response)?),
+        QueryResultData::ServiceResult(service_result) => Ok(service_result.clone()),
     }
 }
 
@@ -1998,25 +2028,26 @@ fn convert_json_to_sparql_result(json: &serde_json::Value) -> Result<QueryResult
                 value: json.to_string(),
                 datatype: None,
                 lang: None,
+                quoted_triple: None,
             },
         );
         map
     };
-    
+
     let sparql_result = SparqlResults {
         head: SparqlHead { vars },
         results: SparqlResultsData {
             bindings: vec![binding],
         },
     };
-    
+
     Ok(QueryResultData::Sparql(sparql_result))
 }
 
 /// Extract nested field names from query fragment
 fn extract_nested_field_names(query_fragment: &str) -> Vec<String> {
     let mut field_names = Vec::new();
-    
+
     // Look for field specifications in the query fragment
     // This is a simplified parser - would be more sophisticated in practice
     if let Some(start) = query_fragment.find("fields:") {
@@ -2031,6 +2062,6 @@ fn extract_nested_field_names(query_fragment: &str) -> Vec<String> {
             }
         }
     }
-    
+
     field_names
 }

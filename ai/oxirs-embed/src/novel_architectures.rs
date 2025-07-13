@@ -74,7 +74,6 @@ pub struct ArchitectureParams {
     pub quantum_params: QuantumParams,
 }
 
-
 /// Graph Transformer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphTransformerParams {
@@ -541,7 +540,6 @@ pub struct GeometricConfig {
     /// Parallel transport
     pub parallel_transport: ParallelTransport,
 }
-
 
 /// Manifold learning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1278,21 +1276,51 @@ impl EmbeddingModel for NovelArchitectureModel {
         match &self.config.architecture {
             ArchitectureType::HyperbolicEmbedding => {
                 // Use hyperbolic distance for scoring
-                let subject_arr =
-                    Array1::from_vec(subject_emb.values.iter().copied().map(|x| x as f64).collect());
-                let object_arr =
-                    Array1::from_vec(object_emb.values.iter().copied().map(|x| x as f64).collect());
+                let subject_arr = Array1::from_vec(
+                    subject_emb
+                        .values
+                        .iter()
+                        .copied()
+                        .map(|x| x as f64)
+                        .collect(),
+                );
+                let object_arr = Array1::from_vec(
+                    object_emb
+                        .values
+                        .iter()
+                        .copied()
+                        .map(|x| x as f64)
+                        .collect(),
+                );
                 let distance = self.poincare_distance(&subject_arr, &object_arr);
                 Ok(-distance) // Negative distance as score
             }
             _ => {
                 // Standard TransE-like scoring
-                let subject_arr =
-                    Array1::from_vec(subject_emb.values.iter().copied().map(|x| x as f64).collect());
-                let predicate_arr =
-                    Array1::from_vec(predicate_emb.values.iter().copied().map(|x| x as f64).collect());
-                let object_arr =
-                    Array1::from_vec(object_emb.values.iter().copied().map(|x| x as f64).collect());
+                let subject_arr = Array1::from_vec(
+                    subject_emb
+                        .values
+                        .iter()
+                        .copied()
+                        .map(|x| x as f64)
+                        .collect(),
+                );
+                let predicate_arr = Array1::from_vec(
+                    predicate_emb
+                        .values
+                        .iter()
+                        .copied()
+                        .map(|x| x as f64)
+                        .collect(),
+                );
+                let object_arr = Array1::from_vec(
+                    object_emb
+                        .values
+                        .iter()
+                        .copied()
+                        .map(|x| x as f64)
+                        .collect(),
+                );
 
                 let predicted = &subject_arr + &predicate_arr;
                 let diff = &predicted - &object_arr;

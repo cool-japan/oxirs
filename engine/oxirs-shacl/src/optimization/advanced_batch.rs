@@ -4,6 +4,8 @@
 //! performance for large-scale SHACL validation by grouping similar constraints,
 //! optimizing memory usage, and providing intelligent scheduling.
 
+#![allow(dead_code)]
+
 use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
     optimization::core::ConstraintCache,
@@ -651,10 +653,12 @@ mod tests {
     fn test_constraint_grouping_key() {
         let config = AdvancedBatchConfig::default();
         let cache = Arc::new(ConstraintCache::default());
-        let _validator = AdvancedBatchValidator::new(config, cache);
+        let validator = AdvancedBatchValidator::new(config, cache);
 
         // Test would create actual constraints and contexts
         // This is a placeholder test structure
-        assert!(true);
+        // Verify that the validator is properly configured
+        assert!(validator.config.max_batch_size > 0);
+        assert!(validator.config.target_batch_size > 0);
     }
 }

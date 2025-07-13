@@ -39,10 +39,12 @@ pub use backend_optimizer::{
     OptimizationDecision, OptimizationStats, OptimizerConfig, PatternType, WorkloadPattern,
 };
 pub use bridge::{
-    BridgeInfo, BridgeStatistics, BridgeType, ExternalMessage, ExternalSystemConfig, ExternalSystemType,
-    MessageBridgeManager, MessageTransformer, RoutingRule,
+    BridgeInfo, BridgeStatistics, BridgeType, ExternalMessage, ExternalSystemConfig,
+    ExternalSystemType, MessageBridgeManager, MessageTransformer, RoutingRule,
 };
-pub use circuit_breaker::{CircuitBreakerError, CircuitBreakerMetrics, FailureType, SharedCircuitBreakerExt};
+pub use circuit_breaker::{
+    CircuitBreakerError, CircuitBreakerMetrics, FailureType, SharedCircuitBreakerExt,
+};
 pub use connection_pool::{
     ConnectionFactory, ConnectionPool, DetailedPoolMetrics, LoadBalancingStrategy, PoolConfig,
     PoolStats, PoolStatus,
@@ -70,15 +72,10 @@ pub use multi_region_replication::{
 };
 pub use patch::{PatchParser, PatchSerializer};
 pub use performance_optimizer::{
-    ActivationFunction, AdaptiveBatcher, AggregationFunction, AutoTuner, BandwidthMeasurement,
-    BandwidthTracker, BatchPerformancePoint, BatchSizePredictor, BatchingStats, CompressionStats,
-    EnhancedMLConfig, EnhancedMLPredictor, FeatureEngineer, FeatureScaler, InteractionFeatures,
-    MLTrainingPoint, MemoryPool, MemoryPoolStats, ModelPerformanceMetrics, ModelSelector,
-    ModelType, NetworkAwareCompressor, ParallelEventProcessor,
-    PerformanceConfig as OptimizerPerformanceConfig, PerformanceDataPoint, PerformancePredictor,
-    PolynomialFeatures, PolynomialRegressor, PredictionModel, PredictionStats, ProcessingResult,
-    ProcessingStats, ProcessingStatus, SimpleNeuralNetwork, StatisticalFeatures, TemporalFeatures,
-    TuningDecision, ZeroCopyEvent,
+    AdaptiveBatcher, AggregationFunction, AutoTuner, BatchPerformancePoint, BatchSizePredictor,
+    BatchingStats, EnhancedMLConfig, MemoryPool, MemoryPoolStats,
+    PerformanceConfig as OptimizerPerformanceConfig, ProcessingResult, ProcessingStats,
+    ProcessingStatus, TuningDecision, ZeroCopyEvent,
 };
 pub use schema_registry::{
     CompatibilityMode, ExternalRegistryConfig, RegistryAuth, SchemaDefinition, SchemaFormat,
@@ -138,7 +135,8 @@ pub use wasm_edge_computing::{
 };
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
-    WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata, WebhookSecurity, WebhookStatistics,
+    WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata, WebhookSecurity,
+    WebhookStatistics,
 };
 
 pub mod backend;
@@ -676,7 +674,7 @@ impl StreamProducer {
             StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
-            } => BackendProducer::Memory(MemoryProducer::with_topic(config.topic.clone()))
+            } => BackendProducer::Memory(MemoryProducer::with_topic(config.topic.clone())),
         };
 
         let stats = Arc::new(RwLock::new(ProducerStats {
@@ -1244,7 +1242,7 @@ impl StreamConsumer {
             StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
-            } => BackendConsumer::Memory(MemoryConsumer::with_topic(config.topic.clone()))
+            } => BackendConsumer::Memory(MemoryConsumer::with_topic(config.topic.clone())),
         };
 
         let stats = Arc::new(RwLock::new(ConsumerStats {
@@ -1452,11 +1450,17 @@ impl StreamConsumer {
                 Ok(())
             }
             #[cfg(feature = "redis")]
-            BackendConsumer::Redis(_) => Err(anyhow!("Reset position not supported for Redis backend")),
+            BackendConsumer::Redis(_) => {
+                Err(anyhow!("Reset position not supported for Redis backend"))
+            }
             #[cfg(feature = "kinesis")]
-            BackendConsumer::Kinesis(_) => Err(anyhow!("Reset position not supported for Kinesis backend")),
+            BackendConsumer::Kinesis(_) => {
+                Err(anyhow!("Reset position not supported for Kinesis backend"))
+            }
             #[cfg(feature = "pulsar")]
-            BackendConsumer::Pulsar(_) => Err(anyhow!("Reset position not supported for Pulsar backend")),
+            BackendConsumer::Pulsar(_) => {
+                Err(anyhow!("Reset position not supported for Pulsar backend"))
+            }
         }
     }
 

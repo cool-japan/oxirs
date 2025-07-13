@@ -256,7 +256,7 @@ impl NTriplesParser {
             )
         })?;
 
-        let literal_value = input[1..end_quote].to_string();
+        let literal_value = self.unescape_literal(&input[1..end_quote], line_number, start_pos)?;
         let mut pos_after_quote = start_pos + end_quote + 1;
 
         // Check for language tag or datatype
@@ -305,6 +305,91 @@ impl NTriplesParser {
             // Simple literal
             Ok((NTriplesTerm::Literal(literal_value), pos_after_quote))
         }
+    }
+
+    /// Unescape special characters in literal values
+    fn unescape_literal(
+        &self,
+        value: &str,
+        line_number: usize,
+        start_pos: usize,
+    ) -> ParseResult<String> {
+        let mut result = String::new();
+        let mut chars = value.chars();
+
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                match chars.next() {
+                    Some('"') => result.push('"'),
+                    Some('\\') => result.push('\\'),
+                    Some('n') => result.push('\n'),
+                    Some('r') => result.push('\r'),
+                    Some('t') => result.push('\t'),
+                    Some('u') => {
+                        // Parse \uHHHH Unicode escape
+                        let hex_chars: String = chars.by_ref().take(4).collect();
+                        if hex_chars.len() != 4 {
+                            return Err(RdfParseError::syntax_at(
+                                "Invalid Unicode escape sequence \\uHHHH - expected 4 hex digits",
+                                TextPosition::new(line_number, start_pos, 0),
+                            ));
+                        }
+                        let code_point = u32::from_str_radix(&hex_chars, 16).map_err(|_| {
+                            RdfParseError::syntax_at(
+                                "Invalid hex digits in Unicode escape sequence",
+                                TextPosition::new(line_number, start_pos, 0),
+                            )
+                        })?;
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            RdfParseError::syntax_at(
+                                "Invalid Unicode code point",
+                                TextPosition::new(line_number, start_pos, 0),
+                            )
+                        })?;
+                        result.push(unicode_char);
+                    }
+                    Some('U') => {
+                        // Parse \UHHHHHHHH Unicode escape
+                        let hex_chars: String = chars.by_ref().take(8).collect();
+                        if hex_chars.len() != 8 {
+                            return Err(RdfParseError::syntax_at(
+                                "Invalid Unicode escape sequence \\UHHHHHHHH - expected 8 hex digits",
+                                TextPosition::new(line_number, start_pos, 0),
+                            ));
+                        }
+                        let code_point = u32::from_str_radix(&hex_chars, 16).map_err(|_| {
+                            RdfParseError::syntax_at(
+                                "Invalid hex digits in Unicode escape sequence",
+                                TextPosition::new(line_number, start_pos, 0),
+                            )
+                        })?;
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            RdfParseError::syntax_at(
+                                "Invalid Unicode code point",
+                                TextPosition::new(line_number, start_pos, 0),
+                            )
+                        })?;
+                        result.push(unicode_char);
+                    }
+                    Some(other) => {
+                        return Err(RdfParseError::syntax_at(
+                            format!("Invalid escape sequence \\{other}"),
+                            TextPosition::new(line_number, start_pos, 0),
+                        ));
+                    }
+                    None => {
+                        return Err(RdfParseError::syntax_at(
+                            "Incomplete escape sequence at end of literal",
+                            TextPosition::new(line_number, start_pos, 0),
+                        ));
+                    }
+                }
+            } else {
+                result.push(c);
+            }
+        }
+
+        Ok(result)
     }
 
     /// Convert parsed term to Subject
@@ -603,6 +688,14 @@ impl<W: Write> WriterNTriplesSerializer<W> {
                 '\n' => "\\n".to_string(),
                 '\r' => "\\r".to_string(),
                 '\t' => "\\t".to_string(),
+                c if !('\u{0020}'..='\u{007E}').contains(&c) => {
+                    // Escape non-ASCII and control characters
+                    if (c as u32) <= 0xFFFF {
+                        format!("\\u{:04X}", c as u32)
+                    } else {
+                        format!("\\U{:08X}", c as u32)
+                    }
+                }
                 _ => c.to_string(),
             })
             .collect()
@@ -741,5 +834,94 @@ mod tests {
         assert!(output.contains("<http://example.org/p>"));
         assert!(output.contains("\"test\""));
         assert!(output.ends_with(" .\n"));
+    }
+
+    #[test]
+    fn test_unicode_escape_parsing() {
+        let parser = NTriplesParser::new();
+
+        // Test \uHHHH escape sequence (Euro symbol)
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> "Euro: \u20AC" ."#;
+        let result = parser.parse_str(ntriples);
+        assert!(result.is_ok());
+        let triples = result.unwrap();
+        assert_eq!(triples.len(), 1);
+        if let crate::model::term::Object::Literal(lit) = triples[0].object() {
+            assert_eq!(lit.value(), "Euro: €");
+        } else {
+            panic!("Expected literal object");
+        }
+
+        // Test \UHHHHHHHH escape sequence (Emoji)
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> "Smile: \U0001F600" ."#;
+        let result = parser.parse_str(ntriples);
+        assert!(result.is_ok());
+        let triples = result.unwrap();
+        assert_eq!(triples.len(), 1);
+        if let crate::model::term::Object::Literal(lit) = triples[0].object() {
+            assert_eq!(lit.value(), "Smile: 😀");
+        } else {
+            panic!("Expected literal object");
+        }
+    }
+
+    #[test]
+    fn test_escape_sequence_parsing() {
+        let parser = NTriplesParser::new();
+
+        // Test all basic escape sequences
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> "Line 1\nLine 2\tTabbed\rCarriage Return\\Backslash\"Quote" ."#;
+        let result = parser.parse_str(ntriples);
+        assert!(result.is_ok());
+        let triples = result.unwrap();
+        assert_eq!(triples.len(), 1);
+        if let crate::model::term::Object::Literal(lit) = triples[0].object() {
+            assert_eq!(
+                lit.value(),
+                "Line 1\nLine 2\tTabbed\rCarriage Return\\Backslash\"Quote"
+            );
+        } else {
+            panic!("Expected literal object");
+        }
+    }
+
+    #[test]
+    fn test_unicode_escape_serialization() {
+        let serializer = NTriplesSerializer::new();
+
+        // Create a triple with Unicode characters
+        let subject = NamedNode::new("http://example.org/s").unwrap();
+        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let object = Literal::new("Hello 世界 🌍");
+        let triple = Triple::new(subject, predicate, object);
+
+        let result = serializer.serialize_to_string(&[triple]);
+        assert!(result.is_ok());
+        let output = result.unwrap();
+
+        // Should contain Unicode escape sequences for non-ASCII characters
+        assert!(output.contains("\\u4E16")); // 世
+        assert!(output.contains("\\u754C")); // 界
+        assert!(output.contains("\\U0001F30D")); // 🌍
+    }
+
+    #[test]
+    fn test_invalid_unicode_escapes() {
+        let parser = NTriplesParser::new();
+
+        // Test invalid \u sequence (too few digits)
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> "Invalid: \u123" ."#;
+        let result = parser.parse_str(ntriples);
+        assert!(result.is_err());
+
+        // Test invalid \U sequence (too few digits)
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> "Invalid: \U1234567" ."#;
+        let result = parser.parse_str(ntriples);
+        assert!(result.is_err());
+
+        // Test invalid hex digits
+        let ntriples = r#"<http://example.org/s> <http://example.org/p> "Invalid: \uGHIJ" ."#;
+        let result = parser.parse_str(ntriples);
+        assert!(result.is_err());
     }
 }

@@ -21,6 +21,12 @@ use std::thread;
 
 use tracing::{debug, span, Level};
 
+// Compression libraries
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use lz4_flex::frame::FrameEncoder;
+use zstd::stream::write::Encoder as ZstdEncoder;
+
 use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarConfig, StarError, StarResult};
@@ -299,10 +305,23 @@ impl<W: Write> StreamingSerializer<W> {
                     let object = Self::format_term_ntriples(&triple.object)?;
                     format!("{subject} {predicate} {object} <> .\n") // <> represents default graph
                 }
-                _ => {
-                    return Err(StarError::serialization_error(format!(
-                        "Streaming not yet implemented for format {format:?}"
-                    )))
+                StarFormat::JsonLdStar => {
+                    // JSON-LD-star format - streaming as individual objects
+                    let subject_value =
+                        StarSerializer::term_to_jsonld_value_static(&triple.subject)?;
+                    let predicate_str =
+                        StarSerializer::term_to_jsonld_predicate_static(&triple.predicate)?;
+                    let object_value = StarSerializer::term_to_jsonld_value_static(&triple.object)?;
+
+                    let mut triple_obj = serde_json::Map::new();
+                    triple_obj.insert("@id".to_string(), subject_value);
+                    triple_obj.insert(predicate_str, object_value);
+
+                    let json_str = serde_json::to_string(&serde_json::Value::Object(triple_obj))
+                        .map_err(|e| {
+                            StarError::serialization_error(format!("JSON serialization error: {e}"))
+                        })?;
+                    format!("{json_str}\n")
                 }
             };
             self.write_buffered(line.as_bytes())?;
@@ -502,10 +521,23 @@ impl ParallelSerializer {
                         Self::format_term_ntriples(&triple.object)?
                     )
                 }
-                _ => {
-                    return Err(StarError::serialization_error(format!(
-                        "Parallel serialization not yet implemented for format {format:?}"
-                    )))
+                StarFormat::JsonLdStar => {
+                    // JSON-LD-star format - streaming as individual objects
+                    let subject_value =
+                        StarSerializer::term_to_jsonld_value_static(&triple.subject)?;
+                    let predicate_str =
+                        StarSerializer::term_to_jsonld_predicate_static(&triple.predicate)?;
+                    let object_value = StarSerializer::term_to_jsonld_value_static(&triple.object)?;
+
+                    let mut triple_obj = serde_json::Map::new();
+                    triple_obj.insert("@id".to_string(), subject_value);
+                    triple_obj.insert(predicate_str, object_value);
+
+                    let json_str = serde_json::to_string(&serde_json::Value::Object(triple_obj))
+                        .map_err(|e| {
+                            StarError::serialization_error(format!("JSON serialization error: {e}"))
+                        })?;
+                    format!("{json_str}\n")
                 }
             };
             output.extend_from_slice(line.as_bytes());
@@ -653,19 +685,21 @@ impl StarSerializer {
         match compression {
             CompressionType::None => Ok(Box::new(writer)),
             CompressionType::Gzip => {
-                // Placeholder - would use flate2 crate in full implementation
-                debug!("Gzip compression requested but not yet implemented");
-                Ok(Box::new(writer))
+                debug!("Creating Gzip compressed writer");
+                let encoder = GzEncoder::new(writer, Compression::default());
+                Ok(Box::new(encoder))
             }
             CompressionType::Zstd => {
-                // Placeholder - would use zstd crate in full implementation
-                debug!("Zstd compression requested but not yet implemented");
-                Ok(Box::new(writer))
+                debug!("Creating Zstd compressed writer");
+                let encoder = ZstdEncoder::new(writer, 3).map_err(|e| {
+                    StarError::serialization_error(format!("Zstd encoder error: {e}"))
+                })?;
+                Ok(Box::new(encoder))
             }
             CompressionType::Lz4 => {
-                // Placeholder - would use lz4 crate in full implementation
-                debug!("LZ4 compression requested but not yet implemented");
-                Ok(Box::new(writer))
+                debug!("Creating LZ4 compressed writer");
+                let encoder = FrameEncoder::new(writer);
+                Ok(Box::new(encoder))
             }
         }
     }
@@ -1148,9 +1182,7 @@ impl StarSerializer {
         let predicate_str = self.term_to_jsonld_predicate(&quad.predicate)?;
         let object_value = self.term_to_jsonld_value(&quad.object)?;
 
-        let subject_props = subjects
-            .entry(subject_str)
-            .or_default();
+        let subject_props = subjects.entry(subject_str).or_default();
         let prop_values = subject_props.entry(predicate_str).or_default();
         prop_values.push(object_value);
 
@@ -1380,6 +1412,93 @@ impl StarSerializer {
             Ok(context.compress_iri(graph_name))
         }
     }
+
+    /// Static method for converting StarTerm to JSON-LD predicate format
+    pub fn term_to_jsonld_predicate_static(term: &StarTerm) -> StarResult<String> {
+        match term {
+            StarTerm::NamedNode(node) => Ok(node.iri.clone()),
+            _ => Err(StarError::serialization_error(
+                "Only named nodes can be used as predicates in JSON-LD".to_string(),
+            )),
+        }
+    }
+
+    /// Static method for converting StarTerm to JSON-LD value format  
+    pub fn term_to_jsonld_value_static(term: &StarTerm) -> StarResult<serde_json::Value> {
+        match term {
+            StarTerm::NamedNode(node) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert(
+                    "@id".to_string(),
+                    serde_json::Value::String(node.iri.clone()),
+                );
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::BlankNode(node) => {
+                let mut obj = serde_json::Map::new();
+                obj.insert(
+                    "@id".to_string(),
+                    serde_json::Value::String(format!("_:{}", node.id)),
+                );
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::Literal(literal) => {
+                if let Some(ref lang) = literal.language {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(
+                        "@value".to_string(),
+                        serde_json::Value::String(literal.value.clone()),
+                    );
+                    obj.insert(
+                        "@language".to_string(),
+                        serde_json::Value::String(lang.clone()),
+                    );
+                    Ok(serde_json::Value::Object(obj))
+                } else if let Some(ref datatype) = literal.datatype {
+                    let mut obj = serde_json::Map::new();
+                    obj.insert(
+                        "@value".to_string(),
+                        serde_json::Value::String(literal.value.clone()),
+                    );
+                    obj.insert(
+                        "@type".to_string(),
+                        serde_json::Value::String(datatype.iri.clone()),
+                    );
+                    Ok(serde_json::Value::Object(obj))
+                } else {
+                    // Plain literal defaults to string
+                    Ok(serde_json::Value::String(literal.value.clone()))
+                }
+            }
+            StarTerm::QuotedTriple(triple) => {
+                // JSON-LD-star representation of quoted triples as annotations
+                let mut annotation_obj = serde_json::Map::new();
+                annotation_obj.insert(
+                    "subject".to_string(),
+                    Self::term_to_jsonld_value_static(&triple.subject)?,
+                );
+                annotation_obj.insert(
+                    "predicate".to_string(),
+                    Self::term_to_jsonld_value_static(&triple.predicate)?,
+                );
+                annotation_obj.insert(
+                    "object".to_string(),
+                    Self::term_to_jsonld_value_static(&triple.object)?,
+                );
+
+                let mut obj = serde_json::Map::new();
+                obj.insert(
+                    "@annotation".to_string(),
+                    serde_json::Value::Object(annotation_obj),
+                );
+                Ok(serde_json::Value::Object(obj))
+            }
+            StarTerm::Variable(var) => Err(StarError::serialization_error(format!(
+                "Variables cannot be serialized to JSON-LD: ?{}",
+                var.name
+            ))),
+        }
+    }
 }
 
 impl Default for StarSerializer {
@@ -1436,14 +1555,241 @@ impl StarSerializer {
                 Ok(())
             }
             StarFormat::TrigStar | StarFormat::NQuadsStar => {
-                // TODO: Add quad-specific validation when implemented
-                Ok(())
+                // Validate quad-specific constraints
+                self.validate_quad_constraints(graph, format)
             }
             StarFormat::JsonLdStar => {
                 // JSON-LD-star supports quoted triples as annotations
                 Ok(())
             }
         }
+    }
+
+    /// Validate quad-specific constraints for TriG-star and N-Quads-star formats
+    fn validate_quad_constraints(&self, graph: &StarGraph, format: StarFormat) -> StarResult<()> {
+        match format {
+            StarFormat::NQuadsStar => {
+                // Validate N-Quads-star specific constraints
+                for quad in graph.quads() {
+                    // Validate subject (must be IRI or blank node, can be quoted triple)
+                    match &quad.subject {
+                        StarTerm::NamedNode(_) | StarTerm::BlankNode(_) => {}
+                        StarTerm::QuotedTriple(inner_triple) => {
+                            // Validate the quoted triple structure
+                            self.validate_quoted_triple_structure(inner_triple)?;
+                        }
+                        StarTerm::Literal(_) => {
+                            return Err(StarError::serialization_error(
+                                "N-Quads-star: Literals cannot be subjects in quads".to_string(),
+                            ));
+                        }
+                        StarTerm::Variable(_) => {
+                            return Err(StarError::serialization_error(
+                                "N-Quads-star: Variables cannot be serialized in concrete data"
+                                    .to_string(),
+                            ));
+                        }
+                    }
+
+                    // Validate predicate (must be IRI only)
+                    match &quad.predicate {
+                        StarTerm::NamedNode(_) => {}
+                        _ => {
+                            return Err(StarError::serialization_error(
+                                "N-Quads-star: Predicates must be IRIs".to_string(),
+                            ));
+                        }
+                    }
+
+                    // Validate object (can be any term including quoted triples)
+                    match &quad.object {
+                        StarTerm::QuotedTriple(inner_triple) => {
+                            self.validate_quoted_triple_structure(inner_triple)?;
+                        }
+                        StarTerm::Variable(_) => {
+                            return Err(StarError::serialization_error(
+                                "N-Quads-star: Variables cannot be serialized in concrete data"
+                                    .to_string(),
+                            ));
+                        }
+                        _ => {} // Other terms are valid as objects
+                    }
+
+                    // Validate graph component if present
+                    if let Some(ref graph_term) = quad.graph {
+                        match graph_term {
+                            StarTerm::NamedNode(_) | StarTerm::BlankNode(_) => {}
+                            StarTerm::QuotedTriple(_) => {
+                                return Err(StarError::serialization_error(
+                                    "N-Quads-star: Quoted triples cannot be used as graph names"
+                                        .to_string(),
+                                ));
+                            }
+                            StarTerm::Literal(_) => {
+                                return Err(StarError::serialization_error(
+                                    "N-Quads-star: Literals cannot be used as graph names"
+                                        .to_string(),
+                                ));
+                            }
+                            StarTerm::Variable(_) => {
+                                return Err(StarError::serialization_error(
+                                    "N-Quads-star: Variables cannot be serialized in concrete data"
+                                        .to_string(),
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+            StarFormat::TrigStar => {
+                // Validate TriG-star specific constraints
+
+                // Check that all graph names are valid
+                for graph_name in graph.named_graph_names() {
+                    if graph_name.is_empty() {
+                        return Err(StarError::serialization_error(
+                            "TriG-star: Empty graph names are not allowed".to_string(),
+                        ));
+                    }
+
+                    // Validate that graph name is a valid IRI or blank node identifier
+                    if !graph_name.starts_with("http://")
+                        && !graph_name.starts_with("https://")
+                        && !graph_name.starts_with("_:")
+                        && !graph_name.starts_with("urn:")
+                    {
+                        return Err(StarError::serialization_error(format!(
+                            "TriG-star: Invalid graph name format: {graph_name}"
+                        )));
+                    }
+                }
+
+                // Validate all triples in default and named graphs
+                for triple in graph.triples() {
+                    self.validate_triple_for_trig(triple)?;
+                }
+
+                // Validate triples in named graphs
+                for graph_name in graph.named_graph_names() {
+                    if let Some(named_triples) = graph.named_graph_triples(graph_name) {
+                        for triple in named_triples {
+                            self.validate_triple_for_trig(triple)?;
+                        }
+                    }
+                }
+
+                // Check for excessive graph nesting (TriG typically doesn't support nested graphs)
+                let graph_count = graph.named_graph_names().len();
+                if graph_count > 1000 {
+                    return Err(StarError::serialization_error(
+                        format!("TriG-star: Too many named graphs ({graph_count}), consider using streaming serialization")
+                    ));
+                }
+            }
+            _ => {
+                return Err(StarError::serialization_error(
+                    "Internal error: validate_quad_constraints called for non-quad format"
+                        .to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate a quoted triple structure for proper nesting and term constraints
+    #[allow(clippy::only_used_in_recursion)]
+    fn validate_quoted_triple_structure(&self, triple: &StarTriple) -> StarResult<()> {
+        // Validate subject of quoted triple
+        match &triple.subject {
+            StarTerm::Literal(_) => {
+                return Err(StarError::serialization_error(
+                    "Quoted triple: Literals cannot be subjects".to_string(),
+                ));
+            }
+            StarTerm::Variable(_) => {
+                return Err(StarError::serialization_error(
+                    "Quoted triple: Variables cannot be serialized in concrete data".to_string(),
+                ));
+            }
+            StarTerm::QuotedTriple(nested) => {
+                // Recursively validate nested quoted triples
+                self.validate_quoted_triple_structure(nested)?;
+            }
+            _ => {} // NamedNode and BlankNode are valid
+        }
+
+        // Validate predicate (must be IRI)
+        match &triple.predicate {
+            StarTerm::NamedNode(_) => {}
+            _ => {
+                return Err(StarError::serialization_error(
+                    "Quoted triple: Predicates must be IRIs".to_string(),
+                ));
+            }
+        }
+
+        // Validate object
+        match &triple.object {
+            StarTerm::Variable(_) => {
+                return Err(StarError::serialization_error(
+                    "Quoted triple: Variables cannot be serialized in concrete data".to_string(),
+                ));
+            }
+            StarTerm::QuotedTriple(nested) => {
+                // Recursively validate nested quoted triples
+                self.validate_quoted_triple_structure(nested)?;
+            }
+            _ => {} // All other terms are valid as objects
+        }
+
+        Ok(())
+    }
+
+    /// Validate a triple for TriG-star format constraints
+    fn validate_triple_for_trig(&self, triple: &StarTriple) -> StarResult<()> {
+        // Validate subject
+        match &triple.subject {
+            StarTerm::Literal(_) => {
+                return Err(StarError::serialization_error(
+                    "TriG-star: Literals cannot be subjects".to_string(),
+                ));
+            }
+            StarTerm::Variable(_) => {
+                return Err(StarError::serialization_error(
+                    "TriG-star: Variables cannot be serialized in concrete data".to_string(),
+                ));
+            }
+            StarTerm::QuotedTriple(inner) => {
+                self.validate_quoted_triple_structure(inner)?;
+            }
+            _ => {} // NamedNode and BlankNode are valid
+        }
+
+        // Validate predicate (must be IRI)
+        match &triple.predicate {
+            StarTerm::NamedNode(_) => {}
+            _ => {
+                return Err(StarError::serialization_error(
+                    "TriG-star: Predicates must be IRIs".to_string(),
+                ));
+            }
+        }
+
+        // Validate object
+        match &triple.object {
+            StarTerm::Variable(_) => {
+                return Err(StarError::serialization_error(
+                    "TriG-star: Variables cannot be serialized in concrete data".to_string(),
+                ));
+            }
+            StarTerm::QuotedTriple(inner) => {
+                self.validate_quoted_triple_structure(inner)?;
+            }
+            _ => {} // All other terms are valid as objects
+        }
+
+        Ok(())
     }
 
     /// Serialize a graph to string using the specified format and options
@@ -2052,7 +2398,10 @@ mod tests {
             CompressionType::Zstd,
             CompressionType::Lz4,
         ] {
-            let options = SerializationOptions { compression, ..Default::default() };
+            let options = SerializationOptions {
+                compression,
+                ..Default::default()
+            };
 
             let output = Box::leak(Box::new(Vec::new()));
             let result = serializer.serialize_with_options(
@@ -2113,5 +2462,164 @@ mod tests {
                 "Roundtrip failed for format {format:?}"
             );
         }
+    }
+
+    #[test]
+    fn test_quad_validation() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Create valid quad
+        let valid_quad = StarQuad::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/knows").unwrap(),
+            StarTerm::iri("http://example.org/bob").unwrap(),
+            Some(StarTerm::iri("http://example.org/graph1").unwrap()),
+        );
+        graph.insert_quad(valid_quad).unwrap();
+
+        // Valid quad should pass validation
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::NQuadsStar)
+            .is_ok());
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::TrigStar)
+            .is_ok());
+
+        // Test validation methods directly without going through graph insertion
+        // (since graph insertion itself validates and rejects invalid quads)
+
+        // Test quoted triple validation with invalid subject (literal)
+        let invalid_inner = StarTriple::new(
+            StarTerm::literal("invalid_subject").unwrap(), // Invalid: literal as subject
+            StarTerm::iri("http://example.org/predicate").unwrap(),
+            StarTerm::literal("object").unwrap(),
+        );
+
+        // Test the quoted triple validation directly
+        let result = serializer.validate_quoted_triple_structure(&invalid_inner);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Literals cannot be subjects"));
+
+        // Test quoted triple validation with invalid predicate
+        let invalid_predicate_triple = StarTriple::new(
+            StarTerm::iri("http://example.org/subject").unwrap(),
+            StarTerm::literal("invalid_predicate").unwrap(), // Invalid: literal as predicate
+            StarTerm::literal("object").unwrap(),
+        );
+
+        let result = serializer.validate_quoted_triple_structure(&invalid_predicate_triple);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Predicates must be IRIs"));
+
+        // Test TriG validation directly
+        let invalid_trig_triple = StarTriple::new(
+            StarTerm::variable("invalid_subject").unwrap(), // Invalid: variable in concrete data
+            StarTerm::iri("http://example.org/predicate").unwrap(),
+            StarTerm::literal("object").unwrap(),
+        );
+
+        let result = serializer.validate_triple_for_trig(&invalid_trig_triple);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Variables cannot be serialized"));
+    }
+
+    #[test]
+    fn test_quoted_triple_validation() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Create valid quoted triple
+        let inner_triple = StarTriple::new(
+            StarTerm::iri("http://example.org/alice").unwrap(),
+            StarTerm::iri("http://example.org/says").unwrap(),
+            StarTerm::literal("hello").unwrap(),
+        );
+        let quoted_triple = StarTriple::new(
+            StarTerm::quoted_triple(inner_triple),
+            StarTerm::iri("http://example.org/certainty").unwrap(),
+            StarTerm::literal("0.9").unwrap(),
+        );
+        graph.insert(quoted_triple).unwrap();
+
+        // Should pass validation for all formats
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::TurtleStar)
+            .is_ok());
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::NTriplesStar)
+            .is_ok());
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::TrigStar)
+            .is_ok());
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::NQuadsStar)
+            .is_ok());
+
+        // Test invalid quoted triple with literal as subject
+        let mut invalid_graph = StarGraph::new();
+        let invalid_inner = StarTriple::new(
+            StarTerm::literal("invalid_subject").unwrap(), // Invalid: literal as subject
+            StarTerm::iri("http://example.org/predicate").unwrap(),
+            StarTerm::literal("object").unwrap(),
+        );
+        let invalid_quoted = StarTriple::new(
+            StarTerm::quoted_triple(invalid_inner),
+            StarTerm::iri("http://example.org/certainty").unwrap(),
+            StarTerm::literal("0.9").unwrap(),
+        );
+        invalid_graph.insert(invalid_quoted).unwrap();
+
+        // Should fail validation
+        let result = serializer.validate_for_format(&invalid_graph, StarFormat::NQuadsStar);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Literals cannot be subjects"));
+    }
+
+    #[test]
+    fn test_trig_star_graph_name_validation() {
+        let serializer = StarSerializer::new();
+        let mut graph = StarGraph::new();
+
+        // Add quad with valid graph name
+        let valid_quad = StarQuad::new(
+            StarTerm::iri("http://example.org/subject").unwrap(),
+            StarTerm::iri("http://example.org/predicate").unwrap(),
+            StarTerm::iri("http://example.org/object").unwrap(),
+            Some(StarTerm::iri("http://example.org/valid_graph").unwrap()),
+        );
+        graph.insert_quad(valid_quad).unwrap();
+
+        // Should pass validation
+        assert!(serializer
+            .validate_for_format(&graph, StarFormat::TrigStar)
+            .is_ok());
+
+        // Test with blank node graph name
+        let mut graph_with_bnode = StarGraph::new();
+        let bnode_quad = StarQuad::new(
+            StarTerm::iri("http://example.org/subject").unwrap(),
+            StarTerm::iri("http://example.org/predicate").unwrap(),
+            StarTerm::iri("http://example.org/object").unwrap(),
+            Some(StarTerm::blank_node("graph1").unwrap()),
+        );
+        graph_with_bnode.insert_quad(bnode_quad).unwrap();
+
+        // Should also pass validation (blank nodes are valid graph names)
+        assert!(serializer
+            .validate_for_format(&graph_with_bnode, StarFormat::TrigStar)
+            .is_ok());
     }
 }

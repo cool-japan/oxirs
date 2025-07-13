@@ -313,14 +313,14 @@ pub enum TransitionType {
 
 impl PartialEq<&str> for TransitionType {
     fn eq(&self, other: &&str) -> bool {
-        match (self, *other) {
-            (TransitionType::NewTopic, "new") => true,
-            (TransitionType::TopicShift, "shift") => true,
-            (TransitionType::TopicReturn, "return") => true,
-            (TransitionType::TopicMerge, "merge") => true,
-            (TransitionType::TopicSplit, "split") => true,
-            _ => false,
-        }
+        matches!(
+            (self, *other),
+            (TransitionType::NewTopic, "new")
+                | (TransitionType::TopicShift, "shift")
+                | (TransitionType::TopicReturn, "return")
+                | (TransitionType::TopicMerge, "merge")
+                | (TransitionType::TopicSplit, "split")
+        )
     }
 }
 

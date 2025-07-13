@@ -223,7 +223,7 @@ impl MemoryPattern {
         performance_metrics: PerformanceMetrics,
     ) -> Self {
         Self {
-            id: format!("pattern_{}", Utc::now().timestamp_nanos()),
+            id: format!("pattern_{}", Utc::now().timestamp_nanos_opt().unwrap_or(0)),
             query_pattern,
             execution_strategy,
             performance_metrics,
@@ -627,7 +627,6 @@ impl ConsciousnessProcessor {
             .count() as f64
             / features.patterns.len().max(1) as f64;
 
-        
         (1.0 - complexity_diff) * 0.3 + pattern_overlap * 0.7
     }
 
@@ -858,7 +857,7 @@ impl ConsciousnessProcessor {
         let mut consolidation_count = 0;
 
         // Strengthen important patterns and decay unused ones
-        let current_time = Utc::now();
+        let _current_time = Utc::now();
         for pattern in patterns.values_mut() {
             if pattern.should_consolidate(10.0) {
                 pattern.strength = (pattern.strength * 1.1).min(1.0);

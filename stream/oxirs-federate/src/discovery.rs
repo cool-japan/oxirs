@@ -13,9 +13,13 @@ use std::collections::HashSet;
 use std::time::{Duration, Instant};
 use tracing::{debug, info, warn};
 
-use crate::service::ServiceRegistry;
 use crate::service::ServiceType;
-use crate::{service::ServiceMetadata, FederatedService, ServiceCapability, ServicePerformance};
+use crate::service_registry::ServiceRegistry;
+use crate::{
+    service::AuthCredentials, service::ServiceMetadata, FederatedService, ServiceCapability,
+    ServicePerformance,
+};
+// use crate::service::AuthCredentials;
 
 /// Service discovery manager
 #[derive(Debug)]
@@ -119,11 +123,13 @@ impl ServiceDiscovery {
                 return Ok(Some(FederatedService {
                     id: service_id,
                     name: format!("SPARQL Service at {full_endpoint}"),
-                    endpoint: full_endpoint,
+                    endpoint: full_endpoint.clone(),
                     service_type: ServiceType::Sparql,
                     capabilities,
-                    data_patterns: vec!["*".to_string()], // TODO: Analyze actual patterns
-                    auth: None, // TODO: Detect authentication requirements
+                    data_patterns: self.analyze_sparql_patterns(&full_endpoint).await,
+                    auth: self
+                        .detect_authentication_requirements(&full_endpoint)
+                        .await,
                     metadata,
                     extended_metadata: None,
                     performance,
@@ -159,11 +165,13 @@ impl ServiceDiscovery {
                 return Ok(Some(FederatedService {
                     id: service_id,
                     name: format!("GraphQL Service at {full_endpoint}"),
-                    endpoint: full_endpoint,
+                    endpoint: full_endpoint.clone(),
                     service_type: ServiceType::GraphQL,
                     capabilities,
-                    data_patterns: vec!["*".to_string()], // TODO: Extract from schema
-                    auth: None, // TODO: Detect authentication requirements
+                    data_patterns: self.analyze_graphql_patterns(&schema).await,
+                    auth: self
+                        .detect_authentication_requirements(&full_endpoint)
+                        .await,
                     metadata,
                     extended_metadata: None,
                     performance,
@@ -407,7 +415,7 @@ impl ServiceDiscovery {
     /// Extract GraphQL service metadata from introspection
     async fn extract_graphql_metadata(
         &self,
-        endpoint: &str,
+        _endpoint: &str,
         introspection: &Option<GraphQLIntrospection>,
     ) -> Result<ServiceMetadata> {
         let mut metadata = ServiceMetadata::default();
@@ -500,6 +508,7 @@ impl ServiceDiscovery {
 
         let endpoints: Vec<String> = registry
             .get_all_services()
+            .into_iter()
             .map(|service| service.endpoint.clone())
             .collect();
 
@@ -520,6 +529,121 @@ impl ServiceDiscovery {
         }
 
         Ok(())
+    }
+
+    /// Analyze SPARQL data patterns from endpoint
+    async fn analyze_sparql_patterns(&self, endpoint: &str) -> Vec<String> {
+        let mut patterns = Vec::new();
+
+        // Try to extract common patterns from SPARQL endpoint
+        if let Ok(response) = self
+            .client
+            .post(endpoint)
+            .header("Content-Type", "application/sparql-query")
+            .header("Accept", "application/sparql-results+json")
+            .body("SELECT DISTINCT ?type WHERE { ?s a ?type } LIMIT 10")
+            .send()
+            .await
+        {
+            if let Ok(text) = response.text().await {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if let Some(bindings) = json["results"]["bindings"].as_array() {
+                        for binding in bindings {
+                            if let Some(type_uri) = binding["type"]["value"].as_str() {
+                                patterns.push(format!("type:{}", type_uri));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Add common RDF patterns
+        patterns.extend(vec![
+            "rdf:type".to_string(),
+            "rdfs:label".to_string(),
+            "dc:title".to_string(),
+        ]);
+
+        if patterns.is_empty() {
+            patterns.push("*".to_string()); // Fallback to wildcard
+        }
+
+        patterns
+    }
+
+    /// Analyze GraphQL data patterns from schema
+    async fn analyze_graphql_patterns(
+        &self,
+        introspection: &Option<GraphQLIntrospection>,
+    ) -> Vec<String> {
+        let mut patterns = Vec::new();
+
+        if let Some(intro) = introspection {
+            // Extract available types from schema
+            for type_def in &intro.schema.types {
+                patterns.push(format!("type:{}", type_def.name));
+                // Note: Field extraction would require more detailed introspection
+                // For now, we'll just use type-level patterns
+            }
+
+            // Add query type pattern
+            patterns.push(format!("query:{}", intro.schema.query_type.name));
+        }
+
+        if patterns.is_empty() {
+            patterns.push("*".to_string()); // Fallback to wildcard
+        }
+
+        patterns
+    }
+
+    /// Detect authentication requirements for an endpoint
+    async fn detect_authentication_requirements(
+        &self,
+        endpoint: &str,
+    ) -> Option<crate::service::ServiceAuthConfig> {
+        // Try to access the endpoint without authentication
+        if let Ok(response) = self.client.get(endpoint).send().await {
+            match response.status() {
+                reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+                    // Check for authentication type hints in headers
+                    if let Some(auth_header) = response.headers().get("www-authenticate") {
+                        if let Ok(auth_str) = auth_header.to_str() {
+                            if auth_str.to_lowercase().contains("basic") {
+                                return Some(crate::service::ServiceAuthConfig {
+                                    auth_type: crate::service::AuthType::Basic,
+                                    credentials: AuthCredentials::default(),
+                                });
+                            } else if auth_str.to_lowercase().contains("bearer") {
+                                return Some(crate::service::ServiceAuthConfig {
+                                    auth_type: crate::service::AuthType::Bearer,
+                                    credentials: AuthCredentials::default(),
+                                });
+                            } else if auth_str.to_lowercase().contains("oauth") {
+                                return Some(crate::service::ServiceAuthConfig {
+                                    auth_type: crate::service::AuthType::OAuth2,
+                                    credentials: AuthCredentials::default(),
+                                });
+                            }
+                        }
+                    }
+
+                    // Default to basic auth if no specific type detected
+                    return Some(crate::service::ServiceAuthConfig {
+                        auth_type: crate::service::AuthType::Basic,
+                        credentials: AuthCredentials::default(),
+                    });
+                }
+                _ => {
+                    // Service accessible without authentication
+                    return None;
+                }
+            }
+        }
+
+        // If request failed for other reasons, assume no auth required
+        None
     }
 }
 
@@ -627,7 +751,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_void_description_parsing() {
-        let discovery = ServiceDiscovery::new();
+        let _discovery = ServiceDiscovery::new();
 
         // This test would require a mock server in a real implementation
         // For now, just test the structure

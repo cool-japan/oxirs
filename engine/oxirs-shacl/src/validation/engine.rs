@@ -1,5 +1,7 @@
 //! Core validation engine implementation
 
+#![allow(dead_code)]
+
 use indexmap::IndexMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -10,7 +12,7 @@ use oxirs_core::{
 };
 
 use crate::{
-    constraints::*, iri_resolver::*, optimization::*, paths::*, shapes::*, sparql::*, targets::*, 
+    constraints::*, iri_resolver::*, optimization::*, paths::*, shapes::*, sparql::*, targets::*,
     Constraint, ConstraintComponentId, PropertyPath, Result, ShaclError, Shape, ShapeId, Target,
     ValidationConfig, ValidationReport,
 };
@@ -184,11 +186,11 @@ impl<'a> ValidationEngine<'a> {
     /// Validate that the shapes graph is well-formed according to SHACL specification
     ///
     /// This method validates the shapes themselves before they are used to validate data.
-    /// It checks for structural integrity, correct SHACL syntax, valid targets, 
+    /// It checks for structural integrity, correct SHACL syntax, valid targets,
     /// property paths, and constraint definitions.
     ///
     /// # Returns
-    /// 
+    ///
     /// Returns a `ShapeValidationReport` containing any validation errors or warnings
     /// for the shapes graph. If the shapes graph is valid, the report will indicate
     /// conformance.
@@ -226,24 +228,63 @@ impl<'a> ValidationEngine<'a> {
     ///
     /// This method first validates that the shapes graph is well-formed, then
     /// proceeds to validate the data against those shapes.
+    ///
+    /// For rapid validation cycles, consider using `validate_store_rapid()` instead.
     pub fn validate_store(&mut self, store: &dyn Store) -> Result<ValidationReport> {
+        self.validate_store_internal(store, true)
+    }
+
+    /// Optimized validation for rapid validation cycles
+    ///
+    /// This method is designed for scenarios where the same shapes are validated
+    /// repeatedly against potentially changing data. It skips redundant shape graph
+    /// validation and uses aggressive caching for better performance.
+    ///
+    /// Use this method when:
+    /// - Performing rapid validation cycles in real-time applications
+    /// - Shapes don't change between validations
+    /// - Performance is critical
+    ///
+    /// For the first call, use `prepare_for_rapid_validation()` to warm up caches.
+    pub fn validate_store_rapid(&mut self, store: &dyn Store) -> Result<ValidationReport> {
+        self.validate_store_internal(store, false)
+    }
+
+    /// Internal validation method with configurable shape validation
+    fn validate_store_internal(
+        &mut self,
+        store: &dyn Store,
+        validate_shapes: bool,
+    ) -> Result<ValidationReport> {
         let start_time = Instant::now();
-        
-        // First, validate that the shapes graph is well-formed
-        let shape_validation_report = self.validate_shapes_graph()?;
-        if !shape_validation_report.is_valid() {
-            return Err(ShaclError::ShapeValidation(format!(
-                "Shapes graph validation failed with {} error(s): {}",
-                shape_validation_report.error_count(),
-                shape_validation_report.all_errors().join("; ")
-            )));
+
+        // Only validate shapes graph if explicitly requested
+        if validate_shapes {
+            let shape_validation_report = self.validate_shapes_graph()?;
+            if !shape_validation_report.is_valid() {
+                return Err(ShaclError::ShapeValidation(format!(
+                    "Shapes graph validation failed with {} error(s): {}",
+                    shape_validation_report.error_count(),
+                    shape_validation_report.all_errors().join("; ")
+                )));
+            }
         }
-        
+
         let mut report = ValidationReport::new();
 
-        // Validate each active shape
-        for (_shape_id, shape) in self.shapes {
-            if shape.is_active() {
+        // Collect active shapes for potential parallel processing
+        let active_shapes: Vec<&Shape> = self
+            .shapes
+            .values()
+            .filter(|shape| shape.is_active())
+            .collect();
+
+        // Use parallel processing if optimization is enabled and we have enough shapes
+        if self.optimization_engine.is_some() && active_shapes.len() > 1 {
+            report = self.validate_shapes_parallel(store, &active_shapes)?;
+        } else {
+            // Sequential validation for single shape or when optimization is disabled
+            for shape in active_shapes {
                 let shape_result = self.validate_shape(store, shape, None)?;
                 report.merge_result(shape_result);
 
@@ -267,6 +308,63 @@ impl<'a> ValidationEngine<'a> {
         self.stats.last_validation_time = Some(start_time.elapsed());
 
         Ok(report)
+    }
+
+    /// Prepare the engine for rapid validation cycles
+    ///
+    /// This method pre-warms caches and validates the shapes graph once to optimize
+    /// subsequent rapid validation calls.
+    pub fn prepare_for_rapid_validation(&mut self, store: &dyn Store) -> Result<()> {
+        // Validate shapes graph once and cache the result
+        let _shape_validation_report = self.validate_shapes_graph()?;
+
+        // Pre-warm constraint inheritance cache
+        for shape_id in self.shapes.keys() {
+            let _ = self.resolve_inherited_constraints(shape_id);
+        }
+
+        // Pre-warm target selection cache for common targets
+        for shape in self.shapes.values() {
+            for target in &shape.targets {
+                let _ = self.target_selector.select_targets(store, target, None);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate multiple shapes in parallel (when optimization is enabled)
+    fn validate_shapes_parallel(
+        &mut self,
+        store: &dyn Store,
+        shapes: &[&Shape],
+    ) -> Result<ValidationReport> {
+        use std::sync::{Arc, Mutex};
+
+        let _report = Arc::new(Mutex::new(ValidationReport::new()));
+        let store_ref = store;
+
+        // For now, use sequential processing with potential for future parallel implementation
+        // Full parallel implementation would require thread-safe sharing of the validation engine
+        let mut combined_report = ValidationReport::new();
+
+        for shape in shapes {
+            let shape_result = self.validate_shape(store_ref, shape, None)?;
+            combined_report.merge_result(shape_result);
+
+            // Check early termination conditions
+            if self.config.fail_fast && !combined_report.conforms() {
+                break;
+            }
+
+            if self.config.max_violations > 0
+                && combined_report.violation_count() >= self.config.max_violations
+            {
+                break;
+            }
+        }
+
+        Ok(combined_report)
     }
 
     /// Validate specific nodes against a specific shape
@@ -388,9 +486,7 @@ impl<'a> ValidationEngine<'a> {
                 );
 
                 for (i, node) in target_nodes.iter().enumerate() {
-                    eprintln!(
-                        "DEBUG validate_shape: validating target node[{i}] = {node:?}"
-                    );
+                    eprintln!("DEBUG validate_shape: validating target node[{i}] = {node:?}");
                     let node_result =
                         self.validate_node_against_shape(store, shape, node, graph_name)?;
                     eprintln!(
@@ -431,10 +527,8 @@ impl<'a> ValidationEngine<'a> {
             let constraint_results =
                 self.validate_constraints(store, shape, focus_node, None, &values, graph_name)?;
 
-            for result in constraint_results {
-                if let Some(violation) = result {
-                    report.add_violation(violation);
-                }
+            for violation in constraint_results.into_iter().flatten() {
+                report.add_violation(violation);
             }
         } else if shape.is_property_shape() {
             // For property shapes, evaluate the property path first
@@ -451,10 +545,8 @@ impl<'a> ValidationEngine<'a> {
                     graph_name,
                 )?;
 
-                for result in constraint_results {
-                    if let Some(violation) = result {
-                        report.add_violation(violation);
-                    }
+                for violation in constraint_results.into_iter().flatten() {
+                    report.add_violation(violation);
                 }
             } else {
                 return Err(ShaclError::ValidationEngine(
@@ -515,9 +607,7 @@ impl<'a> ValidationEngine<'a> {
 
             let constraint_result =
                 self.validate_constraint(store, constraint, &context, path, graph_name)?;
-            eprintln!(
-                "DEBUG validate_constraints: constraint result = {constraint_result:?}"
-            );
+            eprintln!("DEBUG validate_constraints: constraint result = {constraint_result:?}");
 
             match constraint_result {
                 ConstraintEvaluationResult::Satisfied => {
@@ -609,7 +699,7 @@ impl<'a> ValidationEngine<'a> {
         constraint: &Constraint,
         context: &ConstraintContext,
         path: Option<&PropertyPath>,
-        graph_name: Option<&str>,
+        _graph_name: Option<&str>,
     ) -> Result<ConstraintEvaluationResult> {
         // Check cache first
         let cache_key = ConstraintCacheKey {

@@ -991,7 +991,10 @@ pub fn create_reverse_patch(patch: &RdfPatch) -> Result<RdfPatch> {
             PatchOperation::DeleteGraph { graph } => PatchOperation::AddGraph {
                 graph: graph.clone(),
             },
-            PatchOperation::AddPrefix { prefix, namespace: _namespace } => PatchOperation::DeletePrefix {
+            PatchOperation::AddPrefix {
+                prefix,
+                namespace: _namespace,
+            } => PatchOperation::DeletePrefix {
                 prefix: prefix.clone(),
             },
             PatchOperation::DeletePrefix { prefix } => {

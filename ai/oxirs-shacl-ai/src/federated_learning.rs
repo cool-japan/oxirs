@@ -840,7 +840,7 @@ impl AdvancedByzantineFaultTolerance {
     /// Detect Byzantine behavior patterns
     async fn detect_byzantine_behavior(
         &self,
-        node_id: &Uuid,
+        _node_id: &Uuid,
         _update: &FederatedUpdate,
         _nodes: &HashMap<Uuid, FederatedNode>,
     ) -> Result<bool> {
@@ -1515,27 +1515,13 @@ fn laplace_noise(scale: f64) -> f64 {
 }
 
 fn gaussian_noise(mean: f64, std_dev: f64) -> f64 {
-    // Box-Muller transformation for Gaussian noise
-    static mut CACHED: Option<f64> = None;
-    static mut HAS_CACHED: bool = false;
+    // Box-Muller transformation for Gaussian noise (simplified safe version)
+    let u1 = fastrand::f64();
+    let u2 = fastrand::f64();
 
-    unsafe {
-        if HAS_CACHED {
-            HAS_CACHED = false;
-            return CACHED.unwrap();
-        }
+    let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
 
-        let u1 = fastrand::f64();
-        let u2 = fastrand::f64();
-
-        let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
-        let z1 = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).sin();
-
-        CACHED = Some(mean + std_dev * z1);
-        HAS_CACHED = true;
-
-        mean + std_dev * z0
-    }
+    mean + std_dev * z0
 }
 
 fn exponential_noise(lambda: f64) -> f64 {
@@ -1560,7 +1546,7 @@ mod tests {
 
     #[test]
     fn test_privacy_levels() {
-        let levels = vec![
+        let levels = [
             PrivacyLevel::Open,
             PrivacyLevel::Statistical,
             PrivacyLevel::DifferentialPrivacy { epsilon: 1.0 },

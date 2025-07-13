@@ -294,7 +294,7 @@ impl SparqlClient {
 
     /// Add authentication header
     fn add_auth_header(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
-        use base64::encode;
+        use base64::{engine::general_purpose, Engine as _};
 
         match &auth.auth_type {
             AuthType::Basic => {
@@ -302,7 +302,7 @@ impl SparqlClient {
                     (&auth.credentials.username, &auth.credentials.password)
                 {
                     let credentials = format!("{username}:{password}");
-                    let encoded = encode(credentials.as_bytes());
+                    let encoded = general_purpose::STANDARD.encode(credentials.as_bytes());
                     let auth_value = format!("Basic {encoded}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
@@ -664,7 +664,7 @@ impl GraphQLClient {
 
     /// Add authentication header (same as SPARQL client)
     fn add_auth_header(&self, headers: &mut HeaderMap, auth: &ServiceAuthConfig) -> Result<()> {
-        use base64::encode;
+        use base64::{engine::general_purpose, Engine as _};
 
         match &auth.auth_type {
             AuthType::Basic => {
@@ -672,7 +672,7 @@ impl GraphQLClient {
                     (&auth.credentials.username, &auth.credentials.password)
                 {
                     let credentials = format!("{username}:{password}");
-                    let encoded = encode(credentials.as_bytes());
+                    let encoded = general_purpose::STANDARD.encode(credentials.as_bytes());
                     let auth_value = format!("Basic {encoded}");
                     headers.insert(AUTHORIZATION, HeaderValue::from_str(&auth_value)?);
                 }
@@ -1011,10 +1011,12 @@ mod tests {
 
     #[test]
     fn test_client_stats() {
-        let mut stats = ClientStats::default();
-        stats.total_requests = 100;
-        stats.successful_requests = 95;
-        stats.failed_requests = 5;
+        let stats = ClientStats {
+            total_requests: 100,
+            successful_requests: 95,
+            failed_requests: 5,
+            ..Default::default()
+        };
 
         assert_eq!(stats.success_rate(), 0.95);
     }

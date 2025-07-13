@@ -616,7 +616,7 @@ impl AdvancedReasoningEngine {
     /// Gather supporting and contradicting evidence
     async fn gather_evidence(
         &self,
-        chain: &ReasoningChain,
+        _chain: &ReasoningChain,
         context: &AssembledContext,
     ) -> Result<(Vec<Triple>, Vec<Triple>)> {
         let mut supporting = Vec::new();
@@ -830,7 +830,7 @@ mod tests {
 
     #[test]
     fn test_causal_relation_detection() {
-        let engine = AdvancedReasoningEngine::new(ReasoningConfig::default());
+        let _engine = AdvancedReasoningEngine::new(ReasoningConfig::default());
 
         // This test would require actual Triple instances
         // In a real implementation, you'd create test triples with causal predicates

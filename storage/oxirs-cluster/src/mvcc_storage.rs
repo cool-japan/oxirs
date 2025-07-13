@@ -288,7 +288,10 @@ impl MVCCStorage {
         transaction_id: &TransactionId,
         triple: Triple,
     ) -> Result<()> {
-        let key = self.triple_to_key(&triple);
+        // For simplicity in transactions, use shard 0
+        // In production, this would determine the appropriate shard
+        let shard_id = 0;
+        let key = self.shard_triple_to_key(shard_id, &triple);
 
         // Write to MVCC
         self.mvcc
@@ -431,6 +434,10 @@ impl MVCCStorage {
             object_to_string(triple.object())
         )
     }
+
+    fn shard_triple_to_key(&self, shard_id: ShardId, triple: &Triple) -> String {
+        format!("shard:{}:{}", shard_id, self.triple_to_key(triple))
+    }
 }
 
 /// Storage statistics
@@ -474,7 +481,14 @@ impl StorageBackend for MVCCStorage {
 
         // Use shard-prefixed key
         let key = format!("shard:{}:{}", shard_id, self.triple_to_key(&triple));
-        self.mvcc.write(&tx_id, &key, Some(triple)).await?;
+        self.mvcc.write(&tx_id, &key, Some(triple.clone())).await?;
+
+        // Update index (same as regular insert)
+        let timestamp = self.mvcc.current_timestamp();
+        self.index.index_triple(&triple, timestamp, &key);
+
+        // Update statistics
+        self.stats.write().await.total_inserts += 1;
 
         self.commit_transaction(&tx_id).await
     }
@@ -502,9 +516,38 @@ impl StorageBackend for MVCCStorage {
         // Create a temporary transaction for queries
         let tx_id = format!("shard_{}_query_{}", shard_id, uuid::Uuid::new_v4());
 
-        // For shard queries, we need to filter by shard prefix
+        // Begin transaction to get snapshot
+        let _snapshot = self
+            .mvcc
+            .begin_transaction(tx_id.clone(), IsolationLevel::ReadCommitted)
+            .await?;
+
+        // For pattern queries on shards, we need to scan with the shard prefix
         // This is a simplified implementation
-        self.query_triples(&tx_id, subject, predicate, object).await
+        let mut results = Vec::new();
+
+        // For now, let's use the original query_triples approach but filter for shard keys
+        let index_key = IndexKey::from_triple_pattern(subject, predicate, object);
+        let triple_keys = self.index.query(
+            &index_key,
+            &_snapshot.timestamp,
+            _snapshot.isolation_level == IsolationLevel::ReadUncommitted,
+        );
+
+        let shard_prefix = format!("shard:{shard_id}:");
+
+        for key in triple_keys {
+            // Only consider keys that belong to this shard
+            if key.starts_with(&shard_prefix) {
+                if let Some(triple) = self.mvcc.read(&tx_id, &key).await? {
+                    if matches_pattern(&triple, subject, predicate, object) {
+                        results.push(triple);
+                    }
+                }
+            }
+        }
+
+        Ok(results)
     }
 
     async fn get_shard_size(&self, shard_id: ShardId) -> Result<u64> {

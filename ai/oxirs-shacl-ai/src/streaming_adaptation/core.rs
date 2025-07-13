@@ -8,20 +8,14 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 use uuid::Uuid;
 
-use oxirs_core::{
-    model::Triple,
-    Store,
-};
+use oxirs_core::model::Triple;
 use oxirs_shacl::ValidationReport;
 
 use crate::neural_patterns::NeuralPattern;
 use crate::self_adaptive_ai::{PerformanceMetrics, SelfAdaptiveAI};
 use crate::{Result, ShaclAiError};
 
-use super::{
-    metrics::RealTimeMetricsCollector,
-    processors::StreamProcessor,
-};
+use super::{metrics::RealTimeMetricsCollector, processors::StreamProcessor};
 
 /// Real-time streaming adaptation engine
 #[derive(Debug)]
@@ -336,9 +330,9 @@ impl StreamChannel {
             ));
         }
 
-        self.sender.send(data).map_err(|e| {
-            ShaclAiError::StreamingAdaptation(format!("Failed to send data: {e}"))
-        })?;
+        self.sender
+            .send(data)
+            .map_err(|e| ShaclAiError::StreamingAdaptation(format!("Failed to send data: {e}")))?;
 
         Ok(())
     }

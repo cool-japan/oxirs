@@ -206,10 +206,9 @@ fn benchmark_concurrent_operations(c: &mut Criterion) {
                             std::thread::spawn(move || {
                                 for i in 0..operations_per_thread {
                                     let idx = i % 1000;
-                                    let subject = StarTerm::iri(&format!(
-                                        "http://example.org/subject{idx}"
-                                    ))
-                                    .unwrap();
+                                    let subject =
+                                        StarTerm::iri(&format!("http://example.org/subject{idx}"))
+                                            .unwrap();
                                     let _ = black_box(store_clone.query_triples(
                                         Some(&subject),
                                         None,

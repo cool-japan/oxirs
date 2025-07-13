@@ -746,9 +746,7 @@ impl ReteNetwork {
         token: Token,
         join_condition: &JoinCondition,
     ) -> Result<Vec<Token>> {
-        println!(
-            "perform_beta_join called with beta_id={beta_id}, token={token:?}"
-        );
+        println!("perform_beta_join called with beta_id={beta_id}, token={token:?}");
         // Check if we have an enhanced beta node
         if self.enhanced_beta_nodes.contains_key(&beta_id) {
             // Determine which side the token came from before borrowing mutably
@@ -803,9 +801,7 @@ impl ReteNetwork {
             let is_left_token = self.is_left_token(&token, beta_id)?;
 
             let mut joined_tokens = Vec::new();
-            println!(
-                "Using fallback beta join implementation, is_left_token: {is_left_token}"
-            );
+            println!("Using fallback beta join implementation, is_left_token: {is_left_token}");
 
             if is_left_token {
                 // Get copies to avoid borrowing conflicts
@@ -961,7 +957,8 @@ impl ReteNetwork {
                         {
                             println!("Fact matches right pattern - returning false");
                             return Ok(false);
-                        } else if (self.unify_atoms(left_pattern, last_fact, &HashMap::new())?).is_some()
+                        } else if (self.unify_atoms(left_pattern, last_fact, &HashMap::new())?)
+                            .is_some()
                         {
                             println!("Fact matches left pattern - returning true");
                             return Ok(true);

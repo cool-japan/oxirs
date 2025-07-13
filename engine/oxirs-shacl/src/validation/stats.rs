@@ -328,6 +328,7 @@ pub struct DataQualityMetrics {
 #[derive(Debug, Clone, Serialize)]
 pub struct QualityMeasurement {
     #[serde(skip)]
+    #[allow(dead_code)]
     timestamp: Instant,
     quality_score: f64,
     violation_count: usize,
@@ -347,7 +348,7 @@ impl Default for QualityMeasurement {
 
 impl DataQualityMetrics {
     /// Update metrics from a shape validation
-    pub fn update_from_shape_validation(&mut self, conforms: bool, violations: usize) {
+    pub fn update_from_shape_validation(&mut self, _conforms: bool, violations: usize) {
         self.total_nodes_evaluated += 1;
         self.total_violations += violations;
 
@@ -384,7 +385,7 @@ impl DataQualityMetrics {
             + ((1.0 - severity_penalty) * 0.3)
             + ((1.0 - density_penalty) * 0.2);
 
-        quality_score.max(0.0).min(1.0)
+        quality_score.clamp(0.0, 1.0)
     }
 
     /// Calculate penalty based on violation severity distribution
@@ -420,7 +421,7 @@ impl DataQualityMetrics {
 
         // Apply logarithmic scaling to density penalty
         if density > 0.0 {
-            (density.ln() + 5.0).max(0.0).min(1.0) / 5.0
+            (density.ln() + 5.0).clamp(0.0, 1.0) / 5.0
         } else {
             0.0
         }
@@ -508,6 +509,7 @@ pub struct PerformanceAnalytics {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThroughputMeasurement {
     #[serde(skip, default = "Instant::now")]
+    #[allow(dead_code)]
     timestamp: Instant,
     nodes_per_second: f64,
     constraints_per_second: f64,
@@ -527,6 +529,7 @@ impl Default for ThroughputMeasurement {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MemoryMeasurement {
     #[serde(skip, default = "Instant::now")]
+    #[allow(dead_code)]
     timestamp: Instant,
     memory_usage_bytes: usize,
     cache_size_bytes: usize,
@@ -548,6 +551,7 @@ pub struct SlowOperation {
     operation_type: String,
     duration: Duration,
     #[serde(skip, default = "Instant::now")]
+    #[allow(dead_code)]
     timestamp: Instant,
     context: String,
 }

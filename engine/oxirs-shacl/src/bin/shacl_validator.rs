@@ -10,11 +10,11 @@ use std::time::Instant;
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 
-use oxirs_core::{Store, ConcreteStore};
+use oxirs_core::{ConcreteStore, Store};
 use oxirs_shacl::{
     optimization::ValidationStrategy,
     report::{ReportFormat, ValidationReport},
-    shapes::{ShapeValidator},
+    shapes::ShapeValidator,
     validation::ValidationEngine,
     Shape, ShapeId, ValidationConfig,
 };
@@ -193,7 +193,7 @@ fn print_usage(program_name: &str) {
     println!("OxiRS SHACL Validator");
     println!();
     println!("USAGE:");
-    println!("    {} <data-file> <shapes-file> [OPTIONS]", program_name);
+    println!("    {program_name} <data-file> <shapes-file> [OPTIONS]");
     println!();
     println!("ARGS:");
     println!("    <data-file>     RDF data file to validate");
@@ -210,9 +210,9 @@ fn print_usage(program_name: &str) {
     println!("    -h, --help                  Print this help message");
     println!();
     println!("EXAMPLES:");
-    println!("    {} data.ttl shapes.ttl", program_name);
-    println!("    {} data.ttl shapes.ttl -f json -o report.json", program_name);
-    println!("    {} data.ttl shapes.ttl -s parallel -v", program_name);
+    println!("    {program_name} data.ttl shapes.ttl");
+    println!("    {program_name} data.ttl shapes.ttl -f json -o report.json");
+    println!("    {program_name} data.ttl shapes.ttl -s parallel -v");
 }
 
 fn parse_format(format_str: &str) -> Result<ReportFormat> {
@@ -232,7 +232,9 @@ fn parse_strategy(strategy_str: &str) -> Result<ValidationStrategy> {
     match strategy_str.to_lowercase().as_str() {
         "sequential" | "seq" => Ok(ValidationStrategy::Sequential),
         "parallel" | "par" => Ok(ValidationStrategy::Parallel { max_threads: 4 }),
-        "incremental" | "inc" => Ok(ValidationStrategy::Incremental { force_revalidate: false }),
+        "incremental" | "inc" => Ok(ValidationStrategy::Incremental {
+            force_revalidate: false,
+        }),
         "streaming" | "stream" => Ok(ValidationStrategy::Streaming { batch_size: 1000 }),
         _ => Err(anyhow!("Unknown strategy: {}", strategy_str)),
     }
@@ -248,15 +250,15 @@ fn load_shapes(args: &Args) -> Result<IndexMap<ShapeId, Shape>> {
     }
 
     let _shapes_content = fs::read_to_string(&args.shapes_file)?;
-    
+
     // Create a simple in-memory store for shapes parsing
     let _store = ConcreteStore::new();
-    
+
     // Parse shapes content - using simplified approach for demo
     // TODO: Implement proper RDF parsing and shape extraction
     // This should parse the RDF graph and extract SHACL shapes using oxirs-core parser
     let mut shapes = IndexMap::new();
-    
+
     // Create a demonstration shape showing typical SHACL structure
     let shape_id = ShapeId::new("http://example.org/PersonShape");
     let shape = Shape::node_shape(shape_id.clone());
@@ -279,18 +281,24 @@ fn validate_shapes_graph(shapes: &IndexMap<ShapeId, Shape>, verbose: bool) -> Re
     let shapes_vec: Vec<Shape> = shapes.values().cloned().collect();
     let validation_results = validator.validate_shapes(&shapes_vec)?;
 
-    let has_errors = !validation_results.global_errors.is_empty() || 
-                     validation_results.shape_results.iter().any(|r| !r.errors.is_empty());
-    let has_warnings = validation_results.shape_results.iter().any(|r| !r.warnings.is_empty());
-    
+    let has_errors = !validation_results.global_errors.is_empty()
+        || validation_results
+            .shape_results
+            .iter()
+            .any(|r| !r.errors.is_empty());
+    let has_warnings = validation_results
+        .shape_results
+        .iter()
+        .any(|r| !r.warnings.is_empty());
+
     if has_errors || has_warnings {
         println!("⚠️  Shapes validation issues:");
-        
+
         // Print global errors
         for error in &validation_results.global_errors {
-            println!("  GLOBAL ERROR: {}", error);
+            println!("  GLOBAL ERROR: {error}");
         }
-        
+
         // Print shape-specific errors and warnings
         for shape_result in &validation_results.shape_results {
             for error in &shape_result.errors {
@@ -300,7 +308,7 @@ fn validate_shapes_graph(shapes: &IndexMap<ShapeId, Shape>, verbose: bool) -> Re
                 println!("  WARNING [{}]: {}", shape_result.shape_id, warning);
             }
         }
-        
+
         if has_errors {
             return Err(anyhow!("Shapes graph validation failed"));
         }
@@ -317,11 +325,8 @@ fn load_data_store(data_file: &PathBuf) -> Result<Box<dyn Store>> {
     }
 
     // Validate file extension for supported formats
-    let extension = data_file
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-    
+    let extension = data_file.extension().and_then(|s| s.to_str()).unwrap_or("");
+
     match extension.to_lowercase().as_str() {
         "ttl" | "turtle" | "nt" | "ntriples" | "rdf" | "owl" | "n3" => {
             // Supported RDF formats
@@ -354,7 +359,7 @@ fn load_data_store(data_file: &PathBuf) -> Result<Box<dyn Store>> {
 
 fn create_validation_config(args: &Args) -> ValidationConfig {
     let mut config = ValidationConfig::default();
-    
+
     if args.max_violations > 0 {
         config.max_violations = args.max_violations;
     }
@@ -365,15 +370,25 @@ fn create_validation_config(args: &Args) -> ValidationConfig {
 fn display_summary(report: &ValidationReport, verbose: bool) {
     println!("📊 Validation Results");
     println!("===================");
-    println!("Conforms: {}", if report.conforms() { "✅ YES" } else { "❌ NO" });
+    println!(
+        "Conforms: {}",
+        if report.conforms() {
+            "✅ YES"
+        } else {
+            "❌ NO"
+        }
+    );
     println!("Violations: {}", report.violations().len());
-    
+
     if verbose && !report.violations().is_empty() {
         println!();
         println!("Violation details:");
         for (i, violation) in report.violations().iter().enumerate() {
             if i >= 10 {
-                println!("  ... and {} more violations", report.violations().len() - 10);
+                println!(
+                    "  ... and {} more violations",
+                    report.violations().len() - 10
+                );
                 break;
             }
             if let Some(message) = &violation.result_message {
@@ -383,7 +398,7 @@ fn display_summary(report: &ValidationReport, verbose: bool) {
             }
         }
     }
-    
+
     println!();
 }
 
@@ -404,11 +419,11 @@ fn output_report(report: &ValidationReport, args: &Args) -> Result<()> {
         Some(output_file) => {
             fs::write(output_file, serialized)?;
             if args.verbose {
-                println!("📁 Report saved to {:?}", output_file);
+                println!("📁 Report saved to {output_file:?}");
             }
         }
         None => {
-            println!("{}", serialized);
+            println!("{serialized}");
         }
     }
 

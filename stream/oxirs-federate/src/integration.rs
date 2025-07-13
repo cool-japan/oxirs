@@ -11,14 +11,18 @@ use std::time::Duration;
 use tracing::{debug, info};
 
 use crate::{
-    ExecutionMetadata, ExecutionStatus, FederatedResult, FederationError, QueryResult,
-    QueryResultData, SparqlBinding, SparqlResults, SparqlValue, StepResult,
+    cache::{FederationCache, QueryResultCache},
+    executor::types::{
+        ExecutionStatus, QueryResultData, SparqlBinding, SparqlResults, SparqlValue, StepResult,
+    },
+    ExecutionMetadata, FederatedResult, FederationError, QueryResult,
 };
 
 /// Result integrator for federated queries
 #[derive(Debug)]
 pub struct ResultIntegrator {
     config: ResultIntegratorConfig,
+    cache: Option<FederationCache>,
 }
 
 impl ResultIntegrator {
@@ -26,12 +30,24 @@ impl ResultIntegrator {
     pub fn new() -> Self {
         Self {
             config: ResultIntegratorConfig::default(),
+            cache: None,
         }
     }
 
     /// Create a new result integrator with custom configuration
     pub fn with_config(config: ResultIntegratorConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            cache: None,
+        }
+    }
+
+    /// Create a new result integrator with cache support
+    pub fn with_cache(config: ResultIntegratorConfig, cache: FederationCache) -> Self {
+        Self {
+            config,
+            cache: Some(cache),
+        }
     }
 
     /// Integrate SPARQL query results from multiple services
@@ -42,6 +58,43 @@ impl ResultIntegrator {
         info!("Integrating {} SPARQL result steps", step_results.len());
 
         let start_time = std::time::Instant::now();
+
+        // Check cache if available
+        let cache_hit = false;
+        if let Some(cache) = &self.cache {
+            let cache_key = self.generate_integration_cache_key(&step_results);
+            if let Some(cached_result) = cache.get_query_result(&cache_key).await {
+                if let QueryResultCache::Sparql(sparql_results) = cached_result {
+                    let execution_time = start_time.elapsed();
+
+                    // Convert cached results back to FederatedResult
+                    let result_bindings: Vec<HashMap<String, oxirs_core::Term>> = sparql_results
+                        .results
+                        .bindings
+                        .into_iter()
+                        .map(|binding| self.convert_sparql_binding_to_terms(binding))
+                        .collect::<Result<Vec<_>>>()?;
+
+                    let metadata = ExecutionMetadata {
+                        execution_time,
+                        services_used: step_results
+                            .iter()
+                            .filter_map(|sr| sr.service_id.as_ref())
+                            .collect::<HashSet<_>>()
+                            .len(),
+                        subqueries_executed: step_results.len(),
+                        cache_hit: true,
+                        plan_summary: "Integrated from cache".to_string(),
+                    };
+
+                    return Ok(FederatedResult {
+                        data: QueryResult::Sparql(result_bindings),
+                        metadata,
+                        errors: vec![],
+                    });
+                }
+            }
+        }
         let mut all_bindings = Vec::new();
         let mut all_variables = HashSet::new();
         let mut errors = Vec::new();
@@ -133,9 +186,18 @@ impl ResultIntegrator {
             execution_time,
             services_used: services_used.len(),
             subqueries_executed: step_results.len(),
-            cache_hit: false, // TODO: Implement cache hit detection
+            cache_hit,
             plan_summary: format!("Integrated {} services", services_used.len()),
         };
+
+        // Cache the result if cache is available
+        if let Some(cache) = &self.cache {
+            let cache_key = self.generate_integration_cache_key(&step_results);
+            let cache_result = QueryResultCache::Sparql(sparql_results.clone());
+            cache
+                .put_query_result(&cache_key, cache_result, Some(Duration::from_secs(3600)))
+                .await;
+        }
 
         // Convert to HashMap format for FederatedResult
         let result_bindings: Vec<HashMap<String, oxirs_core::Term>> = sparql_results
@@ -259,7 +321,7 @@ impl ResultIntegrator {
             execution_time,
             services_used: services_used.len(),
             subqueries_executed: step_results.len(),
-            cache_hit: false,
+            cache_hit: false, // Test data // GraphQL integration doesn't use cache yet
             plan_summary: format!("Stitched {} GraphQL services", services_used.len()),
         };
 
@@ -489,6 +551,79 @@ impl ResultIntegrator {
 
         Ok(term_binding)
     }
+
+    /// Generate a cache key for the integration result based on step results
+    fn generate_integration_cache_key(&self, step_results: &[StepResult]) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+
+        // Hash the configuration
+        self.config.enable_deduplication.hash(&mut hasher);
+        self.config.enable_partial_results.hash(&mut hasher);
+        self.config.timeout.as_millis().hash(&mut hasher);
+        if let Some(limit) = self.config.result_limit {
+            limit.hash(&mut hasher);
+        }
+
+        // Hash sort configuration
+        if let Some(sort_config) = &self.config.sort_config {
+            for sort_key in &sort_config.sort_keys {
+                sort_key.variable.hash(&mut hasher);
+                sort_key.descending.hash(&mut hasher);
+            }
+        }
+
+        // Hash step results content
+        for step_result in step_results {
+            if let Some(service_id) = &step_result.service_id {
+                service_id.hash(&mut hasher);
+            }
+            step_result.execution_time.as_nanos().hash(&mut hasher);
+
+            // Hash the query result data structure (simplified)
+            if let Some(data) = &step_result.data {
+                match data {
+                    QueryResultData::Sparql(sparql_results) => {
+                        "sparql".hash(&mut hasher);
+                        sparql_results.head.vars.len().hash(&mut hasher);
+                        sparql_results.results.bindings.len().hash(&mut hasher);
+
+                        // Hash first few binding keys for uniqueness without full data
+                        for (i, binding) in
+                            sparql_results.results.bindings.iter().take(3).enumerate()
+                        {
+                            i.hash(&mut hasher);
+                            for (var, _) in binding.iter().take(2) {
+                                var.hash(&mut hasher);
+                            }
+                        }
+                    }
+                    QueryResultData::GraphQL(graphql_data) => {
+                        "graphql".hash(&mut hasher);
+                        // Hash GraphQL data size as proxy
+                        serde_json::to_string(graphql_data)
+                            .unwrap_or_default()
+                            .len()
+                            .hash(&mut hasher);
+                    }
+                    QueryResultData::ServiceResult(service_data) => {
+                        "service".hash(&mut hasher);
+                        // Hash service data size as proxy
+                        serde_json::to_string(service_data)
+                            .unwrap_or_default()
+                            .len()
+                            .hash(&mut hasher);
+                    }
+                }
+            } else {
+                "no_data".hash(&mut hasher);
+            }
+        }
+
+        format!("integration:{:016x}", hasher.finish())
+    }
 }
 
 impl Default for ResultIntegrator {
@@ -546,8 +681,8 @@ pub enum ConflictResolution {
 mod tests {
     use super::*;
     use crate::{
-        executor::{SparqlHead, SparqlResults, SparqlResultsData},
-        QueryResultData, StepResult, StepType,
+        executor::{QueryResultData, SparqlHead, SparqlResults, SparqlResultsData, StepResult},
+        StepType,
     };
     use std::time::Duration;
 
@@ -581,7 +716,7 @@ mod tests {
             success: true,
             error_message: None,
             service_response_time: Duration::from_millis(50),
-            cache_hit: false,
+            cache_hit: false, // Test data
         };
 
         let result = integrator.integrate_sparql_results(vec![step_result]).await;
@@ -615,7 +750,7 @@ mod tests {
             success: true,
             error_message: None,
             service_response_time: Duration::from_millis(100),
-            cache_hit: false,
+            cache_hit: false, // Test data
         };
 
         let result = integrator
@@ -638,6 +773,7 @@ mod tests {
                 value: "http://example.org".to_string(),
                 datatype: None,
                 lang: None,
+                quoted_triple: None,
             },
         );
 

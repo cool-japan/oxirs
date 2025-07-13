@@ -275,9 +275,7 @@ fn benchmark_builtin_predicates(c: &mut Criterion) {
                     let rule = SwrlRule {
                         id: format!("{op_name}_test"),
                         body: vec![SwrlAtom::Builtin {
-                            builtin_predicate: format!(
-                                "http://www.w3.org/2003/11/swrlb#{op_name}"
-                            ),
+                            builtin_predicate: format!("http://www.w3.org/2003/11/swrlb#{op_name}"),
                             arguments: args
                                 .iter()
                                 .map(|&s| SwrlArgument::Literal(s.to_string()))

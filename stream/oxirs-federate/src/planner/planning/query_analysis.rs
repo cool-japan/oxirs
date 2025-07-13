@@ -253,12 +253,9 @@ impl QueryAnalyzer {
             );
 
             // Filter variables based on fields used by this service
-            let filtered_variables = filter_variables_by_field_usage(
-                &query.variables,
-                fields,
-                &query.selection_set,
-            );
-            
+            let filtered_variables =
+                filter_variables_by_field_usage(&query.variables, fields, &query.selection_set);
+
             // Convert HashMap to serde_json::Value
             let variables_json = if filtered_variables.is_empty() {
                 None
@@ -516,19 +513,19 @@ pub fn filter_variables_by_field_usage(
     selection_set: &[Selection],
 ) -> HashMap<String, serde_json::Value> {
     let mut used_variables = std::collections::HashSet::new();
-    
+
     // Extract variables used in the fields assigned to this service
     for field_name in service_fields {
         // Find the selection for this field
         if let Some(selection) = selection_set.iter().find(|s| &s.name == field_name) {
             // Extract variables from field arguments
             extract_variables_from_arguments(&selection.arguments, &mut used_variables);
-            
+
             // Extract variables from nested selections
             extract_variables_from_selections(&selection.selection_set, &mut used_variables);
         }
     }
-    
+
     // Filter the original variables to only include used ones
     let mut filtered_variables = HashMap::new();
     for var_name in used_variables {
@@ -536,7 +533,7 @@ pub fn filter_variables_by_field_usage(
             filtered_variables.insert(var_name, var_value.clone());
         }
     }
-    
+
     filtered_variables
 }
 
@@ -585,7 +582,7 @@ fn extract_variables_from_selections(
     for selection in selections {
         // Extract from arguments
         extract_variables_from_arguments(&selection.arguments, used_variables);
-        
+
         // Extract from nested selections recursively
         extract_variables_from_selections(&selection.selection_set, used_variables);
     }
@@ -594,10 +591,10 @@ fn extract_variables_from_selections(
 /// Parse fragment spreads and inline fragments
 fn parse_fragment_selection(fragment_str: &str) -> Result<Option<Selection>> {
     let fragment_str = fragment_str.trim();
-    
+
     if fragment_str.starts_with("...") {
         let content = &fragment_str[3..].trim(); // Remove "..."
-        
+
         if content.starts_with("on ") {
             // Inline fragment: ... on TypeName { fields }
             parse_inline_fragment(content)
@@ -618,23 +615,23 @@ fn parse_inline_fragment(content: &str) -> Result<Option<Selection>> {
     if !content.starts_with("on ") {
         return Ok(None);
     }
-    
+
     let content = &content[3..]; // Remove "on "
     let parts: Vec<&str> = content.splitn(2, ' ').collect();
-    
+
     if parts.len() < 2 {
         return Ok(None);
     }
-    
+
     let type_name = parts[0];
     let field_content = parts[1];
-    
+
     // Parse the field content within braces
     let mut selection_set = Vec::new();
     if let Some(start) = field_content.find('{') {
         if let Some(end) = field_content.rfind('}') {
             let fields_content = &field_content[start + 1..end];
-            
+
             // Parse each field in the inline fragment
             for line in fields_content.lines() {
                 let line = line.trim();
@@ -646,7 +643,7 @@ fn parse_inline_fragment(content: &str) -> Result<Option<Selection>> {
             }
         }
     }
-    
+
     // Create a virtual selection representing the inline fragment
     Ok(Some(Selection {
         name: format!("__inline_fragment_on_{type_name}"),
@@ -659,11 +656,11 @@ fn parse_inline_fragment(content: &str) -> Result<Option<Selection>> {
 /// Parse named fragment spread: ...FragmentName
 fn parse_named_fragment_spread(fragment_name: &str) -> Result<Option<Selection>> {
     let fragment_name = fragment_name.trim();
-    
+
     if fragment_name.is_empty() {
         return Ok(None);
     }
-    
+
     // Create a virtual selection representing the fragment spread
     // In a full implementation, this would resolve the fragment definition
     Ok(Some(Selection {
@@ -678,12 +675,12 @@ fn parse_named_fragment_spread(fragment_name: &str) -> Result<Option<Selection>>
 fn parse_conditional_fragment(content: &str) -> Result<Option<Selection>> {
     // Handle fragments with directives like: ... @include(if: $condition) { fields }
     // or: ... on TypeName @skip(if: $condition) { fields }
-    
+
     let parts = content.split_whitespace();
     let mut type_condition = None;
     let mut directives = Vec::new();
     let mut remaining_content = String::new();
-    
+
     // Parse the fragment components
     for part in parts {
         if part == "on" {
@@ -701,13 +698,13 @@ fn parse_conditional_fragment(content: &str) -> Result<Option<Selection>> {
             type_condition = Some(part.to_string());
         }
     }
-    
+
     // Parse selection set if present
     let mut selection_set = Vec::new();
     if let Some(start) = remaining_content.find('{') {
         if let Some(end) = remaining_content.rfind('}') {
             let fields_content = &remaining_content[start + 1..end];
-            
+
             for line in fields_content.lines() {
                 let line = line.trim();
                 if !line.is_empty() && !line.starts_with('#') {
@@ -718,14 +715,14 @@ fn parse_conditional_fragment(content: &str) -> Result<Option<Selection>> {
             }
         }
     }
-    
+
     // Create fragment representation
     let fragment_name = if let Some(type_name) = type_condition {
         format!("__conditional_fragment_on_{type_name}")
     } else {
         "__conditional_fragment".to_string()
     };
-    
+
     // Store directive information in arguments (simplified approach)
     let mut arguments = HashMap::new();
     for directive in directives {
@@ -734,7 +731,7 @@ fn parse_conditional_fragment(content: &str) -> Result<Option<Selection>> {
             serde_json::Value::String(directive),
         );
     }
-    
+
     Ok(Some(Selection {
         name: fragment_name,
         alias: None,

@@ -694,8 +694,10 @@ impl StreamingExecutor {
         // Chain remaining patterns with joins
         for pattern in &ordered_patterns[1..] {
             let pattern_stream = self.create_pattern_stream(pattern)?;
-            let join_variables =
-                self.find_join_variables_between_streams(result_stream.as_ref(), pattern_stream.as_ref())?;
+            let join_variables = self.find_join_variables_between_streams(
+                result_stream.as_ref(),
+                pattern_stream.as_ref(),
+            )?;
             result_stream =
                 self.create_streaming_join(result_stream, pattern_stream, join_variables)?;
         }
@@ -1119,10 +1121,7 @@ impl DataStream for StreamingHashJoin {
                         }
                     }
 
-                    self.hash_table
-                        .entry(key)
-                        .or_default()
-                        .push(solution);
+                    self.hash_table.entry(key).or_default().push(solution);
                 }
             }
             self.left_exhausted = true;
@@ -1866,9 +1865,8 @@ impl StreamingPatternScan {
             let mut binding = Binding::new();
 
             for var in self.pattern.variables() {
-                let value = Term::Iri(
-                    NamedNode::new(format!("http://example.org/resource_{i}")).unwrap(),
-                );
+                let value =
+                    Term::Iri(NamedNode::new(format!("http://example.org/resource_{i}")).unwrap());
                 binding.insert(var, value);
             }
 

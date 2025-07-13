@@ -25,7 +25,7 @@ use hmac::{Hmac, Mac};
 use qrcode::{render::svg, QrCode};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use sha1::{Digest, Sha1};
+use sha1::Sha1;
 use tracing::{info, instrument, warn};
 
 type HmacSha1 = Hmac<Sha1>;
@@ -86,7 +86,6 @@ pub struct MfaStatusResponse {
     pub backup_codes_remaining: u8,
     pub last_used: Option<DateTime<Utc>>,
 }
-
 
 /// Hardware token (FIDO2/WebAuthn) registration options
 #[derive(Debug, Serialize)]
@@ -478,7 +477,9 @@ async fn enroll_email_mfa(
     send_verification_email(&email_addr, &verification_code).await?;
 
     // Store email for user
-    auth_service.store_mfa_email(&user.username, &email_addr).await?;
+    auth_service
+        .store_mfa_email(&user.username, &email_addr)
+        .await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -531,7 +532,9 @@ async fn enroll_hardware_mfa(
     };
 
     // Store registration challenge
-    auth_service.store_webauthn_challenge(&user.username, &registration_options.challenge).await?;
+    auth_service
+        .store_webauthn_challenge(&user.username, &registration_options.challenge)
+        .await?;
 
     Ok(Json(MfaSetupResponse {
         success: true,
@@ -599,7 +602,7 @@ fn generate_qr_code_svg(uri: &str) -> FusekiResult<String> {
     Ok(svg)
 }
 
-async fn verify_totp_code(code: &str, auth_service: &AuthService) -> FusekiResult<bool> {
+async fn verify_totp_code(code: &str, _auth_service: &AuthService) -> FusekiResult<bool> {
     // Simplified TOTP verification
     // In production, get user's secret and verify against time windows
     Ok(code.len() == 6 && code.chars().all(|c| c.is_ascii_digit()))
@@ -627,7 +630,7 @@ fn generate_totp_code(secret: &str, time: u64) -> FusekiResult<String> {
 
 // SMS/Email Functions
 
-async fn create_totp_challenge(user: &User) -> FusekiResult<MfaChallenge> {
+async fn create_totp_challenge(_user: &User) -> FusekiResult<MfaChallenge> {
     Ok(MfaChallenge {
         challenge_id: uuid::Uuid::new_v4().to_string(),
         challenge_type: MfaType::Totp,
@@ -643,7 +646,9 @@ async fn create_sms_challenge(
     // Generate and send SMS code
     let code = generate_sms_verification_code();
     // Get user's SMS phone number
-    let phone = auth_service.get_user_sms_phone(&user.username).await?
+    let phone = auth_service
+        .get_user_sms_phone(&user.username)
+        .await?
         .unwrap_or_else(|| "placeholder_phone".to_string());
 
     send_verification_sms(&phone, &code).await?;
@@ -663,7 +668,9 @@ async fn create_email_challenge(
     // Generate and send email code
     let code = generate_email_verification_code();
     // Get user's MFA email
-    let email = auth_service.get_user_mfa_email(&user.username).await?
+    let email = auth_service
+        .get_user_mfa_email(&user.username)
+        .await?
         .unwrap_or_else(|| "placeholder@example.com".to_string());
 
     send_verification_email(&email, &code).await?;
@@ -682,7 +689,9 @@ async fn create_webauthn_challenge(
 ) -> FusekiResult<MfaChallenge> {
     let challenge = generate_webauthn_challenge();
     // Store WebAuthn challenge
-    auth_service.store_webauthn_challenge(&user.username, &challenge).await?;
+    auth_service
+        .store_webauthn_challenge(&user.username, &challenge)
+        .await?;
 
     Ok(MfaChallenge {
         challenge_id: challenge,
@@ -696,8 +705,8 @@ async fn create_webauthn_challenge(
 
 async fn verify_sms_code(
     code: &str,
-    challenge: &MfaChallenge,
-    auth_service: &AuthService,
+    _challenge: &MfaChallenge,
+    _auth_service: &AuthService,
 ) -> FusekiResult<bool> {
     // In production, verify against stored code
     Ok(code.len() == 6 && code.chars().all(|c| c.is_ascii_digit()))
@@ -705,8 +714,8 @@ async fn verify_sms_code(
 
 async fn verify_email_code(
     code: &str,
-    challenge: &MfaChallenge,
-    auth_service: &AuthService,
+    _challenge: &MfaChallenge,
+    _auth_service: &AuthService,
 ) -> FusekiResult<bool> {
     // In production, verify against stored code
     Ok(code.len() == 8 && code.chars().all(|c| c.is_ascii_alphanumeric()))
@@ -714,14 +723,14 @@ async fn verify_email_code(
 
 async fn verify_webauthn_assertion(
     assertion: &str,
-    challenge: &MfaChallenge,
-    auth_service: &AuthService,
+    _challenge: &MfaChallenge,
+    _auth_service: &AuthService,
 ) -> FusekiResult<bool> {
     // In production, verify WebAuthn assertion signature
     Ok(!assertion.is_empty())
 }
 
-async fn verify_backup_code(code: &str, auth_service: &AuthService) -> FusekiResult<bool> {
+async fn verify_backup_code(code: &str, _auth_service: &AuthService) -> FusekiResult<bool> {
     // In production, verify against stored backup codes
     Ok(code.len() == 8 && code.chars().all(|c| c.is_ascii_alphanumeric()))
 }
@@ -729,8 +738,8 @@ async fn verify_backup_code(code: &str, auth_service: &AuthService) -> FusekiRes
 // Helper Functions
 
 async fn extract_authenticated_user(
-    headers: &HeaderMap,
-    auth_service: &AuthService,
+    _headers: &HeaderMap,
+    _auth_service: &AuthService,
 ) -> FusekiResult<User> {
     // Extract user from session (simplified)
     Ok(User {
@@ -816,8 +825,8 @@ async fn send_verification_email(email: &str, code: &str) -> FusekiResult<()> {
 }
 
 async fn get_user_from_challenge(
-    challenge: &MfaChallenge,
-    auth_service: &AuthService,
+    _challenge: &MfaChallenge,
+    _auth_service: &AuthService,
 ) -> FusekiResult<User> {
     // In production, extract user associated with challenge
     Ok(User {

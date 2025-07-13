@@ -143,6 +143,7 @@ impl ShapeValidator {
     }
 
     /// Validate a specific target
+    #[allow(clippy::only_used_in_recursion)]
     fn validate_target(&self, target: &Target) -> Result<()> {
         match target {
             Target::Class(_)
@@ -210,6 +211,7 @@ impl ShapeValidator {
     }
 
     /// Validate property path structure
+    #[allow(clippy::only_used_in_recursion)]
     fn validate_path_structure(&self, path: &PropertyPath) -> Result<()> {
         match path {
             PropertyPath::Predicate(_) => Ok(()),

@@ -351,6 +351,7 @@ impl NetworkManager {
     }
 
     /// Send append entries RPC
+    #[allow(clippy::too_many_arguments)]
     pub async fn send_append_entries(
         &self,
         peer_id: OxirsNodeId,

@@ -581,8 +581,8 @@ impl MvccStore {
                         }
                     }
                 }
-                
-                // Phase 2: Write validation 
+
+                // Phase 2: Write validation
                 for key in tx.write_set.keys() {
                     if let Some(version_chain) = self.versions.get(key) {
                         for version in &version_chain.versions {

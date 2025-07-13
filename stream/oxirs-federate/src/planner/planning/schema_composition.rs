@@ -286,7 +286,10 @@ impl SchemaComposer {
                     }
 
                     // Track field ownership by service
-                    composed.field_ownership.entry(field_key).or_insert_with(|| FieldOwnershipType::Owned(service_id.to_string()));
+                    composed
+                        .field_ownership
+                        .entry(field_key)
+                        .or_insert_with(|| FieldOwnershipType::Owned(service_id.to_string()));
                 }
             }
         }

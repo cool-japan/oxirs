@@ -13,8 +13,6 @@ use std::{
 use tokio::sync::{Mutex, RwLock};
 
 use super::types::{LLMRequest, LLMResponse};
-use crate::llm::{UseCase, Priority, Usage};
-
 /// Real-time adaptation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdaptationConfig {
@@ -264,7 +262,7 @@ pub struct RealTimeAdaptation {
 }
 
 #[derive(Debug, Clone)]
-struct PerformanceState {
+pub struct PerformanceState {
     accuracy: f32,
     latency_ms: f32,
     user_satisfaction: f32,
@@ -694,6 +692,7 @@ struct AdaptationResult {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::llm::{Priority, Usage, UseCase};
 
     #[tokio::test]
     async fn test_real_time_adaptation_creation() {

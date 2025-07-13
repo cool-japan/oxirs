@@ -771,7 +771,7 @@ impl RdfStore {
     pub fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
         // Basic SPARQL query processor for common patterns
         let sparql = sparql.trim();
-        
+
         if sparql.to_uppercase().starts_with("SELECT") {
             self.execute_select_query(sparql)
         } else if sparql.to_uppercase().starts_with("ASK") {
@@ -781,7 +781,9 @@ impl RdfStore {
         } else if sparql.to_uppercase().starts_with("DESCRIBE") {
             self.execute_describe_query(sparql)
         } else {
-            Err(OxirsError::Query(format!("Unsupported SPARQL query type: {sparql}")))
+            Err(OxirsError::Query(format!(
+                "Unsupported SPARQL query type: {sparql}"
+            )))
         }
     }
 
@@ -789,43 +791,44 @@ impl RdfStore {
     fn execute_select_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
         // Basic pattern matching for simple SELECT queries
         // Pattern: SELECT ?var WHERE { ?s ?p ?o }
-        
+
         if sparql.contains("WHERE") {
             let variables = self.extract_select_variables(sparql)?;
             let triple_patterns = self.extract_triple_patterns(sparql)?;
-            
+
             let mut results = Vec::new();
-            
+
             // Execute query based on the pattern
             for pattern in triple_patterns {
                 let matching_quads = self.query_quads_by_pattern(&pattern)?;
-                
+
                 for quad in matching_quads {
                     let mut binding = VariableBinding::new();
-                    
+
                     // Bind variables based on the pattern
                     if let Some(var) = &pattern.subject {
                         if let Some(var_name) = var.strip_prefix('?') {
                             binding.bind(var_name.to_string(), Term::from(quad.subject().clone()));
                         }
                     }
-                    
+
                     if let Some(var) = &pattern.predicate {
                         if let Some(var_name) = var.strip_prefix('?') {
-                            binding.bind(var_name.to_string(), Term::from(quad.predicate().clone()));
+                            binding
+                                .bind(var_name.to_string(), Term::from(quad.predicate().clone()));
                         }
                     }
-                    
+
                     if let Some(var) = &pattern.object {
                         if let Some(var_name) = var.strip_prefix('?') {
                             binding.bind(var_name.to_string(), Term::from(quad.object().clone()));
                         }
                     }
-                    
+
                     results.push(binding);
                 }
             }
-            
+
             Ok(OxirsQueryResults::from_bindings(results, variables))
         } else {
             Ok(OxirsQueryResults::new())
@@ -836,14 +839,14 @@ impl RdfStore {
     fn execute_ask_query(&self, sparql: &str) -> Result<OxirsQueryResults> {
         // Basic ASK query: check if any triples match the pattern
         let triple_patterns = self.extract_triple_patterns(sparql)?;
-        
+
         for pattern in triple_patterns {
             let matching_quads = self.query_quads_by_pattern(&pattern)?;
             if !matching_quads.is_empty() {
                 return Ok(OxirsQueryResults::from_boolean(true));
             }
         }
-        
+
         Ok(OxirsQueryResults::from_boolean(false))
     }
 
@@ -852,12 +855,12 @@ impl RdfStore {
         // Basic CONSTRUCT query: return matching triples
         let triple_patterns = self.extract_triple_patterns(sparql)?;
         let mut result_quads = Vec::new();
-        
+
         for pattern in triple_patterns {
             let matching_quads = self.query_quads_by_pattern(&pattern)?;
             result_quads.extend(matching_quads);
         }
-        
+
         Ok(OxirsQueryResults::from_graph(result_quads))
     }
 
@@ -866,7 +869,7 @@ impl RdfStore {
         // Basic DESCRIBE query: return all triples about the specified resource
         let resources = self.extract_describe_resources(sparql)?;
         let mut result_quads = Vec::new();
-        
+
         for resource in resources {
             // Find all triples where the resource is subject or object
             let subject_pattern = SimpleTriplePattern {
@@ -879,35 +882,59 @@ impl RdfStore {
                 predicate: None,
                 object: Some(resource),
             };
-            
+
             let subject_quads = self.query_quads(
-                subject_pattern.subject.as_ref().and_then(|s| Self::string_to_subject(s)).as_ref(),
-                subject_pattern.predicate.as_ref().and_then(|p| Self::string_to_predicate(p)).as_ref(),
-                subject_pattern.object.as_ref().and_then(|o| Self::string_to_object(o)).as_ref(),
+                subject_pattern
+                    .subject
+                    .as_ref()
+                    .and_then(|s| Self::string_to_subject(s))
+                    .as_ref(),
+                subject_pattern
+                    .predicate
+                    .as_ref()
+                    .and_then(|p| Self::string_to_predicate(p))
+                    .as_ref(),
+                subject_pattern
+                    .object
+                    .as_ref()
+                    .and_then(|o| Self::string_to_object(o))
+                    .as_ref(),
                 None,
             )?;
             let object_quads = self.query_quads(
-                object_pattern.subject.as_ref().and_then(|s| Self::string_to_subject(s)).as_ref(),
-                object_pattern.predicate.as_ref().and_then(|p| Self::string_to_predicate(p)).as_ref(),
-                object_pattern.object.as_ref().and_then(|o| Self::string_to_object(o)).as_ref(),
+                object_pattern
+                    .subject
+                    .as_ref()
+                    .and_then(|s| Self::string_to_subject(s))
+                    .as_ref(),
+                object_pattern
+                    .predicate
+                    .as_ref()
+                    .and_then(|p| Self::string_to_predicate(p))
+                    .as_ref(),
+                object_pattern
+                    .object
+                    .as_ref()
+                    .and_then(|o| Self::string_to_object(o))
+                    .as_ref(),
                 None,
             )?;
-            
+
             result_quads.extend(subject_quads);
             result_quads.extend(object_quads);
         }
-        
+
         Ok(OxirsQueryResults::from_graph(result_quads))
     }
 
     /// Extract variables from SELECT clause
     fn extract_select_variables(&self, sparql: &str) -> Result<Vec<String>> {
         let mut variables = Vec::new();
-        
+
         if let Some(select_start) = sparql.to_uppercase().find("SELECT") {
             if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
                 let select_clause = &sparql[select_start + 6..where_start];
-                
+
                 for token in select_clause.split_whitespace() {
                     if let Some(var_name) = token.strip_prefix('?') {
                         variables.push(var_name.to_string());
@@ -915,28 +942,40 @@ impl RdfStore {
                 }
             }
         }
-        
+
         Ok(variables)
     }
 
     /// Extract triple patterns from WHERE clause
     fn extract_triple_patterns(&self, sparql: &str) -> Result<Vec<SimpleTriplePattern>> {
         let mut patterns = Vec::new();
-        
+
         if let Some(where_start) = sparql.to_uppercase().find("WHERE") {
             let where_clause = &sparql[where_start + 5..];
-            
+
             // Simple pattern extraction for { ?s ?p ?o }
             if let Some(start_brace) = where_clause.find('{') {
                 if let Some(end_brace) = where_clause.find('}') {
                     let pattern_text = &where_clause[start_brace + 1..end_brace];
                     let tokens: Vec<&str> = pattern_text.split_whitespace().collect();
-                    
+
                     if tokens.len() >= 3 {
-                        let subject = if tokens[0] == "." { None } else { Some(tokens[0].to_string()) };
-                        let predicate = if tokens[1] == "." { None } else { Some(tokens[1].to_string()) };
-                        let object = if tokens[2] == "." { None } else { Some(tokens[2].to_string()) };
-                        
+                        let subject = if tokens[0] == "." {
+                            None
+                        } else {
+                            Some(tokens[0].to_string())
+                        };
+                        let predicate = if tokens[1] == "." {
+                            None
+                        } else {
+                            Some(tokens[1].to_string())
+                        };
+                        let object = if tokens[2] == "." {
+                            None
+                        } else {
+                            Some(tokens[2].to_string())
+                        };
+
                         patterns.push(SimpleTriplePattern {
                             subject,
                             predicate,
@@ -946,17 +985,17 @@ impl RdfStore {
                 }
             }
         }
-        
+
         Ok(patterns)
     }
 
     /// Extract resources from DESCRIBE clause
     fn extract_describe_resources(&self, sparql: &str) -> Result<Vec<String>> {
         let mut resources = Vec::new();
-        
+
         if let Some(describe_start) = sparql.to_uppercase().find("DESCRIBE") {
             let describe_clause = &sparql[describe_start + 8..];
-            
+
             for token in describe_clause.split_whitespace() {
                 if token.starts_with('<') && token.ends_with('>') {
                     resources.push(token.to_string());
@@ -964,13 +1003,13 @@ impl RdfStore {
                     // Variable - for now just treat as literal
                     resources.push(token.to_string());
                 }
-                
+
                 if token.to_uppercase() == "WHERE" {
                     break;
                 }
             }
         }
-        
+
         Ok(resources)
     }
 
@@ -979,86 +1018,98 @@ impl RdfStore {
         match &self.backend {
             StorageBackend::UltraMemory(index, _arena) => {
                 let mut results = Vec::new();
-                
+
                 // Convert pattern to quad pattern
                 let _subject_filter = pattern.subject.as_deref();
                 let _predicate_filter = pattern.predicate.as_deref();
                 let _object_filter = pattern.object.as_deref();
-                
+
                 // Query the ultra index using find_quads method
                 // Convert string filters to proper types
                 let results_vec = index.find_quads(
-                    pattern.subject.as_ref().and_then(|s| Self::string_to_subject(s)).as_ref(),
-                    pattern.predicate.as_ref().and_then(|p| Self::string_to_predicate(p)).as_ref(),
-                    pattern.object.as_ref().and_then(|o| Self::string_to_object(o)).as_ref(),
-                    None // graph_name
+                    pattern
+                        .subject
+                        .as_ref()
+                        .and_then(|s| Self::string_to_subject(s))
+                        .as_ref(),
+                    pattern
+                        .predicate
+                        .as_ref()
+                        .and_then(|p| Self::string_to_predicate(p))
+                        .as_ref(),
+                    pattern
+                        .object
+                        .as_ref()
+                        .and_then(|o| Self::string_to_object(o))
+                        .as_ref(),
+                    None, // graph_name
                 );
                 results.extend(results_vec);
-                
+
                 Ok(results)
             }
             StorageBackend::Memory(storage) => {
                 let storage = storage.read().unwrap();
                 let mut results = Vec::new();
-                
+
                 for quad in &storage.quads {
                     let mut matches = true;
-                    
+
                     if let Some(s) = &pattern.subject {
                         if !s.starts_with('?') && quad.subject().to_string() != *s {
                             matches = false;
                         }
                     }
-                    
+
                     if let Some(p) = &pattern.predicate {
                         if !p.starts_with('?') && quad.predicate().to_string() != *p {
                             matches = false;
                         }
                     }
-                    
+
                     if let Some(o) = &pattern.object {
                         if !o.starts_with('?') && quad.object().to_string() != *o {
                             matches = false;
                         }
                     }
-                    
+
                     if matches {
                         results.push(quad.clone());
                     }
                 }
-                
+
                 Ok(results)
             }
             StorageBackend::Persistent(storage, _) => {
                 let storage = storage.read().unwrap();
                 let mut results = Vec::new();
-                
+
                 for quad in &storage.quads {
                     let mut matches = true;
-                    
+
                     if let Some(s) = &pattern.subject {
                         if !s.starts_with('?') && quad.subject().to_string() != *s {
                             matches = false;
                         }
                     }
-                    
+
                     if let Some(p) = &pattern.predicate {
                         if !p.starts_with('?') && quad.predicate().to_string() != *p {
                             matches = false;
                         }
                     }
-                    
+
                     if let Some(o) = &pattern.object {
                         if !o.starts_with('?') && quad.object().to_string() != *o {
                             matches = false;
                         }
                     }
-                    
+
                     if matches {
                         results.push(quad.clone());
                     }
                 }
-                
+
                 Ok(results)
             }
         }
@@ -1253,7 +1304,7 @@ impl RdfStore {
     /// Convert string to Subject term
     fn string_to_subject(s: &str) -> Option<Subject> {
         if s.starts_with('<') && s.ends_with('>') {
-            let iri = &s[1..s.len()-1];
+            let iri = &s[1..s.len() - 1];
             NamedNode::new(iri).ok().map(Subject::NamedNode)
         } else if let Some(blank_id) = s.strip_prefix("_:") {
             BlankNode::new(blank_id).ok().map(Subject::BlankNode)
@@ -1265,7 +1316,7 @@ impl RdfStore {
     /// Convert string to Predicate term
     fn string_to_predicate(p: &str) -> Option<Predicate> {
         if p.starts_with('<') && p.ends_with('>') {
-            let iri = &p[1..p.len()-1];
+            let iri = &p[1..p.len() - 1];
             NamedNode::new(iri).ok().map(Predicate::NamedNode)
         } else {
             None
@@ -1275,13 +1326,13 @@ impl RdfStore {
     /// Convert string to Object term
     fn string_to_object(o: &str) -> Option<Object> {
         if o.starts_with('<') && o.ends_with('>') {
-            let iri = &o[1..o.len()-1];
+            let iri = &o[1..o.len() - 1];
             NamedNode::new(iri).ok().map(Object::NamedNode)
         } else if let Some(blank_id) = o.strip_prefix("_:") {
             BlankNode::new(blank_id).ok().map(Object::BlankNode)
         } else if o.starts_with('"') {
             // Simple literal parsing - more sophisticated parsing would be needed for real use
-            let literal_content = &o[1..o.len()-1];
+            let literal_content = &o[1..o.len() - 1];
             Some(Object::Literal(Literal::new(literal_content)))
         } else {
             None

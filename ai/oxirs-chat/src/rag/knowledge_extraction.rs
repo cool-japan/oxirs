@@ -643,7 +643,7 @@ impl KnowledgeExtractionEngine {
     async fn discover_schema_elements(
         &self,
         text: &str,
-        entities: &[ExtractedEntity],
+        _entities: &[ExtractedEntity],
     ) -> Result<Vec<SchemaElement>> {
         let mut schema_elements = Vec::new();
 
@@ -671,7 +671,7 @@ impl KnowledgeExtractionEngine {
     async fn extract_temporal_facts(
         &self,
         text: &str,
-        entities: &[ExtractedEntity],
+        _entities: &[ExtractedEntity],
     ) -> Result<Vec<TemporalFact>> {
         let mut temporal_facts = Vec::new();
 

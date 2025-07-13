@@ -123,13 +123,12 @@ impl Validator {
         }
 
         // Additional checks for common schemes
-        if (iri.starts_with("http://") || iri.starts_with("https://"))
-            && iri.len() < 8 {
-                // Minimum valid HTTP(S) URL
-                return Err(StorageError::InvalidIri {
-                    iri: iri.to_string(),
-                });
-            }
+        if (iri.starts_with("http://") || iri.starts_with("https://")) && iri.len() < 8 {
+            // Minimum valid HTTP(S) URL
+            return Err(StorageError::InvalidIri {
+                iri: iri.to_string(),
+            });
+        }
 
         Ok(())
     }

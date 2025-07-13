@@ -75,12 +75,12 @@ enum DataComplexity {
     QuantumEnhanced,
 }
 
-fn create_simple_validation_data(store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
+fn create_simple_validation_data(_store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
     // Create basic person data with simple constraints
     for i in 0..size {
-        let person_iri = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
-        let name_literal = Term::Literal(Literal::new(format!("Person {i}")));
-        let age_literal = Term::Literal(Literal::new(format!("{}", 20 + (i % 60))));
+        let _person_iri = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
+        let _name_literal = Term::Literal(Literal::new(format!("Person {i}")));
+        let _age_literal = Term::Literal(Literal::new(format!("{}", 20 + (i % 60))));
 
         // Simple constraints
         let mut person_shape =
@@ -92,7 +92,7 @@ fn create_simple_validation_data(store: &ConcreteStore, size: usize, shapes: &mu
     }
 }
 
-fn create_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
+fn create_complex_validation_data(_store: &ConcreteStore, size: usize, shapes: &mut Vec<Shape>) {
     // Create complex nested data with advanced constraint combinations
     for i in 0..size {
         // Complex property paths
@@ -138,7 +138,7 @@ fn create_complex_validation_data(store: &ConcreteStore, size: usize, shapes: &m
 }
 
 fn create_ultra_complex_validation_data(
-    store: &ConcreteStore,
+    _store: &ConcreteStore,
     size: usize,
     shapes: &mut Vec<Shape>,
 ) {
@@ -192,7 +192,7 @@ fn create_ultra_complex_validation_data(
 }
 
 fn create_quantum_enhanced_validation_data(
-    store: &ConcreteStore,
+    _store: &ConcreteStore,
     size: usize,
     shapes: &mut Vec<Shape>,
 ) {
@@ -374,7 +374,7 @@ fn bench_memory_optimization_performance(c: &mut Criterion) {
 fn bench_adaptive_constraint_ordering(c: &mut Criterion) {
     let mut group = c.benchmark_group("adaptive_constraint_ordering");
 
-    let (store, shapes) = create_ultra_performance_data(500, DataComplexity::UltraComplex);
+    let (_store, shapes) = create_ultra_performance_data(500, DataComplexity::UltraComplex);
     let mut validator = Validator::new();
 
     for shape in shapes {

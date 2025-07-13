@@ -67,21 +67,21 @@ pub struct UserSummary {
 }
 
 /// Login handler
-#[instrument(skip(state, request))]
+#[instrument(skip(_state, request))]
 pub async fn login_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     Json(request): Json<LoginRequest>,
 ) -> Result<Response, FusekiError> {
     let start_time = Instant::now();
 
     // Check if authentication is enabled
-    let auth_service = state
+    let auth_service = _state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
 
     // Record authentication attempt
-    if let Some(metrics_service) = &state.metrics_service {
+    if let Some(metrics_service) = &_state.metrics_service {
         metrics_service.record_authentication(false, "form").await;
     }
 
@@ -102,18 +102,18 @@ pub async fn login_handler(
     match auth_result {
         AuthResult::Authenticated(user) => {
             // Record successful authentication
-            if let Some(metrics_service) = &state.metrics_service {
+            if let Some(metrics_service) = &_state.metrics_service {
                 metrics_service.record_authentication(true, "form").await;
             }
 
             // Generate authentication token/session
-            let (token, expires_at) = if state.config.security.jwt.is_some() {
+            let (token, expires_at) = if _state.config.security.jwt.is_some() {
                 #[cfg(feature = "auth")]
                 {
                     let token = auth_service.create_jwt_token(&user)?;
                     let expires_at = chrono::Utc::now()
                         + chrono::Duration::seconds(
-                            state.config.security.jwt.as_ref().unwrap().expiration_secs as i64,
+                            _state.config.security.jwt.as_ref().unwrap().expiration_secs as i64,
                         );
                     (Some(token), Some(expires_at))
                 }
@@ -125,7 +125,7 @@ pub async fn login_handler(
                 // Create session
                 let session_id = auth_service.create_session(user.clone()).await?;
                 let expires_at = chrono::Utc::now()
-                    + chrono::Duration::seconds(state.config.security.session.timeout_secs as i64);
+                    + chrono::Duration::seconds(_state.config.security.session.timeout_secs as i64);
                 (Some(session_id), Some(expires_at))
             };
 
@@ -140,11 +140,11 @@ pub async fn login_handler(
             let mut resp = Json(response).into_response();
 
             // Set session cookie if using session-based auth
-            if state.config.security.jwt.is_none() {
+            if _state.config.security.jwt.is_none() {
                 if let Some(session_id) = token {
                     let cookie_value = format!(
                         "session_id={}; HttpOnly; Secure; SameSite=Strict; Max-Age={}",
-                        session_id, state.config.security.session.timeout_secs
+                        session_id, _state.config.security.session.timeout_secs
                     );
                     resp.headers_mut()
                         .insert(SET_COOKIE, cookie_value.parse().unwrap());
@@ -215,12 +215,12 @@ pub async fn login_handler(
 }
 
 /// Logout handler
-#[instrument(skip(state, headers))]
+#[instrument(skip(_state, headers))]
 pub async fn logout_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Response, FusekiError> {
-    let auth_service = state
+    let auth_service = _state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
@@ -258,9 +258,9 @@ pub async fn logout_handler(
 }
 
 /// Get current user information
-#[instrument(skip(state))]
+#[instrument(skip(_state))]
 pub async fn user_info_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {
     // For now, return a placeholder response since auth extraction isn't fully implemented
     let response = UserInfoResponse {
@@ -277,9 +277,9 @@ pub async fn user_info_handler(
 }
 
 /// List all users (admin only)
-#[instrument(skip(state))]
+#[instrument(skip(_state))]
 pub async fn list_users_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> Result<Json<UsersListResponse>, FusekiError> {
     // For now, return a placeholder response since auth extraction isn't fully implemented
     let users = vec![UserSummary {
@@ -297,9 +297,9 @@ pub async fn list_users_handler(
 }
 
 /// Register new user (admin only)
-#[instrument(skip(state, auth_user, request))]
+#[instrument(skip(_state, auth_user, request))]
 pub async fn register_user_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     auth_user: AuthUser,
     Json(request): Json<RegisterUserRequest>,
 ) -> Result<Json<UserInfoResponse>, FusekiError> {
@@ -312,7 +312,7 @@ pub async fn register_user_handler(
         ));
     }
 
-    let auth_service = state
+    let auth_service = _state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
@@ -350,7 +350,7 @@ pub async fn register_user_handler(
         .await?;
 
     // Compute permissions for response - simplified for now
-    let user_config = auth_service.get_user(&request.username).await.unwrap();
+    let _user_config = auth_service.get_user(&request.username).await.unwrap();
     let permissions = vec![crate::auth::Permission::GlobalRead]; // Simplified
 
     let response = UserInfoResponse {
@@ -372,15 +372,15 @@ pub async fn register_user_handler(
 }
 
 /// Change user password
-#[instrument(skip(state, auth_user, request))]
+#[instrument(skip(_state, auth_user, request))]
 pub async fn change_password_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     auth_user: AuthUser,
     Json(request): Json<ChangePasswordRequest>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let user = auth_user.0;
 
-    let auth_service = state
+    let auth_service = _state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
@@ -417,9 +417,9 @@ pub async fn change_password_handler(
 }
 
 /// Delete user (admin only)
-#[instrument(skip(state, auth_user, username))]
+#[instrument(skip(_state, auth_user, username))]
 pub async fn delete_user_handler(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     auth_user: AuthUser,
     axum::extract::Path(username): axum::extract::Path<String>,
 ) -> Result<StatusCode, FusekiError> {
@@ -437,7 +437,7 @@ pub async fn delete_user_handler(
         return Err(FusekiError::bad_request("Cannot delete your own account"));
     }
 
-    let auth_service = state
+    let auth_service = _state
         .auth_service
         .as_ref()
         .ok_or_else(|| FusekiError::service_unavailable("Authentication service not available"))?;
@@ -465,8 +465,8 @@ fn extract_session_from_headers(headers: &HeaderMap) -> FusekiResult<Option<Stri
     // Try to extract from Authorization header (Bearer token)
     if let Some(auth_header) = headers.get(AUTHORIZATION) {
         if let Ok(auth_str) = auth_header.to_str() {
-            if auth_str.starts_with("Bearer ") {
-                return Ok(Some(auth_str[7..].to_string()));
+            if let Some(stripped) = auth_str.strip_prefix("Bearer ") {
+                return Ok(Some(stripped.to_string()));
             }
         }
     }

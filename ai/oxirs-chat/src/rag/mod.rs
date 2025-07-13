@@ -87,6 +87,7 @@ use oxirs_embed::{
     EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple as EmbedTriple,
     Vector as EmbedVector,
 };
+use oxirs_vec::VectorIndex;
 use oxirs_vec::{
     index::{
         AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType,
@@ -94,7 +95,6 @@ use oxirs_vec::{
     },
     similarity,
 };
-use oxirs_vec::VectorIndex;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -289,7 +289,7 @@ impl RagEngine {
     pub async fn with_vector_index(
         config: RagConfig,
         store: Arc<dyn Store>,
-        vector_dimensions: usize,
+        _vector_dimensions: usize,
     ) -> Result<Self> {
         let mut engine = Self::new(config, store);
         engine.initialize().await?;

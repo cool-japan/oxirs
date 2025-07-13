@@ -22,6 +22,7 @@ pub mod parallel;
 pub mod path;
 pub mod query;
 pub mod query_analysis;
+pub mod results;
 pub mod statistics_collector;
 pub mod streaming;
 pub mod term;
@@ -37,6 +38,7 @@ pub use algebra::{
     OrderCondition, Solution, Term, TriplePattern, UnaryOperator, Variable,
 };
 pub use executor::{Dataset, ExecutionContext, InMemoryDataset, ParallelConfig, QueryExecutor};
+pub use results::{QueryResult, ResultFormat, ResultSerializer};
 
 // Common Result type for the crate
 pub type Result<T> = anyhow::Result<T>;

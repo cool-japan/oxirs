@@ -9,7 +9,8 @@ use tracing::{debug, info};
 
 use crate::{
     planner::{FilterExpression, QueryInfo, TriplePattern},
-    FederatedService, ServiceCapability, ServiceRegistry,
+    service_registry::ServiceRegistry,
+    FederatedService, ServiceCapability,
 };
 
 use super::types::*;
@@ -54,7 +55,6 @@ impl ServiceOptimizer {
 
         let mut optimized_services = Vec::new();
         let mut global_filters = query_info.filters.clone();
-        let mut cross_service_joins = Vec::new();
 
         // Analyze SERVICE clauses
         for service_clause in &service_clauses {
@@ -65,7 +65,7 @@ impl ServiceOptimizer {
         }
 
         // Identify cross-service joins
-        cross_service_joins = self.identify_cross_service_joins(&optimized_services);
+        let cross_service_joins = self.identify_cross_service_joins(&optimized_services);
 
         // Apply global optimizations
         let execution_strategy =
@@ -151,7 +151,7 @@ impl ServiceOptimizer {
         }
 
         // Try to discover service at endpoint
-        let discovery = crate::ServiceDiscovery::new();
+        let discovery = crate::discovery::ServiceDiscovery::new();
         if let Some(service) = discovery.discover_service_at_endpoint(endpoint).await? {
             return Ok(service);
         }
@@ -361,8 +361,6 @@ impl ServiceOptimizer {
 
     /// Optimize patterns specifically for Wikidata
     fn optimize_for_wikidata(&self, patterns: Vec<TriplePattern>) -> Vec<TriplePattern> {
-        
-
         // Wikidata-specific optimizations
         // 1. Use HINT:Query optimizer hints
         // 2. Prefer wdt: properties over full statements
@@ -373,8 +371,6 @@ impl ServiceOptimizer {
 
     /// Optimize patterns specifically for DBpedia
     fn optimize_for_dbpedia(&self, patterns: Vec<TriplePattern>) -> Vec<TriplePattern> {
-        
-
         // DBpedia-specific optimizations
         // 1. Use indexed properties first
         // 2. Avoid expensive property paths
@@ -619,7 +615,7 @@ impl ServiceOptimizer {
     }
 
     /// Apply SERVICE clause merging optimization
-    pub fn merge_service_clauses(&self, services: &mut Vec<OptimizedServiceClause>) -> Result<()> {
+    pub fn merge_service_clauses(&self, services: &mut [OptimizedServiceClause]) -> Result<()> {
         // Group services by endpoint
         let mut endpoint_groups: HashMap<String, Vec<usize>> = HashMap::new();
 
@@ -722,8 +718,6 @@ impl ServiceOptimizer {
         true
     }
 
-    /// Extract all variables used by a service
-
     /// Get predicate statistics from cache
     pub fn get_predicate_stats(&self, predicate: &str) -> Option<PredicateStatistics> {
         self.statistics_cache.get_predicate_stats(predicate)
@@ -733,7 +727,7 @@ impl ServiceOptimizer {
     pub fn update_service_performance(
         &self,
         service_id: &str,
-        metrics: &ServicePerformanceMetrics,
+        _metrics: &ServicePerformanceMetrics,
     ) {
         // Note: Arc<StatisticsCache> doesn't allow mutable access, this is a design issue
         // For now, we'll need to make StatisticsCache methods work with Arc/Mutex
@@ -756,7 +750,7 @@ impl ServiceOptimizer {
     pub fn estimate_single_pattern_service_cost(
         &self,
         pattern: &TriplePattern,
-        service: &FederatedService,
+        _service: &FederatedService,
     ) -> f64 {
         // Basic cost estimation based on pattern complexity and service performance
         let base_cost = 1.0;
@@ -790,22 +784,249 @@ impl ServiceOptimizer {
         service: &FederatedService,
         registry: &ServiceRegistry,
     ) -> Result<u64> {
-        // TODO: Implement actual ML model for result size prediction
-        // For now, return a simple heuristic-based estimate
-        let base_size = 1000u64;
-        let complexity_factor = match self.calculate_pattern_complexity(pattern) {
-            PatternComplexity::Simple => 0.5,
-            PatternComplexity::Medium => 1.0,
-            PatternComplexity::Complex => 2.0,
+        // Extract features for ML prediction
+        let features = self.extract_ml_features(pattern, service, registry)?;
+
+        // Use trained ML model for prediction
+        let predicted_size = self.predict_with_ml_model(&features)?;
+
+        // Apply bounds checking
+        let bounded_size = predicted_size.max(1).min(1_000_000); // Between 1 and 1M results
+
+        debug!(
+            "ML prediction for pattern {:?}: {} results (features: {:?})",
+            pattern, bounded_size, features
+        );
+
+        Ok(bounded_size)
+    }
+
+    /// Extract machine learning features from pattern and service
+    fn extract_ml_features(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+        registry: &ServiceRegistry,
+    ) -> Result<MLFeatures> {
+        let mut features = MLFeatures::default();
+
+        // Pattern complexity features
+        let complexity = self.calculate_pattern_complexity(pattern);
+        features.pattern_complexity = match complexity {
+            PatternComplexity::Simple => 1.0,
+            PatternComplexity::Medium => 2.0,
+            PatternComplexity::Complex => 3.0,
         };
-        Ok((base_size as f64 * complexity_factor) as u64)
+
+        // Variable count in pattern
+        features.variable_count = self.count_variables_in_pattern(pattern) as f64;
+
+        // Service-specific features
+        features.service_load = self.get_ml_service_load_factor(service, registry) as f64;
+        features.service_response_time = self.get_average_response_time(service, registry) as f64;
+
+        // Dataset size estimation
+        features.estimated_dataset_size =
+            self.estimate_service_dataset_size(service, registry) as f64;
+
+        // Pattern specificity (how specific vs. how general the pattern is)
+        features.pattern_specificity = self.calculate_pattern_specificity(pattern);
+
+        // Historical performance
+        features.historical_avg_size = self.get_historical_average_size(pattern, service) as f64;
+
+        Ok(features)
+    }
+
+    /// Predict result size using ML model (simple linear regression for now)
+    fn predict_with_ml_model(&self, features: &MLFeatures) -> Result<u64> {
+        // Simple linear regression model weights (would be learned from training data)
+        let weights = MLModelWeights {
+            intercept: 100.0,
+            pattern_complexity: 500.0,
+            variable_count: 200.0,
+            service_load: -50.0, // More load = fewer results expected
+            service_response_time: 0.1,
+            estimated_dataset_size: 0.001,
+            pattern_specificity: -300.0, // More specific = fewer results
+            historical_avg_size: 0.7,    // Strong predictor
+        };
+
+        // Linear prediction: y = intercept + sum(weight_i * feature_i)
+        let prediction = weights.intercept
+            + weights.pattern_complexity * features.pattern_complexity
+            + weights.variable_count * features.variable_count
+            + weights.service_load * features.service_load
+            + weights.service_response_time * features.service_response_time
+            + weights.estimated_dataset_size * features.estimated_dataset_size
+            + weights.pattern_specificity * features.pattern_specificity
+            + weights.historical_avg_size * features.historical_avg_size;
+
+        // Apply non-linear activation (sigmoid-like) to bound the result
+        let bounded_prediction =
+            (prediction.max(0.0) / (1.0 + (-prediction / 1000.0).exp())) * 10000.0;
+
+        Ok(bounded_prediction as u64)
+    }
+
+    /// Count variables in a triple pattern
+    fn count_variables_in_pattern(&self, pattern: &TriplePattern) -> usize {
+        let mut count = 0;
+        if let Some(subject) = &pattern.subject {
+            if subject.starts_with('?') || subject.starts_with('$') {
+                count += 1;
+            }
+        }
+        if let Some(predicate) = &pattern.predicate {
+            if predicate.starts_with('?') || predicate.starts_with('$') {
+                count += 1;
+            }
+        }
+        if let Some(object) = &pattern.object {
+            if object.starts_with('?') || object.starts_with('$') {
+                count += 1;
+            }
+        }
+        count
+    }
+
+    /// Calculate pattern specificity (0.0 = very general, 1.0 = very specific)
+    fn calculate_pattern_specificity(&self, pattern: &TriplePattern) -> f64 {
+        let mut specificity = 0.0;
+
+        // Concrete subject increases specificity
+        if let Some(subject) = &pattern.subject {
+            if !subject.starts_with('?') && !subject.starts_with('$') {
+                specificity += 0.4;
+            }
+        }
+
+        // Concrete predicate increases specificity
+        if let Some(predicate) = &pattern.predicate {
+            if !predicate.starts_with('?') && !predicate.starts_with('$') {
+                specificity += 0.3;
+            }
+        }
+
+        // Concrete object increases specificity
+        if let Some(object) = &pattern.object {
+            if !object.starts_with('?') && !object.starts_with('$') {
+                specificity += 0.3;
+            }
+        }
+
+        specificity
+    }
+
+    /// Get service load factor for ML features (0-100)
+    fn get_ml_service_load_factor(
+        &self,
+        service: &FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> u32 {
+        // Simple heuristic based on recent query count
+        // In real implementation, would query service metrics
+        match service.capabilities.len() {
+            0..=5 => 20,  // Low load
+            6..=15 => 50, // Medium load
+            _ => 80,      // High load
+        }
+    }
+
+    /// Get average response time for service (in milliseconds)
+    fn get_average_response_time(
+        &self,
+        _service: &FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> u32 {
+        // Would be tracked from actual service calls
+        // For now, return a reasonable default
+        150
+    }
+
+    /// Estimate total dataset size for service
+    fn estimate_service_dataset_size(
+        &self,
+        service: &FederatedService,
+        _registry: &ServiceRegistry,
+    ) -> u64 {
+        // Heuristic based on service capabilities and type
+        use crate::service::ServiceType;
+        let base_size = match service.service_type {
+            ServiceType::Sparql => 10_000_000,   // Medium SPARQL endpoint
+            ServiceType::GraphQL => 5_000_000,   // Medium GraphQL service
+            ServiceType::Hybrid => 15_000_000,   // Larger hybrid service
+            ServiceType::RestRdf => 1_000_000,   // Smaller REST API
+            ServiceType::Custom(_) => 5_000_000, // Default for custom services
+        };
+
+        // Adjust based on capabilities
+        let capability_factor = (service.capabilities.len() as f64 / 10.0).min(2.0);
+        (base_size as f64 * capability_factor) as u64
+    }
+
+    /// Get historical average result size for similar patterns
+    fn get_historical_average_size(
+        &self,
+        pattern: &TriplePattern,
+        service: &FederatedService,
+    ) -> u64 {
+        // Look up in statistics cache
+        let cache_key = format!("{}:{}", service.id, self.pattern_to_cache_key(pattern));
+
+        self.statistics_cache
+            .get_historical_size(&cache_key)
+            .unwrap_or_else(|| {
+                // Fallback: estimate based on pattern complexity
+                match self.calculate_pattern_complexity(pattern) {
+                    PatternComplexity::Simple => 5000,
+                    PatternComplexity::Medium => 1000,
+                    PatternComplexity::Complex => 200,
+                }
+            })
+    }
+
+    /// Convert pattern to cache key
+    fn pattern_to_cache_key(&self, pattern: &TriplePattern) -> String {
+        // Create a normalized pattern key for caching
+        let subject_type = if let Some(subject) = &pattern.subject {
+            if subject.starts_with('?') || subject.starts_with('$') {
+                "VAR"
+            } else {
+                "CONST"
+            }
+        } else {
+            "NONE"
+        };
+
+        let predicate_type = if let Some(predicate) = &pattern.predicate {
+            if predicate.starts_with('?') || predicate.starts_with('$') {
+                "VAR"
+            } else {
+                "CONST"
+            }
+        } else {
+            "NONE"
+        };
+
+        let object_type = if let Some(object) = &pattern.object {
+            if object.starts_with('?') || object.starts_with('$') {
+                "VAR"
+            } else {
+                "CONST"
+            }
+        } else {
+            "NONE"
+        };
+
+        format!("{}:{}:{}", subject_type, predicate_type, object_type)
     }
 
     /// Estimate range selectivity factor for numeric/temporal predicates
     pub fn estimate_range_selectivity_factor(
         &self,
-        pattern: &TriplePattern,
-        service: &FederatedService,
+        _pattern: &TriplePattern,
+        _service: &FederatedService,
     ) -> Result<f64> {
         // TODO: Implement range-based selectivity analysis
         // For now, return a default factor

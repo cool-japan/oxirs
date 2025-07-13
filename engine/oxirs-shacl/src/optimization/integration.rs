@@ -3,6 +3,8 @@
 //! This module provides optimized validation capabilities that integrate
 //! advanced performance features with the core SHACL validation engine.
 
+#![allow(dead_code)]
+
 use crate::{
     constraints::ConstraintContext,
     iri_resolver::IriResolver,

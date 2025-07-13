@@ -632,8 +632,8 @@ pub fn generate_html_report(report: &ValidationReport) -> Result<String> {
             )?;
             writeln!(
                 output,
-                "                        <td class=\"focus-node\">{}</td>",
-                format!("{:?}", violation.focus_node)
+                "                        <td class=\"focus-node\">{:?}</td>",
+                violation.focus_node
             )?;
             writeln!(
                 output,

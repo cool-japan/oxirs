@@ -917,7 +917,6 @@ impl StatisticsCollector {
         coefficient_of_variation > 1.5
     }
 
-
     /// Rebuild histogram with better bucket distribution
     fn rebuild_histogram(&mut self, predicate: &str) -> Result<()> {
         let histogram = self.histograms.get(predicate);
@@ -1161,6 +1160,50 @@ impl StatisticsCollector {
         }
 
         growth_rates
+    }
+
+    /// Update statistics based on actual execution results
+    /// This method allows the statistics collector to learn from real query execution data
+    pub fn update_execution_statistics(
+        &mut self,
+        actual_duration: Duration,
+        actual_cardinality: usize,
+        memory_used: usize,
+    ) -> Result<()> {
+        // Update temporal statistics if needed
+        self.update_temporal_statistics()?;
+
+        // Update execution time statistics
+        // Use a generic pattern key for overall query performance
+        let execution_key = "overall_query_execution".to_string();
+        self.stats
+            .execution_times
+            .insert(execution_key.clone(), actual_duration);
+
+        // Update cardinality statistics
+        // Track overall cardinality patterns
+        let cardinality_key = "overall_cardinality".to_string();
+        self.stats
+            .cardinalities
+            .insert(cardinality_key, actual_cardinality);
+
+        // Update pattern cardinality if we can infer pattern information
+        // This is a simplified approach - ideally we'd have the actual pattern
+        let pattern_key = format!("execution_pattern_{actual_cardinality}");
+        *self
+            .stats
+            .pattern_cardinality
+            .entry(pattern_key)
+            .or_insert(0) += 1;
+
+        tracing::debug!(
+            "Updated execution statistics: duration={:?}, cardinality={}, memory={}KB",
+            actual_duration,
+            actual_cardinality,
+            memory_used / 1024,
+        );
+
+        Ok(())
     }
 }
 

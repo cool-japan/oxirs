@@ -239,11 +239,6 @@ impl AdvancedNeuralManager {
         }
     }
 
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(ManagerConfig::default())
-    }
-
     /// Register a new neural architecture
     pub async fn register_architecture(
         &self,
@@ -491,9 +486,9 @@ impl AdvancedNeuralManager {
         validation_data: Option<TrainingData>,
     ) -> Result<()> {
         let mut architectures = self.architectures.write().await;
-        let architecture = architectures.get_mut(name).ok_or_else(|| {
-            ShaclAiError::Configuration(format!("Architecture {name} not found"))
-        })?;
+        let architecture = architectures
+            .get_mut(name)
+            .ok_or_else(|| ShaclAiError::Configuration(format!("Architecture {name} not found")))?;
 
         // Cache training data
         {
@@ -683,6 +678,12 @@ impl AdvancedNeuralManager {
         architecture.metrics.inference_time_ms = 18.4;
 
         true
+    }
+}
+
+impl Default for AdvancedNeuralManager {
+    fn default() -> Self {
+        Self::new(ManagerConfig::default())
     }
 }
 

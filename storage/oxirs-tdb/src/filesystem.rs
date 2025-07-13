@@ -1305,6 +1305,7 @@ impl TdbFileSystem {
     }
 
     /// Check for cycles in wait-for graph (DFS-based)
+    #[allow(clippy::only_used_in_recursion)]
     fn has_cycle_from(
         &self,
         graph: &HashMap<String, Vec<String>>,
@@ -1470,6 +1471,7 @@ impl Drop for TdbFileSystem {
 }
 
 #[cfg(test)]
+#[allow(clippy::len_zero)]
 mod tests {
     use super::*;
     use std::io::{Read, Seek, SeekFrom};

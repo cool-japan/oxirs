@@ -64,9 +64,7 @@ fn detect_format(file_path: &PathBuf) -> Result<ExportFormat, Box<dyn std::error
     }
 
     // Default to Turtle if unable to detect
-    eprintln!(
-        "Warning: Unable to detect format for {file_path:?}, assuming Turtle"
-    );
+    eprintln!("Warning: Unable to detect format for {file_path:?}, assuming Turtle");
     Ok(ExportFormat::Turtle)
 }
 

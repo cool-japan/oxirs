@@ -617,9 +617,7 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(format!("<{entity_uri}>")),
                             predicate: Some(predicate.clone()),
                             object: Some(object_value.clone()),
-                            pattern_string: format!(
-                                "<{entity_uri}> {predicate} {object_value}"
-                            ),
+                            pattern_string: format!("<{entity_uri}> {predicate} {object_value}"),
                         };
                         triple_patterns.push(property_triple.clone());
                         sparql_builder.add_insert_triple(&property_triple);
@@ -638,7 +636,7 @@ impl GraphQLToSparqlTranslator {
         &self,
         field: &Selection,
         sparql_builder: &mut SparqlUpdateBuilder,
-        variable_mappings: &mut HashMap<String, String>,
+        _variable_mappings: &mut HashMap<String, String>,
         triple_patterns: &mut Vec<TriplePattern>,
     ) -> Result<()> {
         let args = &field.arguments;
@@ -656,9 +654,7 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(object_value.clone()),
-                            pattern_string: format!(
-                                "{entity_var} {predicate} {object_value}"
-                            ),
+                            pattern_string: format!("{entity_var} {predicate} {object_value}"),
                         };
                         triple_patterns.push(where_triple.clone());
                         sparql_builder.add_where_triple(&where_triple);
@@ -680,9 +676,7 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(old_value_var.clone()),
-                            pattern_string: format!(
-                                "{entity_var} {predicate} {old_value_var}"
-                            ),
+                            pattern_string: format!("{entity_var} {predicate} {old_value_var}"),
                         };
                         sparql_builder.add_delete_triple(&delete_triple);
 
@@ -691,9 +685,7 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(new_object_value.clone()),
-                            pattern_string: format!(
-                                "{entity_var} {predicate} {new_object_value}"
-                            ),
+                            pattern_string: format!("{entity_var} {predicate} {new_object_value}"),
                         };
                         sparql_builder.add_insert_triple(&insert_triple);
                     }
@@ -709,7 +701,7 @@ impl GraphQLToSparqlTranslator {
         &self,
         field: &Selection,
         sparql_builder: &mut SparqlUpdateBuilder,
-        variable_mappings: &mut HashMap<String, String>,
+        _variable_mappings: &mut HashMap<String, String>,
         triple_patterns: &mut Vec<TriplePattern>,
     ) -> Result<()> {
         let args = &field.arguments;
@@ -726,9 +718,7 @@ impl GraphQLToSparqlTranslator {
                             subject: Some(entity_var.clone()),
                             predicate: Some(predicate.clone()),
                             object: Some(object_value.clone()),
-                            pattern_string: format!(
-                                "{entity_var} {predicate} {object_value}"
-                            ),
+                            pattern_string: format!("{entity_var} {predicate} {object_value}"),
                         };
                         triple_patterns.push(where_triple.clone());
                         sparql_builder.add_where_triple(&where_triple);
@@ -750,7 +740,7 @@ impl GraphQLToSparqlTranslator {
     }
 
     /// Get RDF predicate for a GraphQL field
-    fn get_predicate_for_field(&self, field_name: &str, field_type: &str) -> Result<String> {
+    fn get_predicate_for_field(&self, field_name: &str, _field_type: &str) -> Result<String> {
         // Check predicate mappings first
         if let Some(mapped_predicate) = self.predicate_mappings.get(field_name) {
             return Ok(mapped_predicate.clone());
@@ -906,6 +896,7 @@ impl GraphQLToSparqlTranslator {
             alias: None, // Simplified
             arguments,
             selection_set: Vec::new(), // Simplified - would need recursive parsing
+            fragment: None,
         }))
     }
 

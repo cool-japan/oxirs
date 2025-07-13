@@ -50,7 +50,9 @@ impl HnswIndex {
         let results: Vec<(String, f32)> = final_results
             .into_iter()
             .filter_map(|candidate| {
-                self.nodes().get(candidate.id).map(|node| (node.uri.clone(), candidate.distance))
+                self.nodes()
+                    .get(candidate.id)
+                    .map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
 
@@ -178,7 +180,9 @@ impl HnswIndex {
             .into_iter()
             .take(k)
             .filter_map(|candidate| {
-                self.nodes().get(candidate.id).map(|node| (node.uri.clone(), candidate.distance))
+                self.nodes()
+                    .get(candidate.id)
+                    .map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
 
@@ -344,7 +348,9 @@ impl HnswIndex {
             .into_iter()
             .take(k)
             .filter_map(|candidate| {
-                self.nodes().get(candidate.id).map(|node| (node.uri.clone(), candidate.distance))
+                self.nodes()
+                    .get(candidate.id)
+                    .map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
 

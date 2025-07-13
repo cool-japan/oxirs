@@ -359,8 +359,7 @@ pub struct SentenceTransformerGenerator {
 }
 
 /// Supported transformer model types
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum TransformerModelType {
     /// Basic BERT-based model (already implemented)
     #[default]
@@ -388,7 +387,6 @@ pub struct ModelDetails {
     pub model_size_mb: usize,
     pub typical_inference_time_ms: u64,
 }
-
 
 impl SentenceTransformerGenerator {
     pub fn new(config: EmbeddingConfig) -> Self {

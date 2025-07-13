@@ -249,7 +249,7 @@ impl MultiDimensionalReasoner {
     pub async fn reason_multidimensionally(
         &mut self,
         query: &str,
-        context: &str,
+        _context: &str,
     ) -> MultiDimensionalReasoningResult {
         // Placeholder implementation
         // Full implementation in original file from lines 2034-2076

@@ -193,7 +193,10 @@ fn debugging_example() -> Result<()> {
     let _results = debug_engine.debug_forward_chain(&test_facts)?;
 
     // Show debug information
-    println!("Debug trace entries: {trace_count}", trace_count = debug_engine.get_trace().len());
+    println!(
+        "Debug trace entries: {trace_count}",
+        trace_count = debug_engine.get_trace().len()
+    );
 
     let metrics = debug_engine.get_metrics();
     println!("Performance metrics:");
@@ -615,7 +618,10 @@ fn performance_analysis_example() -> Result<()> {
     if !conflicts.is_empty() {
         println!("\n⚠️  Performance issues detected:");
         for conflict in conflicts {
-            println!("    {resolution_suggestion}", resolution_suggestion = conflict.resolution_suggestion);
+            println!(
+                "    {resolution_suggestion}",
+                resolution_suggestion = conflict.resolution_suggestion
+            );
         }
     } else {
         println!("\n✅ No performance issues detected");

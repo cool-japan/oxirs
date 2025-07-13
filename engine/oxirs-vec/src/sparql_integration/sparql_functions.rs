@@ -438,13 +438,15 @@ impl SparqlVectorFunctions {
             }
 
             Some(doc)
-        } else { 
-            self.custom_functions.get(name).map(|custom_func| format!(
-                "Custom Function: {}\nDescription: {}\nArity: {}",
-                name,
-                custom_func.description(),
-                custom_func.arity()
-            ))
+        } else {
+            self.custom_functions.get(name).map(|custom_func| {
+                format!(
+                    "Custom Function: {}\nDescription: {}\nArity: {}",
+                    name,
+                    custom_func.description(),
+                    custom_func.arity()
+                )
+            })
         }
     }
 

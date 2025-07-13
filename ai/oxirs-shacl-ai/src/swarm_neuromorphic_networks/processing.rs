@@ -6,10 +6,7 @@ use tracing::info;
 use oxirs_core::Store;
 use oxirs_shacl::{Shape, ValidationReport};
 
-use super::{
-    network::SwarmNeuromorphicNetwork,
-    types::SwarmValidationContext,
-};
+use super::{network::SwarmNeuromorphicNetwork, types::SwarmValidationContext};
 use crate::Result;
 
 // Result types for processing operations
@@ -441,8 +438,8 @@ impl SwarmNeuromorphicNetwork {
 
     async fn create_swarm_validation_report(
         &self,
-        collective_decisions: &CollectiveDecisionResults,
-        emergent_behavior: &EmergentBehaviorResults,
+        _collective_decisions: &CollectiveDecisionResults,
+        _emergent_behavior: &EmergentBehaviorResults,
     ) -> Result<ValidationReport> {
         // Simplified implementation - would create comprehensive swarm validation report
         Ok(ValidationReport::default())
@@ -527,8 +524,7 @@ impl SwarmNeuromorphicNetwork {
 }
 
 // Helper struct for initialization results
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct InitResult {
     topology_established: bool,
     intelligence_active: bool,
@@ -539,4 +535,3 @@ struct InitResult {
     mechanisms_active: bool,
     optimization_running: bool,
 }
-

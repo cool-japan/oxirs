@@ -6,6 +6,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Once;
 use std::time::Instant;
 use tracing::Level;
 use tracing_subscriber::{
@@ -13,6 +14,8 @@ use tracing_subscriber::{
     layer::SubscriberExt,
     Layer, Registry,
 };
+
+static INIT: Once = Once::new();
 
 /// Logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,75 +59,77 @@ impl Default for LogConfig {
 
 /// Initialize logging system
 pub fn init_logging(config: &LogConfig) -> Result<(), Box<dyn std::error::Error>> {
-    let level = match config.level.to_lowercase().as_str() {
-        "trace" => Level::TRACE,
-        "debug" => Level::DEBUG,
-        "info" => Level::INFO,
-        "warn" => Level::WARN,
-        "error" => Level::ERROR,
-        _ => Level::INFO,
-    };
+    INIT.call_once(|| {
+        let level = match config.level.to_lowercase().as_str() {
+            "trace" => Level::TRACE,
+            "debug" => Level::DEBUG,
+            "info" => Level::INFO,
+            "warn" => Level::WARN,
+            "error" => Level::ERROR,
+            _ => Level::INFO,
+        };
 
-    let registry = Registry::default();
+        let registry = Registry::default();
 
-    // Console output layer
-    let console_layer = match config.format {
-        LogFormat::Text => {
-            let layer = fmt::layer()
-                .with_target(config.source_location)
-                .with_thread_ids(config.thread_ids)
-                .with_span_events(FmtSpan::CLOSE);
+        // Console output layer
+        let console_layer = match config.format {
+            LogFormat::Text => {
+                let layer = fmt::layer()
+                    .with_target(config.source_location)
+                    .with_thread_ids(config.thread_ids)
+                    .with_span_events(FmtSpan::CLOSE);
 
-            if config.timestamps {
-                layer.boxed()
-            } else {
-                layer.without_time().boxed()
+                if config.timestamps {
+                    layer.boxed()
+                } else {
+                    layer.without_time().boxed()
+                }
             }
-        }
-        LogFormat::Json => {
-            let layer = fmt::layer()
-                .json()
-                .with_target(config.source_location)
-                .with_thread_ids(config.thread_ids);
+            LogFormat::Json => {
+                let layer = fmt::layer()
+                    .json()
+                    .with_target(config.source_location)
+                    .with_thread_ids(config.thread_ids);
 
-            if config.timestamps {
-                layer.boxed()
-            } else {
-                layer.without_time().boxed()
+                if config.timestamps {
+                    layer.boxed()
+                } else {
+                    layer.without_time().boxed()
+                }
             }
-        }
-        LogFormat::Pretty => {
-            let layer = fmt::layer()
-                .pretty()
-                .with_target(config.source_location)
-                .with_thread_ids(config.thread_ids);
+            LogFormat::Pretty => {
+                let layer = fmt::layer()
+                    .pretty()
+                    .with_target(config.source_location)
+                    .with_thread_ids(config.thread_ids);
 
-            if config.timestamps {
-                layer.boxed()
-            } else {
-                layer.without_time().boxed()
+                if config.timestamps {
+                    layer.boxed()
+                } else {
+                    layer.without_time().boxed()
+                }
             }
+        };
+
+        let subscriber = registry
+            .with(console_layer)
+            .with(tracing_subscriber::filter::LevelFilter::from_level(level));
+
+        // Add file layer if configured
+        if let Some(ref file_path) = config.file {
+            if let Ok(file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(file_path)
+            {
+                let file_layer = fmt::layer().json().with_writer(std::sync::Mutex::new(file));
+                let subscriber = subscriber.with(file_layer);
+                let _ = tracing::subscriber::set_global_default(subscriber);
+            }
+        } else {
+            let _ = tracing::subscriber::set_global_default(subscriber);
         }
-    };
-
-    let subscriber = registry
-        .with(console_layer)
-        .with(tracing_subscriber::filter::LevelFilter::from_level(level));
-
-    // Add file layer if configured
-    if let Some(ref file_path) = config.file {
-        let file = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(file_path)?;
-
-        let file_layer = fmt::layer().json().with_writer(std::sync::Mutex::new(file));
-
-        let subscriber = subscriber.with(file_layer);
-        tracing::subscriber::set_global_default(subscriber)?;
-    } else {
-        tracing::subscriber::set_global_default(subscriber)?;
-    }
+    });
 
     Ok(())
 }

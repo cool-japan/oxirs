@@ -623,6 +623,7 @@ impl AdvancedSecuritySystem {
     }
 
     /// Log security events for audit purposes
+    #[allow(clippy::too_many_arguments)]
     #[instrument(skip(self, context, query, variables))]
     pub async fn log_audit_event(
         &self,
@@ -803,8 +804,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiting() {
-        let mut config = SecurityConfig::default();
-        config.rate_limit_requests_per_minute = 2;
+        let config = SecurityConfig {
+            rate_limit_requests_per_minute: 2,
+            ..Default::default()
+        };
         let security_system = AdvancedSecuritySystem::new(config);
 
         let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));

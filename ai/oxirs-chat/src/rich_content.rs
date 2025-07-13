@@ -373,7 +373,7 @@ impl RichMessage {
         &mut self,
         nodes: Vec<GraphNode>,
         edges: Vec<GraphEdge>,
-        layout: impl Into<String>,
+        _layout: impl Into<String>,
     ) {
         self.add_content(RichContent::GraphVisualization {
             nodes,

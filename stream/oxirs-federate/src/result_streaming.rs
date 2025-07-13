@@ -4,9 +4,10 @@
 //! streaming, and adaptive data transfer optimization for federated query results.
 
 use anyhow::{anyhow, Result};
+use base64::{engine::general_purpose, Engine as _};
 use bytes::Bytes;
 use flate2::{write::GzEncoder, Compression as GzCompression};
-use futures::stream::{Stream, StreamExt};
+use futures::stream::Stream;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -393,31 +394,31 @@ impl ResultStreamingManager {
             CompressionAlgorithm::Brotli => {
                 use brotli::enc::BrotliEncoderParams;
                 use std::io::Cursor;
-                
+
                 let mut input = Cursor::new(data);
                 let mut output = Vec::new();
                 let params = BrotliEncoderParams {
                     quality: self.config.compression_level.min(11) as i32,
                     ..Default::default()
                 };
-                
+
                 brotli::BrotliCompress(&mut input, &mut output, &params)
                     .map_err(|e| anyhow!("Brotli compression failed: {}", e))?;
-                    
+
                 Ok(output)
             }
             CompressionAlgorithm::Lz4 => {
                 use lz4_flex::compress_prepend_size;
-                
+
                 let compressed = compress_prepend_size(data);
                 Ok(compressed)
             }
             CompressionAlgorithm::Zstd => {
                 use zstd::stream::encode_all;
-                
+
                 let compressed = encode_all(data, self.config.compression_level as i32)
                     .map_err(|e| anyhow!("Zstd compression failed: {}", e))?;
-                    
+
                 Ok(compressed)
             }
         }
@@ -451,31 +452,32 @@ impl ResultStreamingManager {
             CompressionAlgorithm::Brotli => {
                 use brotli::Decompressor;
                 use std::io::Cursor;
-                
+
                 let mut input = Cursor::new(data);
                 let mut output = Vec::new();
                 let mut decompressor = Decompressor::new(&mut input, 4096);
-                
+
                 use std::io::Read;
-                decompressor.read_to_end(&mut output)
+                decompressor
+                    .read_to_end(&mut output)
                     .map_err(|e| anyhow!("Brotli decompression failed: {}", e))?;
-                    
+
                 Ok(output)
             }
             CompressionAlgorithm::Lz4 => {
                 use lz4_flex::decompress_size_prepended;
-                
+
                 let decompressed = decompress_size_prepended(data)
                     .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
-                    
+
                 Ok(decompressed)
             }
             CompressionAlgorithm::Zstd => {
                 use zstd::stream::decode_all;
-                
-                let decompressed = decode_all(data)
-                    .map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
-                    
+
+                let decompressed =
+                    decode_all(data).map_err(|e| anyhow!("Zstd decompression failed: {}", e))?;
+
                 Ok(decompressed)
             }
         }
@@ -492,7 +494,7 @@ impl ResultStreamingManager {
             }
             ResultFormat::MessagePack => {
                 use rmp_serde::to_vec;
-                
+
                 to_vec(result).map_err(|e| anyhow!("MessagePack serialization failed: {}", e))
             }
             ResultFormat::Csv => {
@@ -511,9 +513,7 @@ impl ResultStreamingManager {
             ResultFormat::Xml => {
                 // Simple XML conversion for query results
                 match result {
-                    QueryResult::Sparql(sparql_results) => {
-                        self.sparql_to_xml(sparql_results).await
-                    }
+                    QueryResult::Sparql(sparql_results) => self.sparql_to_xml(sparql_results).await,
                     QueryResult::GraphQL(graphql_result) => {
                         self.graphql_to_xml(graphql_result).await
                     }
@@ -524,7 +524,7 @@ impl ResultStreamingManager {
                 warn!("Avro format not fully implemented, using JSON serialization");
                 let json_data = serde_json::to_vec(result)
                     .map_err(|e| anyhow!("JSON serialization failed: {}", e))?;
-                
+
                 // Create a simple Avro-like wrapper
                 let avro_wrapped = format!(
                     r#"{{"type":"record","name":"QueryResult","fields":[{{"name":"data","type":"string"}}],"data":"{}"}}"#,
@@ -537,7 +537,7 @@ impl ResultStreamingManager {
                 warn!("Protobuf format not fully implemented, using JSON with metadata");
                 let json_data = serde_json::to_vec(result)
                     .map_err(|e| anyhow!("JSON serialization failed: {}", e))?;
-                
+
                 // Create a simple protobuf-like wrapper with length prefix
                 let mut protobuf_data = Vec::new();
                 let length = json_data.len() as u32;
@@ -614,13 +614,16 @@ impl ResultStreamingManager {
         Ok(csv_data)
     }
 
-    async fn sparql_to_xml(&self, results: &Vec<HashMap<String, oxirs_core::Term>>) -> Result<Vec<u8>> {
+    async fn sparql_to_xml(
+        &self,
+        results: &Vec<HashMap<String, oxirs_core::Term>>,
+    ) -> Result<Vec<u8>> {
         let mut xml_data = String::new();
-        
+
         // XML header
         xml_data.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml_data.push_str("<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">\n");
-        
+
         // Head section with variables (collect unique variable names)
         let mut variables: std::collections::HashSet<String> = std::collections::HashSet::new();
         for binding in results {
@@ -633,7 +636,7 @@ impl ResultStreamingManager {
             xml_data.push_str(&format!("    <variable name=\"{var}\"/>\n"));
         }
         xml_data.push_str("  </head>\n");
-        
+
         // Results section
         xml_data.push_str("  <results>\n");
         for binding in results {
@@ -653,17 +656,17 @@ impl ResultStreamingManager {
         }
         xml_data.push_str("  </results>\n");
         xml_data.push_str("</sparql>\n");
-        
+
         Ok(xml_data.into_bytes())
     }
 
     async fn graphql_to_xml(&self, result: &serde_json::Value) -> Result<Vec<u8>> {
         let mut xml_data = String::new();
-        
+
         // XML header
         xml_data.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         xml_data.push_str("<graphql>\n");
-        
+
         // Convert JSON data to simple XML structure
         xml_data.push_str("  <data>\n");
         let json_str = serde_json::to_string_pretty(result)
@@ -674,7 +677,7 @@ impl ResultStreamingManager {
         xml_data.push_str(&format!("    <json>{json_str}</json>\n"));
         xml_data.push_str("  </data>\n");
         xml_data.push_str("</graphql>\n");
-        
+
         Ok(xml_data.into_bytes())
     }
 
@@ -809,7 +812,7 @@ impl ResultStreamingManager {
         algorithm: CompressionAlgorithm,
         level: u32,
     ) -> Result<(Bytes, CompressionInfo)> {
-        let start_time = Instant::now();
+        let _start_time = Instant::now();
 
         let compressed = match algorithm {
             CompressionAlgorithm::Gzip => {
@@ -1093,7 +1096,7 @@ impl PaginationManager {
     /// Create a cursor for streaming large result sets
     pub async fn create_streaming_cursor(
         &self,
-        result_id: String,
+        _result_id: String,
         page_size: usize,
         total_count: Option<usize>,
     ) -> Result<PaginationCursor> {
@@ -1191,7 +1194,7 @@ impl PaginationManager {
 
                 Ok((paginated_result, Some(total_count)))
             }
-            QueryResult::GraphQL(graphql_response) => {
+            QueryResult::GraphQL(_graphql_response) => {
                 // For GraphQL, we'll treat the entire response as one page
                 // In a real implementation, you'd need to parse the GraphQL response
                 // and implement field-level pagination
@@ -1212,7 +1215,7 @@ impl PaginationManager {
             .unwrap()
             .as_secs();
 
-        let position_state = base64::encode(format!("{offset}:{page_size}"));
+        let position_state = general_purpose::STANDARD.encode(format!("{offset}:{page_size}"));
 
         let cursor = PaginationCursor {
             cursor_id,
@@ -1267,7 +1270,8 @@ impl PaginationManager {
         }
 
         // Validate position state
-        let decoded_state = base64::decode(&cursor.position_state)
+        let decoded_state = general_purpose::STANDARD
+            .decode(&cursor.position_state)
             .map_err(|_| anyhow!("Invalid cursor position state"))?;
 
         let state_str = String::from_utf8(decoded_state)
@@ -1321,6 +1325,7 @@ struct AdaptiveConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use futures::StreamExt;
 
     #[tokio::test]
     async fn test_compression() {
@@ -1338,8 +1343,6 @@ mod tests {
     #[tokio::test]
     async fn test_streaming() {
         let manager = ResultStreamingManager::new();
-
-        use crate::executor::{SparqlHead, SparqlResultsData};
 
         let test_result = QueryResult::Sparql(vec![]);
 
@@ -1377,6 +1380,7 @@ mod tests {
                             value: "http://example.org/john".to_string(),
                             datatype: None,
                             lang: None,
+                            quoted_triple: None,
                         },
                     );
                     binding.insert(
@@ -1386,6 +1390,7 @@ mod tests {
                             value: "25".to_string(),
                             datatype: Some("http://www.w3.org/2001/XMLSchema#integer".to_string()),
                             lang: None,
+                            quoted_triple: None,
                         },
                     );
                     binding
@@ -1404,8 +1409,6 @@ mod tests {
     #[tokio::test]
     async fn test_adaptive_streaming() {
         let manager = ResultStreamingManager::new();
-
-        use crate::executor::{SparqlHead, SparqlResultsData};
 
         let test_result = QueryResult::Sparql(vec![]);
 

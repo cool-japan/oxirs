@@ -8,6 +8,8 @@
 //! - Report generation with filtering and formatting options
 //!
 //! ## Key Features
+
+#![allow(dead_code)]
 //!
 //! - **Fluent APIs**: All builders support method chaining for readable configuration
 //! - **Async/Sync Support**: Full support for both synchronous and asynchronous operations

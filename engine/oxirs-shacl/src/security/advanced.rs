@@ -261,7 +261,11 @@ impl SecurityPolicyManager {
     }
 
     /// Execute query with additional safety measures
-    fn execute_query_safely(&self, _query: &str, _context: &SecurityContext) -> Result<QueryResult> {
+    fn execute_query_safely(
+        &self,
+        _query: &str,
+        _context: &SecurityContext,
+    ) -> Result<QueryResult> {
         // Placeholder implementation - in practice would integrate with actual SPARQL engine
         // with sandboxing, resource limits, and monitoring
 

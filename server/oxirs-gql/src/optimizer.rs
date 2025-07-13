@@ -490,6 +490,7 @@ impl QueryPlanner {
         })
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_field_info(
         &self,
         selection_set: &SelectionSet,

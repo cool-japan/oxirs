@@ -441,10 +441,11 @@ impl RuleAuthoringBestPractices {
 
     fn collect_variables(atom: &RuleAtom, vars: &mut std::collections::HashSet<String>) {
         if let RuleAtom::Triple {
-                subject,
-                predicate,
-                object,
-            } = atom {
+            subject,
+            predicate,
+            object,
+        } = atom
+        {
             if let Term::Variable(var) = subject {
                 vars.insert(var.clone());
             }

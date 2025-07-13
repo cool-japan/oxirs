@@ -900,9 +900,7 @@ impl BackupRestoreManager {
         counter.hash(&mut hasher);
         let random_component = hasher.finish() & 0xFFFF; // Use lower 16 bits for compactness
 
-        format!(
-            "{prefix}_{timestamp_nanos:x}_{counter:x}_{random_component:04x}"
-        )
+        format!("{prefix}_{timestamp_nanos:x}_{counter:x}_{random_component:04x}")
     }
 
     /// Get chain info for a backup
@@ -1105,7 +1103,7 @@ mod tests {
         let mut ids = std::collections::HashSet::new();
         for _ in 0..100 {
             let id = manager.generate_backup_id("TEST");
-            assert!(ids.insert(id.clone()), "Duplicate ID generated: {}", id);
+            assert!(ids.insert(id.clone()), "Duplicate ID generated: {id}");
             assert!(id.starts_with("TEST_"));
         }
 
@@ -1120,18 +1118,18 @@ mod tests {
         let target_latest = RecoveryTarget::Latest;
 
         match target_timestamp {
-            RecoveryTarget::Timestamp(_) => assert!(true),
-            _ => assert!(false),
+            RecoveryTarget::Timestamp(_) => {}
+            _ => panic!("Expected timestamp recovery target"),
         }
 
         match target_lsn {
             RecoveryTarget::LogSequenceNumber(lsn) => assert_eq!(lsn, 12345),
-            _ => assert!(false),
+            _ => panic!("Expected LSN recovery target"),
         }
 
         match target_latest {
-            RecoveryTarget::Latest => assert!(true),
-            _ => assert!(false),
+            RecoveryTarget::Latest => {}
+            _ => panic!("Expected latest recovery target"),
         }
     }
 }

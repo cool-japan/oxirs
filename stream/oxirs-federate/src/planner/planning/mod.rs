@@ -34,7 +34,7 @@ use std::time::Instant;
 use tokio::sync::RwLock;
 use tracing::info;
 
-use crate::ServiceRegistry;
+use crate::service_registry::ServiceRegistry;
 
 /// Main federated query planner
 #[derive(Debug)]
@@ -248,6 +248,7 @@ impl FederatedQueryPlanner {
         // Find the appropriate service (simplified - would use more sophisticated logic)
         let service_id = service_registry
             .get_all_services()
+            .into_iter()
             .next()
             .map(|s| s.id.clone())
             .unwrap_or_else(|| "default".to_string());
@@ -400,7 +401,8 @@ impl FederatedQueryPlanner {
         context: &ExecutionContext,
     ) {
         self.performance_optimizer
-            .update_performance_history(metrics, context);
+            .update_performance_history(metrics, context)
+            .await;
     }
 
     /// Get historical performance data
@@ -594,7 +596,7 @@ impl FederatedQueryPlanner {
     pub async fn analyze_graphql(
         &self,
         query: &str,
-        variables: Option<&serde_json::Value>,
+        _variables: Option<&serde_json::Value>,
     ) -> Result<QueryInfo> {
         // Parse GraphQL query and extract information
         let patterns = Vec::new(); // Simplified - would parse actual GraphQL
@@ -640,17 +642,21 @@ impl FederatedQueryPlanner {
         // Analyze patterns to detect specific capability requirements
         for pattern in &query_info.patterns {
             // Check for geospatial patterns
-            if pattern.predicate.as_ref().is_some_and(|p| {
-                p.contains("geo:") || p.contains("wgs84") || p.contains("geof:")
-            }) || pattern.pattern_string.contains("geo:")
+            if pattern
+                .predicate
+                .as_ref()
+                .is_some_and(|p| p.contains("geo:") || p.contains("wgs84") || p.contains("geof:"))
+                || pattern.pattern_string.contains("geo:")
             {
                 capabilities.push(crate::ServiceCapability::Geospatial);
             }
 
             // Check for full-text search patterns
-            if pattern.predicate.as_ref().is_some_and(|p| {
-                p.contains("pf:") || p.contains("text:") || p.contains("lucene:")
-            }) {
+            if pattern
+                .predicate
+                .as_ref()
+                .is_some_and(|p| p.contains("pf:") || p.contains("text:") || p.contains("lucene:"))
+            {
                 capabilities.push(crate::ServiceCapability::FullTextSearch);
             }
         }
@@ -690,8 +696,8 @@ impl FederatedQueryPlanner {
 
         // If no suitable services found, fall back to any available service
         if suitable_services.is_empty() {
-            let mut all_services = service_registry.get_all_services();
-            if let Some(service) = all_services.next() {
+            let all_services = service_registry.get_all_services();
+            if let Some(service) = all_services.into_iter().next() {
                 return Ok(service.id.clone());
             } else {
                 return Err(anyhow!("No services available in registry"));

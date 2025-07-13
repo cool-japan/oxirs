@@ -6,10 +6,11 @@ use std::collections::HashMap;
 
 // Test data structures for SPARQL 1.2 features
 use oxirs_arq::extensions::CustomAggregate;
-use oxirs_fuseki::handlers::sparql::{extract_quoted_triple_patterns, Sparql12Features};
 use oxirs_fuseki::handlers::sparql::sparql12_features::{
-    AggregationEngine, BindValuesProcessor, PropertyPathOptimizer, ServiceDelegator, SubqueryOptimizer,
+    AggregationEngine, BindValuesProcessor, PropertyPathOptimizer, ServiceDelegator,
+    SubqueryOptimizer,
 };
+use oxirs_fuseki::handlers::sparql::{extract_quoted_triple_patterns, Sparql12Features};
 use oxirs_fuseki::handlers::sparql_refactored::{
     contains_aggregation_functions, contains_sparql_star_features,
 };
@@ -62,19 +63,26 @@ mod property_path_tests {
 
         let path = "rdfs:subClassOf*";
 
-        // First optimization should compute
-        let start_time = std::time::Instant::now();
-        let _result1 = optimizer.optimize_path(path).await.unwrap();
-        let first_duration = start_time.elapsed();
+        // First optimization should compute and cache the result
+        let result1 = optimizer.optimize_path(path).await.unwrap();
 
-        // Second optimization should use cache (should be faster)
-        let start_time = std::time::Instant::now();
-        let _result2 = optimizer.optimize_path(path).await.unwrap();
-        let second_duration = start_time.elapsed();
+        // Verify the result is reasonable
+        assert_eq!(result1.original_path, path);
+        assert!(!result1.optimized_path.is_empty());
+        assert!(result1.estimated_cost > 0.0);
 
-        // Cache lookup should be faster (in practice, might not be measurable in tests)
-        // This test validates the caching mechanism works
-        assert!(second_duration <= first_duration);
+        // Second optimization should use cache and return identical result
+        let result2 = optimizer.optimize_path(path).await.unwrap();
+
+        // Verify cached result is identical
+        assert_eq!(result1.original_path, result2.original_path);
+        assert_eq!(result1.optimized_path, result2.optimized_path);
+        assert_eq!(result1.estimated_cost, result2.estimated_cost);
+        assert_eq!(result1.cache_key, result2.cache_key);
+
+        // Verify caching works by checking the cache directly
+        let cache = optimizer.path_cache.read().unwrap();
+        assert!(cache.contains_key(path));
     }
 }
 

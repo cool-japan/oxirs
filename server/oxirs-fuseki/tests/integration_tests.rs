@@ -72,8 +72,8 @@ fn create_test_router() -> axum::Router {
     use axum::{
         extract::State,
         http::{HeaderMap, StatusCode},
-        response::{Html, Json, IntoResponse},
-        routing::{get, post, put, delete},
+        response::{Html, IntoResponse, Json},
+        routing::{delete, get, post, put},
         Router,
     };
     use serde_json::json;
@@ -87,7 +87,8 @@ fn create_test_router() -> axum::Router {
 
     // Admin UI handler
     async fn test_admin_ui() -> impl IntoResponse {
-        Html(r#"
+        Html(
+            r#"
             <!DOCTYPE html>
             <html>
             <head><title>OxiRS Fuseki Server</title></head>
@@ -97,7 +98,8 @@ fn create_test_router() -> axum::Router {
                 <p>Manage your datasets and health monitoring</p>
             </body>
             </html>
-        "#)
+        "#,
+        )
     }
 
     // Enhanced stats handler
@@ -113,20 +115,25 @@ fn create_test_router() -> axum::Router {
     // Graph Store Protocol handlers
     async fn test_graph_store_get(
         query_params: axum::extract::Query<HashMap<String, String>>,
-        headers: HeaderMap
+        headers: HeaderMap,
     ) -> impl IntoResponse {
         use axum::http::header::CONTENT_TYPE;
-        
+
         // Check for invalid parameter combinations
         if query_params.contains_key("graph") && query_params.contains_key("default") {
-            return (StatusCode::BAD_REQUEST, "Cannot specify both graph and default parameters").into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                "Cannot specify both graph and default parameters",
+            )
+                .into_response();
         }
-        
+
         // Determine content type based on Accept header
-        let accept = headers.get("accept")
+        let accept = headers
+            .get("accept")
             .and_then(|h| h.to_str().ok())
             .unwrap_or("text/turtle");
-        
+
         if accept.contains("application/rdf+xml") {
             let rdfxml_content = r#"<?xml version="1.0"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
@@ -135,30 +142,23 @@ fn create_test_router() -> axum::Router {
     <ex:predicate>object</ex:predicate>
   </rdf:Description>
 </rdf:RDF>"#;
-            (
-                [(CONTENT_TYPE, "application/rdf+xml")],
-                rdfxml_content
-            ).into_response()
+            ([(CONTENT_TYPE, "application/rdf+xml")], rdfxml_content).into_response()
         } else if accept.contains("application/n-triples") {
-            let ntriples_content = "<http://example.org/subject> <http://example.org/predicate> \"object\" .";
-            (
-                [(CONTENT_TYPE, "application/n-triples")],
-                ntriples_content
-            ).into_response()
+            let ntriples_content =
+                "<http://example.org/subject> <http://example.org/predicate> \"object\" .";
+            ([(CONTENT_TYPE, "application/n-triples")], ntriples_content).into_response()
         } else {
             // Default to turtle
-            let turtle_content = "@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"object\" .";
-            (
-                [(CONTENT_TYPE, "text/turtle")],
-                turtle_content
-            ).into_response()
+            let turtle_content =
+                "@prefix ex: <http://example.org/> .\nex:subject ex:predicate \"object\" .";
+            ([(CONTENT_TYPE, "text/turtle")], turtle_content).into_response()
         }
     }
 
     async fn test_graph_store_put(
         query_params: axum::extract::Query<HashMap<String, String>>,
         headers: HeaderMap,
-        body: axum::body::Bytes
+        body: axum::body::Bytes,
     ) -> impl IntoResponse {
         // Accept any reasonable RDF content type for PUT operations
         StatusCode::OK.into_response()
@@ -167,27 +167,27 @@ fn create_test_router() -> axum::Router {
     async fn test_graph_store_post(
         query_params: axum::extract::Query<HashMap<String, String>>,
         headers: HeaderMap,
-        body: axum::body::Bytes
+        body: axum::body::Bytes,
     ) -> impl IntoResponse {
         // Accept any reasonable RDF content type for POST operations
         StatusCode::OK.into_response()
     }
 
     async fn test_graph_store_delete(
-        query_params: axum::extract::Query<HashMap<String, String>>
+        query_params: axum::extract::Query<HashMap<String, String>>,
     ) -> impl IntoResponse {
         // Return 200 OK for consistency with test expectations
         StatusCode::OK.into_response()
     }
 
     async fn test_sparql_query(
-        headers: HeaderMap, 
+        headers: HeaderMap,
         query_params: axum::extract::Query<HashMap<String, String>>,
-        body: String
+        body: String,
     ) -> impl IntoResponse {
         use axum::http::header::CONTENT_TYPE;
         use axum::http::StatusCode;
-        
+
         // Check content type first for POST requests
         if let Some(content_type) = headers.get("content-type") {
             if let Ok(ct_str) = content_type.to_str() {
@@ -196,55 +196,64 @@ fn create_test_router() -> axum::Router {
                 }
             }
         }
-        
+
         // Check if query is provided via query params or body
-        let body_query = if body.trim().is_empty() { None } else { Some(&body) };
-        let query = query_params.get("query")
+        let body_query = if body.trim().is_empty() {
+            None
+        } else {
+            Some(&body)
+        };
+        let query = query_params
+            .get("query")
             .or(body_query)
             .filter(|q| !q.trim().is_empty());
-        
+
         if query.is_none() {
             return (StatusCode::BAD_REQUEST, "Missing query parameter").into_response();
         }
-        
+
         let query_str = query.unwrap();
-        
+
         // Validate SPARQL query syntax
         if is_invalid_sparql_query(query_str) {
             return (StatusCode::BAD_REQUEST, "Invalid SPARQL query syntax").into_response();
         }
-        
+
         // Determine query type to return appropriate content
         let query_upper = query_str.to_uppercase();
         let is_construct = query_upper.contains("CONSTRUCT");
         let is_describe = query_upper.contains("DESCRIBE");
         let is_ask = query_upper.contains("ASK");
-        
+
         if is_construct || is_describe {
             // CONSTRUCT and DESCRIBE queries return RDF content
-            let accept = headers.get("accept")
+            let accept = headers
+                .get("accept")
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or("text/turtle");
-            
+
             if accept.contains("application/rdf+xml") {
                 (
                     [(CONTENT_TYPE, "application/rdf+xml")],
                     r#"<?xml version="1.0"?>
 <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-</rdf:RDF>"#
-                ).into_response()
+</rdf:RDF>"#,
+                )
+                    .into_response()
             } else {
                 (
                     [(CONTENT_TYPE, "text/turtle")],
-                    "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> ."
-                ).into_response()
+                    "@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .",
+                )
+                    .into_response()
             }
         } else {
             // SELECT and ASK queries return SPARQL results
-            let accept = headers.get("accept")
+            let accept = headers
+                .get("accept")
                 .and_then(|h| h.to_str().ok())
                 .unwrap_or("application/sparql-results+json");
-            
+
             if is_ask {
                 // ASK queries return boolean results
                 if accept.contains("application/sparql-results+xml") {
@@ -254,16 +263,18 @@ fn create_test_router() -> axum::Router {
 <sparql xmlns="http://www.w3.org/2005/sparql-results#">
   <head></head>
   <boolean>false</boolean>
-</sparql>"#
-                    ).into_response()
+</sparql>"#,
+                    )
+                        .into_response()
                 } else {
                     (
                         [(CONTENT_TYPE, "application/sparql-results+json")],
                         Json(json!({
                             "head": {},
                             "boolean": false
-                        }))
-                    ).into_response()
+                        })),
+                    )
+                        .into_response()
                 }
             } else if accept.contains("application/sparql-results+xml") {
                 (
@@ -277,21 +288,20 @@ fn create_test_router() -> axum::Router {
   </head>
   <results>
   </results>
-</sparql>"#
-                ).into_response()
+</sparql>"#,
+                )
+                    .into_response()
             } else if accept.contains("text/csv") {
-                (
-                    [(CONTENT_TYPE, "text/csv")],
-                    "s,p,o\n"
-                ).into_response()
+                ([(CONTENT_TYPE, "text/csv")], "s,p,o\n").into_response()
             } else {
                 (
                     [(CONTENT_TYPE, "application/sparql-results+json")],
                     Json(json!({
                         "head": { "vars": ["s", "p", "o"] },
                         "results": { "bindings": [] }
-                    }))
-                ).into_response()
+                    })),
+                )
+                    .into_response()
             }
         }
     }
@@ -299,37 +309,40 @@ fn create_test_router() -> axum::Router {
     // Helper function to validate SPARQL query syntax
     fn is_invalid_sparql_query(query: &str) -> bool {
         let trimmed = query.trim();
-        
+
         // Check for obviously invalid queries
-        if trimmed.is_empty() 
+        if trimmed.is_empty()
             || trimmed == "INVALID SPARQL"
             || trimmed == "SELECT * WHERE"
-            || (trimmed.starts_with("SELECT") && !trimmed.contains("WHERE") && !trimmed.contains("*"))
+            || (trimmed.starts_with("SELECT")
+                && !trimmed.contains("WHERE")
+                && !trimmed.contains("*"))
             || (trimmed.contains("SELECT * {") && !trimmed.contains("}"))
             || (trimmed.starts_with("CONSTRUCT WHERE") && !trimmed.contains("CONSTRUCT {"))
         {
             return true;
         }
-        
+
         false
     }
 
     async fn test_sparql_update(
         query_params: axum::extract::Query<HashMap<String, String>>,
-        body: Option<String>
+        body: Option<String>,
     ) -> impl IntoResponse {
         use axum::http::StatusCode;
-        
+
         // Check if update query is provided via query params or body
-        let update = query_params.get("query")
+        let update = query_params
+            .get("query")
             .or_else(|| query_params.get("update"))
             .or_else(|| body.as_ref())
             .filter(|q| !q.trim().is_empty());
-        
+
         if update.is_none() {
             return (StatusCode::BAD_REQUEST, "Missing update parameter").into_response();
         }
-        
+
         StatusCode::NO_CONTENT.into_response()
     }
 
@@ -345,24 +358,27 @@ fn create_test_router() -> axum::Router {
         .route("/health/live", get(test_health))
         .route("/$/stats", get(test_stats))
         .route("/$/ping", get(|| async { "pong" }))
-        
         // Admin UI
         .route("/", get(test_admin_ui))
-        
         // SPARQL endpoints
         .route("/sparql", get(test_sparql_query).post(test_sparql_query))
         .route("/update", post(test_sparql_update))
-        
         // Graph Store Protocol endpoints
-        .route("/graph-store", 
+        .route(
+            "/graph-store",
             get(test_graph_store_get)
-            .post(test_graph_store_post)
-            .put(test_graph_store_put)
-            .delete(test_graph_store_delete)
+                .post(test_graph_store_post)
+                .put(test_graph_store_put)
+                .delete(test_graph_store_delete),
         )
-        
         // Legacy data endpoint
-        .route("/data", get(test_health).post(test_health).put(test_health).delete(test_health))
+        .route(
+            "/data",
+            get(test_health)
+                .post(test_health)
+                .put(test_health)
+                .delete(test_health),
+        )
         .layer(middleware)
 }
 
@@ -850,20 +866,26 @@ mod performance_tests {
 
         // Response times should be reasonably consistent (allow for some system variation)
         let avg_time = response_times.iter().sum::<u128>() / response_times.len() as u128;
-        
+
         // Handle case where all times are very fast (near zero)
         if avg_time == 0 {
             // If average is 0, all times are very fast - this is actually good performance
             return;
         }
-        
-        let outlier_count = response_times.iter().filter(|&&time| time >= avg_time * 5).count();
-        
+
+        let outlier_count = response_times
+            .iter()
+            .filter(|&&time| time >= avg_time * 5)
+            .count();
+
         // Allow up to 1 outlier to account for system load variations
         assert!(
             outlier_count <= 1,
             "Too many response time outliers: {} out of {} (avg: {}μs, times: {:?})",
-            outlier_count, response_times.len(), avg_time, response_times
+            outlier_count,
+            response_times.len(),
+            avg_time,
+            response_times
         );
     }
 

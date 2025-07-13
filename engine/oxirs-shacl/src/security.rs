@@ -8,6 +8,8 @@
 //! - Execution sandboxing with resource limits
 //! - Advanced injection detection with ML support
 //! - Policy-based execution control
+
+#![allow(dead_code)]
 //! - Rate limiting and quota management
 //! - Comprehensive audit logging
 //! - Security context management

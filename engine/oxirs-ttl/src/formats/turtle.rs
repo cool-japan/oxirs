@@ -9,10 +9,10 @@
 //! - Comments and whitespace handling
 
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
-use crate::toolkit::{FormattedWriter, Parser, ParsingContext, SerializationConfig, Serializer};
+use crate::toolkit::{FormattedWriter, Parser, SerializationConfig, Serializer};
 use oxirs_core::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Triple};
 use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufRead, Read, Write};
 
 /// Turtle parser with full Turtle 1.1 support
 #[derive(Debug, Clone)]
@@ -121,21 +121,21 @@ impl TurtleParser {
 
         match &token.kind {
             TokenKind::PrefixKeyword => {
-                tokenizer.consume_token(); // consume @prefix
+                let _ = tokenizer.consume_token(); // consume @prefix
                 let prefix = self.parse_prefix_name(tokenizer)?;
-                
+
                 // Check if we need to consume a colon (only if prefix didn't already include it)
                 let next_token = tokenizer.peek_token()?;
                 if matches!(next_token.kind, TokenKind::Colon) {
-                    tokenizer.consume_token(); // consume colon
+                    let _ = tokenizer.consume_token(); // consume colon
                 }
-                
+
                 let iri = self.parse_iri_ref(tokenizer, context)?;
                 self.expect_token(tokenizer, TokenKind::Dot)?;
                 Ok(Some(TurtleStatement::PrefixDecl(prefix, iri)))
             }
             TokenKind::BaseKeyword => {
-                tokenizer.consume_token(); // consume @base
+                let _ = tokenizer.consume_token(); // consume @base
                 let iri = self.parse_iri_ref(tokenizer, context)?;
                 self.expect_token(tokenizer, TokenKind::Dot)?;
                 Ok(Some(TurtleStatement::BaseDecl(iri)))
@@ -177,19 +177,19 @@ impl TurtleParser {
                 Ok(Subject::NamedNode(named_node))
             }
             TokenKind::PrefixedName(prefix, local) => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
                 let iri = self.resolve_prefixed_name(prefix, local, context)?;
                 let named_node = NamedNode::new(&iri).map_err(TurtleParseError::model)?;
                 Ok(Subject::NamedNode(named_node))
             }
             TokenKind::BlankNodeLabel(label) => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
                 let blank_node = BlankNode::new(label).map_err(TurtleParseError::model)?;
                 Ok(Subject::BlankNode(blank_node))
             }
             TokenKind::LeftBracket => {
                 // Anonymous blank node []
-                tokenizer.consume_token(); // consume [
+                let _ = tokenizer.consume_token(); // consume [
                 self.expect_token(tokenizer, TokenKind::RightBracket)?;
                 let id = context.generate_blank_node_id();
                 let blank_node = BlankNode::new(&id).map_err(TurtleParseError::model)?;
@@ -212,7 +212,7 @@ impl TurtleParser {
 
         match &token.kind {
             TokenKind::A => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
                 let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
                     .map_err(TurtleParseError::model)?;
                 Ok(Predicate::NamedNode(rdf_type))
@@ -223,7 +223,7 @@ impl TurtleParser {
                 Ok(Predicate::NamedNode(named_node))
             }
             TokenKind::PrefixedName(prefix, local) => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
                 let iri = self.resolve_prefixed_name(prefix, local, context)?;
                 let named_node = NamedNode::new(&iri).map_err(TurtleParseError::model)?;
                 Ok(Predicate::NamedNode(named_node))
@@ -250,18 +250,18 @@ impl TurtleParser {
                 Ok(Object::NamedNode(named_node))
             }
             TokenKind::PrefixedName(prefix, local) => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
                 let iri = self.resolve_prefixed_name(prefix, local, context)?;
                 let named_node = NamedNode::new(&iri).map_err(TurtleParseError::model)?;
                 Ok(Object::NamedNode(named_node))
             }
             TokenKind::BlankNodeLabel(label) => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
                 let blank_node = BlankNode::new(label).map_err(TurtleParseError::model)?;
                 Ok(Object::BlankNode(blank_node))
             }
             TokenKind::StringLiteral(value) => {
-                tokenizer.consume_token();
+                let _ = tokenizer.consume_token();
 
                 // Check for language tag or datatype
                 let next_token = tokenizer.peek_token().ok();
@@ -269,12 +269,12 @@ impl TurtleParser {
                 if let Some(token) = next_token {
                     match &token.kind {
                         TokenKind::LanguageTag(lang) => {
-                            tokenizer.consume_token();
+                            let _ = tokenizer.consume_token();
                             let literal = Literal::new_language_tagged_literal(value, lang)
                                 .map_err(|e| {
                                     TurtleParseError::syntax(
                                         crate::error::TurtleSyntaxError::Generic {
-                                            message: format!("Invalid language tag: {}", e),
+                                            message: format!("Invalid language tag: {e}"),
                                             position: TextPosition::default(),
                                         },
                                     )
@@ -282,7 +282,7 @@ impl TurtleParser {
                             Ok(Object::Literal(literal))
                         }
                         TokenKind::DataTypeAnnotation => {
-                            tokenizer.consume_token(); // consume ^^
+                            let _ = tokenizer.consume_token(); // consume ^^
                             let datatype_iri = self.parse_iri_ref(tokenizer, context)?;
                             let datatype =
                                 NamedNode::new(&datatype_iri).map_err(TurtleParseError::model)?;
@@ -301,7 +301,7 @@ impl TurtleParser {
             }
             TokenKind::LeftBracket => {
                 // Anonymous blank node []
-                tokenizer.consume_token(); // consume [
+                let _ = tokenizer.consume_token(); // consume [
                 self.expect_token(tokenizer, TokenKind::RightBracket)?;
                 let id = context.generate_blank_node_id();
                 let blank_node = BlankNode::new(&id).map_err(TurtleParseError::model)?;
@@ -341,7 +341,7 @@ impl TurtleParser {
             TokenKind::PrefixedName(prefix, local) if local.is_empty() => {
                 // Handle case where "prefix:" is parsed as PrefixedName but we only want the prefix part
                 Ok(prefix.clone())
-            },
+            }
             _ => Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
                 message: format!("Expected prefix name, found {:?}", token.kind),
                 position: token.position,
@@ -375,7 +375,7 @@ impl TurtleParser {
         context: &TurtleParsingContext,
     ) -> TurtleResult<String> {
         if let Some(prefix_iri) = context.prefixes.get(prefix) {
-            Ok(format!("{}{}", prefix_iri, local))
+            Ok(format!("{prefix_iri}{local}"))
         } else {
             Err(TurtleParseError::syntax(
                 TurtleSyntaxError::UndefinedPrefix {
@@ -419,7 +419,7 @@ impl TurtleParsingContext {
             if iri.contains(':') {
                 iri.to_string() // Absolute IRI
             } else {
-                format!("{}{}", base, iri) // Relative IRI
+                format!("{base}{iri}") // Relative IRI
             }
         } else {
             iri.to_string()
@@ -739,12 +739,11 @@ impl TurtleTokenizer {
     fn read_blank_node_label(&self, position: TextPosition) -> TurtleResult<Token> {
         let remaining = &self.input[self.position..];
 
-        if remaining.starts_with("_:") {
-            let end = remaining[2..]
+        if let Some(stripped) = remaining.strip_prefix("_:") {
+            let end = stripped
                 .find(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
-                .map(|i| i + 2)
-                .unwrap_or(remaining.len());
-            let label = remaining[2..end].to_string();
+                .unwrap_or(stripped.len());
+            let label = stripped[..end].to_string();
             Ok(Token {
                 kind: TokenKind::BlankNodeLabel(label),
                 position,
@@ -863,13 +862,13 @@ impl TurtleSerializer {
 }
 
 impl Serializer<Triple> for TurtleSerializer {
-    fn serialize<W: Write>(&self, triples: &[Triple], mut writer: W) -> TurtleResult<()> {
+    fn serialize<W: Write>(&self, triples: &[Triple], writer: W) -> TurtleResult<()> {
         let mut formatted_writer = FormattedWriter::new(writer, self.config.clone());
 
         // Write prefix declarations
         for (prefix, iri) in &self.config.prefixes {
             formatted_writer
-                .write_str(&format!("@prefix {}: <{}> .", prefix, iri))
+                .write_str(&format!("@prefix {prefix}: <{iri}> ."))
                 .map_err(TurtleParseError::io)?;
             formatted_writer
                 .write_newline()
@@ -879,7 +878,7 @@ impl Serializer<Triple> for TurtleSerializer {
         // Write base declaration if present
         if let Some(ref base) = self.config.base_iri {
             formatted_writer
-                .write_str(&format!("@base <{}> .", base))
+                .write_str(&format!("@base <{base}> ."))
                 .map_err(TurtleParseError::io)?;
             formatted_writer
                 .write_newline()
@@ -980,12 +979,12 @@ impl TurtleSerializer {
 
                 if let Some(language) = literal.language() {
                     writer
-                        .write_str(&format!("@{}", language))
+                        .write_str(&format!("@{language}"))
                         .map_err(TurtleParseError::io)?;
                 } else if literal.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
                     let datatype_abbrev = writer.abbreviate_iri(literal.datatype().as_str());
                     writer
-                        .write_str(&format!("^^{}", datatype_abbrev))
+                        .write_str(&format!("^^{datatype_abbrev}"))
                         .map_err(TurtleParseError::io)?;
                 }
             }
@@ -1009,7 +1008,6 @@ impl TurtleSerializer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
 
     #[test]
     fn test_parse_simple_turtle() {

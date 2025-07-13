@@ -468,14 +468,12 @@ impl CustomConstraintRegistry {
             }
 
             // Validate cardinality
-            if let Some((min, max)) = param.cardinality {
-                if let Some(max_val) = max {
-                    if min > max_val {
-                        return Err(ShaclError::Configuration(format!(
-                            "Parameter {} has invalid cardinality: min ({}) > max ({})",
-                            param.name, min, max_val
-                        )));
-                    }
+            if let Some((min, Some(max_val))) = param.cardinality {
+                if min > max_val {
+                    return Err(ShaclError::Configuration(format!(
+                        "Parameter {} has invalid cardinality: min ({}) > max ({})",
+                        param.name, min, max_val
+                    )));
                 }
             }
 

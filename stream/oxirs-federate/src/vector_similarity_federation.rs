@@ -16,10 +16,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::{
-    service::ServiceRegistry,
-    FederatedService,
-};
+use crate::{service_registry::ServiceRegistry, FederatedService};
 
 /// Configuration for vector similarity federation
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,7 +128,7 @@ impl VectorSimilarityFederation {
 
         // Register with base service registry
         {
-            let mut registry = self.service_registry.write().await;
+            let registry = self.service_registry.write().await;
             registry.register(metadata.base_metadata.clone()).await?;
         }
 
@@ -187,7 +184,7 @@ impl VectorSimilarityFederation {
         &self,
         left_service: &str,
         right_service: &str,
-        similarity_threshold: f32,
+        _similarity_threshold: f32,
     ) -> Result<Vec<VectorJoinResult>> {
         if !self.config.enable_vector_joins {
             return Err(anyhow::anyhow!("Vector joins are disabled"));
@@ -301,12 +298,12 @@ pub struct VectorFederationStats {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ServiceRegistryConfig;
+    use crate::service::ServiceMetadata;
+    use crate::{ServiceCapability, ServiceType};
 
     #[tokio::test]
     async fn test_vector_federation_creation() {
         let config = VectorFederationConfig::default();
-        let registry_config = ServiceRegistryConfig::default();
         let service_registry = Arc::new(RwLock::new(ServiceRegistry::new()));
 
         let federation = VectorSimilarityFederation::new(config, service_registry).await;
@@ -316,7 +313,6 @@ mod tests {
     #[tokio::test]
     async fn test_vector_service_registration() {
         let config = VectorFederationConfig::default();
-        let registry_config = ServiceRegistryConfig::default();
         let service_registry = Arc::new(RwLock::new(ServiceRegistry::new()));
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
@@ -356,7 +352,6 @@ mod tests {
     #[tokio::test]
     async fn test_query_embedding_generation() {
         let config = VectorFederationConfig::default();
-        let registry_config = ServiceRegistryConfig::default();
         let service_registry = Arc::new(RwLock::new(ServiceRegistry::new()));
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
@@ -373,7 +368,6 @@ mod tests {
     #[tokio::test]
     async fn test_vector_query_analysis() {
         let config = VectorFederationConfig::default();
-        let registry_config = ServiceRegistryConfig::default();
         let service_registry = Arc::new(RwLock::new(ServiceRegistry::new()));
 
         let federation = VectorSimilarityFederation::new(config, service_registry)
@@ -392,7 +386,6 @@ mod tests {
     #[tokio::test]
     async fn test_vector_federation_statistics() {
         let config = VectorFederationConfig::default();
-        let registry_config = ServiceRegistryConfig::default();
         let service_registry = Arc::new(RwLock::new(ServiceRegistry::new()));
 
         let federation = VectorSimilarityFederation::new(config, service_registry)

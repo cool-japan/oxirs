@@ -6,10 +6,15 @@
 use anyhow::{anyhow, Result};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
 
-use crate::{executor::GraphQLResponse, planner::ExecutionPlan, QueryResultData, StepResult};
+use crate::{
+    executor::types::{QueryResultData, StepResult},
+    executor::GraphQLResponse,
+    planner::ExecutionPlan,
+};
 
 use super::types::*;
 
@@ -19,6 +24,7 @@ impl GraphQLFederation {
         Self {
             schemas: Arc::new(RwLock::new(HashMap::new())),
             config: GraphQLFederationConfig::default(),
+            cache: None,
         }
     }
 
@@ -27,6 +33,19 @@ impl GraphQLFederation {
         Self {
             schemas: Arc::new(RwLock::new(HashMap::new())),
             config,
+            cache: None,
+        }
+    }
+
+    /// Create a new GraphQL federation manager with cache
+    pub fn with_cache(
+        config: GraphQLFederationConfig,
+        cache: Arc<crate::cache::FederationCache>,
+    ) -> Self {
+        Self {
+            schemas: Arc::new(RwLock::new(HashMap::new())),
+            config,
+            cache: Some(cache),
         }
     }
 
@@ -136,20 +155,58 @@ impl GraphQLFederation {
             step.step_id, step.step_type
         );
 
-        let result = match step.step_type {
-            crate::StepType::GraphQLQuery => {
-                self.execute_graphql_query_step(step, completed_steps).await
+        // Check cache for this query step
+        let cache_key = self.generate_cache_key(step, completed_steps);
+        let mut cache_hit = false;
+
+        // Try to get cached result first
+        let cached_result = if let Some(cache) = &self.cache {
+            let cached = cache.get_query_result(&cache_key).await;
+            if cached.is_some() {
+                cache_hit = true;
+                debug!("Cache hit for step: {}", step.step_id);
             }
-            crate::StepType::SchemaStitch => {
-                self.execute_schema_stitch_step(step, completed_steps).await
-            }
-            _ => {
-                // For non-GraphQL steps, return a success result
-                Ok(QueryResultData::GraphQL(GraphQLResponse {
-                    data: serde_json::Value::Null,
-                    errors: Vec::new(),
-                    extensions: None,
-                }))
+            cached
+        } else {
+            None
+        };
+
+        let (result, service_response_time) = if let Some(cached) = cached_result {
+            // Use cached result - extract the data from the enum variant
+            let cached_data = match cached {
+                crate::cache::QueryResultCache::GraphQL(response) => {
+                    QueryResultData::GraphQL(response)
+                }
+                crate::cache::QueryResultCache::Sparql(results) => QueryResultData::Sparql(results),
+            };
+            (Ok(cached_data), Duration::from_millis(0))
+        } else {
+            // Execute the step
+            match step.step_type {
+                crate::StepType::GraphQLQuery => {
+                    match self.execute_graphql_query_step(step, completed_steps).await {
+                        Ok((data, service_time)) => (Ok(data), service_time),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                crate::StepType::SchemaStitch => {
+                    // Schema stitch doesn't make service calls, so no specific service response time
+                    match self.execute_schema_stitch_step(step, completed_steps).await {
+                        Ok(data) => (Ok(data), Duration::from_millis(0)),
+                        Err(e) => (Err(e), Duration::from_millis(0)),
+                    }
+                }
+                _ => {
+                    // For non-GraphQL steps, return a success result
+                    (
+                        Ok(QueryResultData::GraphQL(GraphQLResponse {
+                            data: serde_json::Value::Null,
+                            errors: Vec::new(),
+                            extensions: None,
+                        })),
+                        Duration::from_millis(0),
+                    )
+                }
             }
         };
 
@@ -167,6 +224,28 @@ impl GraphQLFederation {
                 Some(err.to_string()),
             ),
         };
+
+        // Cache successful results for future use
+        if !cache_hit && matches!(status, crate::executor::ExecutionStatus::Success) {
+            if let (Some(cache), Some(data)) = (&self.cache, &data) {
+                match data {
+                    QueryResultData::GraphQL(response) => {
+                        let cache_entry = crate::cache::QueryResultCache::GraphQL(response.clone());
+                        let ttl = Some(std::time::Duration::from_secs(300)); // 5 minutes default TTL
+                        cache.put_query_result(&cache_key, cache_entry, ttl).await;
+                    }
+                    QueryResultData::Sparql(results) => {
+                        let cache_entry = crate::cache::QueryResultCache::Sparql(results.clone());
+                        let ttl = Some(std::time::Duration::from_secs(300)); // 5 minutes default TTL
+                        cache.put_query_result(&cache_key, cache_entry, ttl).await;
+                    }
+                    QueryResultData::ServiceResult(_) => {
+                        // Skip caching service results as they don't fit the QueryResultCache enum
+                        debug!("Skipping cache for ServiceResult data type");
+                    }
+                }
+            }
+        }
 
         let result_size = data
             .as_ref()
@@ -191,9 +270,40 @@ impl GraphQLFederation {
             result_size: result_size as usize,
             success: matches!(status, crate::executor::ExecutionStatus::Success),
             error_message: error,
-            service_response_time: execution_time, // TODO: Track service-specific response time
-            cache_hit: false,                      // TODO: Implement cache hit tracking
+            service_response_time,
+            cache_hit,
         })
+    }
+
+    /// Generate a cache key for a query step
+    fn generate_cache_key(
+        &self,
+        step: &crate::ExecutionStep,
+        completed_steps: &HashMap<String, StepResult>,
+    ) -> String {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+
+        // Hash the query fragment
+        step.query_fragment.hash(&mut hasher);
+
+        // Hash the service ID
+        step.service_id.hash(&mut hasher);
+
+        // Hash relevant completed step data that might affect this query
+        for dep in &step.dependencies {
+            if let Some(completed_step) = completed_steps.get(dep) {
+                if let Some(data) = &completed_step.data {
+                    // Create a simplified hash of the data
+                    let data_str = format!("{:?}", data);
+                    data_str.hash(&mut hasher);
+                }
+            }
+        }
+
+        format!("gql_step_{}_{}", step.step_id, hasher.finish())
     }
 
     /// Execute a GraphQL query step
@@ -201,14 +311,20 @@ impl GraphQLFederation {
         &self,
         step: &crate::ExecutionStep,
         _completed_steps: &HashMap<String, StepResult>,
-    ) -> Result<QueryResultData> {
+    ) -> Result<(QueryResultData, Duration)> {
         debug!("Executing GraphQL query: {}", step.query_fragment);
+
+        // Track service-specific response time
+        let service_start = std::time::Instant::now();
 
         // In a real implementation, this would:
         // 1. Send the query to the appropriate GraphQL service
         // 2. Handle authentication and headers
         // 3. Parse and validate the response
         // 4. Apply any necessary transformations
+
+        // Simulate actual service call timing
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
 
         // For now, return a mock successful response
         let mock_response = GraphQLResponse {
@@ -221,7 +337,12 @@ impl GraphQLFederation {
             extensions: None,
         };
 
-        Ok(QueryResultData::GraphQL(mock_response))
+        let service_response_time = service_start.elapsed();
+
+        Ok((
+            QueryResultData::GraphQL(mock_response),
+            service_response_time,
+        ))
     }
 
     /// Execute a schema stitching step

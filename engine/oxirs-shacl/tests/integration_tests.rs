@@ -1,6 +1,6 @@
 use oxirs_core::{
     model::{NamedNode, Term},
-    ConcreteStore, Store,
+    ConcreteStore,
 };
 use oxirs_shacl::{
     constraints::*, shapes::ShapeFactory, Constraint, PropertyPath, Shape, ShapeId, ShapeType,
@@ -169,16 +169,16 @@ fn test_property_paths() {
     let simple_path = PropertyPath::predicate(NamedNode::new("http://example.org/name").unwrap());
 
     // Test inverse property path
-    let inverse_path = PropertyPath::inverse(simple_path.clone());
+    let _inverse_path = PropertyPath::inverse(simple_path.clone());
 
     // Test sequence property path
-    let sequence_path = PropertyPath::sequence(vec![
+    let _sequence_path = PropertyPath::sequence(vec![
         simple_path.clone(),
         PropertyPath::predicate(NamedNode::new("http://example.org/value").unwrap()),
     ]);
 
     // Test alternative property path
-    let alternative_path = PropertyPath::alternative(vec![
+    let _alternative_path = PropertyPath::alternative(vec![
         simple_path.clone(),
         PropertyPath::predicate(NamedNode::new("http://example.org/label").unwrap()),
     ]);

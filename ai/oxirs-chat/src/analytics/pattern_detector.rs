@@ -160,7 +160,7 @@ impl PatternDetector {
         let mut natural_transitions = 0;
 
         for window in self.topic_history.windows(2) {
-            if let [prev, curr] = window {
+            if let [_prev, curr] = window {
                 // Check if transition is natural
                 if curr.transition_type == TransitionType::TopicShift {
                     natural_transitions += 1;
@@ -252,9 +252,7 @@ impl PatternDetector {
         if escalation_count >= 2 {
             return Ok(Some(ConversationPattern {
                 pattern_type: PatternType::ComplexityEscalation,
-                description: format!(
-                    "Complexity escalation detected in {escalation_count} steps"
-                ),
+                description: format!("Complexity escalation detected in {escalation_count} steps"),
                 confidence: 0.6,
                 frequency: escalation_count,
                 examples: vec![format!("Complexity increased {} times", escalation_count)],
@@ -391,7 +389,7 @@ impl PatternDetector {
         }
 
         // Check for repeated questions
-        if let Some(pattern) = self.pattern_cache.get("RepeatedQuestion_0.8") {
+        if let Some(_pattern) = self.pattern_cache.get("RepeatedQuestion_0.8") {
             frustration_score += 0.3;
             examples.push("Repeated questions detected".to_string());
         }

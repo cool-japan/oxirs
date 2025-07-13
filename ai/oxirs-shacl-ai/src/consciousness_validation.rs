@@ -186,7 +186,10 @@ pub struct ValidationDream {
 impl Default for ValidationDream {
     fn default() -> Self {
         Self {
-            dream_id: format!("dream_{}", uuid::Uuid::new_v4()),
+            dream_id: {
+                let id = uuid::Uuid::new_v4();
+                format!("dream_{id}")
+            },
             scenario: ValidationScenario {
                 name: "Basic Validation".to_string(),
                 data_patterns: vec!["basic_patterns".to_string()],
@@ -508,7 +511,7 @@ impl ConsciousnessValidator {
     async fn enhance_validation_with_consciousness(
         &self,
         store: &dyn Store,
-        shapes: &[Shape],
+        _shapes: &[Shape],
         config: &ValidationConfig,
         strategy: &ValidationStrategy,
         consciousness_level: ConsciousnessLevel,
@@ -598,7 +601,10 @@ impl ConsciousnessValidator {
             if dream_state.active_dreams.len() < dream_state.processing_params.max_concurrent_dreams
             {
                 let dream = ValidationDream {
-                    dream_id: format!("dream_{}", uuid::Uuid::new_v4()),
+                    dream_id: {
+                        let id = uuid::Uuid::new_v4();
+                        format!("dream_{id}")
+                    },
                     scenario,
                     started_at: Instant::now(),
                     duration: dream_state.processing_params.default_dream_duration,
@@ -619,8 +625,8 @@ impl ConsciousnessValidator {
     /// Create dream scenarios for validation exploration
     async fn create_dream_scenarios(
         &self,
-        store: &dyn Store,
-        shapes: &[Shape],
+        _store: &dyn Store,
+        _shapes: &[Shape],
     ) -> Result<Vec<ValidationScenario>> {
         let mut scenarios = Vec::new();
 
@@ -858,7 +864,7 @@ mod tests {
 
     #[test]
     fn test_validation_strategy_types() {
-        let strategies = vec![
+        let strategies = [
             ValidationStrategy::Reactive,
             ValidationStrategy::PatternBased,
             ValidationStrategy::Deliberate,

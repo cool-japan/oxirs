@@ -157,6 +157,18 @@ pub struct ExecutionStatus {
     pub estimated_completion: Option<Instant>,
 }
 
+/// Parameters for query complexity calculation
+#[derive(Debug, Clone)]
+pub struct QueryComplexityParams<'a> {
+    pub triple_patterns: &'a [TriplePattern],
+    pub join_count: u32,
+    pub filter_count: u32,
+    pub has_aggregation: bool,
+    pub has_subqueries: bool,
+    pub has_optional: bool,
+    pub has_union: bool,
+}
+
 /// Query analysis result
 #[derive(Debug)]
 pub struct QueryAnalysis {
@@ -286,15 +298,16 @@ impl QueryOptimizer {
         let has_union = query_lower.contains("union");
 
         // Calculate complexity score
-        let complexity = self.calculate_query_complexity(
-            &triple_patterns,
+        let params = QueryComplexityParams {
+            triple_patterns: &triple_patterns,
             join_count,
             filter_count,
             has_aggregation,
             has_subqueries,
             has_optional,
             has_union,
-        );
+        };
+        let complexity = self.calculate_query_complexity(&params);
 
         // Estimate cardinality
         let estimated_cardinality = self.estimate_query_cardinality(&triple_patterns).await;
@@ -434,18 +447,16 @@ impl QueryOptimizer {
             // Create parallel segments
             let chunk_size =
                 (parallelizable_ops.len() / self.execution_engine.max_parallelism).max(1);
-            let mut segment_id = 0;
 
-            for chunk in parallelizable_ops.chunks(chunk_size) {
+            for (segment_id, chunk) in parallelizable_ops.chunks(chunk_size).enumerate() {
                 let segment = ParallelSegment {
-                    segment_id,
+                    segment_id: segment_id as u32,
                     operations: chunk.to_vec(),
                     estimated_parallelism: chunk.len().min(self.execution_engine.max_parallelism)
                         as u32,
                     merge_strategy: "UNION_ALL".to_string(),
                 };
                 plan.parallel_segments.push(segment);
-                segment_id += 1;
             }
 
             // Add parallelization hint
@@ -462,8 +473,8 @@ impl QueryOptimizer {
     }
 
     /// Update database statistics for cost estimation
-    #[instrument(skip(self, store))]
-    async fn update_statistics(&self, store: &Store, dataset: &str) -> FusekiResult<()> {
+    #[instrument(skip(self, _store))]
+    async fn update_statistics(&self, _store: &Store, dataset: &str) -> FusekiResult<()> {
         debug!("Updating database statistics for dataset: {}", dataset);
 
         let mut stats = self.statistics.write().await;
@@ -490,30 +501,21 @@ impl QueryOptimizer {
     }
 
     /// Calculate query complexity score
-    fn calculate_query_complexity(
-        &self,
-        triple_patterns: &[TriplePattern],
-        join_count: u32,
-        filter_count: u32,
-        has_aggregation: bool,
-        has_subqueries: bool,
-        has_optional: bool,
-        has_union: bool,
-    ) -> f64 {
-        let mut complexity = triple_patterns.len() as f64;
-        complexity += join_count as f64 * 2.0;
-        complexity += filter_count as f64 * 0.5;
+    fn calculate_query_complexity(&self, params: &QueryComplexityParams) -> f64 {
+        let mut complexity = params.triple_patterns.len() as f64;
+        complexity += params.join_count as f64 * 2.0;
+        complexity += params.filter_count as f64 * 0.5;
 
-        if has_aggregation {
+        if params.has_aggregation {
             complexity += 3.0;
         }
-        if has_subqueries {
+        if params.has_subqueries {
             complexity += 5.0;
         }
-        if has_optional {
+        if params.has_optional {
             complexity += 2.0;
         }
-        if has_union {
+        if params.has_union {
             complexity += 1.5;
         }
 
@@ -521,7 +523,7 @@ impl QueryOptimizer {
     }
 
     /// Extract triple patterns from query (simplified)
-    async fn extract_triple_patterns(&self, query: &str) -> FusekiResult<Vec<TriplePattern>> {
+    async fn extract_triple_patterns(&self, _query: &str) -> FusekiResult<Vec<TriplePattern>> {
         // Simplified pattern extraction - in real implementation would use SPARQL parser
         let patterns = vec![TriplePattern {
             subject: "?s".to_string(),
@@ -776,8 +778,16 @@ mod tests {
         let optimizer = create_test_optimizer();
         let patterns = vec![];
 
-        let complexity =
-            optimizer.calculate_query_complexity(&patterns, 2, 1, true, false, true, false);
+        let params = QueryComplexityParams {
+            triple_patterns: &patterns,
+            join_count: 2,
+            filter_count: 1,
+            has_aggregation: true,
+            has_subqueries: false,
+            has_optional: true,
+            has_union: false,
+        };
+        let complexity = optimizer.calculate_query_complexity(&params);
 
         assert!(complexity > 0.0);
     }

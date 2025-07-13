@@ -14,8 +14,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Configuration for causal representation learning
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CausalRepresentationConfig {
     pub base_config: ModelConfig,
     /// Causal discovery configuration
@@ -29,7 +28,6 @@ pub struct CausalRepresentationConfig {
     /// Disentanglement configuration
     pub disentanglement_config: DisentanglementConfig,
 }
-
 
 /// Causal discovery configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -530,9 +528,9 @@ impl CausalGraph {
         rec_stack[node] = true;
 
         for child in self.get_children(node) {
-            if !visited[child] && self.has_cycle_dfs(child, visited, rec_stack) {
-                return true;
-            } else if rec_stack[child] {
+            if (!visited[child] && self.has_cycle_dfs(child, visited, rec_stack))
+                || rec_stack[child]
+            {
                 return true;
             }
         }
@@ -858,7 +856,12 @@ impl CausalRepresentationModel {
     }
 
     /// Test independence between two variables
-    fn independence_test(&self, var1: &str, var2: &str, _conditioning_set: &[&str]) -> Result<bool> {
+    fn independence_test(
+        &self,
+        var1: &str,
+        var2: &str,
+        _conditioning_set: &[&str],
+    ) -> Result<bool> {
         // Extract data for variables
         let data1: Vec<f32> = self
             .observational_data

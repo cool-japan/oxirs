@@ -894,6 +894,7 @@ where
 }
 
 #[cfg(test)]
+#[allow(clippy::uninlined_format_args)]
 mod tests {
     use super::*;
 
@@ -922,7 +923,7 @@ mod tests {
         let mut tree = BTree::new();
 
         for i in 0..10 {
-            tree.insert(i, format!("value_{}", i)).unwrap();
+            tree.insert(i, format!("value_{i}")).unwrap();
         }
 
         let range_result = tree.range(&3, &7).unwrap();

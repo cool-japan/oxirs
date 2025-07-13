@@ -3,8 +3,7 @@ use half::f16;
 use std::io::{Read, Write};
 use zstd;
 
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub enum CompressionMethod {
     #[default]
     None,
@@ -33,7 +32,6 @@ pub enum AdaptiveQuality {
     Balanced,  // Balance speed and compression ratio
     BestRatio, // Prioritize compression ratio over speed
 }
-
 
 pub trait VectorCompressor: Send + Sync {
     fn compress(&self, vector: &Vector) -> Result<Vec<u8>, VectorError>;
@@ -237,6 +235,7 @@ pub struct PcaCompressor {
     components: usize,
     mean: Vec<f32>,
     components_matrix: Vec<Vec<f32>>,
+    explained_variance_ratio: Vec<f32>,
 }
 
 impl PcaCompressor {
@@ -245,6 +244,7 @@ impl PcaCompressor {
             components,
             mean: Vec::new(),
             components_matrix: Vec::new(),
+            explained_variance_ratio: Vec::new(),
         }
     }
 
@@ -289,28 +289,69 @@ impl PcaCompressor {
             }
         }
 
-        // Simplified PCA: use random projection for now
-        // TODO: Implement proper SVD-based PCA
+        // Proper SVD-based PCA implementation
         self.components_matrix = Vec::with_capacity(self.components);
-        use rand::{Rng, SeedableRng};
-        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
-        for _ in 0..self.components {
-            let mut component = vec![0.0; n_features];
-            let mut norm = 0.0f32;
+        // Create covariance matrix using nalgebra
+        use nalgebra::DMatrix;
 
-            for val in &mut component {
-                *val = rng.gen_range(-1.0..1.0);
-                norm += *val * *val;
+        // Convert vectors to training data
+        let training_data: Result<Vec<Vec<f32>>, _> = vectors
+            .iter()
+            .map(|v| match &v.values {
+                VectorData::F32(vals) => Ok(vals.clone()),
+                VectorData::F64(vals) => Ok(vals.iter().map(|&x| x as f32).collect()),
+                _ => Err(VectorError::UnsupportedOperation(
+                    "PCA only supports float vectors".to_string(),
+                )),
+            })
+            .collect();
+
+        let training_data = training_data?;
+        let n_samples = training_data.len();
+        if n_samples == 0 {
+            return Err(VectorError::InvalidDimensions(
+                "No training data provided for PCA".to_string(),
+            ));
+        }
+
+        // Build data matrix (samples x features)
+        let mut data_matrix = DMatrix::<f32>::zeros(n_samples, n_features);
+        for (i, sample) in training_data.iter().enumerate() {
+            for (j, &val) in sample.iter().enumerate() {
+                data_matrix[(i, j)] = val - self.mean[j];
+            }
+        }
+
+        // Compute covariance matrix: C = (1/n) * X^T * X
+        let covariance = data_matrix.transpose() * &data_matrix / (n_samples as f32 - 1.0);
+
+        // Perform SVD on covariance matrix
+        let svd = covariance.svd(true, true);
+
+        if let Some(u) = svd.u {
+            // Store the top components (principal components)
+            let num_components = self.components.min(u.ncols());
+
+            // Store singular values for explained variance calculation
+            let singular_values = &svd.singular_values;
+            let total_variance: f32 = singular_values.iter().sum();
+            let mut explained_variance = Vec::with_capacity(num_components);
+
+            for i in 0..num_components {
+                let component: Vec<f32> = u.column(i).iter().cloned().collect();
+                self.components_matrix.push(component);
+
+                let variance_ratio = singular_values[i] / total_variance;
+                explained_variance.push(variance_ratio);
             }
 
-            // Normalize
-            norm = norm.sqrt();
-            for val in &mut component {
-                *val /= norm;
-            }
-
-            self.components_matrix.push(component);
+            // Store explained variance for diagnostics
+            self.explained_variance_ratio = explained_variance;
+        } else {
+            return Err(VectorError::CompressionError(
+                "SVD decomposition failed for PCA".to_string(),
+            ));
         }
 
         Ok(())
@@ -349,6 +390,16 @@ impl PcaCompressor {
         }
 
         reconstructed
+    }
+
+    /// Get the explained variance ratio for each principal component
+    pub fn explained_variance_ratio(&self) -> &[f32] {
+        &self.explained_variance_ratio
+    }
+
+    /// Get the total explained variance for the selected components
+    pub fn total_explained_variance(&self) -> f32 {
+        self.explained_variance_ratio.iter().sum()
     }
 }
 
@@ -406,6 +457,273 @@ impl VectorCompressor for PcaCompressor {
         } else {
             self.components as f32 / self.mean.len() as f32
         }
+    }
+}
+
+/// Product Quantization compressor for efficient vector compression
+pub struct ProductQuantizer {
+    subvectors: usize,
+    codebook_size: usize,
+    codebooks: Vec<Vec<Vec<f32>>>, // codebooks[subvector][centroid][dimension]
+    subvector_dim: usize,
+}
+
+impl ProductQuantizer {
+    pub fn new(subvectors: usize, codebook_size: usize) -> Self {
+        Self {
+            subvectors,
+            codebook_size,
+            codebooks: Vec::new(),
+            subvector_dim: 0,
+        }
+    }
+
+    pub fn train(&mut self, vectors: &[Vector]) -> Result<(), VectorError> {
+        if vectors.is_empty() {
+            return Err(VectorError::InvalidDimensions(
+                "No training data provided for Product Quantization".to_string(),
+            ));
+        }
+
+        // Get the vector dimension
+        let vector_dim = vectors[0].dimensions;
+        if vector_dim % self.subvectors != 0 {
+            return Err(VectorError::InvalidDimensions(format!(
+                "Vector dimension {} is not divisible by number of subvectors {}",
+                vector_dim, self.subvectors
+            )));
+        }
+
+        self.subvector_dim = vector_dim / self.subvectors;
+        self.codebooks = Vec::with_capacity(self.subvectors);
+
+        // Convert vectors to f32
+        let training_data: Result<Vec<Vec<f32>>, _> = vectors
+            .iter()
+            .map(|v| match &v.values {
+                VectorData::F32(vals) => Ok(vals.clone()),
+                VectorData::F64(vals) => Ok(vals.iter().map(|&x| x as f32).collect()),
+                _ => Err(VectorError::UnsupportedOperation(
+                    "Product quantization only supports float vectors".to_string(),
+                )),
+            })
+            .collect();
+
+        let training_data = training_data?;
+
+        // Train a codebook for each subvector
+        for subvec_idx in 0..self.subvectors {
+            let start_dim = subvec_idx * self.subvector_dim;
+            let end_dim = start_dim + self.subvector_dim;
+
+            // Extract subvectors
+            let subvectors: Vec<Vec<f32>> = training_data
+                .iter()
+                .map(|v| v[start_dim..end_dim].to_vec())
+                .collect();
+
+            // Train codebook using k-means
+            let codebook = self.train_codebook(&subvectors)?;
+            self.codebooks.push(codebook);
+        }
+
+        Ok(())
+    }
+
+    fn train_codebook(&self, subvectors: &[Vec<f32>]) -> Result<Vec<Vec<f32>>, VectorError> {
+        use rand::{Rng, SeedableRng};
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        if subvectors.is_empty() {
+            return Err(VectorError::InvalidDimensions(
+                "No subvectors to train codebook".to_string(),
+            ));
+        }
+
+        let dim = subvectors[0].len();
+        let mut centroids = Vec::with_capacity(self.codebook_size);
+
+        // Initialize centroids randomly
+        for _ in 0..self.codebook_size {
+            let mut centroid = vec![0.0; dim];
+            for val in &mut centroid {
+                *val = rng.gen_range(-1.0..1.0);
+            }
+            centroids.push(centroid);
+        }
+
+        // K-means iterations
+        for _ in 0..10 {
+            // Fixed number of iterations for simplicity
+            let mut assignments = vec![0; subvectors.len()];
+
+            // Assignment step
+            for (i, subvec) in subvectors.iter().enumerate() {
+                let mut best_dist = f32::INFINITY;
+                let mut best_centroid = 0;
+
+                for (j, centroid) in centroids.iter().enumerate() {
+                    let dist = euclidean_distance(subvec, centroid);
+                    if dist < best_dist {
+                        best_dist = dist;
+                        best_centroid = j;
+                    }
+                }
+                assignments[i] = best_centroid;
+            }
+
+            // Update step
+            for (j, centroid) in centroids.iter_mut().enumerate() {
+                let assigned_points: Vec<&Vec<f32>> = subvectors
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| assignments[*i] == j)
+                    .map(|(_, v)| v)
+                    .collect();
+
+                if !assigned_points.is_empty() {
+                    for (d, centroid_val) in centroid.iter_mut().enumerate() {
+                        *centroid_val = assigned_points.iter().map(|p| p[d]).sum::<f32>()
+                            / assigned_points.len() as f32;
+                    }
+                }
+            }
+        }
+
+        Ok(centroids)
+    }
+
+    fn quantize_vector(&self, vector: &[f32]) -> Result<Vec<u8>, VectorError> {
+        if vector.len() != self.subvectors * self.subvector_dim {
+            return Err(VectorError::InvalidDimensions(format!(
+                "Vector dimension {} doesn't match expected {}",
+                vector.len(),
+                self.subvectors * self.subvector_dim
+            )));
+        }
+
+        let mut codes = Vec::with_capacity(self.subvectors);
+
+        for subvec_idx in 0..self.subvectors {
+            let start_dim = subvec_idx * self.subvector_dim;
+            let end_dim = start_dim + self.subvector_dim;
+            let subvector = &vector[start_dim..end_dim];
+
+            let codebook = &self.codebooks[subvec_idx];
+            let mut best_dist = f32::INFINITY;
+            let mut best_code = 0u8;
+
+            for (code, centroid) in codebook.iter().enumerate() {
+                let dist = euclidean_distance(subvector, centroid);
+                if dist < best_dist {
+                    best_dist = dist;
+                    best_code = code as u8;
+                }
+            }
+
+            codes.push(best_code);
+        }
+
+        Ok(codes)
+    }
+
+    fn dequantize_codes(&self, codes: &[u8]) -> Result<Vec<f32>, VectorError> {
+        if codes.len() != self.subvectors {
+            return Err(VectorError::InvalidDimensions(format!(
+                "Code length {} doesn't match expected {}",
+                codes.len(),
+                self.subvectors
+            )));
+        }
+
+        let mut reconstructed = Vec::with_capacity(self.subvectors * self.subvector_dim);
+
+        for (subvec_idx, &code) in codes.iter().enumerate() {
+            let codebook = &self.codebooks[subvec_idx];
+            if (code as usize) < codebook.len() {
+                reconstructed.extend_from_slice(&codebook[code as usize]);
+            } else {
+                return Err(VectorError::InvalidDimensions(format!(
+                    "Invalid code {} for codebook of size {}",
+                    code,
+                    codebook.len()
+                )));
+            }
+        }
+
+        Ok(reconstructed)
+    }
+}
+
+// Helper function for euclidean distance
+fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
+    a.iter()
+        .zip(b.iter())
+        .map(|(&x, &y)| (x - y).powi(2))
+        .sum::<f32>()
+        .sqrt()
+}
+
+impl VectorCompressor for ProductQuantizer {
+    fn compress(&self, vector: &Vector) -> Result<Vec<u8>, VectorError> {
+        let values = match &vector.values {
+            VectorData::F32(v) => v.clone(),
+            VectorData::F64(v) => v.iter().map(|&x| x as f32).collect(),
+            _ => {
+                return Err(VectorError::UnsupportedOperation(
+                    "Product quantization only supports float vectors".to_string(),
+                ))
+            }
+        };
+
+        let codes = self.quantize_vector(&values)?;
+
+        let mut compressed = Vec::new();
+        // Write header with metadata
+        compressed.write_all(&(self.subvectors as u32).to_le_bytes())?;
+        compressed.write_all(&(self.codebook_size as u32).to_le_bytes())?;
+        compressed.write_all(&(self.subvector_dim as u32).to_le_bytes())?;
+
+        // Write quantization codes
+        compressed.extend_from_slice(&codes);
+
+        Ok(compressed)
+    }
+
+    fn decompress(&self, data: &[u8], _dimensions: usize) -> Result<Vector, VectorError> {
+        if data.len() < 12 {
+            // 3 * 4 bytes for header
+            return Err(VectorError::InvalidData(
+                "Invalid compressed data format".to_string(),
+            ));
+        }
+
+        // Read header
+        let subvectors = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
+        let codebook_size = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
+        let subvector_dim = u32::from_le_bytes([data[8], data[9], data[10], data[11]]) as usize;
+
+        if subvectors != self.subvectors
+            || codebook_size != self.codebook_size
+            || subvector_dim != self.subvector_dim
+        {
+            return Err(VectorError::InvalidData(
+                "Metadata mismatch in compressed data".to_string(),
+            ));
+        }
+
+        let codes = &data[12..];
+        if codes.len() != subvectors {
+            return Err(VectorError::InvalidData("Invalid code length".to_string()));
+        }
+
+        let values = self.dequantize_codes(codes)?;
+        Ok(Vector::new(values))
+    }
+
+    fn compression_ratio(&self) -> f32 {
+        // Original: 32 bits per float, compressed: 8 bits per subvector
+        (8.0 * self.subvectors as f32) / (32.0 * self.subvectors as f32 * self.subvector_dim as f32)
     }
 }
 
@@ -826,10 +1144,10 @@ pub fn create_compressor(method: &CompressionMethod) -> Box<dyn VectorCompressor
         CompressionMethod::Zstd { level } => Box::new(ZstdCompressor::new(*level)),
         CompressionMethod::Quantization { bits } => Box::new(ScalarQuantizer::new(*bits)),
         CompressionMethod::Pca { components } => Box::new(PcaCompressor::new(*components)),
-        CompressionMethod::ProductQuantization { .. } => {
-            // TODO: Implement product quantization
-            Box::new(NoOpCompressor)
-        }
+        CompressionMethod::ProductQuantization {
+            subvectors,
+            codebook_size,
+        } => Box::new(ProductQuantizer::new(*subvectors, *codebook_size)),
         CompressionMethod::Adaptive {
             quality_level,
             analysis_samples,
@@ -1211,5 +1529,63 @@ mod tests {
 
         let best = AdaptiveCompressor::with_best_ratio();
         assert!(matches!(best.quality_level, AdaptiveQuality::BestRatio));
+    }
+
+    #[test]
+    fn test_product_quantization() {
+        // Create test vectors with 8 dimensions (divisible by 4 subvectors)
+        let vectors = vec![
+            Vector::new(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]),
+            Vector::new(vec![2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0]),
+            Vector::new(vec![3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]),
+            Vector::new(vec![1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5]),
+        ];
+
+        // Create Product Quantizer with 4 subvectors (2 dimensions each) and 4 centroids per codebook
+        let mut pq = ProductQuantizer::new(4, 4);
+
+        // Train the quantizer
+        pq.train(&vectors).unwrap();
+
+        // Test compression and decompression
+        let original = &vectors[0];
+        let compressed = pq.compress(original).unwrap();
+        let decompressed = pq.decompress(&compressed, 8).unwrap();
+
+        // Check that dimensions match
+        assert_eq!(decompressed.dimensions, original.dimensions);
+
+        // Check compression ratio is reasonable (should be better than 1.0)
+        let ratio = pq.compression_ratio();
+        assert!(
+            ratio > 0.0 && ratio < 1.0,
+            "Compression ratio should be between 0 and 1, got {ratio}"
+        );
+
+        // Test that we can compress and decompress all vectors
+        for vector in &vectors {
+            let compressed = pq.compress(vector).unwrap();
+            let decompressed = pq.decompress(&compressed, vector.dimensions).unwrap();
+            assert_eq!(decompressed.dimensions, vector.dimensions);
+        }
+    }
+
+    #[test]
+    fn test_product_quantization_invalid_dimensions() {
+        // Test with vectors that have dimensions not divisible by subvectors
+        let vectors = vec![
+            Vector::new(vec![1.0, 2.0, 3.0]), // 3 dimensions, not divisible by 4
+        ];
+
+        let mut pq = ProductQuantizer::new(4, 4); // 4 subvectors
+        let result = pq.train(&vectors);
+
+        // Should fail with InvalidDimensions error
+        assert!(result.is_err());
+        if let Err(VectorError::InvalidDimensions(_)) = result {
+            // Expected error type
+        } else {
+            panic!("Expected InvalidDimensions error");
+        }
     }
 }

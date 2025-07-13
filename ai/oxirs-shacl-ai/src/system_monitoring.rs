@@ -19,8 +19,6 @@ use crate::{
     Result, ShaclAiError,
 };
 
-use oxirs_core::Store;
-
 /// Main system monitoring engine
 #[derive(Debug)]
 pub struct SystemMonitor {
@@ -840,9 +838,10 @@ impl SystemMonitor {
 
     /// Get current monitoring dashboard
     pub fn get_dashboard(&self) -> Result<MonitoringDashboard> {
-        let dashboard = self.dashboard.read().map_err(|e| {
-            ShaclAiError::ShapeManagement(format!("Failed to read dashboard: {e}"))
-        })?;
+        let dashboard = self
+            .dashboard
+            .read()
+            .map_err(|e| ShaclAiError::ShapeManagement(format!("Failed to read dashboard: {e}")))?;
 
         Ok(dashboard.clone())
     }
@@ -1549,7 +1548,7 @@ impl AnomalyDetector {
 
         if z_score.abs() > z_threshold {
             let anomaly_score = z_score.abs() / z_threshold;
-            let confidence = (anomaly_score - 1.0).min(1.0).max(0.0);
+            let confidence = (anomaly_score - 1.0).clamp(0.0, 1.0);
 
             if confidence >= self.detection_config.min_anomaly_confidence {
                 let anomaly_type = if z_score > 0.0 {
@@ -1767,7 +1766,7 @@ mod tests {
     #[test]
     fn test_system_monitor_creation() {
         let monitor = SystemMonitor::new();
-        assert_eq!(monitor.config.enable_real_time, true);
+        assert!(monitor.config.enable_real_time);
         assert_eq!(monitor.config.collection_interval_secs, 60);
     }
 

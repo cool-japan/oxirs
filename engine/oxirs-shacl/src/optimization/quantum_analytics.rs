@@ -4,6 +4,8 @@
 //! for SHACL validation with consciousness-guided optimization, temporal
 //! paradox resolution, and transcendent performance monitoring.
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};

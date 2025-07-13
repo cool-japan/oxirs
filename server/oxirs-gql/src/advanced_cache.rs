@@ -542,7 +542,7 @@ impl AdvancedCache {
 
         let base_ttl = if let Some(pattern) = patterns.get(key) {
             // Higher frequency = longer TTL
-            let frequency_factor = (pattern.frequency / 10.0).min(3.0).max(0.5);
+            let frequency_factor = (pattern.frequency / 10.0).clamp(0.5, 3.0);
             Duration::from_secs(
                 (self.config.default_ttl.as_secs() as f64 * frequency_factor) as u64,
             )
@@ -617,10 +617,17 @@ impl AdvancedCache {
 
         for (key, entry) in l1.iter().chain(l2.iter()) {
             if entry.access_count > 5 {
+                // Estimate execution time based on query complexity and cache frequency
+                let estimated_exec_time = if entry.query_complexity > 0 {
+                    Duration::from_millis((entry.query_complexity as u64 * 10).min(5000))
+                } else {
+                    Duration::from_millis(50) // Default for simple queries
+                };
+
                 popular.push(PopularQuery {
                     cache_key: key.clone(),
                     access_count: entry.access_count,
-                    avg_execution_time: Duration::from_millis(100), // Placeholder
+                    avg_execution_time: estimated_exec_time,
                     last_accessed: entry.last_accessed,
                 });
             }
@@ -776,8 +783,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_tiers() {
-        let mut config = AdvancedCacheConfig::default();
-        config.l1_max_size = 1; // Force L2 usage
+        let config = AdvancedCacheConfig {
+            l1_max_size: 1, // Force L2 usage
+            ..Default::default()
+        };
 
         let cache = AdvancedCache::new(config);
 

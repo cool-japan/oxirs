@@ -129,15 +129,13 @@ pub struct ResourceConstraints {
 }
 
 /// Neural architecture representation
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NeuralArchitecture {
     pub layers: Vec<LayerSpec>,
     pub connections: Vec<ConnectionSpec>,
     pub topology: TopologySpec,
     pub hyperparameters: HyperparameterSpec,
 }
-
 
 /// Layer specification for neural architecture
 #[derive(Debug, Clone)]

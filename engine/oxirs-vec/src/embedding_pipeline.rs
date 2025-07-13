@@ -340,9 +340,10 @@ impl PreprocessingPipeline {
             if word.ends_with(suffix) {
                 let stem = &word[..word.len() - suffix.len()];
                 if self.measure(stem) > 1
-                    && (*suffix != "ion" || (stem.ends_with("s") || stem.ends_with("t"))) {
-                        word = stem.to_string();
-                    }
+                    && (*suffix != "ion" || (stem.ends_with("s") || stem.ends_with("t")))
+                {
+                    word = stem.to_string();
+                }
                 break;
             }
         }
@@ -664,13 +665,11 @@ impl PostprocessingPipeline {
 }
 
 /// Complete embedding pipeline combining preprocessing and postprocessing
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct EmbeddingPipeline {
     pub preprocessing: PreprocessingPipeline,
     pub postprocessing: PostprocessingPipeline,
 }
-
 
 impl EmbeddingPipeline {
     /// Process content through the complete pipeline

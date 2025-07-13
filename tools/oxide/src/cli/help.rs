@@ -494,10 +494,7 @@ ORDER BY DESC(?bookCount)
         if let Some(help) = self.topics.get(topic) {
             self.print_topic_help(help);
         } else {
-            println!(
-                "{}",
-                format!("No help available for topic: {topic}").red()
-            );
+            println!("{}", format!("No help available for topic: {topic}").red());
             self.list_available_topics();
         }
     }

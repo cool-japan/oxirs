@@ -394,14 +394,16 @@ impl SecureExecutorFactory {
 
     /// Create executor with strict security settings
     pub fn create_strict() -> Result<SecureSparqlExecutor> {
-        let mut config = SecurityConfig::default();
-        config.max_execution_time = Duration::from_secs(10);
-        config.max_memory_usage = 50 * 1024 * 1024; // 50MB
-        config.max_result_count = 1000;
-        config.max_complexity_score = 50.0;
-        config.enable_injection_detection = true;
-        config.enable_sandboxing = true;
-        config.enable_security_logging = true;
+        let mut config = SecurityConfig {
+            max_execution_time: Duration::from_secs(10),
+            max_memory_usage: 50 * 1024 * 1024, // 50MB
+            max_result_count: 1000,
+            max_complexity_score: 50.0,
+            enable_injection_detection: true,
+            enable_sandboxing: true,
+            enable_security_logging: true,
+            ..Default::default()
+        };
 
         // Remove potentially dangerous functions
         config
@@ -413,13 +415,15 @@ impl SecureExecutorFactory {
 
     /// Create executor with relaxed security settings (for trusted environments)
     pub fn create_relaxed() -> Result<SecureSparqlExecutor> {
-        let mut config = SecurityConfig::default();
-        config.max_execution_time = Duration::from_secs(60);
-        config.max_memory_usage = 500 * 1024 * 1024; // 500MB
-        config.max_result_count = 50000;
-        config.max_complexity_score = 500.0;
-        config.enable_injection_detection = true; // Keep injection detection
-        config.enable_sandboxing = false;
+        let config = SecurityConfig {
+            max_execution_time: Duration::from_secs(60),
+            max_memory_usage: 500 * 1024 * 1024, // 500MB
+            max_result_count: 50000,
+            max_complexity_score: 500.0,
+            enable_injection_detection: true, // Keep injection detection
+            enable_sandboxing: false,
+            ..Default::default()
+        };
 
         SecureSparqlExecutor::new(config)
     }

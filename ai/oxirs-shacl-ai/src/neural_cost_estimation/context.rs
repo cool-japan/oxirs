@@ -125,7 +125,7 @@ impl ContextAwareCostAdjuster {
             total_factor *= pattern_factor;
         }
 
-        Ok(total_factor.max(0.1).min(10.0)) // Clamp to reasonable range
+        Ok(total_factor.clamp(0.1, 10.0)) // Clamp to reasonable range
     }
 
     fn calculate_context_confidence(&self, context: &QueryExecutionContext) -> f64 {

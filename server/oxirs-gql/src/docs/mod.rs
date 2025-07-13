@@ -904,7 +904,8 @@ For questions, issues, and contributions:
     /// Generate API documentation in HTML format
     async fn generate_api_html(&self) -> Result<()> {
         let mut html = String::new();
-        html.push_str(r#"
+        html.push_str(
+            r#"
 <!DOCTYPE html>
 <html>
 <head>
@@ -924,7 +925,8 @@ For questions, issues, and contributions:
 </head>
 <body>
     <h1>OxiRS GraphQL API Reference</h1>
-"#);
+"#,
+        );
 
         for doc in &self.api_docs {
             html.push_str(&format!(

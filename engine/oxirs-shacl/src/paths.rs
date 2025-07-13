@@ -1607,6 +1607,7 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#
     }
 
     /// Check if a path has potential for infinite cycles
+    #[allow(clippy::only_used_in_recursion)]
     fn has_potential_cycles(&self, path: &PropertyPath) -> bool {
         match path {
             PropertyPath::ZeroOrMore(_) | PropertyPath::OneOrMore(_) => true,
@@ -1621,6 +1622,7 @@ PREFIX sh: <http://www.w3.org/ns/shacl#>"#
     }
 
     /// Estimate the cost of evaluating a property path
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_path_cost(&self, path: &PropertyPath) -> f64 {
         match path {
             PropertyPath::Predicate(_) => 1.0,

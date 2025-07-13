@@ -487,8 +487,8 @@ pub enum JoinAlgorithm {
 /// Filter placement hints
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum FilterPlacement {
-    Early,   // Push down as much as possible
-    Late,    // Keep at current level
+    Early, // Push down as much as possible
+    Late,  // Keep at current level
     #[default]
     Optimal, // Let optimizer decide
 }
@@ -1052,8 +1052,6 @@ macro_rules! literal {
     };
 }
 
-
-
 impl Default for ServiceCapabilities {
     fn default() -> Self {
         Self {
@@ -1065,11 +1063,6 @@ impl Default for ServiceCapabilities {
         }
     }
 }
-
-
-
-
-
 
 impl Literal {
     /// Create a new literal with value only
@@ -1227,7 +1220,6 @@ impl Literal {
         }
     }
 }
-
 
 impl Default for Statistics {
     fn default() -> Self {
@@ -1445,7 +1437,10 @@ fn estimate_filter_selectivity(condition: &Expression) -> f64 {
             "isIRI" | "isLiteral" | "isBlank" => 0.3, // Type checks
             _ => 0.5,                                 // Default
         },
-        Expression::Unary { op: UnaryOperator::Not, .. } => 0.5, // Invert selectivity (simplified)
+        Expression::Unary {
+            op: UnaryOperator::Not,
+            ..
+        } => 0.5, // Invert selectivity (simplified)
         Expression::Unary { .. } => 0.5,
         _ => 0.5, // Default selectivity
     }

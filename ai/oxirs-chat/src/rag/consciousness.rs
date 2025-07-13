@@ -430,8 +430,8 @@ impl ConsciousnessModel {
 
     fn generate_advanced_insights(
         &self,
-        query: &str,
-        context: &AssembledContext,
+        _query: &str,
+        _context: &AssembledContext,
         neural_activation: &NeuralActivation,
         memory_integration: &MemoryIntegrationResult,
     ) -> Result<Vec<AdvancedConsciousInsight>> {
@@ -494,9 +494,7 @@ impl ConsciousnessModel {
         if stream_coherence > 0.8 {
             insights.push(AdvancedConsciousInsight {
                 insight_type: AdvancedInsightType::StreamCoherence,
-                content: format!(
-                    "High consciousness stream coherence: {stream_coherence:.3}"
-                ),
+                content: format!("High consciousness stream coherence: {stream_coherence:.3}"),
                 confidence: stream_coherence,
                 implications: vec![
                     "Stable consciousness state maintained".to_string(),
@@ -555,7 +553,7 @@ impl ConsciousnessModel {
     fn generate_conscious_insights(
         &self,
         query: &str,
-        context: &AssembledContext,
+        _context: &AssembledContext,
     ) -> Vec<ConsciousInsight> {
         let mut insights = Vec::new();
 
@@ -574,9 +572,7 @@ impl ConsciousnessModel {
         if emotional_resonance > 0.5 {
             insights.push(ConsciousInsight {
                 insight_type: InsightType::EmotionalResonance,
-                content: format!(
-                    "High emotional resonance detected: {emotional_resonance:.2}"
-                ),
+                content: format!("High emotional resonance detected: {emotional_resonance:.2}"),
                 confidence: emotional_resonance,
                 implications: vec!["Consider emotional context in response".to_string()],
             });
@@ -924,7 +920,6 @@ impl Default for ConsciousnessConfig {
 }
 
 /// Advanced data structures for enhanced consciousness processing
-
 /// Advanced attention mechanism with weighted focus distribution
 #[derive(Debug, Clone)]
 pub struct AttentionMechanism {
@@ -1576,7 +1571,7 @@ impl NeuralCorrelates {
     pub fn process_input(
         &mut self,
         query: &str,
-        context: &AssembledContext,
+        _context: &AssembledContext,
     ) -> Result<NeuralActivation> {
         // Simulate neural processing
         let words: Vec<&str> = query.split_whitespace().collect();
@@ -1762,7 +1757,7 @@ impl ConsciousnessMetrics {
     pub fn update(
         &mut self,
         awareness: f64,
-        attention: &AttentionAllocation,
+        _attention: &AttentionAllocation,
         memory: &MemoryIntegrationResult,
         emotion: &EmotionalResponse,
         processing_time: Duration,

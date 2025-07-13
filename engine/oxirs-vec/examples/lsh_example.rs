@@ -196,9 +196,7 @@ fn performance_comparison() -> Result<()> {
     let mut brute_force = MemoryVectorIndex::new();
 
     // Generate and index random vectors
-    println!(
-        "  Indexing {num_vectors} {dimensions}-dimensional vectors..."
-    );
+    println!("  Indexing {num_vectors} {dimensions}-dimensional vectors...");
     let start = Instant::now();
 
     for i in 0..num_vectors {

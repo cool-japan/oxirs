@@ -3,6 +3,8 @@
 //! This module provides performance optimizations for SHACL constraint evaluation
 //! including result caching, batch validation, and dependency-aware evaluation ordering.
 
+#![allow(dead_code)]
+
 use crate::{
     constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult},
     PropertyPath, Result, ShaclError, ShapeId,

@@ -322,12 +322,13 @@ impl OntologyConstraints {
             .collect();
 
         for property in all_properties {
-            let mut characteristics = PropertyCharacteristics::default();
-
-            characteristics.is_functional = self.functional_properties.contains(&property);
-            characteristics.is_symmetric = self.symmetric_properties.contains(&property);
-            characteristics.is_transitive = self.transitive_properties.contains(&property);
-            characteristics.has_inverse = self.inverse_properties.get(&property).cloned();
+            let mut characteristics = PropertyCharacteristics {
+                is_functional: self.functional_properties.contains(&property),
+                is_symmetric: self.symmetric_properties.contains(&property),
+                is_transitive: self.transitive_properties.contains(&property),
+                has_inverse: self.inverse_properties.get(&property).cloned(),
+                ..Default::default()
+            };
 
             if let Some(domains) = self.property_domains.get(&property) {
                 characteristics.domain_classes = domains.clone();

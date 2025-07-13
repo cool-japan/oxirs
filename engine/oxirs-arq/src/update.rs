@@ -1267,7 +1267,6 @@ mod tests {
 
     #[test]
     fn test_enhanced_update_operations() {
-
         // Create a test store (would need actual Store implementation)
         // For now, this is a placeholder test to verify the enhanced operations compile
 

@@ -121,7 +121,7 @@ impl Default for CacheConfig {
         Self {
             max_entries: 1000,
             max_memory_bytes: 100 * 1024 * 1024, // 100MB
-            ttl_seconds: 3600, // 1 hour
+            ttl_seconds: 3600,                   // 1 hour
             intelligent_eviction: true,
             enable_analytics: true,
             min_quality_for_cache: 0.7,
@@ -381,11 +381,15 @@ impl IntelligentPatternCache {
     /// Get patterns from cache
     pub fn get(&mut self, key: &str) -> Option<Vec<AdvancedPattern>> {
         let now = SystemTime::now();
-        
+
         // First check if entry exists and get expiration info
         let (is_expired, patterns) = if let Some(entry) = self.entries.get(key) {
             let expired = self.is_expired(entry, now);
-            let patterns = if !expired { Some(entry.patterns.clone()) } else { None };
+            let patterns = if !expired {
+                Some(entry.patterns.clone())
+            } else {
+                None
+            };
             (expired, patterns)
         } else {
             (false, None)
@@ -394,10 +398,11 @@ impl IntelligentPatternCache {
         if is_expired {
             // Remove expired entry
             self.entries.remove(key);
-            
+
             // Record expired access for warming predictor
-            self.warming_predictor.record_access(key, AccessResult::Expired, 0.0);
-            
+            self.warming_predictor
+                .record_access(key, AccessResult::Expired, 0.0);
+
             self.analytics.misses += 1;
             self.update_analytics();
             return None;
@@ -410,22 +415,24 @@ impl IntelligentPatternCache {
                 entry.last_accessed = now;
                 entry.access_count += 1;
             }
-            
+
             // Update access tracker
             self.access_tracker.record_access(key, now);
-            
+
             // Record access event for warming predictor
-            self.warming_predictor.record_access(key, AccessResult::Hit, response_time);
-            
+            self.warming_predictor
+                .record_access(key, AccessResult::Hit, response_time);
+
             // Update analytics
             self.analytics.hits += 1;
             self.update_analytics();
-            
+
             Some(patterns)
         } else {
             // Record miss for warming predictor
-            self.warming_predictor.record_access(key, AccessResult::Miss, 0.0);
-            
+            self.warming_predictor
+                .record_access(key, AccessResult::Miss, 0.0);
+
             self.analytics.misses += 1;
             self.update_analytics();
             None
@@ -435,10 +442,10 @@ impl IntelligentPatternCache {
     /// Store patterns in cache
     pub fn put(&mut self, key: String, patterns: Vec<AdvancedPattern>) {
         let now = SystemTime::now();
-        
+
         // Calculate quality score for patterns
         let quality_score = self.calculate_patterns_quality(&patterns);
-        
+
         // Check if quality meets minimum threshold
         if quality_score < self.config.min_quality_for_cache {
             return;
@@ -446,7 +453,7 @@ impl IntelligentPatternCache {
 
         // Estimate entry size
         let size_bytes = self.estimate_entry_size(&patterns);
-        
+
         // Check memory limits and evict if necessary
         if self.needs_eviction(size_bytes) {
             self.evict_entries(size_bytes);
@@ -464,10 +471,10 @@ impl IntelligentPatternCache {
 
         // Insert entry
         self.entries.insert(key.clone(), entry);
-        
+
         // Update access tracker
         self.access_tracker.record_access(&key, now);
-        
+
         // Update analytics
         self.update_memory_usage();
         self.update_analytics();
@@ -500,7 +507,7 @@ impl IntelligentPatternCache {
         if self.config.ttl_seconds == 0 {
             return false; // No expiration
         }
-        
+
         match now.duration_since(entry.created_at) {
             Ok(duration) => duration.as_secs() > self.config.ttl_seconds,
             Err(_) => true, // Clock went backwards, consider expired
@@ -536,7 +543,7 @@ impl IntelligentPatternCache {
     fn evict_entries(&mut self, space_needed: usize) {
         // Simplified LRU eviction
         let mut entries_to_remove = Vec::new();
-        
+
         // Sort entries by last access time
         let mut sorted_entries: Vec<_> = self.entries.iter().collect();
         sorted_entries.sort_by_key(|(_, entry)| entry.last_accessed);
@@ -557,10 +564,8 @@ impl IntelligentPatternCache {
 
     /// Update memory usage analytics
     fn update_memory_usage(&mut self) {
-        self.analytics.memory_usage_bytes = self.entries
-            .values()
-            .map(|entry| entry.size_bytes)
-            .sum();
+        self.analytics.memory_usage_bytes =
+            self.entries.values().map(|entry| entry.size_bytes).sum();
     }
 
     /// Update cache analytics
@@ -571,8 +576,10 @@ impl IntelligentPatternCache {
         }
 
         // Calculate efficiency score
-        self.analytics.efficiency_score = self.analytics.hit_rate * 0.7 + 
-            (1.0 - (self.analytics.memory_usage_bytes as f64 / self.config.max_memory_bytes as f64)) * 0.3;
+        self.analytics.efficiency_score = self.analytics.hit_rate * 0.7
+            + (1.0
+                - (self.analytics.memory_usage_bytes as f64 / self.config.max_memory_bytes as f64))
+                * 0.3;
     }
 }
 
@@ -581,10 +588,10 @@ impl AccessTracker {
     pub fn record_access(&mut self, key: &str, timestamp: SystemTime) {
         // Update frequency
         *self.access_frequencies.entry(key.to_string()).or_insert(0) += 1;
-        
+
         // Update last access time
         self.last_access_times.insert(key.to_string(), timestamp);
-        
+
         // Add to history
         self.access_history
             .entry(key.to_string())
@@ -595,7 +602,7 @@ impl AccessTracker {
 
 impl CacheWarmingPredictor {
     /// Record access event
-    pub fn record_access(&mut self, key: &str, result: AccessResult, response_time: f64) {
+    pub fn record_access(&mut self, key: &str, result: AccessResult, _response_time: f64) {
         let event = AccessEvent {
             timestamp: SystemTime::now(),
             access_type: result,
@@ -613,7 +620,7 @@ impl CachePerformanceTuner {
     /// Record performance snapshot
     pub fn record_snapshot(&mut self, snapshot: PerformanceSnapshot) {
         self.metrics_history.push(snapshot);
-        
+
         // Limit history size
         if self.metrics_history.len() > 100 {
             self.metrics_history.remove(0);

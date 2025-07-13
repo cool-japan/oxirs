@@ -218,18 +218,19 @@ impl ServiceDiscovery {
         }
 
         // Parse SPARQL results and build capabilities
-        let mut capabilities = ServiceCapabilities::default();
-
         // For now, return basic capabilities
         // TODO: Parse actual SPARQL JSON results
-        capabilities.sparql_features = vec![
-            "SPARQL 1.1 Query".to_string(),
-            "SPARQL 1.1 Update".to_string(),
-        ];
-        capabilities.result_formats = vec![
-            "application/sparql-results+json".to_string(),
-            "application/sparql-results+xml".to_string(),
-        ];
+        let capabilities = ServiceCapabilities {
+            sparql_features: vec![
+                "SPARQL 1.1 Query".to_string(),
+                "SPARQL 1.1 Update".to_string(),
+            ],
+            result_formats: vec![
+                "application/sparql-results+json".to_string(),
+                "application/sparql-results+xml".to_string(),
+            ],
+            ..Default::default()
+        };
 
         Ok(capabilities)
     }
@@ -509,8 +510,8 @@ impl ServiceDiscovery {
     /// Discover services via Kubernetes
     async fn discover_via_kubernetes(
         namespace: &str,
-        endpoints: &Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
-        client: &Client,
+        _endpoints: &Arc<RwLock<HashMap<String, ServiceEndpoint>>>,
+        _client: &Client,
     ) -> Result<()> {
         // TODO: Implement Kubernetes-based discovery
         tracing::debug!(
@@ -565,20 +566,19 @@ impl ServiceDiscovery {
         for port in &common_ports {
             for path in &common_paths {
                 let scheme = if *port == 443 { "https" } else { "http" };
-                let service_url =
-                    match Url::parse(&format!("{scheme}://{domain}:{port}{path}")) {
-                        Ok(url) => url,
-                        Err(e) => {
-                            tracing::debug!(
-                                "Invalid fallback URL for {}:{}{}: {}",
-                                domain,
-                                port,
-                                path,
-                                e
-                            );
-                            continue;
-                        }
-                    };
+                let service_url = match Url::parse(&format!("{scheme}://{domain}:{port}{path}")) {
+                    Ok(url) => url,
+                    Err(e) => {
+                        tracing::debug!(
+                            "Invalid fallback URL for {}:{}{}: {}",
+                            domain,
+                            port,
+                            path,
+                            e
+                        );
+                        continue;
+                    }
+                };
 
                 match Self::check_service_health(&service_url, client).await {
                     Ok(health) => {

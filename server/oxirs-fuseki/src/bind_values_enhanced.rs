@@ -560,7 +560,7 @@ impl EnhancedBindProcessor {
     pub async fn process_bind_clauses(
         &self,
         query: &str,
-        bindings: &mut Vec<HashMap<String, serde_json::Value>>,
+        bindings: &mut [HashMap<String, serde_json::Value>],
     ) -> FusekiResult<()> {
         let bind_expressions = self.extract_bind_expressions(query)?;
 
@@ -698,7 +698,7 @@ impl EnhancedBindProcessor {
 
     fn apply_bind_result(
         &self,
-        bindings: &mut Vec<HashMap<String, serde_json::Value>>,
+        bindings: &mut [HashMap<String, serde_json::Value>],
         var: &str,
         result: serde_json::Value,
     ) {
@@ -826,7 +826,7 @@ impl EnhancedValuesProcessor {
         if let Some(var_start) = text.find('(') {
             if let Some(var_end) = text[var_start..].find(')') {
                 let var_text = &text[var_start + 1..var_start + var_end];
-                
+
                 // Extract variable names
                 for var in var_text.split_whitespace() {
                     if var.starts_with('?') || var.starts_with('$') {
@@ -840,13 +840,13 @@ impl EnhancedValuesProcessor {
         if let Some(block_start) = text.find('{') {
             if let Some(block_end) = text.rfind('}') {
                 let block_text = &text[block_start + 1..block_end];
-                
+
                 // Parse rows - each row is in parentheses
                 let mut current_row = Vec::new();
                 let mut in_parens = false;
                 let mut current_value = String::new();
                 let mut in_quotes = false;
-                
+
                 for ch in block_text.chars() {
                     match ch {
                         '"' => {
@@ -869,13 +869,15 @@ impl EnhancedValuesProcessor {
                                     .map(|s| {
                                         if s.starts_with('"') && s.ends_with('"') {
                                             // String literal
-                                            serde_json::Value::String(s[1..s.len()-1].to_string())
+                                            serde_json::Value::String(s[1..s.len() - 1].to_string())
                                         } else if s.starts_with(':') {
                                             // IRI/namespace
                                             serde_json::Value::String(s.to_string())
                                         } else {
                                             // Try parsing as other types
-                                            serde_json::from_str(s).unwrap_or_else(|_| serde_json::Value::String(s.to_string()))
+                                            serde_json::from_str(s).unwrap_or_else(|_| {
+                                                serde_json::Value::String(s.to_string())
+                                            })
                                         }
                                     })
                                     .collect();
@@ -1021,8 +1023,8 @@ impl ExpressionEvaluator {
 
     pub fn evaluate(
         &self,
-        expression: &str,
-        bindings: &[HashMap<String, serde_json::Value>],
+        _expression: &str,
+        _bindings: &[HashMap<String, serde_json::Value>],
     ) -> FusekiResult<serde_json::Value> {
         // Simplified evaluation
         // In a real implementation, this would parse and evaluate the expression
@@ -1097,7 +1099,7 @@ impl AdvancedBindOptimizer {
         Ok(optimized)
     }
 
-    fn matches_pattern(&self, expr: &str, pattern: &ExpressionPattern) -> bool {
+    fn matches_pattern(&self, _expr: &str, _pattern: &ExpressionPattern) -> bool {
         // Pattern matching implementation
         true
     }
@@ -1105,7 +1107,7 @@ impl AdvancedBindOptimizer {
     fn apply_transformation(
         &self,
         expr: &str,
-        transformation: &ExpressionTransformation,
+        _transformation: &ExpressionTransformation,
     ) -> FusekiResult<String> {
         // Transformation implementation
         Ok(expr.to_string())
@@ -1170,7 +1172,7 @@ impl AdvancedValuesOptimizer {
     fn apply_strategy(
         &self,
         clause: ValuesClause,
-        strategy: &ValuesOptimizationStrategy,
+        _strategy: &ValuesOptimizationStrategy,
     ) -> FusekiResult<ValuesClause> {
         // Strategy application
         Ok(clause)
@@ -1256,8 +1258,8 @@ impl ExpressionCache {
     }
 }
 
-impl TypeCoercionRules {
-    pub fn default() -> Self {
+impl Default for TypeCoercionRules {
+    fn default() -> Self {
         let mut rules = HashMap::new();
         let mut implicit_coercions = HashSet::new();
 
@@ -1489,7 +1491,7 @@ impl JoinStrategySelector {
         &self,
         strategy: &JoinStrategy,
         values_size: usize,
-        bindings_size: usize,
+        _bindings_size: usize,
     ) -> bool {
         for condition in &strategy.applicable_conditions {
             if let JoinCondition::SizeThreshold { min, max } = condition {

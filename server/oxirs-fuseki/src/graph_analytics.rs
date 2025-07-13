@@ -420,8 +420,7 @@ impl GraphAnalyticsEngine {
 
                         for path in paths {
                             // Add contribution to intermediate nodes
-                            for i in 1..path.len() - 1 {
-                                let intermediate = &path[i];
+                            for intermediate in path.iter().take(path.len() - 1).skip(1) {
                                 if let Some(score) = betweenness.get_mut(intermediate) {
                                     *score += path_weight;
                                 }
@@ -786,7 +785,7 @@ mod tests {
 
         for i in 1..=5 {
             let node = GraphNode {
-                id: format!("node{}", i),
+                id: format!("node{i}"),
                 label: None,
                 properties: HashMap::new(),
                 out_edges: Vec::new(),
@@ -798,7 +797,7 @@ mod tests {
         // Add edges to form a simple cycle
         for i in 1..=5 {
             let edge = GraphEdge {
-                source: format!("node{}", i),
+                source: format!("node{i}"),
                 target: format!("node{}", (i % 5) + 1),
                 label: "next".to_string(),
                 weight: Some(1.0),

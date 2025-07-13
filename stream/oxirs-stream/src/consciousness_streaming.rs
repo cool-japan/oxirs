@@ -879,12 +879,14 @@ impl MeditationStateManager {
     }
 
     async fn get_current_influence(&self) -> Option<MeditationInfluence> {
-        (*self.current_state.read().await).as_ref().map(|state| MeditationInfluence {
-            clarity_enhancement: state.focus_quality * 0.3,
-            emotional_regulation: state.equanimity * 0.4,
-            insight_boost: state.insight_clarity * 0.5,
-            focus_improvement: state.focus_quality * 0.2,
-        })
+        (*self.current_state.read().await)
+            .as_ref()
+            .map(|state| MeditationInfluence {
+                clarity_enhancement: state.focus_quality * 0.3,
+                emotional_regulation: state.equanimity * 0.4,
+                insight_boost: state.insight_clarity * 0.5,
+                focus_improvement: state.focus_quality * 0.2,
+            })
     }
 }
 

@@ -2,6 +2,8 @@
 //!
 //! This module defines all SHACL vocabulary terms according to the W3C SHACL specification.
 
+#![allow(dead_code)]
+
 use crate::{Result, ShaclError, SHACL_NS};
 use oxirs_core::model::NamedNode;
 

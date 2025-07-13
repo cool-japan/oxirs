@@ -1,5 +1,14 @@
 //! Tests for the comprehensive term system
 
+#![allow(
+    unused_imports,
+    unused_variables,
+    dead_code,
+    clippy::uninlined_format_args,
+    clippy::bool_assert_comparison,
+    clippy::print_literal
+)]
+
 use oxirs_arq::algebra::{Literal, Term as AlgebraTerm};
 use oxirs_arq::term::{matches_pattern, xsd, BindingContext, NumericValue, Term};
 use oxirs_core::model::NamedNode;

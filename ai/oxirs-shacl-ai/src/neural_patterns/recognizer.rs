@@ -22,8 +22,8 @@ use super::{
     hierarchies::PatternHierarchyAnalyzer,
     learning::NeuralPatternLearner,
     types::{
-        AttentionAnalysisResult,
-        CorrelationAnalysisConfig, CorrelationAnalysisResult, CorrelationType, NeuralPatternConfig, PatternHierarchy,
+        AttentionAnalysisResult, CorrelationAnalysisConfig, CorrelationAnalysisResult,
+        CorrelationType, NeuralPatternConfig, PatternHierarchy,
     },
 };
 
@@ -474,9 +474,9 @@ impl NeuralPatternRecognizer {
                 .with_id(format!("composite_{}", uuid::Uuid::new_v4()));
             Ok(composite)
         } else {
-            Err(
-                ShaclAiError::ProcessingError("No patterns available for composition".to_string()),
-            )
+            Err(ShaclAiError::ProcessingError(
+                "No patterns available for composition".to_string(),
+            ))
         }
     }
 
@@ -496,29 +496,302 @@ impl NeuralPatternRecognizer {
                 .with_id(format!("merged_{pattern1_id}_{pattern2_id}"));
             Ok(merged)
         } else {
-            Err(
-                ShaclAiError::ProcessingError("No patterns available for merging".to_string()),
-            )
+            Err(ShaclAiError::ProcessingError(
+                "No patterns available for merging".to_string(),
+            ))
         }
     }
 
-    /// Generate embeddings for patterns
+    /// Generate embeddings for patterns using feature-based approach
     async fn generate_pattern_embeddings(
         &self,
         patterns: &[Pattern],
     ) -> Result<HashMap<String, Vec<f64>>> {
         let mut embeddings = HashMap::new();
 
-        for (i, pattern) in patterns.iter().enumerate() {
-            // TODO: Generate actual embeddings using the trained model
-            let embedding: Vec<f64> = (0..self.config.embedding_dim)
-                .map(|_| rand::random::<f64>())
-                .collect();
-
+        for pattern in patterns {
+            // Generate feature-based embeddings instead of random values
+            let embedding = self.compute_pattern_features(pattern)?;
             embeddings.insert(pattern.id().to_string(), embedding);
         }
 
         Ok(embeddings)
+    }
+
+    /// Compute feature-based embedding for a pattern
+    fn compute_pattern_features(&self, pattern: &Pattern) -> Result<Vec<f64>> {
+        let mut features = Vec::new();
+
+        // Feature 1: Pattern type encoding (one-hot like)
+        let pattern_type_features = self.encode_pattern_type(pattern);
+        features.extend(pattern_type_features);
+
+        // Feature 2: Statistical features
+        let statistical_features = self.compute_statistical_features(pattern);
+        features.extend(statistical_features);
+
+        // Feature 3: Structural features
+        let structural_features = self.compute_structural_features(pattern);
+        features.extend(structural_features);
+
+        // Feature 4: Semantic features
+        let semantic_features = self.compute_semantic_features(pattern);
+        features.extend(semantic_features);
+
+        // Normalize features to unit vector
+        let normalized_features = self.normalize_features(&features);
+
+        // Pad or truncate to match embedding dimension
+        let mut final_embedding = normalized_features;
+        if final_embedding.len() < self.config.embedding_dim {
+            // Pad with zeros
+            final_embedding.resize(self.config.embedding_dim, 0.0);
+        } else if final_embedding.len() > self.config.embedding_dim {
+            // Truncate
+            final_embedding.truncate(self.config.embedding_dim);
+        }
+
+        Ok(final_embedding)
+    }
+
+    /// Encode pattern type into feature vector
+    fn encode_pattern_type(&self, pattern: &Pattern) -> Vec<f64> {
+        let mut type_features = vec![0.0; 10]; // 10 different pattern types
+
+        let type_index = match pattern.pattern_type() {
+            crate::patterns::types::PatternType::Structural => 0,
+            crate::patterns::types::PatternType::Usage => 1,
+            crate::patterns::types::PatternType::ShapeComposition => 2,
+            crate::patterns::types::PatternType::Temporal => 3,
+            crate::patterns::types::PatternType::Anomalous => 4,
+            crate::patterns::types::PatternType::Association => 5,
+            crate::patterns::types::PatternType::Constraint => 6,
+            crate::patterns::types::PatternType::Datatype => 7,
+            crate::patterns::types::PatternType::Cardinality => 8,
+            crate::patterns::types::PatternType::Range => 9,
+        };
+
+        type_features[type_index] = 1.0;
+        type_features
+    }
+
+    /// Compute statistical features for a pattern
+    fn compute_statistical_features(&self, pattern: &Pattern) -> Vec<f64> {
+        let mut features = Vec::new();
+
+        // Support and confidence
+        features.push(pattern.support());
+        features.push(pattern.confidence());
+
+        // Pattern complexity (based on pattern structure)
+        let complexity = self.compute_pattern_complexity(pattern);
+        features.push(complexity);
+
+        // Frequency features
+        let frequency = self.compute_pattern_frequency(pattern);
+        features.push(frequency);
+
+        features
+    }
+
+    /// Compute structural features for a pattern
+    fn compute_structural_features(&self, pattern: &Pattern) -> Vec<f64> {
+        let mut features = Vec::new();
+
+        // Pattern ID hash (normalized)
+        let id_hash = self.compute_string_hash(pattern.id()) as f64 / u64::MAX as f64;
+        features.push(id_hash);
+
+        // Pattern-specific structural features
+        match pattern {
+            Pattern::ClassUsage { instance_count, .. } => {
+                features.push(*instance_count as f64 / 1000.0); // Normalize
+                features.push(1.0); // Indicates class usage pattern
+                features.push(0.0); // Not property usage
+            }
+            Pattern::PropertyUsage { usage_count, .. } => {
+                features.push(*usage_count as f64 / 1000.0); // Normalize
+                features.push(0.0); // Not class usage
+                features.push(1.0); // Indicates property usage pattern
+            }
+            Pattern::Datatype { usage_count, .. } => {
+                features.push(*usage_count as f64 / 1000.0); // Normalize
+                features.push(0.0);
+                features.push(0.25); // Datatype pattern indicator
+            }
+            Pattern::Cardinality {
+                min_count,
+                max_count,
+                ..
+            } => {
+                features.push(min_count.unwrap_or(0) as f64 / 100.0); // Normalize
+                features.push(max_count.unwrap_or(1000) as f64 / 1000.0); // Normalize
+                features.push(0.5); // Mixed pattern type
+            }
+            Pattern::Hierarchy { depth, .. } => {
+                features.push(*depth as f64 / 10.0); // Normalize depth
+                features.push(0.0);
+                features.push(0.3); // Hierarchy pattern indicator
+            }
+            Pattern::ConstraintUsage { usage_count, .. } => {
+                features.push(*usage_count as f64 / 1000.0); // Normalize
+                features.push(0.0);
+                features.push(0.4); // Constraint usage pattern indicator
+            }
+            Pattern::TargetUsage { usage_count, .. } => {
+                features.push(*usage_count as f64 / 1000.0); // Normalize
+                features.push(0.0);
+                features.push(0.6); // Target usage pattern indicator
+            }
+            Pattern::PathComplexity { complexity, .. } => {
+                features.push(*complexity as f64 / 100.0); // Normalize complexity
+                features.push(0.0);
+                features.push(0.7); // Path complexity pattern indicator
+            }
+            Pattern::ShapeComplexity {
+                constraint_count, ..
+            } => {
+                features.push(*constraint_count as f64 / 50.0); // Normalize constraint count
+                features.push(0.0);
+                features.push(0.8); // Shape complexity pattern indicator
+            }
+            Pattern::AssociationRule { lift, .. } => {
+                features.push(*lift); // Lift is already a good feature
+                features.push(0.0);
+                features.push(0.9); // Association rule pattern indicator
+            }
+            Pattern::CardinalityRule {
+                min_count,
+                max_count,
+                ..
+            } => {
+                features.push(min_count.unwrap_or(0) as f64 / 100.0); // Normalize
+                features.push(max_count.unwrap_or(1000) as f64 / 1000.0); // Normalize
+                features.push(0.95); // Cardinality rule pattern indicator
+            }
+        }
+
+        features
+    }
+
+    /// Compute semantic features for a pattern
+    fn compute_semantic_features(&self, pattern: &Pattern) -> Vec<f64> {
+        let mut features = Vec::new();
+
+        // Semantic category features based on pattern content
+        let semantic_score = self.compute_semantic_score(pattern);
+        features.push(semantic_score);
+
+        // Domain relevance score
+        let domain_score = self.compute_domain_relevance(pattern);
+        features.push(domain_score);
+
+        // Abstraction level
+        let abstraction_level = self.compute_abstraction_level(pattern);
+        features.push(abstraction_level);
+
+        features
+    }
+
+    /// Compute pattern complexity score
+    fn compute_pattern_complexity(&self, pattern: &Pattern) -> f64 {
+        // Simple complexity based on pattern type and content
+        match pattern {
+            Pattern::ClassUsage { .. } => 0.2,
+            Pattern::PropertyUsage { .. } => 0.3,
+            Pattern::Datatype { .. } => 0.5,
+            Pattern::Cardinality { .. } => 0.6,
+            Pattern::Hierarchy { .. } => 0.4,
+            Pattern::ConstraintUsage { .. } => 0.7,
+            Pattern::TargetUsage { .. } => 0.35,
+            Pattern::PathComplexity { .. } => 0.8,
+            Pattern::ShapeComplexity { .. } => 0.9,
+            Pattern::AssociationRule { .. } => 0.85,
+            Pattern::CardinalityRule { .. } => 0.75,
+        }
+    }
+
+    /// Compute pattern frequency score
+    fn compute_pattern_frequency(&self, pattern: &Pattern) -> f64 {
+        // Base frequency on support value
+        pattern.support().min(1.0)
+    }
+
+    /// Compute semantic score for pattern
+    fn compute_semantic_score(&self, pattern: &Pattern) -> f64 {
+        // Simple semantic scoring based on pattern ID and type
+        let id_length = pattern.id().len();
+        let semantic_score = (id_length as f64 / 100.0).min(1.0);
+
+        // Adjust based on pattern type
+        match pattern.pattern_type() {
+            crate::patterns::types::PatternType::Structural => semantic_score * 0.8,
+            crate::patterns::types::PatternType::Usage => semantic_score * 0.6,
+            crate::patterns::types::PatternType::ShapeComposition => semantic_score * 0.9,
+            crate::patterns::types::PatternType::Temporal => semantic_score * 0.7,
+            crate::patterns::types::PatternType::Anomalous => semantic_score * 0.5,
+            crate::patterns::types::PatternType::Association => semantic_score * 0.4,
+            crate::patterns::types::PatternType::Constraint => semantic_score * 0.85,
+            crate::patterns::types::PatternType::Datatype => semantic_score * 0.75,
+            crate::patterns::types::PatternType::Cardinality => semantic_score * 0.65,
+            crate::patterns::types::PatternType::Range => semantic_score * 0.55,
+        }
+    }
+
+    /// Compute domain relevance score
+    fn compute_domain_relevance(&self, pattern: &Pattern) -> f64 {
+        // Simple domain relevance based on pattern content
+        let id = pattern.id();
+
+        // Check for common RDF/SHACL domain indicators
+        if id.contains("rdf:") || id.contains("rdfs:") || id.contains("shacl:") {
+            0.9
+        } else if id.contains("owl:") || id.contains("foaf:") {
+            0.8
+        } else if id.contains("http://") || id.contains("https://") {
+            0.7
+        } else {
+            0.5
+        }
+    }
+
+    /// Compute abstraction level
+    fn compute_abstraction_level(&self, pattern: &Pattern) -> f64 {
+        // Higher abstraction for more general patterns
+        match pattern {
+            Pattern::ClassUsage { .. } => 0.8,
+            Pattern::PropertyUsage { .. } => 0.7,
+            Pattern::Datatype { .. } => 0.3,
+            Pattern::Cardinality { .. } => 0.4,
+            Pattern::Hierarchy { .. } => 0.9,
+            Pattern::ConstraintUsage { .. } => 0.2,
+            Pattern::TargetUsage { .. } => 0.35,
+            Pattern::PathComplexity { .. } => 0.1,
+            Pattern::ShapeComplexity { .. } => 0.15,
+            Pattern::AssociationRule { .. } => 0.65,
+            Pattern::CardinalityRule { .. } => 0.25,
+        }
+    }
+
+    /// Compute hash for string content
+    fn compute_string_hash(&self, s: &str) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        s.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    /// Normalize feature vector to unit length
+    fn normalize_features(&self, features: &[f64]) -> Vec<f64> {
+        let norm = features.iter().map(|&x| x * x).sum::<f64>().sqrt();
+
+        if norm > 0.0 {
+            features.iter().map(|&x| x / norm).collect()
+        } else {
+            features.to_vec()
+        }
     }
 
     /// Compute quality scores for patterns
@@ -573,11 +846,30 @@ impl NeuralPatternRecognizer {
         self.statistics.hierarchies_built += hierarchies.len();
         self.statistics.attention_patterns_found += attention_analysis.attention_patterns.len();
 
-        // Compute average pattern complexity (placeholder)
-        self.statistics.average_pattern_complexity = 0.7;
+        // Compute average pattern complexity based on actual patterns
+        let total_complexity: f64 = patterns
+            .iter()
+            .map(|p| self.compute_pattern_complexity(p))
+            .sum();
+        self.statistics.average_pattern_complexity = if patterns.is_empty() {
+            0.0
+        } else {
+            total_complexity / patterns.len() as f64
+        };
 
-        // Compute recognition accuracy (placeholder)
-        self.statistics.recognition_accuracy = 0.85;
+        // Compute recognition accuracy based on correlation strength
+        let strong_correlations = correlation_analysis
+            .discovered_correlations
+            .iter()
+            .filter(|c| c.correlation_coefficient > 0.7)
+            .count();
+        let total_correlations = correlation_analysis.discovered_correlations.len();
+
+        self.statistics.recognition_accuracy = if total_correlations > 0 {
+            (strong_correlations as f64 / total_correlations as f64).min(1.0)
+        } else {
+            0.0
+        };
     }
 
     /// Get recognition statistics
@@ -780,7 +1072,7 @@ impl MemoryManager {
     }
 
     /// Return a pattern to the pool
-    pub async fn return_pattern(&mut self, pattern: Pattern) {
+    pub async fn return_pattern(&mut self, _pattern: Pattern) {
         let mut pool = self.pattern_pool.write().await;
 
         if pool.available_patterns.len() < pool.max_pool_size {

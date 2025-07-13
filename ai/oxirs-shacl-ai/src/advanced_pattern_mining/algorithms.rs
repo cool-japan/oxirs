@@ -4,9 +4,9 @@ use tracing::debug;
 
 use oxirs_core::Store;
 
-use super::types::*;
-use super::patterns::*;
 use super::engine::FrequencyTables;
+use super::patterns::*;
+use super::types::*;
 use crate::Result;
 
 /// Discover frequent itemsets using Apriori algorithm
@@ -14,7 +14,10 @@ pub fn discover_frequent_itemsets(
     frequency_tables: &FrequencyTables,
     config: &AdvancedPatternMiningConfig,
 ) -> Result<Vec<Vec<String>>> {
-    debug!("Discovering frequent itemsets with min_support: {}", config.min_support);
+    debug!(
+        "Discovering frequent itemsets with min_support: {}",
+        config.min_support
+    );
 
     let mut frequent_itemsets = Vec::new();
     let total_transactions = calculate_total_transactions(frequency_tables);
@@ -30,7 +33,7 @@ pub fn discover_frequent_itemsets(
 
         // Generate candidate (k+1)-itemsets
         let candidates = generate_candidate_itemsets(&current_itemsets, k + 1);
-        
+
         // Prune candidates that don't meet support threshold
         current_itemsets = candidates
             .into_iter()
@@ -43,7 +46,10 @@ pub fn discover_frequent_itemsets(
         k += 1;
     }
 
-    debug!("Total frequent itemsets discovered: {}", frequent_itemsets.len());
+    debug!(
+        "Total frequent itemsets discovered: {}",
+        frequent_itemsets.len()
+    );
     Ok(frequent_itemsets)
 }
 
@@ -53,7 +59,10 @@ pub fn generate_association_rules(
     frequency_tables: &FrequencyTables,
     config: &AdvancedPatternMiningConfig,
 ) -> Result<Vec<AdvancedPattern>> {
-    debug!("Generating association rules from {} itemsets", frequent_itemsets.len());
+    debug!(
+        "Generating association rules from {} itemsets",
+        frequent_itemsets.len()
+    );
 
     let mut patterns = Vec::new();
     let total_transactions = calculate_total_transactions(frequency_tables);
@@ -62,7 +71,7 @@ pub fn generate_association_rules(
         // Generate all possible rules from this itemset
         for i in 1..itemset.len() {
             let combinations = generate_combinations(itemset, i);
-            
+
             for antecedent in combinations {
                 let consequent: Vec<String> = itemset
                     .iter()
@@ -87,21 +96,23 @@ pub fn generate_association_rules(
                 };
 
                 let lift = if consequent_support > 0 {
-                    (support_count as f64 * total_transactions as f64) 
+                    (support_count as f64 * total_transactions as f64)
                         / (antecedent_support as f64 * consequent_support as f64)
                 } else {
                     0.0
                 };
 
                 let conviction = if confidence < 1.0 {
-                    (1.0 - (consequent_support as f64 / total_transactions as f64)) / (1.0 - confidence)
+                    (1.0 - (consequent_support as f64 / total_transactions as f64))
+                        / (1.0 - confidence)
                 } else {
                     f64::INFINITY
                 };
 
                 if confidence >= config.min_confidence {
                     let pattern_items = create_pattern_items(&antecedent, &consequent);
-                    let quality_score = calculate_quality_score(support_ratio, confidence, lift, conviction);
+                    let quality_score =
+                        calculate_quality_score(support_ratio, confidence, lift, conviction);
 
                     let pattern = AdvancedPattern {
                         items: pattern_items,
@@ -132,9 +143,12 @@ pub fn enhance_with_temporal_analysis(
     patterns: &mut [AdvancedPattern],
     store: &dyn Store,
     graph_name: Option<&str>,
-    config: &AdvancedPatternMiningConfig,
+    _config: &AdvancedPatternMiningConfig,
 ) -> Result<()> {
-    debug!("Enhancing {} patterns with temporal analysis", patterns.len());
+    debug!(
+        "Enhancing {} patterns with temporal analysis",
+        patterns.len()
+    );
 
     for pattern in patterns.iter_mut() {
         if let Some(temporal_info) = analyze_temporal_characteristics(pattern, store, graph_name)? {
@@ -154,13 +168,16 @@ pub fn enhance_with_temporal_analysis(
 pub fn analyze_hierarchical_patterns(
     patterns: &mut [AdvancedPattern],
     frequency_tables: &FrequencyTables,
-    config: &AdvancedPatternMiningConfig,
+    _config: &AdvancedPatternMiningConfig,
 ) -> Result<()> {
-    debug!("Analyzing hierarchical patterns for {} patterns", patterns.len());
+    debug!(
+        "Analyzing hierarchical patterns for {} patterns",
+        patterns.len()
+    );
 
     for pattern in patterns.iter_mut() {
         pattern.hierarchy_level = calculate_hierarchy_level(pattern, frequency_tables);
-        
+
         if pattern.hierarchy_level > 0 {
             // Adjust quality score for hierarchical patterns
             pattern.quality_score *= 1.0 + (pattern.hierarchy_level as f64 * 0.1);
@@ -175,7 +192,10 @@ pub fn generate_constraint_suggestions(
     patterns: &mut [AdvancedPattern],
     config: &AdvancedPatternMiningConfig,
 ) -> Result<()> {
-    debug!("Generating SHACL constraint suggestions for {} patterns", patterns.len());
+    debug!(
+        "Generating SHACL constraint suggestions for {} patterns",
+        patterns.len()
+    );
 
     for pattern in patterns.iter_mut() {
         pattern.suggested_constraints = create_constraint_suggestions(pattern, config);
@@ -188,9 +208,11 @@ pub fn generate_constraint_suggestions(
 
 fn calculate_total_transactions(frequency_tables: &FrequencyTables) -> usize {
     frequency_tables.properties.values().sum::<usize>().max(
-        frequency_tables.classes.values().sum::<usize>().max(
-            frequency_tables.value_patterns.values().sum()
-        )
+        frequency_tables
+            .classes
+            .values()
+            .sum::<usize>()
+            .max(frequency_tables.value_patterns.values().sum()),
     )
 }
 
@@ -230,7 +252,7 @@ fn generate_candidate_itemsets(frequent_itemsets: &[Vec<String>], k: usize) -> V
             let itemset2 = &frequent_itemsets[j];
 
             // Check if first k-2 items are the same
-            if k > 2 && itemset1[..k-2] != itemset2[..k-2] {
+            if k > 2 && itemset1[..k - 2] != itemset2[..k - 2] {
                 continue;
             }
 
@@ -256,24 +278,36 @@ fn generate_candidate_itemsets(frequent_itemsets: &[Vec<String>], k: usize) -> V
 
 fn calculate_itemset_support(itemset: &[String], frequency_tables: &FrequencyTables) -> usize {
     // Simplified support calculation - in practice this would be more sophisticated
-    itemset.iter().map(|item| {
-        if item.starts_with("prop:") {
-            frequency_tables.properties.get(&item[5..]).copied().unwrap_or(0)
-        } else if item.starts_with("class:") {
-            frequency_tables.classes.get(&item[6..]).copied().unwrap_or(0)
-        } else if item.starts_with("value:") {
-            frequency_tables.value_patterns.get(&item[6..]).copied().unwrap_or(0)
-        } else {
-            0
-        }
-    }).min().unwrap_or(0)
+    itemset
+        .iter()
+        .map(|item| {
+            if let Some(stripped) = item.strip_prefix("prop:") {
+                frequency_tables
+                    .properties
+                    .get(stripped)
+                    .copied()
+                    .unwrap_or(0)
+            } else if let Some(stripped) = item.strip_prefix("class:") {
+                frequency_tables.classes.get(stripped).copied().unwrap_or(0)
+            } else if let Some(stripped) = item.strip_prefix("value:") {
+                frequency_tables
+                    .value_patterns
+                    .get(stripped)
+                    .copied()
+                    .unwrap_or(0)
+            } else {
+                0
+            }
+        })
+        .min()
+        .unwrap_or(0)
 }
 
 fn generate_combinations(items: &[String], size: usize) -> Vec<Vec<String>> {
     if size == 0 || size > items.len() {
         return vec![];
     }
-    
+
     if size == 1 {
         return items.iter().map(|item| vec![item.clone()]).collect();
     }
@@ -282,7 +316,7 @@ fn generate_combinations(items: &[String], size: usize) -> Vec<Vec<String>> {
     for i in 0..=items.len() - size {
         let first = items[i].clone();
         let remaining = &items[i + 1..];
-        
+
         for mut combo in generate_combinations(remaining, size - 1) {
             combo.insert(0, first.clone());
             combinations.push(combo);
@@ -330,7 +364,7 @@ fn classify_item_type(item: &str) -> PatternItemType {
 
 fn classify_pattern_type(antecedent: &[String], consequent: &[String]) -> PatternType {
     let all_items: Vec<_> = antecedent.iter().chain(consequent.iter()).collect();
-    
+
     let has_properties = all_items.iter().any(|item| item.starts_with("prop:"));
     let has_classes = all_items.iter().any(|item| item.starts_with("class:"));
     let has_values = all_items.iter().any(|item| item.starts_with("value:"));
@@ -350,7 +384,7 @@ fn calculate_quality_score(support: f64, confidence: f64, lift: f64, conviction:
     let lift_weight = 0.3;
     let conviction_weight = 0.1;
 
-    let normalized_lift = (lift - 1.0).max(0.0).min(2.0) / 2.0;
+    let normalized_lift = (lift - 1.0).clamp(0.0, 2.0) / 2.0;
     let normalized_conviction = conviction.min(10.0) / 10.0;
 
     support * support_weight
@@ -360,9 +394,9 @@ fn calculate_quality_score(support: f64, confidence: f64, lift: f64, conviction:
 }
 
 fn analyze_temporal_characteristics(
-    pattern: &AdvancedPattern,
-    store: &dyn Store,
-    graph_name: Option<&str>,
+    _pattern: &AdvancedPattern,
+    _store: &dyn Store,
+    _graph_name: Option<&str>,
 ) -> Result<Option<TemporalPatternInfo>> {
     // Simplified temporal analysis - would be more sophisticated in practice
     Ok(Some(TemporalPatternInfo {
@@ -373,14 +407,17 @@ fn analyze_temporal_characteristics(
     }))
 }
 
-fn calculate_hierarchy_level(pattern: &AdvancedPattern, frequency_tables: &FrequencyTables) -> usize {
+fn calculate_hierarchy_level(
+    pattern: &AdvancedPattern,
+    _frequency_tables: &FrequencyTables,
+) -> usize {
     // Simplified hierarchy calculation
     pattern.items.len().saturating_sub(2)
 }
 
 fn create_constraint_suggestions(
     pattern: &AdvancedPattern,
-    config: &AdvancedPatternMiningConfig,
+    _config: &AdvancedPatternMiningConfig,
 ) -> Vec<SuggestedConstraint> {
     let mut suggestions = Vec::new();
 
@@ -390,7 +427,9 @@ fn create_constraint_suggestions(
             suggestions.push(SuggestedConstraint {
                 constraint_type: ConstraintType::MinCount,
                 path: item.identifier.clone(),
-                parameters: [("minCount".to_string(), "1".to_string())].into_iter().collect(),
+                parameters: [("minCount".to_string(), "1".to_string())]
+                    .into_iter()
+                    .collect(),
                 confidence: pattern.confidence,
                 coverage: pattern.support_ratio,
                 severity: if pattern.quality_score > 0.9 {

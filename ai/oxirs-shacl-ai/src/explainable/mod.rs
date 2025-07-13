@@ -23,8 +23,6 @@ use std::time::SystemTime;
 
 use tokio::sync::{Mutex, RwLock};
 
-use oxirs_core::Store;
-
 use crate::{Result, ShaclAiError};
 
 /// Explainable AI engine for providing interpretability and transparency
@@ -113,9 +111,9 @@ impl ExplainableAI {
         if let Some(generator) = generators.get(name) {
             Ok(generator.clone_box())
         } else {
-            Err(
-                ShaclAiError::Configuration(format!("Explanation generator '{name}' not found")),
-            )
+            Err(ShaclAiError::Configuration(format!(
+                "Explanation generator '{name}' not found"
+            )))
         }
     }
 

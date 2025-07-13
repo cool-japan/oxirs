@@ -1284,9 +1284,9 @@ impl SpecializedTextEmbedding {
         }
 
         // Fill remaining dimensions with text-based features
-        for i in 3..embedding_dim {
+        for (i, item) in embedding.iter_mut().enumerate().take(embedding_dim).skip(3) {
             let byte_val = text.as_bytes().get(i % text.len()).copied().unwrap_or(0) as f32;
-            embedding[i] = (byte_val / 255.0 - 0.5) * 2.0; // Normalize to [-1, 1]
+            *item = (byte_val / 255.0 - 0.5) * 2.0; // Normalize to [-1, 1]
         }
 
         // Apply domain-specific transformations
@@ -1963,7 +1963,7 @@ mod publication_tests {
             .unwrap();
 
         let similarity = analyzer.predict_collaboration("author1", "author2");
-        assert!(similarity >= 0.0 && similarity <= 1.0);
+        assert!((0.0..=1.0).contains(&similarity));
     }
 
     #[test]

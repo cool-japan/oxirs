@@ -252,9 +252,7 @@ fn demonstrate_queries(store: &MmapStore) -> Result<()> {
             .count();
 
         let elapsed = start.elapsed();
-        println!(
-            "  Graph contains {count} quads (counted in {elapsed:?})"
-        );
+        println!("  Graph contains {count} quads (counted in {elapsed:?})");
     }
 
     // Query 4: Find managers and their direct reports
@@ -276,10 +274,7 @@ fn demonstrate_queries(store: &MmapStore) -> Result<()> {
         }
 
         let elapsed = start.elapsed();
-        println!(
-            "  Found {} manager relationships (sampled 10) in {:?}",
-            manager_count, elapsed
-        );
+        println!("  Found {manager_count} manager relationships (sampled 10) in {elapsed:?}");
     }
 
     Ok(())
@@ -314,8 +309,8 @@ fn demonstrate_memory_efficiency(store: &MmapStore) -> Result<()> {
 
     let elapsed = start.elapsed();
     let avg_time = elapsed.as_micros() as f64 / 1000.0;
-    println!("Completed 1000 random queries in {:?}", elapsed);
-    println!("Average query time: {:.2} microseconds", avg_time);
+    println!("Completed 1000 random queries in {elapsed:?}");
+    println!("Average query time: {avg_time:.2} microseconds");
 
     Ok(())
 }

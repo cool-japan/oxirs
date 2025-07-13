@@ -167,11 +167,8 @@ impl PartialIndexCondition {
             PartialIndexCondition::SubjectEquals(subject) => &triple.subject == subject,
             PartialIndexCondition::ObjectEquals(object) => &triple.object == object,
             PartialIndexCondition::SubjectPrefix(prefix) => {
-                if let Ok(Some(term)) = node_table.get_term(triple.subject) {
-                    match term {
-                        Term::Iri(iri) => iri.starts_with(prefix),
-                        _ => false,
-                    }
+                if let Ok(Some(Term::Iri(iri))) = node_table.get_term(triple.subject) {
+                    iri.starts_with(prefix)
                 } else {
                     false
                 }
@@ -462,7 +459,7 @@ impl Default for TripleStoreConfig {
 }
 
 /// Triple store statistics
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct TripleStoreStats {
     /// Total triples stored
     pub total_triples: u64,
@@ -1619,9 +1616,14 @@ impl StorageInterface for TripleStore {
 
         use crate::wal::SchemaOperation;
         match operation {
-            SchemaOperation::CreateIndex { index_name, index_type, columns, options: _ } => {
+            SchemaOperation::CreateIndex {
+                index_name,
+                index_type,
+                columns,
+                options: _,
+            } => {
                 info!("Schema change: Creating index {}", index_name);
-                
+
                 // Parse index type to determine if it's a standard or partial index
                 match index_type.as_str() {
                     "standard" => {
@@ -1636,17 +1638,20 @@ impl StorageInterface for TripleStore {
                                 "OPS" => Some(IndexType::OPS),
                                 _ => None,
                             };
-                            
+
                             if let Some(idx_type) = idx_type {
                                 let mut indices = self.indices.write().unwrap();
-                                if let std::collections::hash_map::Entry::Vacant(e) = indices.entry(idx_type) {
-                                    let btree = BTree::with_config(self.config.btree_config.clone());
+                                if let std::collections::hash_map::Entry::Vacant(e) =
+                                    indices.entry(idx_type)
+                                {
+                                    let btree =
+                                        BTree::with_config(self.config.btree_config.clone());
                                     e.insert(btree);
                                     info!("Created standard index: {:?}", idx_type);
                                 }
                             }
                         }
-                    },
+                    }
                     "partial" => {
                         // Create partial index with conditions
                         let mut partial_indices = self.partial_indices.write().unwrap();
@@ -1655,15 +1660,18 @@ impl StorageInterface for TripleStore {
                             partial_indices.insert(index_name.clone(), btree);
                             info!("Created partial index: {}", index_name);
                         }
-                    },
+                    }
                     _ => {
                         info!("Unsupported index type: {}", index_type);
                     }
                 }
             }
-            SchemaOperation::DropIndex { index_name, cascade: _ } => {
+            SchemaOperation::DropIndex {
+                index_name,
+                cascade: _,
+            } => {
                 info!("Schema change: Dropping index {}", index_name);
-                
+
                 // Try to drop from partial indices first
                 let mut partial_indices = self.partial_indices.write().unwrap();
                 if partial_indices.remove(index_name).is_some() {
@@ -1671,7 +1679,7 @@ impl StorageInterface for TripleStore {
                     return Ok(());
                 }
                 drop(partial_indices);
-                
+
                 // Try to match standard index names
                 let idx_type = match index_name.as_str() {
                     "SPO" => Some(IndexType::SPO),
@@ -1682,7 +1690,7 @@ impl StorageInterface for TripleStore {
                     "OPS" => Some(IndexType::OPS),
                     _ => None,
                 };
-                
+
                 if let Some(idx_type) = idx_type {
                     let mut indices = self.indices.write().unwrap();
                     if indices.remove(&idx_type).is_some() {
@@ -1694,21 +1702,25 @@ impl StorageInterface for TripleStore {
                     info!("Unknown index name: {}", index_name);
                 }
             }
-            SchemaOperation::CreateGraph { graph_name, metadata } => {
+            SchemaOperation::CreateGraph {
+                graph_name,
+                metadata,
+            } => {
                 info!("Schema change: Creating graph {}", graph_name);
-                
+
                 // Create a term for the graph name and get its node ID
                 let graph_term = Term::iri(graph_name);
                 let graph_node_id = self.node_table.store_term(&graph_term)?;
-                
+
                 // Store metadata as properties of the graph if provided
                 for (key, value) in metadata {
-                    let predicate_term = Term::iri(format!("http://oxirs.org/graph/metadata#{key}"));
+                    let predicate_term =
+                        Term::iri(format!("http://oxirs.org/graph/metadata#{key}"));
                     let predicate_id = self.node_table.store_term(&predicate_term)?;
-                    
+
                     let value_term = Term::literal(value);
                     let value_id = self.node_table.store_term(&value_term)?;
-                    
+
                     // Create a metadata triple in the graph itself
                     let metadata_triple = Triple::new(graph_node_id, predicate_id, value_id);
                     let _quad_key = QuadKey::new(
@@ -1717,7 +1729,7 @@ impl StorageInterface for TripleStore {
                         metadata_triple.object,
                         graph_node_id,
                     );
-                    
+
                     // Insert the metadata as a quad
                     let metadata_quad = Quad {
                         subject: metadata_triple.subject,
@@ -1727,26 +1739,36 @@ impl StorageInterface for TripleStore {
                     };
                     self.insert_quad(&metadata_quad)?;
                 }
-                
-                info!("Created named graph: {} with node ID: {}", graph_name, graph_node_id);
+
+                info!(
+                    "Created named graph: {} with node ID: {}",
+                    graph_name, graph_node_id
+                );
             }
-            SchemaOperation::DropGraph { graph_name, cascade: _ } => {
+            SchemaOperation::DropGraph {
+                graph_name,
+                cascade: _,
+            } => {
                 info!("Schema change: Dropping graph {}", graph_name);
-                
+
                 // Get the node ID for the graph name
                 let graph_term = Term::iri(graph_name);
                 if let Some(graph_node_id) = self.node_table.get_node_id(&graph_term)? {
                     // Query all quads in this graph and delete them
-                    let quads_in_graph = self.query_quads(None, None, None, Some(Some(graph_node_id)))?;
+                    let quads_in_graph =
+                        self.query_quads(None, None, None, Some(Some(graph_node_id)))?;
                     let mut deleted_count = 0;
-                    
+
                     for quad in quads_in_graph {
                         if self.delete_quad(&quad)? {
                             deleted_count += 1;
                         }
                     }
-                    
-                    info!("Dropped named graph: {} with {} quads removed", graph_name, deleted_count);
+
+                    info!(
+                        "Dropped named graph: {} with {} quads removed",
+                        graph_name, deleted_count
+                    );
                 } else {
                     info!("Graph {} not found", graph_name);
                 }
@@ -1757,49 +1779,57 @@ impl StorageInterface for TripleStore {
                 definition,
             } => {
                 info!("Schema change: Adding constraint {}", constraint_name);
-                
+
                 // Store constraint definition as metadata in the default graph
-                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{constraint_name}"));
+                let constraint_subject =
+                    Term::iri(format!("http://oxirs.org/constraints/{constraint_name}"));
                 let constraint_id = self.node_table.store_term(&constraint_subject)?;
-                
+
                 // Store constraint type
                 let type_predicate = Term::iri("http://oxirs.org/constraints#type");
                 let type_predicate_id = self.node_table.store_term(&type_predicate)?;
                 let type_value = Term::literal(constraint_type);
                 let type_value_id = self.node_table.store_term(&type_value)?;
-                
+
                 let type_triple = Triple::new(constraint_id, type_predicate_id, type_value_id);
                 self.insert_triple(&type_triple)?;
-                
+
                 // Store constraint definition
                 let def_predicate = Term::iri("http://oxirs.org/constraints#definition");
                 let def_predicate_id = self.node_table.store_term(&def_predicate)?;
                 let def_value = Term::literal(definition);
                 let def_value_id = self.node_table.store_term(&def_value)?;
-                
+
                 let def_triple = Triple::new(constraint_id, def_predicate_id, def_value_id);
                 self.insert_triple(&def_triple)?;
-                
-                info!("Added constraint: {} of type: {}", constraint_name, constraint_type);
+
+                info!(
+                    "Added constraint: {} of type: {}",
+                    constraint_name, constraint_type
+                );
             }
             SchemaOperation::DropConstraint { constraint_name } => {
                 info!("Schema change: Dropping constraint {}", constraint_name);
-                
+
                 // Find and remove constraint metadata triples
-                let constraint_subject = Term::iri(format!("http://oxirs.org/constraints/{constraint_name}"));
+                let constraint_subject =
+                    Term::iri(format!("http://oxirs.org/constraints/{constraint_name}"));
                 if let Some(constraint_id) = self.node_table.get_node_id(&constraint_subject)? {
                     // Query all triples with this constraint as subject
                     let constraint_triples = self.query_triples(Some(constraint_id), None, None)?;
                     let mut deleted_count = 0;
-                    
+
                     // Delete each triple
                     for triple in constraint_triples {
                         if self.delete_triple(&triple)? {
                             deleted_count += 1;
                         }
                     }
-                    
-                    info!("Dropped constraint: {} with {} metadata triples removed", constraint_name, deleted_count);
+
+                    info!(
+                        "Dropped constraint: {} with {} metadata triples removed",
+                        constraint_name, deleted_count
+                    );
                 } else {
                     info!("Constraint {} not found", constraint_name);
                 }
@@ -1809,86 +1839,105 @@ impl StorageInterface for TripleStore {
                 old_value,
                 new_value,
             } => {
-                info!("Schema change: Updating {} from {} to {}", setting_name, old_value, new_value);
-                
+                info!(
+                    "Schema change: Updating {} from {} to {}",
+                    setting_name, old_value, new_value
+                );
+
                 // Store configuration changes as metadata
                 let config_subject = Term::iri(format!("http://oxirs.org/config/{setting_name}"));
                 let config_id = self.node_table.store_term(&config_subject)?;
-                
+
                 // Store the new value
                 let value_predicate = Term::iri("http://oxirs.org/config#value");
                 let value_predicate_id = self.node_table.store_term(&value_predicate)?;
                 let value_literal = Term::literal(new_value);
                 let value_id = self.node_table.store_term(&value_literal)?;
-                
+
                 let config_triple = Triple::new(config_id, value_predicate_id, value_id);
-                
+
                 // Update or insert the configuration value
                 self.insert_triple(&config_triple)?;
-                
+
                 // Store the change timestamp
                 let timestamp_predicate = Term::iri("http://oxirs.org/config#modified");
                 let timestamp_predicate_id = self.node_table.store_term(&timestamp_predicate)?;
                 let timestamp_value = Term::literal(chrono::Utc::now().to_rfc3339());
                 let timestamp_value_id = self.node_table.store_term(&timestamp_value)?;
-                
-                let timestamp_triple = Triple::new(config_id, timestamp_predicate_id, timestamp_value_id);
+
+                let timestamp_triple =
+                    Triple::new(config_id, timestamp_predicate_id, timestamp_value_id);
                 self.insert_triple(&timestamp_triple)?;
-                
-                info!("Updated configuration setting: {} = {}", setting_name, new_value);
+
+                info!(
+                    "Updated configuration setting: {} = {}",
+                    setting_name, new_value
+                );
             }
-            SchemaOperation::UpdateStatistics { table_name, statistics: _ } => {
+            SchemaOperation::UpdateStatistics {
+                table_name,
+                statistics: _,
+            } => {
                 info!("Schema change: Updating statistics for {}", table_name);
-                
+
                 // Calculate and store current statistics
                 let stats_subject = Term::iri(format!("http://oxirs.org/stats/{table_name}"));
                 let stats_id = self.node_table.store_term(&stats_subject)?;
-                
+
                 match table_name.as_str() {
                     "triples" => {
                         // Get triple count from stats
                         let stats = self.get_stats()?;
                         let triple_count = stats.total_triples;
-                        
+
                         // Store triple count
                         let count_predicate = Term::iri("http://oxirs.org/stats#count");
                         let count_predicate_id = self.node_table.store_term(&count_predicate)?;
                         let count_value = Term::literal(triple_count.to_string());
                         let count_value_id = self.node_table.store_term(&count_value)?;
-                        
-                        let count_triple = Triple::new(stats_id, count_predicate_id, count_value_id);
+
+                        let count_triple =
+                            Triple::new(stats_id, count_predicate_id, count_value_id);
                         self.insert_triple(&count_triple)?;
-                        
-                        info!("Updated statistics for {}: {} triples", table_name, triple_count);
-                    },
+
+                        info!(
+                            "Updated statistics for {}: {} triples",
+                            table_name, triple_count
+                        );
+                    }
                     "quads" => {
                         // Get quad count from stats
                         let stats = self.get_stats()?;
                         let quad_count = stats.total_quads;
-                        
+
                         // Store quad count
                         let count_predicate = Term::iri("http://oxirs.org/stats#count");
                         let count_predicate_id = self.node_table.store_term(&count_predicate)?;
                         let count_value = Term::literal(quad_count.to_string());
                         let count_value_id = self.node_table.store_term(&count_value)?;
-                        
-                        let count_triple = Triple::new(stats_id, count_predicate_id, count_value_id);
+
+                        let count_triple =
+                            Triple::new(stats_id, count_predicate_id, count_value_id);
                         self.insert_triple(&count_triple)?;
-                        
-                        info!("Updated statistics for {}: {} quads", table_name, quad_count);
-                    },
+
+                        info!(
+                            "Updated statistics for {}: {} quads",
+                            table_name, quad_count
+                        );
+                    }
                     _ => {
                         info!("Unknown table for statistics: {}", table_name);
                     }
                 }
-                
+
                 // Store last update timestamp
                 let timestamp_predicate = Term::iri("http://oxirs.org/stats#lastUpdated");
                 let timestamp_predicate_id = self.node_table.store_term(&timestamp_predicate)?;
                 let timestamp_value = Term::literal(chrono::Utc::now().to_rfc3339());
                 let timestamp_value_id = self.node_table.store_term(&timestamp_value)?;
-                
-                let timestamp_triple = Triple::new(stats_id, timestamp_predicate_id, timestamp_value_id);
+
+                let timestamp_triple =
+                    Triple::new(stats_id, timestamp_predicate_id, timestamp_value_id);
                 self.insert_triple(&timestamp_triple)?;
             }
             SchemaOperation::CreateView {
@@ -1905,39 +1954,51 @@ impl StorageInterface for TripleStore {
                     },
                     view_name
                 );
-                
+
                 // Store view definition as metadata
                 let view_subject = Term::iri(format!("http://oxirs.org/views/{view_name}"));
                 let view_id = self.node_table.store_term(&view_subject)?;
-                
+
                 // Store view type (materialized or regular)
                 let type_predicate = Term::iri("http://oxirs.org/views#type");
                 let type_predicate_id = self.node_table.store_term(&type_predicate)?;
-                let type_value = Term::literal(if *materialized { "materialized" } else { "regular" });
+                let type_value = Term::literal(if *materialized {
+                    "materialized"
+                } else {
+                    "regular"
+                });
                 let type_value_id = self.node_table.store_term(&type_value)?;
-                
+
                 let type_triple = Triple::new(view_id, type_predicate_id, type_value_id);
                 self.insert_triple(&type_triple)?;
-                
+
                 // Store view query definition
                 let query_predicate = Term::iri("http://oxirs.org/views#query");
                 let query_predicate_id = self.node_table.store_term(&query_predicate)?;
                 let query_value = Term::literal(definition);
                 let query_value_id = self.node_table.store_term(&query_value)?;
-                
+
                 let query_triple = Triple::new(view_id, query_predicate_id, query_value_id);
                 self.insert_triple(&query_triple)?;
-                
+
                 // Store creation timestamp
                 let created_predicate = Term::iri("http://oxirs.org/views#created");
                 let created_predicate_id = self.node_table.store_term(&created_predicate)?;
                 let created_value = Term::literal(chrono::Utc::now().to_rfc3339());
                 let created_value_id = self.node_table.store_term(&created_value)?;
-                
+
                 let created_triple = Triple::new(view_id, created_predicate_id, created_value_id);
                 self.insert_triple(&created_triple)?;
-                
-                info!("Created {} view: {}", if *materialized { "materialized" } else { "regular" }, view_name);
+
+                info!(
+                    "Created {} view: {}",
+                    if *materialized {
+                        "materialized"
+                    } else {
+                        "regular"
+                    },
+                    view_name
+                );
             }
             SchemaOperation::DropView {
                 view_name,
@@ -1952,23 +2013,27 @@ impl StorageInterface for TripleStore {
                     },
                     view_name
                 );
-                
+
                 // Find and remove view metadata triples
                 let view_subject = Term::iri(format!("http://oxirs.org/views/{view_name}"));
                 if let Some(view_id) = self.node_table.get_node_id(&view_subject)? {
                     // Query all triples with this view as subject and delete them
                     let view_triples = self.query_triples(Some(view_id), None, None)?;
                     let mut deleted_count = 0;
-                    
+
                     for triple in view_triples {
                         if self.delete_triple(&triple)? {
                             deleted_count += 1;
                         }
                     }
-                    
+
                     info!(
                         "Dropped {} view: {} with {} metadata triples removed",
-                        if *materialized { "materialized" } else { "regular" },
+                        if *materialized {
+                            "materialized"
+                        } else {
+                            "regular"
+                        },
                         view_name,
                         deleted_count
                     );

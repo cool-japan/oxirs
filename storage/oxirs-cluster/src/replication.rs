@@ -380,6 +380,9 @@ mod tests {
         // Fresh replica should not be stale
         assert!(!replica.is_stale(Duration::from_secs(10)));
 
+        // Wait a tiny bit to ensure elapsed time passes the threshold
+        std::thread::sleep(Duration::from_micros(1));
+
         // Simulate old replica by checking against very short threshold
         assert!(replica.is_stale(Duration::from_nanos(1)));
     }

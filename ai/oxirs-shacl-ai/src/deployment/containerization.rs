@@ -184,14 +184,12 @@ pub enum ContainerRuntime {
 }
 
 /// Runtime configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RuntimeConfig {
     pub resource_limits: ResourceLimits,
     pub security_context: SecurityContext,
     pub networking: NetworkingConfig,
 }
-
 
 /// Security context
 #[derive(Debug, Clone, Serialize, Deserialize)]

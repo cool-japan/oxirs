@@ -319,7 +319,7 @@ impl NodeStatus {
             score *= 0.8;
         }
 
-        score.max(0.0).min(1.0)
+        score.clamp(0.0, 1.0)
     }
 
     /// Check if node has been inactive too long

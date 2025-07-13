@@ -1,6 +1,12 @@
 //! Integration tests for cross-shard transactions with 2PC
 
 #[cfg(test)]
+#[allow(
+    unused_imports,
+    unused_variables,
+    clippy::uninlined_format_args,
+    clippy::field_reassign_with_default
+)]
 mod transaction_tests {
     use oxirs_cluster::network::{NetworkConfig, NetworkService};
     use oxirs_cluster::shard::{ShardRouter, ShardingStrategy};
@@ -10,12 +16,15 @@ mod transaction_tests {
         IsolationLevel, TransactionConfig, TransactionCoordinator, TransactionId, TransactionOp,
         TransactionState,
     };
-    use oxirs_cluster::transaction_optimizer::{DeadlockDetector, TwoPhaseOptimizer};
-    use oxirs_core::model::{NamedNode, Subject, Triple};
+    use oxirs_cluster::transaction_optimizer::DeadlockDetector;
+    use oxirs_core::model::{Literal, NamedNode, Subject, Triple};
     use std::sync::Arc;
     use std::time::Duration;
 
     async fn setup_transaction_coordinator() -> TransactionCoordinator {
+        // Set test mode environment variable
+        std::env::set_var("OXIRS_TEST_MODE", "1");
+
         let strategy = ShardingStrategy::Hash { num_shards: 4 };
         let router = Arc::new(ShardRouter::new(strategy));
         router.init_shards(4, 3).await.unwrap();
@@ -99,7 +108,7 @@ mod transaction_tests {
             let triple = Triple::new(
                 NamedNode::new("http://example.org/test").unwrap(),
                 NamedNode::new("http://example.org/level").unwrap(),
-                NamedNode::new(format!("{:?}", level)).unwrap(),
+                Literal::new_simple_literal(format!("{:?}", level)),
             );
 
             coordinator
@@ -113,7 +122,6 @@ mod transaction_tests {
     #[tokio::test]
     async fn test_read_only_optimization() {
         let coordinator = setup_transaction_coordinator().await;
-        let optimizer = TwoPhaseOptimizer::new();
 
         // Create read-only transaction
         let tx_id = coordinator
@@ -149,15 +157,14 @@ mod transaction_tests {
         // Commit should be optimized
         coordinator.commit_transaction(&tx_id).await.unwrap();
 
-        // Check optimization stats
-        let stats = optimizer.get_statistics().await;
+        // Check optimization stats from the coordinator's optimizer
+        let stats = coordinator.get_optimizer_statistics().await;
         assert!(stats.readonly_optimized > 0);
     }
 
     #[tokio::test]
     async fn test_single_shard_optimization() {
         let coordinator = setup_transaction_coordinator().await;
-        let optimizer = TwoPhaseOptimizer::new();
 
         // Create transaction affecting single shard
         let tx_id = coordinator
@@ -176,7 +183,7 @@ mod transaction_tests {
                     triple: Triple::new(
                         subject.clone(),
                         NamedNode::new("http://example.org/name").unwrap(),
-                        NamedNode::new("Single Shard").unwrap(),
+                        Literal::new_simple_literal("Single Shard"),
                     ),
                 },
             )
@@ -190,7 +197,7 @@ mod transaction_tests {
                     triple: Triple::new(
                         subject.clone(),
                         NamedNode::new("http://example.org/age").unwrap(),
-                        NamedNode::new("25").unwrap(),
+                        Literal::new_simple_literal("25"),
                     ),
                 },
             )
@@ -199,8 +206,8 @@ mod transaction_tests {
 
         coordinator.commit_transaction(&tx_id).await.unwrap();
 
-        // Check optimization stats
-        let stats = optimizer.get_statistics().await;
+        // Check optimization stats from the coordinator's optimizer
+        let stats = coordinator.get_optimizer_statistics().await;
         assert!(stats.single_shard_optimized > 0);
     }
 
@@ -225,7 +232,7 @@ mod transaction_tests {
             let triple = Triple::new(
                 NamedNode::new(subject).unwrap(),
                 NamedNode::new("http://example.org/updated").unwrap(),
-                NamedNode::new("true").unwrap(),
+                Literal::new_simple_literal("true"),
             );
             coordinator
                 .add_operation(&tx_id, TransactionOp::Insert { triple })
@@ -253,7 +260,7 @@ mod transaction_tests {
         let triple = Triple::new(
             NamedNode::new("http://example.org/aborted").unwrap(),
             NamedNode::new("http://example.org/status").unwrap(),
-            NamedNode::new("pending").unwrap(),
+            Literal::new_simple_literal("pending"),
         );
         coordinator
             .add_operation(&tx_id, TransactionOp::Insert { triple })
@@ -262,7 +269,12 @@ mod transaction_tests {
 
         // Manually abort the transaction
         // In real scenario, this might happen due to conflicts or failures
-        // For now, we'll test cleanup
+        coordinator.abort_transaction(&tx_id).await.unwrap();
+
+        // Give the transaction time to complete abort process
+        tokio::time::sleep(Duration::from_millis(10)).await;
+
+        // Now test cleanup
         coordinator
             .cleanup_transactions(Duration::from_secs(0))
             .await;
@@ -308,7 +320,7 @@ mod transaction_tests {
                 let triple = Triple::new(
                     NamedNode::new(format!("http://example.org/concurrent{}", i)).unwrap(),
                     NamedNode::new("http://example.org/index").unwrap(),
-                    NamedNode::new(i.to_string()).unwrap(),
+                    Literal::new_simple_literal(i.to_string()),
                 );
 
                 coord
@@ -359,9 +371,13 @@ mod transaction_tests {
         // Wait for timeout
         tokio::time::sleep(Duration::from_millis(200)).await;
 
-        // Transaction should fail due to timeout
+        // Try to commit the transaction - this should fail due to timeout
+        let result = coordinator.commit_transaction(&tx_id).await;
+        assert!(result.is_err(), "Transaction should fail due to timeout");
+
+        // Now cleanup timed out transactions
         coordinator
-            .cleanup_transactions(Duration::from_millis(150))
+            .cleanup_transactions(Duration::from_secs(0))
             .await;
 
         let stats = coordinator.get_statistics().await;
@@ -382,7 +398,7 @@ mod transaction_tests {
             let triple = Triple::new(
                 NamedNode::new(format!("http://example.org/batch{}", i)).unwrap(),
                 NamedNode::new("http://example.org/batch").unwrap(),
-                NamedNode::new(i.to_string()).unwrap(),
+                Literal::new_simple_literal(i.to_string()),
             );
             coordinator
                 .add_operation(&tx_id, TransactionOp::Insert { triple })

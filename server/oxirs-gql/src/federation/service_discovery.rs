@@ -154,8 +154,6 @@ impl ServiceDiscovery {
             .build()
             .expect("Failed to create HTTP client");
 
-        
-
         Self {
             config,
             services: Arc::new(RwLock::new(HashMap::new())),

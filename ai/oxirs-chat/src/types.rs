@@ -1038,7 +1038,7 @@ pub enum EnhancedStreamResponseChunk {
     },
     /// Processing complete with comprehensive metadata
     Complete {
-        message: crate::Message,
+        message: Box<crate::Message>,
         total_time: Duration,
         performance_metrics: ProcessingMetrics,
     },

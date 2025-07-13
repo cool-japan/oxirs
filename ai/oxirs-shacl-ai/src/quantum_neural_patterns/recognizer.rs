@@ -5,7 +5,6 @@ use std::f64::consts::PI;
 use std::sync::Arc;
 
 use oxirs_core::{model::Triple, Store};
-use rand_distr::Distribution;
 use tokio::sync::RwLock;
 
 use super::core::{QuantumAdvantageMetrics, QuantumMetrics, QuantumPattern};
@@ -101,7 +100,7 @@ impl QuantumNeuralPatternRecognizer {
     }
 
     /// Apply quantum enhancement algorithms to improve pattern quality
-    async fn apply_quantum_enhancement(&self, patterns: &mut Vec<QuantumPattern>) -> Result<()> {
+    async fn apply_quantum_enhancement(&self, patterns: &mut [QuantumPattern]) -> Result<()> {
         // Apply quantum superposition to enhance pattern diversity
         for pattern in patterns.iter_mut() {
             for qubit in 0..self.num_qubits {
@@ -133,10 +132,7 @@ impl QuantumNeuralPatternRecognizer {
     }
 
     /// Apply quantum error correction to maintain pattern fidelity
-    async fn apply_quantum_error_correction(
-        &self,
-        patterns: &mut Vec<QuantumPattern>,
-    ) -> Result<()> {
+    async fn apply_quantum_error_correction(&self, patterns: &mut [QuantumPattern]) -> Result<()> {
         for pattern in patterns.iter_mut() {
             // Calculate error probability
             let coherence = pattern.quantum_state.coherence();
@@ -251,8 +247,8 @@ impl QuantumNeuralPatternRecognizer {
     /// Extract triples from RDF store
     fn extract_triples_from_store(
         &self,
-        store: &dyn Store,
-        graph_name: Option<&str>,
+        _store: &dyn Store,
+        _graph_name: Option<&str>,
     ) -> Result<Vec<Triple>> {
         // Implementation would extract triples from the store
         // For now, return empty vector as placeholder

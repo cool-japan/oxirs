@@ -181,8 +181,8 @@ impl RdfStore {
     /// Insert a triple into the store
     pub fn insert_triple(&mut self, subject: &str, predicate: &str, object: &str) -> Result<()> {
         // Parse terms
-        let subject = if subject.starts_with("_:") {
-            Subject::BlankNode(BlankNode::new(&subject[2..])?)
+        let subject = if let Some(stripped) = subject.strip_prefix("_:") {
+            Subject::BlankNode(BlankNode::new(stripped)?)
         } else {
             Subject::NamedNode(NamedNode::new(subject)?)
         };
@@ -193,9 +193,9 @@ impl RdfStore {
             // It's a literal
             let literal_value = &object[1..object.len() - 1];
             Term::Literal(OxiLiteral::new_simple_literal(literal_value))
-        } else if object.starts_with("_:") {
+        } else if let Some(stripped) = object.strip_prefix("_:") {
             // It's a blank node
-            Term::BlankNode(BlankNode::new(&object[2..])?)
+            Term::BlankNode(BlankNode::new(stripped)?)
         } else {
             // It's a named node
             Term::NamedNode(NamedNode::new(object)?)
@@ -300,6 +300,7 @@ pub mod neuromorphic_query_processor;
 pub mod performance;
 pub mod predictive_analytics;
 pub mod quantum_real_time_analytics;
+pub mod system_monitor;
 
 // Ultra-modern enterprise modules (July 5, 2025 enhancements)
 pub mod advanced_query_planner;

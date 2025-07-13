@@ -18,7 +18,7 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Json, Response},
-    routing::get,
+    routing::{get, post},
     Router,
 };
 use std::collections::HashMap;
@@ -230,20 +230,19 @@ impl Runtime {
         let mut app = Router::new();
 
         // Core SPARQL Protocol routes
-        app = app
-            .route(
-                "/sparql",
-                get(handlers::query_handler_get).post(handlers::query_handler_post),
-            );
-            // TODO: Re-enable these routes after fixing handler signatures
-            // .route("/update", post(handlers::sparql::update_handler))
-            // .route(
-            //     "/graph-store",
-            //     get(handlers::graph::graph_store_handler)
-            //         .post(handlers::graph::graph_store_handler)
-            //         .put(handlers::graph::graph_store_handler)
-            //         .delete(handlers::graph::graph_store_handler),
-            // );
+        app = app.route(
+            "/sparql",
+            get(handlers::query_handler_get).post(handlers::query_handler_post),
+        );
+        // TODO: Re-enable these routes after fixing handler signatures
+        // .route("/update", post(handlers::sparql::update_handler))
+        // .route(
+        //     "/graph-store",
+        //     get(handlers::graph::graph_store_handler)
+        //         .post(handlers::graph::graph_store_handler)
+        //         .put(handlers::graph::graph_store_handler)
+        //         .delete(handlers::graph::graph_store_handler),
+        // );
 
         // TODO: Re-enable these routes after fixing handler signatures
         // Dataset management routes
@@ -256,7 +255,7 @@ impl Runtime {
         //             .delete(handlers::admin::delete_dataset),
         //     );
 
-        // Server management routes  
+        // Server management routes
         app = app.route("/$/ping", get(ping_handler));
         // TODO: Fix these handler signatures
         // .route("/$/server", get(handlers::admin::server_info))
@@ -274,39 +273,38 @@ impl Runtime {
         //         .route("/$/users", get(handlers::auth::list_users_handler));
         // }
 
-        // TODO: Re-enable OAuth2 routes after fixing handler signatures
         // OAuth2/OIDC authentication routes (if OAuth2 is configured)
-        // if self.config.security.oauth.is_some() {
-        //     app = app
-        //         .route(
-        //             "/auth/oauth2/authorize",
-        //             get(handlers::oauth2::initiate_oauth2_flow),
-        //         )
-        //         .route(
-        //             "/auth/oauth2/callback",
-        //             get(handlers::oauth2::handle_oauth2_callback),
-        //         )
-        //         .route(
-        //             "/auth/oauth2/refresh",
-        //             post(handlers::oauth2::refresh_oauth2_token),
-        //         )
-        //         .route(
-        //             "/auth/oauth2/userinfo",
-        //             get(handlers::oauth2::get_oauth2_user_info),
-        //         )
-        //         .route(
-        //             "/auth/oauth2/validate",
-        //             get(handlers::oauth2::validate_oauth2_token),
-        //         )
-        //         .route(
-        //             "/auth/oauth2/config",
-        //             get(handlers::oauth2::get_oauth2_config),
-        //         )
-        //         .route(
-        //             "/auth/oauth2/.well-known/openid_configuration",
-        //             get(handlers::oauth2::oauth2_discovery),
-        //         );
-        // }
+        if self.config.security.oauth.is_some() {
+            app = app
+                .route(
+                    "/auth/oauth2/authorize",
+                    get(handlers::oauth2::initiate_oauth2_flow),
+                )
+                .route(
+                    "/auth/oauth2/callback",
+                    get(handlers::oauth2::handle_oauth2_callback),
+                )
+                .route(
+                    "/auth/oauth2/refresh",
+                    post(handlers::oauth2::refresh_oauth2_token),
+                )
+                .route(
+                    "/auth/oauth2/userinfo",
+                    get(handlers::oauth2::get_oauth2_user_info),
+                )
+                .route(
+                    "/auth/oauth2/validate",
+                    get(handlers::oauth2::validate_oauth2_token),
+                )
+                .route(
+                    "/auth/oauth2/config",
+                    get(handlers::oauth2::get_oauth2_config),
+                )
+                .route(
+                    "/auth/oauth2/.well-known/openid_configuration",
+                    get(handlers::oauth2::oauth2_discovery),
+                );
+        }
 
         // TODO: Re-enable LDAP and SAML routes after fixing handler signatures
         // LDAP/Active Directory authentication routes (if LDAP is configured)
@@ -406,8 +404,7 @@ impl Runtime {
         // }
 
         // Apply middleware stack in correct order
-        // TODO: Fix middleware stack application
-        // app = self.apply_middleware_stack(app, state).await?;
+        app = self.apply_middleware_stack(app, state.clone()).await?;
 
         // Return the app with state (inferred from handler signatures)
         Ok(app.with_state(state))
@@ -416,11 +413,42 @@ impl Runtime {
     /// Apply comprehensive middleware stack
     async fn apply_middleware_stack(
         &self,
-        app: Router,
-        state: Arc<AppState>,
-    ) -> FusekiResult<Router> {
-        // TODO: Fix middleware implementation
-        // Temporary placeholder to get compilation working
+        mut app: Router<Arc<AppState>>,
+        _state: Arc<AppState>,
+    ) -> FusekiResult<Router<Arc<AppState>>> {
+        use tower_http::{
+            cors::CorsLayer, request_id::SetRequestIdLayer, timeout::TimeoutLayer,
+            trace::TraceLayer,
+        };
+
+        // Request ID generation
+        app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
+
+        // Request tracing and logging
+        app = app.layer(TraceLayer::new_for_http());
+
+        // Timeout middleware
+        app = app.layer(TimeoutLayer::new(Duration::from_secs(30)));
+
+        // CORS configuration if enabled
+        if self.config.server.cors {
+            let cors = CorsLayer::new()
+                .allow_origin(tower_http::cors::Any)
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::PUT,
+                    axum::http::Method::DELETE,
+                    axum::http::Method::OPTIONS,
+                ])
+                .allow_headers(tower_http::cors::Any);
+            app = app.layer(cors);
+        }
+
+        // Note: Auth and metrics middleware would be added here if type compatibility allows
+        // For now, commenting out to fix compilation
+        // TODO: Fix middleware type compatibility issues
+
         Ok(app)
     }
 
@@ -484,9 +512,9 @@ pub struct AppState {
 
 /// Request UUID generator for request IDs
 #[derive(Clone)]
-struct MakeRequestUuid;
+struct RequestIdGenerator;
 
-impl MakeRequestId for MakeRequestUuid {
+impl MakeRequestId for RequestIdGenerator {
     fn make_request_id<B>(&mut self, _request: &axum::http::Request<B>) -> Option<RequestId> {
         let request_id = Uuid::new_v4().to_string();
         axum::http::HeaderValue::from_str(&request_id)
@@ -495,9 +523,12 @@ impl MakeRequestId for MakeRequestUuid {
     }
 }
 
+/// Alias for compatibility
+type MakeRequestUuid = RequestIdGenerator;
+
 /// Comprehensive error handling middleware
 async fn error_handling_middleware(
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -511,6 +542,40 @@ async fn error_handling_middleware(
     }
 
     response
+}
+
+/// Authentication middleware
+async fn auth_middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    // Skip authentication for health endpoints
+    let path = request.uri().path();
+    if path.starts_with("/health") || path == "/$/ping" {
+        return next.run(request).await;
+    }
+
+    // Check if authentication is required and service is available
+    if let Some(auth_service) = &state.auth_service {
+        // Extract authorization header
+        if let Some(auth_header) = request.headers().get("Authorization") {
+            if let Ok(auth_str) = auth_header.to_str() {
+                // Simple token validation (in production, use proper JWT validation)
+                if let Some(token) = auth_str.strip_prefix("Bearer ") {
+                    // Validate token with auth service
+                    match auth_service.validate_jwt_token(token) {
+                        Ok(_validation) => return next.run(request).await, // Token is valid if no error
+                        Err(_) => {
+                            return (StatusCode::UNAUTHORIZED, "Invalid token").into_response()
+                        }
+                    }
+                }
+            }
+        }
+
+        // No valid authorization header found
+        return (StatusCode::UNAUTHORIZED, "Authorization required").into_response();
+    }
+
+    // Auth service not available but auth required - this shouldn't happen
+    next.run(request).await
 }
 
 /// Metrics collection middleware
@@ -854,9 +919,7 @@ async fn metrics_summary_handler(State(state): State<AppState>) -> impl IntoResp
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ServerSettings;
     use std::net::SocketAddr;
-    use tempfile::TempDir;
 
     fn create_test_runtime() -> Runtime {
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -869,8 +932,8 @@ mod tests {
     #[tokio::test]
     async fn test_runtime_creation() {
         let runtime = create_test_runtime();
-        assert_eq!(runtime.auth_service.is_none(), true);
-        assert_eq!(runtime.metrics_service.is_none(), true);
+        assert!(runtime.auth_service.is_none());
+        assert!(runtime.metrics_service.is_none());
     }
 
     #[tokio::test]

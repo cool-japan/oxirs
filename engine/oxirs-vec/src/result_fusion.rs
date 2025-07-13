@@ -89,7 +89,6 @@ pub enum FusionAlgorithm {
     MLFusion,
 }
 
-
 /// A single result from a vector search
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VectorSearchResult {

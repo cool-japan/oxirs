@@ -61,6 +61,7 @@ pub struct AdvancedSubscriptionManager {
     subscription_groups: Arc<RwLock<HashMap<String, SubscriptionGroup>>>,
     event_multiplexer: Arc<EventMultiplexer>,
     data_transformer: Arc<DataTransformer>,
+    #[allow(dead_code)]
     priority_queue: Arc<AsyncMutex<PriorityQueue>>,
     metrics: Arc<RwLock<SubscriptionMetrics>>,
     event_source: broadcast::Sender<RealTimeEvent>,
@@ -464,6 +465,7 @@ impl AdvancedSubscriptionManager {
 
 /// Intelligent event multiplexer for efficient subscription management
 pub struct EventMultiplexer {
+    #[allow(dead_code)]
     config: AdvancedSubscriptionConfig,
     subscription_index: Arc<RwLock<SubscriptionIndex>>,
     statistics: Arc<RwLock<MultiplexerStatistics>>,
@@ -521,6 +523,7 @@ impl EventMultiplexer {
 /// Data transformer for real-time subscription data processing
 #[derive(Debug, Clone)]
 pub struct DataTransformer {
+    #[allow(dead_code)]
     transform_cache: Arc<RwLock<HashMap<String, TransformationResult>>>,
 }
 
@@ -579,6 +582,7 @@ impl DataTransformer {
 
 /// Stream processor for handling individual subscription streams
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct StreamProcessor {
     session: SubscriptionSession,
     config: AdvancedSubscriptionConfig,

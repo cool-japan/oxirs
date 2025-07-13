@@ -775,11 +775,7 @@ impl DomFreeStreamingRdfXmlParser {
         self.namespace_stack.last()?.base_uri.clone()
     }
 
-    fn declare_namespace(
-        &mut self,
-        prefix: &str,
-        namespace: &str,
-    ) -> Result<(), RdfXmlParseError> {
+    fn declare_namespace(&mut self, prefix: &str, namespace: &str) -> Result<(), RdfXmlParseError> {
         if let Some(context) = self.namespace_stack.last_mut() {
             context
                 .prefixes

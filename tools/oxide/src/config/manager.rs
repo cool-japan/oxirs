@@ -328,9 +328,8 @@ impl ConfigManager {
         let profile = profile.unwrap_or(&self.active_profile);
 
         // Ensure config directory exists
-        fs::create_dir_all(&self.config_dir).map_err(|e| {
-            CliError::config_error(format!("Cannot create config directory: {e}"))
-        })?;
+        fs::create_dir_all(&self.config_dir)
+            .map_err(|e| CliError::config_error(format!("Cannot create config directory: {e}")))?;
 
         let path = if profile == "default" {
             self.config_dir.join("config.toml")

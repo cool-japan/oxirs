@@ -195,6 +195,7 @@ use tracing::{debug, info, span, Level};
 
 pub mod cli;
 pub mod docs;
+pub mod enhanced_errors;
 pub mod functions;
 pub mod model;
 pub mod parser;
@@ -206,6 +207,10 @@ pub mod store;
 pub mod troubleshooting;
 
 // Re-export main types
+pub use enhanced_errors::{
+    EnhancedError, EnhancedResult, ErrorAggregator, ErrorCategory, ErrorContext, ErrorSeverity,
+    WithErrorContext,
+};
 pub use model::*;
 pub use store::StarStore;
 pub use troubleshooting::{DiagnosticAnalyzer, MigrationAssistant, TroubleshootingGuide};
@@ -383,10 +388,15 @@ impl StarError {
                     available_formats.join(", ")
                 ));
             }
-            Self::ConfigurationError { valid_range: Some(range), .. } => {
+            Self::ConfigurationError {
+                valid_range: Some(range),
+                ..
+            } => {
                 suggestions.push(format!("Valid range: {range}"));
             }
-            Self::ConfigurationError { valid_range: None, .. } => {}
+            Self::ConfigurationError {
+                valid_range: None, ..
+            } => {}
             _ => {}
         }
 

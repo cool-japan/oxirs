@@ -225,16 +225,20 @@ impl PerformanceMonitor {
         // This would integrate with actual cluster nodes in production
         // For now, we simulate metric collection
 
-        let mut metrics = self.metrics.write().unwrap();
-
         // Simulate node metrics collection
+        let mut node_metrics_map = std::collections::HashMap::new();
         for node_id in 1..=5 {
             let node_metrics = self.collect_node_metrics(node_id).await?;
-            metrics.node_metrics.insert(node_id, node_metrics);
+            node_metrics_map.insert(node_id, node_metrics);
         }
 
-        // Calculate cluster-wide metrics
-        metrics.cluster_metrics = self.calculate_cluster_metrics(&metrics.node_metrics);
+        // Update global metrics
+        {
+            let mut metrics = self.metrics.write().unwrap();
+            metrics.node_metrics = node_metrics_map;
+            // Calculate cluster-wide metrics
+            metrics.cluster_metrics = self.calculate_cluster_metrics(&metrics.node_metrics);
+        }
 
         Ok(())
     }

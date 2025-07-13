@@ -445,9 +445,7 @@ impl AIQueryPredictor {
         let memory_usage =
             ((layer_output.get(1).unwrap_or(&0.5) + 1.0) * 50.0 * complexity_factor) as u64;
         let cpu_usage = (layer_output.get(2).unwrap_or(&0.3).abs() * complexity_factor).min(1.0);
-        let cache_probability = (1.0 - layer_output.get(3).unwrap_or(&0.7).abs())
-            .max(0.0)
-            .min(1.0);
+        let cache_probability = (1.0 - layer_output.get(3).unwrap_or(&0.7).abs()).clamp(0.0, 1.0);
 
         // Calculate performance score with neural network confidence
         let neural_confidence =
@@ -585,10 +583,10 @@ impl AIQueryPredictor {
 
         let memory_usage = ((2.0 - final_score).max(0.1) * 100.0) as u64;
         let cpu_usage = (1.0 - final_score.min(1.0)).max(0.05);
-        let cache_probability = final_score.min(1.0).max(0.0);
+        let cache_probability = final_score.clamp(0.0, 1.0);
 
         // RL confidence based on convergence
-        let rl_confidence = (final_score * 10.0).min(1.0).max(0.1);
+        let rl_confidence = (final_score * 10.0).clamp(0.1, 1.0);
 
         Ok(QueryPrediction {
             predicted_execution_time: execution_time,
@@ -669,11 +667,13 @@ impl AIQueryPredictor {
         for head in 0..attention_heads {
             let mut head_output = vec![0.0; sequence_length];
 
+            #[allow(clippy::needless_range_loop)]
             for i in 0..sequence_length {
                 let mut attention_weights = vec![0.0; sequence_length];
                 let mut sum_weights = 0.0;
 
                 // Compute attention weights for this position
+                #[allow(clippy::needless_range_loop)]
                 for j in 0..sequence_length {
                     // Simplified attention: Q*K^T / sqrt(d_k)
                     let query = input_sequence[0].get(i).unwrap_or(&0.0);
@@ -689,6 +689,7 @@ impl AIQueryPredictor {
                 }
 
                 // Apply attention to values
+                #[allow(clippy::needless_range_loop)]
                 for j in 0..sequence_length {
                     let value = input_sequence[0].get(j).unwrap_or(&0.0);
                     head_output[i] += attention_weights[j] * value;
@@ -742,12 +743,10 @@ impl AIQueryPredictor {
 
         let memory_usage = ((attention_entropy + transformer_score) * 75.0).max(10.0) as u64;
         let cpu_usage = (1.0 - transformer_score.min(1.0)).max(0.1);
-        let cache_probability = (transformer_score + attention_entropy * 0.5)
-            .min(1.0)
-            .max(0.0);
+        let cache_probability = (transformer_score + attention_entropy * 0.5).clamp(0.0, 1.0);
 
         // Transformer confidence based on attention consistency
-        let transformer_confidence = (transformer_score * attention_entropy).min(1.0).max(0.1);
+        let transformer_confidence = (transformer_score * attention_entropy).clamp(0.1, 1.0);
 
         Ok(QueryPrediction {
             predicted_execution_time: execution_time,
@@ -807,6 +806,7 @@ impl AIQueryPredictor {
 
         // Initialize adjacency matrix (simplified graph structure)
         let mut adjacency_matrix = vec![vec![0.0; num_nodes]; num_nodes];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..num_nodes {
             for j in 0..num_nodes {
                 if i != j {
@@ -897,7 +897,8 @@ impl AIQueryPredictor {
         );
 
         let memory_usage = (graph_complexity * 60.0 + total_edges * 2.0).max(15.0) as u64;
-        let cpu_usage = (graph_density + (max_activation.abs() - min_activation.abs()).abs()).clamp(0.05, 1.0);
+        let cpu_usage =
+            (graph_density + (max_activation.abs() - min_activation.abs()).abs()).clamp(0.05, 1.0);
         let cache_probability = (1.0 - graph_complexity * 0.3).clamp(0.0, 1.0);
 
         // GNN confidence based on graph structure consistency
@@ -991,14 +992,16 @@ impl AIQueryPredictor {
             let mut forget_gate = vec![0.0; hidden_size];
             for i in 0..hidden_size {
                 forget_gate[i] = (0.5 * hidden_state[i] + 0.3 * input_val + 0.1)
-                    .tanh().clamp(0.0, 1.0);
+                    .tanh()
+                    .clamp(0.0, 1.0);
             }
 
             // Input gate: i_t = σ(W_i * [h_{t-1}, x_t] + b_i)
             let mut input_gate = vec![0.0; hidden_size];
             for i in 0..hidden_size {
                 input_gate[i] = (0.4 * hidden_state[i] + 0.4 * input_val + 0.2)
-                    .tanh().clamp(0.0, 1.0);
+                    .tanh()
+                    .clamp(0.0, 1.0);
             }
 
             // Candidate values: C̃_t = tanh(W_C * [h_{t-1}, x_t] + b_C)
@@ -1011,7 +1014,8 @@ impl AIQueryPredictor {
             let mut output_gate = vec![0.0; hidden_size];
             for i in 0..hidden_size {
                 output_gate[i] = (0.5 * hidden_state[i] + 0.4 * input_val + 0.1)
-                    .tanh().clamp(0.0, 1.0);
+                    .tanh()
+                    .clamp(0.0, 1.0);
             }
 
             // Update cell state: C_t = f_t * C_{t-1} + i_t * C̃_t

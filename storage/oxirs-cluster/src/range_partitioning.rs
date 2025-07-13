@@ -118,13 +118,8 @@ impl Range {
     /// Check if this range can be merged with another range
     pub fn can_merge_with(&self, other: &Range) -> bool {
         // Check if ranges are adjacent
-        (match (&self.end, &other.start) {
-            (Some(e1), Some(s2)) if e1 == s2 => true,
-            _ => false,
-        }) || (match (&other.end, &self.start) {
-            (Some(e2), Some(s1)) if e2 == s1 => true,
-            _ => false,
-        })
+        matches!((&self.end, &other.start), (Some(e1), Some(s2)) if e1 == s2)
+            || matches!((&other.end, &self.start), (Some(e2), Some(s1)) if e2 == s1)
     }
 
     /// Merge this range with another range

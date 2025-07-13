@@ -750,7 +750,7 @@ impl CollaborativeDevelopmentManager {
         &mut self,
         session_id: Uuid,
         change: RealtimeChange,
-        conflicting_change_ids: Vec<Uuid>,
+        _conflicting_change_ids: Vec<Uuid>,
     ) -> Result<(), ShaclAiError> {
         let session = self
             .active_sessions

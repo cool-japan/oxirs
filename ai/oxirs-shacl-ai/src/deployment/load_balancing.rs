@@ -138,14 +138,12 @@ pub enum HealthCheckType {
 }
 
 /// Traffic routing
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrafficRouting {
     pub routing_rules: Vec<RoutingRule>,
     pub canary_deployments: Vec<CanaryDeployment>,
     pub blue_green_config: Option<BlueGreenConfig>,
 }
-
 
 /// Routing rule
 #[derive(Debug, Clone, Serialize, Deserialize)]

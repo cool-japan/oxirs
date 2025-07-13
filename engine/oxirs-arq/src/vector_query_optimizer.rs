@@ -678,11 +678,9 @@ impl VectorQueryOptimizer {
 
                 // Estimate recall based on strategy
                 estimate.estimated_recall = match strategy {
-                    VectorSearchStrategy::PureVector { .. } => *info
-                        .accuracy_stats
-                        .recall_at_k
-                        .get(&10)
-                        .unwrap_or(&0.9),
+                    VectorSearchStrategy::PureVector { .. } => {
+                        *info.accuracy_stats.recall_at_k.get(&10).unwrap_or(&0.9)
+                    }
                     VectorSearchStrategy::Hybrid { .. } => {
                         // Hybrid search typically has higher effective recall
                         info.accuracy_stats.recall_at_k.get(&10).unwrap_or(&0.9) * 1.1

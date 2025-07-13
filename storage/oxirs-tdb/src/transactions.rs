@@ -11,8 +11,7 @@ use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
 
 /// Transaction isolation levels with full SQL standard compliance
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum IsolationLevel {
     /// Allows dirty reads, non-repeatable reads, and phantom reads
     ReadUncommitted,
@@ -26,7 +25,6 @@ pub enum IsolationLevel {
     /// Prevents all phenomena (dirty reads, non-repeatable reads, phantom reads)
     Serializable,
 }
-
 
 /// Transaction state with comprehensive lifecycle management
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,8 +59,7 @@ pub enum TransactionType {
 }
 
 /// Transaction priority for conflict resolution
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum TransactionPriority {
     Low = 1,
     #[default]
@@ -70,7 +67,6 @@ pub enum TransactionPriority {
     High = 3,
     Critical = 4,
 }
-
 
 /// Resource lock modes for granular locking
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -894,9 +890,7 @@ impl TransactionManager {
         mode: LockMode,
     ) -> Result<bool> {
         let mut lock_manager = self.lock_manager.lock().unwrap();
-        let existing_locks = lock_manager
-            .entry(resource.clone())
-            .or_default();
+        let existing_locks = lock_manager.entry(resource.clone()).or_default();
 
         // Check lock compatibility
         if self.is_lock_compatible(existing_locks, mode, tx_id) {
@@ -951,16 +945,17 @@ impl TransactionManager {
     /// Lock compatibility matrix
     fn are_lock_modes_compatible(&self, existing: LockMode, requested: LockMode) -> bool {
         use LockMode::*;
-        match (existing, requested) {
-            (None, _) | (_, None) => true,
-            (Shared, Shared) => true,
-            (Shared, IntentionShared) => true,
-            (IntentionShared, Shared) => true,
-            (IntentionShared, IntentionShared) => true,
-            (IntentionShared, IntentionExclusive) => true,
-            (IntentionExclusive, IntentionShared) => true,
-            _ => false,
-        }
+        matches!(
+            (existing, requested),
+            (None, _)
+                | (_, None)
+                | (Shared, Shared)
+                | (Shared, IntentionShared)
+                | (IntentionShared, Shared)
+                | (IntentionShared, IntentionShared)
+                | (IntentionShared, IntentionExclusive)
+                | (IntentionExclusive, IntentionShared)
+        )
     }
 
     /// Release all locks held by a transaction

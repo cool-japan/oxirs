@@ -29,7 +29,6 @@ pub struct TdbConfig {
     pub advanced: AdvancedConfig,
 }
 
-
 /// Storage-related configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
@@ -113,7 +112,6 @@ pub struct PerformanceConfig {
     /// Cache configuration
     pub cache_config: CacheConfig,
 }
-
 
 /// Monitoring and observability configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

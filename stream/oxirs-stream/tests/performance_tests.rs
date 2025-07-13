@@ -902,13 +902,15 @@ mod reliability_tests {
             match timeout(Duration::from_millis(10), consumer.consume()).await {
                 Ok(Ok(Some(event))) => {
                     if let StreamEvent::TripleAdded { metadata, .. } = event {
-                        if let std::collections::hash_map::Entry::Vacant(e) = received_events.entry(metadata.event_id) {
+                        if let std::collections::hash_map::Entry::Vacant(e) =
+                            received_events.entry(metadata.event_id)
+                        {
                             e.insert(true);
                         } else {
                             duplicates += 1;
                         }
                     }
-                },
+                }
                 _ => {
                     break;
                 }

@@ -936,9 +936,9 @@ impl InterdimensionalPatternEngine {
     /// Discover patterns across multiple dimensions
     pub async fn discover_interdimensional_patterns(
         &self,
-        store: &dyn Store,
-        shapes: &[Shape],
-        validation_context: &ValidationContext,
+        _store: &dyn Store,
+        _shapes: &[Shape],
+        _validation_context: &ValidationContext,
         target_patterns: HashSet<PatternType>,
     ) -> Result<InterdimensionalPatternResult> {
         info!(

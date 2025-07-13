@@ -83,7 +83,7 @@ impl QueryDecomposer {
     /// Estimate result size for patterns
     pub fn estimate_result_size(
         &self,
-        service: &FederatedService,
+        _service: &FederatedService,
         patterns: &[(usize, TriplePattern)],
     ) -> u64 {
         // Simple estimation based on pattern complexity
@@ -141,11 +141,12 @@ impl QueryDecomposer {
         // Count variable frequencies
         let mut var_counts = HashMap::new();
         for (_, pattern) in &component.patterns {
-            for var_ref in [&pattern.subject, &pattern.predicate, &pattern.object] {
-                if let Some(var_name) = var_ref {
-                    if var_name.starts_with('?') {
-                        *var_counts.entry(var_name.clone()).or_insert(0) += 1;
-                    }
+            for var_name in [&pattern.subject, &pattern.predicate, &pattern.object]
+                .into_iter()
+                .flatten()
+            {
+                if var_name.starts_with('?') {
+                    *var_counts.entry(var_name.clone()).or_insert(0) += 1;
                 }
             }
         }
@@ -167,14 +168,15 @@ impl QueryDecomposer {
         // Build variable-pattern mapping
         let mut var_to_patterns: HashMap<String, Vec<usize>> = HashMap::new();
         for (idx, pattern) in patterns {
-            for var_ref in [&pattern.subject, &pattern.predicate, &pattern.object] {
-                if let Some(var_name) = var_ref {
-                    if var_name.starts_with('?') {
-                        var_to_patterns
-                            .entry(var_name.clone())
-                            .or_default()
-                            .push(*idx);
-                    }
+            for var_name in [&pattern.subject, &pattern.predicate, &pattern.object]
+                .into_iter()
+                .flatten()
+            {
+                if var_name.starts_with('?') {
+                    var_to_patterns
+                        .entry(var_name.clone())
+                        .or_default()
+                        .push(*idx);
                 }
             }
         }
@@ -215,7 +217,7 @@ impl QueryDecomposer {
         let mut assigned = HashSet::new();
 
         // Group patterns that share join variables
-        for (var, pattern_indices) in &join_analysis.join_variables {
+        for pattern_indices in join_analysis.join_variables.values() {
             if pattern_indices.len() >= 2 {
                 let mut group = Vec::new();
                 for &idx in pattern_indices {
@@ -247,13 +249,14 @@ impl QueryDecomposer {
         let mut variable_count = 0;
         let mut constant_count = 0;
 
-        for term in [&pattern.subject, &pattern.predicate, &pattern.object] {
-            if let Some(term_value) = term {
-                if term_value.starts_with('?') {
-                    variable_count += 1;
-                } else {
-                    constant_count += 1;
-                }
+        for term_value in [&pattern.subject, &pattern.predicate, &pattern.object]
+            .into_iter()
+            .flatten()
+        {
+            if term_value.starts_with('?') {
+                variable_count += 1;
+            } else {
+                constant_count += 1;
             }
         }
 
@@ -400,7 +403,7 @@ impl QueryDecomposer {
         &self,
         term: &str,
         service: &FederatedService,
-        position: &str,
+        _position: &str,
     ) -> f64 {
         if term.starts_with('?') {
             // Variable - check if service supports variables in this position
@@ -588,7 +591,7 @@ impl QueryDecomposer {
     /// Perform range-based source selection for numeric/temporal data
     pub fn select_services_by_range(
         &self,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
         services: &[&FederatedService],
         range_info: &RangeInfo,
     ) -> Vec<RangeMatch> {
@@ -796,11 +799,7 @@ impl QueryDecomposer {
         // Pattern structure features
         features.insert(
             "has_subject_var".to_string(),
-            if pattern
-                .subject
-                .as_ref()
-                .is_some_and(|s| s.starts_with('?'))
-            {
+            if pattern.subject.as_ref().is_some_and(|s| s.starts_with('?')) {
                 1.0
             } else {
                 0.0
@@ -820,11 +819,7 @@ impl QueryDecomposer {
         );
         features.insert(
             "has_object_var".to_string(),
-            if pattern
-                .object
-                .as_ref()
-                .is_some_and(|o| o.starts_with('?'))
-            {
+            if pattern.object.as_ref().is_some_and(|o| o.starts_with('?')) {
                 1.0
             } else {
                 0.0
@@ -972,7 +967,7 @@ impl QueryDecomposer {
             score += (3.0 - var_count) * 0.1; // Prefer more specific patterns
         }
 
-        score.min(1.0).max(0.0)
+        score.clamp(0.0, 1.0)
     }
 }
 

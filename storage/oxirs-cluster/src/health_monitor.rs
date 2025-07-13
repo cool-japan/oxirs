@@ -53,8 +53,7 @@ pub enum NodeHealthLevel {
 }
 
 /// Complete health status tracking for a node
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NodeHealthStatus {
     /// Node identifier
     pub node_id: OxirsNodeId,
@@ -73,7 +72,6 @@ pub struct NodeHealthStatus {
     /// Custom health check results
     pub custom_checks: HashMap<String, bool>,
 }
-
 
 /// System metrics for health assessment
 #[derive(Debug, Clone, Serialize, Deserialize)]

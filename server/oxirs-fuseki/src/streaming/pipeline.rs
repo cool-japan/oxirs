@@ -13,6 +13,9 @@ use crate::{
     streaming::{PipelineConfig, RDFEvent},
 };
 
+/// Type alias for aggregation function
+type AggregationFn = Box<dyn Fn(&[RDFEvent]) -> Option<RDFEvent> + Send + Sync>;
+
 /// Pipeline stage for processing events
 #[async_trait]
 pub trait PipelineStage: Send + Sync {
@@ -66,7 +69,7 @@ impl TimeWindow {
 /// Windowed aggregation stage
 pub struct WindowAggregator {
     window_type: WindowType,
-    aggregation_fn: Box<dyn Fn(&[RDFEvent]) -> Option<RDFEvent> + Send + Sync>,
+    aggregation_fn: AggregationFn,
     windows: Arc<RwLock<VecDeque<TimeWindow>>>,
     watermark: Arc<RwLock<Instant>>,
 }
@@ -244,6 +247,7 @@ impl PipelineStage for TransformStage {
 pub struct StreamPipeline {
     name: String,
     stages: Vec<Box<dyn PipelineStage>>,
+    #[allow(dead_code)]
     config: PipelineConfig,
     metrics: Arc<RwLock<PipelineMetrics>>,
 }
@@ -403,6 +407,7 @@ impl PipelineBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use oxirs_core::{Literal, NamedNode};
 
     #[tokio::test]
     async fn test_filter_stage() {
@@ -416,7 +421,11 @@ mod tests {
         };
 
         let event2 = RDFEvent::TripleAdded {
-            triple: unsafe { std::mem::zeroed() },
+            triple: oxirs_core::Triple::new(
+                NamedNode::new("http://example.org/subject").unwrap(),
+                NamedNode::new("http://example.org/predicate").unwrap(),
+                Literal::new("object"),
+            ),
             graph: None,
             timestamp: 12345,
         };

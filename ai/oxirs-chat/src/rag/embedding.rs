@@ -559,9 +559,11 @@ mod tests {
 
     #[test]
     fn test_embedding_stats() {
-        let mut stats = EmbeddingStats::default();
-        stats.cache_hits = 8;
-        stats.cache_misses = 2;
+        let mut stats = EmbeddingStats {
+            cache_hits: 8,
+            cache_misses: 2,
+            ..Default::default()
+        };
 
         assert_eq!(stats.cache_hit_ratio(), 0.8);
 

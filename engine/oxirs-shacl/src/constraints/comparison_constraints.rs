@@ -23,10 +23,39 @@ impl EqualsConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement equals constraint evaluation
+        use oxirs_core::model::{Predicate, Subject};
+
+        // Get the property values for the constraint property
+        let mut constraint_property_values = Vec::new();
+
+        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
+            (&context.focus_node, &self.property)
+        {
+            let subject = Subject::from(focus_node.clone());
+            let predicate = Predicate::from(property_node.clone());
+
+            let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
+            for quad in quads {
+                constraint_property_values.push(quad.object().clone().into());
+            }
+        }
+
+        // Check if current values equal constraint property values
+        for current_value in &context.values {
+            if !constraint_property_values.contains(current_value) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(current_value.clone()),
+                    Some(format!(
+                        "Value {current_value} does not equal any value of property {}",
+                        self.property
+                    )),
+                ));
+            }
+        }
+
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
@@ -49,10 +78,39 @@ impl DisjointConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement disjoint constraint evaluation
+        use oxirs_core::model::{Predicate, Subject};
+
+        // Get the property values for the constraint property
+        let mut constraint_property_values = Vec::new();
+
+        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
+            (&context.focus_node, &self.property)
+        {
+            let subject = Subject::from(focus_node.clone());
+            let predicate = Predicate::from(property_node.clone());
+
+            let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
+            for quad in quads {
+                constraint_property_values.push(quad.object().clone().into());
+            }
+        }
+
+        // Check if current values are disjoint from constraint property values
+        for current_value in &context.values {
+            if constraint_property_values.contains(current_value) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(current_value.clone()),
+                    Some(format!(
+                        "Value {current_value} is not disjoint from values of property {}",
+                        self.property
+                    )),
+                ));
+            }
+        }
+
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
@@ -75,10 +133,57 @@ impl LessThanConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement less than constraint evaluation
+        use crate::validation::utils::{is_numeric_term, parse_numeric_value};
+        use oxirs_core::model::{Predicate, Subject};
+
+        // Get the property values for the constraint property
+        let mut constraint_property_values = Vec::new();
+
+        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
+            (&context.focus_node, &self.property)
+        {
+            let subject = Subject::from(focus_node.clone());
+            let predicate = Predicate::from(property_node.clone());
+
+            let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
+            for quad in quads {
+                constraint_property_values.push(quad.object().clone().into());
+            }
+        }
+
+        // Check if current values are less than constraint property values
+        for current_value in &context.values {
+            if !is_numeric_term(current_value) {
+                continue; // Skip non-numeric values
+            }
+
+            let current_num = parse_numeric_value(current_value)?;
+            let mut satisfied = false;
+
+            for constraint_value in &constraint_property_values {
+                if is_numeric_term(constraint_value) {
+                    let constraint_num = parse_numeric_value(constraint_value)?;
+                    if current_num < constraint_num {
+                        satisfied = true;
+                        break;
+                    }
+                }
+            }
+
+            if !satisfied {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(current_value.clone()),
+                    Some(format!(
+                        "Value {current_value} is not less than any value of property {}",
+                        self.property
+                    )),
+                ));
+            }
+        }
+
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
@@ -101,10 +206,54 @@ impl LessThanOrEqualsConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement less than or equals constraint evaluation
+        use crate::validation::utils::{is_numeric_term, parse_numeric_value};
+        use oxirs_core::model::{Predicate, Subject};
+
+        // Get the property values for the constraint property
+        let mut constraint_property_values = Vec::new();
+
+        if let (Term::NamedNode(focus_node), Term::NamedNode(property_node)) =
+            (&context.focus_node, &self.property)
+        {
+            let subject = Subject::from(focus_node.clone());
+            let predicate = Predicate::from(property_node.clone());
+
+            let quads = store.find_quads(Some(&subject), Some(&predicate), None, None)?;
+            for quad in quads {
+                constraint_property_values.push(quad.object().clone().into());
+            }
+        }
+
+        // Check if current values are less than or equal to constraint property values
+        for current_value in &context.values {
+            if !is_numeric_term(current_value) {
+                continue; // Skip non-numeric values
+            }
+
+            let current_num = parse_numeric_value(current_value)?;
+            let mut satisfied = false;
+
+            for constraint_value in &constraint_property_values {
+                if is_numeric_term(constraint_value) {
+                    let constraint_num = parse_numeric_value(constraint_value)?;
+                    if current_num <= constraint_num {
+                        satisfied = true;
+                        break;
+                    }
+                }
+            }
+
+            if !satisfied {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(current_value.clone()),
+                    Some(format!("Value {current_value} is not less than or equal to any value of property {}", self.property)),
+                ));
+            }
+        }
+
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
@@ -127,10 +276,19 @@ impl InConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
+        context: &ConstraintContext,
         _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement in constraint evaluation
+        // Check if all values in the context are in the allowed set
+        for value in &context.values {
+            if !self.values.contains(value) {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!("Value {value} is not in the allowed set of values")),
+                ));
+            }
+        }
+
         Ok(ConstraintEvaluationResult::Satisfied)
     }
 }
@@ -153,10 +311,23 @@ impl HasValueConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
+        context: &ConstraintContext,
         _store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement has value constraint evaluation
-        Ok(ConstraintEvaluationResult::Satisfied)
+        // Check if any value in the context matches the required value
+        for value in &context.values {
+            if value == &self.value {
+                return Ok(ConstraintEvaluationResult::Satisfied);
+            }
+        }
+
+        // If no matching value found, constraint is violated
+        Ok(ConstraintEvaluationResult::violated(
+            None,
+            Some(format!(
+                "No value matches required value: {value}",
+                value = self.value
+            )),
+        ))
     }
 }

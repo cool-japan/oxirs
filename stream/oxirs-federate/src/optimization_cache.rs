@@ -510,7 +510,7 @@ impl OptimizationCache {
     pub async fn analyze_effectiveness(&self) -> Result<CacheAnalysis> {
         let stats = self.statistics.read().await;
         let cached_plans = self.cached_plans.read().await;
-        let performance_history = self.performance_history.read().await;
+        let _performance_history = self.performance_history.read().await;
 
         let total_requests = stats.hits + stats.misses;
         let hit_rate = if total_requests > 0 {
@@ -583,7 +583,7 @@ impl OptimizationCache {
     fn calculate_effectiveness_score(&self, hit_rate: f64, avg_reuse: f64) -> f64 {
         let hit_score = hit_rate;
         let reuse_score = (avg_reuse - 1.0).max(0.0) / 10.0; // Normalize to 0-1 range
-        
+
         (hit_score * 0.7 + reuse_score * 0.3).min(1.0)
     }
 

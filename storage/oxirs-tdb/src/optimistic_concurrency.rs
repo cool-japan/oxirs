@@ -604,27 +604,24 @@ impl OptimisticConcurrencyController {
 
             // Priority-based conflict resolution
             if self.config.enable_priority_conflict_resolution
-                && tx_info.priority < other_tx.priority {
-                    // Check if there's any overlap in accessed keys
-                    let tx_keys = tx_info.get_accessed_keys();
-                    let other_keys = other_tx.get_accessed_keys();
+                && tx_info.priority < other_tx.priority
+            {
+                // Check if there's any overlap in accessed keys
+                let tx_keys = tx_info.get_accessed_keys();
+                let other_keys = other_tx.get_accessed_keys();
 
-                    if !tx_keys.is_disjoint(&other_keys) {
-                        return Ok(Some(ValidationResult::Conflict {
-                            conflict_type: ConflictType::SerializabilityViolation,
-                            conflicting_transaction: *other_tx_id,
-                            conflicting_key: tx_keys
-                                .intersection(&other_keys)
-                                .next()
-                                .unwrap()
-                                .clone(),
-                            reason: format!(
-                                "Priority conflict with transaction {} (priority {} vs {})",
-                                other_tx_id, tx_info.priority, other_tx.priority
-                            ),
-                        }));
-                    }
+                if !tx_keys.is_disjoint(&other_keys) {
+                    return Ok(Some(ValidationResult::Conflict {
+                        conflict_type: ConflictType::SerializabilityViolation,
+                        conflicting_transaction: *other_tx_id,
+                        conflicting_key: tx_keys.intersection(&other_keys).next().unwrap().clone(),
+                        reason: format!(
+                            "Priority conflict with transaction {} (priority {} vs {})",
+                            other_tx_id, tx_info.priority, other_tx.priority
+                        ),
+                    }));
                 }
+            }
         }
 
         Ok(None)

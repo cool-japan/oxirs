@@ -4,10 +4,170 @@
 //! and schema information to optimize performance and reduce network overhead.
 
 use anyhow::{anyhow, Result};
+#[cfg(feature = "caching")]
 use bloom::{BloomFilter, ASMS};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+#[cfg(feature = "caching")]
 use lru::LruCache;
+#[cfg(feature = "caching")]
 use moka::future::Cache as AsyncCache;
+
+// Stub types when caching is disabled
+#[cfg(not(feature = "caching"))]
+mod cache_stubs {
+    use serde::{Deserialize, Serialize};
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    #[derive(Debug, Clone)]
+    pub struct BloomFilter;
+
+    impl BloomFilter {
+        pub fn with_rate(_rate: f64, _capacity: u32) -> Self {
+            Self
+        }
+
+        pub fn insert<T>(&mut self, _item: &T) {}
+        pub fn contains<T>(&self, _item: &T) -> bool {
+            false
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct LruCache<K, V> {
+        _phantom: std::marker::PhantomData<(K, V)>,
+    }
+
+    pub struct LruCacheIter<K, V> {
+        _phantom: std::marker::PhantomData<(K, V)>,
+    }
+
+    impl<K, V> Iterator for LruCacheIter<K, V> {
+        type Item = (K, V);
+
+        fn next(&mut self) -> Option<Self::Item> {
+            None
+        }
+    }
+
+    impl<K, V> LruCache<K, V> {
+        pub fn new(_capacity: std::num::NonZeroUsize) -> Self {
+            Self {
+                _phantom: std::marker::PhantomData,
+            }
+        }
+
+        pub fn get<Q>(&mut self, _key: &Q) -> Option<&V>
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: std::hash::Hash + Eq + ?Sized,
+        {
+            None
+        }
+
+        pub fn put(&mut self, _key: K, _value: V) -> Option<V> {
+            None
+        }
+
+        pub fn pop<Q>(&mut self, _key: &Q) -> Option<V>
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: std::hash::Hash + Eq + ?Sized,
+        {
+            None
+        }
+
+        pub fn iter(&self) -> LruCacheIter<K, V> {
+            LruCacheIter {
+                _phantom: std::marker::PhantomData,
+            }
+        }
+
+        pub fn len(&self) -> usize {
+            0
+        }
+
+        pub fn pop_lru(&mut self) -> Option<(K, V)> {
+            None
+        }
+
+        pub fn cap(&self) -> std::num::NonZeroUsize {
+            std::num::NonZeroUsize::new(1).unwrap()
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct AsyncCache<K, V> {
+        _phantom: std::marker::PhantomData<(K, V)>,
+    }
+
+    impl<K, V> AsyncCache<K, V>
+    where
+        K: Clone + Send + Sync + 'static,
+        V: Clone + Send + Sync + 'static,
+    {
+        pub fn builder() -> AsyncCacheBuilder<K, V> {
+            AsyncCacheBuilder {
+                _phantom: std::marker::PhantomData,
+            }
+        }
+
+        pub async fn get<Q>(&self, _key: &Q) -> Option<V>
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: std::hash::Hash + Eq + ?Sized,
+        {
+            None
+        }
+
+        pub async fn insert(&self, _key: K, _value: V) {
+            // No-op
+        }
+
+        pub async fn invalidate<Q>(&self, _key: &Q)
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: std::hash::Hash + Eq + ?Sized,
+        {
+            // No-op
+        }
+
+        pub fn entry_count(&self) -> u64 {
+            0
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct AsyncCacheBuilder<K, V> {
+        _phantom: std::marker::PhantomData<(K, V)>,
+    }
+
+    impl<K, V> AsyncCacheBuilder<K, V>
+    where
+        K: Clone + Send + Sync + 'static,
+        V: Clone + Send + Sync + 'static,
+    {
+        pub fn max_capacity(self, _capacity: u64) -> Self {
+            self
+        }
+
+        pub fn time_to_live(self, _ttl: Duration) -> Self {
+            self
+        }
+
+        pub fn build(self) -> AsyncCache<K, V> {
+            AsyncCache {
+                _phantom: std::marker::PhantomData,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ASMS;
+}
+
+#[cfg(not(feature = "caching"))]
+use cache_stubs::{AsyncCache, BloomFilter, LruCache, ASMS};
 use serde::{Deserialize, Serialize};
 use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
@@ -58,8 +218,10 @@ impl FederationCache {
 
     /// Create a new federation cache with custom configuration
     pub fn with_config(config: CacheConfig) -> Self {
-        let l1_capacity = NonZeroUsize::new(config.l1_capacity).unwrap();
-        let l1_cache = Arc::new(RwLock::new(LruCache::new(l1_capacity)));
+        let l1_cache = {
+            let l1_capacity = NonZeroUsize::new(config.l1_capacity).unwrap();
+            Arc::new(RwLock::new(LruCache::new(l1_capacity)))
+        };
 
         let l2_cache = AsyncCache::builder()
             .max_capacity(config.l2_capacity as u64)
@@ -73,22 +235,23 @@ impl FederationCache {
         )));
 
         // Initialize Redis cache if enabled
-        let l3_cache = if config.enable_redis {
-            #[cfg(feature = "redis-cache")]
-            {
-                match RedisCache::new(&config.redis_url) {
-                    Ok(redis) => Some(Arc::new(redis)),
-                    Err(e) => {
-                        warn!("Failed to initialize Redis cache: {}", e);
-                        None
-                    }
+        #[cfg(feature = "redis-cache")]
+        let l3_cache: Option<Arc<RedisCache>> = if config.enable_redis {
+            match RedisCache::new(&config.redis_url) {
+                Ok(redis) => Some(Arc::new(redis)),
+                Err(e) => {
+                    warn!("Failed to initialize Redis cache: {}", e);
+                    None
                 }
             }
-            #[cfg(not(feature = "redis-cache"))]
-            {
-                warn!("Redis cache requested but redis-cache feature not enabled");
-                None
-            }
+        } else {
+            None
+        };
+
+        #[cfg(not(feature = "redis-cache"))]
+        let l3_cache: Option<Arc<()>> = if config.enable_redis {
+            warn!("Redis cache requested but redis-cache feature not enabled");
+            None
         } else {
             None
         };
@@ -397,7 +560,7 @@ impl FederationCache {
         debug!("Warming up service metadata");
 
         // Pre-cache default service capabilities
-        let default_capabilities = [
+        let _default_capabilities = [
             ServiceCapability::SparqlQuery,
             ServiceCapability::GraphQLQuery,
             ServiceCapability::FilterPushdown,
@@ -655,7 +818,7 @@ impl FederationCache {
 
         // Clean Redis cache
         #[cfg(feature = "redis-cache")]
-        if let Some(redis) = &self.l3_cache {
+        if let Some(_redis) = &self.l3_cache {
             // Redis TTL handles expiry automatically
         }
 
@@ -839,7 +1002,7 @@ impl RedisCache {
 
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
 
@@ -862,7 +1025,7 @@ impl RedisCache {
 
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
 
@@ -885,7 +1048,7 @@ impl RedisCache {
 
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
 
@@ -901,7 +1064,7 @@ impl RedisCache {
 
         let mut conn = self
             .client
-            .get_async_connection()
+            .get_multiplexed_async_connection()
             .await
             .map_err(|e| anyhow!("Redis connection failed: {}", e))?;
 
@@ -1298,7 +1461,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_cache_expiry() {
-        let cache = FederationCache::new();
+        let _cache = FederationCache::new();
 
         let entry = CacheEntry {
             value: CacheValue::ServiceMetadata(ServiceMetadata::default()),

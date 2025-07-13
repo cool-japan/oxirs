@@ -13,6 +13,7 @@ use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tracing::info;
 
 use crate::performance::OperationMetrics;
+use crate::system_monitor;
 
 /// Comprehensive observability configuration
 #[derive(Debug, Clone)]
@@ -121,7 +122,8 @@ impl ObservabilitySystem {
             self.real_time_monitor
                 .write()
                 .await
-                .update_metrics(metrics)?;
+                .update_metrics(metrics)
+                .await?;
         }
 
         // Check alert conditions
@@ -293,6 +295,7 @@ impl MetricsCollector {
 }
 
 /// Distributed tracing system
+#[allow(dead_code)]
 pub struct TraceCollector {
     active_spans: HashMap<String, TraceSpan>,
     completed_traces: VecDeque<DistributedTrace>,
@@ -463,7 +466,7 @@ impl RealTimeMonitor {
         }
     }
 
-    fn update_metrics(&mut self, operation_metrics: &OperationMetrics) -> Result<()> {
+    async fn update_metrics(&mut self, operation_metrics: &OperationMetrics) -> Result<()> {
         self.current_metrics.total_requests += 1;
         self.current_metrics.total_errors += operation_metrics.error_count as u64;
 
@@ -485,6 +488,12 @@ impl RealTimeMonitor {
         }
         self.current_metrics.cache_hit_ratio =
             self.current_metrics.cache_hits as f64 / self.current_metrics.total_requests as f64;
+
+        // Update real system metrics
+        self.current_metrics.memory_usage_mb = system_monitor::get_current_memory_usage_mb().await;
+        self.current_metrics.cpu_usage_percent =
+            system_monitor::get_current_cpu_usage_percent().await;
+        self.current_metrics.timestamp = SystemTime::now();
 
         // Store historical data
         if self.last_update.elapsed() >= self.update_interval {

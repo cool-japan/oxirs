@@ -68,8 +68,8 @@ pub mod gpu;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hierarchical_similarity;
-pub mod huggingface;
 pub mod hnsw;
+pub mod huggingface;
 pub mod index;
 pub mod ivf;
 pub mod joint_embedding_spaces;
@@ -290,9 +290,9 @@ pub use structured_vectors::{
     WeightedDimensionVector,
 };
 pub use tensorflow::{
-    OptimizationLevel, PreprocessingPipeline as TensorFlowPreprocessingPipeline, ServerConfig, SessionConfig, TensorDataType,
-    TensorFlowConfig, TensorFlowDevice, TensorFlowEmbedder, TensorFlowModelInfo,
-    TensorFlowModelServer, TensorSpec,
+    OptimizationLevel, PreprocessingPipeline as TensorFlowPreprocessingPipeline, ServerConfig,
+    SessionConfig, TensorDataType, TensorFlowConfig, TensorFlowDevice, TensorFlowEmbedder,
+    TensorFlowModelInfo, TensorFlowModelServer, TensorSpec,
 };
 pub use tree_indices::{
     BallTree, CoverTree, KdTree, RandomProjectionTree, TreeIndex, TreeIndexConfig, TreeType, VpTree,

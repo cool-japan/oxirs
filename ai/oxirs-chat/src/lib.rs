@@ -1,4 +1,5 @@
 //! # OxiRS Chat
+#![allow(dead_code)]
 //!
 //! Advanced RAG chat API with LLM integration, natural language to SPARQL translation,
 //! streaming responses, self-healing capabilities, and consciousness-inspired computing.
@@ -269,7 +270,7 @@ impl OxiRSChat {
             .context("Failed to initialize RAG engine")?;
 
         // Initialize LLM manager with provided config or default
-        let llm_config = llm_config.unwrap_or_else(llm::LLMConfig::default);
+        let llm_config = llm_config.unwrap_or_default();
         let llm_manager = llm::LLMManager::new(llm_config)?;
 
         // Initialize NL2SPARQL engine
@@ -352,7 +353,6 @@ impl OxiRSChat {
         &self,
         persistence_path: P,
     ) -> Result<usize> {
-        
         use std::fs;
 
         let sessions = self.sessions.read().await;
@@ -1122,7 +1122,7 @@ impl OxiRSChat {
             }
 
             // Stage 2: SPARQL Processing (if applicable)
-            let (sparql_query, sparql_results) = if user_message.to_lowercase().contains("sparql")
+            let (_sparql_query, _sparql_results) = if user_message.to_lowercase().contains("sparql")
                 || user_message.to_lowercase().contains("query")
             {
                 let _ = tx
@@ -1255,7 +1255,7 @@ impl OxiRSChat {
             let chunk_size = 3; // Words per chunk
 
             for (i, chunk) in words.chunks(chunk_size).enumerate() {
-                let progress = 0.8 + (0.2 * i as f32 / (words.len() / chunk_size) as f32);
+                let _progress = 0.8 + (0.2 * i as f32 / (words.len() / chunk_size) as f32);
                 let _ = tx
                     .send(StreamResponseChunk::Content {
                         text: chunk.join(" ") + " ",
@@ -1357,7 +1357,7 @@ mod tests {
             .expect("Failed to create chat");
 
         let session_id = "test-session".to_string();
-        let session = chat.create_session(session_id.clone()).await.unwrap();
+        let _session = chat.create_session(session_id.clone()).await.unwrap();
 
         assert_eq!(chat.session_count().await, 1);
         assert!(chat.get_session(&session_id).await.is_some());

@@ -212,8 +212,8 @@ impl TokenStore {
 /// Identity propagation manager
 #[derive(Debug)]
 pub struct IdentityPropagator {
-    propagation_header: String,
-    service_registry: Arc<RwLock<HashMap<String, ServiceAuthConfig>>>,
+    _propagation_header: String,
+    _service_registry: Arc<RwLock<HashMap<String, ServiceAuthConfig>>>,
 }
 
 /// Service authentication configuration
@@ -239,8 +239,8 @@ pub enum TrustLevel {
 /// Policy engine for authorization
 #[derive(Debug)]
 pub struct PolicyEngine {
-    policies: Arc<RwLock<HashMap<String, AuthPolicy>>>,
-    role_permissions: Arc<RwLock<HashMap<String, HashSet<Permission>>>>,
+    _policies: Arc<RwLock<HashMap<String, AuthPolicy>>>,
+    _role_permissions: Arc<RwLock<HashMap<String, HashSet<Permission>>>>,
 }
 
 /// Authorization policy
@@ -733,7 +733,11 @@ impl AuthManager {
 
     /// Authenticate using OAuth2
     async fn authenticate_oauth2(&self, credentials: &AuthCredentials) -> Result<AuthResult> {
-        if let AuthCredentials::OAuth2 { access_token, refresh_token: _ } = credentials {
+        if let AuthCredentials::OAuth2 {
+            access_token,
+            refresh_token: _,
+        } = credentials
+        {
             // Basic OAuth2 token validation
             // In a real implementation, this would validate against the OAuth2 provider
             if access_token.starts_with("oauth2_") && access_token.len() > 20 {
@@ -742,12 +746,9 @@ impl AuthManager {
                     username: "OAuth2 User".to_string(),
                     email: Some("oauth2.user@example.com".to_string()),
                     roles: ["user"].into_iter().map(String::from).collect(),
-                    permissions: [
-                        Permission::QueryRead,
-                        Permission::QueryExecute,
-                    ]
-                    .into_iter()
-                    .collect(),
+                    permissions: [Permission::QueryRead, Permission::QueryExecute]
+                        .into_iter()
+                        .collect(),
                     auth_method: AuthMethod::OAuth2,
                     authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
                     expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
@@ -791,24 +792,27 @@ impl AuthManager {
 
     /// Authenticate using SAML
     async fn authenticate_saml(&self, credentials: &AuthCredentials) -> Result<AuthResult> {
-        if let AuthCredentials::Saml { assertion, signature: _ } = credentials {
+        if let AuthCredentials::Saml {
+            assertion,
+            signature: _,
+        } = credentials
+        {
             // Basic SAML assertion validation
             // In a real implementation, this would validate the SAML assertion and signature
             if assertion.contains("<saml:Assertion") && assertion.contains("</saml:Assertion>") {
                 // Extract basic user info from SAML assertion (simplified)
-                let user_id = extract_saml_attribute(assertion, "NameID").unwrap_or_else(|| "saml_user".to_string());
-                
+                let user_id = extract_saml_attribute(assertion, "NameID")
+                    .unwrap_or_else(|| "saml_user".to_string());
+
                 let identity = Identity {
                     user_id: format!("saml:{user_id}"),
-                    username: extract_saml_attribute(assertion, "displayName").unwrap_or_else(|| "SAML User".to_string()),
+                    username: extract_saml_attribute(assertion, "displayName")
+                        .unwrap_or_else(|| "SAML User".to_string()),
                     email: extract_saml_attribute(assertion, "email"),
                     roles: ["user"].into_iter().map(String::from).collect(),
-                    permissions: [
-                        Permission::QueryRead,
-                        Permission::QueryExecute,
-                    ]
-                    .into_iter()
-                    .collect(),
+                    permissions: [Permission::QueryRead, Permission::QueryExecute]
+                        .into_iter()
+                        .collect(),
                     auth_method: AuthMethod::Saml,
                     authenticated_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
                     expires_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs()
@@ -878,8 +882,8 @@ impl Default for AuthManager {
 impl IdentityPropagator {
     fn new() -> Self {
         Self {
-            propagation_header: "X-Oxirs-Identity".to_string(),
-            service_registry: Arc::new(RwLock::new(HashMap::new())),
+            _propagation_header: "X-Oxirs-Identity".to_string(),
+            _service_registry: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -935,8 +939,8 @@ impl IdentityPropagator {
 impl PolicyEngine {
     fn new() -> Self {
         Self {
-            policies: Arc::new(RwLock::new(HashMap::new())),
-            role_permissions: Arc::new(RwLock::new(HashMap::new())),
+            _policies: Arc::new(RwLock::new(HashMap::new())),
+            _role_permissions: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -944,7 +948,7 @@ impl PolicyEngine {
         &self,
         identity: &Identity,
         action: &str,
-        resource: &str,
+        _resource: &str,
     ) -> Result<bool> {
         // Simple permission-based authorization
         let required_permission = match action {
@@ -1017,7 +1021,7 @@ fn extract_saml_attribute(assertion: &str, attribute_name: &str) -> Option<Strin
         format!("<AttributeValue>{attribute_name}</AttributeValue>"),
         format!("{attribute_name}=\"([^\"]+)\""),
     ];
-    
+
     for pattern in &patterns {
         if let Some(start) = assertion.find(pattern) {
             if let Some(end) = assertion[start..].find('>') {
@@ -1031,7 +1035,7 @@ fn extract_saml_attribute(assertion: &str, attribute_name: &str) -> Option<Strin
             }
         }
     }
-    
+
     // Try to extract NameID
     if attribute_name == "NameID" {
         if let Some(start) = assertion.find("<saml:NameID") {
@@ -1044,7 +1048,7 @@ fn extract_saml_attribute(assertion: &str, attribute_name: &str) -> Option<Strin
             }
         }
     }
-    
+
     None
 }
 

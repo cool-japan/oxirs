@@ -1,5 +1,16 @@
 //! Tests for parallel query execution
 
+#![allow(
+    unused_imports,
+    unused_variables,
+    dead_code,
+    clippy::uninlined_format_args,
+    clippy::bool_assert_comparison,
+    clippy::print_literal,
+    clippy::field_reassign_with_default,
+    clippy::needless_borrows_for_generic_args
+)]
+
 use oxirs_arq::{
     algebra::{Algebra, Binding, Iri, Literal, Term, TriplePattern, Variable},
     executor::{Dataset, ExecutionContext, InMemoryDataset, ParallelConfig, QueryExecutor},

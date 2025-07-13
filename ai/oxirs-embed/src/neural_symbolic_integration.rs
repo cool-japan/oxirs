@@ -14,8 +14,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 /// Configuration for neural-symbolic integration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NeuralSymbolicConfig {
     pub base_config: ModelConfig,
     /// Symbolic reasoning configuration
@@ -29,7 +28,6 @@ pub struct NeuralSymbolicConfig {
     /// Constraint satisfaction configuration
     pub constraint_config: ConstraintSatisfactionConfig,
 }
-
 
 /// Symbolic reasoning configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -742,6 +740,7 @@ impl LogicalFormula {
         self.evaluate_structure(&self.structure, assignment)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn evaluate_structure(
         &self,
         structure: &FormulaStructure,
@@ -986,10 +985,7 @@ impl NeuralSymbolicModel {
 
         // Convert back to vector
         let mut output = Array1::zeros(input.len());
-        for (i, symbol) in (0..input.len())
-            .map(|i| format!("output_{i}"))
-            .enumerate()
-        {
+        for (i, symbol) in (0..input.len()).map(|i| format!("output_{i}")).enumerate() {
             if let Some(&value) = inferred_facts.get(&symbol) {
                 output[i] = value;
             }

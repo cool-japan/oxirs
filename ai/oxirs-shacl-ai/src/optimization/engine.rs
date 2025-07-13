@@ -4,14 +4,9 @@ use indexmap::IndexMap;
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use oxirs_core::{
-    model::NamedNode,
-    Store,
-};
+use oxirs_core::{model::NamedNode, Store};
 
-use oxirs_shacl::{
-    Constraint, ConstraintComponentId, Shape, ShapeId, Target, ValidationReport,
-};
+use oxirs_shacl::{Constraint, ConstraintComponentId, Shape, ShapeId, Target, ValidationReport};
 
 use crate::Result;
 

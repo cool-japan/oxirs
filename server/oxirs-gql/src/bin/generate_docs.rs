@@ -5,7 +5,6 @@
 use anyhow::Result;
 use oxirs_gql::docs::{generate_documentation_with_config, DocConfig, DocFormat, DocTheme};
 use tracing::{info, Level};
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {

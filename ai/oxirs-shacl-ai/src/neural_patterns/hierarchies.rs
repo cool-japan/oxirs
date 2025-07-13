@@ -73,7 +73,7 @@ impl PatternHierarchyAnalyzer {
         &mut self,
         patterns: &[Pattern],
         correlations: &[PatternCorrelation],
-        relationship_graph: &PatternRelationshipGraph,
+        _relationship_graph: &PatternRelationshipGraph,
     ) -> Result<Vec<PatternHierarchy>> {
         // Build hierarchy structure from correlations
         let hierarchy_candidates = self
@@ -98,7 +98,7 @@ impl PatternHierarchyAnalyzer {
     /// Build initial hierarchy candidates from correlations
     async fn build_hierarchy_candidates(
         &self,
-        patterns: &[Pattern],
+        _patterns: &[Pattern],
         correlations: &[PatternCorrelation],
     ) -> Result<Vec<PatternHierarchy>> {
         let mut candidates = Vec::new();
@@ -138,10 +138,7 @@ impl PatternHierarchyAnalyzer {
                 // Determine parent-child direction based on correlation properties
                 let (parent, child) = self.determine_parent_child_relationship(correlation)?;
 
-                parent_child_map
-                    .entry(parent)
-                    .or_default()
-                    .push(child);
+                parent_child_map.entry(parent).or_default().push(child);
             }
         }
 
@@ -250,7 +247,7 @@ impl PatternHierarchyAnalyzer {
     }
 
     /// Compute coherence within a hierarchy level
-    async fn compute_level_coherence(&self, patterns: &[String]) -> Result<f64> {
+    async fn compute_level_coherence(&self, _patterns: &[String]) -> Result<f64> {
         // TODO: Implement proper coherence computation
         // This could measure semantic similarity, structural similarity, etc.
         Ok(0.8)
@@ -415,10 +412,9 @@ impl PatternHierarchyAnalyzer {
     /// Find patterns at a specific hierarchy level
     pub fn find_patterns_at_level(&self, hierarchy_id: &str, level: usize) -> Option<Vec<String>> {
         for hierarchy in &self.hierarchies {
-            if hierarchy.hierarchy_id == hierarchy_id
-                && level < hierarchy.hierarchy_levels.len() {
-                    return Some(hierarchy.hierarchy_levels[level].patterns.clone());
-                }
+            if hierarchy.hierarchy_id == hierarchy_id && level < hierarchy.hierarchy_levels.len() {
+                return Some(hierarchy.hierarchy_levels[level].patterns.clone());
+            }
         }
         None
     }

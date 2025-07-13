@@ -1,9 +1,6 @@
 //! Supporting types for the optimization engine
 
-use crate::{
-    shape::AiShape,
-    shape_management::PerformanceProfile,
-};
+use crate::{shape::AiShape, shape_management::optimization::PerformanceProfile};
 use std::collections::HashMap;
 use std::time::Duration;
 

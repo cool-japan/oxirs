@@ -5,13 +5,13 @@ use std::time::{Duration, Instant};
 
 use oxirs_core::Store;
 
-use oxirs_shacl::{
-    Shape,
-    ValidationReport,
-};
+use oxirs_shacl::{Shape, ValidationReport};
 
 use crate::{
-    insights::{PerformanceInsight, QualityInsight, ValidationInsight, ValidationInsightType, PerformanceInsightType, QualityInsightType},
+    insights::{
+        PerformanceInsight, PerformanceInsightType, QualityInsight, QualityInsightType,
+        ValidationInsight, ValidationInsightType,
+    },
     quality::{QualityIssue, QualityReport},
     Result,
 };
@@ -322,7 +322,7 @@ impl AnalyticsEngine {
         validation_history: &[ValidationReport],
     ) -> Result<Vec<ValidationInsight>> {
         let mut insights = Vec::new();
-        
+
         if validation_history.is_empty() {
             return Ok(insights);
         }
@@ -360,12 +360,14 @@ impl AnalyticsEngine {
         if validation_history.len() >= 10 {
             let recent_half = &validation_history[validation_history.len() / 2..];
             let earlier_half = &validation_history[..validation_history.len() / 2];
-            
-            let recent_success_rate = recent_half.iter().filter(|r| r.conforms()).count() as f64 / recent_half.len() as f64;
-            let earlier_success_rate = earlier_half.iter().filter(|r| r.conforms()).count() as f64 / earlier_half.len() as f64;
-            
+
+            let recent_success_rate = recent_half.iter().filter(|r| r.conforms()).count() as f64
+                / recent_half.len() as f64;
+            let earlier_success_rate = earlier_half.iter().filter(|r| r.conforms()).count() as f64
+                / earlier_half.len() as f64;
+
             let improvement = recent_success_rate - earlier_success_rate;
-            
+
             if improvement > 0.1 {
                 insights.push(ValidationInsight {
                     insight_type: ValidationInsightType::Custom("Quality Improvement".to_string()),
@@ -413,7 +415,7 @@ impl AnalyticsEngine {
         validation_history: &[ValidationReport],
     ) -> Result<Vec<PerformanceInsight>> {
         let mut insights = Vec::new();
-        
+
         if validation_history.len() < 5 {
             return Ok(insights);
         }
@@ -434,13 +436,13 @@ impl AnalyticsEngine {
         if performance_data.len() >= 10 {
             let recent_performance: f64 = performance_data[performance_data.len() - 5..]
                 .iter()
-                .sum::<f64>() / 5.0;
-            let earlier_performance: f64 = performance_data[..5]
-                .iter()
-                .sum::<f64>() / 5.0;
-            
-            let performance_change = (recent_performance - earlier_performance) / earlier_performance;
-            
+                .sum::<f64>()
+                / 5.0;
+            let earlier_performance: f64 = performance_data[..5].iter().sum::<f64>() / 5.0;
+
+            let performance_change =
+                (recent_performance - earlier_performance) / earlier_performance;
+
             if performance_change > 0.2 {
                 insights.push(PerformanceInsight {
                     insight_type: PerformanceInsightType::DegradingPerformance,
@@ -485,26 +487,32 @@ impl AnalyticsEngine {
         }
 
         // Detect performance outliers
-        let mean_performance: f64 = performance_data.iter().sum::<f64>() / performance_data.len() as f64;
+        let mean_performance: f64 =
+            performance_data.iter().sum::<f64>() / performance_data.len() as f64;
         let variance: f64 = performance_data
             .iter()
             .map(|x| (x - mean_performance).powi(2))
-            .sum::<f64>() / performance_data.len() as f64;
+            .sum::<f64>()
+            / performance_data.len() as f64;
         let std_dev = variance.sqrt();
-        
+
         let outliers: Vec<f64> = performance_data
             .iter()
             .filter(|&&x| (x - mean_performance).abs() > 2.0 * std_dev)
             .cloned()
             .collect();
-            
+
         if !outliers.is_empty() && std_dev > mean_performance * 0.3 {
             insights.push(PerformanceInsight {
-                insight_type: PerformanceInsightType::Custom("Performance Inconsistency".to_string()),
+                insight_type: PerformanceInsightType::Custom(
+                    "Performance Inconsistency".to_string(),
+                ),
                 title: "Performance Inconsistency Detected".to_string(),
                 description: format!(
                     "Detected {} performance outliers with high variance (σ={:.1}ms, μ={:.1}ms)",
-                    outliers.len(), std_dev, mean_performance
+                    outliers.len(),
+                    std_dev,
+                    mean_performance
                 ),
                 severity: InsightSeverity::Medium,
                 confidence: 0.7,
@@ -526,12 +534,12 @@ impl AnalyticsEngine {
 
     fn analyze_quality_trends(
         &self,
-        store: &dyn Store,
+        _store: &dyn Store,
         shapes: &[Shape],
         validation_history: &[ValidationReport],
     ) -> Result<Vec<QualityInsight>> {
         let mut insights = Vec::new();
-        
+
         if validation_history.is_empty() || shapes.is_empty() {
             return Ok(insights);
         }
@@ -551,20 +559,20 @@ impl AnalyticsEngine {
         if completeness_scores.len() >= 6 {
             let recent_completeness: f64 = completeness_scores[completeness_scores.len() - 3..]
                 .iter()
-                .sum::<f64>() / 3.0;
-            let earlier_completeness: f64 = completeness_scores[..3]
-                .iter()
-                .sum::<f64>() / 3.0;
-            
+                .sum::<f64>()
+                / 3.0;
+            let earlier_completeness: f64 = completeness_scores[..3].iter().sum::<f64>() / 3.0;
+
             let completeness_change = recent_completeness - earlier_completeness;
-            
+
             if completeness_change > 0.05 {
                 insights.push(QualityInsight {
                     insight_type: QualityInsightType::Completeness,
                     title: "Data Completeness Improving".to_string(),
                     description: format!(
                         "Data completeness has improved by {:.1} percentage points to {:.1}%",
-                        completeness_change * 100.0, recent_completeness * 100.0
+                        completeness_change * 100.0,
+                        recent_completeness * 100.0
                     ),
                     severity: InsightSeverity::Info,
                     confidence: 0.8,
@@ -583,7 +591,8 @@ impl AnalyticsEngine {
                     title: "Data Completeness Declining".to_string(),
                     description: format!(
                         "Data completeness has declined by {:.1} percentage points to {:.1}%",
-                        (-completeness_change) * 100.0, recent_completeness * 100.0
+                        (-completeness_change) * 100.0,
+                        recent_completeness * 100.0
                     ),
                     severity: InsightSeverity::High,
                     confidence: 0.8,
@@ -605,17 +614,20 @@ impl AnalyticsEngine {
             .iter()
             .filter(|report| !report.conforms())
             .count();
-        
+
         if consistency_violations > 0 {
-            let consistency_rate = 1.0 - (consistency_violations as f64 / validation_history.len() as f64);
-            
+            let consistency_rate =
+                1.0 - (consistency_violations as f64 / validation_history.len() as f64);
+
             if consistency_rate < 0.7 {
                 insights.push(QualityInsight {
                     insight_type: QualityInsightType::Consistency,
                     title: "Data Consistency Issues".to_string(),
                     description: format!(
                         "Data consistency rate is {:.1}% with {} violations out of {} validations",
-                        consistency_rate * 100.0, consistency_violations, validation_history.len()
+                        consistency_rate * 100.0,
+                        consistency_violations,
+                        validation_history.len()
                     ),
                     severity: InsightSeverity::High,
                     confidence: 0.9,
@@ -635,11 +647,9 @@ impl AnalyticsEngine {
 
         // Analyze shape complexity vs quality correlation
         let avg_shape_complexity = shapes.len() as f64; // Simplified complexity metric
-        let quality_score = validation_history
-            .iter()
-            .filter(|r| r.conforms())
-            .count() as f64 / validation_history.len() as f64;
-            
+        let quality_score = validation_history.iter().filter(|r| r.conforms()).count() as f64
+            / validation_history.len() as f64;
+
         if avg_shape_complexity > 10.0 && quality_score < 0.8 {
             insights.push(QualityInsight {
                 insight_type: QualityInsightType::Custom("Complexity Impact".to_string()),
@@ -671,7 +681,7 @@ impl AnalyticsEngine {
         validation_history: &[ValidationReport],
     ) -> Result<TrendAnalysis> {
         let mut trends = Vec::new();
-        
+
         if validation_history.len() < 3 {
             return Ok(TrendAnalysis {
                 trends,
@@ -684,11 +694,11 @@ impl AnalyticsEngine {
         // Calculate success rate trend over time
         let window_size = (validation_history.len() / 3).max(1);
         let mut success_rates = Vec::new();
-        
+
         for window_start in (0..validation_history.len()).step_by(window_size) {
             let window_end = (window_start + window_size).min(validation_history.len());
             let window = &validation_history[window_start..window_end];
-            
+
             let success_count = window.iter().filter(|r| r.conforms()).count();
             let success_rate = success_count as f64 / window.len() as f64;
             success_rates.push(success_rate);
@@ -696,9 +706,11 @@ impl AnalyticsEngine {
 
         // Analyze trend direction
         let overall_trend = if success_rates.len() >= 2 {
-            let first_half_avg = success_rates[..success_rates.len()/2].iter().sum::<f64>() / (success_rates.len()/2) as f64;
-            let second_half_avg = success_rates[success_rates.len()/2..].iter().sum::<f64>() / (success_rates.len() - success_rates.len()/2) as f64;
-            
+            let first_half_avg = success_rates[..success_rates.len() / 2].iter().sum::<f64>()
+                / (success_rates.len() / 2) as f64;
+            let second_half_avg = success_rates[success_rates.len() / 2..].iter().sum::<f64>()
+                / (success_rates.len() - success_rates.len() / 2) as f64;
+
             let change = second_half_avg - first_half_avg;
             if change > 0.05 {
                 TrendDirection::Increasing
@@ -748,7 +760,8 @@ impl AnalyticsEngine {
 
         tracing::debug!(
             "Analyzed validation trends: {:?} with {} points",
-            overall_trend, trends.len()
+            overall_trend,
+            trends.len()
         );
 
         Ok(TrendAnalysis {
@@ -764,13 +777,14 @@ impl AnalyticsEngine {
         insights: &ValidationInsights,
     ) -> Result<Vec<ActionableRecommendation>> {
         let mut recommendations = Vec::new();
-        
+
         // Analyze validation insights for recommendations
-        let high_severity_validation_issues = insights.validation_insights
+        let high_severity_validation_issues = insights
+            .validation_insights
             .iter()
             .filter(|insight| matches!(insight.severity, InsightSeverity::High))
             .count();
-            
+
         if high_severity_validation_issues > 0 {
             recommendations.push(ActionableRecommendation {
                 category: RecommendationCategory::Validation,
@@ -792,11 +806,17 @@ impl AnalyticsEngine {
         }
 
         // Analyze performance insights for recommendations
-        let performance_degradations = insights.performance_insights
+        let performance_degradations = insights
+            .performance_insights
             .iter()
-            .filter(|insight| matches!(insight.insight_type, PerformanceInsightType::DegradingPerformance))
+            .filter(|insight| {
+                matches!(
+                    insight.insight_type,
+                    PerformanceInsightType::DegradingPerformance
+                )
+            })
             .count();
-            
+
         if performance_degradations > 0 {
             recommendations.push(ActionableRecommendation {
                 category: RecommendationCategory::Performance,
@@ -818,11 +838,12 @@ impl AnalyticsEngine {
         }
 
         // Analyze quality insights for recommendations
-        let quality_degradations = insights.quality_insights
+        let quality_degradations = insights
+            .quality_insights
             .iter()
             .filter(|insight| insight.is_degrading())
             .count();
-            
+
         if quality_degradations > 0 {
             recommendations.push(ActionableRecommendation {
                 category: RecommendationCategory::Quality,
@@ -844,10 +865,10 @@ impl AnalyticsEngine {
         }
 
         // Generate strategic recommendations if enough data
-        let total_insights = insights.validation_insights.len() + 
-                           insights.performance_insights.len() + 
-                           insights.quality_insights.len();
-                           
+        let total_insights = insights.validation_insights.len()
+            + insights.performance_insights.len()
+            + insights.quality_insights.len();
+
         if total_insights > 10 {
             recommendations.push(ActionableRecommendation {
                 category: RecommendationCategory::Optimization,
@@ -866,39 +887,48 @@ impl AnalyticsEngine {
             });
         }
 
-        tracing::debug!("Generated {} actionable recommendations", recommendations.len());
+        tracing::debug!(
+            "Generated {} actionable recommendations",
+            recommendations.len()
+        );
         Ok(recommendations)
     }
 
     fn generate_insights_summary(&self, insights: &ValidationInsights) -> Result<InsightsSummary> {
         // Calculate comprehensive statistics
-        let total_insights = insights.validation_insights.len() + 
-                           insights.performance_insights.len() + 
-                           insights.quality_insights.len();
-        
+        let total_insights = insights.validation_insights.len()
+            + insights.performance_insights.len()
+            + insights.quality_insights.len();
+
         // Count insights by severity
-        let high_severity_count = insights.validation_insights
+        let high_severity_count = insights
+            .validation_insights
             .iter()
             .filter(|i| matches!(i.severity, InsightSeverity::High))
-            .count() +
-            insights.performance_insights
+            .count()
+            + insights
+                .performance_insights
                 .iter()
                 .filter(|i| matches!(i.severity, InsightSeverity::High))
-                .count() +
-            insights.quality_insights
+                .count()
+            + insights
+                .quality_insights
                 .iter()
                 .filter(|i| matches!(i.severity, InsightSeverity::High))
                 .count();
-        
-        let medium_severity_count = insights.validation_insights
+
+        let medium_severity_count = insights
+            .validation_insights
             .iter()
             .filter(|i| matches!(i.severity, InsightSeverity::Medium))
-            .count() +
-            insights.performance_insights
+            .count()
+            + insights
+                .performance_insights
                 .iter()
                 .filter(|i| matches!(i.severity, InsightSeverity::Medium))
-                .count() +
-            insights.quality_insights
+                .count()
+            + insights
+                .quality_insights
                 .iter()
                 .filter(|i| matches!(i.severity, InsightSeverity::Medium))
                 .count();
@@ -907,14 +937,15 @@ impl AnalyticsEngine {
         let health_score = if total_insights == 0 {
             85.0 // Default neutral score
         } else {
-            let severity_impact = (high_severity_count as f64 * 20.0) + (medium_severity_count as f64 * 10.0);
+            let severity_impact =
+                (high_severity_count as f64 * 20.0) + (medium_severity_count as f64 * 10.0);
             let base_score = 100.0;
             let penalty = (severity_impact / total_insights as f64).min(70.0); // Cap penalty at 70 points
             (base_score - penalty).max(10.0) // Minimum score of 10
         };
 
         // Determine overall health status
-        let health_status = if health_score >= 80.0 {
+        let _health_status = if health_score >= 80.0 {
             OverallHealth::Good
         } else if health_score >= 60.0 {
             OverallHealth::Fair
@@ -924,29 +955,37 @@ impl AnalyticsEngine {
 
         // Generate key findings
         let mut key_findings = Vec::new();
-        
+
         if high_severity_count > 0 {
             key_findings.push(format!(
                 "{high_severity_count} high-severity issues require immediate attention"
             ));
         }
-        
-        if insights.validation_insights.len() > insights.performance_insights.len() + insights.quality_insights.len() {
+
+        if insights.validation_insights.len()
+            > insights.performance_insights.len() + insights.quality_insights.len()
+        {
             key_findings.push("Validation issues are the primary concern".to_string());
-        } else if insights.performance_insights.len() > insights.validation_insights.len() + insights.quality_insights.len() {
+        } else if insights.performance_insights.len()
+            > insights.validation_insights.len() + insights.quality_insights.len()
+        {
             key_findings.push("Performance optimization is the main opportunity".to_string());
-        } else if insights.quality_insights.len() > insights.validation_insights.len() + insights.performance_insights.len() {
+        } else if insights.quality_insights.len()
+            > insights.validation_insights.len() + insights.performance_insights.len()
+        {
             key_findings.push("Data quality improvements are the top priority".to_string());
         }
 
         if total_insights > 15 {
-            key_findings.push("Rich insight data available for comprehensive optimization".to_string());
+            key_findings
+                .push("Rich insight data available for comprehensive optimization".to_string());
         } else if total_insights < 3 {
-            key_findings.push("Limited insight data - consider extended monitoring period".to_string());
+            key_findings
+                .push("Limited insight data - consider extended monitoring period".to_string());
         }
 
         // Generate executive summary
-        let executive_summary = if health_score >= 80.0 {
+        let _executive_summary = if health_score >= 80.0 {
             format!(
                 "System health is good ({}%). {} insights identified with {} requiring immediate action. \
                 Continue current practices while monitoring for emerging trends.",
@@ -967,11 +1006,17 @@ impl AnalyticsEngine {
         };
 
         // Calculate trend summary
-        let trend_summary = if let Some(trend_analysis) = &insights.trend_analysis {
+        let _trend_summary = if let Some(trend_analysis) = &insights.trend_analysis {
             match trend_analysis.overall_trend {
-                TrendDirection::Increasing => "Positive trends observed across validation metrics".to_string(),
-                TrendDirection::Decreasing => "Declining trends require immediate intervention".to_string(),
-                TrendDirection::Stable => "Stable performance with opportunities for optimization".to_string(),
+                TrendDirection::Increasing => {
+                    "Positive trends observed across validation metrics".to_string()
+                }
+                TrendDirection::Decreasing => {
+                    "Declining trends require immediate intervention".to_string()
+                }
+                TrendDirection::Stable => {
+                    "Stable performance with opportunities for optimization".to_string()
+                }
             }
         } else {
             "Insufficient data for trend analysis".to_string()
@@ -998,7 +1043,9 @@ impl AnalyticsEngine {
 
         tracing::debug!(
             "Generated insights summary: {} total insights, health score: {:.1}, status: {:?}",
-            total_insights, health_score, summary.overall_health
+            total_insights,
+            health_score,
+            summary.overall_health
         );
 
         Ok(summary)

@@ -50,7 +50,7 @@ impl SessionManager {
         let mut sessions = self.sessions.write().await;
 
         if let Some(session) = sessions.get_mut(session_id) {
-            let timeout = Duration::seconds(self.timeout_seconds);
+            let _timeout = Duration::seconds(self.timeout_seconds);
 
             if Utc::now() > session.expires_at {
                 sessions.remove(session_id);
@@ -92,7 +92,7 @@ impl SessionManager {
     /// Cleanup expired sessions
     pub async fn cleanup_expired_sessions(&self) -> FusekiResult<usize> {
         let mut sessions = self.sessions.write().await;
-        let timeout = Duration::seconds(self.timeout_seconds);
+        let _timeout = Duration::seconds(self.timeout_seconds);
         let now = Utc::now();
         let initial_count = sessions.len();
 

@@ -708,7 +708,9 @@ impl FederatedVectorSearch {
     /// Get federation health status
     pub fn get_federation_health(&self) -> HashMap<String, NodeHealthStatus> {
         let federations = self.federations.read().unwrap();
-        federations.keys().map(|id| {
+        federations
+            .keys()
+            .map(|id| {
                 // Determine health based on trust scores and recent performance
                 let trust_manager = self.trust_manager.read().unwrap();
                 let trust_score = trust_manager.get_trust_score(id).unwrap_or(0.0);
@@ -824,6 +826,14 @@ impl FederatedVectorSearch {
             if let Some(endpoint) = self.federations.read().unwrap().get(federation_id) {
                 // Simulate query execution with some example results
                 let similarity_result = SimilarityResult {
+                    id: format!(
+                        "fed_{}_{}",
+                        federation_id,
+                        std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap_or_default()
+                            .as_millis()
+                    ),
                     uri: format!("result_from_{federation_id}"),
                     similarity: 0.85,
                     metrics: std::collections::HashMap::new(),

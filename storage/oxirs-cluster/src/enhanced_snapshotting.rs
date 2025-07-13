@@ -18,6 +18,9 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info};
 
+/// Type alias for triple modification: (old_triple, new_triple)
+type TripleModification = ((String, String, String), (String, String, String));
+
 /// Snapshot format version
 pub const SNAPSHOT_FORMAT_VERSION: u32 = 1;
 
@@ -158,7 +161,7 @@ pub struct SnapshotDiff {
     /// Removed triples
     pub deletions: Vec<(String, String, String)>,
     /// Modified triples (old, new)
-    pub modifications: Vec<((String, String, String), (String, String, String))>,
+    pub modifications: Vec<TripleModification>,
 }
 
 /// Unified snapshot data that can hold either full snapshots or diffs
@@ -379,12 +382,15 @@ impl EnhancedSnapshotManager {
         }
 
         // Deserialize the data
-        let app_state: RdfApp = if metadata.is_incremental {
-            // For incremental snapshots, we'd need to apply the diff to a base snapshot
-            // This is a simplified implementation
-            self.serializer.lock().await.deserialize(&all_data)?
-        } else {
-            self.serializer.lock().await.deserialize(&all_data)?
+        let snapshot_data: SnapshotData = self.serializer.lock().await.deserialize(&all_data)?;
+
+        let app_state: RdfApp = match snapshot_data {
+            SnapshotData::Full(state) => state,
+            SnapshotData::Diff(_diff) => {
+                // For incremental snapshots, we'd need to apply the diff to a base snapshot
+                // This is a simplified implementation that returns an empty state
+                RdfApp::default()
+            }
         };
 
         info!(
@@ -483,10 +489,14 @@ impl EnhancedSnapshotManager {
             debug!("Transferred chunk {} of {}", i + 1, metadata.total_chunks);
         }
 
-        // Remove completed transfer
+        // Mark transfer as completed (keep it for status queries)
         {
             let mut transfers = self.active_transfers.write().await;
-            transfers.remove(transfer_id);
+            if let Some(status) = transfers.get_mut(transfer_id) {
+                // Mark as completed by setting current_chunk to total_chunks
+                status.current_chunk = status.total_chunks;
+                status.transferred_bytes = status.total_bytes;
+            }
         }
 
         info!("Completed snapshot transfer {}", transfer_id);
@@ -627,7 +637,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_and_load_snapshot() {
-        let (manager, _temp_dir) = create_test_manager().await;
+        let (manager, temp_dir) = create_test_manager().await;
 
         let mut app_state = RdfApp::default();
         app_state
@@ -642,6 +652,9 @@ mod tests {
 
         assert_eq!(loaded_metadata.snapshot_id, metadata.snapshot_id);
         assert_eq!(loaded_state.triples.len(), 1);
+
+        // Keep temp_dir alive until the end of the test
+        drop(temp_dir);
     }
 
     #[tokio::test]

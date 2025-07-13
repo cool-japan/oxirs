@@ -59,10 +59,10 @@ impl GraphQLFederation {
 
         for (typename, reprs) in by_type {
             // Find which service owns this entity type
-            let service_id = self.find_service_for_entity(&typename).await?;
+            let _service_id = self.find_service_for_entity(&typename).await?;
 
             // Build _entities query for this service
-            let entities_query =
+            let _entities_query =
                 self.build_entities_query_for_representations(&typename, &reprs)?;
 
             // Execute query (mock for now)
@@ -469,7 +469,7 @@ impl GraphQLFederation {
         &self,
         service_id: &str,
         representations: &[EntityRepresentation],
-        context: &ResolutionContext,
+        _context: &ResolutionContext,
     ) -> Result<GraphQLResponse> {
         debug!(
             "Executing _entities query for {} representations on service: {}",
@@ -557,7 +557,7 @@ impl GraphQLFederation {
 
         let mut resolved_entities = Vec::new();
 
-        for (typename, refs) in entities_by_type {
+        for (typename, _refs) in entities_by_type {
             // For now, create a basic query structure - this should be enhanced
             // to properly build GraphQL _entities queries from EntityReference data
             let entities_query = format!(
@@ -596,7 +596,7 @@ impl GraphQLFederation {
         typename: &str,
         representations: &[&EntityRepresentation],
     ) -> Result<String> {
-        let repr_json: Vec<serde_json::Value> = representations
+        let _repr_json: Vec<serde_json::Value> = representations
             .iter()
             .map(|r| {
                 let mut obj = serde_json::Map::new();
@@ -670,7 +670,7 @@ impl GraphQLFederation {
     async fn execute_service_query(
         &self,
         service_id: &str,
-        query: &str,
+        _query: &str,
     ) -> Result<GraphQLResponse> {
         debug!("Executing GraphQL query against service: {}", service_id);
 
@@ -944,7 +944,7 @@ impl GraphQLFederation {
     }
 
     /// Extract federation directives from composed schema
-    fn extract_federation_directives(&self, composed: &ComposedSchema) -> Result<Vec<String>> {
+    fn extract_federation_directives(&self, _composed: &ComposedSchema) -> Result<Vec<String>> {
         let mut directives = Vec::new();
 
         // Standard federation directives
@@ -1082,7 +1082,7 @@ impl GraphQLFederation {
     /// Validate federation-specific rules
     fn validate_federation_rules(&self, composed: &ComposedSchema) -> Result<()> {
         // Rule 1: Entity types should have resolvable key fields
-        for (type_name, entity_info) in &composed.entity_types {
+        for (type_name, _entity_info) in &composed.entity_types {
             if let Some(graphql_type) = composed.types.get(type_name) {
                 // Check that entity has an ID field (common pattern)
                 if !graphql_type.fields.contains_key("id") {

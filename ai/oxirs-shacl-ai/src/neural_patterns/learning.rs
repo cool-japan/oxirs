@@ -59,8 +59,7 @@ pub struct OptimizerState {
 }
 
 /// Training history and metrics
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct TrainingHistory {
     /// Loss values per epoch
     pub loss_history: Vec<f64>,
@@ -73,7 +72,6 @@ pub struct TrainingHistory {
     /// Training time per epoch
     pub epoch_times: Vec<std::time::Duration>,
 }
-
 
 impl NeuralPatternLearner {
     /// Create new neural pattern learner
@@ -255,7 +253,7 @@ impl NeuralPatternLearner {
     }
 
     /// Extract features from a pattern
-    async fn extract_pattern_features(&self, pattern: &Pattern) -> Result<Array1<f64>> {
+    async fn extract_pattern_features(&self, _pattern: &Pattern) -> Result<Array1<f64>> {
         // TODO: Implement comprehensive pattern feature extraction
         // This should extract structural, semantic, and syntactic features
 
@@ -388,9 +386,9 @@ impl NeuralPatternLearner {
     /// Backward pass (compute gradients)
     async fn backward_pass(
         &mut self,
-        predictions: &Array2<f64>,
-        patterns: &[Pattern],
-        target_correlations: &HashMap<(String, String), CorrelationType>,
+        _predictions: &Array2<f64>,
+        _patterns: &[Pattern],
+        _target_correlations: &HashMap<(String, String), CorrelationType>,
     ) -> Result<()> {
         // TODO: Implement backpropagation algorithm
         Ok(())
@@ -416,7 +414,7 @@ impl NeuralPatternLearner {
         &self,
         pattern_embeddings: &Array2<f64>,
     ) -> Result<Array2<f64>> {
-        let seq_len = pattern_embeddings.nrows();
+        let _seq_len = pattern_embeddings.nrows();
         let embed_dim = pattern_embeddings.ncols();
         let head_dim = embed_dim / self.config.attention_heads;
 
@@ -812,7 +810,7 @@ impl NeuralPatternLearner {
     async fn meta_gradient_update(
         &mut self,
         original_weights: &NetworkWeights,
-        query_loss: f64,
+        _query_loss: f64,
     ) -> Result<()> {
         // Simplified meta-gradient computation
         // In practice, would use automatic differentiation through the inner loop
@@ -848,14 +846,14 @@ impl NeuralPatternLearner {
     /// Compute gradients for all parameters
     async fn compute_gradients(
         &self,
-        predictions: &Array2<f64>,
+        _predictions: &Array2<f64>,
         patterns: &[Pattern],
-        target_correlations: &HashMap<(String, String), CorrelationType>,
+        _target_correlations: &HashMap<(String, String), CorrelationType>,
     ) -> Result<HashMap<String, Array2<f64>>> {
         let mut gradients = HashMap::new();
 
         // Simplified gradient computation - in practice would use proper backpropagation
-        let num_patterns = patterns.len();
+        let _num_patterns = patterns.len();
         let embedding_dim = self.config.embedding_dim;
 
         // Create dummy gradients for demonstration
@@ -900,7 +898,7 @@ impl NeuralPatternLearner {
         &self,
         patterns: &[Pattern],
     ) -> Result<HashMap<(String, String), (CorrelationType, f64)>> {
-        let predictions = self.forward_pass(patterns).await?;
+        let _predictions = self.forward_pass(patterns).await?;
 
         // TODO: Convert network outputs to correlation predictions
         let correlations = HashMap::new();

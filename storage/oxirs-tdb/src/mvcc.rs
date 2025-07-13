@@ -921,6 +921,10 @@ pub enum ValidationResult {
     TimestampConflict(String),
 }
 
+/// Type alias for committed transaction history
+type CommittedTransactionHistory<K> =
+    Arc<RwLock<Vec<(TransactionId, ReadWriteSets<K>, LogicalTimestamp)>>>;
+
 /// Optimistic concurrency control manager
 pub struct OptimisticConcurrencyControl<K>
 where
@@ -929,7 +933,7 @@ where
     /// Active transaction read/write sets
     transaction_sets: Arc<RwLock<HashMap<TransactionId, ReadWriteSets<K>>>>,
     /// Committed transaction history for validation
-    committed_transactions: Arc<RwLock<Vec<(TransactionId, ReadWriteSets<K>, LogicalTimestamp)>>>,
+    committed_transactions: CommittedTransactionHistory<K>,
     /// Logical timestamp generator
     timestamp_generator: Arc<Mutex<LogicalTimestamp>>,
     /// Node ID for distributed coordination
@@ -1265,7 +1269,6 @@ where
 {
     /// Create new MVCC storage with optimistic concurrency control
     pub fn with_optimistic_control(_node_id: u64) -> Self {
-        
         // Initialize optimistic concurrency control (this would be integrated more deeply in a real implementation)
         Self::new()
     }

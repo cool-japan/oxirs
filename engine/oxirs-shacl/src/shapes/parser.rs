@@ -1,5 +1,7 @@
 //! SHACL shape parser for extracting shapes from RDF data
 
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 
 use oxirs_core::{
@@ -10,19 +12,23 @@ use oxirs_core::{
 
 use crate::{
     constraints::{
-        Constraint, ConstraintComponentId,
-        cardinality_constraints::{MinCountConstraint, MaxCountConstraint},
+        cardinality_constraints::{MaxCountConstraint, MinCountConstraint},
+        comparison_constraints::{
+            DisjointConstraint, EqualsConstraint, LessThanConstraint, LessThanOrEqualsConstraint,
+        },
+        range_constraints::{
+            MaxExclusiveConstraint, MaxInclusiveConstraint, MinExclusiveConstraint,
+            MinInclusiveConstraint,
+        },
+        string_constraints::{
+            MaxLengthConstraint, MinLengthConstraint, PatternConstraint, UniqueLangConstraint,
+        },
         value_constraints::{ClassConstraint, DatatypeConstraint, NodeKindConstraint},
-        range_constraints::{MinExclusiveConstraint, MaxExclusiveConstraint, MinInclusiveConstraint, MaxInclusiveConstraint},
-        string_constraints::{MinLengthConstraint, MaxLengthConstraint, PatternConstraint, LanguageInConstraint, UniqueLangConstraint},
-        comparison_constraints::{EqualsConstraint, DisjointConstraint, LessThanConstraint, LessThanOrEqualsConstraint, InConstraint, HasValueConstraint},
-        logical_constraints::{NotConstraint, AndConstraint, OrConstraint, XoneConstraint},
-        shape_constraints::{NodeConstraint, QualifiedValueShapeConstraint, ClosedConstraint}
+        Constraint,
     },
-    paths::PropertyPath, 
-    targets::Target, 
-    vocabulary::SHACL_VOCAB,
-    Result, ShaclError, Shape, ShapeId, ShapeType
+    paths::PropertyPath,
+    targets::Target,
+    Result, ShaclError, Shape, ShapeId, ShapeType, SHACL_VOCAB,
 };
 
 use super::types::{ShapeParsingConfig, ShapeParsingStats};
@@ -141,15 +147,14 @@ impl ShapeParser {
         }
 
         use oxirs_core::format::TurtleParser;
-        
+
         // Parse RDF triples using Turtle parser
         let parser = TurtleParser::new();
         tracing::debug!("Parsing Turtle data:\n{}", rdf_data);
-        let triples = parser.parse_slice(rdf_data.as_bytes())
-            .map_err(|e| {
-                tracing::error!("Turtle parsing failed: {}", e);
-                ShaclError::ShapeParsing(format!("Failed to parse Turtle data: {e}"))
-            })?;
+        let triples = parser.parse_slice(rdf_data.as_bytes()).map_err(|e| {
+            tracing::error!("Turtle parsing failed: {}", e);
+            ShaclError::ShapeParsing(format!("Failed to parse Turtle data: {e}"))
+        })?;
         tracing::debug!("Parsed {} triples", triples.len());
 
         // Convert triples to a Graph structure
@@ -420,7 +425,9 @@ impl ShapeParser {
         let shape_subject = Subject::NamedNode(shape_node.clone());
 
         // Parse sh:targetClass
-        if let Some(target_class) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.target_class)? {
+        if let Some(target_class) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.target_class)?
+        {
             shape.add_target(Target::Class(target_class));
         }
 
@@ -435,17 +442,22 @@ impl ShapeParser {
                 Object::NamedNode(node) => Term::NamedNode(node.clone()),
                 Object::BlankNode(node) => Term::BlankNode(node.clone()),
                 Object::Literal(lit) => Term::Literal(lit.clone()),
+                Object::Variable(_) | Object::QuotedTriple(_) => continue, // Skip unsupported types
             };
             shape.add_target(Target::Node(target_term));
         }
 
         // Parse sh:targetObjectsOf
-        if let Some(target_objects_of) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.target_objects_of)? {
+        if let Some(target_objects_of) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.target_objects_of)?
+        {
             shape.add_target(Target::ObjectsOf(target_objects_of));
         }
 
         // Parse sh:targetSubjectsOf
-        if let Some(target_subjects_of) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.target_subjects_of)? {
+        if let Some(target_subjects_of) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.target_subjects_of)?
+        {
             shape.add_target(Target::SubjectsOf(target_subjects_of));
         }
 
@@ -462,94 +474,156 @@ impl ShapeParser {
         let shape_subject = Subject::NamedNode(shape_node.clone());
 
         // Parse core value constraints
-        if let Some(class_iri) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.class)? {
+        if let Some(class_iri) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.class)?
+        {
             let constraint = Constraint::Class(ClassConstraint { class_iri });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(datatype_iri) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.datatype)? {
+        if let Some(datatype_iri) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.datatype)?
+        {
             let constraint = Constraint::Datatype(DatatypeConstraint { datatype_iri });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(node_kind_iri) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.node_kind)? {
+        if let Some(node_kind_iri) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.node_kind)?
+        {
             let node_kind = self.parse_node_kind(&node_kind_iri)?;
             let constraint = Constraint::NodeKind(NodeKindConstraint { node_kind });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
         // Parse cardinality constraints
-        if let Some(min_count) = self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.min_count)? {
-            let constraint = Constraint::MinCount(MinCountConstraint { min_count });
+        if let Some(min_count) =
+            self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.min_count)?
+        {
+            let constraint = Constraint::MinCount(MinCountConstraint {
+                min_count: min_count.try_into().unwrap_or(0),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(max_count) = self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.max_count)? {
-            let constraint = Constraint::MaxCount(MaxCountConstraint { max_count });
+        if let Some(max_count) =
+            self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.max_count)?
+        {
+            let constraint = Constraint::MaxCount(MaxCountConstraint {
+                max_count: max_count.try_into().unwrap_or(0),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
         // Parse range constraints
-        if let Some(min_exclusive) = self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.min_exclusive)? {
-            let constraint = Constraint::MinExclusive(MinExclusiveConstraint { min_exclusive });
+        if let Some(min_exclusive) =
+            self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.min_exclusive)?
+        {
+            let constraint = Constraint::MinExclusive(MinExclusiveConstraint {
+                min_value: min_exclusive,
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(max_exclusive) = self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.max_exclusive)? {
-            let constraint = Constraint::MaxExclusive(MaxExclusiveConstraint { max_exclusive });
+        if let Some(max_exclusive) =
+            self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.max_exclusive)?
+        {
+            let constraint = Constraint::MaxExclusive(MaxExclusiveConstraint {
+                max_value: max_exclusive,
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(min_inclusive) = self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.min_inclusive)? {
-            let constraint = Constraint::MinInclusive(MinInclusiveConstraint { min_inclusive });
+        if let Some(min_inclusive) =
+            self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.min_inclusive)?
+        {
+            let constraint = Constraint::MinInclusive(MinInclusiveConstraint {
+                min_value: min_inclusive,
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(max_inclusive) = self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.max_inclusive)? {
-            let constraint = Constraint::MaxInclusive(MaxInclusiveConstraint { max_inclusive });
+        if let Some(max_inclusive) =
+            self.get_literal_object(graph, &shape_subject, &SHACL_VOCAB.max_inclusive)?
+        {
+            let constraint = Constraint::MaxInclusive(MaxInclusiveConstraint {
+                max_value: max_inclusive,
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
         // Parse string constraints
-        if let Some(min_length) = self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.min_length)? {
-            let constraint = Constraint::MinLength(MinLengthConstraint { min_length });
+        if let Some(min_length) =
+            self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.min_length)?
+        {
+            let constraint = Constraint::MinLength(MinLengthConstraint {
+                min_length: min_length.try_into().unwrap_or(0),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(max_length) = self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.max_length)? {
-            let constraint = Constraint::MaxLength(MaxLengthConstraint { max_length });
+        if let Some(max_length) =
+            self.get_integer_object(graph, &shape_subject, &SHACL_VOCAB.max_length)?
+        {
+            let constraint = Constraint::MaxLength(MaxLengthConstraint {
+                max_length: max_length.try_into().unwrap_or(0),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(pattern) = self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.pattern)? {
+        if let Some(pattern) =
+            self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.pattern)?
+        {
             let flags = self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.flags)?;
-            let constraint = Constraint::Pattern(PatternConstraint { pattern, flags });
+            let constraint = Constraint::Pattern(PatternConstraint {
+                pattern,
+                flags,
+                message: None,
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(unique_lang) = self.get_boolean_object(graph, &shape_subject, &SHACL_VOCAB.unique_lang)? {
+        if let Some(unique_lang) =
+            self.get_boolean_object(graph, &shape_subject, &SHACL_VOCAB.unique_lang)?
+        {
             let constraint = Constraint::UniqueLang(UniqueLangConstraint { unique_lang });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
         // Parse comparison constraints
-        if let Some(equals_property) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.equals)? {
-            let constraint = Constraint::Equals(EqualsConstraint { equals_property });
+        if let Some(equals_property) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.equals)?
+        {
+            let constraint = Constraint::Equals(EqualsConstraint {
+                property: Term::NamedNode(equals_property),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(disjoint_property) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.disjoint)? {
-            let constraint = Constraint::Disjoint(DisjointConstraint { disjoint_property });
+        if let Some(disjoint_property) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.disjoint)?
+        {
+            let constraint = Constraint::Disjoint(DisjointConstraint {
+                property: Term::NamedNode(disjoint_property),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(less_than_property) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.less_than)? {
-            let constraint = Constraint::LessThan(LessThanConstraint { less_than_property });
+        if let Some(less_than_property) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.less_than)?
+        {
+            let constraint = Constraint::LessThan(LessThanConstraint {
+                property: Term::NamedNode(less_than_property),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
-        if let Some(less_than_or_equals_property) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.less_than_or_equals)? {
-            let constraint = Constraint::LessThanOrEquals(LessThanOrEqualsConstraint { less_than_or_equals_property });
+        if let Some(less_than_or_equals_property) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.less_than_or_equals)?
+        {
+            let constraint = Constraint::LessThanOrEquals(LessThanOrEqualsConstraint {
+                property: Term::NamedNode(less_than_or_equals_property),
+            });
             shape.add_constraint(constraint.component_id(), constraint);
         }
 
@@ -575,7 +649,9 @@ impl ShapeParser {
         }
 
         // Parse sh:description
-        if let Some(description) = self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.description)? {
+        if let Some(description) =
+            self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.description)?
+        {
             shape.description = Some(description);
         }
 
@@ -585,17 +661,23 @@ impl ShapeParser {
         }
 
         // Parse sh:deactivated
-        if let Some(deactivated) = self.get_boolean_object(graph, &shape_subject, &SHACL_VOCAB.deactivated)? {
+        if let Some(deactivated) =
+            self.get_boolean_object(graph, &shape_subject, &SHACL_VOCAB.deactivated)?
+        {
             shape.deactivated = deactivated;
         }
 
         // Parse sh:message
-        if let Some(message) = self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.message)? {
+        if let Some(message) =
+            self.get_string_object(graph, &shape_subject, &SHACL_VOCAB.message)?
+        {
             shape.messages.insert("".to_string(), message); // Default language
         }
 
         // Parse sh:severity
-        if let Some(severity_iri) = self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.severity)? {
+        if let Some(severity_iri) =
+            self.get_named_node_object(graph, &shape_subject, &SHACL_VOCAB.severity)?
+        {
             shape.severity = self.parse_severity(&severity_iri)?;
         }
 
@@ -614,7 +696,7 @@ impl ShapeParser {
             Some(&Predicate::NamedNode(predicate.clone())),
             None,
         );
-        
+
         for triple in triples {
             if let Object::NamedNode(node) = triple.object() {
                 return Ok(Some(node.clone()));
@@ -635,7 +717,7 @@ impl ShapeParser {
             Some(&Predicate::NamedNode(predicate.clone())),
             None,
         );
-        
+
         for triple in triples {
             if let Object::Literal(lit) = triple.object() {
                 return Ok(Some(lit.clone()));
@@ -693,29 +775,36 @@ impl ShapeParser {
     }
 
     /// Parse node kind from IRI
-    fn parse_node_kind(&self, node_kind_iri: &NamedNode) -> Result<crate::constraints::value_constraints::NodeKind> {
+    fn parse_node_kind(
+        &self,
+        node_kind_iri: &NamedNode,
+    ) -> Result<crate::constraints::value_constraints::NodeKind> {
         use crate::constraints::value_constraints::NodeKind;
-        
+
         match node_kind_iri.as_str() {
-            "http://www.w3.org/ns/shacl#IRI" => Ok(NodeKind::IRI),
+            "http://www.w3.org/ns/shacl#IRI" => Ok(NodeKind::Iri),
             "http://www.w3.org/ns/shacl#BlankNode" => Ok(NodeKind::BlankNode),
             "http://www.w3.org/ns/shacl#Literal" => Ok(NodeKind::Literal),
-            "http://www.w3.org/ns/shacl#BlankNodeOrIRI" => Ok(NodeKind::BlankNodeOrIRI),
+            "http://www.w3.org/ns/shacl#BlankNodeOrIRI" => Ok(NodeKind::BlankNodeOrIri),
             "http://www.w3.org/ns/shacl#BlankNodeOrLiteral" => Ok(NodeKind::BlankNodeOrLiteral),
-            "http://www.w3.org/ns/shacl#IRIOrLiteral" => Ok(NodeKind::IRIOrLiteral),
-            _ => Err(ShaclError::ShapeParsing(format!("Unknown node kind: {}", node_kind_iri))),
+            "http://www.w3.org/ns/shacl#IRIOrLiteral" => Ok(NodeKind::IriOrLiteral),
+            _ => Err(ShaclError::ShapeParsing(format!(
+                "Unknown node kind: {node_kind_iri}"
+            ))),
         }
     }
 
     /// Parse severity from IRI
     fn parse_severity(&self, severity_iri: &NamedNode) -> Result<crate::Severity> {
         use crate::Severity;
-        
+
         match severity_iri.as_str() {
             "http://www.w3.org/ns/shacl#Violation" => Ok(Severity::Violation),
             "http://www.w3.org/ns/shacl#Warning" => Ok(Severity::Warning),
             "http://www.w3.org/ns/shacl#Info" => Ok(Severity::Info),
-            _ => Err(ShaclError::ShapeParsing(format!("Unknown severity: {}", severity_iri))),
+            _ => Err(ShaclError::ShapeParsing(format!(
+                "Unknown severity: {severity_iri}"
+            ))),
         }
     }
 

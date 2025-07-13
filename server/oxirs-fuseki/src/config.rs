@@ -174,8 +174,7 @@ pub struct TextIndexConfig {
 }
 
 /// Security configuration with validation
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct SecurityConfig {
     pub auth_required: bool,
 
@@ -212,8 +211,7 @@ pub struct SecurityConfig {
 }
 
 /// Authentication configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct AuthenticationConfig {
     pub enabled: bool,
 }
@@ -602,8 +600,7 @@ pub struct UserConfig {
 }
 
 /// Monitoring configuration
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, Default)]
 pub struct MonitoringConfig {
     pub metrics: MetricsConfig,
     pub health_checks: HealthCheckConfig,
@@ -949,9 +946,7 @@ impl ServerConfig {
             }
         }
         .map_err(|e| {
-            FusekiError::configuration(format!(
-                "Failed to load configuration from {path:?}: {e}"
-            ))
+            FusekiError::configuration(format!("Failed to load configuration from {path:?}: {e}"))
         })?;
 
         // Validate the configuration
@@ -1009,9 +1004,7 @@ impl ServerConfig {
         let socket_addrs: Vec<SocketAddr> = addr
             .to_socket_addrs()
             .map_err(|e| {
-                FusekiError::configuration(format!(
-                    "Invalid host:port combination '{addr}': {e}"
-                ))
+                FusekiError::configuration(format!("Invalid host:port combination '{addr}': {e}"))
             })?
             .collect();
 
@@ -1116,7 +1109,6 @@ impl ServerConfig {
     }
 }
 
-
 impl Default for MetricsConfig {
     fn default() -> Self {
         Self {
@@ -1152,8 +1144,6 @@ impl Default for TracingConfig {
         }
     }
 }
-
-
 
 impl Default for CorsConfig {
     fn default() -> Self {
@@ -1264,7 +1254,10 @@ impl ConfigWatcher {
 fn is_privileged_user() -> bool {
     #[cfg(unix)]
     {
-        unsafe { libc::geteuid() == 0 }
+        // Use std::env to check USER environment variable as a safe alternative
+        std::env::var("USER")
+            .map(|user| user == "root")
+            .unwrap_or(false)
     }
     #[cfg(not(unix))]
     {
@@ -1279,6 +1272,14 @@ fn get_cpu_count() -> usize {
     std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4) // Fallback to 4 cores
+}
+
+/// Custom validation function for PathBuf
+fn validate_path(path: &Path) -> Result<(), ValidationError> {
+    if path.as_os_str().is_empty() {
+        return Err(ValidationError::new("path_empty"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1529,7 +1530,7 @@ mod tests {
     #[test]
     fn test_save_and_load_toml() {
         let config = ServerConfig::default();
-        let mut temp_file = NamedTempFile::new().unwrap();
+        let temp_file = NamedTempFile::new().unwrap();
         let temp_path = temp_file.path().with_extension("toml");
 
         // Save configuration
@@ -1570,12 +1571,4 @@ mod tests {
         assert!(!errors.is_empty());
         assert!(errors.iter().any(|e| e.contains("empty location")));
     }
-}
-
-/// Custom validation function for PathBuf
-fn validate_path(path: &PathBuf) -> Result<(), ValidationError> {
-    if path.as_os_str().is_empty() {
-        return Err(ValidationError::new("path_empty"));
-    }
-    Ok(())
 }

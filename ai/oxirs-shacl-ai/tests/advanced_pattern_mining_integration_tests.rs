@@ -5,11 +5,11 @@
 
 #![cfg(disabled)]
 
-use oxirs_shacl_ai::{
-    AdvancedPatternMiningEngine, AdvancedPatternMiningConfig, ShaclAiAssistant, ShaclAiConfig,
-    advanced_pattern_mining::{PatternRankingCriteria, TimeGranularity}
-};
 use oxirs_core::rdf_store::{OxirsQueryResults, PreparedQuery};
+use oxirs_shacl_ai::{
+    advanced_pattern_mining::{PatternRankingCriteria, TimeGranularity},
+    AdvancedPatternMiningConfig, AdvancedPatternMiningEngine, ShaclAiAssistant, ShaclAiConfig,
+};
 use std::collections::HashMap;
 
 /// Test enhanced caching system functionality
@@ -20,7 +20,10 @@ async fn test_enhanced_caching_system() {
 
     // Test cache warming
     let warmed_count = engine.warm_cache();
-    assert!(warmed_count <= 10, "Cache warming should respect max patterns limit");
+    assert!(
+        warmed_count <= 10,
+        "Cache warming should respect max patterns limit"
+    );
 
     // Test cache analytics
     let analytics = engine.get_cache_analytics();
@@ -30,15 +33,24 @@ async fn test_enhanced_caching_system() {
     // Test advanced cache statistics
     let advanced_stats = engine.get_advanced_cache_statistics();
     // warming_predictions_count is usize, so always non-negative
-    assert!(advanced_stats.warming_predictions_count < 1000, "Warming predictions count should be reasonable");
+    assert!(
+        advanced_stats.warming_predictions_count < 1000,
+        "Warming predictions count should be reasonable"
+    );
     // Test that strategy_switching_enabled has a consistent value
     let initial_state = advanced_stats.strategy_switching_enabled;
-    assert_eq!(advanced_stats.strategy_switching_enabled, initial_state, "Strategy switching state should be consistent");
+    assert_eq!(
+        advanced_stats.strategy_switching_enabled, initial_state,
+        "Strategy switching state should be consistent"
+    );
 
     // Test eviction strategy evaluation
     let strategy_changed = engine.evaluate_cache_strategy();
     // Verify the returned value is a valid boolean (this test ensures the function executes)
-    assert!(matches!(strategy_changed, true | false), "Strategy evaluation should return a boolean");
+    assert!(
+        matches!(strategy_changed, true | false),
+        "Strategy evaluation should return a boolean"
+    );
 }
 
 /// Test cache performance recommendations
@@ -50,12 +62,18 @@ async fn test_cache_performance_recommendations() {
     // Get initial recommendations
     let recommendations = engine.get_cache_recommendations();
     // Initially there may be no recommendations
-    assert!(recommendations.len() <= 10, "Recommendations should be reasonable in number");
+    assert!(
+        recommendations.len() <= 10,
+        "Recommendations should be reasonable in number"
+    );
 
     // Test eviction strategy
     let strategy = engine.get_cache_eviction_strategy();
     // Should have a valid strategy
-    assert!(format!("{:?}", strategy).len() > 0, "Eviction strategy should be displayable");
+    assert!(
+        format!("{:?}", strategy).len() > 0,
+        "Eviction strategy should be displayable"
+    );
 }
 
 /// Test sequential pattern mining
@@ -77,10 +95,22 @@ async fn test_sequential_pattern_mining() {
 
     // Verify pattern properties
     for pattern in &patterns {
-        assert!(!pattern.sequence.is_empty(), "Pattern sequence should not be empty");
-        assert!(pattern.support >= 0.0 && pattern.support <= 1.0, "Support should be valid probability");
-        assert!(pattern.confidence >= 0.0 && pattern.confidence <= 1.0, "Confidence should be valid probability");
-        assert!(pattern.quality_score >= 0.0 && pattern.quality_score <= 1.0, "Quality score should be valid");
+        assert!(
+            !pattern.sequence.is_empty(),
+            "Pattern sequence should not be empty"
+        );
+        assert!(
+            pattern.support >= 0.0 && pattern.support <= 1.0,
+            "Support should be valid probability"
+        );
+        assert!(
+            pattern.confidence >= 0.0 && pattern.confidence <= 1.0,
+            "Confidence should be valid probability"
+        );
+        assert!(
+            pattern.quality_score >= 0.0 && pattern.quality_score <= 1.0,
+            "Quality score should be valid"
+        );
     }
 }
 
@@ -102,9 +132,18 @@ async fn test_graph_pattern_mining() {
 
     // Verify pattern properties
     for pattern in &patterns {
-        assert!(pattern.support >= 0.0 && pattern.support <= 1.0, "Support should be valid probability");
-        assert!(pattern.complexity >= 0.0, "Complexity should be non-negative");
-        assert!(pattern.connectivity >= 0.0 && pattern.connectivity <= 1.0, "Connectivity should be valid");
+        assert!(
+            pattern.support >= 0.0 && pattern.support <= 1.0,
+            "Support should be valid probability"
+        );
+        assert!(
+            pattern.complexity >= 0.0,
+            "Complexity should be non-negative"
+        );
+        assert!(
+            pattern.connectivity >= 0.0 && pattern.connectivity <= 1.0,
+            "Connectivity should be valid"
+        );
     }
 }
 
@@ -126,10 +165,22 @@ async fn test_enhanced_temporal_pattern_mining() {
 
     // Verify pattern properties
     for pattern in &patterns {
-        assert!(pattern.base_pattern.frequency >= 0.0, "Frequency should be non-negative");
-        assert!(pattern.trend_strength >= 0.0 && pattern.trend_strength <= 1.0, "Trend strength should be valid");
-        assert!(pattern.forecast_accuracy >= 0.0 && pattern.forecast_accuracy <= 1.0, "Forecast accuracy should be valid");
-        assert!(!pattern.autocorrelation.is_empty(), "Autocorrelation should not be empty");
+        assert!(
+            pattern.base_pattern.frequency >= 0.0,
+            "Frequency should be non-negative"
+        );
+        assert!(
+            pattern.trend_strength >= 0.0 && pattern.trend_strength <= 1.0,
+            "Trend strength should be valid"
+        );
+        assert!(
+            pattern.forecast_accuracy >= 0.0 && pattern.forecast_accuracy <= 1.0,
+            "Forecast accuracy should be valid"
+        );
+        assert!(
+            !pattern.autocorrelation.is_empty(),
+            "Autocorrelation should not be empty"
+        );
     }
 }
 
@@ -164,19 +215,34 @@ async fn test_advanced_pattern_ranking() {
 
     // Test pattern ranking
     let rankings = engine.rank_patterns_advanced(&mut patterns, &criteria);
-    assert_eq!(rankings.len(), patterns.len(), "Rankings should match pattern count");
+    assert_eq!(
+        rankings.len(),
+        patterns.len(),
+        "Rankings should match pattern count"
+    );
 
     // Verify ranking properties
     for ranking in &rankings {
-        assert!(ranking.overall_score >= 0.0, "Overall score should be non-negative");
-        assert!(!ranking.component_scores.is_empty(), "Component scores should not be empty");
-        assert!(!ranking.ranking_explanation.is_empty(), "Explanation should not be empty");
+        assert!(
+            ranking.overall_score >= 0.0,
+            "Overall score should be non-negative"
+        );
+        assert!(
+            !ranking.component_scores.is_empty(),
+            "Component scores should not be empty"
+        );
+        assert!(
+            !ranking.ranking_explanation.is_empty(),
+            "Explanation should not be empty"
+        );
     }
 
     // Verify rankings are sorted (descending)
     for i in 1..rankings.len() {
-        assert!(rankings[i-1].overall_score >= rankings[i].overall_score, 
-                "Rankings should be sorted in descending order");
+        assert!(
+            rankings[i - 1].overall_score >= rankings[i].overall_score,
+            "Rankings should be sorted in descending order"
+        );
     }
 }
 
@@ -201,32 +267,53 @@ async fn test_enhanced_statistical_analysis() {
     let analysis = engine.perform_enhanced_statistical_analysis(&patterns);
 
     // Verify basic statistics
-    assert_eq!(analysis.basic_stats.total_patterns, patterns.len(), 
-               "Total patterns should match");
-    assert!(analysis.basic_stats.mean_quality >= 0.0 && analysis.basic_stats.mean_quality <= 1.0, 
-            "Mean quality should be valid");
+    assert_eq!(
+        analysis.basic_stats.total_patterns,
+        patterns.len(),
+        "Total patterns should match"
+    );
+    assert!(
+        analysis.basic_stats.mean_quality >= 0.0 && analysis.basic_stats.mean_quality <= 1.0,
+        "Mean quality should be valid"
+    );
 
     // Verify distribution analysis
-    assert_eq!(analysis.distribution_analysis.quality_distribution.len(), patterns.len(), 
-               "Quality distribution should match pattern count");
+    assert_eq!(
+        analysis.distribution_analysis.quality_distribution.len(),
+        patterns.len(),
+        "Quality distribution should match pattern count"
+    );
 
     // Verify outlier detection
-    assert!(analysis.outlier_detection.outlier_scores.len() == patterns.len(), 
-            "Outlier scores should match pattern count");
-    assert!(!analysis.outlier_detection.detection_method.is_empty(), 
-            "Detection method should be specified");
+    assert!(
+        analysis.outlier_detection.outlier_scores.len() == patterns.len(),
+        "Outlier scores should match pattern count"
+    );
+    assert!(
+        !analysis.outlier_detection.detection_method.is_empty(),
+        "Detection method should be specified"
+    );
 
     // Verify clustering analysis
-    assert_eq!(analysis.clustering_analysis.cluster_assignments.len(), patterns.len(), 
-               "Cluster assignments should match pattern count");
-    assert!(analysis.clustering_analysis.num_clusters > 0, 
-            "Should have at least one cluster");
+    assert_eq!(
+        analysis.clustering_analysis.cluster_assignments.len(),
+        patterns.len(),
+        "Cluster assignments should match pattern count"
+    );
+    assert!(
+        analysis.clustering_analysis.num_clusters > 0,
+        "Should have at least one cluster"
+    );
 
     // Verify diversity metrics
-    assert!(analysis.diversity_metrics.simpson_diversity >= 0.0, 
-            "Simpson diversity should be non-negative");
-    assert!(analysis.diversity_metrics.shannon_diversity >= 0.0, 
-            "Shannon diversity should be non-negative");
+    assert!(
+        analysis.diversity_metrics.simpson_diversity >= 0.0,
+        "Simpson diversity should be non-negative"
+    );
+    assert!(
+        analysis.diversity_metrics.shannon_diversity >= 0.0,
+        "Shannon diversity should be non-negative"
+    );
 }
 
 /// Test integration with ShaclAiAssistant
@@ -236,11 +323,16 @@ async fn test_shacl_ai_integration() {
 
     // Test that assistant can be created and basic functions work
     let ai_config = assistant.config();
-    assert!(ai_config.learning.max_shapes >= 1, "Should allow at least one shape");
+    assert!(
+        ai_config.learning.max_shapes >= 1,
+        "Should allow at least one shape"
+    );
 
     // Test basic functionality
-    assert!(format!("{:?}", assistant).contains("ShaclAiAssistant"), 
-            "Assistant should be properly formatted");
+    assert!(
+        format!("{:?}", assistant).contains("ShaclAiAssistant"),
+        "Assistant should be properly formatted"
+    );
 }
 
 /// Test cache pattern storage and retrieval
@@ -251,7 +343,7 @@ async fn test_cache_pattern_operations() {
 
     // Test cache key generation and pattern storage
     let cache_key = "test_patterns_key";
-    
+
     // First try to get patterns (should be empty)
     let cached_patterns = engine.get_cached_patterns(cache_key);
     assert!(cached_patterns.is_none(), "Cache should be empty initially");
@@ -268,10 +360,17 @@ async fn test_cache_pattern_operations() {
 
         // Try to retrieve cached patterns
         let retrieved_patterns = engine.get_cached_patterns(cache_key);
-        assert!(retrieved_patterns.is_some(), "Cached patterns should be retrievable");
+        assert!(
+            retrieved_patterns.is_some(),
+            "Cached patterns should be retrievable"
+        );
 
         let retrieved = retrieved_patterns.unwrap();
-        assert_eq!(retrieved.len(), patterns.len(), "Retrieved patterns should match stored patterns");
+        assert_eq!(
+            retrieved.len(),
+            patterns.len(),
+            "Retrieved patterns should match stored patterns"
+        );
     }
 }
 
@@ -279,7 +378,7 @@ async fn test_cache_pattern_operations() {
 #[tokio::test]
 async fn test_pattern_mining_error_handling() {
     let config = AdvancedPatternMiningConfig {
-        min_support: -1.0, // Invalid support value
+        min_support: -1.0,   // Invalid support value
         min_confidence: 2.0, // Invalid confidence value
         ..Default::default()
     };
@@ -290,13 +389,17 @@ async fn test_pattern_mining_error_handling() {
     // These operations should handle invalid configuration gracefully
     let sequential_result = engine.mine_sequential_patterns(&*store, None, 0.5);
     // Should either succeed with corrected values or handle gracefully
-    assert!(sequential_result.is_ok() || sequential_result.is_err(), 
-            "Should handle invalid config gracefully");
+    assert!(
+        sequential_result.is_ok() || sequential_result.is_err(),
+        "Should handle invalid config gracefully"
+    );
 
     let graph_result = engine.mine_graph_patterns(&*store, None, 0);
     // Should either succeed or handle zero max_pattern_size gracefully
-    assert!(graph_result.is_ok() || graph_result.is_err(), 
-            "Should handle zero max size gracefully");
+    assert!(
+        graph_result.is_ok() || graph_result.is_err(),
+        "Should handle zero max size gracefully"
+    );
 }
 
 /// Create a mock store for testing
@@ -315,7 +418,7 @@ impl MockStore {
     fn new() -> Self {
         // Create some sample quads for testing
         let quads = Vec::new();
-        
+
         // Add sample triples as quads
         // This is simplified - in real implementation would have proper RDF data
         Self { quads }

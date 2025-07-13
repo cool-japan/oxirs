@@ -305,11 +305,12 @@ impl RealTimeEmbeddingPipeline {
         // Check stream processors health
         // First, collect processor names to avoid holding lock during async calls
         let processor_names: Vec<String> = {
-            let processors = self.stream_processors
-                .read()
-                .map_err(|_| PipelineError::CoordinationError {
-                    message: "Failed to acquire stream processors lock".to_string(),
-                })?;
+            let processors =
+                self.stream_processors
+                    .read()
+                    .map_err(|_| PipelineError::CoordinationError {
+                        message: "Failed to acquire stream processors lock".to_string(),
+                    })?;
             processors.keys().cloned().collect()
         };
 
@@ -317,8 +318,8 @@ impl RealTimeEmbeddingPipeline {
         // TODO: Implement proper async health checking mechanism
         for name in processor_names {
             components.insert(
-                format!("stream_processor_{name}"), 
-                crate::real_time_embedding_pipeline::traits::HealthStatus::Healthy
+                format!("stream_processor_{name}"),
+                crate::real_time_embedding_pipeline::traits::HealthStatus::Healthy,
             );
         }
 

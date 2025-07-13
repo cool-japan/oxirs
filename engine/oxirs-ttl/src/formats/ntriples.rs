@@ -4,7 +4,7 @@
 //! This implementation provides both streaming parsing and serialization capabilities.
 
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
-use crate::toolkit::{FormattedWriter, Parser, ParsingContext, SerializationConfig, Serializer};
+use crate::toolkit::{FormattedWriter, Parser, SerializationConfig, Serializer};
 use oxirs_core::model::{BlankNode, Literal, NamedNode, Object, Predicate, Subject, Triple};
 use std::io::{BufRead, BufReader, Read, Write};
 
@@ -78,7 +78,7 @@ impl NTriplesParser {
         let mut in_quotes = false;
         let mut escaped = false;
 
-        for (i, ch) in line.char_indices() {
+        for (_i, ch) in line.char_indices() {
             if escaped {
                 current_token.push(ch);
                 escaped = false;
@@ -124,15 +124,14 @@ impl NTriplesParser {
     fn parse_subject(&self, token: &str, line_number: usize) -> TurtleResult<Subject> {
         if token.starts_with('<') && token.ends_with('>') {
             let iri = &token[1..token.len() - 1];
-            let named_node = NamedNode::new(iri).map_err(|e| TurtleParseError::model(e))?;
+            let named_node = NamedNode::new(iri).map_err(TurtleParseError::model)?;
             Ok(Subject::NamedNode(named_node))
-        } else if token.starts_with("_:") {
-            let id = &token[2..];
-            let blank_node = BlankNode::new(id).map_err(|e| TurtleParseError::model(e))?;
+        } else if let Some(id) = token.strip_prefix("_:") {
+            let blank_node = BlankNode::new(id).map_err(TurtleParseError::model)?;
             Ok(Subject::BlankNode(blank_node))
         } else {
             Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
-                message: format!("Invalid subject: {}", token),
+                message: format!("Invalid subject: {token}"),
                 position: TextPosition::new(line_number, 1, 0),
             }))
         }
@@ -142,11 +141,11 @@ impl NTriplesParser {
     fn parse_predicate(&self, token: &str, line_number: usize) -> TurtleResult<Predicate> {
         if token.starts_with('<') && token.ends_with('>') {
             let iri = &token[1..token.len() - 1];
-            let named_node = NamedNode::new(iri).map_err(|e| TurtleParseError::model(e))?;
+            let named_node = NamedNode::new(iri).map_err(TurtleParseError::model)?;
             Ok(Predicate::NamedNode(named_node))
         } else {
             Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
-                message: format!("Invalid predicate: {}", token),
+                message: format!("Invalid predicate: {token}"),
                 position: TextPosition::new(line_number, 1, 0),
             }))
         }
@@ -156,17 +155,16 @@ impl NTriplesParser {
     fn parse_object(&self, token: &str, line_number: usize) -> TurtleResult<Object> {
         if token.starts_with('<') && token.ends_with('>') {
             let iri = &token[1..token.len() - 1];
-            let named_node = NamedNode::new(iri).map_err(|e| TurtleParseError::model(e))?;
+            let named_node = NamedNode::new(iri).map_err(TurtleParseError::model)?;
             Ok(Object::NamedNode(named_node))
-        } else if token.starts_with("_:") {
-            let id = &token[2..];
-            let blank_node = BlankNode::new(id).map_err(|e| TurtleParseError::model(e))?;
+        } else if let Some(id) = token.strip_prefix("_:") {
+            let blank_node = BlankNode::new(id).map_err(TurtleParseError::model)?;
             Ok(Object::BlankNode(blank_node))
         } else if token.starts_with('"') {
             self.parse_literal(token, line_number)
         } else {
             Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
-                message: format!("Invalid object: {}", token),
+                message: format!("Invalid object: {token}"),
                 position: TextPosition::new(line_number, 1, 0),
             }))
         }
@@ -186,15 +184,15 @@ impl NTriplesParser {
         let mut escaped = false;
         let chars: Vec<char> = token.chars().collect();
 
-        for i in 1..chars.len() {
+        for (i, &char) in chars.iter().enumerate().skip(1) {
             if escaped {
                 escaped = false;
                 continue;
             }
 
-            if chars[i] == '\\' {
+            if char == '\\' {
                 escaped = true;
-            } else if chars[i] == '"' {
+            } else if char == '"' {
                 end_quote = Some(i);
                 break;
             }
@@ -218,21 +216,20 @@ impl NTriplesParser {
             // Simple string literal
             let literal = Literal::new_simple_literal(&unescaped_value);
             Ok(Object::Literal(literal))
-        } else if remainder.starts_with('@') {
+        } else if let Some(language) = remainder.strip_prefix('@') {
             // Language-tagged literal
-            let language = &remainder[1..];
             let literal = Literal::new_language_tagged_literal(&unescaped_value, language)
                 .map_err(|e| TurtleParseError::model(e.into()))?;
             Ok(Object::Literal(literal))
         } else if remainder.starts_with("^^<") && remainder.ends_with('>') {
             // Typed literal
             let datatype_iri = &remainder[3..remainder.len() - 1];
-            let datatype = NamedNode::new(datatype_iri).map_err(|e| TurtleParseError::model(e))?;
+            let datatype = NamedNode::new(datatype_iri).map_err(TurtleParseError::model)?;
             let literal = Literal::new_typed_literal(&unescaped_value, datatype);
             Ok(Object::Literal(literal))
         } else {
             Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
-                message: format!("Invalid literal suffix: {}", remainder),
+                message: format!("Invalid literal suffix: {remainder}"),
                 position: TextPosition::new(line_number, end_quote + 1, 0),
             }))
         }
@@ -260,7 +257,7 @@ impl NTriplesParser {
                             } else {
                                 return Err(TurtleParseError::syntax(
                                     TurtleSyntaxError::InvalidEscape {
-                                        sequence: format!("u{}", code),
+                                        sequence: format!("u{code}"),
                                         position: TextPosition::start(),
                                     },
                                 ));
@@ -268,7 +265,7 @@ impl NTriplesParser {
                         }
                         let code_point = u32::from_str_radix(&code, 16).map_err(|_| {
                             TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
-                                sequence: format!("u{}", code),
+                                sequence: format!("u{code}"),
                                 position: TextPosition::start(),
                             })
                         })?;
@@ -289,7 +286,7 @@ impl NTriplesParser {
                             } else {
                                 return Err(TurtleParseError::syntax(
                                     TurtleSyntaxError::InvalidEscape {
-                                        sequence: format!("U{}", code),
+                                        sequence: format!("U{code}"),
                                         position: TextPosition::start(),
                                     },
                                 ));
@@ -297,7 +294,7 @@ impl NTriplesParser {
                         }
                         let code_point = u32::from_str_radix(&code, 16).map_err(|_| {
                             TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
-                                sequence: format!("U{}", code),
+                                sequence: format!("U{code}"),
                                 position: TextPosition::start(),
                             })
                         })?;
@@ -509,7 +506,7 @@ impl NTriplesSerializer {
 
                 if let Some(language) = literal.language() {
                     writer
-                        .write_str(&format!("@{}", language))
+                        .write_str(&format!("@{language}"))
                         .map_err(TurtleParseError::io)?;
                 } else if literal.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
                     writer
@@ -534,7 +531,7 @@ impl NTriplesSerializer {
 }
 
 impl Serializer<Triple> for NTriplesSerializer {
-    fn serialize<W: Write>(&self, triples: &[Triple], mut writer: W) -> TurtleResult<()> {
+    fn serialize<W: Write>(&self, triples: &[Triple], writer: W) -> TurtleResult<()> {
         let mut formatted_writer = FormattedWriter::new(writer, self.config.clone());
 
         for triple in triples {

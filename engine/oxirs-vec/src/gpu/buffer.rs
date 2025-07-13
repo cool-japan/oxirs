@@ -27,22 +27,14 @@ impl GpuBuffer {
         if data.len() > self.size {
             return Err(anyhow!("Data size exceeds buffer capacity"));
         }
-        self.copy_host_to_device(
-            data.as_ptr(),
-            self.ptr,
-            std::mem::size_of_val(data),
-        )
+        self.copy_host_to_device(data.as_ptr(), self.ptr, std::mem::size_of_val(data))
     }
 
     pub fn copy_to_host(&self, data: &mut [f32]) -> Result<()> {
         if data.len() > self.size {
             return Err(anyhow!("Host buffer too small"));
         }
-        self.copy_device_to_host(
-            self.ptr,
-            data.as_mut_ptr(),
-            std::mem::size_of_val(data),
-        )
+        self.copy_device_to_host(self.ptr, data.as_mut_ptr(), std::mem::size_of_val(data))
     }
 
     #[allow(unused_variables)]

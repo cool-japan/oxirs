@@ -397,14 +397,8 @@ mod tests {
 
     #[test]
     fn test_xsd_date_time_datatypes() {
-        assert_eq!(
-            xsd::DATE.as_str(),
-            "http://www.w3.org/2001/XMLSchema#date"
-        );
-        assert_eq!(
-            xsd::TIME.as_str(),
-            "http://www.w3.org/2001/XMLSchema#time"
-        );
+        assert_eq!(xsd::DATE.as_str(), "http://www.w3.org/2001/XMLSchema#date");
+        assert_eq!(xsd::TIME.as_str(), "http://www.w3.org/2001/XMLSchema#time");
         assert_eq!(
             xsd::DATE_TIME.as_str(),
             "http://www.w3.org/2001/XMLSchema#dateTime"
@@ -441,10 +435,7 @@ mod tests {
             xsd::G_MONTH_DAY.as_str(),
             "http://www.w3.org/2001/XMLSchema#gMonthDay"
         );
-        assert_eq!(
-            xsd::G_DAY.as_str(),
-            "http://www.w3.org/2001/XMLSchema#gDay"
-        );
+        assert_eq!(xsd::G_DAY.as_str(), "http://www.w3.org/2001/XMLSchema#gDay");
     }
 
     #[test]
@@ -461,19 +452,13 @@ mod tests {
 
     #[test]
     fn test_xsd_integer_datatypes() {
-        assert_eq!(
-            xsd::LONG.as_str(),
-            "http://www.w3.org/2001/XMLSchema#long"
-        );
+        assert_eq!(xsd::LONG.as_str(), "http://www.w3.org/2001/XMLSchema#long");
         assert_eq!(xsd::INT.as_str(), "http://www.w3.org/2001/XMLSchema#int");
         assert_eq!(
             xsd::SHORT.as_str(),
             "http://www.w3.org/2001/XMLSchema#short"
         );
-        assert_eq!(
-            xsd::BYTE.as_str(),
-            "http://www.w3.org/2001/XMLSchema#byte"
-        );
+        assert_eq!(xsd::BYTE.as_str(), "http://www.w3.org/2001/XMLSchema#byte");
         assert_eq!(
             xsd::UNSIGNED_LONG.as_str(),
             "http://www.w3.org/2001/XMLSchema#unsignedLong"
@@ -585,10 +570,7 @@ mod tests {
 
     #[test]
     fn test_owl_vocabulary() {
-        assert_eq!(
-            owl::CLASS.as_str(),
-            "http://www.w3.org/2002/07/owl#Class"
-        );
+        assert_eq!(owl::CLASS.as_str(), "http://www.w3.org/2002/07/owl#Class");
         assert_eq!(
             owl::OBJECT_PROPERTY.as_str(),
             "http://www.w3.org/2002/07/owl#ObjectProperty"

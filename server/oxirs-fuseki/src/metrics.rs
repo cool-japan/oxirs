@@ -2,12 +2,7 @@
 
 use crate::config::MonitoringConfig;
 use crate::error::{FusekiError, FusekiResult};
-use axum::{
-    extract::State,
-    response::IntoResponse,
-    routing::get,
-    Json, Router,
-};
+use axum::{extract::State, response::IntoResponse, routing::get, Json, Router};
 use metrics::{counter, describe_counter, describe_gauge, describe_histogram, gauge, histogram};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -209,7 +204,7 @@ impl MetricsService {
 
         // Health check task
         if config.health_checks.enabled {
-            let registry_clone = Arc::clone(&self.registry);
+            let _registry_clone = Arc::clone(&self.registry);
             let health_config = config.health_checks.clone();
 
             tokio::spawn(async move {
@@ -608,9 +603,9 @@ impl MetricsService {
         let encoder = TextEncoder::new();
         let metric_families = self.prometheus_registry.gather();
 
-        encoder.encode_to_string(&metric_families).map_err(|e| {
-            FusekiError::internal(format!("Failed to encode Prometheus metrics: {e}"))
-        })
+        encoder
+            .encode_to_string(&metric_families)
+            .map_err(|e| FusekiError::internal(format!("Failed to encode Prometheus metrics: {e}")))
     }
 
     /// Create metrics router for HTTP endpoints

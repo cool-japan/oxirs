@@ -239,9 +239,7 @@ impl InteractiveMode {
                 if let Some(suggestion) = suggestions {
                     println!("Unknown command: {cmd}. {suggestion}");
                 } else {
-                    println!(
-                        "Unknown command: {cmd}. Type 'help' for available commands."
-                    );
+                    println!("Unknown command: {cmd}. Type 'help' for available commands.");
                 }
                 Ok(())
             }

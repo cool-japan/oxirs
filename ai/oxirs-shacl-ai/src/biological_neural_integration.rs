@@ -235,7 +235,7 @@ impl BiologicalNeuralIntegrator {
         let mut cultures_established = 0;
         let mut total_neurons = 0;
 
-        for culture_index in 0..self.config.target_culture_count {
+        for _culture_index in 0..self.config.target_culture_count {
             let culture_id = Uuid::new_v4();
             let culture_cluster = CellCultureCluster::new(
                 culture_id,
@@ -266,7 +266,7 @@ impl BiologicalNeuralIntegrator {
         let mut organoids_initialized = 0;
         let mut total_processing_capacity = 0.0;
 
-        for organoid_index in 0..self.config.target_organoid_count {
+        for _organoid_index in 0..self.config.target_organoid_count {
             let organoid_id = Uuid::new_v4();
             let organoid_processor = NeuralOrganoidProcessor::new(
                 organoid_id,
@@ -696,8 +696,8 @@ impl BiologicalNeuralIntegrator {
     /// Create biological validation report
     async fn create_biological_validation_report(
         &self,
-        culture_results: &CellCultureResults,
-        organoid_results: &NeuralOrganoidResults,
+        _culture_results: &CellCultureResults,
+        _organoid_results: &NeuralOrganoidResults,
     ) -> Result<ValidationReport> {
         // Simplified implementation - would create comprehensive bio-validation report
         Ok(ValidationReport::new())

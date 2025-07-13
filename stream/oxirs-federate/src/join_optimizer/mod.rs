@@ -21,7 +21,7 @@ use tracing::info;
 use crate::{
     planner::planning::{FilterExpression as PlanningFilterExpression, TriplePattern},
     service_optimizer::{JoinAlgorithm, JoinOperation, JoinOperationType, JoinPlan},
-    ServiceRegistry,
+    service_registry::ServiceRegistry,
 };
 
 /// Advanced join optimizer for distributed federated queries
@@ -98,7 +98,7 @@ impl DistributedJoinOptimizer {
     async fn build_join_graph(
         &self,
         patterns: &[TriplePattern],
-        filters: &[PlanningFilterExpression],
+        _filters: &[PlanningFilterExpression],
     ) -> Result<JoinGraph> {
         let mut graph = JoinGraph {
             nodes: Vec::new(),
@@ -180,11 +180,10 @@ impl DistributedJoinOptimizer {
     /// Estimate selectivity of a triple pattern
     async fn estimate_selectivity(&self, pattern: &TriplePattern) -> Result<f64> {
         // Simplified selectivity estimation
-        let mut selectivity = 1.0;
 
         // Less selective if more variables
         let var_count = self.extract_variables(pattern).len();
-        selectivity = match var_count {
+        let selectivity = match var_count {
             0 => 0.001, // Ground triple
             1 => 0.01,  // One variable
             2 => 0.1,   // Two variables
@@ -303,7 +302,7 @@ impl DistributedJoinOptimizer {
     async fn optimize_star_join(
         &self,
         graph: &JoinGraph,
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
     ) -> Result<JoinPlan> {
         info!("Applying star join optimization");
 
@@ -369,7 +368,7 @@ impl DistributedJoinOptimizer {
     async fn apply_adaptive_optimizations(
         &self,
         plan: JoinPlan,
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
     ) -> Result<JoinPlan> {
         info!("Applying adaptive optimizations");
 

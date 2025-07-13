@@ -744,8 +744,10 @@ mod tests {
     #[test]
     fn test_node_info_with_metadata() {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-        let mut metadata = NodeMetadata::default();
-        metadata.version = "1.0.0".to_string();
+        let mut metadata = NodeMetadata {
+            version: "1.0.0".to_string(),
+            ..Default::default()
+        };
         metadata.features.insert("raft".to_string());
 
         let node = NodeInfo::with_metadata(1, addr, metadata.clone());

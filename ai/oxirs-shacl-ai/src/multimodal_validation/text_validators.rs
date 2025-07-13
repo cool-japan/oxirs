@@ -251,7 +251,7 @@ impl LanguageDetectionValidator {
     fn calculate_language_confidence(&self, text: &str, _language: &str) -> f64 {
         // Simplified confidence calculation
         let word_count = text.split_whitespace().count() as f64;
-        (word_count / (word_count + 10.0)).max(0.1).min(0.95)
+        (word_count / (word_count + 10.0)).clamp(0.1, 0.95)
     }
 }
 

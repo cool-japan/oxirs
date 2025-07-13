@@ -5,9 +5,7 @@
 
 use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
-use oxirs_core::model::{
-    GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple,
-};
+use oxirs_core::model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple};
 use oxirs_core::{OxirsError, RdfStore};
 use tracing::{debug, info};
 

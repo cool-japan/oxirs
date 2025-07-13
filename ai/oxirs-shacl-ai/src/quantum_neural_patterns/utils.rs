@@ -4,24 +4,20 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 /// Gate count analyzer for circuit complexity
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct GateCountAnalyzer {
     pub total_gates: usize,
     pub gate_types: HashMap<String, usize>,
     pub depth_analysis: Option<String>,
 }
 
-
 /// Circuit depth analyzer
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct CircuitDepthAnalyzer {
     pub total_depth: usize,
     pub critical_path: Vec<String>,
     pub parallelization_opportunities: Vec<String>,
 }
-
 
 /// Connectivity analyzer for quantum hardware
 #[derive(Debug, Clone)]
@@ -42,15 +38,13 @@ impl Default for ConnectivityAnalyzer {
 }
 
 /// Random circuit benchmark results
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct RandomCircuitBenchmark {
     pub circuit_depth: usize,
     pub num_qubits: usize,
     pub fidelity_scores: Vec<f64>,
     pub execution_times: Vec<Duration>,
 }
-
 
 /// Verification protocol for quantum computations
 #[derive(Debug, Clone)]
@@ -71,13 +65,11 @@ impl Default for VerificationProtocol {
 }
 
 /// Von Neumann entropy calculator
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct VonNeumannEntropyCalculator {
     pub entropy_values: Vec<f64>,
     pub subsystem_entropies: HashMap<String, f64>,
 }
-
 
 /// Rényi entropy calculator
 #[derive(Debug, Clone)]
@@ -236,50 +228,40 @@ impl Default for CliffordDataRegressor {
 }
 
 /// Circuit complexity analyzer aggregator
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct CircuitComplexityAnalyzer {
     pub gate_count_analyzer: GateCountAnalyzer,
     pub depth_analyzer: CircuitDepthAnalyzer,
     pub connectivity_analyzer: ConnectivityAnalyzer,
 }
 
-
 /// Quantum benchmarking suite
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct QuantumBenchmarkSuite {
     pub random_circuit_benchmarks: Vec<RandomCircuitBenchmark>,
     pub verification_protocols: Vec<VerificationProtocol>,
 }
 
-
 /// Entanglement entropy calculator aggregator
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct EntanglementEntropyCalculator {
     pub von_neumann_entropy: VonNeumannEntropyCalculator,
     pub renyi_entropy: RenyiEntropyCalculator,
     pub schmidt_decomposition: SchmidtDecomposer,
 }
 
-
 /// Quantum volume estimator
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct QuantumVolumeEstimator {
     pub ideal_simulator: IdealQuantumSimulator,
     pub noise_model: QuantumNoiseModel,
     pub volume_metrics: VolumeMetrics,
 }
 
-
 /// Quantum error mitigator
-#[derive(Debug)]
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct QuantumErrorMitigator {
     pub zero_noise_extrapolation: ZeroNoiseExtrapolator,
     pub symmetry_verification: SymmetryVerifier,
     pub clifford_data_regression: CliffordDataRegressor,
 }
-

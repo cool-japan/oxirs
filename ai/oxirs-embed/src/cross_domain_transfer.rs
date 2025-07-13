@@ -1029,10 +1029,10 @@ impl CrossDomainTransferManager {
         let transfer_time = start_time.elapsed().as_secs_f64();
 
         // Efficiency = (accuracy * domain_similarity) / normalized_time
-        let normalized_time = (transfer_time / 60.0).min(1.0).max(0.01); // Normalize to minutes
+        let normalized_time = (transfer_time / 60.0).clamp(0.01, 1.0); // Normalize to minutes
         let efficiency = (transfer_accuracy * domain_similarity) / normalized_time;
 
-        Ok(efficiency.min(1.0).max(0.0))
+        Ok(efficiency.clamp(0.0, 1.0))
     }
 
     /// Calculate catastrophic forgetting
@@ -1075,7 +1075,7 @@ impl CrossDomainTransferManager {
         } else {
             let avg_forgetting =
                 forgetting_scores.iter().sum::<f64>() / forgetting_scores.len() as f64;
-            Ok(avg_forgetting.min(1.0).max(0.0))
+            Ok(avg_forgetting.clamp(0.0, 1.0))
         }
     }
 
@@ -1124,7 +1124,7 @@ impl CrossDomainTransferManager {
         } else {
             let avg_coherence =
                 coherence_scores.iter().sum::<f64>() / coherence_scores.len() as f64;
-            Ok(avg_coherence.min(1.0).max(0.0))
+            Ok(avg_coherence.clamp(0.0, 1.0))
         }
     }
 

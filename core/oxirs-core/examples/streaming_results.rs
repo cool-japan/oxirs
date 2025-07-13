@@ -277,7 +277,7 @@ fn construct_streaming_example() -> Result<(), OxirsError> {
     let mut count = 0;
 
     while let Ok(Some(triple)) = results.next() {
-        println!("  {}", triple);
+        println!("  {triple}");
         count += 1;
     }
 

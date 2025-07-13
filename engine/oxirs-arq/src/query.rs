@@ -1603,9 +1603,7 @@ impl QueryParser {
         if let Some(base) = self.prefixes.get(prefix) {
             Ok(format!("{base}{local}"))
         } else {
-            bail!(
-                "Undefined prefix '{prefix}' in prefixed name '{prefix}:{local}'"
-            )
+            bail!("Undefined prefix '{prefix}' in prefixed name '{prefix}:{local}'")
         }
     }
 

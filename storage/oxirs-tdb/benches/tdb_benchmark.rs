@@ -3,11 +3,11 @@
 //! This benchmark suite tests the performance of oxirs-tdb with large-scale datasets
 //! to ensure it meets the performance requirements specified in the TODO.
 
+#![allow(clippy::uninlined_format_args, unused_variables)]
+
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
 use oxirs_tdb::{
-    compression::{
-        AdaptiveCompressor, CompressionAlgorithm,
-    },
+    compression::{AdaptiveCompressor, CompressionAlgorithm},
     SimpleTdbConfig, TdbStore, Term,
 };
 use rand::prelude::*;
@@ -17,10 +17,7 @@ use tempfile::TempDir;
 
 /// Generate random terms for benchmarking
 fn generate_random_triple(rng: &mut impl Rng) -> (Term, Term, Term) {
-    let subject = Term::iri(format!(
-        "http://example.org/subject/{}",
-        rng.r#gen::<u64>()
-    ));
+    let subject = Term::iri(format!("http://example.org/subject/{}", rng.r#gen::<u64>()));
     let predicate = Term::iri(format!(
         "http://example.org/predicate/{}",
         rng.r#gen::<u8>()
@@ -211,8 +208,7 @@ fn bench_concurrent(c: &mut Criterion) {
                 .map(|i| {
                     let store = Arc::clone(&store);
                     std::thread::spawn(move || {
-                        let subject =
-                            Term::iri(format!("http://example.org/subject/{}", i * 1000));
+                        let subject = Term::iri(format!("http://example.org/subject/{}", i * 1000));
                         let results = store.query_triples(Some(&subject), None, None).unwrap();
                         black_box(results);
                     })
@@ -565,25 +561,31 @@ fn bench_real_world_patterns(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
 
     // FOAF-like data
-    let foaf_predicates = ["http://xmlns.com/foaf/0.1/name",
+    let foaf_predicates = [
+        "http://xmlns.com/foaf/0.1/name",
         "http://xmlns.com/foaf/0.1/email",
         "http://xmlns.com/foaf/0.1/knows",
         "http://xmlns.com/foaf/0.1/age",
-        "http://xmlns.com/foaf/0.1/homepage"];
+        "http://xmlns.com/foaf/0.1/homepage",
+    ];
 
     // Schema.org-like data
-    let schema_predicates = ["http://schema.org/name",
+    let schema_predicates = [
+        "http://schema.org/name",
         "http://schema.org/description",
         "http://schema.org/dateCreated",
         "http://schema.org/author",
-        "http://schema.org/url"];
+        "http://schema.org/url",
+    ];
 
     // Dublin Core metadata
-    let dc_predicates = ["http://purl.org/dc/terms/title",
+    let dc_predicates = [
+        "http://purl.org/dc/terms/title",
         "http://purl.org/dc/terms/creator",
         "http://purl.org/dc/terms/subject",
         "http://purl.org/dc/terms/date",
-        "http://purl.org/dc/terms/identifier"];
+        "http://purl.org/dc/terms/identifier",
+    ];
 
     // Insert 1M triples with realistic distribution
     group.bench_function("load_knowledge_graph", |b| {
@@ -606,9 +608,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                     if used_predicates.insert(predicate_str) {
                         let predicate = Term::iri(*predicate_str);
                         let object = match predicate_str {
-                            s if s.contains("name") => {
-                                Term::literal(format!("Person {person_id}"))
-                            }
+                            s if s.contains("name") => Term::literal(format!("Person {person_id}")),
                             s if s.contains("email") => {
                                 Term::literal(format!("person{person_id}@example.com"))
                             }
@@ -656,9 +656,7 @@ fn bench_real_world_patterns(c: &mut Criterion) {
                 for predicate_str in schema_predicates.choose_multiple(&mut rng, 4) {
                     let predicate = Term::iri(*predicate_str);
                     let object = match predicate_str {
-                        s if s.contains("name") => {
-                            Term::literal(format!("Product {product_id}"))
-                        }
+                        s if s.contains("name") => Term::literal(format!("Product {product_id}")),
                         s if s.contains("description") => {
                             Term::literal(format!("Description for product {product_id}"))
                         }

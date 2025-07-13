@@ -156,7 +156,7 @@ impl RealTimeMetricsCollector {
 
         // Calculate health score (lower is better for error rate, resource usage)
         let health = 1.0 - (avg_error_rate + (avg_cpu_usage * 0.5) + (avg_memory_usage * 0.3));
-        health.max(0.0).min(1.0)
+        health.clamp(0.0, 1.0)
     }
 }
 
@@ -251,9 +251,7 @@ impl PerformanceMonitor {
             alert_type: alert_type.clone(),
             timestamp: SystemTime::now(),
             value,
-            message: format!(
-                "Performance threshold exceeded: {alert_type:?} = {value}"
-            ),
+            message: format!("Performance threshold exceeded: {alert_type:?} = {value}"),
         };
 
         for handler in &self.alert_handlers {

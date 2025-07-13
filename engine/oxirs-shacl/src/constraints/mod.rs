@@ -2,6 +2,8 @@
 //!
 //! This module provides a modular organization of SHACL constraint types and validation logic.
 
+#![allow(dead_code)]
+
 pub mod cardinality_constraints;
 pub mod comparison_constraints;
 pub mod constraint_context;

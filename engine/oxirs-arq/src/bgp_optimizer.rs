@@ -62,7 +62,8 @@ impl<'a> BGPOptimizer<'a> {
         let overall_selectivity = self.calculate_overall_selectivity(&pattern_selectivities);
 
         // Step 6: Estimate total cost
-        let estimated_cost = self.estimate_total_cost(&optimized_patterns, &pattern_selectivities)?;
+        let estimated_cost =
+            self.estimate_total_cost(&optimized_patterns, &pattern_selectivities)?;
 
         Ok(OptimizedBGP {
             patterns: optimized_patterns,
@@ -79,31 +80,34 @@ impl<'a> BGPOptimizer<'a> {
     // Private helper methods would go here...
     // For now, providing stub implementations to avoid compilation errors
 
-    fn calculate_pattern_selectivities(&self, _patterns: &[TriplePattern]) -> Result<Vec<PatternSelectivity>> {
+    fn calculate_pattern_selectivities(
+        &self,
+        _patterns: &[TriplePattern],
+    ) -> Result<Vec<PatternSelectivity>> {
         // Implementation would be moved from original file
         Ok(Vec::new())
     }
 
     fn calculate_join_selectivities(
-        &self, 
-        _patterns: &[TriplePattern], 
-        _pattern_selectivities: &[PatternSelectivity]
+        &self,
+        _patterns: &[TriplePattern],
+        _pattern_selectivities: &[PatternSelectivity],
     ) -> Result<HashMap<(usize, usize), f64>> {
         Ok(HashMap::new())
     }
 
     fn reorder_patterns(
-        &self, 
-        patterns: &[TriplePattern], 
-        _pattern_selectivities: &[PatternSelectivity]
+        &self,
+        patterns: &[TriplePattern],
+        _pattern_selectivities: &[PatternSelectivity],
     ) -> Result<Vec<TriplePattern>> {
         Ok(patterns.to_vec())
     }
 
     fn generate_index_plan(
-        &self, 
-        _patterns: &[TriplePattern], 
-        _pattern_selectivities: &[PatternSelectivity]
+        &self,
+        _patterns: &[TriplePattern],
+        _pattern_selectivities: &[PatternSelectivity],
     ) -> Result<IndexUsagePlan> {
         Ok(IndexUsagePlan {
             pattern_indexes: Vec::new(),
@@ -121,9 +125,9 @@ impl<'a> BGPOptimizer<'a> {
     }
 
     fn estimate_total_cost(
-        &self, 
-        _patterns: &[TriplePattern], 
-        _pattern_selectivities: &[PatternSelectivity]
+        &self,
+        _patterns: &[TriplePattern],
+        _pattern_selectivities: &[PatternSelectivity],
     ) -> Result<f64> {
         Ok(1.0)
     }
@@ -134,18 +138,22 @@ impl<'a> BGPOptimizer<'a> {
 mod tests {
     use super::*;
     use crate::optimizer::{IndexStatistics, Statistics};
-    
+
     fn create_test_statistics() -> Statistics {
-        let mut stats = Statistics { total_queries: 1000, ..Default::default() };
-        
+        let mut stats = Statistics {
+            total_queries: 1000,
+            ..Default::default()
+        };
+
         // Add some sample predicate frequencies
-        stats
-            .predicate_frequency
-            .insert("http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(), 100);
+        stats.predicate_frequency.insert(
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type".to_string(),
+            100,
+        );
         stats
             .predicate_frequency
             .insert("http://xmlns.com/foaf/0.1/name".to_string(), 80);
-        
+
         // Add sample subject cardinalities
         stats
             .subject_cardinality
@@ -153,7 +161,7 @@ mod tests {
         stats
             .subject_cardinality
             .insert("http://example.org/person/2".to_string(), 15);
-        
+
         stats
     }
 

@@ -3,6 +3,8 @@
 //! Demonstrates the core functionality of the oxirs-tdb storage engine,
 //! including RDF triple storage, MVCC transactions, and querying.
 
+#![allow(unused_imports, unused_variables, clippy::uninlined_format_args)]
+
 use anyhow::Result;
 use oxirs_tdb::{SimpleTdbConfig, TdbStore, Term, TripleStoreStats};
 

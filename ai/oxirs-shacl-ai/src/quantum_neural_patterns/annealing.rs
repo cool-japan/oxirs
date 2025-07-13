@@ -36,7 +36,7 @@ impl QuantumAnnealer {
     }
 
     /// Optimize quantum patterns using quantum annealing
-    pub fn anneal_patterns(&mut self, patterns: &mut Vec<QuantumPattern>) -> Result<f64> {
+    pub fn anneal_patterns(&mut self, patterns: &mut [QuantumPattern]) -> Result<f64> {
         let mut best_energy = f64::INFINITY;
 
         for &annealing_parameter in &self.schedule.clone() {

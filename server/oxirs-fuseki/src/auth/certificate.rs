@@ -188,9 +188,8 @@ impl CertificateAuthService {
 
         if pattern.contains('*') {
             let regex_pattern = pattern.replace('*', ".*");
-            let regex = regex::Regex::new(&regex_pattern).map_err(|e| {
-                FusekiError::configuration(format!("Invalid issuer pattern: {e}"))
-            })?;
+            let regex = regex::Regex::new(&regex_pattern)
+                .map_err(|e| FusekiError::configuration(format!("Invalid issuer pattern: {e}")))?;
             Ok(regex.is_match(issuer_dn))
         } else {
             Ok(issuer_dn == pattern)
@@ -279,8 +278,8 @@ impl CertificateAuthService {
         // Simple DN parsing - extract CN
         for component in dn.split(',') {
             let component = component.trim();
-            if component.starts_with("CN=") {
-                return Ok(component[3..].to_string());
+            if let Some(stripped) = component.strip_prefix("CN=") {
+                return Ok(stripped.to_string());
             }
         }
 
@@ -312,8 +311,8 @@ impl CertificateAuthService {
     fn extract_common_name_from_dn(&self, dn: &str) -> FusekiResult<String> {
         for component in dn.split(',') {
             let component = component.trim();
-            if component.starts_with("CN=") {
-                return Ok(component[3..].to_string());
+            if let Some(stripped) = component.strip_prefix("CN=") {
+                return Ok(stripped.to_string());
             }
         }
 

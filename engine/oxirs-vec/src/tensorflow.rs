@@ -1,7 +1,9 @@
 //! TensorFlow integration for embedding generation and model serving
 
-use crate::{EmbeddingConfig, Vector};
-use crate::real_time_embedding_pipeline::traits::{EmbeddingGenerator, ContentItem, ProcessingResult, ProcessingStatus, GeneratorStatistics};
+use crate::real_time_embedding_pipeline::traits::{
+    ContentItem, EmbeddingGenerator, GeneratorStatistics, ProcessingResult, ProcessingStatus,
+};
+use crate::Vector;
 use anyhow::{anyhow, Result};
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
@@ -149,7 +151,10 @@ impl TensorFlowEmbedder {
     /// Load and initialize the TensorFlow model
     pub fn load_model(&mut self) -> Result<()> {
         if !self.config.model_path.exists() {
-            return Err(anyhow!("Model path does not exist: {:?}", self.config.model_path));
+            return Err(anyhow!(
+                "Model path does not exist: {:?}",
+                self.config.model_path
+            ));
         }
 
         // Mock model loading - in a real implementation, this would use tensorflow-rust
@@ -225,7 +230,9 @@ impl TensorFlowEmbedder {
 
     /// Run TensorFlow inference (mock implementation)
     fn run_inference(&self, text: &str) -> Result<Vec<f32>> {
-        let model_info = self.model_info.as_ref()
+        let model_info = self
+            .model_info
+            .as_ref()
             .ok_or_else(|| anyhow!("Model info not available"))?;
 
         // Mock inference - generate random embeddings
@@ -307,14 +314,14 @@ impl TensorFlowModelServer {
     /// Register a model with the server
     pub fn register_model(&mut self, name: String, embedder: TensorFlowEmbedder) -> Result<()> {
         self.models.insert(name.clone(), embedder);
-        
+
         if self.server_config.model_warming {
             if let Some(model) = self.models.get(&name) {
                 // Warm up the model with a test embedding
                 let _ = model.embed_text("warmup text");
             }
         }
-        
+
         Ok(())
     }
 
@@ -325,7 +332,9 @@ impl TensorFlowModelServer {
 
     /// Generate embeddings using a specific model
     pub fn embed_with_model(&self, model_name: &str, texts: &[String]) -> Result<Vec<Vector>> {
-        let model = self.models.get(model_name)
+        let model = self
+            .models
+            .get(model_name)
             .ok_or_else(|| anyhow!("Model not found: {}", model_name))?;
 
         if self.server_config.request_batching && texts.len() > 1 {
@@ -362,12 +371,12 @@ impl EmbeddingGenerator for TensorFlowEmbedder {
 
     fn generate_batch_embeddings(&self, content: &[ContentItem]) -> Result<Vec<ProcessingResult>> {
         let mut results = Vec::new();
-        
+
         for item in content {
             let start_time = Instant::now();
             let vector_result = self.generate_embedding(item);
             let duration = start_time.elapsed();
-            
+
             let result = match vector_result {
                 Ok(vector) => ProcessingResult {
                     item: item.clone(),
@@ -388,10 +397,10 @@ impl EmbeddingGenerator for TensorFlowEmbedder {
                     metadata: HashMap::new(),
                 },
             };
-            
+
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
@@ -419,6 +428,7 @@ impl EmbeddingGenerator for TensorFlowEmbedder {
 }
 
 #[cfg(test)]
+#[allow(unused_imports, clippy::useless_vec)]
 mod tests {
     use super::*;
     use std::path::PathBuf;
@@ -447,31 +457,26 @@ mod tests {
             ..Default::default()
         };
         embedder.set_preprocessing_pipeline(pipeline);
-        
+
         let processed = embedder.preprocess_text("Hello, World!").unwrap();
         assert_eq!(processed, "hello world");
     }
 
     #[test]
     fn test_model_server_creation() {
-        let server = TensorFlowModelServer::new(
-            "default".to_string(),
-            ServerConfig::default()
-        );
+        let server = TensorFlowModelServer::new("default".to_string(), ServerConfig::default());
         assert_eq!(server.default_model, "default");
         assert!(server.list_models().is_empty());
     }
 
     #[test]
     fn test_model_registration() {
-        let mut server = TensorFlowModelServer::new(
-            "test_model".to_string(),
-            ServerConfig::default()
-        );
-        
+        let mut server =
+            TensorFlowModelServer::new("test_model".to_string(), ServerConfig::default());
+
         let config = TensorFlowConfig::default();
         let embedder = TensorFlowEmbedder::new(config).unwrap();
-        
+
         let result = server.register_model("test_model".to_string(), embedder);
         assert!(result.is_ok());
         assert_eq!(server.list_models().len(), 1);
@@ -498,9 +503,14 @@ mod tests {
 
     #[test]
     fn test_device_configuration() {
-        let cpu_device = TensorFlowDevice::Cpu { num_threads: Some(4) };
-        let gpu_device = TensorFlowDevice::Gpu { device_id: 0, memory_growth: true };
-        
+        let cpu_device = TensorFlowDevice::Cpu {
+            num_threads: Some(4),
+        };
+        let gpu_device = TensorFlowDevice::Gpu {
+            device_id: 0,
+            memory_growth: true,
+        };
+
         assert!(matches!(cpu_device, TensorFlowDevice::Cpu { .. }));
         assert!(matches!(gpu_device, TensorFlowDevice::Gpu { .. }));
     }

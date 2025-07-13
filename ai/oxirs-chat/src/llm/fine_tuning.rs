@@ -102,8 +102,7 @@ pub enum JobStatus {
 }
 
 /// Training progress tracking
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrainingProgress {
     pub current_epoch: usize,
     pub total_epochs: usize,
@@ -114,10 +113,8 @@ pub struct TrainingProgress {
     pub estimated_time_remaining: Option<Duration>,
 }
 
-
 /// Training metrics and evaluation results
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TrainingMetrics {
     pub train_loss: Vec<f32>,
     pub validation_loss: Vec<f32>,
@@ -130,10 +127,8 @@ pub struct TrainingMetrics {
     pub final_model_quality: Option<f32>,
 }
 
-
 /// Job artifacts and outputs
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct JobArtifacts {
     pub model_path: Option<PathBuf>,
     pub checkpoint_paths: Vec<PathBuf>,
@@ -141,7 +136,6 @@ pub struct JobArtifacts {
     pub evaluation_report: Option<PathBuf>,
     pub config_snapshot: Option<PathBuf>,
 }
-
 
 /// Fine-tuning engine for managing training jobs
 pub struct FineTuningEngine {
@@ -307,7 +301,7 @@ impl FineTuningEngine {
         jobs: &std::sync::Arc<RwLock<HashMap<String, FineTuningJob>>>,
     ) -> Result<Vec<TrainingExample>> {
         let jobs_lock = jobs.read().await;
-        let job = jobs_lock
+        let _job = jobs_lock
             .get(job_id)
             .ok_or_else(|| anyhow!("Job not found"))?;
 
@@ -475,7 +469,6 @@ pub struct FineTuningStatistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[tokio::test]
     async fn test_fine_tuning_engine_creation() {

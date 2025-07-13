@@ -500,9 +500,7 @@ impl VisionProcessor {
             .map(|d| format!("Description: {d}"))
             .unwrap_or_default();
 
-        Ok(format!(
-            "{size_analysis}, {format_analysis}, {description}"
-        ))
+        Ok(format!("{size_analysis}, {format_analysis}, {description}"))
     }
 }
 
@@ -583,9 +581,7 @@ impl StructuredProcessor {
             .first()
             .map(|line| line.split(',').count())
             .unwrap_or(0);
-        Ok(format!(
-            "CSV data with {rows} rows and {columns} columns"
-        ))
+        Ok(format!("CSV data with {rows} rows and {columns} columns"))
     }
 
     async fn analyze_rdf(
@@ -742,10 +738,7 @@ impl FusionStrategyTrait for LateFusionStrategy {
         let mut modality_groups: HashMap<String, Vec<&ReasoningStep>> = HashMap::new();
         for step in steps {
             let modality_key = format!("{:?}", step.modality);
-            modality_groups
-                .entry(modality_key)
-                .or_default()
-                .push(step);
+            modality_groups.entry(modality_key).or_default().push(step);
         }
 
         for (modality, modality_steps) in modality_groups {

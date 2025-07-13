@@ -18,6 +18,21 @@ use crate::{
     cache::{AdvancedCacheManager, CacheStats},
 };
 
+/// Parameters for recording a request
+#[derive(Debug, Clone)]
+pub struct RecordRequestParams {
+    pub session_id: String,
+    pub message_id: String,
+    pub response_time: Duration,
+    pub cache_hit: bool,
+    pub cache_type: Option<String>,
+    pub error: Option<String>,
+    pub query_complexity: f32,
+    pub context_size: usize,
+    pub tokens_processed: usize,
+    pub optimization_applied: bool,
+}
+
 /// Performance monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceConfig {
@@ -259,31 +274,19 @@ impl PerformanceMonitor {
     }
 
     /// Record request metrics
-    pub async fn record_request(
-        &self,
-        session_id: String,
-        message_id: String,
-        response_time: Duration,
-        cache_hit: bool,
-        cache_type: Option<String>,
-        error: Option<String>,
-        query_complexity: f32,
-        context_size: usize,
-        tokens_processed: usize,
-        optimization_applied: bool,
-    ) -> Result<()> {
+    pub async fn record_request(&self, params: RecordRequestParams) -> Result<()> {
         let metrics = RequestMetrics {
-            session_id,
-            message_id,
+            session_id: params.session_id,
+            message_id: params.message_id,
             timestamp: SystemTime::now(),
-            response_time,
-            cache_hit,
-            cache_type,
-            error,
-            query_complexity,
-            context_size,
-            tokens_processed,
-            optimization_applied,
+            response_time: params.response_time,
+            cache_hit: params.cache_hit,
+            cache_type: params.cache_type,
+            error: params.error,
+            query_complexity: params.query_complexity,
+            context_size: params.context_size,
+            tokens_processed: params.tokens_processed,
+            optimization_applied: params.optimization_applied,
         };
 
         // Clone metrics for alerts before moving into the collection
@@ -656,7 +659,7 @@ impl PerformanceMonitor {
     /// Static version of analyze_bottlenecks for use in async tasks
     async fn analyze_bottlenecks_static(
         request_metrics: &Arc<RwLock<VecDeque<RequestMetrics>>>,
-        cache_manager: &Arc<AdvancedCacheManager>,
+        _cache_manager: &Arc<AdvancedCacheManager>,
         config: &PerformanceConfig,
     ) -> Result<BottleneckAnalysis> {
         let metrics =

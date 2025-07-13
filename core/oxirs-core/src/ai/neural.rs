@@ -129,7 +129,11 @@ impl NeuralLayer for LinearLayer {
     fn parameters(&self) -> Vec<Array2<f32>> {
         vec![
             self.weight.clone(),
-            self.bias.clone().into_shape((self.output_dim, 1)).unwrap(),
+            self.bias
+                .clone()
+                .to_shape((self.output_dim, 1))
+                .unwrap()
+                .to_owned(),
         ]
     }
 
@@ -139,7 +143,7 @@ impl NeuralLayer for LinearLayer {
         }
 
         self.weight = params[0].clone();
-        self.bias = params[1].clone().into_shape(self.output_dim)?;
+        self.bias = params[1].clone().to_shape(self.output_dim)?.to_owned();
 
         Ok(())
     }
@@ -267,12 +271,14 @@ impl NeuralLayer for BatchNormLayer {
         vec![
             self.gamma
                 .clone()
-                .into_shape((self.num_features, 1))
-                .unwrap(),
+                .to_shape((self.num_features, 1))
+                .unwrap()
+                .to_owned(),
             self.beta
                 .clone()
-                .into_shape((self.num_features, 1))
-                .unwrap(),
+                .to_shape((self.num_features, 1))
+                .unwrap()
+                .to_owned(),
         ]
     }
 
@@ -281,8 +287,8 @@ impl NeuralLayer for BatchNormLayer {
             return Err(anyhow::anyhow!("BatchNorm layer expects 2 parameters"));
         }
 
-        self.gamma = params[0].clone().into_shape(self.num_features)?;
-        self.beta = params[1].clone().into_shape(self.num_features)?;
+        self.gamma = params[0].clone().to_shape(self.num_features)?.to_owned();
+        self.beta = params[1].clone().to_shape(self.num_features)?.to_owned();
 
         Ok(())
     }

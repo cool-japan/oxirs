@@ -96,10 +96,10 @@ impl<'a> PatternAlgorithms<'a> {
 
         // Extract itemsets from property-class combinations
         let itemsets = self.extract_property_class_itemsets(store, graph_name)?;
-        
+
         // Find frequent 1-itemsets
         let frequent_1_itemsets = self.find_frequent_1_itemsets(&itemsets)?;
-        
+
         // Generate patterns from frequent 1-itemsets
         for (item, count) in frequent_1_itemsets.iter() {
             let support = *count as f64 / itemsets.len() as f64;
@@ -119,17 +119,28 @@ impl<'a> PatternAlgorithms<'a> {
 
         // Find frequent 2-itemsets for co-occurrence patterns
         let frequent_2_itemsets = self.find_frequent_2_itemsets(&itemsets, &frequent_1_itemsets)?;
-        
+
         for ((item1, item2), count) in frequent_2_itemsets.iter() {
             let support = *count as f64 / itemsets.len() as f64;
             if support >= self.config.min_support_threshold {
                 patterns.push(Pattern::AssociationRule {
-                    id: format!("frequent_2_itemset_{}_{}_{}", item1, item2, uuid::Uuid::new_v4()),
+                    id: format!(
+                        "frequent_2_itemset_{}_{}_{}",
+                        item1,
+                        item2,
+                        uuid::Uuid::new_v4()
+                    ),
                     antecedent: item1.clone(),
                     consequent: item2.clone(),
                     support,
                     confidence: 0.8,
-                    lift: self.calculate_lift(&frequent_1_itemsets, item1, item2, *count, itemsets.len())?,
+                    lift: self.calculate_lift(
+                        &frequent_1_itemsets,
+                        item1,
+                        item2,
+                        *count,
+                        itemsets.len(),
+                    )?,
                     pattern_type: PatternType::Association,
                 });
             }
@@ -155,14 +166,15 @@ impl<'a> PatternAlgorithms<'a> {
 
         // Extract property co-occurrence rules
         let property_cooccurrences = self.analyze_property_cooccurrences(store, graph_name)?;
-        
+
         for ((prop1, prop2), occurrence_data) in property_cooccurrences {
             let support = occurrence_data.support;
             let confidence = occurrence_data.confidence;
             let lift = occurrence_data.lift;
-            
-            if support >= self.config.min_support_threshold && 
-               confidence >= self.config.min_confidence_threshold {
+
+            if support >= self.config.min_support_threshold
+                && confidence >= self.config.min_confidence_threshold
+            {
                 rules.push(Pattern::AssociationRule {
                     id: format!("assoc_rule_{}_{}_{}", prop1, prop2, uuid::Uuid::new_v4()),
                     antecedent: prop1.clone(),
@@ -326,7 +338,7 @@ impl<'a> PatternAlgorithms<'a> {
             for (_, constraint) in &shape.constraints {
                 // Extract path complexity from constraint
                 let complexity = self.calculate_path_complexity(constraint)?;
-                
+
                 if complexity > 0 {
                     *complexity_distribution.entry(complexity).or_insert(0) += 1;
                 }
@@ -335,17 +347,23 @@ impl<'a> PatternAlgorithms<'a> {
 
         // Generate patterns for different complexity levels
         let total_paths = complexity_distribution.values().sum::<u32>() as f64;
-        
+
         for (complexity, count) in complexity_distribution {
             let support = count as f64 / total_paths;
-            
+
             if support >= self.config.min_support_threshold {
                 patterns.push(Pattern::PathComplexity {
                     id: format!("path_complexity_{}_{}", complexity, uuid::Uuid::new_v4()),
                     complexity,
                     usage_count: count,
                     support,
-                    confidence: if complexity <= 2 { 0.9 } else if complexity <= 4 { 0.7 } else { 0.5 },
+                    confidence: if complexity <= 2 {
+                        0.9
+                    } else if complexity <= 4 {
+                        0.7
+                    } else {
+                        0.5
+                    },
                     pattern_type: PatternType::Structural,
                 });
             }
@@ -357,31 +375,40 @@ impl<'a> PatternAlgorithms<'a> {
 
     /// Analyze shape composition patterns
     pub fn analyze_shape_composition_patterns(&self, shapes: &[Shape]) -> Result<Vec<Pattern>> {
-        tracing::info!("Starting shape composition pattern analysis for {} shapes", shapes.len());
+        tracing::info!(
+            "Starting shape composition pattern analysis for {} shapes",
+            shapes.len()
+        );
         let mut patterns = Vec::new();
         let mut constraint_count_distribution = std::collections::HashMap::new();
 
         for shape in shapes {
             let constraint_count = shape.constraints.len();
-            *constraint_count_distribution.entry(constraint_count).or_insert(0) += 1;
+            *constraint_count_distribution
+                .entry(constraint_count)
+                .or_insert(0) += 1;
         }
 
         // Generate patterns for different complexity levels
         let total_shapes = shapes.len() as f64;
-        
+
         for (constraint_count, shape_count) in constraint_count_distribution {
             let support = shape_count as f64 / total_shapes;
-            
+
             if support >= self.config.min_support_threshold {
                 let confidence = match constraint_count {
-                    0..=2 => 0.95,    // Simple shapes
-                    3..=5 => 0.85,    // Moderate complexity
-                    6..=10 => 0.7,    // Complex shapes
-                    _ => 0.5,         // Very complex shapes
+                    0..=2 => 0.95, // Simple shapes
+                    3..=5 => 0.85, // Moderate complexity
+                    6..=10 => 0.7, // Complex shapes
+                    _ => 0.5,      // Very complex shapes
                 };
-                
+
                 patterns.push(Pattern::ShapeComplexity {
-                    id: format!("shape_complexity_{}_{}", constraint_count, uuid::Uuid::new_v4()),
+                    id: format!(
+                        "shape_complexity_{}_{}",
+                        constraint_count,
+                        uuid::Uuid::new_v4()
+                    ),
                     constraint_count,
                     shape_count,
                     support,
@@ -559,7 +586,7 @@ impl<'a> PatternAlgorithms<'a> {
         let subclass_patterns = self.analyze_subclass_patterns(store, graph_name)?;
         patterns.extend(subclass_patterns);
 
-        // Analyze subproperty relationships  
+        // Analyze subproperty relationships
         let subproperty_patterns = self.analyze_subproperty_patterns(store, graph_name)?;
         patterns.extend(subproperty_patterns);
 
@@ -579,10 +606,10 @@ impl<'a> PatternAlgorithms<'a> {
 
         // Analyze property cardinality distribution
         let cardinality_stats = self.calculate_property_cardinalities(store, graph_name)?;
-        
+
         for (property, stats) in cardinality_stats {
             let cardinality_type = self.determine_cardinality_type(&stats)?;
-            
+
             if stats.support >= self.config.min_support_threshold {
                 patterns.push(Pattern::Cardinality {
                     id: format!("cardinality_{}_{}", property.as_str(), uuid::Uuid::new_v4()),
@@ -637,9 +664,13 @@ impl<'a> PatternAlgorithms<'a> {
 
         let result = self.execute_pattern_query(store, &query)?;
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             let total_combinations = bindings.len() as f64;
-            
+
             for binding in bindings {
                 if let (Some(property_term), Some(datatype_term), Some(count_term)) = (
                     binding.get("property"),
@@ -654,7 +685,7 @@ impl<'a> PatternAlgorithms<'a> {
                     {
                         if let Ok(count) = count_literal.value().parse::<u32>() {
                             let support = count as f64 / total_combinations;
-                            
+
                             if support >= self.config.min_support_threshold {
                                 patterns.push(Pattern::Datatype {
                                     id: format!(
@@ -687,9 +718,9 @@ impl<'a> PatternAlgorithms<'a> {
         query: &str,
     ) -> Result<oxirs_core::query::QueryResult> {
         let query_engine = QueryEngine::new();
-        let result = query_engine.query(query, store).map_err(|e| {
-            ShaclAiError::PatternRecognition(format!("Pattern query failed: {e}"))
-        })?;
+        let result = query_engine
+            .query(query, store)
+            .map_err(|e| ShaclAiError::PatternRecognition(format!("Pattern query failed: {e}")))?;
 
         Ok(result)
     }
@@ -721,22 +752,33 @@ impl<'a> PatternAlgorithms<'a> {
                     ?subject a ?class .
                     FILTER(isIRI(?property) && isIRI(?class))
                 }
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
         let mut itemsets = Vec::new();
-        let mut subject_items: std::collections::HashMap<String, std::collections::HashSet<String>> = std::collections::HashMap::new();
+        let mut subject_items: std::collections::HashMap<
+            String,
+            std::collections::HashSet<String>,
+        > = std::collections::HashMap::new();
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             for binding in bindings {
                 if let (Some(subject_term), Some(property_term), Some(class_term)) = (
                     binding.get("subject"),
                     binding.get("property"),
                     binding.get("class"),
                 ) {
-                    if let (Term::NamedNode(subject), Term::NamedNode(property), Term::NamedNode(class)) =
-                        (subject_term, property_term, class_term)
+                    if let (
+                        Term::NamedNode(subject),
+                        Term::NamedNode(property),
+                        Term::NamedNode(class),
+                    ) = (subject_term, property_term, class_term)
                     {
                         subject_items
                             .entry(subject.as_str().to_string())
@@ -772,7 +814,10 @@ impl<'a> PatternAlgorithms<'a> {
         }
 
         let min_support_count = (itemsets.len() as f64 * self.config.min_support_threshold) as u32;
-        Ok(item_counts.into_iter().filter(|(_, count)| *count >= min_support_count).collect())
+        Ok(item_counts
+            .into_iter()
+            .filter(|(_, count)| *count >= min_support_count)
+            .collect())
     }
 
     /// Find frequent 2-itemsets for co-occurrence patterns
@@ -788,8 +833,10 @@ impl<'a> PatternAlgorithms<'a> {
                 for j in i + 1..itemset.len() {
                     let item1 = &itemset[i];
                     let item2 = &itemset[j];
-                    
-                    if frequent_1_itemsets.contains_key(item1) && frequent_1_itemsets.contains_key(item2) {
+
+                    if frequent_1_itemsets.contains_key(item1)
+                        && frequent_1_itemsets.contains_key(item2)
+                    {
                         let pair = if item1 < item2 {
                             (item1.clone(), item2.clone())
                         } else {
@@ -802,7 +849,10 @@ impl<'a> PatternAlgorithms<'a> {
         }
 
         let min_support_count = (itemsets.len() as f64 * self.config.min_support_threshold) as u32;
-        Ok(pair_counts.into_iter().filter(|(_, count)| *count >= min_support_count).collect())
+        Ok(pair_counts
+            .into_iter()
+            .filter(|(_, count)| *count >= min_support_count)
+            .collect())
     }
 
     /// Calculate lift metric for association rules
@@ -816,11 +866,11 @@ impl<'a> PatternAlgorithms<'a> {
     ) -> Result<f64> {
         let support_a = frequent_1_itemsets.get(item1).unwrap_or(&0);
         let support_b = frequent_1_itemsets.get(item2).unwrap_or(&0);
-        
+
         let prob_a = *support_a as f64 / total_transactions as f64;
         let prob_b = *support_b as f64 / total_transactions as f64;
         let prob_ab = joint_count as f64 / total_transactions as f64;
-        
+
         if prob_a > 0.0 && prob_b > 0.0 {
             Ok(prob_ab / (prob_a * prob_b))
         } else {
@@ -837,7 +887,7 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<std::collections::HashMap<(String, String), PropertyCooccurrenceData>> {
         let mut cooccurrences = std::collections::HashMap::new();
-        
+
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -857,31 +907,39 @@ impl<'a> PatternAlgorithms<'a> {
                     ?subject ?prop2 ?obj2 .
                     FILTER(?prop1 != ?prop2 && isIRI(?prop1) && isIRI(?prop2))
                 }
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
         let mut property_counts = std::collections::HashMap::new();
         let mut total_subjects = std::collections::HashSet::new();
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             for binding in bindings {
                 if let (Some(subject_term), Some(prop1_term), Some(prop2_term)) = (
                     binding.get("subject"),
                     binding.get("prop1"),
                     binding.get("prop2"),
                 ) {
-                    if let (Term::NamedNode(subject), Term::NamedNode(prop1), Term::NamedNode(prop2)) =
-                        (subject_term, prop1_term, prop2_term)
+                    if let (
+                        Term::NamedNode(subject),
+                        Term::NamedNode(prop1),
+                        Term::NamedNode(prop2),
+                    ) = (subject_term, prop1_term, prop2_term)
                     {
                         total_subjects.insert(subject.as_str().to_string());
-                        
+
                         let pair = if prop1.as_str() < prop2.as_str() {
                             (prop1.as_str().to_string(), prop2.as_str().to_string())
                         } else {
                             (prop2.as_str().to_string(), prop1.as_str().to_string())
                         };
-                        
+
                         *property_counts.entry(pair).or_insert(0) += 1;
                     }
                 }
@@ -889,12 +947,12 @@ impl<'a> PatternAlgorithms<'a> {
         }
 
         let total_count = total_subjects.len() as f64;
-        
+
         for ((prop1, prop2), count) in property_counts {
             let support = count as f64 / total_count;
             let confidence = if support > 0.0 { support * 0.8 } else { 0.0 }; // Simplified confidence
             let lift = if support > 0.0 { 1.2 } else { 1.0 }; // Simplified lift
-            
+
             cooccurrences.insert(
                 (prop1, prop2),
                 PropertyCooccurrenceData {
@@ -916,7 +974,7 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
-        
+
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -940,32 +998,40 @@ impl<'a> PatternAlgorithms<'a> {
                 }
                 GROUP BY ?class ?property
                 ORDER BY DESC(?count)
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             let total_associations = bindings.len() as f64;
-            
+
             for binding in bindings {
                 if let (Some(class_term), Some(property_term), Some(count_term)) = (
                     binding.get("class"),
                     binding.get("property"),
                     binding.get("count"),
                 ) {
-                    if let (Term::NamedNode(class), Term::NamedNode(property), Term::Literal(count_literal)) =
-                        (class_term, property_term, count_term)
+                    if let (
+                        Term::NamedNode(class),
+                        Term::NamedNode(property),
+                        Term::Literal(count_literal),
+                    ) = (class_term, property_term, count_term)
                     {
                         if let Ok(count) = count_literal.value().parse::<u32>() {
                             let support = count as f64 / total_associations;
-                            
+
                             if support >= self.config.min_support_threshold {
                                 patterns.push(Pattern::AssociationRule {
                                     id: format!(
-                                        "class_prop_assoc_{}_{}_{}", 
-                                        class.as_str(), 
-                                        property.as_str(), 
+                                        "class_prop_assoc_{}_{}_{}",
+                                        class.as_str(),
+                                        property.as_str(),
                                         uuid::Uuid::new_v4()
                                     ),
                                     antecedent: format!("class:{}", class.as_str()),
@@ -1032,11 +1098,11 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
-        
+
         // Analyze highly connected nodes (hubs)
         let hub_patterns = self.find_hub_patterns(store, graph_name)?;
         patterns.extend(hub_patterns);
-        
+
         Ok(patterns)
     }
 
@@ -1047,7 +1113,7 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
-        
+
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -1071,26 +1137,31 @@ impl<'a> PatternAlgorithms<'a> {
                 GROUP BY ?node
                 ORDER BY DESC(?degree)
                 LIMIT 100
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             let total_nodes = bindings.len() as f64;
-            
+
             for binding in bindings {
-                if let (Some(node_term), Some(degree_term)) = (
-                    binding.get("node"),
-                    binding.get("degree"),
-                ) {
+                if let (Some(node_term), Some(degree_term)) =
+                    (binding.get("node"), binding.get("degree"))
+                {
                     if let (Term::NamedNode(node), Term::Literal(degree_literal)) =
                         (node_term, degree_term)
                     {
                         if let Ok(degree) = degree_literal.value().parse::<u32>() {
-                            if degree > 10 { // Threshold for hub classification
+                            if degree > 10 {
+                                // Threshold for hub classification
                                 let support = 1.0 / total_nodes; // Individual node support
-                                
+
                                 patterns.push(Pattern::PropertyUsage {
                                     id: format!("hub_{}_{}", node.as_str(), uuid::Uuid::new_v4()),
                                     property: node.clone(),
@@ -1136,7 +1207,7 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut patterns = Vec::new();
-        
+
         // Analyze path length distribution
         let query = if let Some(graph) = graph_name {
             format!(
@@ -1161,20 +1232,25 @@ impl<'a> PatternAlgorithms<'a> {
                 }
                 GROUP BY ?start ?end
                 HAVING (COUNT(*) > 1)
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             let total_paths = bindings.len() as f64;
-            
+
             for binding in bindings {
                 if let Some(count_term) = binding.get("path_count") {
                     if let Term::Literal(count_literal) = count_term {
                         if let Ok(count) = count_literal.value().parse::<u32>() {
                             let support = count as f64 / total_paths;
-                            
+
                             if support >= self.config.min_support_threshold {
                                 patterns.push(Pattern::PathComplexity {
                                     id: format!("path_pattern_{}", uuid::Uuid::new_v4()),
@@ -1203,7 +1279,7 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<Vec<Pattern>> {
         let mut anomalous_patterns = Vec::new();
-        
+
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -1225,14 +1301,19 @@ impl<'a> PatternAlgorithms<'a> {
                 }
                 GROUP BY ?class
                 ORDER BY DESC(?count)
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
             let mut counts: Vec<u32> = Vec::new();
-            
+
             // Collect all counts
             for binding in &bindings {
                 if let Some(count_term) = binding.get("count") {
@@ -1243,29 +1324,34 @@ impl<'a> PatternAlgorithms<'a> {
                     }
                 }
             }
-            
+
             if counts.len() > 2 {
                 // Calculate statistics
                 let mean = counts.iter().sum::<u32>() as f64 / counts.len() as f64;
-                let variance = counts.iter()
+                let variance = counts
+                    .iter()
                     .map(|x| (*x as f64 - mean).powi(2))
-                    .sum::<f64>() / counts.len() as f64;
+                    .sum::<f64>()
+                    / counts.len() as f64;
                 let std_dev = variance.sqrt();
                 let threshold = mean + 2.0 * std_dev; // 2-sigma rule
-                
+
                 // Find outliers
                 for binding in bindings {
-                    if let (Some(class_term), Some(count_term)) = (
-                        binding.get("class"),
-                        binding.get("count"),
-                    ) {
+                    if let (Some(class_term), Some(count_term)) =
+                        (binding.get("class"), binding.get("count"))
+                    {
                         if let (Term::NamedNode(class), Term::Literal(count_literal)) =
                             (class_term, count_term)
                         {
                             if let Ok(count) = count_literal.value().parse::<u32>() {
                                 if count as f64 > threshold || (count as f64) < mean / 2.0 {
                                     anomalous_patterns.push(Pattern::ClassUsage {
-                                        id: format!("anomaly_class_{}_{}", class.as_str(), uuid::Uuid::new_v4()),
+                                        id: format!(
+                                            "anomaly_class_{}_{}",
+                                            class.as_str(),
+                                            uuid::Uuid::new_v4()
+                                        ),
                                         class: class.clone(),
                                         instance_count: count,
                                         support: count as f64 / counts.iter().sum::<u32>() as f64,
@@ -1318,7 +1404,7 @@ impl<'a> PatternAlgorithms<'a> {
         graph_name: Option<&str>,
     ) -> Result<std::collections::HashMap<NamedNode, PropertyCardinalityStats>> {
         let mut stats = std::collections::HashMap::new();
-        
+
         let query = if let Some(graph) = graph_name {
             format!(
                 r#"
@@ -1338,19 +1424,24 @@ impl<'a> PatternAlgorithms<'a> {
                     FILTER(isIRI(?property))
                 }
                 GROUP BY ?property ?subject
-            "#.to_string()
+            "#
+            .to_string()
         };
 
         let result = self.execute_pattern_query(store, &query)?;
 
-        if let oxirs_core::query::QueryResult::Select { variables: _, bindings } = result {
-            let mut property_counts: std::collections::HashMap<NamedNode, Vec<u32>> = std::collections::HashMap::new();
-            
+        if let oxirs_core::query::QueryResult::Select {
+            variables: _,
+            bindings,
+        } = result
+        {
+            let mut property_counts: std::collections::HashMap<NamedNode, Vec<u32>> =
+                std::collections::HashMap::new();
+
             for binding in bindings {
-                if let (Some(property_term), Some(count_term)) = (
-                    binding.get("property"),
-                    binding.get("count"),
-                ) {
+                if let (Some(property_term), Some(count_term)) =
+                    (binding.get("property"), binding.get("count"))
+                {
                     if let (Term::NamedNode(property), Term::Literal(count_literal)) =
                         (property_term, count_term)
                     {
@@ -1363,7 +1454,7 @@ impl<'a> PatternAlgorithms<'a> {
                     }
                 }
             }
-            
+
             // Calculate statistics for each property
             for (property, counts) in property_counts {
                 if !counts.is_empty() {
@@ -1372,7 +1463,7 @@ impl<'a> PatternAlgorithms<'a> {
                     let avg_count = counts.iter().sum::<u32>() as f64 / counts.len() as f64;
                     let support = counts.len() as f64 / 100.0; // Simplified support calculation
                     let confidence = if avg_count > 1.0 { 0.8 } else { 0.9 };
-                    
+
                     stats.insert(
                         property,
                         PropertyCardinalityStats {
@@ -1391,7 +1482,10 @@ impl<'a> PatternAlgorithms<'a> {
     }
 
     /// Determine cardinality type from statistics
-    fn determine_cardinality_type(&self, stats: &PropertyCardinalityStats) -> Result<CardinalityType> {
+    fn determine_cardinality_type(
+        &self,
+        stats: &PropertyCardinalityStats,
+    ) -> Result<CardinalityType> {
         match (stats.min_count, stats.max_count) {
             (Some(min), Some(max)) => {
                 if min == 0 {

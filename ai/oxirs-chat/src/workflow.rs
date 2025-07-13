@@ -727,7 +727,7 @@ impl AuditLogger {
         Ok(())
     }
 
-    async fn get_audit_trail(&self, entity_id: &str) -> Result<Vec<AuditEntry>> {
+    async fn get_audit_trail(&self, _entity_id: &str) -> Result<Vec<AuditEntry>> {
         // Implementation to read audit entries for specific entity
         // This would scan audit files and filter by entity_id
         Ok(Vec::new()) // Simplified implementation
@@ -735,6 +735,7 @@ impl AuditLogger {
 }
 
 struct NotificationService {
+    #[allow(dead_code)]
     config: WorkflowConfig,
 }
 
@@ -1154,9 +1155,9 @@ impl CollaborativeWorkspaceManager {
     /// Get workspace activity feed
     pub async fn get_activity_feed(
         &self,
-        workspace_id: &WorkspaceId,
-        since: Option<SystemTime>,
-        limit: usize,
+        _workspace_id: &WorkspaceId,
+        _since: Option<SystemTime>,
+        _limit: usize,
     ) -> Result<Vec<ActivityEvent>> {
         // Implementation would fetch recent activities
         Ok(Vec::new()) // Placeholder
@@ -1164,8 +1165,8 @@ impl CollaborativeWorkspaceManager {
 
     fn get_user_permissions(
         &self,
-        workspace_id: &WorkspaceId,
-        user_id: &str,
+        _workspace_id: &WorkspaceId,
+        _user_id: &str,
     ) -> Result<UserPermissions> {
         // Implementation would check user permissions
         Ok(UserPermissions::default())
@@ -1405,7 +1406,7 @@ pub struct CursorPosition {
 /// Real-time messaging system for collaboration
 pub struct CollaborativeMessageBus {
     message_history: HashMap<String, Vec<CollaborativeMessage>>,
-    subscribers: HashMap<String, Vec<String>>, // workspace_id -> user_ids
+    _subscribers: HashMap<String, Vec<String>>, // workspace_id -> user_ids
 }
 
 impl Default for CollaborativeMessageBus {
@@ -1418,7 +1419,7 @@ impl CollaborativeMessageBus {
     pub fn new() -> Self {
         Self {
             message_history: HashMap::new(),
-            subscribers: HashMap::new(),
+            _subscribers: HashMap::new(),
         }
     }
 
@@ -1532,7 +1533,7 @@ pub struct MessageReaction {
 
 /// Shared document management for collaborative editing
 pub struct SharedDocumentManager {
-    documents: HashMap<String, SharedDocument>,
+    _documents: HashMap<String, SharedDocument>,
     editing_sessions: HashMap<String, Vec<CollaborativeEditingSession>>,
 }
 
@@ -1545,7 +1546,7 @@ impl Default for SharedDocumentManager {
 impl SharedDocumentManager {
     pub fn new() -> Self {
         Self {
-            documents: HashMap::new(),
+            _documents: HashMap::new(),
             editing_sessions: HashMap::new(),
         }
     }

@@ -5,8 +5,8 @@
 //! Graph Attention Networks (GAT), and Graph Isomorphism Networks (GIN).
 
 use super::{
-    GraphData, LearnedConstraint, LearnedShape,
-    ModelError, ModelMetrics, ModelParams, ShapeLearningModel, ShapeTrainingData,
+    GraphData, LearnedConstraint, LearnedShape, ModelError, ModelMetrics, ModelParams,
+    ShapeLearningModel, ShapeTrainingData,
 };
 
 use ndarray::{Array2, Array3, Axis};
@@ -769,12 +769,20 @@ impl GraphNeuralNetwork {
 
         // Update step
         let mut combined = Array2::zeros((features.nrows(), layer.input_dim * 2));
-        combined
-            .slice_mut(ndarray::s![.., ..layer.input_dim])
-            .assign(features);
-        combined
-            .slice_mut(ndarray::s![.., layer.input_dim..])
-            .assign(&messages);
+
+        // Safely copy features to first part of combined array
+        for i in 0..features.nrows() {
+            for j in 0..layer.input_dim.min(features.ncols()) {
+                combined[[i, j]] = features[[i, j]];
+            }
+        }
+
+        // Safely copy messages to second part of combined array
+        for i in 0..messages.nrows().min(combined.nrows()) {
+            for j in 0..layer.input_dim.min(messages.ncols()) {
+                combined[[i, layer.input_dim + j]] = messages[[i, j]];
+            }
+        }
 
         let mut output = combined.clone();
         for update_layer in &layer.update_net {

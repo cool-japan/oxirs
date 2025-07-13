@@ -107,8 +107,7 @@ pub struct SessionWithDirtyFlag {
 }
 
 /// Conversation state for advanced context management
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ConversationState {
     pub current_topic: Option<String>,
     pub context_window: Vec<String>, // Message IDs in current context
@@ -117,7 +116,6 @@ pub struct ConversationState {
     pub user_intent_history: Vec<String>,
     pub conversation_flow: ConversationFlow,
 }
-
 
 /// Entity reference for tracking
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -361,7 +359,8 @@ impl SessionPersistenceManager {
             if let Some(persisted_session) = active.get(session_id) {
                 let session_with_flag = persisted_session.read().await;
                 return Ok(Some(
-                    self.convert_to_persistent_chat_session(&session_with_flag.session).await?,
+                    self.convert_to_persistent_chat_session(&session_with_flag.session)
+                        .await?,
                 ));
             }
         }
@@ -403,7 +402,10 @@ impl SessionPersistenceManager {
                 dirty: false, // Just loaded, so not dirty
                 last_saved: Some(SystemTime::now()),
             };
-            active.insert(session_id.to_string(), Arc::new(RwLock::new(session_with_flag)));
+            active.insert(
+                session_id.to_string(),
+                Arc::new(RwLock::new(session_with_flag)),
+            );
         }
 
         // Update statistics
@@ -629,7 +631,6 @@ impl SessionPersistenceManager {
         session: &PersistentChatSession,
     ) -> ConversationState {
         let mut context_window = Vec::new();
-        let mut entity_history = Vec::new();
         let mut query_history = Vec::new();
         let mut user_intent_history = Vec::new();
         let mut current_topic = None;
@@ -752,7 +753,7 @@ impl SessionPersistenceManager {
         }
 
         // Convert entities HashMap to Vec
-        entity_history = entities.into_values().collect();
+        let entity_history = entities.into_values().collect();
 
         // Create interaction patterns based on message analysis
         let mut pattern_counts = HashMap::new();
@@ -992,9 +993,7 @@ impl SessionPersistenceManager {
     }
 
     fn get_backup_file_path(&self, session_id: &str) -> PathBuf {
-        self.config
-            .backup_path
-            .join(format!("{session_id}.backup"))
+        self.config.backup_path.join(format!("{session_id}.backup"))
     }
 
     fn get_checkpoint_file_path(&self, session_id: &str) -> PathBuf {
@@ -1035,14 +1034,14 @@ impl SessionPersistenceManager {
                     let session_guard = session_arc.read().await;
                     if session_guard.dirty {
                         drop(session_guard); // Release read lock before saving
-                        
+
                         // Create a temporary manager for saving (using config clone)
                         let temp_manager = SessionPersistenceManager {
                             config: config.clone(),
                             active_sessions: Arc::clone(&active_sessions),
                             persistence_stats: Arc::new(RwLock::new(PersistenceStats::default())),
                         };
-                        
+
                         // Convert to PersistentChatSession for saving
                         let session_guard = session_arc.read().await;
                         if let Ok(persistent_session) = temp_manager
@@ -1050,12 +1049,12 @@ impl SessionPersistenceManager {
                             .await
                         {
                             drop(session_guard);
-                            
+
                             if let Err(e) = temp_manager.save_session(&persistent_session).await {
                                 error!("Failed to auto-save session {}: {}", session_id, e);
                             } else {
                                 debug!("Auto-saved dirty session {}", session_id);
-                                
+
                                 // Mark as clean after successful save
                                 let mut session_guard = session_arc.write().await;
                                 session_guard.dirty = false;
@@ -1130,13 +1129,17 @@ impl SessionPersistenceManager {
         {
             let mut session_with_flag = session_arc.write().await;
             // Add a checkpoint marker to the context window
-            session_with_flag.session.conversation_state.context_window.push(format!(
-                "checkpoint:{}",
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or(Duration::ZERO)
-                    .as_secs()
-            ));
+            session_with_flag
+                .session
+                .conversation_state
+                .context_window
+                .push(format!(
+                    "checkpoint:{}",
+                    SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or(Duration::ZERO)
+                        .as_secs()
+                ));
             // Mark as dirty since we modified the session
             session_with_flag.dirty = true;
         }
@@ -1249,14 +1252,13 @@ impl SessionPersistenceManager {
         };
 
         // Verify checksum if available
-        if !persisted.checksum.is_empty()
-            && !self.verify_checksum(&persisted).await? {
-                warn!(
-                    "Checkpoint checksum verification failed for session: {}",
-                    session_id
-                );
-                return Ok(None);
-            }
+        if !persisted.checksum.is_empty() && !self.verify_checksum(&persisted).await? {
+            warn!(
+                "Checkpoint checksum verification failed for session: {}",
+                session_id
+            );
+            return Ok(None);
+        }
 
         // Convert to persistent chat session
         let session = self
@@ -1509,7 +1511,7 @@ impl SessionPersistenceManager {
         &self,
         session: &PersistentChatSession,
     ) -> Result<ConversationAnalytics> {
-        let now = SystemTime::now();
+        let _now = SystemTime::now();
 
         // Count messages by role
         let mut user_message_count = 0;

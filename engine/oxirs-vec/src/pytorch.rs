@@ -1,7 +1,9 @@
 //! PyTorch integration for embedding generation and neural network models
 
-use crate::{EmbeddingConfig, Vector};
-use crate::real_time_embedding_pipeline::traits::{EmbeddingGenerator, ContentItem, ProcessingResult, ProcessingStatus, GeneratorStatistics};
+use crate::real_time_embedding_pipeline::traits::{
+    ContentItem, EmbeddingGenerator, GeneratorStatistics, ProcessingResult, ProcessingStatus,
+};
+use crate::Vector;
 use anyhow::{anyhow, Result};
 use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
@@ -27,7 +29,7 @@ pub struct PyTorchConfig {
 pub enum PyTorchDevice {
     Cpu,
     Cuda { device_id: usize },
-    Mps, // Apple Metal Performance Shaders
+    Mps,  // Apple Metal Performance Shaders
     Auto, // Automatically select best available device
 }
 
@@ -139,14 +141,17 @@ impl PyTorchEmbedder {
     /// Load PyTorch model from file
     pub fn load_model(&mut self) -> Result<()> {
         if !self.config.model_path.exists() {
-            return Err(anyhow!("Model file not found: {:?}", self.config.model_path));
+            return Err(anyhow!(
+                "Model file not found: {:?}",
+                self.config.model_path
+            ));
         }
 
         // Mock model loading - in real implementation would use tch or candle-core
         let metadata = PyTorchModelMetadata {
             model_name: "pytorch_embedder".to_string(),
             model_version: "1.0.0".to_string(),
-            input_shape: vec![-1, 512], // batch_size, sequence_length
+            input_shape: vec![-1, 512],  // batch_size, sequence_length
             output_shape: vec![-1, 768], // batch_size, embedding_dim
             embedding_dimension: 768,
             vocab_size: Some(30000),
@@ -177,30 +182,32 @@ impl PyTorchEmbedder {
         }
 
         let mut results = Vec::new();
-        
+
         // Process in batches according to config
         for chunk in texts.chunks(self.config.batch_size) {
             let mut batch_tokens = Vec::new();
             for text in chunk {
                 batch_tokens.push(self.tokenize_text(text)?);
             }
-            
+
             let batch_embeddings = self.forward_pass_batch(&batch_tokens)?;
             for embedding in batch_embeddings {
                 results.push(Vector::new(embedding));
             }
         }
-        
+
         Ok(results)
     }
 
     /// Tokenize text using the configured tokenizer
     fn tokenize_text(&self, text: &str) -> Result<Vec<i32>> {
-        let tokenizer = self.tokenizer.as_ref()
+        let tokenizer = self
+            .tokenizer
+            .as_ref()
             .ok_or_else(|| anyhow!("Tokenizer not available"))?;
 
         let mut tokens = Vec::new();
-        
+
         // Add CLS token if available
         if let Some(cls_token) = &tokenizer.cls_token {
             if let Some(&token_id) = tokenizer.special_tokens.get(cls_token) {
@@ -211,7 +218,9 @@ impl PyTorchEmbedder {
         // Simple whitespace tokenization (in practice would use proper tokenizer)
         let words: Vec<&str> = text.split_whitespace().collect();
         for word in words {
-            let token_id = tokenizer.vocab.get(word)
+            let token_id = tokenizer
+                .vocab
+                .get(word)
                 .or_else(|| tokenizer.special_tokens.get(&tokenizer.unknown_token))
                 .copied()
                 .unwrap_or(1); // Default to UNK token ID
@@ -229,7 +238,9 @@ impl PyTorchEmbedder {
         if tokens.len() > tokenizer.max_length {
             tokens.truncate(tokenizer.max_length);
         } else {
-            let pad_token_id = tokenizer.special_tokens.get(&tokenizer.padding_token)
+            let pad_token_id = tokenizer
+                .special_tokens
+                .get(&tokenizer.padding_token)
                 .copied()
                 .unwrap_or(0);
             tokens.resize(tokenizer.max_length, pad_token_id);
@@ -240,13 +251,14 @@ impl PyTorchEmbedder {
 
     /// Forward pass through the model (mock implementation)
     fn forward_pass(&self, tokens: &[i32]) -> Result<Vec<f32>> {
-        let metadata = self.model_metadata.as_ref()
+        let metadata = self
+            .model_metadata
+            .as_ref()
             .ok_or_else(|| anyhow!("Model metadata not available"))?;
 
         // Mock forward pass - generate deterministic embeddings based on tokens
-        let mut rng = rand::rngs::StdRng::seed_from_u64(
-            tokens.iter().map(|&t| t as u64).sum::<u64>()
-        );
+        let mut rng =
+            rand::rngs::StdRng::seed_from_u64(tokens.iter().map(|&t| t as u64).sum::<u64>());
         use rand::Rng;
 
         let mut embedding = vec![0.0f32; metadata.embedding_dimension];
@@ -256,7 +268,8 @@ impl PyTorchEmbedder {
 
         // Apply layer normalization (simplified)
         let mean = embedding.iter().sum::<f32>() / embedding.len() as f32;
-        let variance = embedding.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / embedding.len() as f32;
+        let variance =
+            embedding.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / embedding.len() as f32;
         let std_dev = variance.sqrt();
 
         if std_dev > 0.0 {
@@ -323,7 +336,8 @@ impl DeviceManager {
     /// Create a new device manager
     pub fn new() -> Self {
         let available_devices = Self::detect_available_devices();
-        let current_device = available_devices.first()
+        let current_device = available_devices
+            .first()
             .cloned()
             .unwrap_or(PyTorchDevice::Cpu);
 
@@ -337,11 +351,11 @@ impl DeviceManager {
     /// Detect available PyTorch devices
     fn detect_available_devices() -> Vec<PyTorchDevice> {
         let mut devices = vec![PyTorchDevice::Cpu];
-        
+
         // Mock device detection
         devices.push(PyTorchDevice::Cuda { device_id: 0 });
         devices.push(PyTorchDevice::Mps);
-        
+
         devices
     }
 
@@ -391,9 +405,11 @@ impl PyTorchModelManager {
 
     /// Generate embeddings using a specific model
     pub fn embed_with_model(&self, model_name: &str, texts: &[String]) -> Result<Vec<Vector>> {
-        let model = self.models.get(model_name)
+        let model = self
+            .models
+            .get(model_name)
             .ok_or_else(|| anyhow!("Model not found: {}", model_name))?;
-        
+
         model.embed_batch(texts)
     }
 
@@ -420,12 +436,12 @@ impl EmbeddingGenerator for PyTorchEmbedder {
 
     fn generate_batch_embeddings(&self, content: &[ContentItem]) -> Result<Vec<ProcessingResult>> {
         let mut results = Vec::new();
-        
+
         for item in content {
             let start_time = Instant::now();
             let vector_result = self.generate_embedding(item);
             let duration = start_time.elapsed();
-            
+
             let result = match vector_result {
                 Ok(vector) => ProcessingResult {
                     item: item.clone(),
@@ -446,10 +462,10 @@ impl EmbeddingGenerator for PyTorchEmbedder {
                     metadata: HashMap::new(),
                 },
             };
-            
+
             results.push(result);
         }
-        
+
         Ok(results)
     }
 
@@ -477,6 +493,7 @@ impl EmbeddingGenerator for PyTorchEmbedder {
 }
 
 #[cfg(test)]
+#[allow(clippy::useless_vec)]
 mod tests {
     use super::*;
 
@@ -516,7 +533,7 @@ mod tests {
             max_sequence_length: 512,
             architecture_type: ArchitectureType::Transformer,
         };
-        
+
         assert_eq!(metadata.embedding_dimension, 768);
         assert_eq!(metadata.vocab_size, Some(30000));
     }

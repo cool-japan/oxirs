@@ -7,8 +7,6 @@ use nalgebra::DMatrix;
 use num_complex::Complex64;
 use serde::{Deserialize, Serialize};
 
-use oxirs_core::Store;
-
 use crate::neural_patterns::NeuralPattern;
 use crate::{Result, ShaclAiError};
 
@@ -143,12 +141,11 @@ impl QuantumPattern {
         }
 
         // Apply quantum superposition
-        for (i, (amp1, amp2)) in self
+        for (amp1, amp2) in self
             .quantum_state
             .amplitudes
             .iter_mut()
             .zip(other.quantum_state.amplitudes.iter())
-            .enumerate()
         {
             *amp1 = (*amp1 + *amp2) / Complex64::new(2.0_f64.sqrt(), 0.0);
         }

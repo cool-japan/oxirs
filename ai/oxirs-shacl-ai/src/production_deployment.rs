@@ -835,13 +835,15 @@ impl ProductionDeploymentManager {
         // Simplified deployment execution
         // In a real implementation, this would interact with Kubernetes API
 
-        let phases = [DeploymentPhase::Validation,
+        let phases = [
+            DeploymentPhase::Validation,
             DeploymentPhase::PreDeployment,
             DeploymentPhase::Deployment,
             DeploymentPhase::PostDeployment,
             DeploymentPhase::HealthCheck,
             DeploymentPhase::Monitoring,
-            DeploymentPhase::Completed];
+            DeploymentPhase::Completed,
+        ];
 
         for (i, phase) in phases.iter().enumerate() {
             self.update_deployment_phase(

@@ -22,7 +22,7 @@ pub use types::{FederatedExecutor, FederatedExecutorConfig};
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::planner::{ExecutionPlan, ExecutionStep, StepType};
+    use crate::planner::StepType;
     use std::time::Duration;
 
     #[tokio::test]
@@ -84,6 +84,7 @@ mod tests {
                 value: "http://example.org".to_string(),
                 datatype: None,
                 lang: None,
+                quoted_triple: None,
             },
         );
 

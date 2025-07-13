@@ -22,9 +22,7 @@ pub async fn run(
     iterations: usize,
     output: Option<PathBuf>,
 ) -> CommandResult {
-    println!(
-        "Running '{suite}' benchmark suite on dataset '{dataset}' ({iterations} iterations)"
-    );
+    println!("Running '{suite}' benchmark suite on dataset '{dataset}' ({iterations} iterations)");
 
     // Validate benchmark suite
     if !is_supported_benchmark_suite(&suite) {

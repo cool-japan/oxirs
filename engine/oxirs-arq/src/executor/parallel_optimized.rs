@@ -219,11 +219,10 @@ impl<T> MemoryPool<T> {
     /// Return an object to the pool
     fn return_object(&self, obj: Box<T>) {
         let current = self.current_size.load(Ordering::Relaxed);
-        if current < self.max_size
-            && self.available.push(obj).is_ok() {
-                self.current_size.fetch_add(1, Ordering::Relaxed);
-            }
-            // If push fails, just drop the object
+        if current < self.max_size && self.available.push(obj).is_ok() {
+            self.current_size.fetch_add(1, Ordering::Relaxed);
+        }
+        // If push fails, just drop the object
         // If pool is full, just drop the object
     }
 }

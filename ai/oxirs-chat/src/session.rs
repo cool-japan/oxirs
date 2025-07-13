@@ -6,11 +6,7 @@ use crate::context::ContextSummary;
 use crate::types::*;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::HashMap,
-    sync::Arc,
-    time::SystemTime,
-};
+use std::{collections::HashMap, sync::Arc, time::SystemTime};
 use tracing::{debug, info, warn};
 
 /// Persistent session data

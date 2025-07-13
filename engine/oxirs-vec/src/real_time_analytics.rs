@@ -363,8 +363,7 @@ pub struct OverviewData {
 }
 
 /// Query performance dashboard data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct QueryPerformanceData {
     pub latency_trends: Vec<(SystemTime, Duration)>,
     pub throughput_trends: Vec<(SystemTime, f64)>,
@@ -398,8 +397,7 @@ pub struct QualityMetricsData {
 }
 
 /// Usage analytics dashboard data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct UsageAnalyticsData {
     pub user_activity: Vec<(SystemTime, u64)>,
     pub popular_queries: Vec<PopularQuery>,
@@ -618,6 +616,71 @@ impl VectorAnalyticsEngine {
         Ok(())
     }
 
+    /// Record distributed query execution across multiple nodes
+    pub fn record_distributed_query(
+        &self,
+        query_id: String,
+        node_count: usize,
+        total_duration: Duration,
+        _federation_id: Option<String>,
+        success: bool,
+    ) -> Result<()> {
+        // Update distributed query metrics
+        {
+            let mut metrics = self.metrics_collector.query_metrics.write();
+            metrics.total_queries += 1;
+
+            if success {
+                metrics.successful_queries += 1;
+            } else {
+                metrics.failed_queries += 1;
+            }
+
+            // Update latency statistics for distributed queries
+            self.update_latency_statistics(&mut metrics, total_duration);
+
+            // Update distributed query distribution
+            let operation_type = format!("distributed_query_{node_count}_nodes");
+            *metrics
+                .query_distribution
+                .entry(operation_type)
+                .or_insert(0) += 1;
+
+            // Update error rate
+            metrics.error_rate = if metrics.total_queries > 0 {
+                metrics.failed_queries as f64 / metrics.total_queries as f64
+            } else {
+                0.0
+            };
+        }
+
+        // Record distributed query event
+        let event = AnalyticsEvent::QueryExecuted {
+            query_id: query_id.clone(),
+            operation_type: format!("distributed_query_{node_count}_nodes"),
+            duration: total_duration,
+            result_count: node_count,
+            success,
+            timestamp: SystemTime::now(),
+        };
+
+        let _ = self.event_broadcaster.send(event);
+
+        // Generate alert if distributed query is taking too long
+        if total_duration.as_millis() > 5000 {
+            let message = format!(
+                "Distributed query {} across {} nodes took {}ms",
+                query_id,
+                node_count,
+                total_duration.as_millis()
+            );
+
+            self.create_alert(AlertType::HighLatency, AlertSeverity::Warning, message)?;
+        }
+
+        Ok(())
+    }
+
     /// Update system metrics
     pub fn update_system_metrics(
         &self,
@@ -797,8 +860,7 @@ impl VectorAnalyticsEngine {
             if let Some(obj) = query_metrics.as_object() {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
-                        csv_content
-                            .push_str(&format!("{timestamp},query_{key},{num_val},query\n"));
+                        csv_content.push_str(&format!("{timestamp},query_{key},{num_val},query\n"));
                     }
                 }
             }
@@ -809,9 +871,8 @@ impl VectorAnalyticsEngine {
             if let Some(obj) = system_metrics.as_object() {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
-                        csv_content.push_str(&format!(
-                            "{timestamp},system_{key},{num_val},system\n"
-                        ));
+                        csv_content
+                            .push_str(&format!("{timestamp},system_{key},{num_val},system\n"));
                     }
                 }
             }
@@ -834,11 +895,9 @@ impl VectorAnalyticsEngine {
             if let Some(obj) = query_metrics.as_object() {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
-                        prometheus_content.push_str(&format!(
-                            "# HELP vector_query_{key} Query metric {key}\n"
-                        ));
                         prometheus_content
-                            .push_str(&format!("# TYPE vector_query_{key} gauge\n"));
+                            .push_str(&format!("# HELP vector_query_{key} Query metric {key}\n"));
+                        prometheus_content.push_str(&format!("# TYPE vector_query_{key} gauge\n"));
                         prometheus_content
                             .push_str(&format!("vector_query_{key} {num_val} {timestamp}\n"));
                     }
@@ -851,14 +910,11 @@ impl VectorAnalyticsEngine {
             if let Some(obj) = system_metrics.as_object() {
                 for (key, value) in obj {
                     if let Some(num_val) = value.as_f64() {
-                        prometheus_content.push_str(&format!(
-                            "# HELP vector_system_{key} System metric {key}\n"
-                        ));
                         prometheus_content
-                            .push_str(&format!("# TYPE vector_system_{key} gauge\n"));
-                        prometheus_content.push_str(&format!(
-                            "vector_system_{key} {num_val} {timestamp}\n"
-                        ));
+                            .push_str(&format!("# HELP vector_system_{key} System metric {key}\n"));
+                        prometheus_content.push_str(&format!("# TYPE vector_system_{key} gauge\n"));
+                        prometheus_content
+                            .push_str(&format!("vector_system_{key} {num_val} {timestamp}\n"));
                     }
                 }
             }
@@ -1308,7 +1364,11 @@ impl PerformanceProfiler {
     }
 
     pub fn start_profile(&self, function_name: &str) -> String {
-        let profile_id = format!("{}_{}", function_name, chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
+        let profile_id = format!(
+            "{}_{}",
+            function_name,
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        );
         let mut active = self.active_profiles.write();
         active.insert(profile_id.clone(), Instant::now());
         profile_id
@@ -1489,7 +1549,6 @@ impl Default for OverviewData {
     }
 }
 
-
 impl Default for SystemHealthData {
     fn default() -> Self {
         Self {
@@ -1516,7 +1575,6 @@ impl Default for QualityMetricsData {
         }
     }
 }
-
 
 impl Default for UsageTrends {
     fn default() -> Self {

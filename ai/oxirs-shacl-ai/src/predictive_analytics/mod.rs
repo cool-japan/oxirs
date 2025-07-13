@@ -13,7 +13,7 @@ pub mod types;
 // Re-export main public interface
 pub use config::*;
 pub use core::PredictiveAnalyticsEngine;
-pub use forecasting::*;
-pub use recommendation::*;
-pub use time_series::*;
+pub use forecasting::ForecastingModels;
+pub use recommendation::RecommendationEngine;
+pub use time_series::{TimeSeriesProcessor, TrendAnalyzer};
 pub use types::*;

@@ -3,6 +3,8 @@
 //! Provides comprehensive support for importing external SHACL shapes, handling
 //! dependencies, resolving references, and managing circular dependencies.
 
+#![allow(dead_code)]
+
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
@@ -174,7 +176,7 @@ impl ShapeImportManager {
     }
 
     /// Create with default configuration
-    pub fn default() -> Self {
+    pub fn with_default_config() -> Self {
         Self::new(ShapeImportConfig::default())
     }
 
@@ -1191,14 +1193,14 @@ mod tests {
 
     #[test]
     fn test_import_manager_creation() {
-        let manager = ShapeImportManager::default();
+        let manager = ShapeImportManager::with_default_config();
         assert_eq!(manager.stats.total_imports, 0);
         assert_eq!(manager.import_cache.len(), 0);
     }
 
     #[test]
     fn test_circular_dependency_detection() {
-        let manager = ShapeImportManager::default();
+        let manager = ShapeImportManager::with_default_config();
         // Start with empty dependency graph
         assert!(manager.check_circular_dependencies().is_ok());
     }
@@ -1230,7 +1232,7 @@ mod tests {
 
     #[test]
     fn test_format_determination() {
-        let manager = ShapeImportManager::default();
+        let manager = ShapeImportManager::with_default_config();
 
         assert_eq!(
             manager.determine_format("text/turtle", &None, "test.ttl"),
@@ -1251,25 +1253,28 @@ mod tests {
 
     #[test]
     fn test_extract_owl_imports() {
-        let manager = ShapeImportManager::default();
-        
+        let manager = ShapeImportManager::with_default_config();
+
         let rdf_content = r#"
             @prefix owl: <http://www.w3.org/2002/07/owl#> .
             @prefix ex: <http://example.org/> .
             
             ex:MyOntology owl:imports <http://example.org/other-shapes.ttl> .
         "#;
-        
+
         let directives = manager.extract_import_directives(rdf_content).unwrap();
         assert_eq!(directives.len(), 1);
-        assert_eq!(directives[0].source_iri, "http://example.org/other-shapes.ttl");
+        assert_eq!(
+            directives[0].source_iri,
+            "http://example.org/other-shapes.ttl"
+        );
         assert!(matches!(directives[0].import_type, ImportType::Include));
     }
 
     #[test]
     fn test_extract_shacl_imports() {
-        let manager = ShapeImportManager::default();
-        
+        let manager = ShapeImportManager::with_default_config();
+
         let rdf_content = r#"
             @prefix sh: <http://www.w3.org/ns/shacl#> .
             @prefix ex: <http://example.org/> .
@@ -1277,28 +1282,32 @@ mod tests {
             ex:MyShapes sh:include <http://example.org/base-shapes.ttl> .
             ex:MyShapes sh:imports <http://example.org/additional-shapes.ttl> .
         "#;
-        
+
         let directives = manager.extract_import_directives(rdf_content).unwrap();
         assert_eq!(directives.len(), 2);
-        
+
         // Check that we have both include and imports directives
-        let has_include = directives.iter().any(|d| matches!(d.import_type, ImportType::Include));
-        let has_selective = directives.iter().any(|d| matches!(d.import_type, ImportType::Selective));
+        let has_include = directives
+            .iter()
+            .any(|d| matches!(d.import_type, ImportType::Include));
+        let has_selective = directives
+            .iter()
+            .any(|d| matches!(d.import_type, ImportType::Selective));
         assert!(has_include);
         assert!(has_selective);
     }
 
     #[test]
     fn test_external_reference_detection() {
-        let manager = ShapeImportManager::default();
-        
+        let manager = ShapeImportManager::with_default_config();
+
         // HTTP URLs should be considered external
         assert!(manager.is_external_reference("http://example.org/shapes.ttl"));
         assert!(manager.is_external_reference("https://example.org/shapes.ttl"));
-        
+
         // File URLs should be considered external if allowed
         assert!(manager.is_external_reference("file:///path/to/shapes.ttl"));
-        
+
         // Relative IRIs should not be considered external
         assert!(!manager.is_external_reference("relative-shape"));
         assert!(!manager.is_external_reference("#LocalShape"));
@@ -1313,9 +1322,12 @@ mod tests {
             import_type: ImportType::Selective,
             format_hint: Some("turtle".to_string()),
         };
-        
+
         assert_eq!(directive.source_iri, "https://example.org/shapes.ttl");
-        assert_eq!(directive.target_namespace, Some("http://myorg.org/shapes#".to_string()));
+        assert_eq!(
+            directive.target_namespace,
+            Some("http://myorg.org/shapes#".to_string())
+        );
         assert!(matches!(directive.import_type, ImportType::Selective));
         assert_eq!(directive.format_hint, Some("turtle".to_string()));
     }
@@ -1323,19 +1335,19 @@ mod tests {
     #[test]
     fn test_namespace_mapping_creation() {
         let import_type = ImportType::NamespaceMapping("http://mapped.example.org/".to_string());
-        
+
         match import_type {
             ImportType::NamespaceMapping(ns) => {
                 assert_eq!(ns, "http://mapped.example.org/");
             }
-            _ => assert!(false, "Expected NamespaceMapping, got: {:?}", import_type),
+            _ => panic!("Expected NamespaceMapping, got: {import_type:?}"),
         }
     }
 
     #[test]
     fn test_import_statistics_tracking() {
-        let manager = ShapeImportManager::default();
-        
+        let manager = ShapeImportManager::with_default_config();
+
         // Initial statistics should be zero
         let stats = manager.get_statistics();
         assert_eq!(stats.total_imports, 0);
@@ -1351,15 +1363,19 @@ mod tests {
             cache_ttl: std::time::Duration::from_millis(1), // Very short TTL
             ..Default::default()
         };
-        
+
         let manager = ShapeImportManager::new(config);
-        
+
         // Cache should be empty initially
-        assert!(manager.get_cached_import("http://example.org/test").is_none());
-        
+        assert!(manager
+            .get_cached_import("http://example.org/test")
+            .is_none());
+
         // After TTL expiration, cache should still be empty (nothing was cached)
         std::thread::sleep(std::time::Duration::from_millis(2));
-        assert!(manager.get_cached_import("http://example.org/test").is_none());
+        assert!(manager
+            .get_cached_import("http://example.org/test")
+            .is_none());
     }
 
     #[test]
@@ -1370,17 +1386,23 @@ mod tests {
             max_resource_size: 1024,
             ..Default::default()
         };
-        
+
         let manager = ShapeImportManager::new(config);
-        
+
         // HTTP should be blocked
-        assert!(manager.validate_source_iri("http://example.org/shapes.ttl").is_err());
-        
+        assert!(manager
+            .validate_source_iri("http://example.org/shapes.ttl")
+            .is_err());
+
         // File should be blocked
-        assert!(manager.validate_source_iri("file:///path/to/shapes.ttl").is_err());
-        
+        assert!(manager
+            .validate_source_iri("file:///path/to/shapes.ttl")
+            .is_err());
+
         // HTTPS should still be allowed
-        assert!(manager.validate_source_iri("https://example.org/shapes.ttl").is_ok());
+        assert!(manager
+            .validate_source_iri("https://example.org/shapes.ttl")
+            .is_ok());
     }
 
     #[test]
@@ -1389,9 +1411,9 @@ mod tests {
             max_import_depth: 2,
             ..Default::default()
         };
-        
+
         let mut manager = ShapeImportManager::new(config);
-        
+
         let directive = ImportDirective {
             source_iri: "https://example.org/shapes.ttl".to_string(),
             target_namespace: None,
@@ -1399,11 +1421,11 @@ mod tests {
             import_type: ImportType::Include,
             format_hint: None,
         };
-        
+
         // Should fail when exceeding max depth
         let result = manager.import_shapes(&directive, 3);
         assert!(result.is_err());
-        
+
         // Should succeed within depth limit
         // Note: This will fail due to network access, but at least we test the depth check
         let result = manager.import_shapes(&directive, 1);

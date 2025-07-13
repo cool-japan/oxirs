@@ -686,9 +686,7 @@ impl GraphQLFederation {
                     if !new_fields.contains_key(field_name) {
                         breaking_changes.push(BreakingChange {
                             change_type: BreakingChangeType::FieldRemoved,
-                            description: format!(
-                                "Field '{type_name}.{field_name}' was removed"
-                            ),
+                            description: format!("Field '{type_name}.{field_name}' was removed"),
                             severity: BreakingChangeSeverity::High,
                         });
                     }
@@ -736,11 +734,12 @@ impl GraphQLFederation {
                 {
                     for (field_name, old_field) in old_fields {
                         if !new_fields.contains_key(field_name)
-                            && old_field.directives.iter().any(|d| d.name == "deprecated") {
-                                warnings.push(format!(
-                                    "Deprecated field '{type_name}.{field_name}' was removed"
-                                ));
-                            }
+                            && old_field.directives.iter().any(|d| d.name == "deprecated")
+                        {
+                            warnings.push(format!(
+                                "Deprecated field '{type_name}.{field_name}' was removed"
+                            ));
+                        }
                     }
                 }
             }

@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use tracing::{info, instrument};
 
-use crate::{planner::ExecutionPlan, ServiceRegistry};
+use crate::{planner::ExecutionPlan, service_registry::ServiceRegistry};
 
 use super::step_execution::execute_step;
 use super::types::*;
@@ -132,11 +132,11 @@ impl FederatedExecutor {
         adaptive_config: &mut LocalAdaptiveConfig,
     ) -> Result<Vec<StepResult>> {
         let group_start = Instant::now();
-        let mut group_results = Vec::new();
+        let group_results;
 
         // Monitor resource usage before execution
-        let initial_memory = resource_monitor.get_memory_usage();
-        let initial_cpu = resource_monitor.get_cpu_usage();
+        let _initial_memory = resource_monitor.get_memory_usage();
+        let _initial_cpu = resource_monitor.get_cpu_usage();
 
         // Choose execution strategy dynamically
         let execution_strategy = self.select_execution_strategy(
@@ -433,7 +433,7 @@ impl FederatedExecutor {
         &self,
         parallel_group: &[String],
         plan: &ExecutionPlan,
-        runtime_stats: &RuntimeStatistics,
+        _runtime_stats: &RuntimeStatistics,
         performance_monitor: &EnhancedPerformanceMonitor,
         _registry: &ServiceRegistry,
     ) -> Result<Vec<String>> {
@@ -509,7 +509,7 @@ impl FederatedExecutor {
     pub fn adapt_configuration(
         &self,
         adaptive_config: &mut LocalAdaptiveConfig,
-        runtime_stats: &RuntimeStatistics,
+        _runtime_stats: &RuntimeStatistics,
         performance_monitor: &EnhancedPerformanceMonitor,
         resource_monitor: &LocalResourceMonitor,
     ) {
@@ -554,7 +554,7 @@ impl FederatedExecutor {
         &self,
         runtime_stats: &RuntimeStatistics,
         performance_monitor: &EnhancedPerformanceMonitor,
-        resource_monitor: &LocalResourceMonitor,
+        _resource_monitor: &LocalResourceMonitor,
     ) {
         info!("=== Adaptive Execution Insights ===");
         info!(

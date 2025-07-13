@@ -138,7 +138,7 @@ pub async fn quick_visualization(
     engine: &AdvancedVisualizationEngine,
     collector_name: &str,
     renderer_name: &str,
-    title: &str,
+    _title: &str,
 ) -> Result<VisualizationOutput> {
     let options = RenderOptions {
         visualization_type: VisualizationType::NetworkGraph,
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn test_color_schemes() {
-        let schemes = vec![
+        let schemes = [
             ColorScheme::Viridis,
             ColorScheme::Plasma,
             ColorScheme::Inferno,
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn test_visualization_types() {
-        let types = vec![
+        let types = [
             VisualizationType::NetworkGraph,
             VisualizationType::Heatmap,
             VisualizationType::Timeline,
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn test_export_formats() {
-        let formats = vec![
+        let formats = [
             ExportFormat::SVG,
             ExportFormat::PNG,
             ExportFormat::HTML,

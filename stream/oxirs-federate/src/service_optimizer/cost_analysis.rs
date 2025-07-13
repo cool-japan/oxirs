@@ -9,7 +9,7 @@ use std::time::Duration;
 use tracing::debug;
 
 use crate::planner::TriplePattern;
-use crate::{FederatedService, ServiceRegistry};
+use crate::{service_registry::ServiceRegistry, FederatedService};
 
 use super::{types::*, ServiceOptimizer};
 
@@ -82,14 +82,8 @@ impl ServiceOptimizer {
         predicted_size += features.service_data_size_factor * 500.0;
 
         // Apply pattern type multipliers
-        if pattern
-            .subject
-            .as_ref()
-            .is_some_and(|s| s.starts_with('?'))
-            && pattern
-                .object
-                .as_ref()
-                .is_some_and(|o| o.starts_with('?'))
+        if pattern.subject.as_ref().is_some_and(|s| s.starts_with('?'))
+            && pattern.object.as_ref().is_some_and(|o| o.starts_with('?'))
         {
             predicted_size *= 2.0; // More variables = more results
         }
@@ -194,7 +188,7 @@ impl ServiceOptimizer {
     fn calculate_pattern_selectivity_local(
         &self,
         pattern: &TriplePattern,
-        service: &FederatedService,
+        _service: &FederatedService,
         _registry: &ServiceRegistry,
     ) -> f64 {
         let mut selectivity: f64 = 1.0;
@@ -331,7 +325,7 @@ impl ServiceOptimizer {
 
             // Recalculate ranking scores
             if let Some(service) = registry.get_service(&update.service_id) {
-                let new_ranking = self.calculate_dynamic_ranking_score(service, registry)?;
+                let new_ranking = self.calculate_dynamic_ranking_score(&service, registry)?;
                 self.update_service_ranking(&update.service_id, new_ranking);
 
                 // Trigger re-ranking of related services if significant change
@@ -349,7 +343,7 @@ impl ServiceOptimizer {
         &self,
         pattern: &TriplePattern,
         service: &FederatedService,
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
     ) -> Result<f64> {
         let estimated_cost = self
             .estimate_service_cost(service, &[pattern.clone()], &[])
@@ -607,7 +601,7 @@ impl ServiceOptimizer {
         service: &FederatedService,
         request_size: u64,
         expected_response_size: u64,
-        registry: &ServiceRegistry,
+        _registry: &ServiceRegistry,
         current_time: chrono::DateTime<chrono::Utc>,
     ) -> Result<Duration> {
         // Base latency from service performance data
@@ -782,7 +776,6 @@ impl ServiceOptimizer {
         let local_hour = ((hour as i32) + primary_timezone_offset).rem_euclid(24) as u32;
 
         // Peak hours typically have more network congestion
-        
 
         match local_hour {
             0..=5 => 0.8,   // Night: lower congestion
@@ -1149,11 +1142,7 @@ impl ServiceOptimizer {
         let mut cost = 10.0; // Base cost
 
         // Variable patterns are more expensive
-        if pattern
-            .subject
-            .as_ref()
-            .is_some_and(|s| s.starts_with('?'))
-        {
+        if pattern.subject.as_ref().is_some_and(|s| s.starts_with('?')) {
             cost += 5.0;
         }
         if pattern
@@ -1163,11 +1152,7 @@ impl ServiceOptimizer {
         {
             cost += 10.0; // Predicate variables are very expensive
         }
-        if pattern
-            .object
-            .as_ref()
-            .is_some_and(|o| o.starts_with('?'))
-        {
+        if pattern.object.as_ref().is_some_and(|o| o.starts_with('?')) {
             cost += 5.0;
         }
 
@@ -1214,11 +1199,7 @@ impl ServiceOptimizer {
         let mut complexity_score = 0;
 
         // Variable patterns increase complexity
-        if pattern
-            .subject
-            .as_ref()
-            .is_some_and(|s| s.starts_with('?'))
-        {
+        if pattern.subject.as_ref().is_some_and(|s| s.starts_with('?')) {
             complexity_score += 1;
         }
         if pattern
@@ -1228,11 +1209,7 @@ impl ServiceOptimizer {
         {
             complexity_score += 2; // Predicate variables are more complex
         }
-        if pattern
-            .object
-            .as_ref()
-            .is_some_and(|o| o.starts_with('?'))
-        {
+        if pattern.object.as_ref().is_some_and(|o| o.starts_with('?')) {
             complexity_score += 1;
         }
 

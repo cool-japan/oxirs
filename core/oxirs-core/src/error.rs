@@ -179,8 +179,8 @@ pub mod validation {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::validation::*;
+    use super::*;
 
     #[test]
     fn test_core_error_display() {
@@ -188,10 +188,7 @@ mod tests {
             name: "test".to_string(),
             message: "test message".to_string(),
         };
-        assert_eq!(
-            error.to_string(),
-            "Invalid parameter 'test': test message"
-        );
+        assert_eq!(error.to_string(), "Invalid parameter 'test': test message");
 
         let error = CoreError::NotFound("resource".to_string());
         assert_eq!(error.to_string(), "Resource not found: resource");
@@ -200,10 +197,7 @@ mod tests {
             expected: 3,
             actual: 5,
         };
-        assert_eq!(
-            error.to_string(),
-            "Dimension mismatch: expected 3, got 5"
-        );
+        assert_eq!(error.to_string(), "Dimension mismatch: expected 3, got 5");
     }
 
     #[test]
@@ -400,7 +394,10 @@ mod tests {
         assert_eq!(error.to_string(), "Platform capability not available: SIMD");
 
         let error = CoreError::MemoryError("allocation failed".to_string());
-        assert_eq!(error.to_string(), "Memory allocation failed: allocation failed");
+        assert_eq!(
+            error.to_string(),
+            "Memory allocation failed: allocation failed"
+        );
 
         let error = CoreError::ConfigError("invalid setting".to_string());
         assert_eq!(error.to_string(), "Configuration error: invalid setting");

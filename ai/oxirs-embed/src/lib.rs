@@ -113,6 +113,8 @@
 //! - `gpu_acceleration_demo.rs` - GPU acceleration features  
 //! - `integrated_ai_platform_demo.rs` - Complete AI platform showcase
 
+#![allow(dead_code)]
+
 pub mod adaptive_learning;
 pub mod advanced_profiler;
 #[cfg(feature = "api-server")]

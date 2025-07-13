@@ -375,17 +375,17 @@ impl ConstraintEvaluator for NodeKindConstraint {
 
 impl NodeKindConstraint {
     fn matches_node_kind(&self, value: &Term) -> bool {
-        match (&self.node_kind, value) {
-            (NodeKind::Iri, Term::NamedNode(_)) => true,
-            (NodeKind::BlankNode, Term::BlankNode(_)) => true,
-            (NodeKind::Literal, Term::Literal(_)) => true,
-            (NodeKind::BlankNodeOrIri, Term::BlankNode(_)) => true,
-            (NodeKind::BlankNodeOrIri, Term::NamedNode(_)) => true,
-            (NodeKind::BlankNodeOrLiteral, Term::BlankNode(_)) => true,
-            (NodeKind::BlankNodeOrLiteral, Term::Literal(_)) => true,
-            (NodeKind::IriOrLiteral, Term::NamedNode(_)) => true,
-            (NodeKind::IriOrLiteral, Term::Literal(_)) => true,
-            _ => false,
-        }
+        matches!(
+            (&self.node_kind, value),
+            (NodeKind::Iri, Term::NamedNode(_))
+                | (NodeKind::BlankNode, Term::BlankNode(_))
+                | (NodeKind::Literal, Term::Literal(_))
+                | (NodeKind::BlankNodeOrIri, Term::BlankNode(_))
+                | (NodeKind::BlankNodeOrIri, Term::NamedNode(_))
+                | (NodeKind::BlankNodeOrLiteral, Term::BlankNode(_))
+                | (NodeKind::BlankNodeOrLiteral, Term::Literal(_))
+                | (NodeKind::IriOrLiteral, Term::NamedNode(_))
+                | (NodeKind::IriOrLiteral, Term::Literal(_))
+        )
     }
 }

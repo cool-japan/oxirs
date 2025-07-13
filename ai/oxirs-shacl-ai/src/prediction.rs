@@ -6,14 +6,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use oxirs_core::{
-    model::Term,
-    RdfTerm, Store,
-};
+use oxirs_core::{model::Term, RdfTerm, Store};
 
-use oxirs_shacl::{
-    Constraint, Shape, ValidationConfig, ValidationReport,
-};
+use oxirs_shacl::{Constraint, Shape, ValidationConfig, ValidationReport};
 
 use crate::{ModelTrainingResult, Result, ShaclAiError};
 
@@ -203,7 +198,6 @@ impl ValidationPredictor {
 
         let start_time = std::time::Instant::now();
         let success = true;
-        let mut accuracy = 0.0;
         let mut loss = 0.0;
         let epochs_trained = self.config.model_params.history_window_size;
 
@@ -220,7 +214,7 @@ impl ValidationPredictor {
             }
         }
 
-        accuracy = 1.0 - (loss / epochs_trained as f64).min(1.0);
+        let accuracy = 1.0 - (loss / epochs_trained as f64).min(1.0);
         let training_time = start_time.elapsed();
 
         // Update model state

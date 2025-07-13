@@ -861,7 +861,6 @@ pub struct ArchitectureComplexity {
     pub width: usize,
 }
 
-
 /// Population of neural architectures
 #[derive(Debug, Clone)]
 pub struct Population {

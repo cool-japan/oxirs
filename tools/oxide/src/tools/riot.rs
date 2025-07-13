@@ -64,9 +64,7 @@ pub async fn run(
         println!("  Input format: {input_format}");
 
         if !utils::is_supported_input_format(&input_format) {
-            eprintln!(
-                "  Warning: Unsupported input format '{input_format}', skipping"
-            );
+            eprintln!("  Warning: Unsupported input format '{input_format}', skipping");
             stats.warnings += 1;
             continue;
         }
@@ -448,9 +446,7 @@ fn serialize_rdf_content(triples: &[RdfTriple], format: &str) -> ToolResult<Stri
             }
         }
         _ => {
-            return Err(
-                format!("Serialization for format '{format}' not yet implemented").into(),
-            );
+            return Err(format!("Serialization for format '{format}' not yet implemented").into());
         }
     }
 

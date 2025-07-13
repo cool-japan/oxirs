@@ -910,10 +910,7 @@ impl QuantumConsciousnessEntanglement {
 
         let start_time = Instant::now();
         let mut entangled_results = HashMap::new();
-        let mut quantum_correlations = Vec::new();
-        let mut bell_measurements = Vec::new();
         let mut nonlocal_correlations = Vec::new();
-        let mut instantaneous_communications = Vec::new();
         let mut error_corrections = Vec::new();
 
         // Step 1: Verify entanglement status of all agents
@@ -934,12 +931,12 @@ impl QuantumConsciousnessEntanglement {
         }
 
         // Step 4: Measure quantum correlations between validation results
-        quantum_correlations = self
+        let quantum_correlations = self
             .measure_quantum_correlations(&entangled_results, &active_entanglements)
             .await?;
 
         // Step 5: Perform Bell measurements on entangled states
-        bell_measurements = self
+        let bell_measurements = self
             .perform_bell_measurements(&active_entanglements)
             .await?;
 
@@ -951,7 +948,7 @@ impl QuantumConsciousnessEntanglement {
         }
 
         // Step 7: Test instantaneous communication capabilities
-        instantaneous_communications = self
+        let instantaneous_communications = self
             .test_instantaneous_communication(entangled_agents)
             .await?;
 
@@ -1330,7 +1327,7 @@ trait DecoherenceDetector {
     fn detect_decoherence(&self, state: &QuantumEntanglementState) -> f64;
 }
 
-trait ErrorCorrection {
+pub trait ErrorCorrection {
     fn correct_errors(&self, state: &QuantumEntanglementState) -> QuantumEntanglementState;
 }
 
@@ -1386,7 +1383,7 @@ impl QuantumConsciousnessEntanglement {
         Ok(entanglements)
     }
 
-    async fn synchronize_quantum_states(&self, entanglements: &[EntanglementId]) -> Result<()> {
+    async fn synchronize_quantum_states(&self, _entanglements: &[EntanglementId]) -> Result<()> {
         // Synchronize quantum states across all entangled pairs
         Ok(())
     }

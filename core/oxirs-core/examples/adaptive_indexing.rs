@@ -88,7 +88,7 @@ fn example_query_pattern_learning() -> Result<(), Box<dyn std::error::Error>> {
     let stats = manager.get_stats();
     println!("\nQuery Statistics:");
     for (pattern, pattern_stats) in &stats.pattern_stats {
-        println!("  {:?}:", pattern);
+        println!("  {pattern:?}:");
         println!("    Query count: {}", pattern_stats.query_count);
         println!("    Avg result size: {:.2}", pattern_stats.avg_result_size);
         println!(
@@ -128,13 +128,13 @@ fn example_index_creation() -> Result<(), Box<dyn std::error::Error>> {
 
         // Add type
         let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
-        let type_obj = NamedNode::new(&format!("http://example.org/{}", types[i % types.len()]))?;
+        let type_obj = NamedNode::new(format!("http://example.org/{}", types[i % types.len()]))?;
         manager.insert(Triple::new(subject.clone(), type_pred, type_obj))?;
 
         // Add other properties
         for (j, pred_name) in predicates.iter().enumerate() {
             if i % (j + 2) == 0 {
-                let pred = NamedNode::new(&format!("http://example.org/{}", pred_name))?;
+                let pred = NamedNode::new(format!("http://example.org/{}", pred_name))?;
                 let obj = Literal::new(&format!("{} value {}", pred_name, i));
                 manager.insert(Triple::new(subject.clone(), pred, obj))?;
             }

@@ -75,7 +75,7 @@ impl ReportFormat {
     }
 
     /// Parse format from string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse_format(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "turtle" | "ttl" => Some(ReportFormat::Turtle),
             "jsonld" | "json-ld" => Some(ReportFormat::JsonLd),

@@ -393,8 +393,10 @@ impl SimpleEmbeddingModel {
 impl EmbeddingModel for SimpleEmbeddingModel {
     fn config(&self) -> &ModelConfig {
         // Create a default config since SimpleEmbeddingModel doesn't store one
-        use std::sync::LazyLock;
-        static DEFAULT_CONFIG: LazyLock<ModelConfig> = LazyLock::new(|| ModelConfig {
+        use std::sync::OnceLock;
+        static DEFAULT_CONFIG: OnceLock<ModelConfig> = OnceLock::new();
+
+        DEFAULT_CONFIG.get_or_init(|| ModelConfig {
             dimensions: 384,
             learning_rate: 0.01,
             l2_reg: 0.0001,
@@ -404,8 +406,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
             seed: None,
             use_gpu: false,
             model_params: HashMap::new(),
-        });
-        &DEFAULT_CONFIG
+        })
     }
 
     fn model_id(&self) -> &Uuid {

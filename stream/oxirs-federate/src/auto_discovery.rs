@@ -15,7 +15,7 @@ use tracing::{error, info, warn};
 #[cfg(feature = "service-discovery")]
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 
-use crate::{service::ServiceType, service_registry::ServiceRegistry, ServiceDiscovery};
+use crate::{discovery::ServiceDiscovery, service::ServiceType, service_registry::ServiceRegistry};
 
 /// Service discovery daemon for automatic discovery
 #[derive(Debug)]
@@ -338,6 +338,7 @@ impl AutoDiscovery {
 
         #[cfg(not(feature = "kubernetes"))]
         {
+            let _ = tx; // Suppress unused variable warning when feature is disabled
             warn!("Kubernetes discovery requested but feature not enabled");
         }
 

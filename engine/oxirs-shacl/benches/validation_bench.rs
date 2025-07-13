@@ -14,19 +14,19 @@ fn create_test_data(size: usize) -> (ConcreteStore, Vec<Shape>) {
 
     // Create test data in the store
     for i in 0..size {
-        let person_iri = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
-        let name_literal = Term::Literal(Literal::new(format!("Person {i}")));
-        let age_literal = Term::Literal(Literal::new(format!("{}", 20 + (i % 60))));
+        let _person_iri = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
+        let _name_literal = Term::Literal(Literal::new(format!("Person {i}")));
+        let _age_literal = Term::Literal(Literal::new(format!("{}", 20 + (i % 60))));
 
         // Add person type
-        let rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
-        let person_class = NamedNode::new("http://example.org/Person").unwrap();
+        let _rdf_type = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        let _person_class = NamedNode::new("http://example.org/Person").unwrap();
 
         // Add name
-        let name_predicate = NamedNode::new("http://example.org/name").unwrap();
+        let _name_predicate = NamedNode::new("http://example.org/name").unwrap();
 
         // Add age
-        let age_predicate = NamedNode::new("http://example.org/age").unwrap();
+        let _age_predicate = NamedNode::new("http://example.org/age").unwrap();
 
         // TODO: Add triples to store when store API is available
     }
@@ -265,7 +265,7 @@ fn bench_shape_parsing(c: &mut Criterion) {
 fn bench_property_path_evaluation(c: &mut Criterion) {
     let mut group = c.benchmark_group("property_path_evaluation");
 
-    let store = ConcreteStore::new().unwrap();
+    let _store = ConcreteStore::new().unwrap();
     // TODO: Add test data to store when API is available
 
     let paths = vec![

@@ -6,14 +6,14 @@ use crate::{
     server::AppState,
     store::Store,
 };
-use std::sync::Arc;
-use std::collections::HashMap;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json, Response},
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, instrument};
 
@@ -121,10 +121,11 @@ pub async fn get_dataset(
     // Check permissions
     // check_dataset_permission(&auth_user, &dataset_name, &Permission::DatasetRead)?;
 
-    let config =
-        state.config.datasets.get(&dataset_name).ok_or_else(|| {
-            FusekiError::not_found(format!("Dataset '{dataset_name}' not found"))
-        })?;
+    let config = state
+        .config
+        .datasets
+        .get(&dataset_name)
+        .ok_or_else(|| FusekiError::not_found(format!("Dataset '{dataset_name}' not found")))?;
 
     let dataset_info = get_dataset_info(&dataset_name, config, &state.store).await?;
 
@@ -383,14 +384,8 @@ pub async fn backup_dataset(
     // Determine content type and filename
     let (content_type, filename) = match format {
         "turtle" => ("text/turtle", format!("{dataset_name}_backup.ttl")),
-        "ntriples" => (
-            "application/n-triples",
-            format!("{dataset_name}_backup.nt"),
-        ),
-        "rdfxml" => (
-            "application/rdf+xml",
-            format!("{dataset_name}_backup.rdf"),
-        ),
+        "ntriples" => ("application/n-triples", format!("{dataset_name}_backup.nt")),
+        "rdfxml" => ("application/rdf+xml", format!("{dataset_name}_backup.rdf")),
         _ => ("text/turtle", format!("{dataset_name}_backup.ttl")),
     };
 
@@ -574,7 +569,7 @@ struct CompactionResult {
     size_after: u64,
 }
 
-async fn get_dataset_stats_from_store(store: &Store, name: &str) -> FusekiResult<DatasetStats> {
+async fn get_dataset_stats_from_store(_store: &Store, _name: &str) -> FusekiResult<DatasetStats> {
     // Mock implementation
     Ok(DatasetStats {
         triple_count: 1000, // Mock data
@@ -583,7 +578,7 @@ async fn get_dataset_stats_from_store(store: &Store, name: &str) -> FusekiResult
 }
 
 async fn create_dataset_in_store(
-    store: &Store,
+    _store: &Store,
     name: &str,
     config: &DatasetConfig,
 ) -> FusekiResult<()> {
@@ -596,7 +591,7 @@ async fn create_dataset_in_store(
     Ok(())
 }
 
-async fn delete_dataset_from_store(store: &Store, name: &str) -> FusekiResult<()> {
+async fn delete_dataset_from_store(_store: &Store, name: &str) -> FusekiResult<()> {
     // Mock implementation
     debug!("Deleting dataset '{}'", name);
     tokio::time::sleep(std::time::Duration::from_millis(5)).await;
@@ -604,7 +599,7 @@ async fn delete_dataset_from_store(store: &Store, name: &str) -> FusekiResult<()
 }
 
 async fn compact_dataset_in_store(
-    store: &Store,
+    _store: &Store,
     name: &str,
     force: bool,
 ) -> FusekiResult<CompactionResult> {
@@ -619,7 +614,7 @@ async fn compact_dataset_in_store(
 }
 
 async fn create_dataset_backup(
-    store: &Store,
+    _store: &Store,
     name: &str,
     format: &str,
     compress: bool,

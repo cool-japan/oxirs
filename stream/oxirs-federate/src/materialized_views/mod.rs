@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 use tracing::{debug, info};
 use uuid::Uuid;
 
-use crate::{planner::planning::types::QueryInfo, ServiceRegistry};
+use crate::{planner::planning::types::QueryInfo, service_registry::ServiceRegistry};
 
 /// Main materialized view manager that coordinates all view operations
 #[derive(Debug)]
@@ -199,7 +199,7 @@ impl MaterializedViewManager {
 
     /// Remove a materialized view
     pub async fn remove_view(&mut self, view_id: &str) -> Result<()> {
-        if let Some(view) = self.views.remove(view_id) {
+        if let Some(_view) = self.views.remove(view_id) {
             self.view_statistics.remove(view_id);
             self.maintenance_scheduler
                 .cancel_operations_for_view(view_id);

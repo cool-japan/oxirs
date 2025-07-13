@@ -50,7 +50,8 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
     println!("🔬 Adding sample biomedical knowledge...");
 
     // Gene-disease associations
-    let gene_disease_triples = [(
+    let gene_disease_triples = [
+        (
             "http://bio.org/gene/BRCA1",
             "http://bio.org/causes",
             "http://bio.org/disease/breast_cancer",
@@ -69,7 +70,8 @@ async fn demo_biomedical_kg_embeddings() -> Result<()> {
             "http://bio.org/gene/HTT",
             "http://bio.org/causes",
             "http://bio.org/disease/huntington",
-        )];
+        ),
+    ];
 
     // Drug-target interactions
     let drug_target_triples = vec![
@@ -463,6 +465,7 @@ async fn demo_drug_discovery() -> Result<()> {
 }
 
 /// Helper function to display entity type information
+#[allow(dead_code)]
 fn display_entity_info(entity_iri: &str) -> String {
     if let Some(entity_type) = BiomedicalEntityType::from_iri(entity_iri) {
         format!(
@@ -488,6 +491,7 @@ fn display_entity_info(entity_iri: &str) -> String {
 }
 
 /// Helper function to display relation type information
+#[allow(dead_code)]
 fn display_relation_info(relation_iri: &str) -> String {
     if let Some(relation_type) = BiomedicalRelationType::from_iri(relation_iri) {
         format!(

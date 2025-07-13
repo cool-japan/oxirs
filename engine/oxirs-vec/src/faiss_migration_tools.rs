@@ -11,9 +11,7 @@
 //! - Progress tracking and resumable migrations
 //! - Automatic format detection and conversion
 
-use crate::{
-    faiss_compatibility::FaissIndexType, faiss_native_integration::NativeFaissConfig,
-};
+use crate::{faiss_compatibility::FaissIndexType, faiss_native_integration::NativeFaissConfig};
 use anyhow::{Error as AnyhowError, Result};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};

@@ -11,9 +11,7 @@ use oxirs_core::{
     RdfTerm, Store,
 };
 
-use oxirs_shacl::{
-    Constraint, PropertyPath, Shape, Target, ValidationConfig, Validator,
-};
+use oxirs_shacl::{Constraint, PropertyPath, Shape, Target, ValidationConfig, Validator};
 
 use crate::{insights::QualityInsight, Result, ShaclAiError};
 
@@ -550,10 +548,7 @@ impl QualityAssessor {
             // Process last entity
             if let Some(entity) = current_entity {
                 let signature = self.create_entity_signature(&current_signature);
-                entity_signatures
-                    .entry(signature)
-                    .or_default()
-                    .push(entity);
+                entity_signatures.entry(signature).or_default().push(entity);
                 total_entities += 1;
             }
         }
@@ -1588,6 +1583,32 @@ struct AccuracyCheck {
 struct AdherenceCheck {
     total: usize,
     adherent: usize,
+}
+
+// Implementation of multimodal validation trait for QualityAssessor
+#[async_trait::async_trait]
+impl crate::multimodal_validation::traits::QualityAssessor for QualityAssessor {
+    async fn assess_quality(
+        &self,
+        _content: &crate::multimodal_validation::types::MultiModalContent,
+        _analysis: &crate::multimodal_validation::types::ContentAnalysis,
+    ) -> crate::Result<crate::multimodal_validation::traits::QualityAssessment> {
+        // Simple implementation for now
+        Ok(crate::multimodal_validation::traits::QualityAssessment {
+            overall_score: 0.8,
+            dimensions: std::collections::HashMap::new(),
+            issues: Vec::new(),
+            recommendations: Vec::new(),
+        })
+    }
+
+    fn get_thresholds(&self) -> crate::multimodal_validation::traits::QualityThresholds {
+        crate::multimodal_validation::traits::QualityThresholds::default()
+    }
+
+    fn set_thresholds(&self, _thresholds: crate::multimodal_validation::traits::QualityThresholds) {
+        // Implementation placeholder
+    }
 }
 
 #[cfg(test)]

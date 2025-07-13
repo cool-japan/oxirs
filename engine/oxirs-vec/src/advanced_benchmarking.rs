@@ -752,10 +752,7 @@ impl AdvancedBenchmarkSuite {
     }
 
     /// Analyze dataset characteristics
-    fn analyze_dataset(
-        &self,
-        base_dataset: BenchmarkDataset,
-    ) -> Result<EnhancedBenchmarkDataset> {
+    fn analyze_dataset(&self, base_dataset: BenchmarkDataset) -> Result<EnhancedBenchmarkDataset> {
         tracing::info!("Analyzing dataset: {}", base_dataset.name);
 
         let statistics = self.compute_dataset_statistics(&base_dataset.train_vectors)?;
@@ -1366,9 +1363,7 @@ impl AdvancedBenchmarkSuite {
         let build_start = Instant::now();
 
         for (i, vector) in dataset.base_dataset.train_vectors.iter().enumerate() {
-            algorithm
-                .index
-                .insert(format!("vec_{i}"), vector.clone())?;
+            algorithm.index.insert(format!("vec_{i}"), vector.clone())?;
         }
 
         let build_time = build_start.elapsed();

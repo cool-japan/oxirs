@@ -24,8 +24,6 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, info};
 
-use oxirs_core::Store;
-
 use crate::Result;
 
 /// Reality synthesis system for creating new realities through validation
@@ -707,15 +705,15 @@ impl RealityGenerationEngine {
 
     async fn identify_reality_seeds(
         &mut self,
-        mapping: &PossibilityMapping,
+        _mapping: &PossibilityMapping,
     ) -> Result<RealitySeeds> {
         Ok(RealitySeeds::default()) // Placeholder
     }
 
     async fn generate_universe_elements(
         &mut self,
-        substrate: &DimensionalSubstrate,
-        spec: &AlternativeUniverseSpecification,
+        _substrate: &DimensionalSubstrate,
+        _spec: &AlternativeUniverseSpecification,
     ) -> Result<RealityElements> {
         Ok(RealityElements::default()) // Placeholder
     }
@@ -727,40 +725,40 @@ impl RealityGenerationEngine {
     // Helper methods
     async fn generate_reality_seeds(
         &mut self,
-        context: &RealitySynthesisContext,
+        _context: &RealitySynthesisContext,
     ) -> Result<Vec<RealitySeed>> {
         Ok(vec![RealitySeed]) // Placeholder
     }
 
     async fn build_foundation_structure(
         &mut self,
-        seeds: &[RealitySeed],
+        _seeds: &[RealitySeed],
     ) -> Result<FoundationStructure> {
         Ok(FoundationStructure) // Placeholder
     }
 
     async fn synthesize_reality_elements(
         &mut self,
-        structure: &FoundationStructure,
+        _structure: &FoundationStructure,
     ) -> Result<Vec<RealityElement>> {
         Ok(vec![RealityElement]) // Placeholder
     }
 
     async fn weave_reality_patterns(
         &mut self,
-        elements: &[RealityElement],
+        _elements: &[RealityElement],
     ) -> Result<Vec<RealityPattern>> {
         Ok(vec![RealityPattern]) // Placeholder
     }
 
     async fn define_reality_laws(
         &mut self,
-        patterns: &[RealityPattern],
+        _patterns: &[RealityPattern],
     ) -> Result<Vec<RealityLaw>> {
         Ok(vec![RealityLaw]) // Placeholder
     }
 
-    async fn calculate_foundation_strength(&self, laws: &[RealityLaw]) -> Result<f64> {
+    async fn calculate_foundation_strength(&self, _laws: &[RealityLaw]) -> Result<f64> {
         Ok(0.95) // Placeholder
     }
 }
@@ -892,7 +890,7 @@ impl RealitySynthesisMetrics {
 
     pub async fn update_synthesis_metrics(
         &mut self,
-        foundation: &RealityFoundation,
+        _foundation: &RealityFoundation,
         framework: &DimensionalFramework,
         structure: &UniverseStructure,
         possibilities: &MaterializedPossibilities,
@@ -944,7 +942,6 @@ impl RealitySynthesisMetrics {
 }
 
 /// Supporting component types and placeholder implementations
-
 // Main component placeholder implementations
 macro_rules! impl_reality_component {
     ($name:ident) => {

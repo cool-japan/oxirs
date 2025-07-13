@@ -5,8 +5,6 @@
 
 use serde::{Deserialize, Serialize};
 
-
-
 // Simplified shape types for AI operations
 // We'll expand this as the SHACL crate stabilizes
 
@@ -276,7 +274,9 @@ impl PropertyConstraint {
             Some(self.in_values.join(","))
         } else if let Some(min_length) = self.min_length {
             Some(min_length.to_string())
-        } else { self.max_length.map(|max_length| max_length.to_string()) }
+        } else {
+            self.max_length.map(|max_length| max_length.to_string())
+        }
     }
 }
 

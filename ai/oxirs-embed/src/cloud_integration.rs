@@ -139,7 +139,8 @@ pub struct MonitoringConfig {
 #[async_trait]
 pub trait CloudService: Send + Sync {
     /// Deploy model to cloud service
-    async fn deploy_model(&self, _deployment_config: &DeploymentConfig) -> Result<DeploymentResult>;
+    async fn deploy_model(&self, _deployment_config: &DeploymentConfig)
+        -> Result<DeploymentResult>;
 
     /// Get inference endpoint
     async fn get_endpoint(&self, deployment_id: &str) -> Result<EndpointInfo>;
@@ -462,7 +463,10 @@ impl AWSSageMakerService {
 
 #[async_trait]
 impl CloudService for AWSSageMakerService {
-    async fn deploy_model(&self, __deployment_config: &DeploymentConfig) -> Result<DeploymentResult> {
+    async fn deploy_model(
+        &self,
+        __deployment_config: &DeploymentConfig,
+    ) -> Result<DeploymentResult> {
         // Mock implementation - replace with actual AWS SageMaker API calls
         let deployment_id = Uuid::new_v4().to_string();
 
@@ -829,7 +833,10 @@ impl AzureMLService {
 
 #[async_trait]
 impl CloudService for AzureMLService {
-    async fn deploy_model(&self, _deployment_config: &DeploymentConfig) -> Result<DeploymentResult> {
+    async fn deploy_model(
+        &self,
+        _deployment_config: &DeploymentConfig,
+    ) -> Result<DeploymentResult> {
         // Mock implementation for Azure ML
         let deployment_id = format!("azure-{}", Uuid::new_v4());
 
@@ -1262,6 +1269,7 @@ impl AWSBedrockService {
 }
 
 /// Azure Cognitive Services integration
+#[allow(dead_code)]
 pub struct AzureCognitiveServices {
     subscription_key: String,
     endpoint: String,

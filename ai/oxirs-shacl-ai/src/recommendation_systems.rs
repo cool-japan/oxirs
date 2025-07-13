@@ -12,10 +12,7 @@ use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::{
-    optimization_engine::PerformanceMetrics,
-    quality::QualityReport,
-    shape::Shape,
-    Result,
+    optimization_engine::PerformanceMetrics, quality::QualityReport, shape::Shape, Result,
 };
 
 use oxirs_core::Store;
@@ -466,8 +463,8 @@ impl RecommendationEngine {
     /// Generate shape improvement recommendations
     fn generate_shape_improvement_recommendations(
         &self,
-        shapes: &[Shape],
-        quality_report: &QualityReport,
+        _shapes: &[Shape],
+        _quality_report: &QualityReport,
     ) -> Result<Vec<Recommendation>> {
         let mut recommendations = Vec::new();
 
@@ -593,7 +590,7 @@ impl RecommendationEngine {
     /// Generate validation strategy recommendations
     fn generate_validation_strategy_recommendations(
         &self,
-        validation_reports: &[ValidationReport],
+        _validation_reports: &[ValidationReport],
     ) -> Result<Vec<Recommendation>> {
         let mut recommendations = Vec::new();
 
@@ -693,7 +690,7 @@ impl RecommendationEngine {
     /// Generate performance optimization recommendations
     fn generate_performance_optimization_recommendations(
         &self,
-        performance_metrics: &PerformanceMetrics,
+        _performance_metrics: &PerformanceMetrics,
     ) -> Result<Vec<Recommendation>> {
         let mut recommendations = Vec::new();
 
@@ -802,7 +799,7 @@ impl RecommendationEngine {
     /// Generate quality enhancement recommendations
     fn generate_quality_enhancement_recommendations(
         &self,
-        quality_report: &QualityReport,
+        _quality_report: &QualityReport,
     ) -> Result<Vec<Recommendation>> {
         let mut recommendations = Vec::new();
 
@@ -1464,8 +1461,7 @@ impl RecommendationEngine {
             }
         }
 
-        let mut top_impact_categories: Vec<ImpactCategory> = category_counts.into_keys()
-            .collect();
+        let mut top_impact_categories: Vec<ImpactCategory> = category_counts.into_keys().collect();
         top_impact_categories.sort();
         top_impact_categories.truncate(5);
 
@@ -1692,7 +1688,7 @@ impl RecommendationEngine {
     fn update_success_rates(&mut self) {
         let type_counts: HashMap<RecommendationType, (usize, usize)> = HashMap::new();
 
-        for outcome in self.effectiveness_tracker.applied_recommendations.values() {
+        for _outcome in self.effectiveness_tracker.applied_recommendations.values() {
             // This would need to be enhanced to track recommendation type
             // For now, we'll use a simplified approach
         }

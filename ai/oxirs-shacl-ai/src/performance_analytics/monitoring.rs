@@ -52,13 +52,15 @@ impl MetricsCollector {
         let mut metrics = self.metrics.write().map_err(|_| {
             crate::ShaclAiError::PerformanceAnalytics("Failed to acquire metrics write lock".into())
         })?;
-        
-        let entry = metrics.entry(metric_name.to_string()).or_insert_with(VecDeque::new);
+
+        let entry = metrics
+            .entry(metric_name.to_string())
+            .or_insert_with(VecDeque::new);
         let now = Instant::now();
-        
+
         // Add new sample
         entry.push_back((now, value));
-        
+
         // Remove old samples outside window
         while let Some((timestamp, _)) = entry.front() {
             if now.duration_since(*timestamp) > self.window_size {
@@ -67,12 +69,12 @@ impl MetricsCollector {
                 break;
             }
         }
-        
+
         // Limit samples to max size
         while entry.len() > self.max_samples {
             entry.pop_front();
         }
-        
+
         Ok(())
     }
 
@@ -81,12 +83,12 @@ impl MetricsCollector {
         let metrics = self.metrics.read().map_err(|_| {
             crate::ShaclAiError::PerformanceAnalytics("Failed to acquire metrics read lock".into())
         })?;
-        
+
         if let Some(values) = metrics.get(metric_name) {
             if values.is_empty() {
                 return Ok(None);
             }
-            
+
             let sum: f64 = values.iter().map(|(_, value)| value).sum();
             Ok(Some(sum / values.len() as f64))
         } else {
@@ -99,16 +101,18 @@ impl MetricsCollector {
         let metrics = self.metrics.read().map_err(|_| {
             crate::ShaclAiError::PerformanceAnalytics("Failed to acquire metrics read lock".into())
         })?;
-        
+
         if let Some(values) = metrics.get(metric_name) {
             if values.len() < 2 {
                 return Ok(None);
             }
-            
+
             let recent_half = values.len() / 2;
-            let older_avg: f64 = values.iter().take(recent_half).map(|(_, v)| v).sum::<f64>() / recent_half as f64;
-            let recent_avg: f64 = values.iter().skip(recent_half).map(|(_, v)| v).sum::<f64>() / (values.len() - recent_half) as f64;
-            
+            let older_avg: f64 =
+                values.iter().take(recent_half).map(|(_, v)| v).sum::<f64>() / recent_half as f64;
+            let recent_avg: f64 = values.iter().skip(recent_half).map(|(_, v)| v).sum::<f64>()
+                / (values.len() - recent_half) as f64;
+
             Ok(Some(recent_avg - older_avg))
         } else {
             Ok(None)
@@ -180,10 +184,10 @@ impl RealTimeMonitor {
     /// Record a performance metric
     pub fn record_metric(&self, metric_name: &str, value: f64) -> crate::Result<()> {
         self.metrics_collector.record(metric_name, value)?;
-        
+
         // Check for threshold violations
         self.check_thresholds(metric_name, value)?;
-        
+
         debug!("Recorded metric: {} = {}", metric_name, value);
         Ok(())
     }
@@ -201,7 +205,9 @@ impl RealTimeMonitor {
     /// Start monitoring with alert handling
     pub async fn start(&mut self) -> crate::Result<mpsc::UnboundedReceiver<PerformanceAlert>> {
         if self.is_running {
-            return Err(crate::ShaclAiError::PerformanceAnalytics("Monitor already running".into()));
+            return Err(crate::ShaclAiError::PerformanceAnalytics(
+                "Monitor already running".into(),
+            ));
         }
 
         let (tx, rx) = mpsc::unbounded_channel();
@@ -211,13 +217,13 @@ impl RealTimeMonitor {
         // Start background monitoring task
         let active_alerts = Arc::clone(&self.active_alerts);
         let alert_sender = tx;
-        
+
         let handle = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(10));
-            
+
             loop {
                 interval.tick().await;
-                
+
                 // Perform periodic monitoring tasks
                 if let Err(e) = Self::periodic_monitoring(&active_alerts, &alert_sender).await {
                     error!("Error in periodic monitoring: {}", e);
@@ -237,11 +243,11 @@ impl RealTimeMonitor {
         }
 
         self.is_running = false;
-        
+
         if let Some(handle) = self.monitoring_handle.take() {
             handle.abort();
         }
-        
+
         self.alert_sender = None;
         info!("Real-time monitor stopped");
         Ok(())
@@ -255,24 +261,33 @@ impl RealTimeMonitor {
             }
 
             let severity = self.evaluate_threshold(threshold, value);
-            
+
             if let Some(severity) = severity {
                 let alert = PerformanceAlert {
-                    id: format!("{}_{}", metric_name, SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_secs()),
+                    id: format!(
+                        "{}_{}",
+                        metric_name,
+                        SystemTime::now()
+                            .duration_since(SystemTime::UNIX_EPOCH)
+                            .unwrap()
+                            .as_secs()
+                    ),
                     severity: severity.clone(),
                     metric_name: metric_name.to_string(),
                     current_value: value,
                     threshold: self.get_threshold_value(threshold, &severity),
-                    message: format!("Metric '{}' exceeded {} threshold: {} > {}", 
-                                   metric_name, 
-                                   match severity {
-                                       AlertSeverity::Warning => "warning",
-                                       AlertSeverity::Critical => "critical", 
-                                       AlertSeverity::Emergency => "emergency",
-                                       _ => "info"
-                                   },
-                                   value, 
-                                   self.get_threshold_value(threshold, &severity)),
+                    message: format!(
+                        "Metric '{}' exceeded {} threshold: {} > {}",
+                        metric_name,
+                        match severity {
+                            AlertSeverity::Warning => "warning",
+                            AlertSeverity::Critical => "critical",
+                            AlertSeverity::Emergency => "emergency",
+                            _ => "info",
+                        },
+                        value,
+                        self.get_threshold_value(threshold, &severity)
+                    ),
                     timestamp: SystemTime::now(),
                     resolved: false,
                 };
@@ -333,7 +348,9 @@ impl RealTimeMonitor {
         // Clean up old resolved alerts
         if let Ok(mut alerts) = active_alerts.lock() {
             alerts.retain(|_, alert| {
-                SystemTime::now().duration_since(alert.timestamp).unwrap_or(Duration::ZERO) 
+                SystemTime::now()
+                    .duration_since(alert.timestamp)
+                    .unwrap_or(Duration::ZERO)
                     < Duration::from_secs(3600) // Keep alerts for 1 hour
             });
         }
@@ -346,14 +363,14 @@ impl RealTimeMonitor {
         let alerts = self.active_alerts.lock().map_err(|_| {
             crate::ShaclAiError::Performance("Failed to acquire alerts lock".into())
         })?;
-        
+
         Ok(alerts.values().cloned().collect())
     }
 
     /// Get monitoring statistics
     pub fn get_monitoring_stats(&self) -> crate::Result<MonitoringStats> {
         let alerts = self.get_active_alerts()?;
-        
+
         let alert_counts = alerts.iter().fold(HashMap::new(), |mut acc, alert| {
             *acc.entry(alert.severity.clone()).or_insert(0) += 1;
             acc
@@ -390,16 +407,16 @@ mod tests {
     #[test]
     fn test_metrics_collector() {
         let collector = MetricsCollector::new(Duration::from_secs(60), 100);
-        
+
         // Record some metrics
         collector.record("cpu_usage", 50.0).unwrap();
         collector.record("cpu_usage", 60.0).unwrap();
         collector.record("cpu_usage", 70.0).unwrap();
-        
+
         // Check average
         let avg = collector.get_average("cpu_usage").unwrap().unwrap();
         assert!((avg - 60.0).abs() < f64::EPSILON);
-        
+
         // Check trend (should be positive)
         let trend = collector.get_trend("cpu_usage").unwrap().unwrap();
         assert!(trend > 0.0);
@@ -416,25 +433,34 @@ mod tests {
         };
 
         let monitor = RealTimeMonitor::new();
-        
+
         // Test threshold evaluation
         assert_eq!(monitor.evaluate_threshold(&threshold, 75.0), None);
-        assert_eq!(monitor.evaluate_threshold(&threshold, 85.0), Some(AlertSeverity::Warning));
-        assert_eq!(monitor.evaluate_threshold(&threshold, 92.0), Some(AlertSeverity::Critical));
-        assert_eq!(monitor.evaluate_threshold(&threshold, 97.0), Some(AlertSeverity::Emergency));
+        assert_eq!(
+            monitor.evaluate_threshold(&threshold, 85.0),
+            Some(AlertSeverity::Warning)
+        );
+        assert_eq!(
+            monitor.evaluate_threshold(&threshold, 92.0),
+            Some(AlertSeverity::Critical)
+        );
+        assert_eq!(
+            monitor.evaluate_threshold(&threshold, 97.0),
+            Some(AlertSeverity::Emergency)
+        );
     }
 
     #[tokio::test]
     async fn test_monitor_lifecycle() {
         let mut monitor = RealTimeMonitor::new();
-        
+
         // Start monitoring
         let _alert_rx = monitor.start().await.unwrap();
         assert!(monitor.is_running);
-        
+
         // Record some metrics
         monitor.record_metric("test_metric", 100.0).unwrap();
-        
+
         // Stop monitoring
         monitor.stop().await.unwrap();
         assert!(!monitor.is_running);

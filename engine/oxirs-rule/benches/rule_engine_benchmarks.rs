@@ -37,7 +37,10 @@ fn generate_test_facts(size: usize) -> Vec<RuleAtom> {
             facts.push(RuleAtom::Triple {
                 subject: Term::Constant(format!("http://example.org/person{i}")),
                 predicate: Term::Constant("http://example.org/knows".to_string()),
-                object: Term::Constant(format!("http://example.org/person{prev_i}", prev_i = i - 1)),
+                object: Term::Constant(format!(
+                    "http://example.org/person{prev_i}",
+                    prev_i = i - 1
+                )),
             });
         }
     }

@@ -742,7 +742,7 @@ impl IntelligentQueryCache {
             ema = alpha * hit_ratio + (1.0 - alpha) * ema;
         }
 
-        ema.min(1.0).max(0.0)
+        ema.clamp(0.0, 1.0)
     }
 
     /// Generate optimization recommendations based on cache analysis

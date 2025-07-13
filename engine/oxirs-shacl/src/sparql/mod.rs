@@ -4,13 +4,15 @@
 //! including dynamic function registration, advanced security sandboxing, and
 //! extensive function library management.
 
+#![allow(dead_code)]
+
 pub mod function_library;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use oxirs_core::{model::RdfTerm, Store};
+use oxirs_core::{model::Term, rdf_store::QueryResults, RdfTerm, Store};
 
 use crate::{
     constraints::{ConstraintContext, ConstraintEvaluationResult},
@@ -69,12 +71,22 @@ impl SparqlConstraintExecutor {
 
     pub fn execute_constraint(
         &self,
-        _constraint: &SparqlConstraint,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        constraint: &SparqlConstraint,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // Basic implementation - in a real system this would execute SPARQL queries
-        Ok(ConstraintEvaluationResult::Satisfied)
+        // Check cache first
+        let cache_key = format!("{}:{}", constraint.query, context.focus_node);
+        if let Some(cached_result) = self.cache.get(&cache_key) {
+            return Ok(cached_result.clone());
+        }
+
+        // Execute the constraint using the enhanced implementation
+        let result = constraint.evaluate(context, store)?;
+
+        // Note: In a real implementation, we would cache the result here
+        // For now, we'll just return the result without caching
+        Ok(result)
     }
 }
 
@@ -135,12 +147,116 @@ impl SparqlConstraint {
     /// Evaluate the SPARQL constraint
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // Basic implementation - in a real system this would execute SPARQL queries
-        // For now, return satisfied to allow compilation
-        Ok(ConstraintEvaluationResult::Satisfied)
+        // Substitute variables in the SPARQL query with context values
+        let query_with_substitutions = self.substitute_variables(&self.query, context)?;
+
+        // Execute the SPARQL query
+        let query_results = store.query(&query_with_substitutions).map_err(|e| {
+            ShaclError::SparqlExecution(format!("SPARQL query execution failed: {e}"))
+        })?;
+
+        // Interpret results based on query type
+        match query_results.results() {
+            QueryResults::Boolean(result) => {
+                // ASK query - true means constraint is satisfied
+                if *result {
+                    Ok(ConstraintEvaluationResult::Satisfied)
+                } else {
+                    let message = self.message.clone();
+                    Ok(ConstraintEvaluationResult::Violated {
+                        violating_value: Some(context.focus_node.clone()),
+                        message,
+                        details: std::collections::HashMap::new(),
+                    })
+                }
+            }
+            QueryResults::Bindings(bindings) => {
+                // SELECT query - empty results mean constraint is satisfied
+                if bindings.is_empty() {
+                    Ok(ConstraintEvaluationResult::Satisfied)
+                } else {
+                    let message = self.message.clone().or_else(|| {
+                        Some(format!(
+                            "SPARQL constraint failed with {} violations",
+                            bindings.len()
+                        ))
+                    });
+
+                    // Use the first binding to identify the violating value
+                    let violating_value = if let Some(first_binding) = bindings.first() {
+                        first_binding
+                            .get("violating_value")
+                            .cloned()
+                            .or_else(|| Some(context.focus_node.clone()))
+                    } else {
+                        Some(context.focus_node.clone())
+                    };
+
+                    Ok(ConstraintEvaluationResult::Violated {
+                        violating_value,
+                        message,
+                        details: std::collections::HashMap::new(),
+                    })
+                }
+            }
+            QueryResults::Graph(_quads) => {
+                // CONSTRUCT/DESCRIBE query - not typically used for constraints
+                // Treat as satisfied for now
+                Ok(ConstraintEvaluationResult::Satisfied)
+            }
+        }
+    }
+
+    /// Substitute SPARQL variables with context values
+    fn substitute_variables(&self, query: &str, context: &ConstraintContext) -> Result<String> {
+        let mut substituted_query = query.to_string();
+
+        // Replace standard SHACL variables
+        substituted_query =
+            substituted_query.replace("$this", &self.format_term_for_sparql(&context.focus_node));
+
+        if let Some(path) = &context.path {
+            // Convert PropertyPath to string representation - simplified for now
+            substituted_query = substituted_query.replace("$PATH", &format!("<{path:?}>"));
+        }
+
+        substituted_query =
+            substituted_query.replace("$currentShape", &format!("<{}>", context.shape_id.0));
+
+        // Handle $value by using the first value in context.values if available
+        if let Some(value) = context.values.first() {
+            substituted_query =
+                substituted_query.replace("$value", &self.format_term_for_sparql(value));
+        }
+
+        Ok(substituted_query)
+    }
+
+    /// Format a Term for use in SPARQL queries
+    fn format_term_for_sparql(&self, term: &Term) -> String {
+        match term {
+            Term::NamedNode(node) => format!("<{}>", node.as_str()),
+            Term::BlankNode(node) => format!("_:{}", node.as_str()),
+            Term::Literal(literal) => {
+                let datatype = literal.datatype();
+                if datatype.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                    format!("\"{}\"^^<{}>", literal.value(), datatype.as_str())
+                } else if let Some(language) = literal.language() {
+                    format!("\"{}\"@{}", literal.value(), language)
+                } else {
+                    format!("\"{}\"", literal.value())
+                }
+            }
+            Term::Variable(var) => format!("?{}", var.as_str()),
+            Term::QuotedTriple(_triple) => {
+                // Format as RDF-star quoted triple - simplified for now
+                // In a real implementation, this would need proper recursive formatting
+                format!("<< {} {} {} >>", "?s", "?p", "?o")
+            }
+        }
     }
 }
 
@@ -489,7 +605,7 @@ mod tests {
             Term::Literal(literal) => {
                 assert_eq!(literal.as_str(), "HELLO");
             }
-            _ => assert!(false, "Expected literal result, got: {:?}", result),
+            _ => panic!("Expected literal result, got: {result:?}"),
         }
     }
 
@@ -518,7 +634,7 @@ mod tests {
                 let value: f64 = literal.as_str().parse().unwrap();
                 assert_eq!(value, 8.0);
             }
-            _ => assert!(false, "Expected literal result, got: {:?}", result),
+            _ => panic!("Expected literal result, got: {result:?}"),
         }
     }
 }

@@ -4,6 +4,8 @@
 //! constraint failure isolation, and validation limits to ensure robust validation
 //! even when encountering malformed data or expensive constraints.
 
+#![allow(dead_code)]
+
 use crate::{
     constraints::{Constraint, ConstraintContext},
     validation::ConstraintEvaluationResult,
@@ -777,8 +779,10 @@ mod tests {
 
     #[test]
     fn test_recursion_limit_check() {
-        let mut config = ErrorRecoveryConfig::default();
-        config.max_recursion_depth = 2;
+        let config = ErrorRecoveryConfig {
+            max_recursion_depth: 2,
+            ..Default::default()
+        };
 
         let manager = ErrorRecoveryManager::new(config);
         let context = ConstraintContext::new(
@@ -800,7 +804,7 @@ mod tests {
     #[test]
     fn test_memory_monitor() {
         let monitor = MemoryMonitor::default();
-        let usage = monitor.memory_usage_delta();
+        let _usage = monitor.memory_usage_delta();
         // usage is always >= 0 by type invariant
     }
 

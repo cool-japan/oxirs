@@ -551,9 +551,7 @@ pub mod patterns {
             if let Some(right_event) = right {
                 // Merge metadata from both events
                 for (k, v) in right_event.metadata().properties.iter() {
-                    metadata
-                        .properties
-                        .insert(format!("right_{k}"), v.clone());
+                    metadata.properties.insert(format!("right_{k}"), v.clone());
                 }
                 metadata
                     .properties

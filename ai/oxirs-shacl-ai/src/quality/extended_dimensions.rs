@@ -84,8 +84,7 @@ pub struct MultiDimensionalQualityAssessment {
 }
 
 /// Intrinsic quality assessment
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IntrinsicQualityAssessment {
     pub accuracy: QualityDimensionResult,
     pub consistency: QualityDimensionResult,
@@ -96,8 +95,7 @@ pub struct IntrinsicQualityAssessment {
 }
 
 /// Contextual quality assessment
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ContextualQualityAssessment {
     pub relevance: QualityDimensionResult,
     pub timeliness: QualityDimensionResult,
@@ -1145,8 +1143,6 @@ impl Default for ExtendedQualityDimensionsAssessor {
 }
 
 // Default implementations for assessment results
-
-
 
 impl Default for StatisticalQualityMeasures {
     fn default() -> Self {

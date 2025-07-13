@@ -15,11 +15,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{info, warn};
-use uuid::Uuid;
 
 /// Enterprise integration configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EnterpriseConfig {
     pub sso: SsoConfig,
     pub ldap: LdapConfig,
@@ -29,7 +27,6 @@ pub struct EnterpriseConfig {
     pub business_intelligence: BiConfig,
     pub security: SecurityConfig,
 }
-
 
 /// SSO configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,8 +167,7 @@ impl Default for WorkflowConfig {
 }
 
 /// Business Intelligence configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BiConfig {
     pub enabled: bool,
     pub connectors: Vec<BiConnector>,
@@ -180,7 +176,6 @@ pub struct BiConfig {
     pub reporting_schedule: ReportingSchedule,
     pub data_warehouse_config: DataWarehouseConfig,
 }
-
 
 /// Security configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -216,7 +211,7 @@ pub enum SsoProvider {
     Okta,
     AzureAD,
     GoogleWorkspace,
-    AWS_SSO,
+    AwsSso,
 }
 
 /// Audit log levels
@@ -248,7 +243,7 @@ pub enum ComplianceStandard {
     HIPAA,
     SOC2,
     ISO27001,
-    PCI_DSS,
+    PciDss,
     FedRAMP,
 }
 
@@ -259,8 +254,8 @@ pub enum WorkflowEngine {
     Zeebe,
     Temporal,
     AirflowApache,
-    AWS_StepFunctions,
-    Azure_LogicApps,
+    AwsStepFunctions,
+    AzureLogicApps,
 }
 
 /// User information from SSO
@@ -996,6 +991,7 @@ impl EnterpriseIntegrationManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use uuid::Uuid;
 
     #[test]
     fn test_enterprise_config_default() {

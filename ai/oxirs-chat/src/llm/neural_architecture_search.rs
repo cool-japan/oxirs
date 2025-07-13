@@ -467,7 +467,7 @@ impl ArchitectureSearch {
     /// Generate initial population of architectures
     async fn generate_initial_population(
         search_id: &str,
-        searches: &Arc<RwLock<HashMap<String, SearchState>>>,
+        _searches: &Arc<RwLock<HashMap<String, SearchState>>>,
     ) -> Result<Vec<ModelArchitecture>> {
         let mut architectures = Vec::new();
 

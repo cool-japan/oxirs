@@ -22,8 +22,6 @@ use tokio::sync::RwLock;
 use tokio::time::interval;
 use tracing::{debug, info, warn};
 
-use oxirs_core::Store;
-
 use crate::consciousness_validation::ConsciousnessLevel;
 use crate::{Result, ShaclAiError};
 
@@ -595,7 +593,7 @@ impl ConsciousAwarenessEngine {
 
     async fn calculate_awareness_coherence(
         &self,
-        measurements: &[AwarenessMeasurement],
+        _measurements: &[AwarenessMeasurement],
     ) -> Result<f64> {
         // Calculate coherence between different awareness measurements
         Ok(0.85) // Placeholder implementation
@@ -603,7 +601,7 @@ impl ConsciousAwarenessEngine {
 
     async fn calculate_awareness_stability(
         &self,
-        measurements: &[AwarenessMeasurement],
+        _measurements: &[AwarenessMeasurement],
     ) -> Result<f64> {
         // Calculate stability of awareness over time
         Ok(0.90) // Placeholder implementation
@@ -917,9 +915,9 @@ impl ConsciousnessPlasticityMetrics {
     pub async fn update_plasticity_metrics(
         &mut self,
         awareness_assessment: &AwarenessAssessment,
-        strategy_selection: &StrategySelection,
+        _strategy_selection: &StrategySelection,
         plasticity_control: &PlasticityControl,
-        meta_learning_results: &MetaLearningResults,
+        _meta_learning_results: &MetaLearningResults,
         feedback_integration: &FeedbackIntegration,
     ) {
         self.total_conscious_adaptations += 1;

@@ -4,9 +4,7 @@
 //! source selection learning, and predictive analytics.
 
 use oxirs_federate::{
-    ml_optimizer::*,
-    planner::QueryInfo,
-    FederatedService, QueryType, TriplePattern,
+    ml_optimizer::*, planner::QueryInfo, FederatedService, QueryType, TriplePattern,
 };
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
@@ -499,7 +497,8 @@ async fn test_anomaly_detection() {
     let optimizer = MLOptimizer::new();
 
     // Train with normal query performance data
-    let normal_performances = [Duration::from_millis(100),
+    let normal_performances = [
+        Duration::from_millis(100),
         Duration::from_millis(110),
         Duration::from_millis(95),
         Duration::from_millis(105),
@@ -508,7 +507,8 @@ async fn test_anomaly_detection() {
         Duration::from_millis(107),
         Duration::from_millis(103),
         Duration::from_millis(99),
-        Duration::from_millis(101)];
+        Duration::from_millis(101),
+    ];
 
     let query_features = QueryFeatures {
         pattern_count: 1,

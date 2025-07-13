@@ -231,7 +231,7 @@ impl ShapeOptimizer {
         let mut bottlenecks = Vec::new();
 
         for constraint in constraints {
-            let constraint_weight = match constraint.constraint_type().as_str() {
+            let _constraint_weight = match constraint.constraint_type().as_str() {
                 "sh:pattern" => {
                     validation_time += 100.0; // Regex is expensive
                     memory_usage += 32.0;

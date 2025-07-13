@@ -18,10 +18,7 @@ use std::{collections::HashMap, net::SocketAddr, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::{
-    error::FusekiResult,
-    store::Store,
-};
+use crate::{error::FusekiResult, store::Store};
 
 /// Clustering configuration
 #[derive(Debug, Clone)]
@@ -242,6 +239,7 @@ pub struct ClusterManager {
     node_info: NodeInfo,
     raft_node: Arc<raft::RaftNode>,
     partition_manager: Arc<partition::PartitionManager>,
+    #[allow(dead_code)]
     coordinator: Arc<coordinator::QueryCoordinator>,
     cluster_view: Arc<RwLock<ClusterView>>,
 }
@@ -357,7 +355,7 @@ impl ClusterManager {
     }
 
     /// Contact a seed node
-    async fn contact_seed(&self, seed: &str) -> FusekiResult<()> {
+    async fn contact_seed(&self, _seed: &str) -> FusekiResult<()> {
         // TODO: Implement seed contact protocol
         Ok(())
     }
@@ -490,7 +488,7 @@ mod tests {
     fn test_cluster_config_default() {
         let config = ClusterConfig::default();
         assert!(!config.node_id.is_empty());
-        assert_eq!(config.raft.pre_vote, true);
+        assert!(config.raft.pre_vote);
         assert_eq!(config.partitioning.partition_count, 128);
         assert_eq!(config.replication.factor, 3);
     }

@@ -1124,7 +1124,10 @@ impl EnterpriseKnowledgeAnalyzer {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         let target_embedding = self.generate_employee_embedding(employee_id).await?;
-        let embeddings = self.employee_embeddings.read().unwrap();
+        let embeddings = {
+            let guard = self.employee_embeddings.read().unwrap();
+            guard.clone()
+        };
 
         let mut similarities = Vec::new();
 
@@ -1150,7 +1153,10 @@ impl EnterpriseKnowledgeAnalyzer {
         _project_id: &str,
         required_skills: &[String],
     ) -> Result<Vec<String>> {
-        let employees = self.employee_embeddings.read().unwrap();
+        let employees = {
+            let guard = self.employee_embeddings.read().unwrap();
+            guard.clone()
+        };
         let mut candidates = Vec::new();
 
         // Score employees based on skill match
@@ -1172,8 +1178,14 @@ impl EnterpriseKnowledgeAnalyzer {
 
     /// Analyze market trends and opportunities
     pub async fn analyze_market_trends(&self) -> Result<MarketAnalysis> {
-        let products = self.product_embeddings.read().unwrap();
-        let customers = self.customer_embeddings.read().unwrap();
+        let products = {
+            let guard = self.product_embeddings.read().unwrap();
+            guard.clone()
+        };
+        let customers = {
+            let guard = self.customer_embeddings.read().unwrap();
+            guard.clone()
+        };
 
         // Analyze product performance trends
         let mut category_performance = HashMap::new();

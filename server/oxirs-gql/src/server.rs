@@ -314,6 +314,7 @@ impl Server {
         crate::parser::parse_document(query)
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn json_to_value(&self, json: JsonValue) -> crate::ast::Value {
         match json {
             JsonValue::Null => crate::ast::Value::NullValue,

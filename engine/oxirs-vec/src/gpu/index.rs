@@ -112,10 +112,7 @@ impl GpuVectorIndex {
         )?;
 
         // Sort and return top-k results
-        let mut results: Vec<(usize, f32)> = similarities
-            .into_iter()
-            .enumerate()
-            .collect();
+        let mut results: Vec<(usize, f32)> = similarities.into_iter().enumerate().collect();
 
         // Sort by similarity (descending for similarity, ascending for distance)
         match metric {

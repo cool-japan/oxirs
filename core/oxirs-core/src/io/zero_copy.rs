@@ -140,6 +140,7 @@ pub enum ZeroCopyTerm<'a> {
     BlankNode(ZeroCopyBlankNode<'a>),
     Literal(ZeroCopyLiteral<'a>),
     Variable(ZeroCopyStr<'a>),
+    QuotedTriple(Box<ZeroCopyTriple<'a>>),
 }
 
 /// Zero-copy triple
@@ -168,6 +169,7 @@ const TERM_LITERAL_SIMPLE: u8 = 2;
 const TERM_LITERAL_LANG: u8 = 3;
 const TERM_LITERAL_TYPED: u8 = 4;
 const TERM_VARIABLE: u8 = 5;
+const TERM_QUOTED_TRIPLE: u8 = 6;
 
 /// Write a length-prefixed string
 fn write_string<W: Write>(writer: &mut W, s: &str) -> io::Result<()> {
@@ -228,11 +230,35 @@ impl ZeroCopySerialize for Term {
                 writer.write_all(&[TERM_VARIABLE])?;
                 write_string(writer, v.as_str())?;
             }
-            Term::QuotedTriple(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "QuotedTriple serialization not supported",
-                ));
+            Term::QuotedTriple(qt) => {
+                writer.write_all(&[TERM_QUOTED_TRIPLE])?;
+                // Convert and serialize the inner triple components
+                let subject_term = match qt.subject() {
+                    crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+                    crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+                    crate::model::Subject::QuotedTriple(nested_qt) => {
+                        Term::QuotedTriple(nested_qt.clone())
+                    }
+                };
+                subject_term.serialize_to(writer)?;
+
+                let predicate_term = match qt.predicate() {
+                    crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+                };
+                predicate_term.serialize_to(writer)?;
+
+                let object_term = match qt.object() {
+                    crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+                    crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+                    crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+                    crate::model::Object::QuotedTriple(nested_qt) => {
+                        Term::QuotedTriple(nested_qt.clone())
+                    }
+                };
+                object_term.serialize_to(writer)?;
             }
         }
         Ok(())
@@ -252,7 +278,36 @@ impl ZeroCopySerialize for Term {
                 }
             }
             Term::Variable(v) => 4 + v.as_str().len(),
-            Term::QuotedTriple(_) => panic!("QuotedTriple size calculation not supported"),
+            Term::QuotedTriple(qt) => {
+                // Convert and calculate sizes for the inner triple components
+                let subject_term = match qt.subject() {
+                    crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+                    crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+                    crate::model::Subject::QuotedTriple(nested_qt) => {
+                        Term::QuotedTriple(nested_qt.clone())
+                    }
+                };
+
+                let predicate_term = match qt.predicate() {
+                    crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+                };
+
+                let object_term = match qt.object() {
+                    crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+                    crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+                    crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+                    crate::model::Object::QuotedTriple(nested_qt) => {
+                        Term::QuotedTriple(nested_qt.clone())
+                    }
+                };
+
+                subject_term.serialized_size()
+                    + predicate_term.serialized_size()
+                    + object_term.serialized_size()
+            }
         }
     }
 
@@ -292,8 +347,35 @@ impl ZeroCopySerialize for Term {
                 buf.put_u32_le(v.as_str().len() as u32);
                 buf.put_slice(v.as_str().as_bytes());
             }
-            Term::QuotedTriple(_) => {
-                panic!("QuotedTriple bytes serialization not supported");
+            Term::QuotedTriple(ref qt) => {
+                buf.put_u8(TERM_QUOTED_TRIPLE);
+                // Convert and serialize the inner triple components
+                let subject_term = match qt.subject() {
+                    crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+                    crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+                    crate::model::Subject::QuotedTriple(nested_qt) => {
+                        Term::QuotedTriple(nested_qt.clone())
+                    }
+                };
+                subject_term.serialize_to_bytes(buf);
+
+                let predicate_term = match qt.predicate() {
+                    crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+                };
+                predicate_term.serialize_to_bytes(buf);
+
+                let object_term = match qt.object() {
+                    crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+                    crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+                    crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+                    crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+                    crate::model::Object::QuotedTriple(nested_qt) => {
+                        Term::QuotedTriple(nested_qt.clone())
+                    }
+                };
+                object_term.serialize_to_bytes(buf);
             }
         }
     }
@@ -361,6 +443,26 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                     rest,
                 ))
             }
+            TERM_QUOTED_TRIPLE => {
+                // Deserialize the inner triple components
+                let (subject, data) = ZeroCopyTerm::deserialize_from(data)?;
+                let (predicate_term, data) = ZeroCopyTerm::deserialize_from(data)?;
+                let (object, rest) = ZeroCopyTerm::deserialize_from(data)?;
+
+                // Ensure predicate is a named node
+                let predicate = match predicate_term {
+                    ZeroCopyTerm::NamedNode(iri) => iri,
+                    _ => return Err(OxirsError::Parse("Predicate must be a named node".into())),
+                };
+
+                let triple = ZeroCopyTriple {
+                    subject,
+                    predicate,
+                    object,
+                };
+
+                Ok((ZeroCopyTerm::QuotedTriple(Box::new(triple)), rest))
+            }
             _ => Err(OxirsError::Parse(format!("Unknown term type: {term_type}"))),
         }
     }
@@ -400,6 +502,26 @@ impl<'a> ZeroCopyDeserialize<'a> for ZeroCopyTerm<'a> {
                     ZeroCopyStr::new_owned(value.to_string()),
                 )))
             }
+            TERM_QUOTED_TRIPLE => {
+                // Deserialize the inner triple components
+                let subject = ZeroCopyTerm::deserialize_from_bytes(buf)?;
+                let predicate_term = ZeroCopyTerm::deserialize_from_bytes(buf)?;
+                let object = ZeroCopyTerm::deserialize_from_bytes(buf)?;
+
+                // Ensure predicate is a named node
+                let predicate = match predicate_term {
+                    ZeroCopyTerm::NamedNode(iri) => iri,
+                    _ => return Err(OxirsError::Parse("Predicate must be a named node".into())),
+                };
+
+                let triple = ZeroCopyTriple {
+                    subject,
+                    predicate,
+                    object,
+                };
+
+                Ok(ZeroCopyTerm::QuotedTriple(Box::new(triple)))
+            }
             _ => Err(OxirsError::Parse(format!("Unknown term type: {term_type}"))),
         }
     }
@@ -412,12 +534,7 @@ impl ZeroCopySerialize for Triple {
             crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
-            crate::model::Subject::QuotedTriple(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "QuotedTriple not supported",
-                ));
-            }
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
         };
         subject_term.serialize_to(writer)?;
 
@@ -434,12 +551,7 @@ impl ZeroCopySerialize for Triple {
             crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Object::Literal(l) => Term::Literal(l.clone()),
             crate::model::Object::Variable(v) => Term::Variable(v.clone()),
-            crate::model::Object::QuotedTriple(_) => {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    "QuotedTriple not supported",
-                ));
-            }
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
         };
         object_term.serialize_to(writer)?;
 
@@ -452,7 +564,7 @@ impl ZeroCopySerialize for Triple {
             crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
-            crate::model::Subject::QuotedTriple(_) => panic!("QuotedTriple not supported"),
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
         };
 
         let predicate_term: Term = match self.predicate() {
@@ -465,7 +577,7 @@ impl ZeroCopySerialize for Triple {
             crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Object::Literal(l) => Term::Literal(l.clone()),
             crate::model::Object::Variable(v) => Term::Variable(v.clone()),
-            crate::model::Object::QuotedTriple(_) => panic!("QuotedTriple not supported"),
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
         };
 
         subject_term.serialized_size()
@@ -479,7 +591,7 @@ impl ZeroCopySerialize for Triple {
             crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
             crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
-            crate::model::Subject::QuotedTriple(_) => panic!("QuotedTriple not supported"),
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
         };
         subject_term.serialize_to_bytes(buf);
 
@@ -496,7 +608,7 @@ impl ZeroCopySerialize for Triple {
             crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
             crate::model::Object::Literal(l) => Term::Literal(l.clone()),
             crate::model::Object::Variable(v) => Term::Variable(v.clone()),
-            crate::model::Object::QuotedTriple(_) => panic!("QuotedTriple not supported"),
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
         };
         object_term.serialize_to_bytes(buf);
     }
@@ -630,6 +742,100 @@ impl MmapWriter {
         self.file.set_len(self.position as u64)?;
         self.mmap.flush()?;
         Ok(())
+    }
+}
+
+// Implement ZeroCopySerialize for Subject, Predicate, and Object
+impl ZeroCopySerialize for crate::model::Subject {
+    fn serialize_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let term: Term = match self {
+            crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        };
+        term.serialize_to(writer)
+    }
+
+    fn serialized_size(&self) -> usize {
+        let term: Term = match self {
+            crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        };
+        term.serialized_size()
+    }
+
+    fn serialize_to_bytes(&self, buf: &mut BytesMut) {
+        let term: Term = match self {
+            crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        };
+        term.serialize_to_bytes(buf)
+    }
+}
+
+impl ZeroCopySerialize for crate::model::Predicate {
+    fn serialize_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let term: Term = match self {
+            crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+        };
+        term.serialize_to(writer)
+    }
+
+    fn serialized_size(&self) -> usize {
+        let term: Term = match self {
+            crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+        };
+        term.serialized_size()
+    }
+
+    fn serialize_to_bytes(&self, buf: &mut BytesMut) {
+        let term: Term = match self {
+            crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+        };
+        term.serialize_to_bytes(buf)
+    }
+}
+
+impl ZeroCopySerialize for crate::model::Object {
+    fn serialize_to<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+        let term: Term = match self {
+            crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+            crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        };
+        term.serialize_to(writer)
+    }
+
+    fn serialized_size(&self) -> usize {
+        let term: Term = match self {
+            crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+            crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        };
+        term.serialized_size()
+    }
+
+    fn serialize_to_bytes(&self, buf: &mut BytesMut) {
+        let term: Term = match self {
+            crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+            crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        };
+        term.serialize_to_bytes(buf)
     }
 }
 

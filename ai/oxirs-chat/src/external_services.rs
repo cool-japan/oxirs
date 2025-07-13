@@ -440,7 +440,7 @@ impl ExternalServicesManager {
         &self,
         audio_data: &[u8],
         language: &str,
-        options: &SpeechProcessingOptions,
+        _options: &SpeechProcessingOptions,
     ) -> Result<SpeechResult> {
         for speech_config in &self.config.speech_services {
             if !speech_config.enabled
@@ -477,9 +477,9 @@ impl ExternalServicesManager {
     /// Real-time streaming speech recognition
     pub async fn streaming_speech_to_text(
         &self,
-        audio_stream: tokio::sync::mpsc::Receiver<Vec<u8>>,
+        _audio_stream: tokio::sync::mpsc::Receiver<Vec<u8>>,
         language: &str,
-        options: &SpeechProcessingOptions,
+        _options: &SpeechProcessingOptions,
     ) -> Result<tokio::sync::mpsc::Receiver<PartialSpeechResult>> {
         // Find a speech service with real-time streaming support
         for speech_config in &self.config.speech_services {
@@ -526,7 +526,7 @@ impl ExternalServicesManager {
     pub async fn text_to_speech_with_voice(
         &self,
         text: &str,
-        language: &str,
+        _language: &str,
         voice_model: &VoiceModel,
     ) -> Result<Vec<u8>> {
         for speech_config in &self.config.speech_services {

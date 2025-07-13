@@ -398,11 +398,7 @@ impl AdversarialAttackGenerator {
             attack_success_rate,
             perturbation_magnitude: avg_perturbation,
             certified_radius: self.calculate_certified_radius(adversarial_accuracy),
-            attack_types: self
-                .attack_types
-                .iter()
-                .map(|t| format!("{t:?}"))
-                .collect(),
+            attack_types: self.attack_types.iter().map(|t| format!("{t:?}")).collect(),
         })
     }
 
@@ -841,7 +837,7 @@ impl AdvancedEvaluator {
             score += explanation.fidelity * 0.15;
         }
 
-        score.min(1.0).max(0.0)
+        score.clamp(0.0, 1.0)
     }
 
     /// Generate negative samples for evaluation

@@ -3,12 +3,7 @@
 //! This module provides tools for selecting the best ML models and optimizing
 //! their hyperparameters for shape learning tasks.
 
-use super::{
-    ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
-    ShapeTrainingData,
-};
-use rand::SeedableRng;
-
+use super::{ModelError, ModelMetrics, ModelParams, ShapeLearningModel, ShapeTrainingData};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -57,7 +52,7 @@ pub enum EvaluationMetric {
 
 /// Search result for a single model configuration
 #[derive(Debug, Clone)]
-struct SearchResult {
+pub struct SearchResult {
     model_name: String,
     params: ModelParams,
     cv_scores: Vec<f64>,

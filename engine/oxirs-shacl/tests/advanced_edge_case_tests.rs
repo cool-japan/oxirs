@@ -6,7 +6,7 @@
 use indexmap::IndexMap;
 use oxirs_core::{
     model::{Literal, NamedNode, Quad, Term, Triple},
-    ConcreteStore, Store,
+    ConcreteStore,
 };
 use oxirs_shacl::*;
 use std::sync::{Arc, Mutex};
@@ -38,9 +38,9 @@ fn test_large_dataset_validation() {
 
     // Generate large dataset
     for i in 0..10000 {
-        let subject = NamedNode::new(format!("http://example.org/entity{}", i)).unwrap();
+        let subject = NamedNode::new(format!("http://example.org/entity{i}")).unwrap();
         let predicate = NamedNode::new("http://example.org/hasValue").unwrap();
-        let object = Literal::new_simple_literal(&format!("value{}", i));
+        let object = Literal::new_simple_literal(format!("value{i}"));
 
         let quad = Quad::new(
             subject.clone(),
@@ -86,8 +86,7 @@ fn test_large_dataset_validation() {
     // Should handle large dataset efficiently
     assert!(
         duration < Duration::from_secs(30),
-        "Large dataset validation took too long: {:?}",
-        duration
+        "Large dataset validation took too long: {duration:?}"
     );
     assert!(result.is_ok(), "Large dataset validation failed");
 }
@@ -99,9 +98,9 @@ fn test_concurrent_validation_stress() {
 
     // Setup test data
     for i in 0..1000 {
-        let subject = NamedNode::new(format!("http://example.org/item{}", i)).unwrap();
+        let subject = NamedNode::new(format!("http://example.org/item{i}")).unwrap();
         let predicate = NamedNode::new("http://example.org/name").unwrap();
-        let object = Literal::new_simple_literal(&format!("name{}", i));
+        let object = Literal::new_simple_literal(format!("name{i}"));
 
         let quad = Quad::new(
             subject.clone(),
@@ -155,12 +154,10 @@ fn test_concurrent_validation_stress() {
     assert_eq!(results_guard.len(), 10);
 
     for (thread_id, success, duration) in results_guard.iter() {
-        assert!(success, "Thread {} validation failed", thread_id);
+        assert!(success, "Thread {thread_id} validation failed");
         assert!(
             duration < &Duration::from_secs(5),
-            "Thread {} took too long: {:?}",
-            thread_id,
-            duration
+            "Thread {thread_id} took too long: {duration:?}"
         );
     }
 }
@@ -172,11 +169,11 @@ fn test_extreme_constraint_combinations() {
 
     // Create complex test data
     for i in 0..100 {
-        let subject = NamedNode::new(format!("http://example.org/complex{}", i)).unwrap();
+        let subject = NamedNode::new(format!("http://example.org/complex{i}")).unwrap();
 
         // Multiple property types
         let name_pred = NamedNode::new("http://example.org/name").unwrap();
-        let name_obj = Literal::new_simple_literal(&format!("Name{}", i));
+        let name_obj = Literal::new_simple_literal(format!("Name{i}"));
         let triple = Triple::new(subject.clone(), name_pred, Term::Literal(name_obj));
         let quad = Quad::new(
             triple.subject().clone(),
@@ -187,7 +184,7 @@ fn test_extreme_constraint_combinations() {
         try_insert_quad(&mut store, quad);
 
         let age_pred = NamedNode::new("http://example.org/age").unwrap();
-        let age_obj = Literal::new_simple_literal(&(20 + i % 50).to_string());
+        let age_obj = Literal::new_simple_literal((20 + i % 50).to_string());
         let triple = Triple::new(subject.clone(), age_pred, Term::Literal(age_obj));
         let quad = Quad::new(
             triple.subject().clone(),
@@ -198,7 +195,7 @@ fn test_extreme_constraint_combinations() {
         try_insert_quad(&mut store, quad);
 
         let email_pred = NamedNode::new("http://example.org/email").unwrap();
-        let email_obj = Literal::new_simple_literal(&format!("user{}@example.com", i));
+        let email_obj = Literal::new_simple_literal(format!("user{i}@example.com"));
         let triple = Triple::new(subject.clone(), email_pred, Term::Literal(email_obj));
         let quad = Quad::new(
             triple.subject().clone(),
@@ -244,8 +241,7 @@ fn test_extreme_constraint_combinations() {
     assert!(result.is_ok(), "Complex constraint validation failed");
     assert!(
         duration < Duration::from_secs(10),
-        "Complex validation took too long: {:?}",
-        duration
+        "Complex validation took too long: {duration:?}"
     );
 }
 
@@ -256,13 +252,13 @@ fn test_memory_pressure_handling() {
 
     // Generate data that could cause memory pressure
     for i in 0..5000 {
-        let subject = NamedNode::new(format!("http://example.org/memory_test_{}", i)).unwrap();
+        let subject = NamedNode::new(format!("http://example.org/memory_test_{i}")).unwrap();
 
         // Create multiple properties with long string values
         for j in 0..10 {
-            let pred = NamedNode::new(format!("http://example.org/property{}", j)).unwrap();
+            let pred = NamedNode::new(format!("http://example.org/property{j}")).unwrap();
             let long_value = "x".repeat(1000); // 1KB string
-            let obj = Literal::new_simple_literal(&format!("{}_{}_{}", long_value, i, j));
+            let obj = Literal::new_simple_literal(format!("{long_value}_{i}_{j}"));
             let triple = Triple::new(subject.clone(), pred, Term::Literal(obj));
             let quad = Quad::new(
                 triple.subject().clone(),
@@ -291,8 +287,7 @@ fn test_memory_pressure_handling() {
     assert!(result.is_ok(), "Memory pressure validation failed");
     assert!(
         duration < Duration::from_secs(60),
-        "Memory pressure test took too long: {:?}",
-        duration
+        "Memory pressure test took too long: {duration:?}"
     );
 }
 
@@ -303,7 +298,7 @@ fn test_deep_property_path_stress() {
 
     // Create a chain of connected entities
     for i in 0..50 {
-        let subject = NamedNode::new(format!("http://example.org/chain{}", i)).unwrap();
+        let subject = NamedNode::new(format!("http://example.org/chain{i}")).unwrap();
         let next = NamedNode::new(format!("http://example.org/chain{}", i + 1)).unwrap();
         let pred = NamedNode::new("http://example.org/nextInChain").unwrap();
 
@@ -320,7 +315,7 @@ fn test_deep_property_path_stress() {
 
         // Add properties at each level
         let value_pred = NamedNode::new("http://example.org/value").unwrap();
-        let value_obj = Literal::new_simple_literal(&format!("value_at_level_{}", i));
+        let value_obj = Literal::new_simple_literal(format!("value_at_level_{i}"));
         let triple = Triple::new(subject.clone(), value_pred, Term::Literal(value_obj));
         let quad = Quad::new(
             triple.subject().clone(),
@@ -347,8 +342,7 @@ fn test_deep_property_path_stress() {
     assert!(result.is_ok(), "Deep property path validation failed");
     assert!(
         duration < Duration::from_secs(15),
-        "Deep property path test took too long: {:?}",
-        duration
+        "Deep property path test took too long: {duration:?}"
     );
 }
 
@@ -359,13 +353,13 @@ fn test_malformed_data_resilience() {
 
     // Add various edge case data
     let long_url = format!("http://example.org/very_long_{}", "x".repeat(1000));
-    let subjects = vec![
+    let subjects = [
         "http://example.org/empty",
         "http://example.org/unicode_😀_test",
         &long_url,
     ];
 
-    for (i, subject_str) in subjects.iter().enumerate() {
+    for subject_str in subjects.iter() {
         if let Ok(subject) = NamedNode::new(*subject_str) {
             let pred = NamedNode::new("http://example.org/testProp").unwrap();
 
@@ -418,10 +412,9 @@ fn test_many_small_validations() {
 
         // Small dataset per validation
         for i in 0..10 {
-            let subject =
-                NamedNode::new(format!("http://example.org/small_{}_{}", run, i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/small_{run}_{i}")).unwrap();
             let pred = NamedNode::new("http://example.org/value").unwrap();
-            let obj = Literal::new_simple_literal(&format!("value_{}", i));
+            let obj = Literal::new_simple_literal(format!("value_{i}"));
             let triple = Triple::new(subject, pred, Term::Literal(obj));
             let quad = Quad::new(
                 triple.subject().clone(),
@@ -444,7 +437,7 @@ fn test_many_small_validations() {
         let result = engine.validate_store(&store);
         let duration = start_time.elapsed();
 
-        assert!(result.is_ok(), "Small validation {} failed", run);
+        assert!(result.is_ok(), "Small validation {run} failed");
         total_duration += duration;
     }
 
@@ -453,12 +446,8 @@ fn test_many_small_validations() {
     // Average validation should be very fast
     assert!(
         avg_duration < Duration::from_millis(10),
-        "Average small validation took too long: {:?}",
-        avg_duration
+        "Average small validation took too long: {avg_duration:?}"
     );
 
-    println!(
-        "Average validation time for {} small validations: {:?}",
-        total_runs, avg_duration
-    );
+    println!("Average validation time for {total_runs} small validations: {avg_duration:?}");
 }

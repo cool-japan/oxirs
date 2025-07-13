@@ -983,7 +983,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_recovery_action_determination() {
-        let config = FailoverConfig::default();
+        let config = FailoverConfig {
+            strategy: FailoverStrategy::Immediate,
+            ..Default::default()
+        };
         let health_monitor = Arc::new(HealthMonitor::new(HealthMonitorConfig::default()));
         let manager = FailoverManager::new(config, health_monitor);
 

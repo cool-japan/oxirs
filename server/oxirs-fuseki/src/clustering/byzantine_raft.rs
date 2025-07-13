@@ -12,10 +12,7 @@
 //! - Secure leader election with proof-of-work challenges
 //! - Distributed key management for node authentication
 
-use crate::clustering::raft::{
-    AppendEntriesRequest, RequestVoteRequest,
-    RpcMessage,
-};
+use crate::clustering::raft::{AppendEntriesRequest, RequestVoteRequest, RpcMessage};
 use crate::error::{FusekiError, FusekiResult};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -229,7 +226,7 @@ impl BftNodeState {
 
         // Check for message replay
         let message_id = self.compute_message_id(bft_message)?;
-        if let Some(&seen_time) = self.seen_messages.get(&message_id) {
+        if let Some(&_seen_time) = self.seen_messages.get(&message_id) {
             self.record_byzantine_behavior(
                 &bft_message.sender_key_id,
                 ByzantineBehavior::ReplayAttack,
@@ -296,10 +293,7 @@ impl BftNodeState {
     fn check_double_voting(&mut self, vote_req: &RequestVoteRequest) -> FusekiResult<()> {
         // Check if this node has already voted for a different candidate in this term
         let previous_candidate_id = {
-            let term_votes = self
-                .vote_tracking
-                .entry(vote_req.term)
-                .or_default();
+            let term_votes = self.vote_tracking.entry(vote_req.term).or_default();
 
             // Use this node's ID as key to track its votes
             let node_id = &self.identity.node_id;

@@ -19,9 +19,7 @@ use tracing::{debug, info};
 use crate::{
     planner::planning::{FilterExpression, TriplePattern},
     service::ServiceCapability,
-    service_optimizer::types::{
-        HistoricalQueryData, MLSourcePrediction, PatternFeatures,
-    },
+    service_optimizer::types::{HistoricalQueryData, MLSourcePrediction, PatternFeatures},
     FederatedService,
 };
 
@@ -79,8 +77,6 @@ impl ConsciousnessPatternEngine {
         filters: &[FilterExpression],
         services: &[&FederatedService],
     ) -> Result<ConsciousnessAnalysis> {
-        
-
         // Simplified consciousness analysis
         let consciousness_score = patterns.len() as f64 * 0.1;
         let awareness_level = if services.len() > 3 { "high" } else { "medium" }.to_string();
@@ -683,9 +679,9 @@ impl AdvancedPatternAnalyzer {
             && service
                 .capabilities
                 .contains(&ServiceCapability::Geospatial)
-            {
-                score += 0.3;
-            }
+        {
+            score += 0.3;
+        }
 
         if pattern
             .object
@@ -694,9 +690,9 @@ impl AdvancedPatternAnalyzer {
             && service
                 .capabilities
                 .contains(&ServiceCapability::FullTextSearch)
-            {
-                score += 0.2;
-            }
+        {
+            score += 0.2;
+        }
 
         score
     }
@@ -814,7 +810,7 @@ impl AdvancedPatternAnalyzer {
             selectivity *= self.estimate_filter_selectivity(filter);
         }
 
-        selectivity.min(1.0).max(0.001) // Ensure reasonable bounds
+        selectivity.clamp(0.001, 1.0) // Ensure reasonable bounds
     }
 
     /// Analyze join structure in the query
@@ -1188,7 +1184,9 @@ impl AdvancedPatternAnalyzer {
     }
 
     fn calculate_join_complexity(&self, variables: &HashMap<String, Vec<usize>>) -> f64 {
-        variables.values().map(|patterns| (patterns.len() * patterns.len()) as f64)
+        variables
+            .values()
+            .map(|patterns| (patterns.len() * patterns.len()) as f64)
             .sum()
     }
 
@@ -1333,7 +1331,7 @@ impl AdvancedPatternAnalyzer {
             confidence_factors.push(neural_predictions.confidence_score * 0.25);
         }
 
-        confidence_factors.iter().sum::<f64>().min(1.0).max(0.0)
+        confidence_factors.iter().sum::<f64>().clamp(0.0, 1.0)
     }
 
     /// Generate cache key for pattern analysis
@@ -1490,7 +1488,7 @@ impl Default for AdvancedAnalysisConfig {
             complexity_weight: 0.3,
             performance_weight: 0.4,
             ml_model_version: "v1.0".to_string(),
-            /// Enhanced configuration with quantum, consciousness, and neural configs
+            // Enhanced configuration with quantum, consciousness, and neural configs
             quantum_config: QuantumOptimizerConfig::default(),
             consciousness_config: ConsciousnessEngineConfig::default(),
             neural_config: NeuralPredictorConfig::default(),
@@ -1648,9 +1646,9 @@ impl MLOptimizationModel {
     pub async fn predict_service_score_enhanced(
         &self,
         service: &FederatedService,
-        pattern: &TriplePattern,
+        _pattern: &TriplePattern,
         features: &PatternFeatures,
-        analysis: &PatternAnalysisResult,
+        _analysis: &PatternAnalysisResult,
     ) -> Result<MLSourcePrediction> {
         // Simplified ML prediction - in practice would use actual ML model
         let base_score = match features.pattern_complexity {
@@ -1726,7 +1724,7 @@ impl QuantumPatternOptimizer {
     pub async fn optimize_pattern_selection(
         &self,
         patterns: &[TriplePattern],
-        filters: &[FilterExpression],
+        _filters: &[FilterExpression],
         services: &[FederatedService],
     ) -> Result<QuantumPatternInsights> {
         let mut insights = QuantumPatternInsights {

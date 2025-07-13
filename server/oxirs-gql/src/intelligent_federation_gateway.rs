@@ -426,7 +426,7 @@ impl IntelligentFederationGateway {
         let query_hash = {
             use std::collections::hash_map::DefaultHasher;
             use std::hash::{Hash, Hasher};
-            
+
             let mut hasher = DefaultHasher::new();
             query.hash(&mut hasher);
             hasher.finish()
@@ -1094,7 +1094,7 @@ impl IntelligentFederationGateway {
         let total_load = load_factors.iter().sum::<f64>();
 
         // Ensure load is between 0.0 and 1.0
-        Ok(total_load.max(0.0).min(1.0))
+        Ok(total_load.clamp(0.0, 1.0))
     }
 
     async fn is_circuit_breaker_open(&self, _service_id: &str) -> Result<bool> {
@@ -1251,9 +1251,9 @@ mod tests {
         for i in 0..7 {
             // Create 7 services (> 5)
             high_complexity_assignments.insert(
-                format!("service{}", i),
+                format!("service{i}"),
                 ServiceQueryFragment {
-                    service_id: format!("service{}", i),
+                    service_id: format!("service{i}"),
                     fragment_query: "test query".to_string(),
                     expected_fields: HashSet::new(),
                     complexity: 100,

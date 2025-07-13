@@ -4,11 +4,25 @@
 //! including query planning, service discovery, result integration, and caching.
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use oxirs_federate::distributed_tracing::QueryContext; // Fix QueryContext import
-use oxirs_federate::executor::types::{ExecutionStatus, QueryResultData, StepResult};
+use oxirs_federate::cache::{FederationCache, QueryResultCache};
+use oxirs_federate::distributed_tracing::{
+    DistributedTracingManager, QueryContext, QueryPriority, SpanStatus,
+}; // Fix QueryContext import
+use oxirs_federate::executor::types::{
+    ExecutionStatus, QueryResultData, SparqlHead, SparqlResults, SparqlResultsData, SparqlValue,
+    StepResult,
+};
+use oxirs_federate::integration::ResultIntegrator;
+use oxirs_federate::network_optimizer::{EncodingFormat, NetworkOptimizer};
 use oxirs_federate::planner::planning::types::StepType;
-use oxirs_federate::cache::QueryResultCache;
-use oxirs_federate::source_selection::{AdvancedSourceSelector, SourceSelectionConfig, TriplePattern};
+use oxirs_federate::planner::{PlannerConfig, QueryPlanner};
+use oxirs_federate::request_batcher::{
+    BatchableRequest, BatchingStrategy, RequestBatch, RequestBatcher, RequestPriority,
+};
+use oxirs_federate::service_registry::ServiceRegistry;
+use oxirs_federate::source_selection::{
+    AdvancedSourceSelector, SourceSelectionConfig, TriplePattern,
+};
 use oxirs_federate::*;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -133,7 +147,7 @@ fn bench_source_selection(c: &mut Criterion) {
                     object: "?o".to_string(),
                     graph: None,
                 }];
-                
+
                 selector
                     .select_sources(&patterns, &[], &registry)
                     .await
@@ -163,20 +177,22 @@ fn bench_caching_performance(c: &mut Criterion) {
 
                         // Perform cache operations
                         let mut hits = 0;
-                        
+
                         for i in 0..size {
                             let query_hash = format!("query-{i}");
-                            
+
                             // Try to get from cache (should miss)
                             if cache.get_query_result(&query_hash).await.is_some() {
                                 hits += 1;
                             }
-                            
+
                             // Put a result in cache
                             let sparql_result = create_sample_sparql_result(i, 1);
                             let cached_result = QueryResultCache::Sparql(sparql_result);
-                            cache.put_query_result(&query_hash, cached_result, None).await;
-                            
+                            cache
+                                .put_query_result(&query_hash, cached_result, None)
+                                .await;
+
                             // Try to get from cache again (should hit)
                             if cache.get_query_result(&query_hash).await.is_some() {
                                 hits += 1;
@@ -383,6 +399,7 @@ fn create_sample_sparql_result(offset: usize, binding_count: usize) -> SparqlRes
                 value: format!("http://example.org/resource{}", offset * binding_count + i),
                 datatype: None,
                 lang: None,
+                quoted_triple: None,
             },
         );
         binding.insert(
@@ -392,6 +409,7 @@ fn create_sample_sparql_result(offset: usize, binding_count: usize) -> SparqlRes
                 value: "http://example.org/predicate".to_string(),
                 datatype: None,
                 lang: None,
+                quoted_triple: None,
             },
         );
         binding.insert(
@@ -401,6 +419,7 @@ fn create_sample_sparql_result(offset: usize, binding_count: usize) -> SparqlRes
                 value: format!("Object {i}"),
                 datatype: Some("http://www.w3.org/2001/XMLSchema#string".to_string()),
                 lang: None,
+                quoted_triple: None,
             },
         );
         bindings.push(binding);

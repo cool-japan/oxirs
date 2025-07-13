@@ -329,7 +329,7 @@ impl EvolutionaryNeuralArchitecture {
     /// Perform gradual deployment of new architecture
     async fn gradual_architecture_deployment(
         &self,
-        architecture: &EvolvedArchitecture,
+        _architecture: &EvolvedArchitecture,
     ) -> Result<()> {
         // Implementation would gradually replace existing architectures
         Ok(())

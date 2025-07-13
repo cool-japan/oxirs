@@ -159,7 +159,6 @@ impl CacheKey {
         self.variant = Some(variant.into());
         self
     }
-
 }
 
 impl fmt::Display for CacheKey {
@@ -1025,7 +1024,7 @@ impl MultiLevelCache {
 pub struct CacheInvalidator {
     cache: Arc<MultiLevelCache>,
     tag_index: TagIndex, // tag_key -> tag_value -> keys
-    namespace_index: Arc<RwLock<HashMap<String, Vec<CacheKey>>>>,            // namespace -> keys
+    namespace_index: Arc<RwLock<HashMap<String, Vec<CacheKey>>>>, // namespace -> keys
 }
 
 impl CacheInvalidator {
@@ -1322,9 +1321,7 @@ impl BackgroundCacheWorker {
         // 1. Clean expired entries
         let expired_count = invalidator.invalidate_expired()?;
         if expired_count > 0 {
-            println!(
-                "Background worker cleaned {expired_count} expired entries"
-            );
+            println!("Background worker cleaned {expired_count} expired entries");
         }
 
         // 2. Optimize memory usage if fragmentation is high

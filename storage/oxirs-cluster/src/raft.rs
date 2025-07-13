@@ -6,8 +6,23 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::RwLock;
+
+/// Global shared storage for testing when Raft is not available
+static GLOBAL_SHARED_STORAGE: OnceLock<Arc<RwLock<RdfApp>>> = OnceLock::new();
+
+/// Initialize global shared storage (for testing)
+pub fn init_global_shared_storage() -> Arc<RwLock<RdfApp>> {
+    GLOBAL_SHARED_STORAGE
+        .get_or_init(|| Arc::new(RwLock::new(RdfApp::default())))
+        .clone()
+}
+
+/// Get global shared storage (for testing)
+pub fn get_global_shared_storage() -> Option<Arc<RwLock<RdfApp>>> {
+    GLOBAL_SHARED_STORAGE.get().cloned()
+}
 
 #[cfg(feature = "raft")]
 use openraft::{
@@ -73,8 +88,7 @@ pub enum RdfResponse {
 }
 
 /// Raft application data
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub struct RdfApp {
     /// In-memory triple store for demonstration
     /// In production, this would interface with oxirs-tdb
@@ -86,7 +100,6 @@ pub struct RdfApp {
     /// Shards marked for deletion
     pub deleted_shards: BTreeSet<crate::shard::ShardId>,
 }
-
 
 impl RdfApp {
     /// Apply a command to the state machine
@@ -683,16 +696,26 @@ impl RaftNode {
                     .map_err(|e| anyhow::anyhow!("Failed to submit command: {}", e))?;
                 Ok(response.data)
             } else {
-                // Fallback to local execution
-                let mut state = self.storage.write().await;
-                Ok(state.apply_command(&cmd))
+                // Fallback: use global shared storage for testing
+                if let Some(shared_storage) = get_global_shared_storage() {
+                    let mut state = shared_storage.write().await;
+                    Ok(state.apply_command(&cmd))
+                } else {
+                    let mut state = self.storage.write().await;
+                    Ok(state.apply_command(&cmd))
+                }
             }
         }
         #[cfg(not(feature = "raft"))]
         {
-            // Fallback to local execution
-            let mut state = self.storage.write().await;
-            Ok(state.apply_command(&cmd))
+            // Use global shared storage for testing
+            if let Some(shared_storage) = get_global_shared_storage() {
+                let mut state = shared_storage.write().await;
+                Ok(state.apply_command(&cmd))
+            } else {
+                let mut state = self.storage.write().await;
+                Ok(state.apply_command(&cmd))
+            }
         }
     }
 
@@ -711,20 +734,35 @@ impl RaftNode {
         predicate: Option<&str>,
         object: Option<&str>,
     ) -> Vec<(String, String, String)> {
-        let state = self.storage.read().await;
-        state.query(subject, predicate, object)
+        if let Some(shared_storage) = get_global_shared_storage() {
+            let state = shared_storage.read().await;
+            state.query(subject, predicate, object)
+        } else {
+            let state = self.storage.read().await;
+            state.query(subject, predicate, object)
+        }
     }
 
     /// Get number of triples
     pub async fn len(&self) -> usize {
-        let state = self.storage.read().await;
-        state.len()
+        if let Some(shared_storage) = get_global_shared_storage() {
+            let state = shared_storage.read().await;
+            state.len()
+        } else {
+            let state = self.storage.read().await;
+            state.len()
+        }
     }
 
     /// Check if store is empty
     pub async fn is_empty(&self) -> bool {
-        let state = self.storage.read().await;
-        state.is_empty()
+        if let Some(shared_storage) = get_global_shared_storage() {
+            let state = shared_storage.read().await;
+            state.is_empty()
+        } else {
+            let state = self.storage.read().await;
+            state.is_empty()
+        }
     }
 
     /// Shutdown the raft node gracefully

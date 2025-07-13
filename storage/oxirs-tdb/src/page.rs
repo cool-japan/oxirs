@@ -351,8 +351,7 @@ impl Default for NumaTopology {
 }
 
 /// NUMA allocation strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum NumaAllocationStrategy {
     /// Allocate on current NUMA node
     #[default]
@@ -366,7 +365,6 @@ pub enum NumaAllocationStrategy {
     /// Bind allocation to specific NUMA node
     Bind(usize),
 }
-
 
 /// NUMA memory pool configuration
 #[derive(Debug, Clone)]
@@ -577,6 +575,7 @@ impl BufferPool {
         // Create or open the page file
         let page_file = OpenOptions::new()
             .create(true)
+            .truncate(false)
             .read(true)
             .write(true)
             .open(&file_path)

@@ -56,6 +56,7 @@ futures = "0.3"
 sha1 = "0.10"
 sha2 = "0.10"
 md5 = "0.7"
+siphasher = "1.0"  # For optimized term encoding
 
 # Additional dependencies for SPARQL functions
 chrono = { version = "0.4", features = ["serde"] }
@@ -90,7 +91,7 @@ bimap = "0.6"
 bytes = "1.5"
 
 # AI and ML dependencies
-ndarray = { version = "0.15", features = ["rayon"] }
+ndarray = { workspace = true }
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri.workspace = true         # Fast IRI validation and parsing

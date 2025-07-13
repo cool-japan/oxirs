@@ -268,7 +268,8 @@ impl ParallelQueryExecutor {
             let results: Vec<Binding> = solution
                 .par_iter()
                 .flat_map(|binding| {
-                    self.extend_binding_with_pattern(binding, pattern, dataset).unwrap_or_default()
+                    self.extend_binding_with_pattern(binding, pattern, dataset)
+                        .unwrap_or_default()
                 })
                 .collect();
             Ok(results)
@@ -689,8 +690,7 @@ impl ParallelQueryExecutor {
         });
 
         // Parallel aggregation - convert DashMap to Vec for parallel iteration
-        let groups_vec: Vec<(Vec<AlgebraTerm>, Vec<Binding>)> =
-            groups.into_iter().collect();
+        let groups_vec: Vec<(Vec<AlgebraTerm>, Vec<Binding>)> = groups.into_iter().collect();
 
         let result: Vec<Binding> = groups_vec
             .into_par_iter()

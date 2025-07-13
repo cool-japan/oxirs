@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_stream::processing::{
-    AggregateFunction, EventProcessor, WindowConfig, WindowTrigger, WindowType,
+    AggregateFunction, EventProcessor, ProcessorConfig, WindowConfig, WindowTrigger, WindowType,
 };
 use oxirs_stream::*;
 use std::time::{Duration, Instant};
@@ -195,7 +195,7 @@ fn bench_stream_processing_pipeline(c: &mut Criterion) {
     group.bench_function("event_processor_10k_events", |b| {
         b.iter(|| {
             rt.block_on(async {
-                let mut processor = EventProcessor::new();
+                let mut processor = EventProcessor::new(ProcessorConfig::default());
 
                 // Create a window for processing
                 let window_config = WindowConfig {
@@ -212,7 +212,7 @@ fn bench_stream_processing_pipeline(c: &mut Criterion) {
                     trigger: WindowTrigger::OnCount(1000),
                 };
 
-                processor.create_window(window_config);
+                let _ = processor.create_window(window_config);
 
                 let start = Instant::now();
 
@@ -222,7 +222,7 @@ fn bench_stream_processing_pipeline(c: &mut Criterion) {
 
                 for i in 0..event_count {
                     let event = create_benchmark_event(i);
-                    let results = processor.process_event(black_box(event)).await.unwrap();
+                    let results = processor.process_event(black_box(event)).unwrap();
                     total_results += results.len();
                 }
 

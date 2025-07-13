@@ -947,7 +947,6 @@ impl RandomProjectionTree {
         rng: &mut impl rand::Rng,
         depth: usize,
     ) -> Result<RpNode> {
-
         // Very strict stack overflow prevention - similar to BallTree approach
         if indices.len() <= self.config.max_leaf_size || indices.len() <= 2 || depth >= 5 {
             return Ok(RpNode {

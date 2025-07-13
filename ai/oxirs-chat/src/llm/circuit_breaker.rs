@@ -106,7 +106,6 @@ impl CircuitBreaker {
             if current_state == CircuitBreakerState::HalfOpen
                 && self.success_count.load(Ordering::Relaxed) >= self.config.recovery_threshold
             {
-                drop(current_state);
                 self.transition_to_closed().await;
             }
         } else {
@@ -122,7 +121,6 @@ impl CircuitBreaker {
 
             // Check if we should open the circuit
             if self.should_open_circuit().await {
-                drop(current_state);
                 self.transition_to_open().await;
             }
         }

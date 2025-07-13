@@ -9,15 +9,13 @@ use crate::{
     Result, ShaclAiError,
 };
 
-use ndarray::{s, Array1, Array2, Array3};
+use ndarray::{Array1, Array2, Array3};
 use oxirs_core::{
     model::Variable,
     query::{
         algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern},
-        pattern_optimizer::{
-            IndexType, OptimizedPatternPlan, PatternStrategy,
-        },
-    }, Store,
+        pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternStrategy},
+    },
 };
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -193,18 +191,25 @@ impl MultiHeadAttention {
 
         // Process each attention head
         for head in 0..self.config.num_heads {
-            let q =
-                self.project_to_head(input, &self.query_weights.slice(s![head, .., ..]), head)?;
-            let k = self.project_to_head(input, &self.key_weights.slice(s![head, .., ..]), head)?;
-            let v =
-                self.project_to_head(input, &self.value_weights.slice(s![head, .., ..]), head)?;
+            // Extract head-specific weights manually
+            let query_head_weights = self.extract_head_weights(&self.query_weights, head);
+            let key_head_weights = self.extract_head_weights(&self.key_weights, head);
+            let value_head_weights = self.extract_head_weights(&self.value_weights, head);
+
+            let q = self.project_to_head(input, &query_head_weights, head)?;
+            let k = self.project_to_head(input, &key_head_weights, head)?;
+            let v = self.project_to_head(input, &value_head_weights, head)?;
 
             let (head_output, head_attention) =
                 self.scaled_dot_product_attention(&q, &k, &v, mask)?;
             attention_outputs.push(head_output);
-            attention_weights
-                .slice_mut(s![head, .., ..])
-                .assign(&head_attention);
+
+            // Safely assign attention weights for this head
+            for i in 0..seq_len.min(head_attention.nrows()) {
+                for j in 0..seq_len.min(head_attention.ncols()) {
+                    attention_weights[[head, i, j]] = head_attention[[i, j]];
+                }
+            }
         }
 
         // Concatenate all heads
@@ -216,11 +221,27 @@ impl MultiHeadAttention {
         Ok((output, attention_weights))
     }
 
+    /// Extract head-specific weights from 3D weight matrix
+    fn extract_head_weights(&self, weights: &Array3<f64>, head: usize) -> Array2<f64> {
+        let model_dim = weights.shape()[1];
+        let head_dim = weights.shape()[2];
+        let mut head_weights = Array2::zeros((model_dim, head_dim));
+
+        // Copy weights for this head
+        for i in 0..model_dim {
+            for j in 0..head_dim {
+                head_weights[[i, j]] = weights[[head, i, j]];
+            }
+        }
+
+        head_weights
+    }
+
     /// Project input to attention head space
     fn project_to_head(
         &self,
         input: &Array2<f64>,
-        weights: &ndarray::ArrayView2<f64>,
+        weights: &Array2<f64>,
         head: usize,
     ) -> Result<Array2<f64>> {
         Ok(input.dot(weights))
@@ -280,14 +301,14 @@ impl MultiHeadAttention {
         let mut output = Array2::zeros(input.raw_dim());
 
         for i in 0..input.shape()[0] {
-            let row = input.slice(s![i, ..]);
+            let row = input.row(i);
             let max_val = row.fold(f64::NEG_INFINITY, |a, &b| a.max(b));
 
             let exp_row: Array1<f64> = row.mapv(|x| (x - max_val).exp());
             let sum_exp = exp_row.sum();
 
             if sum_exp > 0.0 {
-                output.slice_mut(s![i, ..]).assign(&(exp_row / sum_exp));
+                output.row_mut(i).assign(&(exp_row / sum_exp));
             }
         }
 
@@ -297,9 +318,9 @@ impl MultiHeadAttention {
     /// Concatenate attention heads
     fn concatenate_heads(&self, heads: &[Array2<f64>]) -> Result<Array2<f64>> {
         if heads.is_empty() {
-            return Err(
-                ShaclAiError::DataProcessing("No attention heads provided".to_string()),
-            );
+            return Err(ShaclAiError::DataProcessing(
+                "No attention heads provided".to_string(),
+            ));
         }
 
         let seq_len = heads[0].shape()[0];
@@ -309,11 +330,14 @@ impl MultiHeadAttention {
 
         for (head_idx, head_output) in heads.iter().enumerate() {
             let start_dim = head_idx * head_output.shape()[1];
-            let end_dim = start_dim + head_output.shape()[1];
+            let head_dim = head_output.shape()[1];
 
-            concatenated
-                .slice_mut(s![.., start_dim..end_dim])
-                .assign(head_output);
+            // Safely assign head output to concatenated result
+            for i in 0..head_output.shape()[0].min(concatenated.shape()[0]) {
+                for j in 0..head_dim.min(concatenated.shape()[1] - start_dim) {
+                    concatenated[[i, start_dim + j]] = head_output[[i, j]];
+                }
+            }
         }
 
         Ok(concatenated)
@@ -442,7 +466,7 @@ impl TransformerEncoderLayer {
         let mut output = Array2::zeros(input.raw_dim());
 
         for i in 0..input.shape()[0] {
-            let row = input.slice(s![i, ..]);
+            let row = input.row(i);
             let mean = row.mean().unwrap_or(0.0);
             let variance = row.mapv(|x| (x - mean).powi(2)).mean().unwrap_or(0.0);
             let std = (variance + epsilon).sqrt();
@@ -450,7 +474,7 @@ impl TransformerEncoderLayer {
             let normalized = row.mapv(|x| (x - mean) / std);
             let scaled = &normalized * weight + bias;
 
-            output.slice_mut(s![i, ..]).assign(&scaled);
+            output.row_mut(i).assign(&scaled);
         }
 
         Ok(output)
@@ -530,8 +554,8 @@ impl PatternEmbedder {
 
         for token in &pattern_tokens {
             let token_id = self.get_or_create_token_id(token);
-            let token_embedding = self.embedding_table.slice(s![token_id, ..]);
-            embedding = embedding + token_embedding;
+            let token_embedding = self.embedding_table.row(token_id);
+            embedding = embedding + &token_embedding;
         }
 
         // Normalize by number of tokens
@@ -552,7 +576,7 @@ impl PatternEmbedder {
 
         for (i, pattern) in patterns.iter().take(seq_len).enumerate() {
             let pattern_embedding = self.embed_pattern(pattern)?;
-            embeddings.slice_mut(s![i, ..]).assign(&pattern_embedding);
+            embeddings.row_mut(i).assign(&pattern_embedding);
         }
 
         Ok(embeddings)
@@ -660,8 +684,8 @@ impl AttentionCostPredictor {
         // Combine pattern and context
         let combined = pattern_embedding + &context_vector;
 
-        // Predict cost
-        let cost_logits: f64 = combined.dot(&self.cost_head.slice(s![.., 0]));
+        // Predict cost using first column of cost_head
+        let cost_logits = combined.dot(&self.cost_head.column(0));
         let cost: f64 = cost_logits.max(0.1); // Ensure positive cost
 
         Ok(cost)
@@ -688,14 +712,12 @@ impl AttentionCostPredictor {
 
         // Update based on recent samples
         for (pattern_emb, actual_cost) in self.cost_history.iter().rev().take(10) {
-            let predicted_cost = pattern_emb.dot(&self.cost_head.slice(s![.., 0]));
+            let predicted_cost = pattern_emb.dot(&self.cost_head.column(0));
             let error = actual_cost - predicted_cost;
 
             // Update cost head weights
             let gradient = pattern_emb * error * lr;
-            self.cost_head
-                .slice_mut(s![.., 0])
-                .scaled_add(1.0, &gradient);
+            self.cost_head.column_mut(0).scaled_add(1.0, &gradient);
         }
     }
 }
@@ -740,8 +762,8 @@ impl PositionalEncoder {
         let mut encoded = embeddings.clone();
 
         for i in 0..seq_len {
-            let pos_encoding = self.position_encodings.slice(s![i, ..]);
-            encoded.slice_mut(s![i, ..]).scaled_add(1.0, &pos_encoding);
+            let pos_encoding = self.position_encodings.row(i);
+            encoded.row_mut(i).scaled_add(1.0, &pos_encoding);
         }
 
         Ok(encoded)
@@ -961,9 +983,9 @@ impl NeuralTransformerPatternIntegration {
     fn embed_patterns(&mut self, patterns: &[AlgebraTriplePattern]) -> Result<Array2<f64>> {
         match self.pattern_embedder.lock() {
             Ok(mut embedder) => embedder.embed_pattern_sequence(patterns),
-            _ => Err(
-                ShaclAiError::DataProcessing("Failed to lock pattern embedder".to_string()),
-            ),
+            _ => Err(ShaclAiError::DataProcessing(
+                "Failed to lock pattern embedder".to_string(),
+            )),
         }
     }
 
@@ -971,9 +993,9 @@ impl NeuralTransformerPatternIntegration {
     fn apply_positional_encoding(&self, embeddings: &Array2<f64>) -> Result<Array2<f64>> {
         match self.positional_encoder.lock() {
             Ok(encoder) => encoder.encode(embeddings),
-            _ => Err(
-                ShaclAiError::DataProcessing("Failed to lock positional encoder".to_string()),
-            ),
+            _ => Err(ShaclAiError::DataProcessing(
+                "Failed to lock positional encoder".to_string(),
+            )),
         }
     }
 
@@ -998,12 +1020,12 @@ impl NeuralTransformerPatternIntegration {
         match self.attention_cost_predictor.lock() {
             Ok(predictor) => {
                 for i in 0..patterns.len() {
-                    let pattern_emb = embeddings.slice(s![i, ..]).to_owned();
+                    let pattern_emb = embeddings.row(i).to_owned();
 
                     // Use other patterns as context
                     let context_embeddings: Vec<Array1<f64>> = (0..patterns.len())
                         .filter(|&j| j != i)
-                        .map(|j| embeddings.slice(s![j, ..]).to_owned())
+                        .map(|j| embeddings.row(j).to_owned())
                         .collect();
 
                     let cost = predictor.predict_cost(&pattern_emb, &context_embeddings)?;
@@ -1046,7 +1068,7 @@ impl NeuralTransformerPatternIntegration {
         // Build optimized plan
         for (pattern_idx, cost) in indexed_costs {
             let pattern = &patterns[pattern_idx];
-            let pattern_embedding = embeddings.slice(s![pattern_idx, ..]);
+            let pattern_embedding = embeddings.row(pattern_idx);
 
             // Determine optimal index using attention weights
             let optimal_index =
@@ -1105,7 +1127,7 @@ impl NeuralTransformerPatternIntegration {
     ) -> Result<f64> {
         // Simple selectivity estimation based on embedding magnitude
         let embedding_norm = embedding.dot(embedding).sqrt();
-        let selectivity = (1.0 / (1.0 + embedding_norm)).min(0.9).max(0.001);
+        let selectivity = (1.0 / (1.0 + embedding_norm)).clamp(0.001, 0.9);
 
         Ok(selectivity)
     }
@@ -1136,7 +1158,7 @@ impl NeuralTransformerPatternIntegration {
     ) -> Result<()> {
         if let Ok(mut memory) = self.pattern_memory.lock() {
             for (i, pattern) in patterns.iter().enumerate() {
-                let embedding = embeddings.slice(s![i, ..]).to_owned();
+                let embedding = embeddings.row(i).to_owned();
                 let cost = costs[i];
 
                 memory.store(pattern.clone(), embedding, cost);

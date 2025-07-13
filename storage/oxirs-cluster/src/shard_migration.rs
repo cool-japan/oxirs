@@ -465,7 +465,8 @@ impl ShardMigrationManager {
         let mut processed = 0u64;
 
         for (sequence, chunk) in triples.chunks(batch_size).enumerate() {
-            let batch = MigrationBatch::new(migration_id.to_string(), sequence as u64, chunk.to_vec());
+            let batch =
+                MigrationBatch::new(migration_id.to_string(), sequence as u64, chunk.to_vec());
 
             // Transfer batch to target nodes
             self.transfer_batch(migration_id, &batch).await?;

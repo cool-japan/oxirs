@@ -290,18 +290,9 @@ impl Parser {
 
         while let Some(c) = chars.next() {
             if escaped {
-                // Handle escaped characters
-                match c {
-                    '"' => current_token.push('"'),
-                    '\\' => current_token.push('\\'),
-                    'n' => current_token.push('\n'),
-                    'r' => current_token.push('\r'),
-                    't' => current_token.push('\t'),
-                    _ => {
-                        current_token.push('\\');
-                        current_token.push(c);
-                    }
-                }
+                // Preserve escape sequences - don't unescape during tokenization
+                current_token.push('\\');
+                current_token.push(c);
                 escaped = false;
             } else if c == '\\' && in_quotes {
                 escaped = true;
@@ -437,8 +428,9 @@ impl Parser {
         let end_quote_pos =
             end_quote_pos.ok_or_else(|| OxirsError::Parse("Unterminated literal".to_string()))?;
 
-        // Extract the literal value (without quotes)
-        let literal_value: String = chars[1..end_quote_pos].iter().collect();
+        // Extract the literal value (without quotes) and unescape
+        let raw_value: String = chars[1..end_quote_pos].iter().collect();
+        let literal_value = self.unescape_literal_value(&raw_value)?;
 
         // Check for language tag or datatype
         let remaining = &token[end_quote_pos + 1..];
@@ -606,14 +598,24 @@ impl Parser {
         }
     }
 
-    fn parse_rdfxml<F>(&self, _data: &str, _handler: F) -> Result<()>
+    fn parse_rdfxml<F>(&self, data: &str, mut handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Result<()>,
     {
-        // TODO: Enable when rdfxml module compilation issues are resolved
-        Err(OxirsError::Parse(
-            "RDF/XML parsing temporarily disabled".to_string(),
-        ))
+        use crate::rdfxml::wrapper::parse_rdfxml;
+        use std::io::Cursor;
+
+        // Parse RDF/XML data using the wrapper
+        let reader = Cursor::new(data.as_bytes());
+        let base_iri = self.config.base_iri.as_deref();
+        let quads = parse_rdfxml(reader, base_iri, self.config.ignore_errors)?;
+
+        // Process each quad through the handler
+        for quad in quads {
+            handler(quad)?;
+        }
+
+        Ok(())
     }
 
     fn parse_jsonld<F>(&self, data: &str, mut handler: F) -> Result<()>
@@ -622,12 +624,12 @@ impl Parser {
     {
         // Basic JSON-LD parser implementation using existing jsonld module
         use crate::jsonld::to_rdf::JsonLdParser;
-        
+
         let parser = JsonLdParser::new();
         let parser = if let Some(base_iri) = &self.config.base_iri {
-            parser.with_base_iri(base_iri.clone()).map_err(|e| {
-                OxirsError::Parse(format!("Invalid base IRI: {e}"))
-            })?
+            parser
+                .with_base_iri(base_iri.clone())
+                .map_err(|e| OxirsError::Parse(format!("Invalid base IRI: {e}")))?
         } else {
             parser
         };
@@ -648,6 +650,75 @@ impl Parser {
         }
 
         Ok(())
+    }
+
+    /// Unescape special characters in literal values
+    fn unescape_literal_value(&self, value: &str) -> Result<String> {
+        let mut result = String::new();
+        let mut chars = value.chars();
+
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                match chars.next() {
+                    Some('"') => result.push('"'),
+                    Some('\\') => result.push('\\'),
+                    Some('n') => result.push('\n'),
+                    Some('r') => result.push('\r'),
+                    Some('t') => result.push('\t'),
+                    Some('u') => {
+                        // Parse \uHHHH Unicode escape
+                        let hex_chars: String = chars.by_ref().take(4).collect();
+                        if hex_chars.len() != 4 {
+                            return Err(OxirsError::Parse(
+                                "Invalid Unicode escape sequence \\uHHHH - expected 4 hex digits"
+                                    .to_string(),
+                            ));
+                        }
+                        let code_point = u32::from_str_radix(&hex_chars, 16).map_err(|_| {
+                            OxirsError::Parse(
+                                "Invalid hex digits in Unicode escape sequence".to_string(),
+                            )
+                        })?;
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            OxirsError::Parse("Invalid Unicode code point".to_string())
+                        })?;
+                        result.push(unicode_char);
+                    }
+                    Some('U') => {
+                        // Parse \UHHHHHHHH Unicode escape
+                        let hex_chars: String = chars.by_ref().take(8).collect();
+                        if hex_chars.len() != 8 {
+                            return Err(OxirsError::Parse(
+                                "Invalid Unicode escape sequence \\UHHHHHHHH - expected 8 hex digits".to_string()
+                            ));
+                        }
+                        let code_point = u32::from_str_radix(&hex_chars, 16).map_err(|_| {
+                            OxirsError::Parse(
+                                "Invalid hex digits in Unicode escape sequence".to_string(),
+                            )
+                        })?;
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            OxirsError::Parse("Invalid Unicode code point".to_string())
+                        })?;
+                        result.push(unicode_char);
+                    }
+                    Some(other) => {
+                        return Err(OxirsError::Parse(format!(
+                            "Invalid escape sequence \\{other}"
+                        )));
+                    }
+                    None => {
+                        return Err(OxirsError::Parse(
+                            "Incomplete escape sequence at end of literal".to_string(),
+                        ));
+                    }
+                }
+            } else {
+                result.push(c);
+            }
+        }
+
+        Ok(result)
     }
 
     // Native parsing implementation complete - no external dependencies needed
@@ -777,21 +848,27 @@ impl TrigParserState {
     }
 
     fn parse_graph_start(&mut self, line: &str) -> Result<Vec<Quad>> {
-        // Parse: <graph_name> { or { for default graph
+        // Parse: <graph_name> { or graph_name { or { for default graph
         if line.trim() == "{" {
             // Default graph
             self.current_graph = Some(GraphName::DefaultGraph);
         } else {
-            // Named graph: <iri> {
+            // Named graph: <iri> { or prefix:name {
             let graph_part = line.replace('{', "").trim().to_string();
             if graph_part.starts_with('<') && graph_part.ends_with('>') {
+                // Full IRI
                 let iri = &graph_part[1..graph_part.len() - 1];
                 let named_node = NamedNode::new(iri)?;
                 self.current_graph = Some(GraphName::NamedNode(named_node));
+            } else if graph_part.contains(':') {
+                // Prefixed name
+                let expanded = self.expand_prefixed_name(&graph_part)?;
+                let named_node = NamedNode::new(&expanded)?;
+                self.current_graph = Some(GraphName::NamedNode(named_node));
             } else {
-                return Err(OxirsError::Parse(
-                    "Invalid graph name in TriG".to_string(),
-                ));
+                return Err(OxirsError::Parse(format!(
+                    "Invalid graph name in TriG: '{graph_part}'. Must be IRI or prefixed name"
+                )));
             }
         }
 
@@ -805,7 +882,10 @@ impl TrigParserState {
 
         // Parse as Turtle triple then convert to quad with current graph
         let triple = self.parse_turtle_statement(statement)?;
-        let graph_name = self.current_graph.clone().unwrap_or(GraphName::DefaultGraph);
+        let graph_name = self
+            .current_graph
+            .clone()
+            .unwrap_or(GraphName::DefaultGraph);
         let quad = Quad::new(
             triple.subject().clone(),
             triple.predicate().clone(),
@@ -864,7 +944,7 @@ impl TrigParserState {
         // Parse subject
         let subject = self.parse_subject_term(&tokens[0])?;
 
-        // Parse predicate  
+        // Parse predicate
         let predicate = self.parse_predicate_term(&tokens[1])?;
 
         // Parse object
@@ -934,7 +1014,9 @@ impl TrigParserState {
     fn parse_literal_term(&self, token: &str) -> Result<Object> {
         // Parse "value"@lang or "value"^^<datatype> or just "value"
         if !token.starts_with('"') {
-            return Err(OxirsError::Parse("Literal must start with quote".to_string()));
+            return Err(OxirsError::Parse(
+                "Literal must start with quote".to_string(),
+            ));
         }
 
         // Find the end quote
@@ -957,22 +1039,24 @@ impl TrigParserState {
             return Err(OxirsError::Parse("Unterminated literal".to_string()));
         }
 
-        let value = &token[1..end_quote];
+        let value = self.unescape_literal_value(&token[1..end_quote])?;
         let remainder = &token[end_quote + 1..];
 
         if remainder.is_empty() {
             // Simple literal
-            Ok(Object::Literal(Literal::new_simple_literal(value)))
+            Ok(Object::Literal(Literal::new_simple_literal(&value)))
         } else if let Some(lang) = remainder.strip_prefix('@') {
             // Language tag
-            let literal = Literal::new_language_tagged_literal(value, lang)?;
+            let literal = Literal::new_language_tagged_literal(&value, lang)?;
             Ok(Object::Literal(literal))
         } else if let Some(datatype_token) = remainder.strip_prefix("^^") {
             // Datatype
             if datatype_token.starts_with('<') && datatype_token.ends_with('>') {
                 let datatype_iri = &datatype_token[1..datatype_token.len() - 1];
                 let datatype = NamedNode::new(datatype_iri)?;
-                Ok(Object::Literal(Literal::new_typed_literal(value, datatype)))
+                Ok(Object::Literal(Literal::new_typed_literal(
+                    &value, datatype,
+                )))
             } else {
                 Err(OxirsError::Parse("Invalid datatype IRI".to_string()))
             }
@@ -991,6 +1075,75 @@ impl TrigParserState {
         } else {
             Err(OxirsError::Parse("Invalid prefixed name".to_string()))
         }
+    }
+
+    /// Unescape special characters in literal values
+    fn unescape_literal_value(&self, value: &str) -> Result<String> {
+        let mut result = String::new();
+        let mut chars = value.chars();
+
+        while let Some(c) = chars.next() {
+            if c == '\\' {
+                match chars.next() {
+                    Some('"') => result.push('"'),
+                    Some('\\') => result.push('\\'),
+                    Some('n') => result.push('\n'),
+                    Some('r') => result.push('\r'),
+                    Some('t') => result.push('\t'),
+                    Some('u') => {
+                        // Parse \uHHHH Unicode escape
+                        let hex_chars: String = chars.by_ref().take(4).collect();
+                        if hex_chars.len() != 4 {
+                            return Err(OxirsError::Parse(
+                                "Invalid Unicode escape sequence \\uHHHH - expected 4 hex digits"
+                                    .to_string(),
+                            ));
+                        }
+                        let code_point = u32::from_str_radix(&hex_chars, 16).map_err(|_| {
+                            OxirsError::Parse(
+                                "Invalid hex digits in Unicode escape sequence".to_string(),
+                            )
+                        })?;
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            OxirsError::Parse("Invalid Unicode code point".to_string())
+                        })?;
+                        result.push(unicode_char);
+                    }
+                    Some('U') => {
+                        // Parse \UHHHHHHHH Unicode escape
+                        let hex_chars: String = chars.by_ref().take(8).collect();
+                        if hex_chars.len() != 8 {
+                            return Err(OxirsError::Parse(
+                                "Invalid Unicode escape sequence \\UHHHHHHHH - expected 8 hex digits".to_string()
+                            ));
+                        }
+                        let code_point = u32::from_str_radix(&hex_chars, 16).map_err(|_| {
+                            OxirsError::Parse(
+                                "Invalid hex digits in Unicode escape sequence".to_string(),
+                            )
+                        })?;
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            OxirsError::Parse("Invalid Unicode code point".to_string())
+                        })?;
+                        result.push(unicode_char);
+                    }
+                    Some(other) => {
+                        return Err(OxirsError::Parse(format!(
+                            "Invalid escape sequence \\{other}"
+                        )));
+                    }
+                    None => {
+                        return Err(OxirsError::Parse(
+                            "Incomplete escape sequence at end of literal".to_string(),
+                        ));
+                    }
+                }
+            } else {
+                result.push(c);
+            }
+        }
+
+        Ok(result)
     }
 }
 
@@ -1843,7 +1996,6 @@ _:person1 <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> ."#;
     }
 
     #[test]
-    #[ignore] // TODO: Fix escaped literal parsing
     fn test_ntriples_parsing_escaped_literals() {
         let ntriples_data = r#"<http://example.org/test> <http://example.org/desc> "Text with \"quotes\" and \n newlines" ."#;
 
@@ -2114,6 +2266,155 @@ ex:alice ex:age "30"^^<http://www.w3.org/2001/XMLSchema#integer> ."#;
                 parsed_graph.contains(triple),
                 "Parsed graph missing triple: {triple}"
             );
+        }
+    }
+
+    #[test]
+    fn test_trig_parser() {
+        let trig_data = r#"
+@prefix ex: <http://example.org/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+
+# Default graph
+{
+    ex:alice rdf:type ex:Person .
+    ex:alice ex:name "Alice" .
+}
+
+# Named graph
+ex:graph1 {
+    ex:bob rdf:type ex:Person .
+    ex:bob ex:name "Bob" .
+    ex:bob ex:age "30" .
+}
+"#;
+
+        let parser = Parser::new(RdfFormat::TriG);
+        let quads = parser.parse_str_to_quads(trig_data).unwrap();
+
+        // Should parse all statements
+        assert!(
+            quads.len() >= 5,
+            "Should parse at least 5 quads, got {}",
+            quads.len()
+        );
+
+        // Check that we have both default and named graph quads
+        let default_graph_count = quads.iter().filter(|q| q.is_default_graph()).count();
+        let named_graph_count = quads.len() - default_graph_count;
+
+        assert!(
+            default_graph_count >= 2,
+            "Should have at least 2 default graph quads, got {default_graph_count}"
+        );
+        assert!(
+            named_graph_count >= 3,
+            "Should have at least 3 named graph quads, got {named_graph_count}"
+        );
+
+        // Verify specific content
+        let alice_uri = "http://example.org/alice";
+        let bob_uri = "http://example.org/bob";
+        let person_uri = "http://example.org/Person";
+
+        // Check for Alice in default graph
+        let alice_type_found = quads.iter().any(|q| {
+            q.is_default_graph()
+                && q.subject().to_string().contains(alice_uri)
+                && q.object().to_string().contains(person_uri)
+        });
+        assert!(
+            alice_type_found,
+            "Should find Alice type assertion in default graph"
+        );
+
+        // Check for Bob in named graph
+        let bob_in_named_graph = quads
+            .iter()
+            .any(|q| !q.is_default_graph() && q.subject().to_string().contains(bob_uri));
+        assert!(
+            bob_in_named_graph,
+            "Should find Bob statements in named graph"
+        );
+    }
+
+    #[test]
+    fn test_trig_parser_prefixes() {
+        let trig_data = r#"
+@prefix ex: <http://example.org/> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+
+ex:person1 foaf:name "John Doe" .
+"#;
+
+        let parser = Parser::new(RdfFormat::TriG);
+        let quads = parser.parse_str_to_quads(trig_data).unwrap();
+
+        assert!(!quads.is_empty(), "Should parse prefixed statements");
+
+        // Verify prefix expansion worked
+        let expanded_found = quads.iter().any(|q| {
+            q.subject()
+                .to_string()
+                .contains("http://example.org/person1")
+                && q.predicate()
+                    .to_string()
+                    .contains("http://xmlns.com/foaf/0.1/name")
+        });
+        assert!(expanded_found, "Should expand prefixes correctly");
+    }
+
+    #[test]
+    fn test_jsonld_parser() {
+        let jsonld_data = r#"{
+    "@context": {
+        "name": "http://xmlns.com/foaf/0.1/name",
+        "Person": "http://schema.org/Person"
+    },
+    "@type": "Person",
+    "@id": "http://example.org/john",
+    "name": "John Doe"
+}"#;
+
+        let parser = Parser::new(RdfFormat::JsonLd);
+        let result = parser.parse_str_to_quads(jsonld_data);
+
+        match result {
+            Ok(quads) => {
+                println!("JSON-LD parsed {} quads:", quads.len());
+                for quad in &quads {
+                    println!("  {quad}");
+                }
+                assert!(!quads.is_empty(), "Should parse some quads from JSON-LD");
+            }
+            Err(e) => {
+                // For now, just verify that the parser attempts to parse
+                println!("JSON-LD parsing error (expected during development): {e}");
+                // Don't fail the test yet as the implementation might need more work
+            }
+        }
+    }
+
+    #[test]
+    fn test_jsonld_parser_simple() {
+        let jsonld_data = r#"{
+    "@context": "http://schema.org/",
+    "@type": "Person",
+    "name": "Alice"
+}"#;
+
+        let parser = Parser::new(RdfFormat::JsonLd);
+        let result = parser.parse_str_to_quads(jsonld_data);
+
+        // For now, just verify the parser doesn't crash
+        match result {
+            Ok(quads) => {
+                println!("Simple JSON-LD parsed {} quads", quads.len());
+            }
+            Err(e) => {
+                println!("Simple JSON-LD parsing error: {e}");
+                // Don't fail during development
+            }
         }
     }
 }

@@ -723,8 +723,7 @@ mod tests {
             // Allow for small floating-point differences in percentile calculation
             assert!(
                 (value - 75.0).abs() < 1.0,
-                "Expected value around 75.0, got {}",
-                value
+                "Expected value around 75.0, got {value}"
             );
         } else {
             panic!("Expected numeric result");

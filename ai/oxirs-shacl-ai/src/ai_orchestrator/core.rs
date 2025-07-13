@@ -323,16 +323,15 @@ impl AiOrchestrator {
         store: &dyn Store,
         graph_name: Option<&str>,
     ) -> Result<Vec<crate::patterns::Pattern>> {
-        // TODO: Implement discover_patterns method for PatternAnalyzer
-        // let mut pattern_analyzer = self.pattern_analyzer.lock().unwrap();
-        // pattern_analyzer.discover_patterns(store, graph_name)
-        Ok(Vec::new())
+        tracing::debug!("Discovering patterns using PatternAnalyzer");
+        let mut pattern_analyzer = self.pattern_analyzer.lock().unwrap();
+        pattern_analyzer.analyze_graph_patterns(store, graph_name)
     }
 
     fn learn_shapes_from_patterns(
         &self,
         store: &dyn Store,
-        patterns: &[crate::patterns::Pattern],
+        _patterns: &[crate::patterns::Pattern],
         graph_name: Option<&str>,
     ) -> Result<Vec<Shape>> {
         let mut shape_learner = self.shape_learner.lock().unwrap();
@@ -340,16 +339,57 @@ impl AiOrchestrator {
     }
 
     fn assess_quality(&self, store: &dyn Store, shapes: &[Shape]) -> Result<QualityAnalysisResult> {
-        // TODO: Implement assess_data_quality method for QualityAssessor
-        // let quality_assessor = self.quality_assessor.lock().unwrap();
-        // let _quality_report = quality_assessor.assess_data_quality(store, shapes)?;
+        tracing::debug!("Assessing quality using QualityAssessor");
+        let mut quality_assessor = self.quality_assessor.lock().unwrap();
+        let quality_report = quality_assessor.assess_comprehensive_quality(store, shapes)?;
 
-        // Simplified quality analysis
+        // Convert QualityReport to QualityAnalysisResult
+        let mut shape_quality_scores = HashMap::new();
+
+        // Create individual shape quality scores based on overall metrics
+        for (i, _shape) in shapes.iter().enumerate() {
+            let shape_id = format!("shape_{}", i);
+            let shape_score = (quality_report.completeness_score
+                + quality_report.consistency_score
+                + quality_report.accuracy_score)
+                / 3.0;
+            shape_quality_scores.insert(shape_id, shape_score);
+        }
+
+        // Convert quality issues
+        let quality_issues = quality_report
+            .issues
+            .into_iter()
+            .map(|issue| {
+                QualityIssue {
+                    description: issue.description,
+                    shape_id: None, // Could be enhanced to map specific shapes
+                    severity: match issue.severity {
+                        crate::quality::core::QualityIssueSeverity::Critical => {
+                            IssueSeverity::Critical
+                        }
+                        crate::quality::core::QualityIssueSeverity::High => IssueSeverity::High,
+                        crate::quality::core::QualityIssueSeverity::Medium => IssueSeverity::Medium,
+                        crate::quality::core::QualityIssueSeverity::Low => IssueSeverity::Low,
+                        crate::quality::core::QualityIssueSeverity::Info => IssueSeverity::Low,
+                    },
+                    suggested_fix: issue.recommendation,
+                }
+            })
+            .collect();
+
+        // Convert recommendations to improvement suggestions
+        let improvement_suggestions = quality_report
+            .recommendations
+            .into_iter()
+            .map(|rec| rec.description)
+            .collect();
+
         Ok(QualityAnalysisResult {
-            overall_quality_score: 0.8,
-            shape_quality_scores: HashMap::new(),
-            quality_issues: Vec::new(),
-            improvement_suggestions: vec!["Consider adding more constraints".to_string()],
+            overall_quality_score: quality_report.overall_score,
+            shape_quality_scores,
+            quality_issues,
+            improvement_suggestions,
         })
     }
 

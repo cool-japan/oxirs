@@ -274,8 +274,8 @@ impl LiteralValue {
                 )
             }
             xsd::HEX_BINARY => {
-                let bytes = hex::decode(value)
-                    .map_err(|_| anyhow!("Invalid hexBinary value: {value}"))?;
+                let bytes =
+                    hex::decode(value).map_err(|_| anyhow!("Invalid hexBinary value: {value}"))?;
                 ParsedValue::Binary(bytes)
             }
             xsd::BASE64_BINARY => {

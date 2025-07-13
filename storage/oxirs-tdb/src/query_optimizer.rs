@@ -280,9 +280,9 @@ impl AdaptiveIndexManager {
                             potential_savings,
                             confidence,
                             reason: format!(
-                                "Pattern {:?} executed {} times with average cost {:.2}, optimal index {} could reduce cost by {:.2}",
+                                "Pattern {:?} executed {} times with average cost {:.2}, optimal index {:?} could reduce cost by {:.2}",
                                 pattern.pattern_type(), frequency, average_cost,
-                                format!("{:?}", optimal_index), potential_savings
+                                optimal_index, potential_savings
                             ),
                         });
                     }
@@ -405,9 +405,7 @@ impl QueryOptimizer {
         let mut best_cost = self
             .cost_model
             .estimate_cost(pattern, optimal_index, store_stats);
-        let mut reasoning = format!(
-            "Optimal index {optimal_index:?} for pattern {pattern_type:?}"
-        );
+        let mut reasoning = format!("Optimal index {optimal_index:?} for pattern {pattern_type:?}");
 
         // Check if historical data suggests a better index
         if let Ok(history) = self.stats_history.read() {
@@ -647,8 +645,7 @@ impl Default for QueryOptimizer {
 }
 
 /// Summary of query execution statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct QueryStatisticsSummary {
     pub total_queries: u64,
     pub avg_execution_time_ms: u64,
@@ -656,7 +653,6 @@ pub struct QueryStatisticsSummary {
     pub index_usage: HashMap<IndexType, u64>,
     pub pattern_type_usage: HashMap<PatternType, u64>,
 }
-
 
 #[cfg(test)]
 mod tests {

@@ -12,10 +12,7 @@ use crate::{
 };
 use axum::{
     extract::{Query, State},
-    http::{
-        header::ACCEPT,
-        HeaderMap, StatusCode,
-    },
+    http::{header::ACCEPT, HeaderMap, StatusCode},
     response::{Html, IntoResponse, Json, Response},
     Form,
 };
@@ -136,8 +133,10 @@ pub async fn sparql_query(
     };
 
     // Create query context
-    let mut context = QueryContext::default();
-    context.user = user;
+    let mut context = QueryContext {
+        user,
+        ..Default::default()
+    };
     if let Some(timeout) = params.timeout {
         context.timeout = Some(Duration::from_secs(timeout as u64));
     }
@@ -145,7 +144,7 @@ pub async fn sparql_query(
     // Execute query
     match execute_sparql_query(&query_string, context, &state).await {
         Ok(result) => {
-            let execution_time = start_time.elapsed().as_millis() as u64;
+            let _execution_time = start_time.elapsed().as_millis() as u64;
 
             // TODO: Implement metrics recording
             // state.metrics.record_query_execution(execution_time, true);
@@ -159,7 +158,7 @@ pub async fn sparql_query(
             format_query_response(result, accept_header)
         }
         Err(e) => {
-            let execution_time = start_time.elapsed().as_millis() as u64;
+            let _execution_time = start_time.elapsed().as_millis() as u64;
             // TODO: Implement metrics - state.metrics.record_query_execution(execution_time, false);
 
             error!("SPARQL query execution failed: {}", e);
@@ -197,7 +196,7 @@ pub async fn sparql_query_post(
         let mut query = None;
         let mut default_graph_uri = None;
         let mut named_graph_uri = None;
-        
+
         for part in body_str.split('&') {
             if let Some((key, value)) = part.split_once('=') {
                 let decoded_value = urlencoding::decode(value).unwrap_or_default().to_string();
@@ -213,7 +212,7 @@ pub async fn sparql_query_post(
                 }
             }
         }
-        
+
         SparqlQueryParams {
             query,
             default_graph_uri,
@@ -257,13 +256,15 @@ pub async fn sparql_query_post(
     };
 
     // Create query context
-    let mut context = QueryContext::default();
-    context.user = user;
+    let context = QueryContext {
+        user,
+        ..Default::default()
+    };
 
     // Execute the query using the same logic as GET
     match execute_sparql_query(&query_string, context, &state).await {
         Ok(result) => {
-            let execution_time = start_time.elapsed().as_millis() as u64;
+            let _execution_time = start_time.elapsed().as_millis() as u64;
 
             // Determine response format based on Accept header
             let accept_header = headers
@@ -274,7 +275,7 @@ pub async fn sparql_query_post(
             format_query_response(result, accept_header)
         }
         Err(e) => {
-            let execution_time = start_time.elapsed().as_millis() as u64;
+            let _execution_time = start_time.elapsed().as_millis() as u64;
 
             error!("SPARQL query execution failed: {}", e);
             (
@@ -323,19 +324,21 @@ pub async fn sparql_update(
     }
 
     // Create update context
-    let mut context = QueryContext::default();
-    context.user = user;
+    let context = QueryContext {
+        user,
+        ..Default::default()
+    };
 
     // Execute update
     match execute_sparql_update(&params.update, context, &state).await {
         Ok(result) => {
-            let execution_time = start_time.elapsed().as_millis() as u64;
+            let _execution_time = start_time.elapsed().as_millis() as u64;
             // TODO: Implement metrics - state.metrics.record_update_execution(execution_time, true);
 
             Json(result).into_response()
         }
         Err(e) => {
-            let execution_time = start_time.elapsed().as_millis() as u64;
+            let _execution_time = start_time.elapsed().as_millis() as u64;
             // TODO: Implement metrics - state.metrics.record_update_execution(execution_time, false);
 
             error!("SPARQL update execution failed: {}", e);
@@ -374,14 +377,44 @@ pub async fn execute_sparql_query(
     // If parsing failed, provide a simple fallback response for testing
     if _parsed_query.is_none() {
         warn!("Providing fallback response due to parsing failure");
-        let result = QueryResult {
-            query_type: "SELECT".to_string(),
-            execution_time_ms: 1,
-            result_count: Some(0),
-            bindings: Some(Vec::new()),
-            boolean: None,
-            construct_graph: None,
-            describe_graph: None,
+        let query_type = detect_query_type(query);
+        let result = match query_type.as_str() {
+            "ASK" => QueryResult {
+                query_type,
+                execution_time_ms: 1,
+                result_count: Some(1),
+                bindings: None,
+                boolean: Some(false),
+                construct_graph: None,
+                describe_graph: None,
+            },
+            "CONSTRUCT" => QueryResult {
+                query_type,
+                execution_time_ms: 1,
+                result_count: Some(0),
+                bindings: None,
+                boolean: None,
+                construct_graph: Some(String::new()),
+                describe_graph: None,
+            },
+            "DESCRIBE" => QueryResult {
+                query_type,
+                execution_time_ms: 1,
+                result_count: Some(0),
+                bindings: None,
+                boolean: None,
+                construct_graph: None,
+                describe_graph: Some(String::new()),
+            },
+            _ => QueryResult {
+                query_type,
+                execution_time_ms: 1,
+                result_count: Some(0),
+                bindings: Some(Vec::new()),
+                boolean: None,
+                construct_graph: None,
+                describe_graph: None,
+            },
         };
         return Ok(result);
     }
@@ -397,14 +430,53 @@ pub async fn execute_sparql_query(
     match state.store.query(&optimized_query) {
         Ok(store_result) => {
             // Convert store::QueryResult to sparql::core::QueryResult
-            let result = QueryResult {
-                query_type: "SELECT".to_string(), // TODO: Detect actual query type
-                execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
-                result_count: Some(store_result.stats.result_count),
-                bindings: Some(Vec::new()), // TODO: Convert from store_result.inner
-                boolean: None,
-                construct_graph: None,
-                describe_graph: None,
+            let query_type = detect_query_type(&optimized_query);
+
+            let result = match store_result.inner {
+                oxirs_core::query::QueryResult::Select {
+                    variables: _,
+                    bindings,
+                } => {
+                    let converted_bindings = convert_hashmap_bindings_to_json(&bindings);
+                    QueryResult {
+                        query_type: query_type.clone(),
+                        execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
+                        result_count: Some(store_result.stats.result_count),
+                        bindings: Some(converted_bindings),
+                        boolean: None,
+                        construct_graph: None,
+                        describe_graph: None,
+                    }
+                }
+                oxirs_core::query::QueryResult::Ask(boolean) => QueryResult {
+                    query_type: query_type.clone(),
+                    execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
+                    result_count: Some(1),
+                    bindings: None,
+                    boolean: Some(boolean),
+                    construct_graph: None,
+                    describe_graph: None,
+                },
+                oxirs_core::query::QueryResult::Construct(triples) => {
+                    let graph_str = serialize_triples_to_turtle(&triples);
+                    QueryResult {
+                        query_type: query_type.clone(),
+                        execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
+                        result_count: Some(triples.len()),
+                        bindings: None,
+                        boolean: None,
+                        construct_graph: if query_type == "CONSTRUCT" {
+                            Some(graph_str.clone())
+                        } else {
+                            None
+                        },
+                        describe_graph: if query_type == "DESCRIBE" {
+                            Some(graph_str)
+                        } else {
+                            None
+                        },
+                    }
+                }
             };
             Ok(result)
         }
@@ -414,14 +486,44 @@ pub async fn execute_sparql_query(
                 e
             );
             // Provide a basic response for testing purposes
-            let result = QueryResult {
-                query_type: "SELECT".to_string(),
-                execution_time_ms: 1,
-                result_count: Some(0),
-                bindings: Some(Vec::new()),
-                boolean: None,
-                construct_graph: None,
-                describe_graph: None,
+            let query_type = detect_query_type(&optimized_query);
+            let result = match query_type.as_str() {
+                "ASK" => QueryResult {
+                    query_type,
+                    execution_time_ms: 1,
+                    result_count: Some(1),
+                    bindings: None,
+                    boolean: Some(false),
+                    construct_graph: None,
+                    describe_graph: None,
+                },
+                "CONSTRUCT" => QueryResult {
+                    query_type,
+                    execution_time_ms: 1,
+                    result_count: Some(0),
+                    bindings: None,
+                    boolean: None,
+                    construct_graph: Some(String::new()),
+                    describe_graph: None,
+                },
+                "DESCRIBE" => QueryResult {
+                    query_type,
+                    execution_time_ms: 1,
+                    result_count: Some(0),
+                    bindings: None,
+                    boolean: None,
+                    construct_graph: None,
+                    describe_graph: Some(String::new()),
+                },
+                _ => QueryResult {
+                    query_type,
+                    execution_time_ms: 1,
+                    result_count: Some(0),
+                    bindings: Some(Vec::new()),
+                    boolean: None,
+                    construct_graph: None,
+                    describe_graph: None,
+                },
             };
             Ok(result)
         }
@@ -431,7 +533,7 @@ pub async fn execute_sparql_query(
 /// Execute SPARQL update with validation
 pub async fn execute_sparql_update(
     update: &str,
-    context: QueryContext,
+    _context: QueryContext,
     state: &Arc<AppState>,
 ) -> FusekiResult<UpdateResult> {
     // Validate update
@@ -510,7 +612,7 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
                     } else {
                         Vec::new()
                     };
-                    
+
                     serde_json::json!({
                         "head": {
                             "vars": variables
@@ -536,7 +638,7 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
                     })
                 }
             };
-            
+
             let json_response = Json(sparql_json).into_response();
             let mut response = json_response;
             response.headers_mut().insert(
@@ -558,7 +660,7 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
                     } else {
                         Vec::new()
                     };
-                    
+
                     serde_json::json!({
                         "head": {
                             "vars": variables
@@ -617,7 +719,7 @@ fn format_query_response(result: QueryResult, content_type: &str) -> Response {
                     } else {
                         Vec::new()
                     };
-                    
+
                     serde_json::json!({
                         "head": {
                             "vars": variables
@@ -686,4 +788,202 @@ fn validate_sparql_update(update: &str) -> FusekiResult<()> {
     }
 
     Ok(())
+}
+
+/// Detect SPARQL query type from query string
+fn detect_query_type(query: &str) -> String {
+    let query_upper = query.to_uppercase();
+
+    if query_upper.contains("SELECT") {
+        "SELECT".to_string()
+    } else if query_upper.contains("ASK") {
+        "ASK".to_string()
+    } else if query_upper.contains("CONSTRUCT") {
+        "CONSTRUCT".to_string()
+    } else if query_upper.contains("DESCRIBE") {
+        "DESCRIBE".to_string()
+    } else {
+        "SELECT".to_string() // Default fallback
+    }
+}
+
+/// Convert variable bindings to JSON format for SPARQL response
+fn convert_bindings_to_json(
+    bindings: &[oxirs_core::rdf_store::VariableBinding],
+) -> Vec<HashMap<String, serde_json::Value>> {
+    bindings
+        .iter()
+        .map(|binding| {
+            let mut json_binding = HashMap::new();
+
+            for variable in binding.variables() {
+                if let Some(term) = binding.get(variable) {
+                    let json_value = convert_term_to_json(term);
+                    json_binding.insert(variable.clone(), json_value);
+                }
+            }
+
+            json_binding
+        })
+        .collect()
+}
+
+/// Convert HashMap bindings to JSON format for SPARQL response
+fn convert_hashmap_bindings_to_json(
+    bindings: &[HashMap<String, oxirs_core::model::Term>],
+) -> Vec<HashMap<String, serde_json::Value>> {
+    bindings
+        .iter()
+        .map(|binding| {
+            let mut json_binding = HashMap::new();
+
+            for (variable, term) in binding {
+                let json_value = convert_term_to_json(term);
+                json_binding.insert(variable.clone(), json_value);
+            }
+
+            json_binding
+        })
+        .collect()
+}
+
+/// Convert RDF term to JSON representation for SPARQL results
+fn convert_term_to_json(term: &oxirs_core::model::Term) -> serde_json::Value {
+    match term {
+        oxirs_core::model::Term::NamedNode(iri) => {
+            serde_json::json!({
+                "type": "uri",
+                "value": iri.as_str()
+            })
+        }
+        oxirs_core::model::Term::BlankNode(bnode) => {
+            serde_json::json!({
+                "type": "bnode",
+                "value": bnode
+            })
+        }
+        oxirs_core::model::Term::Literal(literal) => {
+            let mut json_literal = serde_json::json!({
+                "type": "literal",
+                "value": literal.value()
+            });
+
+            if let Some(language) = literal.language() {
+                json_literal["xml:lang"] = serde_json::Value::String(language.to_string());
+            }
+
+            if literal.datatype().as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                json_literal["datatype"] =
+                    serde_json::Value::String(literal.datatype().as_str().to_string());
+            }
+
+            json_literal
+        }
+        oxirs_core::model::Term::Variable(var) => {
+            serde_json::json!({
+                "type": "variable",
+                "value": var.name()
+            })
+        }
+        oxirs_core::model::Term::QuotedTriple(triple) => {
+            serde_json::json!({
+                "type": "quoted-triple",
+                "value": format!("{}", triple)
+            })
+        }
+    }
+}
+
+/// Serialize graph quads to Turtle format
+fn serialize_graph_to_turtle(quads: &[oxirs_core::model::Quad]) -> String {
+    let mut turtle = String::new();
+
+    // Add common prefixes
+    turtle.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n");
+    turtle.push_str("@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n");
+    turtle.push_str("@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\n");
+
+    for quad in quads {
+        let subject_str =
+            format_term_for_turtle(&oxirs_core::model::Term::from_subject(quad.subject()));
+        let predicate_str =
+            format_term_for_turtle(&oxirs_core::model::Term::from_predicate(quad.predicate()));
+        let object_str =
+            format_term_for_turtle(&oxirs_core::model::Term::from_object(quad.object()));
+
+        turtle.push_str(&format!(
+            "{} {} {} .\n",
+            subject_str, predicate_str, object_str
+        ));
+    }
+
+    turtle
+}
+
+/// Serialize triples to Turtle format
+fn serialize_triples_to_turtle(triples: &[oxirs_core::model::Triple]) -> String {
+    let mut turtle = String::new();
+
+    // Add common prefixes
+    turtle.push_str("@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .\n");
+    turtle.push_str("@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .\n");
+    turtle.push_str("@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .\n\n");
+
+    for triple in triples {
+        let subject_str =
+            format_term_for_turtle(&oxirs_core::model::Term::from_subject(triple.subject()));
+        let predicate_str =
+            format_term_for_turtle(&oxirs_core::model::Term::from_predicate(triple.predicate()));
+        let object_str =
+            format_term_for_turtle(&oxirs_core::model::Term::from_object(triple.object()));
+
+        turtle.push_str(&format!(
+            "{} {} {} .\n",
+            subject_str, predicate_str, object_str
+        ));
+    }
+
+    turtle
+}
+
+/// Format RDF term for Turtle serialization
+fn format_term_for_turtle(term: &oxirs_core::model::Term) -> String {
+    match term {
+        oxirs_core::model::Term::NamedNode(iri) => {
+            format!("<{}>", iri.as_str())
+        }
+        oxirs_core::model::Term::BlankNode(bnode) => {
+            format!("_:{}", bnode)
+        }
+        oxirs_core::model::Term::Literal(literal) => {
+            let mut formatted = format!("\"{}\"", escape_turtle_string(literal.value()));
+
+            if let Some(language) = literal.language() {
+                formatted.push_str(&format!("@{}", language));
+            } else {
+                let datatype_str = literal.datatype().as_str();
+                // Only add datatype if it's not the default string type
+                if datatype_str != "http://www.w3.org/2001/XMLSchema#string" {
+                    formatted.push_str(&format!("^^<{}>", datatype_str));
+                }
+            }
+
+            formatted
+        }
+        oxirs_core::model::Term::Variable(var) => {
+            format!("?{}", var.name())
+        }
+        oxirs_core::model::Term::QuotedTriple(triple) => {
+            format!("<< {} >>", triple)
+        }
+    }
+}
+
+/// Escape special characters in Turtle string literals
+fn escape_turtle_string(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+        .replace('\t', "\\t")
 }

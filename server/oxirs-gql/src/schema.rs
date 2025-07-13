@@ -486,9 +486,9 @@ impl SchemaGenerator {
 
     fn extract_literal_value(&self, term_str: &str) -> Option<String> {
         // Extract literal value from RDF term string format
-        if term_str.starts_with('"') {
-            if let Some(end_quote) = term_str[1..].find('"') {
-                return Some(term_str[1..end_quote + 1].to_string());
+        if let Some(stripped) = term_str.strip_prefix('"') {
+            if let Some(end_quote) = stripped.find('"') {
+                return Some(stripped[..end_quote].to_string());
             }
         }
         None
@@ -789,7 +789,9 @@ impl SchemaGenerator {
                     "input".to_string(),
                     ArgumentType::new(
                         "input".to_string(),
-                        GraphQLType::NonNull(Box::new(GraphQLType::InputObject(InputObjectType::new(input_type_name.clone())))),
+                        GraphQLType::NonNull(Box::new(GraphQLType::InputObject(
+                            InputObjectType::new(input_type_name.clone()),
+                        ))),
                     )
                     .with_description(format!("Input data for creating a new {type_name}")),
                 ),
@@ -815,7 +817,9 @@ impl SchemaGenerator {
                     "input".to_string(),
                     ArgumentType::new(
                         "input".to_string(),
-                        GraphQLType::NonNull(Box::new(GraphQLType::InputObject(InputObjectType::new(update_input_type_name)))),
+                        GraphQLType::NonNull(Box::new(GraphQLType::InputObject(
+                            InputObjectType::new(update_input_type_name),
+                        ))),
                     )
                     .with_description(format!("Input data for updating the {type_name}")),
                 ),
@@ -870,7 +874,9 @@ impl SchemaGenerator {
                 "updates".to_string(),
                 ArgumentType::new(
                     "updates".to_string(),
-                    GraphQLType::NonNull(Box::new(GraphQLType::List(Box::new(GraphQLType::Scalar(BuiltinScalars::string()))))),
+                    GraphQLType::NonNull(Box::new(GraphQLType::List(Box::new(
+                        GraphQLType::Scalar(BuiltinScalars::string()),
+                    )))),
                 )
                 .with_description("List of SPARQL UPDATE queries to execute".to_string()),
             ),
@@ -903,11 +909,10 @@ impl SchemaGenerator {
                 .with_description(format!("Subscribe to changes for {type_name} instances"))
                 .with_argument(
                     "id".to_string(),
-                    ArgumentType::new(
-                        "id".to_string(),
-                        GraphQLType::Scalar(BuiltinScalars::id()),
-                    )
-                    .with_description("Subscribe to changes for a specific resource ID".to_string()),
+                    ArgumentType::new("id".to_string(), GraphQLType::Scalar(BuiltinScalars::id()))
+                        .with_description(
+                            "Subscribe to changes for a specific resource ID".to_string(),
+                        ),
                 )
                 .with_argument(
                     "changeType".to_string(),
@@ -915,11 +920,13 @@ impl SchemaGenerator {
                         "changeType".to_string(),
                         GraphQLType::Enum(EnumType::new("ChangeType".to_string())),
                     )
-                    .with_description("Filter by change type (CREATED, UPDATED, DELETED)".to_string()),
+                    .with_description(
+                        "Filter by change type (CREATED, UPDATED, DELETED)".to_string(),
+                    ),
                 ),
             );
 
-            // Collection changes subscription  
+            // Collection changes subscription
             let collection_field = format!("{}CollectionChanged", self.to_camel_case(&type_name));
             subscription_type = subscription_type.with_field(
                 collection_field.clone(),
@@ -954,7 +961,9 @@ impl SchemaGenerator {
                     field_name.clone(),
                     GraphQLType::Object(ObjectType::new("PropertyChangeEvent".to_string())),
                 )
-                .with_description(format!("Subscribe to changes for the {property_name} property"))
+                .with_description(format!(
+                    "Subscribe to changes for the {property_name} property"
+                ))
                 .with_argument(
                     "subject".to_string(),
                     ArgumentType::new(
@@ -1003,11 +1012,10 @@ impl SchemaGenerator {
             .with_description("Subscribe to any changes in the RDF graph".to_string())
             .with_argument(
                 "graph".to_string(),
-                ArgumentType::new(
-                    "graph".to_string(),
-                    GraphQLType::Scalar(RdfScalars::iri()),
-                )
-                .with_description("The named graph to monitor (default graph if not specified)".to_string()),
+                ArgumentType::new("graph".to_string(), GraphQLType::Scalar(RdfScalars::iri()))
+                    .with_description(
+                        "The named graph to monitor (default graph if not specified)".to_string(),
+                    ),
             ),
         );
 
@@ -1066,8 +1074,8 @@ impl SchemaGenerator {
     fn pluralize(&self, word: &str) -> String {
         if word.ends_with('s') || word.ends_with("sh") || word.ends_with("ch") {
             format!("{word}es")
-        } else if word.ends_with('y') {
-            format!("{}ies", &word[..word.len() - 1])
+        } else if let Some(stripped) = word.strip_suffix('y') {
+            format!("{stripped}ies")
         } else {
             format!("{word}s")
         }
@@ -1215,7 +1223,6 @@ impl SchemaGenerator {
 
     /// Load and parse RDF ontology from URI
     async fn load_ontology_from_uri(&self, ontology_uri: &str) -> Result<RdfVocabulary> {
-
         // Create a temporary store to load the ontology
         let store = crate::RdfStore::new()?;
 
@@ -1235,7 +1242,11 @@ impl SchemaGenerator {
                     store.insert(&quad)?;
                 }
                 Err(e) => {
-                    return Err(anyhow::anyhow!("Failed to parse quad from {}: {}", ontology_uri, e));
+                    return Err(anyhow::anyhow!(
+                        "Failed to parse quad from {}: {}",
+                        ontology_uri,
+                        e
+                    ));
                 }
             }
         }
@@ -1251,15 +1262,19 @@ impl SchemaGenerator {
             self.fetch_http_content(uri).await
         } else if uri.starts_with("file://") || !uri.contains("://") {
             // Load from local file
-            let file_path = if uri.starts_with("file://") {
-                &uri[7..] // Remove "file://" prefix
+            let file_path = if let Some(stripped) = uri.strip_prefix("file://") {
+                stripped // Remove "file://" prefix
             } else {
                 uri
             };
-            
+
             match std::fs::read(file_path) {
                 Ok(content) => Ok(content),
-                Err(e) => Err(anyhow::anyhow!("Failed to read local file {}: {}", file_path, e))
+                Err(e) => Err(anyhow::anyhow!(
+                    "Failed to read local file {}: {}",
+                    file_path,
+                    e
+                )),
             }
         } else {
             Err(anyhow::anyhow!("Unsupported URI scheme: {}", uri))
@@ -1269,20 +1284,26 @@ impl SchemaGenerator {
     /// Fetch content from HTTP/HTTPS URI
     async fn fetch_http_content(&self, uri: &str) -> Result<Vec<u8>> {
         use reqwest;
-        
+
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()?;
 
         let response = client
             .get(uri)
-            .header("Accept", "application/rdf+xml, text/turtle, application/n-triples, application/ld+json")
+            .header(
+                "Accept",
+                "application/rdf+xml, text/turtle, application/n-triples, application/ld+json",
+            )
             .send()
             .await?;
 
         if !response.status().is_success() {
-            return Err(anyhow::anyhow!("HTTP error {}: Failed to fetch ontology from {}", 
-                response.status(), uri));
+            return Err(anyhow::anyhow!(
+                "HTTP error {}: Failed to fetch ontology from {}",
+                response.status(),
+                uri
+            ));
         }
 
         let content = response.bytes().await?;
@@ -1292,16 +1313,16 @@ impl SchemaGenerator {
     /// Detect RDF format based on URI or content-type
     fn detect_rdf_format(&self, uri: &str) -> RdfFormat {
         use oxirs_core::format::JsonLdProfileSet;
-        
+
         let uri_lower = uri.to_lowercase();
-        
+
         if uri_lower.ends_with(".ttl") || uri_lower.ends_with(".turtle") {
             RdfFormat::Turtle
         } else if uri_lower.ends_with(".nt") || uri_lower.ends_with(".ntriples") {
             RdfFormat::NTriples
         } else if uri_lower.ends_with(".jsonld") || uri_lower.ends_with(".json-ld") {
-            RdfFormat::JsonLd { 
-                profile: JsonLdProfileSet::empty() 
+            RdfFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
             }
         } else if uri_lower.ends_with(".n3") {
             RdfFormat::N3

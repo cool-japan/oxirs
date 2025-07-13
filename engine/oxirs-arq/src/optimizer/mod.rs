@@ -91,8 +91,15 @@ impl Optimizer {
     fn apply_filter_pushdown(&self, algebra: Algebra) -> Result<Algebra> {
         match algebra {
             Algebra::Filter { pattern, condition } => {
-                let optimized_pattern = self.push_filter_down(*pattern, &condition)?;
-                Ok(optimized_pattern)
+                // First, apply advanced filter optimizations
+                let optimized_conditions = self.optimize_filter_conditions(&condition)?;
+
+                // Apply each condition separately for better pushdown opportunities
+                let mut result_pattern = *pattern;
+                for cond in optimized_conditions {
+                    result_pattern = self.push_filter_down(result_pattern, &cond)?;
+                }
+                Ok(result_pattern)
             }
             Algebra::Join { left, right } => Ok(Algebra::Join {
                 left: Box::new(self.apply_filter_pushdown(*left)?),
@@ -310,6 +317,209 @@ impl Optimizer {
             }
             other => Ok(other),
         }
+    }
+
+    /// Optimize filter conditions using advanced techniques
+    fn optimize_filter_conditions(&self, condition: &Expression) -> Result<Vec<Expression>> {
+        // Step 1: Factor AND conditions into separate filters
+        let factored_conditions = Self::factor_and_conditions(condition);
+
+        // Step 2: Remove redundant conditions
+        let deduplicated = self.remove_redundant_filters(&factored_conditions);
+
+        // Step 3: Order by estimated selectivity (most selective first)
+        let mut ordered = deduplicated;
+        ordered.sort_by(|a, b| {
+            let selectivity_a = Self::estimate_filter_selectivity(a);
+            let selectivity_b = Self::estimate_filter_selectivity(b);
+            selectivity_a
+                .partial_cmp(&selectivity_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        Ok(ordered)
+    }
+
+    /// Factor AND conditions into separate expressions for better pushdown
+    fn factor_and_conditions(expr: &Expression) -> Vec<Expression> {
+        match expr {
+            Expression::Binary { op, left, right } => {
+                if let crate::algebra::BinaryOperator::And = op {
+                    let mut conditions = Vec::new();
+                    conditions.extend(Self::factor_and_conditions(left));
+                    conditions.extend(Self::factor_and_conditions(right));
+                    conditions
+                } else {
+                    vec![expr.clone()]
+                }
+            }
+            _ => vec![expr.clone()],
+        }
+    }
+
+    /// Remove redundant filter conditions
+    fn remove_redundant_filters(&self, conditions: &[Expression]) -> Vec<Expression> {
+        let mut result = Vec::new();
+        let mut seen_hashes = HashSet::new();
+
+        for condition in conditions {
+            let hash = self.hash_expression(condition);
+            if !seen_hashes.contains(&hash) {
+                // Check for logical redundancy
+                if !self.is_logically_redundant(condition, &result) {
+                    result.push(condition.clone());
+                    seen_hashes.insert(hash);
+                }
+            }
+        }
+
+        result
+    }
+
+    /// Estimate selectivity of a filter condition (lower is more selective)
+    fn estimate_filter_selectivity(expr: &Expression) -> f64 {
+        match expr {
+            Expression::Binary { op, left, right } => {
+                match op {
+                    crate::algebra::BinaryOperator::Equal => {
+                        // Equality is highly selective
+                        match (left.as_ref(), right.as_ref()) {
+                            (Expression::Variable(_), Expression::Literal(_))
+                            | (Expression::Literal(_), Expression::Variable(_)) => 0.1, // Very selective
+                            _ => 0.3,
+                        }
+                    }
+                    crate::algebra::BinaryOperator::Less
+                    | crate::algebra::BinaryOperator::LessEqual
+                    | crate::algebra::BinaryOperator::Greater
+                    | crate::algebra::BinaryOperator::GreaterEqual => 0.3, // Range conditions
+                    crate::algebra::BinaryOperator::NotEqual => 0.9, // Usually not very selective
+                    crate::algebra::BinaryOperator::And => {
+                        // Combined selectivity (product for AND)
+                        let left_sel = Self::estimate_filter_selectivity(left);
+                        let right_sel = Self::estimate_filter_selectivity(right);
+                        left_sel * right_sel
+                    }
+                    crate::algebra::BinaryOperator::Or => {
+                        // Combined selectivity for OR (higher selectivity)
+                        let left_sel = Self::estimate_filter_selectivity(left);
+                        let right_sel = Self::estimate_filter_selectivity(right);
+                        left_sel + right_sel - (left_sel * right_sel)
+                    }
+                    _ => 0.5, // Default moderate selectivity
+                }
+            }
+            Expression::Function { name, args: _ } => {
+                match name.as_str() {
+                    "bound" => 0.8, // BOUND function is often not very selective
+                    "isURI" | "isIRI" | "isLiteral" | "isBlank" => 0.4, // Type checks
+                    "regex" => 0.6, // Regular expressions - moderate selectivity
+                    "contains" | "strstarts" | "strends" => 0.5, // String functions
+                    _ => 0.5,       // Default for other functions
+                }
+            }
+            Expression::Unary {
+                op: crate::algebra::UnaryOperator::Not,
+                operand,
+            } => {
+                // Negation typically increases selectivity
+                1.0 - Self::estimate_filter_selectivity(operand)
+            }
+            Expression::Unary { op: _, operand: _ } => 0.5,
+            _ => 0.5, // Default moderate selectivity
+        }
+    }
+
+    /// Check if a condition is logically redundant given existing conditions
+    fn is_logically_redundant(&self, condition: &Expression, existing: &[Expression]) -> bool {
+        // Simple redundancy check - could be enhanced with more sophisticated logic
+        for existing_condition in existing {
+            if Self::expressions_equivalent(condition, existing_condition) {
+                return true;
+            }
+
+            // Check for simple cases like x = 1 AND x = 1
+            if let (
+                Expression::Binary {
+                    op: op1,
+                    left: left1,
+                    right: right1,
+                },
+                Expression::Binary {
+                    op: op2,
+                    left: left2,
+                    right: right2,
+                },
+            ) = (condition, existing_condition)
+            {
+                if op1 == op2
+                    && Self::expressions_equivalent(left1, left2)
+                    && Self::expressions_equivalent(right1, right2)
+                {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Check if two expressions are equivalent
+    fn expressions_equivalent(expr1: &Expression, expr2: &Expression) -> bool {
+        match (expr1, expr2) {
+            (Expression::Variable(v1), Expression::Variable(v2)) => v1 == v2,
+            (Expression::Literal(l1), Expression::Literal(l2)) => l1 == l2,
+            (
+                Expression::Binary {
+                    op: op1,
+                    left: left1,
+                    right: right1,
+                },
+                Expression::Binary {
+                    op: op2,
+                    left: left2,
+                    right: right2,
+                },
+            ) => {
+                op1 == op2
+                    && Self::expressions_equivalent(left1, left2)
+                    && Self::expressions_equivalent(right1, right2)
+            }
+            (
+                Expression::Unary {
+                    op: op1,
+                    operand: operand1,
+                },
+                Expression::Unary {
+                    op: op2,
+                    operand: operand2,
+                },
+            ) => op1 == op2 && Self::expressions_equivalent(operand1, operand2),
+            (
+                Expression::Function {
+                    name: name1,
+                    args: args1,
+                },
+                Expression::Function {
+                    name: name2,
+                    args: args2,
+                },
+            ) => {
+                name1 == name2
+                    && args1.len() == args2.len()
+                    && args1
+                        .iter()
+                        .zip(args2.iter())
+                        .all(|(a1, a2)| Self::expressions_equivalent(a1, a2))
+            }
+            _ => false,
+        }
+    }
+
+    /// Hash an expression for deduplication
+    fn hash_expression(&self, expr: &Expression) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        format!("{expr:?}").hash(&mut hasher);
+        hasher.finish()
     }
 
     /// Extract variables from an algebra expression

@@ -97,7 +97,11 @@ impl TargetSelector {
         target: &Target,
         graph_name: Option<&str>,
     ) -> Result<String> {
-        self.generate_optimized_target_query(target, graph_name, &QueryOptimizationOptions::default())
+        self.generate_optimized_target_query(
+            target,
+            graph_name,
+            &QueryOptimizationOptions::default(),
+        )
     }
 
     /// Generate optimized SPARQL query for target selection with custom optimization options
@@ -108,24 +112,24 @@ impl TargetSelector {
         options: &QueryOptimizationOptions,
     ) -> Result<String> {
         let mut query = self.generate_basic_target_query(target, graph_name)?;
-        
+
         // Apply optimizations
         if options.use_index_hints {
             query = self.add_index_hints(query, target)?;
         }
-        
+
         if let Some(limit) = options.limit {
             query = format!("{query} LIMIT {limit}");
         }
-        
+
         if options.deterministic_results {
             query = self.add_deterministic_ordering(query)?;
         }
-        
+
         if options.include_performance_hints {
             query = self.add_performance_hints(query, target)?;
         }
-        
+
         Ok(query)
     }
 
@@ -323,9 +327,13 @@ impl TargetSelector {
     fn record_cache_hit(&mut self) {
         self.stats.total_evaluations += 1;
         // Update cache hit rate
-        let total_cache_operations = self.cache.values().map(|c| c.stats.hits + c.stats.misses).sum::<usize>();
+        let total_cache_operations = self
+            .cache
+            .values()
+            .map(|c| c.stats.hits + c.stats.misses)
+            .sum::<usize>();
         let total_hits = self.cache.values().map(|c| c.stats.hits).sum::<usize>() + 1;
-        
+
         if total_cache_operations > 0 {
             self.stats.cache_hit_rate = total_hits as f64 / total_cache_operations as f64;
         }
@@ -334,9 +342,13 @@ impl TargetSelector {
     fn record_cache_miss(&mut self) {
         self.stats.total_evaluations += 1;
         // Update cache hit rate
-        let total_cache_operations = self.cache.values().map(|c| c.stats.hits + c.stats.misses).sum::<usize>();
+        let total_cache_operations = self
+            .cache
+            .values()
+            .map(|c| c.stats.hits + c.stats.misses)
+            .sum::<usize>();
         let total_hits = self.cache.values().map(|c| c.stats.hits).sum::<usize>();
-        
+
         if total_cache_operations > 0 {
             self.stats.cache_hit_rate = total_hits as f64 / total_cache_operations as f64;
         }
@@ -383,9 +395,7 @@ impl TargetSelector {
         use oxirs_core::model::NamedNode;
         use oxirs_core::{Object, Predicate, Subject};
 
-        eprintln!(
-            "DEBUG execute_target_selection: processing target {target:?}"
-        );
+        eprintln!("DEBUG execute_target_selection: processing target {target:?}");
 
         match target {
             Target::Class(class_iri) => {
@@ -431,17 +441,13 @@ impl TargetSelector {
                     class_iri.as_str()
                 );
                 for (i, node) in target_nodes.iter().enumerate() {
-                    eprintln!(
-                        "DEBUG execute_target_selection: instance[{i}] = {node:?}"
-                    );
+                    eprintln!("DEBUG execute_target_selection: instance[{i}] = {node:?}");
                 }
 
                 Ok(target_nodes)
             }
             Target::Node(node) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: specific node target: {node:?}"
-                );
+                eprintln!("DEBUG execute_target_selection: specific node target: {node:?}");
                 // For specific nodes, just return the node itself
                 Ok(vec![node.clone()])
             }
@@ -527,9 +533,7 @@ impl TargetSelector {
                 self.execute_target_selection(store, &Target::Class(class_iri.clone()), graph_name)
             }
             Target::Sparql(_sparql_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing SPARQL target query"
-                );
+                eprintln!("DEBUG execute_target_selection: executing SPARQL target query");
                 // For SPARQL targets, we need to execute the query against the store
                 // This is a placeholder - actual SPARQL execution would be needed
                 Ok(Vec::new())
@@ -554,62 +558,80 @@ impl TargetSelector {
                 if intersection_target.targets.is_empty() {
                     return Ok(Vec::new());
                 }
-                
+
                 // Start with first target's results
-                let mut result_nodes: HashSet<Term> = self.execute_target_selection(store, &intersection_target.targets[0], graph_name)?
-                    .into_iter().collect();
-                
+                let mut result_nodes: HashSet<Term> = self
+                    .execute_target_selection(store, &intersection_target.targets[0], graph_name)?
+                    .into_iter()
+                    .collect();
+
                 // Intersect with remaining targets
                 for target in &intersection_target.targets[1..] {
-                    let nodes: HashSet<Term> = self.execute_target_selection(store, target, graph_name)?
-                        .into_iter().collect();
+                    let nodes: HashSet<Term> = self
+                        .execute_target_selection(store, target, graph_name)?
+                        .into_iter()
+                        .collect();
                     result_nodes.retain(|node| nodes.contains(node));
                     if result_nodes.is_empty() {
                         break; // Early exit if intersection is empty
                     }
                 }
-                
+
                 Ok(result_nodes.into_iter().collect())
             }
             Target::Difference(difference_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing difference target"
-                );
-                let primary_nodes: HashSet<Term> = self.execute_target_selection(store, &difference_target.primary_target, graph_name)?
-                    .into_iter().collect();
-                let exclusion_nodes: HashSet<Term> = self.execute_target_selection(store, &difference_target.exclusion_target, graph_name)?
-                    .into_iter().collect();
-                
-                Ok(primary_nodes.difference(&exclusion_nodes).cloned().collect())
+                eprintln!("DEBUG execute_target_selection: executing difference target");
+                let primary_nodes: HashSet<Term> = self
+                    .execute_target_selection(store, &difference_target.primary_target, graph_name)?
+                    .into_iter()
+                    .collect();
+                let exclusion_nodes: HashSet<Term> = self
+                    .execute_target_selection(
+                        store,
+                        &difference_target.exclusion_target,
+                        graph_name,
+                    )?
+                    .into_iter()
+                    .collect();
+
+                Ok(primary_nodes
+                    .difference(&exclusion_nodes)
+                    .cloned()
+                    .collect())
             }
             Target::Conditional(conditional_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing conditional target"
-                );
-                
+                eprintln!("DEBUG execute_target_selection: executing conditional target");
+
                 // First get nodes from base target
-                let base_nodes: HashSet<Term> = self.execute_target_selection(store, &conditional_target.base_target, graph_name)?
-                    .into_iter().collect();
-                
+                let base_nodes: HashSet<Term> = self
+                    .execute_target_selection(store, &conditional_target.base_target, graph_name)?
+                    .into_iter()
+                    .collect();
+
                 // Filter nodes based on condition
                 let mut filtered_nodes = Vec::new();
                 for node in base_nodes {
-                    if self.evaluate_target_condition(store, &node, &conditional_target.condition, graph_name)? {
+                    if self.evaluate_target_condition(
+                        store,
+                        &node,
+                        &conditional_target.condition,
+                        graph_name,
+                    )? {
                         filtered_nodes.push(node);
                     }
                 }
-                
+
                 Ok(filtered_nodes)
             }
             Target::Hierarchical(hierarchical_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing hierarchical target"
-                );
-                
+                eprintln!("DEBUG execute_target_selection: executing hierarchical target");
+
                 // Get root nodes from root target
-                let root_nodes: HashSet<Term> = self.execute_target_selection(store, &hierarchical_target.root_target, graph_name)?
-                    .into_iter().collect();
-                
+                let root_nodes: HashSet<Term> = self
+                    .execute_target_selection(store, &hierarchical_target.root_target, graph_name)?
+                    .into_iter()
+                    .collect();
+
                 // Traverse hierarchy from root nodes
                 let hierarchical_nodes = self.traverse_hierarchy(
                     store,
@@ -617,20 +639,20 @@ impl TargetSelector {
                     &hierarchical_target.relationship,
                     hierarchical_target.max_depth,
                     hierarchical_target.include_intermediate,
-                    graph_name
+                    graph_name,
                 )?;
-                
+
                 Ok(hierarchical_nodes)
             }
             Target::PathBased(path_target) => {
-                eprintln!(
-                    "DEBUG execute_target_selection: executing path-based target"
-                );
-                
+                eprintln!("DEBUG execute_target_selection: executing path-based target");
+
                 // Get starting nodes from start target
-                let start_nodes: HashSet<Term> = self.execute_target_selection(store, &path_target.start_target, graph_name)?
-                    .into_iter().collect();
-                
+                let start_nodes: HashSet<Term> = self
+                    .execute_target_selection(store, &path_target.start_target, graph_name)?
+                    .into_iter()
+                    .collect();
+
                 // Follow property path from start nodes
                 let path_nodes = self.follow_property_path(
                     store,
@@ -638,9 +660,9 @@ impl TargetSelector {
                     &path_target.path,
                     &path_target.direction,
                     &path_target.filters,
-                    graph_name
+                    graph_name,
                 )?;
-                
+
                 Ok(path_nodes)
             }
         }
@@ -742,13 +764,11 @@ impl TargetSelector {
 
         let query = format!(
             r#"SELECT DISTINCT ?target WHERE {{
-  {}
+  {primary_where}
   FILTER NOT EXISTS {{
-    {}
+    {exclusion_where}
   }}
-}}"#,
-            primary_where,
-            exclusion_where.replace("?target", "?target") // Keep same variable
+}}"#
         );
 
         Ok(query)
@@ -1117,7 +1137,11 @@ impl TargetSelector {
             }
             Target::ObjectsOf(property) | Target::SubjectsOf(property) => {
                 // For property-based targets, suggest using property index
-                Ok(format!("# Use property index for {}\n{}", property.as_str(), query))
+                Ok(format!(
+                    "# Use property index for {}\n{}",
+                    property.as_str(),
+                    query
+                ))
             }
             _ => Ok(query),
         }
@@ -1136,10 +1160,11 @@ impl TargetSelector {
     /// Add performance hints for query optimization
     fn add_performance_hints(&self, query: String, target: &Target) -> Result<String> {
         let mut hints = Vec::new();
-        
+
         match target {
             Target::Class(_) => {
-                hints.push("# Consider using RDFS reasoning for subclass relationships".to_string());
+                hints
+                    .push("# Consider using RDFS reasoning for subclass relationships".to_string());
             }
             Target::Union(union_target) => {
                 if union_target.targets.len() > 5 {
@@ -1148,12 +1173,13 @@ impl TargetSelector {
             }
             Target::Intersection(intersection_target) => {
                 if intersection_target.targets.len() > 3 {
-                    hints.push("# Complex intersection - consider selectivity ordering".to_string());
+                    hints
+                        .push("# Complex intersection - consider selectivity ordering".to_string());
                 }
             }
             _ => {}
         }
-        
+
         if hints.is_empty() {
             Ok(query)
         } else {
@@ -1162,17 +1188,25 @@ impl TargetSelector {
     }
 
     /// Generate optimized batch query for multiple targets
-    pub fn generate_batch_query(&self, targets: &[Target], graph_name: Option<&str>) -> Result<BatchQueryResult> {
+    pub fn generate_batch_query(
+        &self,
+        targets: &[Target],
+        graph_name: Option<&str>,
+    ) -> Result<BatchQueryResult> {
         let start_time = Instant::now();
         let mut individual_queries = Vec::new();
         let mut total_estimated_cardinality = 0;
-        
+
         // Generate individual queries
         for target in targets {
-            let query = self.generate_optimized_target_query(target, graph_name, &QueryOptimizationOptions::default())?;
+            let query = self.generate_optimized_target_query(
+                target,
+                graph_name,
+                &QueryOptimizationOptions::default(),
+            )?;
             let estimated_cardinality = self.estimate_target_cardinality(target);
             total_estimated_cardinality += estimated_cardinality;
-            
+
             individual_queries.push(OptimizedQuery {
                 sparql: query,
                 estimated_cardinality,
@@ -1181,14 +1215,14 @@ impl TargetSelector {
                 optimization_time: Duration::from_millis(0),
             });
         }
-        
+
         // Generate union query if beneficial
         let union_query = if targets.len() > 1 && self.optimization_config.use_union_optimization {
             Some(self.generate_union_query(targets, graph_name)?)
         } else {
             None
         };
-        
+
         Ok(BatchQueryResult {
             individual_queries,
             union_query,
@@ -1198,19 +1232,28 @@ impl TargetSelector {
     }
 
     /// Estimate cardinality for a target (simple heuristic)
+    #[allow(clippy::only_used_in_recursion)]
     fn estimate_target_cardinality(&self, target: &Target) -> usize {
         match target {
-            Target::Class(_) => 1000,  // Assume moderate class size
-            Target::Node(_) => 1,      // Single node
+            Target::Class(_) => 1000,     // Assume moderate class size
+            Target::Node(_) => 1,         // Single node
             Target::ObjectsOf(_) => 500,  // Moderate property usage
-            Target::SubjectsOf(_) => 500,  // Moderate property usage
-            Target::Union(union_target) => {
-                union_target.targets.iter().map(|t| self.estimate_target_cardinality(t)).sum()
-            }
+            Target::SubjectsOf(_) => 500, // Moderate property usage
+            Target::Union(union_target) => union_target
+                .targets
+                .iter()
+                .map(|t| self.estimate_target_cardinality(t))
+                .sum(),
             Target::Intersection(intersection_target) => {
-                intersection_target.targets.iter().map(|t| self.estimate_target_cardinality(t)).min().unwrap_or(0) / 2
+                intersection_target
+                    .targets
+                    .iter()
+                    .map(|t| self.estimate_target_cardinality(t))
+                    .min()
+                    .unwrap_or(0)
+                    / 2
             }
-            _ => 100,  // Default estimate
+            _ => 100, // Default estimate
         }
     }
 
@@ -1226,23 +1269,26 @@ impl TargetSelector {
             TargetCondition::SparqlAsk { query, prefixes } => {
                 // Execute SPARQL ASK query with node binding
                 let mut final_query = query.clone();
-                
+
                 // Replace $this with the actual node
                 let node_sparql = format_term_for_sparql(node)?;
                 final_query = final_query.replace("$this", &node_sparql);
-                
+
                 // Add prefixes if provided
                 if let Some(prefixes) = prefixes {
                     final_query = format!("{prefixes}\n{final_query}");
                 }
-                
+
                 // For now, return true as we'd need SPARQL execution capability
                 // TODO: Integrate with SPARQL engine when available
                 tracing::warn!("SPARQL ASK condition evaluation not fully implemented yet");
                 tracing::debug!("Would execute SPARQL query: {}", final_query);
                 Ok(true)
             }
-            TargetCondition::PropertyExists { property, direction } => {
+            TargetCondition::PropertyExists {
+                property,
+                direction,
+            } => {
                 // Check if the node has the specified property
                 match direction {
                     PropertyDirection::Subject => {
@@ -1255,13 +1301,19 @@ impl TargetSelector {
                     }
                     PropertyDirection::Either => {
                         // Check both directions
-                        let forward = self.check_property_exists(store, node, property, true, graph_name)?;
-                        let backward = self.check_property_exists(store, node, property, false, graph_name)?;
+                        let forward =
+                            self.check_property_exists(store, node, property, true, graph_name)?;
+                        let backward =
+                            self.check_property_exists(store, node, property, false, graph_name)?;
                         Ok(forward || backward)
                     }
                 }
             }
-            TargetCondition::PropertyValue { property, value, direction } => {
+            TargetCondition::PropertyValue {
+                property,
+                value,
+                direction,
+            } => {
                 // Check if the node has the specified property with the specified value
                 match direction {
                     PropertyDirection::Subject => {
@@ -1271,8 +1323,11 @@ impl TargetSelector {
                         self.check_property_value(store, node, property, value, false, graph_name)
                     }
                     PropertyDirection::Either => {
-                        let forward = self.check_property_value(store, node, property, value, true, graph_name)?;
-                        let backward = self.check_property_value(store, node, property, value, false, graph_name)?;
+                        let forward = self
+                            .check_property_value(store, node, property, value, true, graph_name)?;
+                        let backward = self.check_property_value(
+                            store, node, property, value, false, graph_name,
+                        )?;
                         Ok(forward || backward)
                     }
                 }
@@ -1281,13 +1336,19 @@ impl TargetSelector {
                 // Check if node is an instance of the specified class
                 self.check_node_type(store, node, class_iri, graph_name)
             }
-            TargetCondition::Cardinality { property, min_count, max_count, direction } => {
+            TargetCondition::Cardinality {
+                property,
+                min_count,
+                max_count,
+                direction,
+            } => {
                 // Check if node satisfies cardinality constraints for the property
-                let count = self.count_property_values(store, node, property, direction, graph_name)?;
-                
+                let count =
+                    self.count_property_values(store, node, property, direction, graph_name)?;
+
                 let min_satisfied = min_count.map_or(true, |min| count >= min);
                 let max_satisfied = max_count.map_or(true, |max| count <= max);
-                
+
                 Ok(min_satisfied && max_satisfied)
             }
         }
@@ -1315,19 +1376,20 @@ impl TargetSelector {
 
         while !current_level.is_empty() && (max_depth == -1 || depth < max_depth) {
             let mut next_level = HashSet::new();
-            
+
             for node in &current_level {
                 if visited.contains(node) {
                     continue; // Avoid cycles
                 }
                 visited.insert(node.clone());
-                
-                let related_nodes = self.get_related_nodes(store, node, relationship, graph_name)?;
-                
+
+                let related_nodes =
+                    self.get_related_nodes(store, node, relationship, graph_name)?;
+
                 for related_node in related_nodes {
                     if !visited.contains(&related_node) {
                         next_level.insert(related_node.clone());
-                        
+
                         // Include this node if we want intermediate nodes or this is the final level
                         if include_intermediate || depth + 1 == max_depth || max_depth == -1 {
                             result_nodes.push(related_node);
@@ -1335,7 +1397,7 @@ impl TargetSelector {
                     }
                 }
             }
-            
+
             current_level = next_level;
             depth += 1;
         }
@@ -1354,10 +1416,11 @@ impl TargetSelector {
         graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
         let mut result_nodes = Vec::new();
-        
+
         for start_node in start_nodes {
-            let path_results = self.evaluate_property_path(store, start_node, path, direction, graph_name)?;
-            
+            let path_results =
+                self.evaluate_property_path(store, start_node, path, direction, graph_name)?;
+
             // Apply filters
             for result_node in path_results {
                 if self.apply_path_filters(&result_node, filters, store, graph_name)? {
@@ -1365,7 +1428,7 @@ impl TargetSelector {
                 }
             }
         }
-        
+
         Ok(result_nodes)
     }
 
@@ -1381,16 +1444,19 @@ impl TargetSelector {
         // Use SPARQL query to check property existence
         let node_sparql = format_term_for_sparql(node)?;
         let property_sparql = format!("<{}>", property.as_str());
-        
+
         let query = if forward {
             format!("ASK {{ {node_sparql} {property_sparql} ?o }}")
         } else {
             format!("ASK {{ ?s {property_sparql} {node_sparql} }}")
         };
-        
+
         // For now, return false as placeholder
         // TODO: Integrate with SPARQL engine when available
-        tracing::warn!("Property existence check not fully implemented yet: {}", query);
+        tracing::warn!(
+            "Property existence check not fully implemented yet: {}",
+            query
+        );
         Ok(false)
     }
 
@@ -1406,13 +1472,13 @@ impl TargetSelector {
         let node_sparql = format_term_for_sparql(node)?;
         let property_sparql = format!("<{}>", property.as_str());
         let value_sparql = format_term_for_sparql(value)?;
-        
+
         let query = if forward {
             format!("ASK {{ {node_sparql} {property_sparql} {value_sparql} }}")
         } else {
             format!("ASK {{ {value_sparql} {property_sparql} {node_sparql} }}")
         };
-        
+
         // TODO: Integrate with SPARQL engine when available
         tracing::warn!("Property value check not fully implemented yet: {}", query);
         Ok(false)
@@ -1427,11 +1493,11 @@ impl TargetSelector {
     ) -> Result<bool> {
         let node_sparql = format_term_for_sparql(node)?;
         let class_sparql = format!("<{}>", class_iri.as_str());
-        
+
         let query = format!(
             "ASK {{ {node_sparql} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> {class_sparql} }}"
         );
-        
+
         // TODO: Integrate with SPARQL engine when available
         tracing::warn!("Node type check not fully implemented yet: {}", query);
         Ok(false)
@@ -1489,7 +1555,10 @@ impl TargetSelector {
             }
             _ => {
                 // TODO: Implement other relationship types
-                tracing::warn!("Hierarchical relationship type not fully implemented yet: {:?}", relationship);
+                tracing::warn!(
+                    "Hierarchical relationship type not fully implemented yet: {:?}",
+                    relationship
+                );
                 Ok(Vec::new())
             }
         }

@@ -142,6 +142,7 @@ pub struct PartitionManager {
     partitions: Arc<RwLock<HashMap<u32, Partition>>>,
     assignment: Arc<RwLock<PartitionAssignment>>,
     hash_ring: Arc<RwLock<ConsistentHashRing>>,
+    #[allow(dead_code)]
     store: Arc<Store>,
 }
 
@@ -203,7 +204,7 @@ impl PartitionManager {
             PartitionStrategy::Range => {
                 // Simple range partitioning based on first character
                 let first_char = key.chars().next().unwrap_or('a') as u32;
-                (first_char % self.config.partition_count)
+                first_char % self.config.partition_count
             }
             PartitionStrategy::Custom => {
                 // Default to hash partitioning
@@ -283,13 +284,13 @@ impl PartitionManager {
             return Ok(());
         }
 
-        let assignment = self.assignment.read().await;
+        let _assignment = self.assignment.read().await;
         let partitions = self.partitions.read().await;
 
         // Calculate data distribution
         let mut node_sizes: HashMap<String, u64> = HashMap::new();
 
-        for (partition_id, partition) in partitions.iter() {
+        for (_partition_id, partition) in partitions.iter() {
             if let Some(primary_node) = partition.nodes.first() {
                 *node_sizes.entry(primary_node.clone()).or_default() += partition.size;
             }

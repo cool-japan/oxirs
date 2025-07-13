@@ -22,4 +22,3 @@ pub use recognizer::QuantumNeuralPatternRecognizer;
 pub use supremacy::QuantumSupremacyDetector;
 pub use teleportation::QuantumTeleportation;
 pub use utils::*;
-

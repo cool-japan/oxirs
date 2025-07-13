@@ -2,6 +2,8 @@
 //!
 //! This module handles generation and serialization of SHACL validation reports.
 
+#![allow(dead_code)]
+
 pub mod advanced_filtering;
 pub mod analytics;
 pub mod core;

@@ -23,8 +23,7 @@ use crate::{
 use oxirs_core::Store;
 
 /// NL2SPARQL system configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct NL2SPARQLConfig {
     pub generation: GenerationConfig,
     pub templates: TemplateConfig,
@@ -32,7 +31,6 @@ pub struct NL2SPARQLConfig {
     pub optimization: OptimizationConfig,
     pub explanation: ExplanationConfig,
 }
-
 
 /// Generation strategy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -495,10 +493,9 @@ impl NL2SPARQLSystem {
                     let execution_time = start_time.elapsed();
 
                     let mut bindings = Vec::new();
-                    let mut result_count = 0;
 
                     // Process query results based on query type
-                    match results.results() {
+                    let result_count = match results.results() {
                         oxirs_core::rdf_store::QueryResults::Bindings(result_bindings) => {
                             // Convert Variable bindings to String-based bindings for API compatibility
                             for binding in result_bindings {
@@ -510,14 +507,14 @@ impl NL2SPARQLSystem {
                                 }
                                 bindings.push(string_binding);
                             }
-                            result_count = bindings.len();
+                            bindings.len()
                         }
                         oxirs_core::rdf_store::QueryResults::Boolean(answer) => {
                             // For ASK queries, create a single binding with the boolean result
                             let mut ask_binding = HashMap::new();
                             ask_binding.insert("result".to_string(), answer.to_string());
                             bindings.push(ask_binding);
-                            result_count = 1;
+                            1
                         }
                         oxirs_core::rdf_store::QueryResults::Graph(quads) => {
                             // For CONSTRUCT queries, convert quads to bindings
@@ -536,9 +533,9 @@ impl NL2SPARQLSystem {
                                 quad_binding.insert("quad_index".to_string(), index.to_string());
                                 bindings.push(quad_binding);
                             }
-                            result_count = quads.len();
+                            quads.len()
                         }
-                    }
+                    };
 
                     info!(
                         "Query executed successfully: {} results in {}ms",
@@ -884,9 +881,8 @@ LIMIT {{limit}}
                 .find(|msg| matches!(msg.role, crate::rag::types::MessageRole::User))
                 .map(|msg| msg.content.as_str())
                 .unwrap_or("Unknown query");
-            let user_message = format!(
-                "Convert this natural language query to SPARQL: {query_text}"
-            );
+            let user_message =
+                format!("Convert this natural language query to SPARQL: {query_text}");
 
             let llm_request = LLMRequest {
                 messages: vec![ChatMessage {
@@ -997,9 +993,13 @@ LIMIT {{limit}}
         let mut hints = Vec::new();
 
         // Rule 1: Basic SELECT pattern detection
-        let select_query = if query_text.contains("find") || query_text.contains("show") || 
-                              query_text.contains("list") || query_text.contains("get") ||
-                              query_text.contains("what") || query_text.contains("which") {
+        let select_query = if query_text.contains("find")
+            || query_text.contains("show")
+            || query_text.contains("list")
+            || query_text.contains("get")
+            || query_text.contains("what")
+            || query_text.contains("which")
+        {
             confidence += 0.3;
             true
         } else {
@@ -1007,17 +1007,22 @@ LIMIT {{limit}}
         };
 
         // Rule 2: COUNT pattern detection
-        let count_query = if query_text.contains("how many") || query_text.contains("count") ||
-                            query_text.contains("number of") {
+        let count_query = if query_text.contains("how many")
+            || query_text.contains("count")
+            || query_text.contains("number of")
+        {
             confidence += 0.3;
             true
         } else {
             false
         };
 
-        // Rule 3: ASK pattern detection  
-        let ask_query = if query_text.starts_with("is") || query_text.starts_with("does") ||
-                          query_text.starts_with("has") || query_text.contains("whether") {
+        // Rule 3: ASK pattern detection
+        let ask_query = if query_text.starts_with("is")
+            || query_text.starts_with("does")
+            || query_text.starts_with("has")
+            || query_text.contains("whether")
+        {
             confidence += 0.3;
             true
         } else {
@@ -1029,9 +1034,9 @@ LIMIT {{limit}}
         let mut predicates = Vec::new();
         let mut objects = Vec::new();
 
-        // Use entities from query context if available (entities is Vec<Vec<String>>)
-        for entity_group in &query_context.entities {
-            for entity in entity_group {
+        // Use entities from query context if available (entities is Option<Vec<String>>)
+        if let Some(entities) = &query_context.entities {
+            for entity in entities {
                 // Treat all entities as potential subjects/objects
                 if entity.starts_with("http") || entity.starts_with("urn:") {
                     subjects.push(format!("<{entity}>"));
@@ -1064,8 +1069,16 @@ LIMIT {{limit}}
         let sparql_query = if count_query {
             // Generate COUNT query
             let subject_var = if subjects.is_empty() { "?entity" } else { "?s" };
-            let predicate = if predicates.is_empty() { "?p" } else { &predicates[0] };
-            let object_var = if objects.is_empty() { "?o" } else { &objects[0] };
+            let predicate = if predicates.is_empty() {
+                "?p"
+            } else {
+                &predicates[0]
+            };
+            let object_var = if objects.is_empty() {
+                "?o"
+            } else {
+                &objects[0]
+            };
 
             hints.push(OptimizationHint {
                 hint_type: OptimizationHintType::SimplifyExpression,
@@ -1078,13 +1091,23 @@ LIMIT {{limit}}
             )
         } else if ask_query {
             // Generate ASK query
-            let subject = if subjects.is_empty() { "?s" } else { &subjects[0] };
-            let predicate = if predicates.is_empty() { "?p" } else { &predicates[0] };
-            let object = if objects.is_empty() { "?o" } else { &objects[0] };
+            let subject = if subjects.is_empty() {
+                "?s"
+            } else {
+                &subjects[0]
+            };
+            let predicate = if predicates.is_empty() {
+                "?p"
+            } else {
+                &predicates[0]
+            };
+            let object = if objects.is_empty() {
+                "?o"
+            } else {
+                &objects[0]
+            };
 
-            format!(
-                "ASK {{\n  {subject} {predicate} {object} .\n}}"
-            )
+            format!("ASK {{\n  {subject} {predicate} {object} .\n}}")
         } else {
             // Generate basic SELECT query
             let mut select_vars = Vec::new();
@@ -1092,13 +1115,25 @@ LIMIT {{limit}}
 
             if subjects.is_empty() {
                 select_vars.push("?subject");
-                where_patterns.push(format!("?subject {} ?object", 
-                    if predicates.is_empty() { "?predicate" } else { &predicates[0] }));
+                where_patterns.push(format!(
+                    "?subject {} ?object",
+                    if predicates.is_empty() {
+                        "?predicate"
+                    } else {
+                        &predicates[0]
+                    }
+                ));
             } else {
                 select_vars.push("?object");
-                where_patterns.push(format!("{} {} ?object", 
-                    &subjects[0], 
-                    if predicates.is_empty() { "?predicate" } else { &predicates[0] }));
+                where_patterns.push(format!(
+                    "{} {} ?object",
+                    &subjects[0],
+                    if predicates.is_empty() {
+                        "?predicate"
+                    } else {
+                        &predicates[0]
+                    }
+                ));
             }
 
             if predicates.is_empty() {
@@ -1119,12 +1154,18 @@ LIMIT {{limit}}
         };
 
         // Rule 7: Confidence adjustment based on query complexity and rule coverage
-        if !subjects.is_empty() { confidence += 0.2; }
-        if !predicates.is_empty() { confidence += 0.2; }
-        if !objects.is_empty() { confidence += 0.1; }
+        if !subjects.is_empty() {
+            confidence += 0.2;
+        }
+        if !predicates.is_empty() {
+            confidence += 0.2;
+        }
+        if !objects.is_empty() {
+            confidence += 0.1;
+        }
 
         // Ensure confidence is within bounds
-        confidence = confidence.min(1.0).max(0.0);
+        confidence = confidence.clamp(0.0, 1.0);
 
         // If confidence is too low, provide a generic fallback
         let final_query = if confidence < 0.3 {
@@ -1142,10 +1183,10 @@ LIMIT {{limit}}
 
         // Create generation metadata
         let metadata = GenerationMetadata {
-            generation_time_ms: 50, // Rule-based is fast
-            template_used: None,     // No template used
-            llm_model_used: None,    // No LLM used
-            iterations: 1,           // Single iteration for rule-based
+            generation_time_ms: 50,          // Rule-based is fast
+            template_used: None,             // No template used
+            llm_model_used: None,            // No LLM used
+            iterations: 1,                   // Single iteration for rule-based
             fallback_used: confidence < 0.3, // Fallback used if confidence too low
         };
 
@@ -1205,18 +1246,19 @@ LIMIT {{limit}}
             validation_result: ValidationResult {
                 is_valid: true, // Assume generated queries are syntactically valid
                 syntax_errors: Vec::new(),
-                semantic_warnings: if confidence < 0.5 { 
+                semantic_warnings: if confidence < 0.5 {
                     vec![SemanticWarning {
                         message: "Low confidence rule-based generation".to_string(),
                         warning_type: SemanticWarningType::PerformanceIssue,
                         severity: WarningSeverity::Medium,
-                    }] 
-                } else { 
-                    Vec::new() 
+                    }]
+                } else {
+                    Vec::new()
                 },
                 schema_issues: Vec::new(),
                 suggestions: vec![
-                    "Consider using template-based or LLM-based generation for better accuracy".to_string(),
+                    "Consider using template-based or LLM-based generation for better accuracy"
+                        .to_string(),
                 ],
             },
             optimization_hints: hints,
@@ -1373,9 +1415,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         // Step 2: Method Selection
         let method_description = match result.generation_method {
             GenerationMethod::Template(ref template_name) => {
-                format!(
-                    "Selected template-based generation using template: {template_name}"
-                )
+                format!("Selected template-based generation using template: {template_name}")
             }
             GenerationMethod::LLM(ref model_name) => {
                 format!("Selected LLM-based generation using model: {model_name}")
@@ -1595,7 +1635,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         } else {
             0.0
         };
-        let final_confidence = (base_confidence + template_bonus).min(1.0).max(0.1);
+        let final_confidence = (base_confidence + template_bonus).clamp(0.1, 1.0);
 
         debug!(
             "Template confidence for '{}': {:.3}",
@@ -1608,7 +1648,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
     /// Calculate confidence for LLM-based generation
     fn calculate_llm_confidence(
         &mut self,
-        response: &crate::llm::LLMResponse,
+        _response: &crate::llm::LLMResponse,
         sparql_query: &str,
         _query_context: &QueryContext,
     ) -> Result<f32> {
@@ -1634,11 +1674,8 @@ Always respond with just the SPARQL query, no additional explanation unless requ
         // Factor 3: Query completeness (0.4-1.0)
         let completeness_score = if sparql_query.trim().is_empty() {
             0.4
-        } else if sparql_query.to_uppercase().contains("SELECT")
-            && sparql_query.to_uppercase().contains("WHERE")
-        {
-            0.9
-        } else if sparql_query.to_uppercase().contains("CONSTRUCT")
+        } else if (sparql_query.to_uppercase().contains("SELECT")
+            || sparql_query.to_uppercase().contains("CONSTRUCT"))
             && sparql_query.to_uppercase().contains("WHERE")
         {
             0.9
@@ -1656,7 +1693,7 @@ Always respond with just the SPARQL query, no additional explanation unless requ
             .map(|(factor, weight)| factor * weight)
             .sum();
 
-        let final_confidence = weighted_sum.min(1.0).max(0.1);
+        let final_confidence = weighted_sum.clamp(0.1, 1.0);
 
         debug!("LLM confidence for query: {:.3}", final_confidence);
 
@@ -1803,9 +1840,7 @@ impl SPARQLValidator {
 
         if open_braces != close_braces {
             syntax_errors.push(SyntaxError {
-                message: format!(
-                    "Unbalanced braces: {open_braces} open, {close_braces} close"
-                ),
+                message: format!("Unbalanced braces: {open_braces} open, {close_braces} close"),
                 position: None,
                 error_type: SyntaxErrorType::InvalidSyntax,
                 suggestion: Some(
@@ -1971,25 +2006,24 @@ impl Default for SPARQLOptimizer {
 
 impl SPARQLOptimizer {
     pub fn new() -> Self {
-        let mut optimization_rules = Vec::new();
-
-        // Add DISTINCT optimization
-        optimization_rules.push(OptimizationRule {
-            name: "redundant_distinct".to_string(),
-            pattern: Regex::new(r"(?i)SELECT\s+DISTINCT\s+DISTINCT").unwrap(),
-            replacement: "SELECT DISTINCT".to_string(),
-            description: "Remove redundant DISTINCT clauses".to_string(),
-            estimated_improvement: 0.1,
-        });
-
-        // Add LIMIT pushdown optimization
-        optimization_rules.push(OptimizationRule {
-            name: "limit_optimization".to_string(),
-            pattern: Regex::new(r"(?i)ORDER\s+BY\s+[^}]+}\s*$").unwrap(),
-            replacement: "$0 LIMIT 1000".to_string(),
-            description: "Add default LIMIT for safety".to_string(),
-            estimated_improvement: 0.3,
-        });
+        let optimization_rules = vec![
+            // Add DISTINCT optimization
+            OptimizationRule {
+                name: "redundant_distinct".to_string(),
+                pattern: Regex::new(r"(?i)SELECT\s+DISTINCT\s+DISTINCT").unwrap(),
+                replacement: "SELECT DISTINCT".to_string(),
+                description: "Remove redundant DISTINCT clauses".to_string(),
+                estimated_improvement: 0.1,
+            },
+            // Add LIMIT pushdown optimization
+            OptimizationRule {
+                name: "limit_optimization".to_string(),
+                pattern: Regex::new(r"(?i)ORDER\s+BY\s+[^}]+}\s*$").unwrap(),
+                replacement: "$0 LIMIT 1000".to_string(),
+                description: "Add default LIMIT for safety".to_string(),
+                estimated_improvement: 0.3,
+            },
+        ];
 
         Self { optimization_rules }
     }

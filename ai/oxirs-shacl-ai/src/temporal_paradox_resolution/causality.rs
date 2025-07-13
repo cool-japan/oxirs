@@ -315,7 +315,7 @@ impl CausalityLoopDetector {
     /// Detect causal loops in the given relationships
     pub async fn detect_loops(
         &self,
-        relationships: &[CausalRelationship],
+        _relationships: &[CausalRelationship],
     ) -> Result<Vec<CausalLoop>, ShaclAiError> {
         // Implementation placeholder
         Ok(Vec::new())
@@ -393,8 +393,8 @@ impl CausalDependencyAnalyzer {
     /// Analyze causal relationships
     pub async fn analyze_causal_relationships(
         &self,
-        validation_query: &str,
-        timeline_analysis: &[TimelineAnalysisResult],
+        _validation_query: &str,
+        _timeline_analysis: &[TimelineAnalysisResult],
     ) -> Result<CausalityAnalysisResult, ShaclAiError> {
         // Implementation placeholder
         Ok(CausalityAnalysisResult {

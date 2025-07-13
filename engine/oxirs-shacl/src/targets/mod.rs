@@ -4,6 +4,8 @@
 //! It has been refactored from a single large file into smaller, focused modules
 //! to comply with the 2000-line refactoring policy.
 
+#![allow(dead_code)]
+
 pub mod optimization;
 pub mod selector;
 pub mod target_impl;

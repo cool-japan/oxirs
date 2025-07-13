@@ -6,7 +6,10 @@
 //! - HTTP protocol compliance
 //! - Authentication protocol compliance
 
+use oxirs_federate::cache::FederationCache;
+use oxirs_federate::planner::QueryPlanner;
 use oxirs_federate::service::{AuthType, ServiceAuthConfig};
+use oxirs_federate::service_registry::ServiceRegistry;
 use oxirs_federate::*;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -446,6 +449,8 @@ mod graphql_federation_compliance {
 /// HTTP protocol compliance tests
 mod http_protocol_compliance {
     use super::*;
+    use oxirs_federate::network_optimizer::{EncodingFormat, NetworkOptimizer};
+    use oxirs_federate::service_client::{ClientConfig, ServiceClient, SparqlClient};
 
     #[tokio::test]
     async fn test_sparql_protocol_compliance() {
@@ -536,6 +541,7 @@ mod http_protocol_compliance {
 /// Authentication protocol compliance tests
 mod authentication_compliance {
     use super::*;
+    use oxirs_federate::service_client::{ClientConfig, ServiceClient, SparqlClient};
 
     #[tokio::test]
     async fn test_basic_authentication() {
@@ -771,7 +777,7 @@ mod performance_compliance {
 
         // System should continue functioning despite some invalid services
         let health = registry.health_check().await.unwrap();
-        assert!(health.total_services == 5);
+        assert!(health.len() == 5);
         // Some services may be unhealthy, but system should still function
     }
 }

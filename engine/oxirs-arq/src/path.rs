@@ -336,7 +336,8 @@ impl PropertyPathEvaluator {
                 let all_predicates = dataset.get_predicates()?;
                 for predicate in all_predicates {
                     if !predicates.contains(&predicate)
-                        && dataset.contains_triple(current, &predicate, target)? {
+                        && dataset.contains_triple(current, &predicate, target)?
+                    {
                         return Ok(true);
                     }
                 }

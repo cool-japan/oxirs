@@ -11,6 +11,9 @@ keywords.workspace = true
 categories.workspace = true
 rust-version.workspace = true
 
+[lints]
+workspace = true
+
 [dependencies]
 oxirs-core = { path = "../../core/oxirs-core" }
 oxirs-shacl = { path = "../../engine/oxirs-shacl" }
@@ -22,13 +25,14 @@ tracing.workspace = true
 chrono = "0.4.39"
 tokio.workspace = true
 num_cpus = "1.17"
-ndarray = "0.16"
+ndarray = { workspace = true }
 rand.workspace = true
 rand_distr = "0.5"
 regex = "1.11"
 indexmap = "2.10"
 uuid = { version = "1.17", features = ["v4", "serde"] }
 threadpool = "1.8"
+sysinfo = "0.32"
 nalgebra = { version = "0.33", features = ["serde-serialize"] }
 num-complex = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"

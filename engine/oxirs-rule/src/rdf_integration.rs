@@ -7,8 +7,7 @@
 use crate::{Rule, RuleAtom, Term as RuleTerm};
 use anyhow::{anyhow, Result};
 use oxirs_core::model::{
-    BlankNode, GraphName, Literal, NamedNode, Object, Quad, Subject, Term,
-    Variable,
+    BlankNode, GraphName, Literal, NamedNode, Object, Quad, Subject, Term, Variable,
 };
 use oxirs_core::Store;
 use std::collections::HashMap;
@@ -304,7 +303,7 @@ pub fn convert_term(term: &RuleTerm, namespaces: &NamespaceManager) -> Result<Rd
                     // Recursively convert arguments, but handle potential errors
                     match convert_term(arg, namespaces) {
                         Ok(converted) => format!("{converted:?}"), // Simple string representation
-                        Err(_) => "?".to_string(), // Fallback for unparseable terms
+                        Err(_) => "?".to_string(),                 // Fallback for unparseable terms
                     }
                 })
                 .collect();

@@ -273,7 +273,7 @@ impl ChatServer {
 /// REST API Handlers
 async fn create_session(
     State(state): State<AppState>,
-    Json(request): Json<CreateSessionRequest>,
+    Json(_request): Json<CreateSessionRequest>,
 ) -> Result<Json<CreateSessionResponse>, StatusCode> {
     let session_id = Uuid::new_v4().to_string();
 
@@ -413,7 +413,7 @@ async fn get_threads(
 ) -> Result<Json<Vec<ThreadInfo>>, StatusCode> {
     match state.chat.get_session(&session_id).await {
         Some(session_arc) => {
-            let session = session_arc.lock().await;
+            let _session = session_arc.lock().await;
             // Thread functionality not yet implemented
             let threads: Vec<ThreadInfo> = Vec::new();
             Ok(Json(threads))
@@ -518,7 +518,7 @@ async fn add_reaction(
                 "✅" | "helpful" => crate::ReactionType::Helpful,
                 "❌" | "not_helpful" => crate::ReactionType::NotHelpful,
                 "✔️" | "accurate" => crate::ReactionType::Accurate,
-                "❌" | "inaccurate" => crate::ReactionType::Inaccurate,
+                "inaccurate" => crate::ReactionType::Inaccurate,
                 "💭" | "clear" => crate::ReactionType::Clear,
                 "😵" | "confusing" => crate::ReactionType::Confusing,
                 _ => crate::ReactionType::Like, // Default to Like for unknown emojis
@@ -545,7 +545,7 @@ async fn add_reaction(
 async fn get_stats(State(state): State<AppState>) -> Result<Json<crate::SessionStats>, StatusCode> {
     // Calculate basic stats from available methods
     let total_sessions = state.chat.session_count().await;
-    let session_list = state.chat.list_sessions().await;
+    let _session_list = state.chat.list_sessions().await;
 
     // Create basic stats (detailed stats would require iterating over all sessions)
     let stats = crate::SessionStats {
@@ -583,7 +583,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
     let tx_clone = tx.clone();
 
     let session_id_clone = session_id.clone();
-    let ws_session_id_clone = ws_session_id.clone();
+    let _ws_session_id_clone = ws_session_id.clone();
     let ws_session_id_cleanup = ws_session_id.clone();
     let send_task = tokio::spawn(async move {
         loop {
@@ -634,8 +634,8 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                             match ws_msg {
                                 WebSocketMessage::SendMessage {
                                     content,
-                                    thread_id,
-                                    parent_message_id,
+                                    thread_id: _,
+                                    parent_message_id: _,
                                 } => {
                                     // Process message using OxiRSChat
                                     match state.chat.process_message(&session_id, content).await {
@@ -739,7 +739,7 @@ async fn handle_websocket(socket: WebSocket, session_id: String, state: AppState
                                                 crate::ReactionType::NotHelpful
                                             }
                                             "✔️" | "accurate" => crate::ReactionType::Accurate,
-                                            "❌" | "inaccurate" => crate::ReactionType::Inaccurate,
+                                            "inaccurate" => crate::ReactionType::Inaccurate,
                                             "💭" | "clear" => crate::ReactionType::Clear,
                                             "😵" | "confusing" => crate::ReactionType::Confusing,
                                             _ => crate::ReactionType::Like,
@@ -809,32 +809,23 @@ async fn health_check() -> Json<serde_json::Value> {
 
 async fn metrics_handler() -> Result<String, StatusCode> {
     // Basic Prometheus metrics implementation
-    let mut metrics = Vec::new();
-
-    // Help and type declarations
-    metrics.push("# HELP oxirs_chat_requests_total Total number of requests received".to_string());
-    metrics.push("# TYPE oxirs_chat_requests_total counter".to_string());
-
-    metrics.push("# HELP oxirs_chat_sessions_active Number of active chat sessions".to_string());
-    metrics.push("# TYPE oxirs_chat_sessions_active gauge".to_string());
-
-    metrics.push("# HELP oxirs_chat_messages_total Total number of messages processed".to_string());
-    metrics.push("# TYPE oxirs_chat_messages_total counter".to_string());
-
-    metrics.push("# HELP oxirs_chat_response_time_seconds Response time in seconds".to_string());
-    metrics.push("# TYPE oxirs_chat_response_time_seconds histogram".to_string());
-
-    metrics.push(
+    let mut metrics = vec![
+        "# HELP oxirs_chat_requests_total Total number of requests received".to_string(),
+        "# TYPE oxirs_chat_requests_total counter".to_string(),
+        "# HELP oxirs_chat_sessions_active Number of active chat sessions".to_string(),
+        "# TYPE oxirs_chat_sessions_active gauge".to_string(),
+        "# HELP oxirs_chat_messages_total Total number of messages processed".to_string(),
+        "# TYPE oxirs_chat_messages_total counter".to_string(),
+        "# HELP oxirs_chat_response_time_seconds Response time in seconds".to_string(),
+        "# TYPE oxirs_chat_response_time_seconds histogram".to_string(),
         "# HELP oxirs_chat_sparql_queries_total Total number of SPARQL queries generated"
             .to_string(),
-    );
-    metrics.push("# TYPE oxirs_chat_sparql_queries_total counter".to_string());
-
-    metrics.push("# HELP oxirs_chat_llm_requests_total Total number of LLM requests".to_string());
-    metrics.push("# TYPE oxirs_chat_llm_requests_total counter".to_string());
-
-    metrics.push("# HELP oxirs_chat_errors_total Total number of errors".to_string());
-    metrics.push("# TYPE oxirs_chat_errors_total counter".to_string());
+        "# TYPE oxirs_chat_sparql_queries_total counter".to_string(),
+        "# HELP oxirs_chat_llm_requests_total Total number of LLM requests".to_string(),
+        "# TYPE oxirs_chat_llm_requests_total counter".to_string(),
+        "# HELP oxirs_chat_errors_total Total number of errors".to_string(),
+        "# TYPE oxirs_chat_errors_total counter".to_string(),
+    ];
 
     // Sample metric values (in production, these would be collected from actual metrics)
     let timestamp = std::time::SystemTime::now()
