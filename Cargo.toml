@@ -95,7 +95,7 @@ tantivy = "0.22"
 hnsw_rs = "0.3"
 
 # Streaming
-rdkafka = "0.36"
+rdkafka = "0.38"
 async-nats = "0.33"
 
 # Clustering
