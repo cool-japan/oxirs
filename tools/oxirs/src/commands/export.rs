@@ -91,15 +91,9 @@ fn is_supported_export_format(format: &str) -> bool {
 
 /// Load dataset configuration from oxirs.toml file
 fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let config_path = PathBuf::from(dataset).join("oxirs.toml");
-
-    if !config_path.exists() {
-        return Err(format!("Configuration file '{}' not found", config_path.display()).into());
-    }
-
-    // For now, just return the dataset directory
-    // TODO: Parse TOML configuration and extract actual storage path
-    Ok(PathBuf::from(dataset))
+    // Use shared configuration loader with full TOML parsing
+    crate::config::load_dataset_from_config(dataset)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 /// Export data from store to file
