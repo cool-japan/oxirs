@@ -1,0 +1,265 @@
+# OxiRS Production Configuration
+# Optimized for high-performance deployments with GPU acceleration and SIMD optimizations
+
+[server]
+# Network configuration
+host = "0.0.0.0"
+port = 3030
+graphql_port = 3031
+metrics_port = 3032
+
+# Performance tuning
+worker_threads = "auto"  # Automatically detect optimal thread count
+max_connections = 10000
+connection_timeout = 300
+keep_alive_timeout = 75
+request_timeout = 300
+
+# Enable production optimizations
+production_mode = true
+admin_ui = false  # Disabled for security in production
+
+[performance]
+# SIMD optimizations
+enable_simd = true
+simd_threshold = 64  # Use SIMD for vectors >= 64 elements
+
+# GPU acceleration
+enable_gpu = "auto-detect"  # Automatically detect and use available GPUs
+gpu_device_ids = [0]  # Primary GPU device
+gpu_memory_pool_mb = 2048
+gpu_threshold = 1000  # Use GPU for problems >= 1000 elements
+
+# Parallel processing
+enable_parallel = true
+parallel_threshold = 10000
+numa_policy = "interleave"  # Optimize for NUMA systems
+
+# Memory management
+max_heap_size = "8GB"
+min_heap_size = "2GB"
+gc_threshold = "80%"  # Trigger cleanup at 80% memory usage
+
+[caching]
+# Intelligent caching for performance
+enabled = true
+strategy = "adaptive"  # Adapt cache strategy based on workload
+
+# Cache sizes
+query_cache_size = "512MB"
+result_cache_size = "1GB"
+embedding_cache_size = "2GB"
+pattern_cache_size = "256MB"
+
+# Cache policies
+query_cache_ttl = 3600  # 1 hour
+result_cache_ttl = 1800  # 30 minutes
+embedding_cache_ttl = 7200  # 2 hours
+
+# Advanced caching features
+prefetch_enabled = true
+compression_enabled = true
+write_through = false  # Write-back for better performance
+
+[datasets]
+# Primary production dataset
+[[datasets]]
+name = "production"
+type = "tdb"
+location = "/opt/oxirs/data/production"
+
+# Performance optimizations
+indexing_strategy = "adaptive"
+compression = "lz4"  # Fast compression for better I/O
+memory_mapped = true
+write_ahead_log = true
+
+# Backup configuration
+backup_enabled = true
+backup_interval = 3600  # Hourly backups
+backup_location = "/opt/oxirs/data/backups"
+
+# Read replicas for load distribution
+[[datasets.replicas]]
+name = "replica-1"
+location = "/opt/oxirs/data/replica-1"
+read_only = true
+lag_tolerance = 5  # seconds
+
+[[datasets.replicas]]
+name = "replica-2"
+location = "/opt/oxirs/data/replica-2"
+read_only = true
+lag_tolerance = 5
+
+[ai]
+# AI and ML optimizations
+enabled = true
+
+# Embedding configuration
+[ai.embeddings]
+enabled = true
+dimensions = 512
+model_type = "transformer"
+batch_size = 1000
+
+# Use scirs2 optimizations
+use_scirs2_optimizations = true
+enable_gpu_acceleration = true
+simd_optimization = true
+
+# Vector similarity settings
+similarity_threshold = 0.85
+max_results = 100
+index_type = "hnsw"  # Hierarchical Navigable Small World
+
+# Neural network optimization
+[ai.neural]
+enabled = true
+use_mixed_precision = true
+enable_gradient_clipping = true
+learning_rate = 0.001
+batch_size = 512
+
+# Advanced ML features
+[ai.advanced]
+enable_federated_learning = true
+enable_meta_learning = true
+enable_continual_learning = true
+neural_architecture_search = true
+
+[federation]
+# Federated query optimization
+enabled = true
+timeout = 180
+
+# Load balancing
+load_balancing = "adaptive"
+health_check_interval = 30
+circuit_breaker_enabled = true
+
+# ML-driven optimization
+ml_optimizer_enabled = true
+source_selection_learning = true
+join_order_optimization = true
+caching_strategy_learning = true
+
+# Performance monitoring
+performance_tracking = true
+bottleneck_detection = true
+
+[security]
+# Production security settings
+mode = "strict"
+enable_authentication = true
+enable_authorization = true
+enable_encryption = true
+
+# TLS configuration
+tls_enabled = true
+tls_cert_path = "/opt/oxirs/certs/server.crt"
+tls_key_path = "/opt/oxirs/certs/server.key"
+tls_protocols = ["TLSv1.2", "TLSv1.3"]
+
+# Rate limiting
+rate_limiting_enabled = true
+requests_per_minute = 10000
+burst_size = 1000
+
+# Security headers
+security_headers = true
+cors_enabled = true
+cors_origins = ["https://app.example.com", "https://admin.example.com"]
+
+[monitoring]
+# Comprehensive monitoring
+enabled = true
+detailed_metrics = true
+
+# Prometheus metrics
+prometheus_enabled = true
+prometheus_namespace = "oxirs"
+
+# Performance metrics
+track_query_performance = true
+track_memory_usage = true
+track_gpu_utilization = true
+track_simd_usage = true
+
+# Distributed tracing
+tracing_enabled = true
+jaeger_endpoint = "http://jaeger:14268/api/traces"
+sampling_rate = 0.1  # 10% sampling in production
+
+# Log aggregation
+log_aggregation = true
+log_level = "info"
+structured_logging = true
+
+[optimization]
+# Query optimization
+query_optimizer = "advanced"
+statistics_enabled = true
+cost_model = "ml_enhanced"
+
+# Index optimization
+auto_indexing = true
+index_maintenance = "background"
+statistics_update_frequency = 3600
+
+# Pattern optimization
+pattern_detection = true
+pattern_rewriting = true
+subquery_optimization = true
+
+# Join optimization
+join_reordering = true
+join_algorithm_selection = "adaptive"
+parallel_joins = true
+
+[clustering]
+# High availability clustering
+enabled = true
+cluster_size = 3
+replication_factor = 2
+
+# Consensus algorithm
+consensus = "raft"
+election_timeout = 5000
+heartbeat_interval = 1000
+
+# Cluster communication
+cluster_communication_protocol = "grpc"
+cluster_encryption = true
+
+# Load balancing
+cluster_load_balancing = "round_robin"
+health_check_enabled = true
+
+[streaming]
+# Real-time data streaming
+enabled = true
+buffer_size = 100000
+flush_interval = 1000
+
+# Stream processing
+parallel_processing = true
+backpressure_strategy = "block"
+error_handling = "retry_with_backoff"
+
+# Integration
+kafka_enabled = true
+kafka_brokers = ["kafka-1:9092", "kafka-2:9092", "kafka-3:9092"]
+nats_enabled = true
+nats_servers = ["nats-1:4222", "nats-2:4222", "nats-3:4222"]
+
+[experimental]
+# Cutting-edge features (use with caution in production)
+quantum_optimization = false  # Disable in production for stability
+consciousness_validation = false
+biological_neural_integration = false
+
+# Stable experimental features
+adaptive_compression = true
+predictive_caching = true
+intelligent_prefetching = true

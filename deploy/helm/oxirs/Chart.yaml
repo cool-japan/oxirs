@@ -1,0 +1,75 @@
+apiVersion: v2
+name: oxirs
+description: High-Performance RDF/SPARQL/GraphQL Platform with AI Capabilities
+home: https://github.com/cool-japan/oxirs
+sources:
+  - https://github.com/cool-japan/oxirs
+maintainers:
+  - name: OxiRS Team (Team KitaSan)
+    email: info@kitasan.io
+
+# Chart version
+version: 1.0.0
+
+# Application version
+appVersion: "1.0.0"
+
+# Chart type
+type: application
+
+# Keywords for discoverability
+keywords:
+  - rdf
+  - sparql
+  - graphql
+  - semantic-web
+  - knowledge-graph
+  - ai
+  - machine-learning
+  - performance
+  - gpu-acceleration
+  - simd
+
+# Dependencies
+dependencies:
+  - name: postgresql
+    version: "^12.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+    tags:
+      - database
+
+  - name: redis
+    version: "^17.0.0"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+    tags:
+      - cache
+
+  - name: prometheus
+    version: "^15.0.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: monitoring.prometheus.enabled
+    tags:
+      - monitoring
+
+  - name: grafana
+    version: "^6.0.0"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: monitoring.grafana.enabled
+    tags:
+      - monitoring
+
+annotations:
+  # Performance optimizations
+  "performance.oxirs.io/simd": "supported"
+  "performance.oxirs.io/gpu": "supported"
+  "performance.oxirs.io/parallel": "supported"
+
+  # Security
+  "security.oxirs.io/hardened": "true"
+
+  # Monitoring
+  "monitoring.oxirs.io/prometheus": "supported"
+  "monitoring.oxirs.io/grafana": "supported"
+  "monitoring.oxirs.io/jaeger": "supported"

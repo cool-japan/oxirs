@@ -1,0 +1,208 @@
+[workspace]
+resolver = "2"
+members = [
+    "core/oxirs-core",
+    "server/oxirs-fuseki",
+    "server/oxirs-gql",
+    "engine/oxirs-arq",
+    "engine/oxirs-rule",
+    "engine/oxirs-shacl",
+    "engine/oxirs-star",
+    "engine/oxirs-ttl",
+    "engine/oxirs-vec",
+    "storage/oxirs-tdb",
+    "storage/oxirs-cluster",
+    "stream/oxirs-stream",
+    "stream/oxirs-federate",
+    "ai/oxirs-embed",
+    "ai/oxirs-shacl-ai",  # Re-enabled after major refactoring fixes
+    "ai/oxirs-chat",
+    "tools/oxirs",
+]
+
+[workspace.package]
+version = "0.1.0-alpha.1"
+authors = ["KitaSan <info@kitasan.io>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/cool-japan/oxirs"
+homepage = "https://github.com/cool-japan/oxirs"
+description = "A Rust-native, modular platform for Semantic Web, SPARQL 1.2, GraphQL, and AI-augmented reasoning"
+keywords = ["sparql", "rdf", "semantic-web", "graphql", "knowledge-graph"]
+categories = ["database", "web-programming", "science"]
+rust-version = "1.70"
+
+[workspace.lints.clippy]
+# Allow certain patterns common in large, evolving codebases
+let_and_return = "allow"
+new_without_default = "allow"
+uninlined_format_args = "allow"
+manual_clamp = "allow"
+unwrap_or_default = "allow"
+
+[workspace.lints.rust]
+# Allow dead code as this is a large project with code written for future use
+dead_code = "allow"
+unused_imports = "allow"
+unused_variables = "allow"
+noop_method_call = "allow"
+unsafe_code = "warn"
+
+[workspace.dependencies]
+# Internal OxiRS crates
+oxirs-core = { path = "core/oxirs-core", version = "0.1.0-alpha.1" }
+oxirs-fuseki = { path = "server/oxirs-fuseki", version = "0.1.0-alpha.1" }
+oxirs-gql = { path = "server/oxirs-gql", version = "0.1.0-alpha.1" }
+oxirs-arq = { path = "engine/oxirs-arq", version = "0.1.0-alpha.1" }
+oxirs-rule = { path = "engine/oxirs-rule", version = "0.1.0-alpha.1" }
+oxirs-shacl = { path = "engine/oxirs-shacl", version = "0.1.0-alpha.1" }
+oxirs-star = { path = "engine/oxirs-star", version = "0.1.0-alpha.1" }
+oxirs-ttl = { path = "engine/oxirs-ttl", version = "0.1.0-alpha.1" }
+oxirs-vec = { path = "engine/oxirs-vec", version = "0.1.0-alpha.1" }
+oxirs-tdb = { path = "storage/oxirs-tdb", version = "0.1.0-alpha.1" }
+oxirs-cluster = { path = "storage/oxirs-cluster", version = "0.1.0-alpha.1" }
+oxirs-stream = { path = "stream/oxirs-stream", version = "0.1.0-alpha.1" }
+oxirs-federate = { path = "stream/oxirs-federate", version = "0.1.0-alpha.1" }
+oxirs-embed = { path = "ai/oxirs-embed", version = "0.1.0-alpha.1" }
+oxirs-shacl-ai = { path = "ai/oxirs-shacl-ai", version = "0.1.0-alpha.1" }
+oxirs-chat = { path = "ai/oxirs-chat", version = "0.1.0-alpha.1" }
+
+# Core RDF and SPARQL functionality (native OxiRS implementations)
+# oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
+# oxjsonld = "0.1.0"   # REMOVED: Replaced with native implementations
+# oxrdf = "0.2.0"      # REMOVED: Replaced with native implementations
+rio_api = "0.8"
+rio_turtle = "0.8"
+rio_xml = "0.8"
+
+# High-performance validation dependencies from oxrdf ecosystem
+oxiri = "0.2"         # Fast IRI validation and parsing
+oxilangtag = "0.1"    # Fast language tag validation
+oxsdatatypes = "0.2"  # Fast XSD datatype validation and parsing
+
+# Async runtime and HTTP
+tokio = { version = "1.47.1", features = ["full"] }
+tokio-util = "0.7"
+tokio-stream = { version = "0.1", features = ["sync"] }
+hyper = { version = "1.7.0", features = ["full"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+
+# GraphQL
+juniper = "0.16.1"
+juniper_hyper = "0.9.0"
+
+# Serialization
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+toml = "0.9"
+
+# Error handling and logging
+anyhow = "1.0"
+thiserror = "2.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"] }
+
+# Storage and persistence
+rocksdb = "0.22"
+
+# Text search
+tantivy = "0.22"
+
+# Vector search
+hnsw_rs = "0.3"
+
+# Streaming
+rdkafka = "0.37"
+async-nats = "0.43"
+
+# Clustering
+openraft = "0.9"
+
+# CLI
+clap = { version = "4.4", features = ["derive"] }
+
+# Testing
+criterion = { version = "0.5", features = ["html_reports"] }
+proptest = "1.7"
+tempfile = "3.23"
+
+# Additional dependencies
+async-trait = "0.1"
+uuid = { version = "1.18", features = ["v4", "serde"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+
+# Arrow crates (temporarily disabled due to chrono compatibility issues)
+# arrow = "53.4.0"
+# arrow-array = "53.4.0"
+# arrow-buffer = "53.4.0"
+# arrow-data = "53.4.0"
+# arrow-arith = "53.4.0"
+# arrow-cast = "53.4.0"
+# arrow-csv = "53.4.0"
+# arrow-ipc = "53.4.0"
+# arrow-json = "53.4.0"
+# arrow-ord = "53.4.0"
+# arrow-row = "53.4.0"
+# arrow-select = "53.4.0"
+# arrow-string = "53.4.0"
+# arrow-schema = "53.4.0"
+# parquet = "53.4.0"
+# DataFusion compatible with arrow 53.4.0
+# datafusion = "43.0.0"
+# datafusion-common = "43.0.0"
+# datafusion-expr = "43.0.0"
+# datafusion-physical-expr = "43.0.0"
+# datafusion-physical-plan = "43.0.0"
+# datafusion-optimizer = "43.0.0"
+# datafusion-sql = "43.0.0"
+
+# WebSocket support for GraphQL subscriptions
+tokio-tungstenite = "0.28"
+futures-util = "0.3"
+futures = "0.3"
+
+# Rand and numerical computing now provided by scirs2-core
+# Direct rand and ndarray usage removed per SciRS2 integration policy
+# Use scirs2-core::random and scirs2-core::ndarray_ext instead
+
+# SciRS2 dependencies (Scientific Computing Library) - Using beta.2 from crates.io
+scirs2 = { version = "0.1.0-beta.3" }
+scirs2-core = { version = "0.1.0-beta.3", features = ["random"] }
+scirs2-linalg = { version = "0.1.0-beta.3" }
+scirs2-stats = { version = "0.1.0-beta.3" }
+scirs2-neural = { version = "0.1.0-beta.3" }
+scirs2-graph = { version = "0.1.0-beta.3" }
+scirs2-metrics = { version = "0.1.0-beta.3" }
+scirs2-fft = { version = "0.1.0-beta.3" }
+scirs2-signal = { version = "0.1.0-beta.3" }
+scirs2-optimize = { version = "0.1.0-beta.3" }
+scirs2-cluster = { version = "0.1.0-beta.3" }
+scirs2-text = { version = "0.1.0-beta.3" }
+scirs2-vision = { version = "0.1.0-beta.3" }
+scirs2-autograd = { version = "0.1.0-beta.3" }  # For array! macro support
+
+# System utilities
+num_cpus = "1.17"
+url = { version = "2.5", features = ["serde"] }
+rayon = "1.10"
+once_cell = "1.21"
+sysinfo = "0.30.13"  # System information for memory/CPU monitoring
+
+# Compression libraries
+flate2 = "1.1"     # Gzip compression
+zstd = "0.13"      # Zstandard compression
+lz4_flex = "0.11"  # LZ4 compression
+
+# OpenTelemetry for observability
+opentelemetry = { version = "0.27", features = ["trace", "metrics"] }
+opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.27", features = ["trace", "rt-tokio"] }
+opentelemetry-semantic-conventions = "0.27"
+
+[workspace.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+# Feature flags to keep optional dependencies out of default builds

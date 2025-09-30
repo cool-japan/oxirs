@@ -1,0 +1,253 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: oxirs-performance-rules
+  namespace: oxirs-production
+  labels:
+    app: oxirs
+    component: monitoring
+spec:
+  groups:
+  - name: oxirs.performance
+    interval: 30s
+    rules:
+    # Performance metrics
+    - alert: OxiRSHighCPUUsage
+      expr: rate(container_cpu_usage_seconds_total{pod=~"oxirs-.*"}[5m]) * 100 > 80
+      for: 5m
+      labels:
+        severity: warning
+        component: performance
+      annotations:
+        summary: "OxiRS CPU usage is high"
+        description: "CPU usage for {{ $labels.pod }} has been above 80% for more than 5 minutes"
+
+    - alert: OxiRSHighMemoryUsage
+      expr: container_memory_working_set_bytes{pod=~"oxirs-.*"} / container_spec_memory_limit_bytes{pod=~"oxirs-.*"} * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+        component: performance
+      annotations:
+        summary: "OxiRS memory usage is high"
+        description: "Memory usage for {{ $labels.pod }} has been above 85% for more than 5 minutes"
+
+    # SIMD performance metrics
+    - alert: OxiRSSIMDOptimizationDisabled
+      expr: oxirs_simd_operations_total == 0
+      for: 2m
+      labels:
+        severity: info
+        component: simd
+      annotations:
+        summary: "SIMD optimizations not being used"
+        description: "No SIMD operations detected - performance may be suboptimal"
+
+    - record: oxirs:simd_efficiency_ratio
+      expr: oxirs_simd_operations_total / (oxirs_simd_operations_total + oxirs_scalar_operations_total)
+
+    - alert: OxiRSLowSIMDEfficiency
+      expr: oxirs:simd_efficiency_ratio < 0.7
+      for: 5m
+      labels:
+        severity: warning
+        component: simd
+      annotations:
+        summary: "Low SIMD efficiency detected"
+        description: "SIMD efficiency is {{ $value | humanizePercentage }} - expected >70%"
+
+    # GPU acceleration metrics
+    - alert: OxiRSGPUMemoryHigh
+      expr: nvidia_ml_py_memory_used_bytes / nvidia_ml_py_memory_total_bytes * 100 > 90
+      for: 2m
+      labels:
+        severity: warning
+        component: gpu
+      annotations:
+        summary: "GPU memory usage is high"
+        description: "GPU {{ $labels.gpu }} memory usage is above 90%"
+
+    - alert: OxiRSGPUTemperatureHigh
+      expr: nvidia_ml_py_temperature_celsius > 80
+      for: 5m
+      labels:
+        severity: critical
+        component: gpu
+      annotations:
+        summary: "GPU temperature is high"
+        description: "GPU {{ $labels.gpu }} temperature is {{ $value }}°C"
+
+    - record: oxirs:gpu_utilization_avg
+      expr: avg(nvidia_ml_py_utilization_gpu_ratio)
+
+    - alert: OxiRSLowGPUUtilization
+      expr: oxirs:gpu_utilization_avg < 0.3
+      for: 10m
+      labels:
+        severity: info
+        component: gpu
+      annotations:
+        summary: "Low GPU utilization"
+        description: "Average GPU utilization is {{ $value | humanizePercentage }} - GPU acceleration may not be working optimally"
+
+  - name: oxirs.query_performance
+    interval: 15s
+    rules:
+    # Query performance metrics
+    - record: oxirs:query_rate_5m
+      expr: rate(oxirs_queries_total[5m])
+
+    - record: oxirs:query_duration_p95
+      expr: histogram_quantile(0.95, rate(oxirs_query_duration_seconds_bucket[5m]))
+
+    - record: oxirs:query_duration_p99
+      expr: histogram_quantile(0.99, rate(oxirs_query_duration_seconds_bucket[5m]))
+
+    - alert: OxiRSHighQueryLatency
+      expr: oxirs:query_duration_p95 > 10
+      for: 5m
+      labels:
+        severity: warning
+        component: query
+      annotations:
+        summary: "High query latency detected"
+        description: "95th percentile query latency is {{ $value }}s"
+
+    - alert: OxiRSQueryErrorRate
+      expr: rate(oxirs_queries_total{status="error"}[5m]) / rate(oxirs_queries_total[5m]) * 100 > 5
+      for: 2m
+      labels:
+        severity: critical
+        component: query
+      annotations:
+        summary: "High query error rate"
+        description: "Query error rate is {{ $value | humanizePercentage }}"
+
+    # Federation performance
+    - record: oxirs:federation_latency_p95
+      expr: histogram_quantile(0.95, rate(oxirs_federation_request_duration_seconds_bucket[5m]))
+
+    - alert: OxiRSFederationLatencyHigh
+      expr: oxirs:federation_latency_p95 > 5
+      for: 5m
+      labels:
+        severity: warning
+        component: federation
+      annotations:
+        summary: "High federation latency"
+        description: "Federation 95th percentile latency is {{ $value }}s"
+
+  - name: oxirs.ai_performance
+    interval: 30s
+    rules:
+    # AI/ML performance metrics
+    - record: oxirs:embedding_generation_rate
+      expr: rate(oxirs_embeddings_generated_total[5m])
+
+    - record: oxirs:ml_training_duration_avg
+      expr: avg(oxirs_ml_training_duration_seconds)
+
+    - alert: OxiRSSlowEmbeddingGeneration
+      expr: oxirs:embedding_generation_rate < 100
+      for: 5m
+      labels:
+        severity: warning
+        component: ai
+      annotations:
+        summary: "Slow embedding generation"
+        description: "Embedding generation rate is {{ $value }} per second - expected >100/s"
+
+    - alert: OxiRSMLModelAccuracyLow
+      expr: oxirs_ml_model_accuracy < 0.8
+      for: 10m
+      labels:
+        severity: warning
+        component: ai
+      annotations:
+        summary: "ML model accuracy degraded"
+        description: "ML model accuracy is {{ $value | humanizePercentage }} - expected >80%"
+
+  - name: oxirs.caching
+    interval: 30s
+    rules:
+    # Cache performance metrics
+    - record: oxirs:cache_hit_rate
+      expr: rate(oxirs_cache_hits_total[5m]) / rate(oxirs_cache_requests_total[5m])
+
+    - alert: OxiRSLowCacheHitRate
+      expr: oxirs:cache_hit_rate < 0.7
+      for: 5m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "Low cache hit rate"
+        description: "Cache hit rate is {{ $value | humanizePercentage }} - expected >70%"
+
+    - alert: OxiRSCacheMemoryHigh
+      expr: oxirs_cache_memory_usage_bytes / oxirs_cache_memory_limit_bytes * 100 > 90
+      for: 2m
+      labels:
+        severity: warning
+        component: cache
+      annotations:
+        summary: "Cache memory usage high"
+        description: "Cache memory usage is {{ $value | humanizePercentage }}"
+
+  - name: oxirs.availability
+    interval: 30s
+    rules:
+    # Availability and reliability metrics
+    - record: oxirs:availability_5m
+      expr: (rate(oxirs_requests_total[5m]) - rate(oxirs_requests_total{status=~"5.."}[5m])) / rate(oxirs_requests_total[5m])
+
+    - alert: OxiRSLowAvailability
+      expr: oxirs:availability_5m < 0.99
+      for: 2m
+      labels:
+        severity: critical
+        component: availability
+      annotations:
+        summary: "Low service availability"
+        description: "Service availability is {{ $value | humanizePercentage }} - expected >99%"
+
+    - alert: OxiRSPodRestarts
+      expr: increase(kube_pod_container_status_restarts_total{pod=~"oxirs-.*"}[1h]) > 3
+      for: 0m
+      labels:
+        severity: warning
+        component: reliability
+      annotations:
+        summary: "Pod restart rate high"
+        description: "Pod {{ $labels.pod }} has restarted {{ $value }} times in the last hour"
+
+    # Resource exhaustion
+    - alert: OxiRSDiskSpaceLow
+      expr: (node_filesystem_avail_bytes{mountpoint="/opt/oxirs/data"} / node_filesystem_size_bytes{mountpoint="/opt/oxirs/data"}) * 100 < 10
+      for: 5m
+      labels:
+        severity: critical
+        component: storage
+      annotations:
+        summary: "Low disk space"
+        description: "Disk space on {{ $labels.instance }} is below 10%"
+
+  - name: oxirs.scirs2_optimization
+    interval: 30s
+    rules:
+    # scirs2 optimization metrics
+    - record: oxirs:scirs2_random_operations_rate
+      expr: rate(oxirs_scirs2_random_operations_total[5m])
+
+    - record: oxirs:scirs2_optimization_ratio
+      expr: oxirs_scirs2_optimized_operations_total / (oxirs_scirs2_optimized_operations_total + oxirs_fallback_operations_total)
+
+    - alert: OxiRSLowScirs2Optimization
+      expr: oxirs:scirs2_optimization_ratio < 0.8
+      for: 5m
+      labels:
+        severity: info
+        component: scirs2
+      annotations:
+        summary: "Low scirs2 optimization usage"
+        description: "scirs2 optimization ratio is {{ $value | humanizePercentage }} - expected >80%"

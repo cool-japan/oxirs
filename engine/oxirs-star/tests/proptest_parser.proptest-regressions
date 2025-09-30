@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.cc 295d1a2225d174803cb5eb15393e465cbd4167117cc0239628900020b48aa17d # shrinks to format = TurtleStar, comment_text = "", triple_line = "<http://A/0> <http://-/0> \"\n\" ."
+cc 004d0785f8ab66763393a75761a0f97bf7784eac22214bd5a7d120c8ed3115e5 # shrinks to triples = [("http://example\torg/a", "http://example¡org/a", "http://example¡org/a")]
+cc 55881010930c9f7fbfbbba99ff3376def6cd50337469b110ba6579db4b5e1b10 # shrinks to content = ["<http://0/-> <http://0/-> \"\n\" ."]
+cc 73aec1f362e546796c2ebebe03c6b5614a335526cf10207d8c8f50f3db4520d6 # shrinks to format = TurtleStar, triple_line = "<http://a/a> <http://-/-> \"\n\" .", ws_before = "", ws_after = ""
+cc e4113a05db0da461a46768219209f94f5714a0773fc65eece88854aa0e5c694a # shrinks to format = TurtleStar, comment_text = "", triple_line = "<http://0/0> <http://0/-> \"\n\" ."
+cc 10823e609395de0913e12030271f7214f748131016723ac58e6de085d209cc59 # shrinks to format = TrigStar, garbage = "\"{A¡\"."

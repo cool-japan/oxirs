@@ -1,0 +1,111 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "oxirs-vec"
+description = "High-performance vector search engine with SPARQL integration"
+readme = "README_PYTHON.md"
+license = {text = "MIT OR Apache-2.0"}
+requires-python = ">=3.8"
+authors = [
+    {name = "OxiRS Team"},
+]
+keywords = [
+    "vector-search",
+    "similarity-search",
+    "semantic-search",
+    "sparql",
+    "knowledge-graph",
+    "machine-learning",
+    "rust",
+    "embeddings",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Rust",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Database",
+]
+dependencies = [
+    "numpy>=1.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-benchmark",
+    "black",
+    "isort",
+    "mypy",
+    "ruff",
+]
+ml = [
+    "scikit-learn>=1.0.0",
+    "pandas>=1.3.0",
+    "matplotlib>=3.3.0",
+    "seaborn>=0.11.0",
+]
+all = [
+    "oxirs-vec[dev,ml]",
+]
+
+[project.urls]
+Homepage = "https://github.com/cool-japan/oxirs"
+Repository = "https://github.com/cool-japan/oxirs"
+Documentation = "https://docs.oxirs.dev"
+Issues = "https://github.com/cool-japan/oxirs/issues"
+
+[tool.maturin]
+features = ["pyo3/extension-module", "python"]
+python-source = "python"
+module-name = "oxirs_vec"
+
+[tool.black]
+line-length = 88
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+addopts = "-v --tb=short"

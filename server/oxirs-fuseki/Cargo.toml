@@ -1,0 +1,184 @@
+[package]
+name = "oxirs-fuseki"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "SPARQL 1.1/1.2 HTTP protocol server with Fuseki-compatible configuration"
+keywords = ["sparql", "http-server", "fuseki", "rdf-server", "semantic-web"]
+categories = ["web-programming", "database", "network-programming"]
+rust-version.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+# Core dependencies
+scirs2-core = { workspace = true }
+oxirs-core.workspace = true
+oxirs-arq.workspace = true
+
+# HTTP server framework
+tokio = { version = "1.47", features = ["full"] }
+tokio-util = "0.7"
+hyper = { version = "1.7", features = ["full"] }
+axum = { version = "0.7", features = ["ws", "multipart"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
+tower = { version = "0.5", features = ["timeout", "load-shed", "buffer"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compression-gzip", "compression-br", "request-id", "sensitive-headers"] }
+
+# CLI and configuration
+clap = { version = "4.4", features = ["derive", "env"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+serde_urlencoded = "0.7"
+toml = "0.9"
+config = "0.14"
+figment = { version = "0.10", features = ["toml", "yaml", "env"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "2.0"
+
+# Hashing
+md5 = "0.8"
+
+# Logging and tracing
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "chrono"] }
+tracing-opentelemetry = { version = "0.28", optional = true }
+opentelemetry = { workspace = true, features = ["trace"] }
+opentelemetry-otlp = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["trace"] }
+
+# Authentication and security
+uuid = { version = "1.18", features = ["v4", "serde"] }
+argon2 = "0.5"
+jsonwebtoken = { version = "9.2", optional = true }
+bcrypt = { version = "0.17", optional = true }
+sha2 = "0.10"
+base64 = "0.22"
+
+# Time and dates
+chrono = { version = "0.4", features = ["serde"] }
+
+# HTTP utilities
+headers = "0.4"
+mime = "0.3"
+http-body-util = "0.1"
+
+# Metrics and monitoring
+prometheus = { version = "0.13", optional = true }
+axum-prometheus = { version = "0.7", optional = true }
+metrics = "0.23"
+metrics-exporter-prometheus = "0.15"
+
+# Caching
+lru = "0.16"
+moka = { version = "0.12", features = ["future"] }
+
+# Rate limiting and concurrent data structures
+governor = "0.10"
+dashmap = "6.1"
+parking_lot = "0.12"
+
+# Streaming
+rdkafka = { version = "0.37", optional = true }
+async-nats = { version = "0.43", optional = true }
+bytes = "1.10"
+
+# Validation
+validator = { version = "0.19", features = ["derive"] }
+
+# Random number generation
+# rand functionality now provided by scirs2-core (use scirs2_core::random)
+
+# Regular expressions for query validation
+regex = "1.11"
+
+# Serialization and encoding
+bincode = "1.3"
+hex = "0.4"
+
+# Additional dependencies for MFA and authentication
+urlencoding = "2.1"
+base32 = "0.5"
+qrcode = "0.14"
+hmac = "0.12"
+sha1 = "0.10"
+flate2 = "1.1"
+
+# OAuth2 and HTTP client
+reqwest = { version = "0.12", features = ["json"] }
+percent-encoding = "2.3"
+url = { version = "2.5", features = ["serde"] }
+
+# SAML security (optional)
+# xmlsec has compatibility issues with newer OpenSSL - disabled for now
+# samael = { version = "0.0.19", optional = true, default-features = false }
+
+# LDAP authentication
+ldap3 = { version = "0.12", optional = true }
+
+# System utilities
+libc = "0.2"
+
+# Async utilities
+futures = "0.3"
+futures-util = "0.3"
+tokio-stream = "0.1"
+async-trait = "0.1"
+
+# DNS resolution for service discovery
+trust-dns-resolver = "0.23"
+
+# X.509 certificate parsing for client authentication
+x509-parser = "0.18"
+der-parser = "10.0"
+ring = "0.17"
+
+# File watching for hot reload
+notify = { version = "6.1", optional = true }
+
+# Template engine for admin UI
+askama = { version = "0.12", features = ["with-axum"], optional = true }
+
+# Environment
+dotenv = "0.15"
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+tokio-test = "0.4"
+axum-test = "14.10"
+http = "1.2"
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+tempfile = "3.23"
+rstest = "0.26"
+proptest = "1.7"
+insta = "1.43"
+serial_test = "3.2"
+wiremock = "0.6"
+
+[features]
+default = ["metrics", "auth"]
+metrics = ["prometheus", "axum-prometheus"]
+auth = ["jsonwebtoken", "bcrypt"]
+admin-ui = ["askama"]
+tracing = ["tracing-opentelemetry"]
+rate-limit = []
+kafka = ["rdkafka"]
+nats = ["async-nats"]
+hot-reload = ["notify"]
+ldap = ["ldap3"]
+# saml = [] # Disabled until xmlsec compatibility issues are resolved
+development = ["admin-ui", "tracing"]
+production = ["metrics", "auth", "rate-limit", "ldap"]
+
+[[bin]]
+name = "oxirs-fuseki"
+path = "src/main.rs"
+

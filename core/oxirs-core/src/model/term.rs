@@ -1,0 +1,1364 @@
+//! Core RDF term types and implementations
+
+use crate::model::{
+    Literal, LiteralRef, NamedNode, NamedNodeRef, ObjectTerm, PredicateTerm, RdfTerm, SubjectTerm,
+};
+use crate::OxirsError;
+use lazy_static::lazy_static;
+// use rand::random; // Replaced with fastrand
+use regex::Regex;
+// use serde::{Deserialize, Serialize}; // Available for serialization features
+use std::collections::HashSet;
+use std::fmt;
+use std::hash::Hash;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+/// Parses a string as a hexadecimal u128 ID (similar to OxiGraph's optimization)
+/// Check if an ID is a pure hex numeric ID that should be optimized
+/// This should only return true for IDs that are clearly system-generated hex numbers,
+/// not user-provided identifiers like "b1", "a2b", etc.
+fn is_pure_hex_numeric_id(id: &str) -> bool {
+    // Only consider optimization for IDs that:
+    // 1. Are pure hex digits (lowercase letters and digits) to avoid mixed case user input
+    // 2. Start with 'a'-'f' (as per the unique generation pattern)
+    // 3. Are not obvious user patterns like single letters or very short common patterns
+    !id.is_empty()
+        && id
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && (c.is_ascii_lowercase() || c.is_ascii_digit()))
+        && id.starts_with(|c: char| ('a'..='f').contains(&c))
+        && id.len() >= 3 // Avoid very short patterns like "a", "ab", etc.
+}
+
+fn to_integer_id(id: &str) -> Option<u128> {
+    let digits = id.as_bytes();
+    let mut value: u128 = 0;
+    if let None | Some(b'0') = digits.first() {
+        return None; // No empty string or leading zeros
+    }
+    for digit in digits {
+        value = value.checked_mul(16)?.checked_add(
+            match *digit {
+                b'0'..=b'9' => digit - b'0',
+                b'a'..=b'f' => digit - b'a' + 10,
+                _ => return None,
+            }
+            .into(),
+        )?;
+    }
+    Some(value)
+}
+
+lazy_static! {
+    /// Regex for validating blank node IDs according to Turtle/N-Triples specification
+    static ref BLANK_NODE_REGEX: Regex = Regex::new(
+        r"^[a-zA-Z_][a-zA-Z0-9_.-]*$"
+    ).expect("Blank node regex compilation failed");
+
+    /// Regex for validating SPARQL variable names according to SPARQL 1.1 specification
+    static ref VARIABLE_REGEX: Regex = Regex::new(
+        r"^[a-zA-Z_][a-zA-Z0-9_]*$"
+    ).expect("Variable regex compilation failed");
+
+    /// Global counter for unique blank node generation
+    static ref BLANK_NODE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    /// Global set for collision detection (using thread-safe wrapper)
+    static ref BLANK_NODE_IDS: std::sync::Mutex<HashSet<String>> = std::sync::Mutex::new(HashSet::new());
+}
+
+/// Validates a blank node identifier according to RDF specifications
+fn validate_blank_node_id(id: &str) -> Result<(), OxirsError> {
+    if id.is_empty() {
+        return Err(OxirsError::Parse(
+            "Blank node ID cannot be empty".to_string(),
+        ));
+    }
+
+    // Remove _: prefix if present for validation
+    let clean_id = if let Some(stripped) = id.strip_prefix("_:") {
+        stripped
+    } else {
+        id
+    };
+
+    if clean_id.is_empty() {
+        return Err(OxirsError::Parse(
+            "Blank node ID cannot be just '_:'".to_string(),
+        ));
+    }
+
+    if !BLANK_NODE_REGEX.is_match(clean_id) {
+        return Err(OxirsError::Parse(format!(
+            "Invalid blank node ID format: '{clean_id}'. Must match [a-zA-Z0-9_][a-zA-Z0-9_.-]*"
+        )));
+    }
+
+    Ok(())
+}
+
+/// Validates a SPARQL variable name according to SPARQL 1.1 specification
+fn validate_variable_name(name: &str) -> Result<(), OxirsError> {
+    if name.is_empty() {
+        return Err(OxirsError::Parse(
+            "Variable name cannot be empty".to_string(),
+        ));
+    }
+
+    // Remove ? or $ prefix if present for validation
+    let clean_name = if name.starts_with('?') || name.starts_with('$') {
+        &name[1..]
+    } else {
+        name
+    };
+
+    if clean_name.is_empty() {
+        return Err(OxirsError::Parse(
+            "Variable name cannot be just '?' or '$'".to_string(),
+        ));
+    }
+
+    if !VARIABLE_REGEX.is_match(clean_name) {
+        return Err(OxirsError::Parse(format!(
+            "Invalid variable name format: '{clean_name}'. Must match [a-zA-Z_][a-zA-Z0-9_]*"
+        )));
+    }
+
+    // Check for reserved keywords
+    match clean_name.to_lowercase().as_str() {
+        "select" | "where" | "from" | "order" | "group" | "having" | "limit" | "offset"
+        | "distinct" | "reduced" | "construct" | "describe" | "ask" | "union" | "optional"
+        | "filter" | "bind" | "values" | "graph" | "service" | "minus" | "exists" | "not" => {
+            return Err(OxirsError::Parse(format!(
+                "Variable name '{clean_name}' is a reserved SPARQL keyword"
+            )));
+        }
+        _ => {}
+    }
+
+    Ok(())
+}
+
+/// A blank node identifier
+///
+/// Blank nodes are local identifiers used in RDF graphs that don't have global meaning.
+/// Supports both named identifiers and efficient numerical IDs.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct BlankNode {
+    content: BlankNodeContent,
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+enum BlankNodeContent {
+    Named(String),
+    Anonymous { id: u128, str: String },
+}
+
+impl Default for BlankNode {
+    /// Builds a new RDF blank node with a unique id.
+    /// Ensures the ID does not start with a number to be also valid with RDF/XML
+    fn default() -> Self {
+        loop {
+            let id: u128 = fastrand::u128(..);
+            let str = format!("{id:x}"); // Use hexadecimal format instead of decimal
+            if matches!(str.as_bytes().first(), Some(b'a'..=b'f')) {
+                return Self {
+                    content: BlankNodeContent::Anonymous { id, str },
+                };
+            }
+        }
+    }
+}
+
+impl BlankNode {
+    /// Creates a new blank node with the given identifier
+    ///
+    /// # Arguments
+    /// * `id` - The blank node identifier (with or without _: prefix)
+    ///
+    /// # Errors
+    /// Returns an error if the ID format is invalid according to RDF specifications
+    pub fn new(id: impl Into<String>) -> Result<Self, OxirsError> {
+        let id = id.into();
+        // Remove _: prefix for validation if present
+        let clean_id = if let Some(stripped) = id.strip_prefix("_:") {
+            stripped
+        } else {
+            &id
+        };
+        validate_blank_node_id(clean_id)?;
+
+        // Only optimize IDs that are pure hex numbers (no mixed letters/numbers)
+        // to avoid incorrectly converting user IDs like "b1"
+        if is_pure_hex_numeric_id(clean_id) {
+            if let Some(numerical_id) = to_integer_id(clean_id) {
+                // For hex-optimized IDs, preserve the original hex string as the display representation
+                Ok(BlankNode {
+                    content: BlankNodeContent::Anonymous {
+                        id: numerical_id,
+                        str: clean_id.to_string(),
+                    },
+                })
+            } else {
+                Ok(BlankNode {
+                    content: BlankNodeContent::Named(id),
+                })
+            }
+        } else {
+            Ok(BlankNode {
+                content: BlankNodeContent::Named(id),
+            })
+        }
+    }
+
+    /// Creates a new blank node without validation
+    ///
+    /// # Safety
+    /// The caller must ensure the ID is valid and properly formatted
+    pub fn new_unchecked(id: impl Into<String>) -> Self {
+        let id = id.into();
+        // Remove _: prefix if present
+        let clean_id = if let Some(stripped) = id.strip_prefix("_:") {
+            stripped
+        } else {
+            &id
+        };
+        if let Some(numerical_id) = to_integer_id(clean_id) {
+            Self::new_from_unique_id(numerical_id)
+        } else {
+            BlankNode {
+                content: BlankNodeContent::Named(id),
+            }
+        }
+    }
+
+    /// Creates a blank node from a unique numerical id.
+    ///
+    /// In most cases, it is much more convenient to create a blank node using [`BlankNode::default()`].
+    pub fn new_from_unique_id(id: u128) -> Self {
+        Self {
+            content: BlankNodeContent::Anonymous {
+                id,
+                str: format!("{id:x}"), // Use hex representation for consistency
+            },
+        }
+    }
+
+    /// Generates a new unique blank node with collision detection
+    ///
+    /// This method ensures global uniqueness across all threads and sessions
+    pub fn new_unique() -> Self {
+        Self::default()
+    }
+
+    /// Generates a new unique blank node with a custom prefix
+    pub fn new_unique_with_prefix(prefix: &str) -> Result<Self, OxirsError> {
+        // Validate prefix
+        if !BLANK_NODE_REGEX.is_match(prefix) {
+            return Err(OxirsError::Parse(format!(
+                "Invalid blank node prefix: '{prefix}'. Must match [a-zA-Z0-9_][a-zA-Z0-9_.-]*"
+            )));
+        }
+
+        let counter = BLANK_NODE_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let id = format!("{prefix}_{counter}");
+        Ok(BlankNode {
+            content: BlankNodeContent::Named(id),
+        })
+    }
+
+    /// Returns the blank node identifier
+    pub fn id(&self) -> &str {
+        match &self.content {
+            BlankNodeContent::Named(id) => id,
+            BlankNodeContent::Anonymous { str, .. } => str,
+        }
+    }
+
+    /// Returns the blank node identifier as a string slice
+    pub fn as_str(&self) -> &str {
+        self.id()
+    }
+
+    /// Returns the internal numerical ID of this blank node if it has been created using [`BlankNode::new_from_unique_id`] or [`BlankNode::default`].
+    pub fn unique_id(&self) -> Option<u128> {
+        match &self.content {
+            BlankNodeContent::Named(_) => None,
+            BlankNodeContent::Anonymous { id, .. } => Some(*id),
+        }
+    }
+
+    /// Returns the blank node identifier without the _: prefix
+    pub fn local_id(&self) -> &str {
+        let id = self.id();
+        if let Some(stripped) = id.strip_prefix("_:") {
+            stripped
+        } else {
+            id
+        }
+    }
+
+    /// Returns a reference to this BlankNode as a BlankNodeRef
+    pub fn as_ref(&self) -> BlankNodeRef<'_> {
+        BlankNodeRef {
+            content: match &self.content {
+                BlankNodeContent::Named(id) => BlankNodeRefContent::Named(id.as_str()),
+                BlankNodeContent::Anonymous { id, str } => BlankNodeRefContent::Anonymous {
+                    id: *id,
+                    str: str.as_str(),
+                },
+            },
+        }
+    }
+}
+
+impl fmt::Display for BlankNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "_:{}", self.local_id())
+    }
+}
+
+impl RdfTerm for BlankNode {
+    fn as_str(&self) -> &str {
+        self.id()
+    }
+
+    fn is_blank_node(&self) -> bool {
+        true
+    }
+}
+
+impl SubjectTerm for BlankNode {}
+impl ObjectTerm for BlankNode {}
+
+/// A borrowed blank node reference for zero-copy operations
+///
+/// This is an optimized version for temporary references that avoids allocations
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct BlankNodeRef<'a> {
+    content: BlankNodeRefContent<'a>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+enum BlankNodeRefContent<'a> {
+    Named(&'a str),
+    Anonymous { id: u128, str: &'a str },
+}
+
+impl<'a> BlankNodeRef<'a> {
+    /// Creates a new blank node reference with the given identifier
+    ///
+    /// # Arguments
+    /// * `id` - The blank node identifier (with or without _: prefix)
+    ///
+    /// # Errors
+    /// Returns an error if the ID format is invalid according to RDF specifications
+    pub fn new(id: &'a str) -> Result<Self, OxirsError> {
+        // Remove _: prefix for validation if present
+        let clean_id = if let Some(stripped) = id.strip_prefix("_:") {
+            stripped
+        } else {
+            id
+        };
+        validate_blank_node_id(clean_id)?;
+
+        // Check if it's a hex numeric ID that can be optimized
+        if let Some(numerical_id) = to_integer_id(clean_id) {
+            Ok(BlankNodeRef {
+                content: BlankNodeRefContent::Anonymous {
+                    id: numerical_id,
+                    str: clean_id,
+                },
+            })
+        } else {
+            Ok(BlankNodeRef {
+                content: BlankNodeRefContent::Named(id),
+            })
+        }
+    }
+
+    /// Creates a new blank node reference without validation
+    ///
+    /// # Safety
+    /// The caller must ensure the ID is valid and properly formatted
+    pub fn new_unchecked(id: &'a str) -> Self {
+        // Remove _: prefix if present
+        let clean_id = if let Some(stripped) = id.strip_prefix("_:") {
+            stripped
+        } else {
+            id
+        };
+        if let Some(numerical_id) = to_integer_id(clean_id) {
+            BlankNodeRef {
+                content: BlankNodeRefContent::Anonymous {
+                    id: numerical_id,
+                    str: clean_id,
+                },
+            }
+        } else {
+            BlankNodeRef {
+                content: BlankNodeRefContent::Named(id),
+            }
+        }
+    }
+
+    /// Returns the blank node identifier
+    pub fn id(&self) -> &str {
+        match &self.content {
+            BlankNodeRefContent::Named(id) => id,
+            BlankNodeRefContent::Anonymous { str, .. } => str,
+        }
+    }
+
+    /// Returns the blank node identifier as a string slice
+    pub fn as_str(&self) -> &str {
+        self.id()
+    }
+
+    /// Returns the internal numerical ID of this blank node if it has been created using numerical ID optimization
+    pub fn unique_id(&self) -> Option<u128> {
+        match &self.content {
+            BlankNodeRefContent::Named(_) => None,
+            BlankNodeRefContent::Anonymous { id, .. } => Some(*id),
+        }
+    }
+
+    /// Returns the blank node identifier without the _: prefix
+    pub fn local_id(&self) -> &str {
+        let id = self.id();
+        if let Some(stripped) = id.strip_prefix("_:") {
+            stripped
+        } else {
+            id
+        }
+    }
+
+    /// Converts to an owned BlankNode
+    pub fn to_owned(&self) -> BlankNode {
+        BlankNode::new_unchecked(self.id().to_string())
+    }
+}
+
+impl<'a> fmt::Display for BlankNodeRef<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "_:{}", self.local_id())
+    }
+}
+
+impl<'a> RdfTerm for BlankNodeRef<'a> {
+    fn as_str(&self) -> &str {
+        self.id()
+    }
+
+    fn is_blank_node(&self) -> bool {
+        true
+    }
+}
+
+impl<'a> SubjectTerm for BlankNodeRef<'a> {}
+impl<'a> ObjectTerm for BlankNodeRef<'a> {}
+
+impl<'a> From<BlankNodeRef<'a>> for BlankNode {
+    fn from(node_ref: BlankNodeRef<'a>) -> Self {
+        node_ref.to_owned()
+    }
+}
+
+impl<'a> From<&'a BlankNode> for BlankNodeRef<'a> {
+    fn from(node: &'a BlankNode) -> Self {
+        node.as_ref()
+    }
+}
+
+/// A SPARQL variable
+///
+/// Variables are used in SPARQL queries and updates to represent unknown values.
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub struct Variable {
+    name: String,
+}
+
+impl Variable {
+    /// Creates a new variable with the given name
+    ///
+    /// # Arguments  
+    /// * `name` - The variable name (with or without ? or $ prefix)
+    ///
+    /// # Errors
+    /// Returns an error if the name format is invalid according to SPARQL 1.1 specification
+    pub fn new(name: impl Into<String>) -> Result<Self, OxirsError> {
+        let name = name.into();
+        validate_variable_name(&name)?;
+
+        // Store name without prefix for consistency
+        let clean_name = if let Some(stripped) = name.strip_prefix('?') {
+            stripped.to_string()
+        } else if let Some(stripped) = name.strip_prefix('$') {
+            stripped.to_string()
+        } else {
+            name
+        };
+
+        Ok(Variable { name: clean_name })
+    }
+
+    /// Creates a new variable without validation
+    ///
+    /// # Safety
+    /// The caller must ensure the name is valid according to SPARQL rules
+    pub fn new_unchecked(name: impl Into<String>) -> Self {
+        Variable { name: name.into() }
+    }
+
+    /// Returns the variable name (without prefix)
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the variable name as a string slice (without prefix)
+    pub fn as_str(&self) -> &str {
+        &self.name
+    }
+
+    /// Returns the variable name with ? prefix for SPARQL syntax
+    pub fn with_prefix(&self) -> String {
+        format!("?{}", self.name)
+    }
+}
+
+impl fmt::Display for Variable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "?{}", self.name)
+    }
+}
+
+impl Variable {
+    /// Formats using the SPARQL S-Expression syntax
+    pub fn fmt_sse(&self, f: &mut impl fmt::Write) -> fmt::Result {
+        write!(f, "?{}", self.name)
+    }
+}
+
+impl RdfTerm for Variable {
+    fn as_str(&self) -> &str {
+        &self.name
+    }
+
+    fn is_variable(&self) -> bool {
+        true
+    }
+}
+
+/// Union type for all RDF terms
+///
+/// This enum can hold any type of RDF term and is used when the specific
+/// type is not known at compile time. It supports the full RDF 1.2 specification
+/// including RDF-star quoted triples.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_core::model::{Term, NamedNode, Literal, BlankNode, Variable};
+///
+/// // Create different types of terms
+/// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+/// let literal = Term::Literal(Literal::new("Hello World"));
+/// let blank_node = Term::BlankNode(BlankNode::new("b1").unwrap());
+/// let variable = Term::Variable(Variable::new("x").unwrap());
+///
+/// // Check term types
+/// assert!(named_node.is_named_node());
+/// assert!(literal.is_literal());
+/// assert!(blank_node.is_blank_node());
+/// assert!(variable.is_variable());
+/// ```
+///
+/// # Variants
+///
+/// - [`NamedNode`]: An IRI reference (e.g., `<http://example.org/resource>`)
+/// - [`BlankNode`]: An anonymous node (e.g., `_:b1`)
+/// - [`Literal`]: A literal value with optional datatype and language tag
+/// - [`Variable`]: A query variable (e.g., `?x`)
+/// - [`QuotedTriple`]: A quoted triple for RDF-star support
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Term {
+    /// A named node (IRI reference)
+    ///
+    /// Represents a resource identified by an IRI according to RFC 3987.
+    /// Used for subjects, predicates, and objects in RDF triples.
+    NamedNode(NamedNode),
+
+    /// A blank node (anonymous resource)
+    ///
+    /// Represents an anonymous resource that can be used as a subject or object
+    /// but not as a predicate. Blank nodes have local scope within a graph.
+    BlankNode(BlankNode),
+
+    /// A literal value
+    ///
+    /// Represents a data value with an optional datatype and language tag.
+    /// Can only be used as objects in RDF triples.
+    Literal(Literal),
+
+    /// A query variable
+    ///
+    /// Represents a variable in SPARQL queries or graph patterns.
+    /// Variables are prefixed with '?' or '$' in SPARQL syntax.
+    Variable(Variable),
+
+    /// A quoted triple (RDF-star)
+    ///
+    /// Represents a triple that can itself be used as a subject or object
+    /// in another triple, enabling statement-level metadata.
+    QuotedTriple(Box<crate::model::star::QuotedTriple>),
+}
+
+impl Term {
+    /// Returns `true` if this term is a named node (IRI reference)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Term, NamedNode, Literal};
+    ///
+    /// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+    /// let literal = Term::Literal(Literal::new("Hello"));
+    ///
+    /// assert!(named_node.is_named_node());
+    /// assert!(!literal.is_named_node());
+    /// ```
+    pub fn is_named_node(&self) -> bool {
+        matches!(self, Term::NamedNode(_))
+    }
+
+    /// Returns `true` if this term is a blank node
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Term, BlankNode, Literal};
+    ///
+    /// let blank_node = Term::BlankNode(BlankNode::new("b1").unwrap());
+    /// let literal = Term::Literal(Literal::new("Hello"));
+    ///
+    /// assert!(blank_node.is_blank_node());
+    /// assert!(!literal.is_blank_node());
+    /// ```
+    pub fn is_blank_node(&self) -> bool {
+        matches!(self, Term::BlankNode(_))
+    }
+
+    /// Returns `true` if this term is a literal value
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Term, NamedNode, Literal};
+    ///
+    /// let literal = Term::Literal(Literal::new("Hello"));
+    /// let named_node = Term::NamedNode(NamedNode::new("http://example.org/resource").unwrap());
+    ///
+    /// assert!(literal.is_literal());
+    /// assert!(!named_node.is_literal());
+    /// ```
+    pub fn is_literal(&self) -> bool {
+        matches!(self, Term::Literal(_))
+    }
+
+    /// Returns `true` if this term is a query variable
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Term, Variable, Literal};
+    ///
+    /// let variable = Term::Variable(Variable::new("x").unwrap());
+    /// let literal = Term::Literal(Literal::new("Hello"));
+    ///
+    /// assert!(variable.is_variable());
+    /// assert!(!literal.is_variable());
+    /// ```
+    pub fn is_variable(&self) -> bool {
+        matches!(self, Term::Variable(_))
+    }
+
+    /// Returns `true` if this term is a quoted triple (RDF-star)
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_core::model::{Term, Literal};
+    ///
+    /// let literal = Term::Literal(Literal::new("Hello"));
+    ///
+    /// assert!(!literal.is_quoted_triple());
+    /// // Note: Creating QuotedTriple examples requires more complex setup
+    /// ```
+    pub fn is_quoted_triple(&self) -> bool {
+        matches!(self, Term::QuotedTriple(_))
+    }
+
+    /// Returns the named node if this term is a named node
+    pub fn as_named_node(&self) -> Option<&NamedNode> {
+        match self {
+            Term::NamedNode(n) => Some(n),
+            _ => None,
+        }
+    }
+
+    /// Returns the blank node if this term is a blank node
+    pub fn as_blank_node(&self) -> Option<&BlankNode> {
+        match self {
+            Term::BlankNode(b) => Some(b),
+            _ => None,
+        }
+    }
+
+    /// Returns the literal if this term is a literal
+    pub fn as_literal(&self) -> Option<&Literal> {
+        match self {
+            Term::Literal(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    /// Returns the variable if this term is a variable
+    pub fn as_variable(&self) -> Option<&Variable> {
+        match self {
+            Term::Variable(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    /// Returns the quoted triple if this term is a quoted triple
+    pub fn as_quoted_triple(&self) -> Option<&crate::model::star::QuotedTriple> {
+        match self {
+            Term::QuotedTriple(qt) => Some(qt),
+            _ => None,
+        }
+    }
+
+    /// Convert a Subject to a Term
+    pub fn from_subject(subject: &crate::model::Subject) -> Term {
+        match subject {
+            crate::model::Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Subject::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        }
+    }
+
+    /// Convert a Predicate to a Term
+    pub fn from_predicate(predicate: &crate::model::Predicate) -> Term {
+        match predicate {
+            crate::model::Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Predicate::Variable(v) => Term::Variable(v.clone()),
+        }
+    }
+
+    /// Convert an Object to a Term
+    pub fn from_object(object: &crate::model::Object) -> Term {
+        match object {
+            crate::model::Object::NamedNode(n) => Term::NamedNode(n.clone()),
+            crate::model::Object::BlankNode(b) => Term::BlankNode(b.clone()),
+            crate::model::Object::Literal(l) => Term::Literal(l.clone()),
+            crate::model::Object::Variable(v) => Term::Variable(v.clone()),
+            crate::model::Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+        }
+    }
+}
+
+impl fmt::Display for Term {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Term::NamedNode(n) => write!(f, "{n}"),
+            Term::BlankNode(b) => write!(f, "{b}"),
+            Term::Literal(l) => write!(f, "{l}"),
+            Term::Variable(v) => write!(f, "{v}"),
+            Term::QuotedTriple(qt) => write!(f, "{qt}"),
+        }
+    }
+}
+
+impl RdfTerm for Term {
+    fn as_str(&self) -> &str {
+        match self {
+            Term::NamedNode(n) => n.as_str(),
+            Term::BlankNode(b) => b.as_str(),
+            Term::Literal(l) => l.as_str(),
+            Term::Variable(v) => v.as_str(),
+            Term::QuotedTriple(_) => "<<quoted-triple>>",
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        self.is_named_node()
+    }
+
+    fn is_blank_node(&self) -> bool {
+        self.is_blank_node()
+    }
+
+    fn is_literal(&self) -> bool {
+        self.is_literal()
+    }
+
+    fn is_variable(&self) -> bool {
+        self.is_variable()
+    }
+
+    fn is_quoted_triple(&self) -> bool {
+        self.is_quoted_triple()
+    }
+}
+
+// Conversion implementations
+impl From<NamedNode> for Term {
+    fn from(node: NamedNode) -> Self {
+        Term::NamedNode(node)
+    }
+}
+
+impl From<BlankNode> for Term {
+    fn from(node: BlankNode) -> Self {
+        Term::BlankNode(node)
+    }
+}
+
+impl From<Literal> for Term {
+    fn from(literal: Literal) -> Self {
+        Term::Literal(literal)
+    }
+}
+
+impl From<Variable> for Term {
+    fn from(variable: Variable) -> Self {
+        Term::Variable(variable)
+    }
+}
+
+// Conversion implementations for union types
+impl From<Subject> for Term {
+    fn from(subject: Subject) -> Self {
+        match subject {
+            Subject::NamedNode(nn) => Term::NamedNode(nn),
+            Subject::BlankNode(bn) => Term::BlankNode(bn),
+            Subject::Variable(v) => Term::Variable(v),
+            Subject::QuotedTriple(qt) => Term::QuotedTriple(qt),
+        }
+    }
+}
+
+impl From<Predicate> for Term {
+    fn from(predicate: Predicate) -> Self {
+        match predicate {
+            Predicate::NamedNode(nn) => Term::NamedNode(nn),
+            Predicate::Variable(v) => Term::Variable(v),
+        }
+    }
+}
+
+impl From<Object> for Term {
+    fn from(object: Object) -> Self {
+        match object {
+            Object::NamedNode(nn) => Term::NamedNode(nn),
+            Object::BlankNode(bn) => Term::BlankNode(bn),
+            Object::Literal(l) => Term::Literal(l),
+            Object::Variable(v) => Term::Variable(v),
+            Object::QuotedTriple(qt) => Term::QuotedTriple(qt),
+        }
+    }
+}
+
+/// Union type for terms that can be subjects in RDF triples
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Subject {
+    NamedNode(NamedNode),
+    BlankNode(BlankNode),
+    Variable(Variable),
+    QuotedTriple(Box<crate::model::star::QuotedTriple>),
+}
+
+impl From<NamedNode> for Subject {
+    fn from(node: NamedNode) -> Self {
+        Subject::NamedNode(node)
+    }
+}
+
+impl From<BlankNode> for Subject {
+    fn from(node: BlankNode) -> Self {
+        Subject::BlankNode(node)
+    }
+}
+
+impl From<Variable> for Subject {
+    fn from(variable: Variable) -> Self {
+        Subject::Variable(variable)
+    }
+}
+
+impl RdfTerm for Subject {
+    fn as_str(&self) -> &str {
+        match self {
+            Subject::NamedNode(n) => n.as_str(),
+            Subject::BlankNode(b) => b.as_str(),
+            Subject::Variable(v) => v.as_str(),
+            Subject::QuotedTriple(_) => "<<quoted-triple>>",
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        matches!(self, Subject::NamedNode(_))
+    }
+
+    fn is_blank_node(&self) -> bool {
+        matches!(self, Subject::BlankNode(_))
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self, Subject::Variable(_))
+    }
+
+    fn is_quoted_triple(&self) -> bool {
+        matches!(self, Subject::QuotedTriple(_))
+    }
+}
+
+impl SubjectTerm for Subject {}
+
+/// Union type for terms that can be predicates in RDF triples
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Predicate {
+    NamedNode(NamedNode),
+    Variable(Variable),
+}
+
+impl From<NamedNode> for Predicate {
+    fn from(node: NamedNode) -> Self {
+        Predicate::NamedNode(node)
+    }
+}
+
+impl From<Variable> for Predicate {
+    fn from(variable: Variable) -> Self {
+        Predicate::Variable(variable)
+    }
+}
+
+impl RdfTerm for Predicate {
+    fn as_str(&self) -> &str {
+        match self {
+            Predicate::NamedNode(n) => n.as_str(),
+            Predicate::Variable(v) => v.as_str(),
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        matches!(self, Predicate::NamedNode(_))
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self, Predicate::Variable(_))
+    }
+}
+
+impl PredicateTerm for Predicate {}
+
+/// Union type for terms that can be objects in RDF triples
+#[derive(
+    Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+pub enum Object {
+    NamedNode(NamedNode),
+    BlankNode(BlankNode),
+    Literal(Literal),
+    Variable(Variable),
+    QuotedTriple(Box<crate::model::star::QuotedTriple>),
+}
+
+impl From<NamedNode> for Object {
+    fn from(node: NamedNode) -> Self {
+        Object::NamedNode(node)
+    }
+}
+
+impl From<BlankNode> for Object {
+    fn from(node: BlankNode) -> Self {
+        Object::BlankNode(node)
+    }
+}
+
+impl From<Literal> for Object {
+    fn from(literal: Literal) -> Self {
+        Object::Literal(literal)
+    }
+}
+
+impl From<Variable> for Object {
+    fn from(variable: Variable) -> Self {
+        Object::Variable(variable)
+    }
+}
+
+// Conversion from Subject to Object
+impl From<Subject> for Object {
+    fn from(subject: Subject) -> Self {
+        match subject {
+            Subject::NamedNode(n) => Object::NamedNode(n),
+            Subject::BlankNode(b) => Object::BlankNode(b),
+            Subject::Variable(v) => Object::Variable(v),
+            Subject::QuotedTriple(qt) => Object::QuotedTriple(qt),
+        }
+    }
+}
+
+// Conversion from Predicate to Object
+impl From<Predicate> for Object {
+    fn from(predicate: Predicate) -> Self {
+        match predicate {
+            Predicate::NamedNode(n) => Object::NamedNode(n),
+            Predicate::Variable(v) => Object::Variable(v),
+        }
+    }
+}
+
+// Conversion from Term to Object
+impl From<Term> for Object {
+    fn from(term: Term) -> Self {
+        match term {
+            Term::NamedNode(n) => Object::NamedNode(n),
+            Term::BlankNode(b) => Object::BlankNode(b),
+            Term::Literal(l) => Object::Literal(l),
+            Term::Variable(v) => Object::Variable(v),
+            Term::QuotedTriple(qt) => Object::QuotedTriple(qt),
+        }
+    }
+}
+
+impl RdfTerm for Object {
+    fn as_str(&self) -> &str {
+        match self {
+            Object::NamedNode(n) => n.as_str(),
+            Object::BlankNode(b) => b.as_str(),
+            Object::Literal(l) => l.as_str(),
+            Object::Variable(v) => v.as_str(),
+            Object::QuotedTriple(_) => "<<quoted-triple>>",
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        matches!(self, Object::NamedNode(_))
+    }
+
+    fn is_blank_node(&self) -> bool {
+        matches!(self, Object::BlankNode(_))
+    }
+
+    fn is_literal(&self) -> bool {
+        matches!(self, Object::Literal(_))
+    }
+
+    fn is_variable(&self) -> bool {
+        matches!(self, Object::Variable(_))
+    }
+
+    fn is_quoted_triple(&self) -> bool {
+        matches!(self, Object::QuotedTriple(_))
+    }
+}
+
+impl ObjectTerm for Object {}
+
+// Term to position conversions (needed for rdfxml parser)
+impl TryFrom<Term> for Subject {
+    type Error = OxirsError;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(n) => Ok(Subject::NamedNode(n)),
+            Term::BlankNode(b) => Ok(Subject::BlankNode(b)),
+            Term::Variable(v) => Ok(Subject::Variable(v)),
+            Term::QuotedTriple(qt) => Ok(Subject::QuotedTriple(qt)),
+            Term::Literal(_) => Err(OxirsError::Parse(
+                "Literals cannot be used as subjects".to_string(),
+            )),
+        }
+    }
+}
+
+impl TryFrom<Term> for Predicate {
+    type Error = OxirsError;
+
+    fn try_from(term: Term) -> Result<Self, Self::Error> {
+        match term {
+            Term::NamedNode(n) => Ok(Predicate::NamedNode(n)),
+            Term::Variable(v) => Ok(Predicate::Variable(v)),
+            Term::BlankNode(_) => Err(OxirsError::Parse(
+                "Blank nodes cannot be used as predicates".to_string(),
+            )),
+            Term::Literal(_) => Err(OxirsError::Parse(
+                "Literals cannot be used as predicates".to_string(),
+            )),
+            Term::QuotedTriple(_) => Err(OxirsError::Parse(
+                "Quoted triples cannot be used as predicates".to_string(),
+            )),
+        }
+    }
+}
+
+// Note: We already have From<Term> for Object above, so TryFrom is not needed
+// The From implementation handles all cases infallibly
+
+/// A reference to an RDF term
+///
+/// This enum provides a lightweight way to work with term references without ownership.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TermRef<'a> {
+    /// Named node reference
+    NamedNode(NamedNodeRef<'a>),
+    /// Blank node reference
+    BlankNode(BlankNodeRef<'a>),
+    /// Literal reference
+    Literal(LiteralRef<'a>),
+    /// Variable reference
+    Variable(&'a Variable),
+    /// Quoted triple reference (RDF-star)
+    #[cfg(feature = "rdf-star")]
+    Triple(&'a crate::model::star::QuotedTriple),
+}
+
+impl<'a> TermRef<'a> {
+    /// Returns true if this is a named node
+    pub fn is_named_node(&self) -> bool {
+        matches!(self, TermRef::NamedNode(_))
+    }
+
+    /// Returns true if this is a blank node
+    pub fn is_blank_node(&self) -> bool {
+        matches!(self, TermRef::BlankNode(_))
+    }
+
+    /// Returns true if this is a literal
+    pub fn is_literal(&self) -> bool {
+        matches!(self, TermRef::Literal(_))
+    }
+
+    /// Returns true if this is a variable
+    pub fn is_variable(&self) -> bool {
+        matches!(self, TermRef::Variable(_))
+    }
+
+    /// Returns true if this is a quoted triple
+    #[cfg(feature = "rdf-star")]
+    pub fn is_triple(&self) -> bool {
+        matches!(self, TermRef::Triple(_))
+    }
+}
+
+impl<'a> From<&'a Term> for TermRef<'a> {
+    fn from(term: &'a Term) -> Self {
+        match term {
+            Term::NamedNode(n) => TermRef::NamedNode(n.as_ref()),
+            Term::BlankNode(b) => TermRef::BlankNode(b.as_ref()),
+            Term::Literal(l) => TermRef::Literal(l.as_ref()),
+            Term::Variable(v) => TermRef::Variable(v),
+            #[allow(unused_variables)]
+            Term::QuotedTriple(t) => {
+                #[cfg(feature = "rdf-star")]
+                {
+                    TermRef::Triple(t.as_ref())
+                }
+                #[cfg(not(feature = "rdf-star"))]
+                {
+                    panic!("RDF-star feature not enabled")
+                }
+            }
+        }
+    }
+}
+
+impl<'a> RdfTerm for TermRef<'a> {
+    fn as_str(&self) -> &str {
+        match self {
+            TermRef::NamedNode(n) => n.as_str(),
+            TermRef::BlankNode(b) => b.as_str(),
+            TermRef::Literal(l) => l.value(),
+            TermRef::Variable(v) => v.name(),
+            #[cfg(feature = "rdf-star")]
+            TermRef::Triple(_) => "<<quoted triple>>", // Placeholder
+        }
+    }
+
+    fn is_named_node(&self) -> bool {
+        self.is_named_node()
+    }
+
+    fn is_blank_node(&self) -> bool {
+        self.is_blank_node()
+    }
+
+    fn is_literal(&self) -> bool {
+        self.is_literal()
+    }
+
+    fn is_variable(&self) -> bool {
+        self.is_variable()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_blank_node() {
+        let blank = BlankNode::new("b1").unwrap();
+        assert_eq!(blank.id(), "b1");
+        assert_eq!(blank.local_id(), "b1");
+        assert!(blank.is_blank_node());
+        assert_eq!(format!("{blank}"), "_:b1");
+    }
+
+    #[test]
+    fn test_blank_node_with_prefix() {
+        let blank = BlankNode::new("_:test").unwrap();
+        assert_eq!(blank.id(), "_:test");
+        assert_eq!(blank.local_id(), "test");
+    }
+
+    #[test]
+    fn test_blank_node_unique() {
+        let blank1 = BlankNode::new_unique();
+        let blank2 = BlankNode::new_unique();
+        assert_ne!(blank1.id(), blank2.id());
+        // New unique uses Default() which creates hex IDs that start with a-f
+        assert!(matches!(blank1.id().as_bytes().first(), Some(b'a'..=b'f')));
+        assert!(matches!(blank2.id().as_bytes().first(), Some(b'a'..=b'f')));
+    }
+
+    #[test]
+    fn test_blank_node_unique_with_prefix() {
+        let blank1 = BlankNode::new_unique_with_prefix("test").unwrap();
+        let blank2 = BlankNode::new_unique_with_prefix("test").unwrap();
+        assert_ne!(blank1.id(), blank2.id());
+        assert!(blank1.id().starts_with("test_"));
+        assert!(blank2.id().starts_with("test_"));
+    }
+
+    #[test]
+    fn test_blank_node_validation() {
+        // Valid IDs
+        assert!(BlankNode::new("test123").is_ok());
+        assert!(BlankNode::new("Test_Node").is_ok());
+        assert!(BlankNode::new("node-1.2").is_ok());
+
+        // Invalid IDs
+        assert!(BlankNode::new("").is_err());
+        assert!(BlankNode::new("_:").is_err());
+        assert!(BlankNode::new("123invalid").is_err()); // Can't start with number
+        assert!(BlankNode::new("invalid@char").is_err());
+        assert!(BlankNode::new("invalid space").is_err());
+    }
+
+    #[test]
+    fn test_blank_node_serde() {
+        let blank = BlankNode::new("serializable").unwrap();
+        let json = serde_json::to_string(&blank).unwrap();
+        let deserialized: BlankNode = serde_json::from_str(&json).unwrap();
+        assert_eq!(blank, deserialized);
+    }
+
+    #[test]
+    fn test_variable() {
+        let var = Variable::new("x").unwrap();
+        assert_eq!(var.name(), "x");
+        assert!(var.is_variable());
+        assert_eq!(format!("{var}"), "?x");
+        assert_eq!(var.with_prefix(), "?x");
+    }
+
+    #[test]
+    fn test_variable_with_prefix() {
+        let var1 = Variable::new("?test").unwrap();
+        let var2 = Variable::new("$test").unwrap();
+        assert_eq!(var1.name(), "test");
+        assert_eq!(var2.name(), "test");
+        assert_eq!(var1, var2); // Same after normalization
+    }
+
+    #[test]
+    fn test_variable_validation() {
+        // Valid names
+        assert!(Variable::new("x").is_ok());
+        assert!(Variable::new("test123").is_ok());
+        assert!(Variable::new("_underscore").is_ok());
+        assert!(Variable::new("?prefixed").is_ok());
+        assert!(Variable::new("$prefixed").is_ok());
+
+        // Invalid names
+        assert!(Variable::new("").is_err());
+        assert!(Variable::new("?").is_err());
+        assert!(Variable::new("$").is_err());
+        assert!(Variable::new("123invalid").is_err()); // Can't start with number
+        assert!(Variable::new("invalid-char").is_err());
+        assert!(Variable::new("invalid space").is_err());
+
+        // Reserved keywords
+        assert!(Variable::new("select").is_err());
+        assert!(Variable::new("WHERE").is_err()); // Case insensitive
+        assert!(Variable::new("?from").is_err());
+    }
+
+    #[test]
+    fn test_variable_serde() {
+        let var = Variable::new("serializable").unwrap();
+        let json = serde_json::to_string(&var).unwrap();
+        let deserialized: Variable = serde_json::from_str(&json).unwrap();
+        assert_eq!(var, deserialized);
+    }
+
+    #[test]
+    fn test_term_enum() {
+        let term = Term::NamedNode(NamedNode::new("http://example.org").unwrap());
+        assert!(term.is_named_node());
+        assert!(term.as_named_node().is_some());
+        assert!(term.as_blank_node().is_none());
+    }
+
+    #[test]
+    fn test_blank_node_numerical() {
+        // Test hex ID optimization - hex IDs must still follow blank node rules (can't start with digit)
+        let blank1 = BlankNode::new("a100a").unwrap();
+        assert_eq!(blank1.unique_id(), Some(0xa100a));
+        assert_eq!(blank1.local_id(), "a100a");
+
+        // Non-hex IDs should not get numerical IDs
+        let blank2 = BlankNode::new("a100A").unwrap(); // Capital letters not supported in hex optimization
+        assert_eq!(blank2.unique_id(), None);
+
+        // Direct numerical ID creation
+        let blank3 = BlankNode::new_from_unique_id(0x42);
+        assert_eq!(blank3.unique_id(), Some(0x42));
+        assert_eq!(blank3.local_id(), "42");
+    }
+
+    #[test]
+    fn test_blank_node_default() {
+        let blank = BlankNode::default();
+        assert!(blank.unique_id().is_some());
+        // Default blank nodes start with a-f (for RDF/XML compatibility)
+        assert!(matches!(blank.id().as_bytes().first(), Some(b'a'..=b'f')));
+    }
+}

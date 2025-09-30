@@ -1,0 +1,49 @@
+[package]
+name = "oxirs-star"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "RDF-star and SPARQL-star grammar support for quoted triples"
+keywords = ["rdf-star", "sparql-star", "quoted-triples", "rdf", "semantic-web"]
+categories = ["data-structures", "parser-implementations", "database"]
+rust-version.workspace = true
+
+[dependencies]
+oxirs-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = "0.3"
+
+# CLI and tooling dependencies
+clap = { version = "4.4", features = ["derive"] }
+num_cpus = "1.17"
+chrono = { version = "0.4", features = ["serde"] }
+lru = "0.16"
+
+# Compression dependencies
+flate2.workspace = true
+zstd.workspace = true
+lz4_flex.workspace = true
+
+[dev-dependencies]
+criterion.workspace = true
+proptest.workspace = true
+tempfile.workspace = true
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+[[bench]]
+name = "enhanced_benchmarks"
+harness = false
+
+[features]
+default = []
+

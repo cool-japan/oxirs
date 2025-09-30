@@ -1,0 +1,16 @@
+PREFIX ub: <http://swat.cse.lehigh.edu/onto/univ-bench.owl#>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+
+SELECT ?student ?professor ?course ?grade
+WHERE {
+    ?student rdf:type ub:Student .
+    ?student ub:name ?studentName .
+    ?student ub:advisor ?professor .
+    ?professor rdf:type ub:Professor .
+    ?professor ub:name ?profName .
+    ?student ub:takesCourse ?course .
+    ?course rdf:type ub:Course .
+    ?student ub:hasGrade ?grade .
+    FILTER (?grade > 85)
+}
+ORDER BY ?student ?course

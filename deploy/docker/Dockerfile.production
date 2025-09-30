@@ -1,0 +1,121 @@
+# Production Dockerfile for OxiRS with Performance Optimizations
+# Multi-stage build for optimal production image size and security
+
+# Build stage with full development environment
+FROM rust:1.75-bullseye as builder
+
+# Install system dependencies for performance optimizations
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    pkg-config \
+    libssl-dev \
+    libnuma-dev \
+    # GPU acceleration dependencies
+    nvidia-cuda-dev \
+    opencl-headers \
+    ocl-icd-opencl-dev \
+    # SIMD optimization tools
+    gcc-multilib \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set optimization environment variables
+ENV RUSTFLAGS="-C target-cpu=native -C opt-level=3 -C lto=fat -C codegen-units=1"
+ENV CARGO_PROFILE_RELEASE_LTO=true
+ENV CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1
+ENV CARGO_PROFILE_RELEASE_PANIC="abort"
+
+# Enable all performance features
+ENV OXIRS_FEATURES="simd,gpu-acceleration,parallel,advanced-models,neural-models"
+
+WORKDIR /usr/src/oxirs
+
+# Copy dependency files first for better layer caching
+COPY Cargo.toml Cargo.lock ./
+COPY */Cargo.toml ./*/
+
+# Create dummy source files to cache dependencies
+RUN find . -name "Cargo.toml" -exec dirname {} \; | \
+    xargs -I {} mkdir -p {}/src && \
+    find . -name "Cargo.toml" -exec dirname {} \; | \
+    xargs -I {} touch {}/src/lib.rs
+
+# Build dependencies with all optimizations
+RUN cargo build --release --all-features
+
+# Copy actual source code
+COPY . .
+
+# Build optimized production binaries
+RUN cargo build --release --all-features --bins
+
+# Runtime stage with minimal base image
+FROM ubuntu:22.04 as runtime
+
+# Install minimal runtime dependencies
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    # GPU runtime libraries
+    nvidia-driver-525 \
+    ocl-icd-libopencl1 \
+    # Performance monitoring tools
+    htop \
+    iotop \
+    numactl \
+    # Network utilities
+    curl \
+    netcat \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user for security
+RUN groupadd -r oxirs && useradd -r -g oxirs -d /opt/oxirs -s /bin/bash oxirs
+
+# Copy optimized binaries from builder stage
+COPY --from=builder /usr/src/oxirs/target/release/oxirs-fuseki /usr/local/bin/
+COPY --from=builder /usr/src/oxirs/target/release/oxirs-gql /usr/local/bin/
+COPY --from=builder /usr/src/oxirs/target/release/oxirs /usr/local/bin/
+
+# Copy production configuration templates
+COPY deploy/config/production/ /opt/oxirs/config/
+
+# Set up directories with proper permissions
+RUN mkdir -p /opt/oxirs/{data,logs,tmp,cache} && \
+    chown -R oxirs:oxirs /opt/oxirs
+
+# Performance tuning via environment variables
+ENV OXIRS_LOG_LEVEL=info
+ENV OXIRS_WORKER_THREADS=auto
+ENV OXIRS_ENABLE_SIMD=true
+ENV OXIRS_ENABLE_GPU=auto-detect
+ENV OXIRS_CACHE_SIZE=1GB
+ENV OXIRS_MEMORY_POOL_SIZE=2GB
+
+# NUMA optimization
+ENV OXIRS_NUMA_POLICY=interleave
+
+# JVM-style memory settings for large deployments
+ENV OXIRS_MAX_HEAP_SIZE=8GB
+ENV OXIRS_MIN_HEAP_SIZE=2GB
+
+# Performance monitoring
+ENV OXIRS_METRICS_ENABLED=true
+ENV OXIRS_TRACING_ENABLED=true
+
+# Security hardening
+ENV OXIRS_SECURITY_MODE=strict
+ENV OXIRS_ALLOW_ADMIN_UI=false
+
+WORKDIR /opt/oxirs
+USER oxirs
+
+# Health check with performance validation
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:3030/health || exit 1
+
+# Expose service ports
+EXPOSE 3030 3031 3032
+
+# Use production-optimized entrypoint
+ENTRYPOINT ["/usr/local/bin/oxirs-fuseki"]
+CMD ["--config", "/opt/oxirs/config/oxirs.toml", "--production"]

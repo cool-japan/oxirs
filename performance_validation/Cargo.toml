@@ -1,0 +1,63 @@
+[package]
+name = "oxirs-performance-validation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Revolutionary performance validation and benchmarking suite for OxiRS"
+
+[dependencies]
+# SciRS2 Core Dependencies (Full Usage - MANDATORY)
+scirs2-core = { path = "../../scirs/scirs2-core", features = ["all"] }
+scirs2-autograd = { path = "../../scirs/scirs2-autograd" }
+scirs2-graph = { path = "../../scirs/scirs2-graph" }
+scirs2-linalg = { path = "../../scirs/scirs2-linalg" }
+scirs2-stats = { path = "../../scirs/scirs2-stats" }
+scirs2-neural = { path = "../../scirs/scirs2-neural" }
+scirs2-optimize = { path = "../../scirs/scirs2-optim" }
+scirs2-cluster = { path = "../../scirs/scirs2-cluster" }
+
+# Async Runtime
+tokio = { workspace = true, features = ["full"] }
+futures = { workspace = true }
+
+# Standard Library Extensions
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+toml = { workspace = true }
+
+# Logging and Tracing
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Time Handling
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+proptest = { workspace = true }
+criterion = { workspace = true, features = ["html_reports"] }
+
+[features]
+default = ["quantum", "gpu", "distributed", "ml"]
+quantum = ["scirs2-core/quantum"]
+gpu = ["scirs2-core/gpu"]
+distributed = ["scirs2-cluster/distributed"]
+ml = ["scirs2-neural/ml"]
+cosmic-scale = ["scirs2-core/cosmic"]
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = true
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.bench]
+opt-level = 3
+debug = true
+lto = true

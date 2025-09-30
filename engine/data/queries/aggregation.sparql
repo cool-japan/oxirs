@@ -1,0 +1,10 @@
+PREFIX stats: <http://example.org/stats#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+SELECT ?category (COUNT(?record) AS ?count) (AVG(?value) AS ?average) (MAX(?value) AS ?maximum)
+WHERE {
+    ?record stats:category ?category .
+    ?record stats:value ?value .
+}
+GROUP BY ?category
+ORDER BY DESC(?average)

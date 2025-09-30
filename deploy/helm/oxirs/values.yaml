@@ -1,0 +1,393 @@
+# Production-ready Helm values for OxiRS
+# Optimized for high-performance deployments with GPU acceleration and SIMD
+
+# Global configuration
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+  storageClass: "fast-ssd"
+
+# Application image configuration
+image:
+  registry: docker.io
+  repository: oxirs/oxirs
+  tag: "v1.0.0-production"
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+# Deployment configuration
+replicaCount: 3
+
+# Performance and resource configuration
+performance:
+  # SIMD optimizations
+  simd:
+    enabled: true
+    architecture: "auto-detect"  # auto-detect, avx2, neon
+    threshold: 64
+
+  # GPU acceleration
+  gpu:
+    enabled: true
+    autoDetect: true
+    deviceIds: [0]
+    memoryPoolMB: 2048
+    threshold: 1000
+
+  # NUMA optimization
+  numa:
+    enabled: true
+    policy: "interleave"
+
+  # Parallel processing
+  parallel:
+    enabled: true
+    threshold: 10000
+    workerThreads: "auto"
+
+# Resource allocation
+resources:
+  requests:
+    cpu: 2000m
+    memory: 4Gi
+    ephemeral-storage: 10Gi
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+    ephemeral-storage: 20Gi
+    nvidia.com/gpu: 1
+
+# Node selection and affinity
+nodeSelector:
+  performance.oxirs.io/simd: "avx2"
+  performance.oxirs.io/gpu: "available"
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - oxirs
+        topologyKey: kubernetes.io/hostname
+
+tolerations:
+- key: "performance.oxirs.io/dedicated"
+  operator: "Equal"
+  value: "true"
+  effect: "NoSchedule"
+
+# Service configuration
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+
+  sparql:
+    port: 3030
+    targetPort: 3030
+
+  graphql:
+    port: 3031
+    targetPort: 3031
+
+  metrics:
+    enabled: true
+    port: 3032
+    targetPort: 3032
+
+# Ingress configuration
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+  hosts:
+  - host: sparql.example.com
+    paths:
+    - path: /
+      pathType: Prefix
+      service:
+        name: sparql
+        port: 3030
+
+  - host: graphql.example.com
+    paths:
+    - path: /
+      pathType: Prefix
+      service:
+        name: graphql
+        port: 3031
+
+  tls:
+  - secretName: oxirs-tls
+    hosts:
+    - sparql.example.com
+    - graphql.example.com
+
+# Persistence configuration
+persistence:
+  enabled: true
+  storageClass: "fast-ssd"
+  accessMode: ReadWriteOnce
+  size: 100Gi
+
+  # Data persistence
+  data:
+    enabled: true
+    size: 100Gi
+    mountPath: /opt/oxirs/data
+
+  # Cache persistence (memory-backed)
+  cache:
+    enabled: true
+    size: 10Gi
+    mountPath: /opt/oxirs/cache
+    storageClass: "memory"
+
+# Configuration management
+config:
+  # Main configuration (see oxirs.toml)
+  production:
+    server:
+      host: "0.0.0.0"
+      port: 3030
+      graphql_port: 3031
+      metrics_port: 3032
+      worker_threads: "auto"
+      max_connections: 10000
+      production_mode: true
+      admin_ui: false
+
+    performance:
+      enable_simd: true
+      enable_gpu: "auto-detect"
+      enable_parallel: true
+      numa_policy: "interleave"
+      max_heap_size: "8GB"
+      min_heap_size: "2GB"
+
+    caching:
+      enabled: true
+      strategy: "adaptive"
+      query_cache_size: "512MB"
+      result_cache_size: "1GB"
+      embedding_cache_size: "2GB"
+
+    ai:
+      enabled: true
+      embeddings:
+        enabled: true
+        dimensions: 512
+        use_scirs2_optimizations: true
+        enable_gpu_acceleration: true
+        simd_optimization: true
+
+    monitoring:
+      enabled: true
+      prometheus_enabled: true
+      tracing_enabled: true
+      detailed_metrics: true
+
+# Security configuration
+security:
+  enabled: true
+  mode: "strict"
+
+  # Pod security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+
+  # Container security context
+  securityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop:
+      - ALL
+
+  # Network policies
+  networkPolicy:
+    enabled: true
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: oxirs-production
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: oxirs
+    egress:
+    - to: []
+      ports:
+      - protocol: TCP
+        port: 53
+      - protocol: UDP
+        port: 53
+
+# Health checks
+healthCheck:
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 3030
+    initialDelaySeconds: 60
+    periodSeconds: 30
+    timeoutSeconds: 10
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 3030
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# Monitoring and observability
+monitoring:
+  # Prometheus metrics
+  prometheus:
+    enabled: true
+    port: 3032
+    path: /metrics
+    scrapeInterval: 30s
+
+  # Grafana dashboards
+  grafana:
+    enabled: true
+    dashboards:
+      performance: true
+      gpu_utilization: true
+      simd_metrics: true
+      federation: true
+
+  # Distributed tracing
+  jaeger:
+    enabled: true
+    endpoint: "http://jaeger:14268/api/traces"
+    samplingRate: 0.1
+
+  # Alerting
+  alerts:
+    enabled: true
+    rules:
+      highCPUUsage: 80
+      highMemoryUsage: 85
+      highErrorRate: 5
+      gpuMemoryUsage: 90
+
+# Autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+  # Custom metrics for SPARQL query rate
+  - type: Pods
+    pods:
+      metric:
+        name: oxirs_queries_per_second
+      target:
+        type: AverageValue
+        averageValue: "100"
+
+# Pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2
+
+# Environment variables
+env:
+  # Performance tuning
+  OXIRS_WORKER_THREADS: "auto"
+  OXIRS_ENABLE_SIMD: "true"
+  OXIRS_ENABLE_GPU: "auto-detect"
+  OXIRS_NUMA_POLICY: "interleave"
+
+  # Memory management
+  OXIRS_MAX_HEAP_SIZE: "8GB"
+  OXIRS_MIN_HEAP_SIZE: "2GB"
+  OXIRS_CACHE_SIZE: "2GB"
+
+  # Monitoring
+  OXIRS_METRICS_ENABLED: "true"
+  OXIRS_TRACING_ENABLED: "true"
+
+  # Security
+  OXIRS_SECURITY_MODE: "strict"
+  OXIRS_ALLOW_ADMIN_UI: "false"
+
+# Init containers for system optimization
+initContainers:
+  performanceTuning:
+    enabled: true
+    image: alpine:3.18
+    securityContext:
+      privileged: true
+
+# Dependencies
+postgresql:
+  enabled: false  # Use external database in production
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: "change-me-in-production"
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Backup configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Daily at 2 AM
+  retention: 30  # Keep 30 days
+  destination: "s3://oxirs-backups/"
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi

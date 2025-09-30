@@ -1,0 +1,38 @@
+[package]
+name = "oxirs-rule"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Forward/backward rule engine for RDFS, OWL, and SWRL reasoning"
+keywords = ["inference", "reasoning", "rules", "owl", "rdfs"]
+categories = ["algorithms", "science", "data-structures"]
+rust-version.workspace = true
+
+[dependencies]
+scirs2-core = { workspace = true }
+scirs2-graph = { workspace = true }
+oxirs-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+regex = "1.11"
+tokio = { version = "1.47", features = ["fs", "io-util"] }
+lazy_static = "1.5"
+rand = "0.9"
+
+[dev-dependencies]
+criterion.workspace = true
+tempfile = "3.23"
+tokio = { version = "1.47", features = ["full"] }
+
+[features]
+default = ["rdfs"]
+rdfs = []
+owl = []
+swrl = []
+
