@@ -9,8 +9,9 @@ use crate::executor::{Dataset, ExecutionContext, QueryExecutor};
 use anyhow::Result;
 use scirs2_core::array;  // Beta.3 array macro convenience
 use scirs2_core::error::CoreError;
-// Temporary: Use compatibility shim until scirs2-core beta.4
-use crate::scirs2_compat::{Counter, Profiler, Gauge, Histogram, Timer};
+// Native SciRS2 APIs (beta.4+)
+use scirs2_core::metrics::{Counter, Gauge, Histogram, Timer};
+use scirs2_core::profiling::Profiler;
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1};
 use scirs2_core::parallel_ops::ParallelIterator;
 use scirs2_core::random::{

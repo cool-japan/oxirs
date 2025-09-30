@@ -234,75 +234,43 @@ fn format_xml_results(
     Ok(())
 }
 
-/// Enhanced format results using CLI context
+/// Enhanced format results using CLI context with comprehensive formatters
 fn format_results_enhanced(
     results: &super::stubs::OxirsQueryResults,
     output_format: &str,
     ctx: &crate::cli::CliContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match output_format {
-        "table" => {
-            // Use the table formatter from output module
-            let mut table = ctx.output_formatter.create_table();
-            if !results.variables.is_empty() {
-                use prettytable::{Cell, Row};
-                table.set_titles(Row::new(
-                    results.variables.iter().map(|v| Cell::new(v)).collect(),
-                ));
-            }
+    use crate::cli::formatters::{create_formatter, Binding, QueryResults, RdfTerm, ResultFormatter};
+    use std::io;
 
-            for binding in &results.bindings {
-                let cells: Vec<prettytable::Cell> = binding
+    // Convert stub results to formatter QueryResults
+    let formatter_results = QueryResults {
+        variables: results.variables.clone(),
+        bindings: results
+            .bindings
+            .iter()
+            .map(|stub_binding| Binding {
+                values: stub_binding
                     .values
                     .iter()
-                    .map(|opt| opt.as_deref().unwrap_or(""))
-                    .map(prettytable::Cell::new)
-                    .collect();
-                table.add_row(prettytable::Row::new(cells));
-            }
+                    .map(|opt_val| {
+                        opt_val.as_ref().map(|v| RdfTerm::Literal {
+                            value: v.clone(),
+                            lang: None,
+                            datatype: None,
+                        })
+                    })
+                    .collect(),
+            })
+            .collect(),
+    };
 
-            table.printstd();
-        }
-        "json" => {
-            let json_output = serde_json::json!({
-                "head": { "vars": results.variables },
-                "results": {
-                    "bindings": results.bindings.iter().map(|b| {
-                        let mut binding_map = serde_json::Map::new();
-                        for (i, var) in results.variables.iter().enumerate() {
-                            if let Some(Some(value)) = b.values.get(i) {
-                                binding_map.insert(var.clone(), serde_json::Value::String(value.clone()));
-                            }
-                        }
-                        binding_map
-                    }).collect::<Vec<_>>()
-                }
-            });
-            ctx.output_formatter.json(&json_output)?;
-        }
-        "csv" | "tsv" => {
-            let separator = if output_format == "csv" { "," } else { "\t" };
-
-            // Print headers
-            println!("{}", results.variables.join(separator));
-
-            // Print rows
-            for binding in &results.bindings {
-                let values: Vec<_> = binding
-                    .values
-                    .iter()
-                    .map(|opt| opt.as_deref().unwrap_or(""))
-                    .collect();
-                println!("{}", values.join(separator));
-            }
-        }
-        "xml" => {
-            format_xml_results(results)?;
-        }
-        _ => {
-            // This should not happen due to validation
-            return Err(format!("Unsupported output format: {output_format}").into());
-        }
+    // Use the comprehensive formatter
+    if let Some(formatter) = create_formatter(output_format) {
+        let mut stdout = io::stdout();
+        formatter.format(&formatter_results, &mut stdout)?;
+    } else {
+        return Err(format!("Unsupported output format: {output_format}").into());
     }
 
     Ok(())

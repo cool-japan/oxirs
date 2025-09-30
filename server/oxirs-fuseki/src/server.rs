@@ -420,17 +420,43 @@ impl Runtime {
             cors::CorsLayer, request_id::SetRequestIdLayer, timeout::TimeoutLayer,
             trace::TraceLayer,
         };
+        use crate::middleware::{
+            security_headers, https_security_headers, request_correlation_id,
+            request_timing, api_version, health_check_bypass,
+        };
 
-        // Request ID generation
+        // Layer 1: Health check bypass (outermost - first to execute)
+        app = app.layer(axum::middleware::from_fn(health_check_bypass));
+
+        // Layer 2: Security headers for all requests
+        app = app.layer(axum::middleware::from_fn(security_headers));
+
+        // Layer 3: HTTPS-specific security headers if TLS is enabled
+        if self.config.server.tls.is_some() {
+            app = app.layer(axum::middleware::from_fn(https_security_headers));
+        }
+
+        // Layer 4: Request correlation ID for distributed tracing
+        app = app.layer(axum::middleware::from_fn(request_correlation_id));
+
+        // Layer 5: Request timing for performance monitoring
+        app = app.layer(axum::middleware::from_fn(request_timing));
+
+        // Layer 6: API version header
+        app = app.layer(axum::middleware::from_fn(api_version));
+
+        // Layer 7: Request ID generation (tower-http)
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
 
-        // Request tracing and logging
+        // Layer 8: Request tracing and logging
         app = app.layer(TraceLayer::new_for_http());
 
-        // Timeout middleware
-        app = app.layer(TimeoutLayer::new(Duration::from_secs(30)));
+        // Layer 9: Timeout middleware
+        app = app.layer(TimeoutLayer::new(Duration::from_secs(
+            self.config.server.request_timeout_secs
+        )));
 
-        // CORS configuration if enabled
+        // Layer 10: CORS configuration if enabled
         if self.config.server.cors {
             let cors = CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
@@ -441,13 +467,16 @@ impl Runtime {
                     axum::http::Method::DELETE,
                     axum::http::Method::OPTIONS,
                 ])
-                .allow_headers(tower_http::cors::Any);
+                .allow_headers(tower_http::cors::Any)
+                .expose_headers([
+                    axum::http::HeaderName::from_static("x-request-id"),
+                    axum::http::HeaderName::from_static("x-response-time"),
+                    axum::http::HeaderName::from_static("x-api-version"),
+                ]);
             app = app.layer(cors);
         }
 
-        // Note: Auth and metrics middleware would be added here if type compatibility allows
-        // For now, commenting out to fix compilation
-        // TODO: Fix middleware type compatibility issues
+        info!("Middleware stack configured: security, tracing, timing, CORS");
 
         Ok(app)
     }

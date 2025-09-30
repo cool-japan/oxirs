@@ -13,8 +13,8 @@ use scirs2_core::random::{
     distributions::{Dirichlet, Beta, MultivariateNormal, Categorical, WeightedChoice, VonMises}
 };
 use scirs2_core::memory::BufferPool;
-// Temporary: Use compatibility shim until scirs2-core beta.4
-use crate::scirs2_compat::{Counter, Gauge, Histogram as MetricsHistogram, Timer};
+// Native SciRS2 APIs (beta.4+)
+use scirs2_core::metrics::{Counter, Gauge, Histogram as MetricsHistogram, Timer};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};

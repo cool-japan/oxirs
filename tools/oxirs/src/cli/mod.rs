@@ -9,6 +9,7 @@ use std::time::Duration;
 
 pub mod completion;
 pub mod error;
+pub mod formatters;
 pub mod help;
 pub mod interactive;
 pub mod logging;
@@ -18,6 +19,10 @@ pub mod validation;
 
 pub use completion::{CommandCompletionProvider, CompletionContext, CompletionProvider};
 pub use error::{CliError, CliResult};
+pub use formatters::{
+    create_formatter, Binding, CsvFormatter, JsonFormatter, QueryResults, RdfTerm, ResultFormatter,
+    TableFormatter, XmlFormatter,
+};
 pub use help::{HelpCategory, HelpProvider};
 pub use interactive::InteractiveMode;
 pub use logging::{

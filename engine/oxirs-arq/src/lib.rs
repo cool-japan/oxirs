@@ -81,9 +81,6 @@ pub mod advanced_optimizer;
 // pub mod realtime_streaming;
 // pub mod unified_optimization_framework;
 
-// Compatibility shim for missing scirs2-core APIs (temporary until beta.4)
-pub mod scirs2_compat;
-
 // Re-export commonly used types
 pub use algebra::{
     Aggregate, Algebra, BinaryOperator, Binding, Expression, GroupCondition, Iri, Literal,
