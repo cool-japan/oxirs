@@ -459,7 +459,7 @@ impl NatsProducer {
     ) -> bool {
         match strategy {
             LoadBalancingStrategy::RoundRobin => message_count % 2 == 0, // Simple implementation
-            LoadBalancingStrategy::Random => rand::Random::default().gen::<bool>(),
+            LoadBalancingStrategy::Random => rand::Random::default().random::<bool>(),
             LoadBalancingStrategy::LeastConnections => true, // Simplified
             LoadBalancingStrategy::WeightedRoundRobin(_weights) => true, // Simplified
             LoadBalancingStrategy::Consistent => true,       // Simplified

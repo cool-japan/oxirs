@@ -7,7 +7,7 @@
 
 use crate::model::{Triple, TriplePattern};
 use crate::OxirsError;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::Arc;
@@ -130,7 +130,7 @@ impl ElementId {
             node_id,
             random: {
                 let mut rng = Random::default();
-                rng.gen::<u64>()
+                rng.random::<u64>()
             },
         }
     }

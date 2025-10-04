@@ -3,10 +3,10 @@
 //! This module integrates scirs2-neural capabilities into oxirs-embed for advanced
 //! neural embedding computations with scientific computing optimizations.
 
-use crate::{EmbeddingModel, ModelConfig};
-use anyhow::{Context, Result};
-use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use crate::ModelConfig;
+use anyhow::Result;
+use scirs2_core::ndarray_ext::Array1;
+use scirs2_core::random::Random;
 use scirs2_neural::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

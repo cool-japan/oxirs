@@ -5,7 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::Random;
 use scirs2_core::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;

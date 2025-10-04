@@ -516,7 +516,8 @@ impl crate::EmbeddingModel for MambaEmbedding {
             self.relation_embeddings = Array2::zeros((num_relations, self.config.dimensions));
 
             // Initialize with random values
-            use scirs2_core::random::{Rng, Random};
+            #[allow(unused_imports)]
+            use scirs2_core::random::{Random, Rng};
             let mut rng = Random::default();
 
             for i in 0..num_entities {

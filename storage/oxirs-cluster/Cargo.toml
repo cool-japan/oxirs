@@ -36,7 +36,8 @@ num_cpus.workspace = true
 # Byzantine fault tolerance dependencies
 sha2 = "0.10"
 ed25519-dalek = "2.1"
-# rand functionality now provided by scirs2-core (use scirs2_core::random)
+rand = "0.8"  # Required by ed25519-dalek for key generation
+# Note: For other random functionality, use scirs2_core::random
 
 # MVCC dependencies
 dashmap = "6.1"
@@ -75,4 +76,5 @@ tempfile = "3.23"
 default = []
 raft = ["openraft"]
 bft = []
+test-support = []
 

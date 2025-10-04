@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use scirs2_core::ndarray_ext::{Array1, Array2, Array3};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -884,7 +884,7 @@ impl NeuralSymbolicModel {
 
             neural_layers.push(Array2::from_shape_fn((output_size, input_size), |_| {
                 let mut random = Random::default();
-                random.gen::<f32>() * 0.1
+                random.random::<f32>() * 0.1
             }));
         }
 
@@ -894,22 +894,22 @@ impl NeuralSymbolicModel {
             neural_layers,
             attention_weights: Array3::from_shape_fn((8, dimensions, dimensions), |_| {
                 let mut random = Random::default();
-                random.gen::<f32>() * 0.1
+                random.random::<f32>() * 0.1
             }),
             knowledge_base: Vec::new(),
             logical_formulas: Vec::new(),
             symbol_embeddings: HashMap::new(),
             neural_to_symbolic: Array2::from_shape_fn((dimensions, dimensions), |_| {
                 let mut random = Random::default();
-                random.gen::<f32>() * 0.1
+                random.random::<f32>() * 0.1
             }),
             symbolic_to_neural: Array2::from_shape_fn((dimensions, dimensions), |_| {
                 let mut random = Random::default();
-                random.gen::<f32>() * 0.1
+                random.random::<f32>() * 0.1
             }),
             fusion_weights: Array2::from_shape_fn((dimensions, dimensions * 2), |_| {
                 let mut random = Random::default();
-                random.gen::<f32>() * 0.1
+                random.random::<f32>() * 0.1
             }),
             constraints: Vec::new(),
             constraint_weights: Array1::from_shape_fn(10, |_| 1.0),
@@ -1289,7 +1289,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
             // Simulate neural-symbolic training
             let epoch_loss = {
                 let mut random = Random::default();
-                0.1 * random.gen::<f64>()
+                0.1 * random.random::<f64>()
             };
             loss_history.push(epoch_loss);
 

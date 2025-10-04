@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2025-10-04
+
+### Overview
+
+Second alpha milestone delivering end-to-end persistence, a production-ready CLI, interactive tooling, and SPARQL federation with enterprise-grade observability.
+
+⚠️ **Alpha Software**: APIs may still change. Evaluate carefully before deploying to critical production environments.
+
+### Added
+
+#### Persistent RDF Pipeline
+- Automatic on-disk persistence in N-Quads format with zero-configuration save/load
+- Streaming import/export/migrate commands covering Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD, and N3
+- Batch tooling with configurable worker pools for large dataset ingestion
+
+#### Query & Federation Enhancements
+- Interactive SPARQL REPL with history, multi-line editing, templated queries, and batch execution
+- Full coverage of SPARQL SELECT / ASK / CONSTRUCT / DESCRIBE in the CLI with standards-compliant formatters (Table, JSON, CSV/TSV, XML)
+- SPARQL 1.1 `SERVICE` support including retries, `SERVICE SILENT`, and JSON results merging for cross-endpoint federation
+
+#### Observability & Security
+- Prometheus metrics, slow-query tracing, and request correlation IDs for distributed debugging
+- Hardened HTTP stack with OAuth2/OIDC, JWT support, seven security headers, and HSTS enabled by default
+
+### Changed
+- Consolidated SciRS2 integration across query execution for SIMD-accelerated operators
+- Updated deployment guidance to reflect Kubernetes-ready health probes and production monitoring defaults
+
+### Fixed
+- Correct wildcard expansion for `SELECT *` queries inside the CLI REPL
+- Resolved intermittent federation failures through exponential backoff and smarter response merging
+
+### Known Limitations
+- Large dataset (>100M triples) performance tuning remains in progress
+- Advanced AI extensions continue to ship as experimental features pending additional hardening
+
 ## [0.1.0-alpha.1] - 2025-09-30
 
 ### Overview
@@ -125,10 +161,10 @@ Available on crates.io:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0-alpha.1"
-oxirs-fuseki = "0.1.0-alpha.1"
-oxirs-arq = "0.1.0-alpha.1"
-oxirs-gql = "0.1.0-alpha.1"
+oxirs-core = "0.1.0-alpha.2"
+oxirs-fuseki = "0.1.0-alpha.2"
+oxirs-arq = "0.1.0-alpha.2"
+oxirs-gql = "0.1.0-alpha.2"
 # ... other crates as needed
 ```
 
@@ -184,4 +220,4 @@ cargo install oxirs
 
 ---
 
-*First alpha release - September 30, 2025*
+*Second alpha release - October 04, 2025*

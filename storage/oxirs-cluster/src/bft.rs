@@ -4,7 +4,7 @@
 //! protecting against malicious nodes in the cluster.
 
 use crate::{ClusterError, Result};
-use ed25519_dalek::{Keypair, PublicKey, Signature, Signer, Verifier};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -156,9 +156,9 @@ pub struct BftConsensus {
     /// BFT configuration
     config: BftConfig,
     /// Cryptographic keypair for this node
-    keypair: Keypair,
+    keypair: SigningKey,
     /// Known public keys of other nodes
-    node_keys: Arc<RwLock<HashMap<String, PublicKey>>>,
+    node_keys: Arc<RwLock<HashMap<String, VerifyingKey>>>,
     /// Message log for consensus
     message_log: Arc<RwLock<MessageLog>>,
     /// Byzantine node tracker
@@ -260,7 +260,7 @@ impl BftConsensus {
     /// Create a new BFT consensus instance
     pub fn new(node_id: String, config: BftConfig) -> Result<Self> {
         let mut csprng = OsRng {};
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = SigningKey::generate(&mut csprng);
 
         Ok(BftConsensus {
             node_id,
@@ -276,7 +276,7 @@ impl BftConsensus {
     }
 
     /// Register a node's public key
-    pub fn register_node(&self, node_id: String, public_key: PublicKey) -> Result<()> {
+    pub fn register_node(&self, node_id: String, public_key: VerifyingKey) -> Result<()> {
         let mut keys = self
             .node_keys
             .write()

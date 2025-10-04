@@ -1236,7 +1236,8 @@ impl<R> InternalRdfXmlParser<R> {
     }
 
     fn parse_text_event(&mut self, event: &BytesText<'_>) -> Result<(), RdfXmlParseError> {
-        let text = unescape_with(std::str::from_utf8(event)?, |e| self.resolve_entity(e))?.to_string();
+        let text =
+            unescape_with(std::str::from_utf8(event)?, |e| self.resolve_entity(e))?.to_string();
         match self.state.last_mut() {
             Some(RdfXmlState::PropertyElt { object, .. }) => {
                 if is_object_defined(object) {

@@ -749,7 +749,7 @@ impl EvolutionaryNAS {
         // Start with simple architectures and increase complexity
         let base_complexity = self.config.progressive_config.start_complexity;
         let complexity_variance = 2;
-        let num_nodes = base_complexity + random.gen_range(0..complexity_variance);
+        let num_nodes = base_complexity + random.random_range(0, complexity_variance);
         
         let mut nodes = Vec::new();
         let mut connections = Vec::new();
@@ -769,11 +769,11 @@ impl EvolutionaryNAS {
         }
         
         // Create random connections
-        let num_connections = random.gen_range(num_nodes..num_nodes * 2);
+        let num_connections = random.random_range(num_nodes, num_nodes * 2);
         for i in 0..num_connections {
             if nodes.len() >= 2 {
-                let from_node = random.gen_range(0..nodes.len() - 1);
-                let to_node = random.gen_range(from_node + 1..nodes.len());
+                let from_node = random.random_range(0, nodes.len() - 1);
+                let to_node = random.random_range(from_node + 1, nodes.len());
 
                 let connection = ConnectionGene {
                     from_node,
@@ -936,8 +936,8 @@ impl EvolutionaryNAS {
             inference_time_ms: random.gen_range(0.1..10.0),
             memory_usage_mb: random.gen_range(100.0..2000.0),
             energy_consumption: Some(random.gen_range(10.0..100.0)),
-            model_size: random.gen_range(1000000..50000000),
-            flops: random.gen_range(1000000..100000000),
+            model_size: random.random_range(1000000, 50000000),
+            flops: random.random_range(1000000, 100000000),
         })
     }
 
@@ -1224,14 +1224,14 @@ impl EvolutionaryNAS {
             
             // Crossover
             let mut random = Random::default();
-            if random.gen::<f32>() < self.config.crossover_probability {
+            if random.random::<f32>() < self.config.crossover_probability {
                 let (mut child1, mut child2) = self.crossover(parent1, parent2)?;
 
                 // Mutation
-                if random.gen::<f32>() < self.config.mutation_probability {
+                if random.random::<f32>() < self.config.mutation_probability {
                     self.mutate(&mut child1)?;
                 }
-                if random.gen::<f32>() < self.config.mutation_probability {
+                if random.random::<f32>() < self.config.mutation_probability {
                     self.mutate(&mut child2)?;
                 }
                 
@@ -1245,7 +1245,7 @@ impl EvolutionaryNAS {
                 child.id = Uuid::new_v4();
                 child.parents = vec![parent1.id];
                 
-                if random.gen::<f32>() < self.config.mutation_probability {
+                if random.random::<f32>() < self.config.mutation_probability {
                     self.mutate(&mut child)?;
                 }
                 
@@ -1260,11 +1260,11 @@ impl EvolutionaryNAS {
     /// Tournament selection
     fn tournament_selection(&self, population: &[ArchitectureCandidate]) -> Result<usize> {
         let mut random = Random::default();
-        let mut best_idx = random.gen_range(0..population.len());
+        let mut best_idx = random.random_range(0, population.len());
         let mut best_fitness = population[best_idx].fitness.overall_fitness;
 
         for _ in 1..self.config.tournament_size {
-            let idx = random.gen_range(0..population.len());
+            let idx = random.random_range(0, population.len());
             if population[idx].fitness.overall_fitness > best_fitness {
                 best_idx = idx;
                 best_fitness = population[idx].fitness.overall_fitness;
@@ -1290,7 +1290,7 @@ impl EvolutionaryNAS {
         
         // Simple single-point crossover for nodes
         let mut random = Random::default();
-        let crossover_point = random.gen_range(1..parent1.genome.nodes.len().min(parent2.genome.nodes.len()));
+        let crossover_point = random.random_range(1, parent1.genome.nodes.len().min(parent2.genome.nodes.len()));
         
         // Exchange nodes after crossover point
         for i in crossover_point..child1.genome.nodes.len().min(child2.genome.nodes.len()) {
@@ -1312,7 +1312,7 @@ impl EvolutionaryNAS {
 
         // Node mutation - modify operation parameters
         for node in &mut candidate.genome.nodes {
-            if random.gen::<f32>() < self.config.mutation_probability {
+            if random.random::<f32>() < self.config.mutation_probability {
                 for (_, value) in node.parameters.iter_mut() {
                     *value *= random.gen_range(0.8..1.2); // ±20% variation
                 }
@@ -1321,14 +1321,14 @@ impl EvolutionaryNAS {
         
         // Connection mutation - modify weights
         for connection in &mut candidate.genome.connections {
-            if random.gen::<f32>() < self.config.mutation_probability {
+            if random.random::<f32>() < self.config.mutation_probability {
                 connection.weight += random.gen_range(-0.1..0.1);
                 connection.weight = connection.weight.clamp(-2.0, 2.0);
             }
         }
         
         // Structural mutation - add/remove nodes/connections occasionally
-        if random.gen::<f32>() < 0.05 { // Low probability structural mutation
+        if random.random::<f32>() < 0.05 { // Low probability structural mutation
             self.structural_mutation(candidate)?;
         }
         
@@ -1343,7 +1343,7 @@ impl EvolutionaryNAS {
     fn structural_mutation(&mut self, candidate: &mut ArchitectureCandidate) -> Result<()> {
         let mut random = Random::default();
 
-        match random.gen_range(0..4) {
+        match random.random_range(0, 4) {
             0 => self.add_node_mutation(candidate)?,
             1 => self.add_connection_mutation(candidate)?,
             2 => self.remove_node_mutation(candidate)?,
@@ -1379,8 +1379,8 @@ impl EvolutionaryNAS {
         let num_nodes = candidate.genome.nodes.len();
 
         if num_nodes >= 2 {
-            let from_node = random.gen_range(0..num_nodes);
-            let to_node = random.gen_range(0..num_nodes);
+            let from_node = random.random_range(0, num_nodes);
+            let to_node = random.random_range(0, num_nodes);
 
             if from_node != to_node {
                 let connection = ConnectionGene {
@@ -1403,7 +1403,7 @@ impl EvolutionaryNAS {
     fn remove_node_mutation(&mut self, candidate: &mut ArchitectureCandidate) -> Result<()> {
         if candidate.genome.nodes.len() > 3 { // Keep minimum structure
             let mut random = Random::default();
-            let remove_idx = random.gen_range(0..candidate.genome.nodes.len());
+            let remove_idx = random.random_range(0, candidate.genome.nodes.len());
             candidate.genome.nodes.remove(remove_idx);
             
             // Remove connections involving the removed node
@@ -1419,7 +1419,7 @@ impl EvolutionaryNAS {
     fn remove_connection_mutation(&mut self, candidate: &mut ArchitectureCandidate) -> Result<()> {
         if !candidate.genome.connections.is_empty() {
             let mut random = Random::default();
-            let remove_idx = random.gen_range(0..candidate.genome.connections.len());
+            let remove_idx = random.random_range(0, candidate.genome.connections.len());
             candidate.genome.connections.remove(remove_idx);
         }
         
@@ -1506,7 +1506,7 @@ impl EvolutionaryNAS {
         
         for candidate in population.iter_mut() {
             let mut random = Random::default();
-            if candidate.genome.nodes.len() < max_nodes && random.gen::<f32>() < 0.1 {
+            if candidate.genome.nodes.len() < max_nodes && random.random::<f32>() < 0.1 {
                 // Gradually add complexity
                 self.add_node_mutation(candidate)?;
             }

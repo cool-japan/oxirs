@@ -352,10 +352,11 @@ impl ConsciousnessAwareEmbedding {
 
         // Simple hash-based initialization (could be more sophisticated)
         let hash = entity.chars().map(|c| c as u32).sum::<u32>();
-        let seed = hash as u64;
+        let _seed = hash as u64;
 
         {
-            use scirs2_core::random::{Rng, Random};
+            #[allow(unused_imports)]
+            use scirs2_core::random::{Random, Rng};
             // Note: Seeding not supported in scirs2_core - would be deterministic if needed
             Array1::from_shape_fn(dimensions, |_| {
                 let mut random = Random::default();

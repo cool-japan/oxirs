@@ -9,7 +9,7 @@
 
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::Array2;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -487,7 +487,7 @@ impl VariationalQuantumEigensolver {
                 ansatz.add_parameterized_gate(QuantumGate::RY(0.0), vec![param_idx]);
                 let random_value = {
                     let mut random = Random::default();
-                    0.1 * random.gen::<f64>()
+                    0.1 * random.random::<f64>()
                 };
                 parameters.push(random_value);
                 param_idx += 1;
@@ -503,7 +503,7 @@ impl VariationalQuantumEigensolver {
                 ansatz.add_parameterized_gate(QuantumGate::RZ(0.0), vec![param_idx]);
                 let random_value = {
                     let mut random = Random::default();
-                    0.1 * random.gen::<f64>()
+                    0.1 * random.random::<f64>()
                 };
                 parameters.push(random_value);
                 param_idx += 1;
@@ -832,7 +832,7 @@ impl QuantumNeuralNetworkLayer {
         let parameters = (0..num_params)
             .map(|_| {
                 let mut random = Random::default();
-                2.0 * PI * random.gen::<f64>()
+                2.0 * PI * random.random::<f64>()
             })
             .collect();
 
@@ -1187,7 +1187,7 @@ impl CoherenceTimeManager {
             if coherence_factor < 1.0 {
                 let phase_noise = {
                     let mut random = Random::default();
-                    (1.0 - coherence_factor) * random.gen::<f64>() * PI
+                    (1.0 - coherence_factor) * random.random::<f64>() * PI
                 };
                 for amplitude in state_vector.iter_mut() {
                     let phase_factor = Complex::new(phase_noise.cos(), phase_noise.sin());

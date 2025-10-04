@@ -1,8 +1,8 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.1.0-alpha.1"
+oxirs-rule = "0.1.0-alpha.2"
 ```
 
 ## Quick Start
@@ -347,4 +347,11 @@ Licensed under the Apache License, Version 2.0 or the MIT License, at your optio
 
 ## Status
 
-Production-ready with 98% feature completion (34/34 tests passing). Actively maintained and continuously optimized for performance and standards compliance.
+🚀 **Alpha Release (v0.1.0-alpha.2)** – October 4, 2025
+
+Highlights:
+- ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots
+- ✅ RETE network optimized with SciRS2 metrics and tracing hooks
+- ✅ Integrated with federation-aware SPARQL workflows for rule-driven post-processing
+- ✅ 89/89 tests passing plus CLI end-to-end coverage
+- 🚧 Advanced distributed reasoning (planned for beta)

@@ -1,49 +1,57 @@
 [package]
 name = "oxirs-tdb"
 version.workspace = true
-authors.workspace = true
 edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "MVCC layer and assembler grammar with TDB2 parity for persistent RDF storage"
-keywords = ["triple-store", "rdf", "storage", "database", "sparql"]
-categories = ["database", "filesystem", "data-structures"]
-rust-version.workspace = true
+readme = "README.md"
+description = "Apache Jena TDB/TDB2 compatible RDF storage engine with B+Tree indexes"
+keywords = ["rdf", "sparql", "storage", "database", "tdb"]
+categories = ["database", "data-structures"]
 
 [dependencies]
-scirs2-core = { workspace = true }
-oxirs-core.workspace = true
-# rocksdb = "0.22"  # Disabled due to conflict with oxigraph
-serde.workspace = true
-serde_json.workspace = true
-anyhow.workspace = true
-thiserror.workspace = true
-tracing.workspace = true
-tokio.workspace = true
-uuid.workspace = true
-chrono.workspace = true
-bincode = "1.3"
-once_cell = "1.21"
-# rand functionality now provided by scirs2-core (use scirs2_core::random)
-toml.workspace = true
-num_cpus.workspace = true
-# fastrand functionality now provided by scirs2-core (use scirs2_core::random)
+# Core
+oxirs-core = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
-libc = "0.2"
+# SciRS2 Integration
+scirs2-core = { workspace = true }
+
+# Storage
+memmap2 = "0.9"
+parking_lot = "0.12"
+dashmap = "6.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+bincode = "1.3"
+
+# Utilities
+log = "0.4"
+bytes = "1.10"
+byteorder = "1.5"
+crc32fast = "1.5"
 
 [dev-dependencies]
-criterion.workspace = true
+criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.23"
-# rand functionality now provided by scirs2-core (use scirs2_core::random)
+proptest = "1.7"
+env_logger = "0.11"
+# Use scirs2-core::random instead of rand (see CLAUDE.md)
 
-[[bench]]
-name = "tdb_benchmark"
-harness = false
-
-[features]
-default = []
-transactions = []
-backup = []
-
+# Benchmarks will be added later
+# [[bench]]
+# name = "btree_bench"
+# harness = false
+#
+# [[bench]]
+# name = "index_bench"
+# harness = false
+#
+# [[bench]]
+# name = "query_bench"
+# harness = false

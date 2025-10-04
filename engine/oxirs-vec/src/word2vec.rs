@@ -411,7 +411,7 @@ impl Word2VecEmbeddingGenerator {
                 let hash = std::hash::Hasher::finish(&hasher);
 
                 let mut rng = Random::seed(hash);
-                use scirs2_core::random::Random as RngTrait;
+                
 
                 Some(
                     (0..self.config.dimensions)

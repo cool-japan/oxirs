@@ -6,10 +6,10 @@
 //! - RotatE: Rotation-based embeddings
 
 use crate::gnn_embeddings::{GraphSAGE, GCN};
+use crate::random_utils::NormalSampler as Normal;
 use crate::Vector;
 use anyhow::{anyhow, Result};
 use nalgebra::{Complex, DVector};
-use crate::random_utils::{NormalSampler as Normal, UniformSampler as Uniform};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -165,7 +165,7 @@ impl TransE {
         // Initialize entity embeddings
         for entity in &self.entities {
             let values: Vec<f32> = (0..self.config.dimensions)
-                .map(|_| rng.gen_range(range_min..range_max))
+                .map(|_| rng.random_range(range_min, range_max))
                 .collect();
             let mut embedding = DVector::from_vec(values);
 
@@ -181,7 +181,7 @@ impl TransE {
         // Initialize relation embeddings
         for relation in &self.relations {
             let values: Vec<f32> = (0..self.config.dimensions)
-                .map(|_| rng.gen_range(range_min..range_max))
+                .map(|_| rng.random_range(range_min, range_max))
                 .collect();
             let embedding = DVector::from_vec(values);
 
@@ -191,6 +191,7 @@ impl TransE {
     }
 
     /// Generate negative samples
+    #[allow(deprecated)]
     fn generate_negative_samples(&self, triple: &Triple, rng: &mut impl Rng) -> Vec<Triple> {
         let mut negatives = Vec::new();
 
@@ -373,7 +374,7 @@ impl KGEmbeddingModel for TransE {
             // Note: Using manual random selection instead of SliceRandom
             // Manually shuffle using Fisher-Yates algorithm
             for i in (1..shuffled_triples.len()).rev() {
-                let j = rng.gen_range(0..=i);
+                let j = rng.random_range(0, i + 1);
                 shuffled_triples.swap(i, j);
             }
 

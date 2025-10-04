@@ -1,7 +1,7 @@
 //! Multi-dimensional feature extraction for neural cost estimation
 
-use scirs2_core::ndarray_ext::Array1;
 use oxirs_core::query::{algebra::AlgebraTriplePattern, pattern_optimizer::IndexType};
+use scirs2_core::ndarray_ext::Array1;
 use std::collections::HashMap;
 
 use super::{config::*, core::QueryExecutionContext, types::*};

@@ -107,7 +107,7 @@ fn create_test_router() -> axum::Router {
     async fn test_stats() -> impl IntoResponse {
         Json(json!({
             "datasets": 5,
-            "version": "1.0.0-alpha.1",
+            "version": "1.0.0-alpha.2",
             "uptime": 3600,
             "queries_executed": 1000
         }))

@@ -7,7 +7,9 @@
 use anyhow::Result;
 use async_trait::async_trait;
 // Temporary: Use compatibility shim until scirs2-core beta.4
-use crate::scirs2_compat::{Counter, Profiler, Gauge, Timer};
+// Native SciRS2 APIs (beta.4+)
+use scirs2_core::metrics::{Counter, Gauge, Timer};
+use scirs2_core::profiling::Profiler;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, SystemTime};

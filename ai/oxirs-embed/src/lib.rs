@@ -1,9 +1,9 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
@@ -794,7 +794,8 @@ pub mod quick_start {
         num_entities: usize,
         num_relations: usize,
     ) -> Vec<(String, String, String)> {
-        use scirs2_core::random::{Rng, Random};
+        #[allow(unused_imports)]
+        use scirs2_core::random::{Random, Rng};
 
         let mut random = Random::default();
         let mut triples = Vec::new();
@@ -809,9 +810,9 @@ pub mod quick_start {
 
         // Generate random triples (avoid self-loops)
         for _ in 0..(num_entities * 2) {
-            let subject_idx = random.gen_range(0..entities.len());
-            let relation_idx = random.gen_range(0..relations.len());
-            let object_idx = random.gen_range(0..entities.len());
+            let subject_idx = random.random_range(0, entities.len());
+            let relation_idx = random.random_range(0, relations.len());
+            let object_idx = random.random_range(0, entities.len());
 
             let subject = entities[subject_idx].clone();
             let relation = relations[relation_idx].clone();

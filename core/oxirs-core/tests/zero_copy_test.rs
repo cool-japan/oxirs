@@ -7,7 +7,6 @@ use oxirs_core::io::{
 };
 use oxirs_core::model::*;
 use std::fs;
-use tempfile::TempDir;
 
 #[test]
 fn test_basic_serialization() {

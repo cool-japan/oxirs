@@ -1,7 +1,7 @@
 //! Cross-pattern attention mechanisms for discovering subtle relationships
 
 use scirs2_core::ndarray_ext::{Array1, Array2, Axis};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use std::collections::HashMap;
 
 use crate::{patterns::Pattern, Result};
@@ -108,7 +108,12 @@ impl CrossPatternAttention {
         let bound = (6.0 / (dim + self.config.head_dim) as f64).sqrt();
         for mut row in matrix.axis_iter_mut(Axis(0)) {
             for elem in row.iter_mut() {
-                *elem = ({ let mut random = Random::default(); random.gen::<f64>() }) * 2.0 * bound - bound;
+                *elem = ({
+                    let mut random = Random::default();
+                    random.random::<f64>()
+                }) * 2.0
+                    * bound
+                    - bound;
             }
         }
 
@@ -185,7 +190,10 @@ impl CrossPatternAttention {
 
         // Simple placeholder embedding based on pattern properties
         for i in 0..embedding_dim {
-            embedding[i] = ({ let mut random = Random::default(); random.gen::<f64>() });
+            embedding[i] = {
+                let mut random = Random::default();
+                random.random::<f64>()
+            };
         }
 
         Ok(embedding)

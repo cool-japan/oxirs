@@ -1,7 +1,7 @@
 //! Historical data management for neural cost estimation
 
-use scirs2_core::ndarray_ext::{Array1, Array2};
 use oxirs_core::query::algebra::AlgebraTriplePattern;
+use scirs2_core::ndarray_ext::{Array1, Array2};
 use std::collections::VecDeque;
 
 use super::{

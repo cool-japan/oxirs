@@ -1,10 +1,10 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -39,44 +39,43 @@ cd oxirs/tools/oxirs
 cargo install --path .
 ```
 
-### Pre-built Binaries
-
-Download from [GitHub Releases](https://github.com/cool-japan/oxirs/releases/tag/v0.1.0-alpha.1):
-
-```bash
-# Linux
-curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0-alpha.1/oxirs-linux-x86_64.tar.gz | tar xz
-
-# macOS
-curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0-alpha.1/oxirs-macos-x86_64.tar.gz | tar xz
-
-# Windows
-curl -L https://github.com/cool-japan/oxirs/releases/download/v0.1.0-alpha.1/oxirs-windows-x86_64.zip -o oxirs.zip
-```
-
 ## Quick Start
+
+### Dataset Name Rules
+
+Dataset names must follow these rules:
+- **Only alphanumeric characters, underscores (_), and hyphens (-)** are allowed
+- **No dots (.), slashes (/), or file extensions** (e.g., `.oxirs`)
+- Maximum length: 255 characters
+- Cannot be empty
+
+✅ Valid: `mydata`, `my_dataset`, `test-data-2024`
+❌ Invalid: `dataset.oxirs`, `my/data`, `data.ttl`
 
 ### Basic Usage
 
 ```bash
-# Import RDF data
-oxirs import --file data.ttl --format turtle --output dataset.oxirs
+# Initialize a new dataset
+oxirs init mydata
+
+# Import RDF data into the dataset
+oxirs import mydata data.ttl --format turtle
 
 # Query the data
-oxirs query --dataset dataset.oxirs --query "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
+oxirs query mydata "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
 
 # Start a SPARQL server
-oxirs serve --dataset dataset.oxirs --port 3030
+oxirs serve mydata --port 3030
 
 # Export to different format
-oxirs export --dataset dataset.oxirs --format json-ld --output data.jsonld
+oxirs export mydata output.jsonld --format json-ld
 ```
 
 ### Interactive Mode
 
 ```bash
 # Start interactive REPL
-oxirs repl --dataset dataset.oxirs
+oxirs interactive --dataset mydata
 
 oxirs> SELECT ?person ?name WHERE { ?person foaf:name ?name } LIMIT 5
 ┌─────────────────────────────────────┬──────────────┐
@@ -103,49 +102,52 @@ oxirs> .exit
 #### Import Data
 
 ```bash
-# Import single file
-oxirs import --file data.ttl --dataset mydata.oxirs
+# Initialize dataset first
+oxirs init mydata
 
-# Import multiple files
-oxirs import --files *.ttl --dataset mydata.oxirs
+# Import single file (dataset name must be alphanumeric, _, - only)
+oxirs import mydata data.ttl --format turtle
 
-# Import from URL
-oxirs import --url https://example.org/data.rdf --dataset mydata.oxirs
+# Import with named graph
+oxirs import mydata data.ttl --format turtle --graph http://example.org/graph1
 
-# Import with custom base IRI
-oxirs import --file data.ttl --base http://example.org/ --dataset mydata.oxirs
+# Import N-Triples
+oxirs import mydata data.nt --format ntriples
 
-# Import with validation
-oxirs import --file data.ttl --validate --strict --dataset mydata.oxirs
+# Import RDF/XML
+oxirs import mydata data.rdf --format rdfxml
+
+# Import JSON-LD
+oxirs import mydata data.jsonld --format jsonld
 ```
 
 #### Export Data
 
 ```bash
 # Export entire dataset
-oxirs export --dataset mydata.oxirs --format turtle --output export.ttl
+oxirs export mydata export.ttl --format turtle
 
 # Export specific graph
-oxirs export --dataset mydata.oxirs --graph http://example.org/graph1 --format json-ld
+oxirs export mydata output.jsonld --format json-ld --graph http://example.org/graph1
 
-# Export query results
-oxirs export --dataset mydata.oxirs --query query.sparql --format csv --output results.csv
+# Export to N-Triples
+oxirs export mydata output.nt --format ntriples
 
-# Streaming export for large datasets
-oxirs export --dataset mydata.oxirs --format nquads --stream --output large-export.nq
+# Export to RDF/XML
+oxirs export mydata output.rdf --format rdfxml
 ```
 
 #### Validate Data
 
 ```bash
-# Validate syntax
-oxirs validate --file data.ttl --format turtle
+# Validate RDF syntax
+oxirs rdfparse data.ttl --format turtle
 
 # SHACL validation
-oxirs validate --dataset mydata.oxirs --shapes shapes.ttl --report validation-report.ttl
+oxirs shacl --dataset mydata --shapes shapes.ttl --format text
 
-# Schema validation
-oxirs validate --dataset mydata.oxirs --schema schema.rdfs --output validation.json
+# ShEx validation
+oxirs shex --dataset mydata --schema schema.shex --format text
 ```
 
 ### Query Operations
@@ -154,29 +156,29 @@ oxirs validate --dataset mydata.oxirs --schema schema.rdfs --output validation.j
 
 ```bash
 # Run SPARQL query
-oxirs query --dataset mydata.oxirs --query "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
+oxirs query mydata "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
 
 # Run query from file
-oxirs query --dataset mydata.oxirs --file query.sparql
+oxirs query mydata query.sparql --file
 
-# Run query against remote endpoint
-oxirs query --endpoint https://dbpedia.org/sparql --query query.sparql
+# Output formats: table, json, csv, tsv
+oxirs query mydata query.sparql --file --output json
 
-# Save results to file
-oxirs query --dataset mydata.oxirs --query query.sparql --output results.json --format json
+# Advanced query with arq tool
+oxirs arq --dataset mydata --query "SELECT * WHERE { ?s ?p ?o }" --results table
 ```
 
 #### Query Analysis
 
 ```bash
-# Analyze query performance
-oxirs query --dataset mydata.oxirs --file query.sparql --analyze --explain
+# Parse and validate SPARQL query
+oxirs qparse query.sparql --print-ast
 
-# Show query plan
-oxirs query --dataset mydata.oxirs --file query.sparql --plan
+# Show query algebra
+oxirs qparse query.sparql --print-algebra
 
-# Benchmark query
-oxirs query --dataset mydata.oxirs --file query.sparql --benchmark --iterations 100
+# Parse SPARQL update
+oxirs uparse update.sparql --print-ast
 ```
 
 ### Server Management
@@ -184,17 +186,14 @@ oxirs query --dataset mydata.oxirs --file query.sparql --benchmark --iterations 
 #### Start Server
 
 ```bash
-# Basic SPARQL server
-oxirs serve --dataset mydata.oxirs --port 3030
+# Start SPARQL server with configuration file
+oxirs serve mydata/oxirs.toml --port 3030
 
-# With GraphQL support
-oxirs serve --dataset mydata.oxirs --port 3030 --graphql --graphql-port 4000
+# With GraphQL support enabled
+oxirs serve mydata/oxirs.toml --port 3030 --graphql
 
-# With authentication
-oxirs serve --dataset mydata.oxirs --auth basic --users users.yaml
-
-# With configuration file
-oxirs serve --config server.yaml
+# Specify host and port
+oxirs serve mydata/oxirs.toml --host 0.0.0.0 --port 8080
 ```
 
 #### Server Administration
@@ -337,39 +336,44 @@ oxirs init --template ci-cd --output .github/workflows/
 
 ## Configuration
 
-### Global Configuration
+### Dataset Configuration
 
-The global configuration file is located at:
-- Linux/macOS: `~/.config/oxirs/config.yaml`
-- Windows: `%APPDATA%\oxirs\config.yaml`
+When you run `oxirs init mydata`, it creates a configuration file at `mydata/oxirs.toml`:
 
-```yaml
-# ~/.config/oxirs/config.yaml
-default:
-  format: turtle
-  output_dir: ./output
-  verbose: false
+```toml
+# OxiRS Configuration
+# Generated by oxirs init
 
-servers:
-  local:
-    url: http://localhost:3030
-    auth: none
-  
-  production:
-    url: https://sparql.example.org
-    auth:
-      type: bearer
-      token: ${SPARQL_TOKEN}
+[general]
+default_format = "turtle"
 
-profiles:
-  development:
-    log_level: debug
-    enable_timing: true
-    
-  production:
-    log_level: warn
-    enable_timing: false
+[server]
+port = 3030
+host = "localhost"
+enable_cors = true
+enable_graphql = false
+
+[datasets.mydata]
+name = "mydata"
+location = "."
+dataset_type = "tdb2"
+read_only = false
+enable_reasoning = false
+enable_validation = false
+enable_text_search = false
+enable_vector_search = false
 ```
+
+### Configuration Fields
+
+- `general.default_format`: Default RDF serialization format
+- `server.port`: HTTP server port
+- `server.host`: Server bind address
+- `server.enable_graphql`: Enable GraphQL endpoint
+- `datasets.{name}.location`: Storage path (`.` means dataset directory itself)
+- `datasets.{name}.dataset_type`: Storage backend (`tdb2` or `memory`)
+- `datasets.{name}.read_only`: Prevent modifications
+- Feature flags: `enable_reasoning`, `enable_validation`, `enable_text_search`, `enable_vector_search`
 
 ### Command-specific Configuration
 
@@ -559,14 +563,44 @@ at your option.
 
 ## Status
 
-🚧 **Alpha Release (v0.1.0-alpha.1)** - September 30, 2025
+🚧 **Alpha Release (v0.1.0-alpha.2)** - October 1, 2025
 
 Current alpha features:
-- ✅ Basic data import/export
-- ✅ Query execution
-- ✅ Server management (basic)
+- ✅ Dataset initialization and management
+- ✅ **Persistent RDF storage** (N-Quads format, auto-save on import)
+- ✅ Data import/export (Turtle, N-Triples, RDF/XML, JSON-LD, N-Quads, TriG)
+- ✅ **SPARQL query execution** (SELECT, ASK, CONSTRUCT, DESCRIBE)
+- ✅ Triple pattern matching with variable binding
+- ✅ **Automatic data persistence** (save/load from disk)
+- ✅ Server management with configuration
+- ✅ Interactive REPL mode
+- ✅ RDF validation tools (syntax, SHACL, ShEx)
+- 🚧 PREFIX support (planned for next release)
+- 🚧 Advanced SPARQL features (FILTER, OPTIONAL, UNION)
 - 🚧 Benchmarking tools (in progress)
+- 🚧 TDB storage tools (in progress)
 - ⏳ Migration utilities (planned)
-- ⏳ Interactive REPL (planned)
+
+### Changes in v0.1.0-alpha.2
+
+- **Persistent storage**: Data automatically saved to `<dataset>/data.nq` on import
+- **SPARQL queries**: Basic SELECT, ASK, CONSTRUCT, DESCRIBE queries now working
+- **Dataset naming**: Dataset names must be alphanumeric with `_` and `-` only (no file extensions)
+- **Command syntax**: Simplified positional arguments (e.g., `oxirs import mydata file.ttl`)
+- **Configuration format**: Unified TOML format with `[datasets.{name}]` sections
+- **Interactive mode**: Added `oxirs interactive` command for REPL
+- **Auto-load**: Query command automatically loads data from disk
+
+### Working Example
+
+```bash
+# Initialize and use a dataset
+oxirs init mykg
+oxirs import mykg data.ttl --format turtle
+oxirs query mykg "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
+
+# Data persists! Close terminal, reopen, and query again
+oxirs query mykg "SELECT * WHERE { ?s ?p ?o }"  # Same results!
+```
 
 Note: This is an alpha release. Some features are incomplete and APIs may change.

@@ -3,14 +3,14 @@
 //! Temporary utilities for random number generation until scirs2-core beta.4
 //! provides full distribution support in public API.
 
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Rng;
 
 /// Sample from a normal distribution with given mean and standard deviation
 /// using Box-Muller transform
 #[inline]
 pub fn sample_normal<R: Rng>(rng: &mut R, mean: f32, std: f32) -> f32 {
-    let u1: f32 = rng.gen::<f32>();
-    let u2: f32 = rng.gen::<f32>();
+    let u1: f32 = rng.random::<f32>();
+    let u2: f32 = rng.random::<f32>();
     let z = (-2.0_f32 * u1.ln()).sqrt() * (2.0_f32 * std::f32::consts::PI * u2).cos();
     mean + z * std
 }
@@ -18,7 +18,7 @@ pub fn sample_normal<R: Rng>(rng: &mut R, mean: f32, std: f32) -> f32 {
 /// Sample from a uniform distribution with given bounds
 #[inline]
 pub fn sample_uniform<R: Rng>(rng: &mut R, low: f32, high: f32) -> f32 {
-    low + rng.gen::<f32>() * (high - low)
+    low + rng.random::<f32>() * (high - low)
 }
 
 /// Normal distribution sampler (temporary replacement for scirs2_core::random::distributions::Normal)
@@ -49,7 +49,10 @@ pub struct UniformSampler {
 impl UniformSampler {
     pub fn new(low: f32, high: f32) -> Result<Self, String> {
         if low >= high {
-            return Err(format!("Low must be less than high, got {} and {}", low, high));
+            return Err(format!(
+                "Low must be less than high, got {} and {}",
+                low, high
+            ));
         }
         Ok(Self { low, high })
     }

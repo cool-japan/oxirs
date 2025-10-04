@@ -1,18 +1,18 @@
 # OxiRS Federate - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-federate** provides federated query processing (experimental feature).
 
-### Alpha Release Status
-- **Comprehensive test suite** (266+ tests passing)
-- **Zero compilation errors/warnings**
-- **Federated SPARQL queries (basic)**
-- **Multiple endpoint support**
-- **Query decomposition**
-- **Released on crates.io**: `oxirs-federate = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **Comprehensive test suite** (266+ passing) with zero warnings
+- **Federated SPARQL queries** featuring retries, `SERVICE SILENT`, and JSON merging
+- **Multiple endpoint support** with health checks and adaptive timeouts
+- **Query decomposition** integrated with persisted dataset pipelines
+- **Observability**: SciRS2 metrics for latency, retries, and endpoint scoring
+- **Released on crates.io**: `oxirs-federate = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

@@ -207,7 +207,8 @@ impl ReliableMessage {
 
         // Add jitter if enabled
         if config.backoff_jitter {
-            use scirs2_core::random::{Rng, Random};
+            #[allow(unused_imports)]
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
             let jitter = random.gen_range(0.8..1.2);
             delay = Duration::from_millis((delay.as_millis() as f64 * jitter) as u64);

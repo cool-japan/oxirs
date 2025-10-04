@@ -1,9 +1,9 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
@@ -40,6 +40,7 @@
 //! - [`oxirs-fuseki`](https://docs.rs/oxirs-fuseki) - SPARQL HTTP server
 
 // Core modules
+pub mod aggregates_ext;
 pub mod algebra;
 pub mod algebra_generation;
 pub mod bgp_optimizer;
@@ -59,14 +60,23 @@ pub mod materialized_views;
 pub mod optimizer;
 pub mod parallel;
 pub mod path;
+pub mod path_extensions;
+pub mod procedures;
+pub mod property_functions;
 pub mod query;
 pub mod query_analysis;
+pub mod query_builder;
+pub mod result_formats;
 pub mod results;
 pub mod scirs_optimize_integration;
+pub mod service_description;
 pub mod statistics_collector;
 pub mod streaming;
+pub mod string_functions_ext;
 pub mod term;
+pub mod triple_functions;
 pub mod update;
+pub mod values_support;
 pub mod vector_query_optimizer;
 
 // Advanced modules
@@ -81,19 +91,54 @@ pub mod advanced_optimizer;
 // pub mod realtime_streaming;
 // pub mod unified_optimization_framework;
 
-// Compatibility shim for missing scirs2-core APIs (temporary until beta.4)
-pub mod scirs2_compat;
-
 // Re-export commonly used types
+pub use aggregates_ext::{
+    Accumulator, AggregateFactory, AggregateMetadata, AggregateOptimization, AggregateRegistry,
+    MemoryUsage,
+};
 pub use algebra::{
     Aggregate, Algebra, BinaryOperator, Binding, Expression, GroupCondition, Iri, Literal,
     OrderCondition, Solution, Term, TriplePattern, UnaryOperator, Variable,
 };
 pub use executor::{Dataset, ExecutionContext, InMemoryDataset, ParallelConfig, QueryExecutor};
+pub use path_extensions::{
+    BidirectionalPathSearch, CacheStats, CachedPathEvaluator, PathAnalyzer, PathCache,
+    PathComplexity, PathOptimizationHint, ReachabilityIndex,
+};
+pub use procedures::{
+    Procedure, ProcedureArgs, ProcedureContext, ProcedureFactory, ProcedureRegistry,
+    ProcedureResult,
+};
+pub use property_functions::{
+    PropFuncArg, PropertyFunction, PropertyFunctionContext, PropertyFunctionRegistry,
+    PropertyFunctionResult,
+};
+pub use query_builder::{AskBuilder, ConstructBuilder, DescribeBuilder, SelectBuilder};
+pub use result_formats::{
+    BinaryResultSerializer, CustomFormatSerializer, FormatConverter, FormatRegistry,
+    StreamingResultIterator, XmlResultSerializer,
+};
 pub use results::{QueryResult, ResultFormat, ResultSerializer};
 pub use scirs_optimize_integration::{
     OptimizationResult, PerformanceAnalysis, QueryInfo, QueryOptimizationConfig,
     SciRS2QueryOptimizer,
+};
+pub use string_functions_ext::{
+    StrAfterFunction, StrBeforeFunction, StrDtFunction, StrLangDirFunction, StrLangFunction,
+};
+pub use triple_functions::{
+    IsTripleFunction, ObjectFunction, PredicateFunction, SubjectFunction, TripleFunction,
+};
+pub use values_support::{
+    IndexedValues, JoinStrategy, OptimizedValues, ValuesBuilder, ValuesClause,
+    ValuesExecutionStrategy, ValuesExecutor, ValuesJoinOptimizer, ValuesOptimizer,
+    ValuesStatistics,
+};
+pub use service_description::{
+    AggregateInfo, DatasetDescription, ExtensionFunction, Feature, LanguageExtension,
+    NamedGraphDescription, ParameterInfo, ProcedureInfo, PropertyFunctionInfo,
+    ServiceDescription, ServiceDescriptionBuilder, ServiceDescriptionRegistry,
+    ServiceLimitations, create_default_service_description,
 };
 // Temporarily disabled - require scirs2-core beta.4 APIs
 /*

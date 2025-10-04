@@ -187,7 +187,6 @@ impl ControllerNetwork {
         {
             use scirs2_core::random::{Rng, Random};
             let mut rng = Random::default();
-        use scirs2_core::random::Rng;
         
         let w_ih = Array2::from_shape_fn((hidden_size, input_size), |_| rng.random_range(-0.1..0.1));
         let w_hh = Array2::from_shape_fn((hidden_size, hidden_size), |_| rng.random_range(-0.1..0.1));
@@ -891,7 +890,6 @@ impl MemoryNetworks {
         {
             use scirs2_core::random::{Rng, Random};
             let mut rng = Random::default();
-        use scirs2_core::random::Rng;
         
         let input_encoder = Array2::from_shape_fn(
             (config.embedding_dim, config.embedding_dim),
@@ -1209,7 +1207,6 @@ impl RelationalAttention {
         {
             use scirs2_core::random::{Rng, Random};
             let mut rng = Random::default();
-        use scirs2_core::random::Rng;
         
         let query_weights = Array2::from_shape_fn((embed_dim, embed_dim), |_| rng.random_range(-0.1..0.1));
         let key_weights = Array2::from_shape_fn((embed_dim, embed_dim), |_| rng.random_range(-0.1..0.1));
@@ -1276,7 +1273,6 @@ impl RelationalMemoryCore {
         {
             use scirs2_core::random::{Rng, Random};
             let mut rng = Random::default();
-        use scirs2_core::random::Rng;
         
         for _ in 0..config.num_relation_types {
             let relation_matrix = Array2::from_shape_fn(

@@ -12,7 +12,7 @@ use crate::network::{NetworkConfig, NetworkService};
 use crate::raft::{OxirsNodeId, RdfCommand, RdfResponse};
 use crate::storage::StorageBackend;
 use crate::{ClusterError, Result};
-use ed25519_dalek::{Keypair, PublicKey};
+use ed25519_dalek::{SigningKey, VerifyingKey};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -39,7 +39,7 @@ pub struct BftConsensusManager {
 #[derive(Debug, Clone)]
 struct PeerInfo {
     pub node_id: String,
-    pub public_key: PublicKey,
+    pub public_key: VerifyingKey,
     pub address: String,
     pub is_active: bool,
 }
@@ -117,7 +117,7 @@ impl BftConsensusManager {
     pub async fn register_peer(
         &self,
         node_id: String,
-        public_key: PublicKey,
+        public_key: VerifyingKey,
         address: String,
     ) -> Result<()> {
         // Register with consensus engine
@@ -263,11 +263,11 @@ mod tests {
     fn test_peer_info() {
         use rand::rngs::OsRng;
         let mut csprng = OsRng {};
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = SigningKey::generate(&mut csprng);
 
         let peer = PeerInfo {
             node_id: "node1".to_string(),
-            public_key: keypair.public,
+            public_key: keypair.verifying_key(),
             address: "127.0.0.1:8080".to_string(),
             is_active: true,
         };

@@ -721,6 +721,13 @@ impl ConsolidationMetrics {
             insight_generation_rate: 0.3,
         }
     }
+
+    pub fn update(&mut self, consolidation_count: usize, dream_intensity: f64) {
+        // Update consolidation metrics based on processing results
+        self.consolidation_rate = (consolidation_count as f64 / 10.0).min(1.0);
+        self.memory_retention = (self.memory_retention + dream_intensity * 0.1).min(1.0);
+        self.insight_generation_rate = (dream_intensity * 0.5).min(1.0);
+    }
 }
 
 #[derive(Debug, Clone)]

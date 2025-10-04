@@ -3,13 +3,26 @@
 //! Provides advanced compression algorithms including column-store optimizations,
 //! bitmap compression, delta encoding, and adaptive compression selection.
 
+/// Adaptive compression selection based on data characteristics
 pub mod adaptive;
+/// Bitmap compression for boolean and sparse data
 pub mod bitmap;
+/// Bloom filter for membership testing
+pub mod bloom;
+/// Column-store compression optimizations
 pub mod column_store;
+/// Delta encoding for numerical sequences
 pub mod delta;
+/// Dictionary compression for repeated values
 pub mod dictionary;
+/// Frame-of-reference encoding
 pub mod frame_of_reference;
+/// Prefix compression for strings
+pub mod prefix;
+/// Run-length encoding for repeated values
 pub mod run_length;
+/// SIMD-accelerated scan operations
+pub mod simd_scan;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -19,11 +32,14 @@ use std::fmt;
 // Re-export main compression implementations
 pub use adaptive::AdaptiveCompressor;
 pub use bitmap::{BitmapRoaringEncoder, BitmapWAHEncoder};
+pub use bloom::{BloomFilter, BloomFilterStats};
 pub use column_store::ColumnStoreCompressor;
 pub use delta::DeltaEncoder;
 pub use dictionary::AdaptiveDictionary;
 pub use frame_of_reference::FrameOfReferenceEncoder;
+pub use prefix::{CompressedString, CompressionStats as PrefixCompressionStats, PrefixCompressor};
 pub use run_length::RunLengthEncoder;
+pub use simd_scan::SimdScanner;
 
 /// Advanced compression types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

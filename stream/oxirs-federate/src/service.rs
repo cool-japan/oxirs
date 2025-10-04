@@ -1414,6 +1414,7 @@ pub struct ServiceRegistryStats {
 
 /// OAuth2 token response
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 struct OAuth2TokenResponse {
     pub access_token: String,
     pub token_type: String,

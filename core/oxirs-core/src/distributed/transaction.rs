@@ -8,7 +8,7 @@ use crate::model::{BlankNode, Literal, NamedNode, Triple};
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
 use parking_lot::RwLock;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -639,7 +639,7 @@ impl TransactionCoordinator {
         // Simulate 95% success rate
         if {
             let mut rng = Random::default();
-            rng.gen::<f32>()
+            rng.random::<f32>()
         } < 0.95
         {
             Vote::Yes

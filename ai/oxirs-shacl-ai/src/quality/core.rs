@@ -2,7 +2,7 @@
 //!
 //! This module implements AI-powered quality assessment for RDF data and SHACL shapes.
 
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Instant;
@@ -280,7 +280,10 @@ impl QualityAssessor {
     /// Simulate quality prediction for training
     fn simulate_quality_prediction(&self, _features: &[f64]) -> f64 {
         // Simple simulation - return a reasonable quality score
-        0.7 + (({ let mut random = Random::default(); random.gen::<f64>() }) * 0.3)
+        0.7 + (({
+            let mut random = Random::default();
+            random.random::<f64>()
+        }) * 0.3)
     }
 
     /// Assess comprehensive data quality

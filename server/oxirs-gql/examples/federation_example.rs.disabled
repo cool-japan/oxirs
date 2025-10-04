@@ -1,0 +1,234 @@
+//! Apollo Federation v2 Example
+//!
+//! Demonstrates how to set up a complete federated GraphQL architecture
+//! with multiple subgraphs and intelligent query optimization.
+//!
+//! Run with: cargo run --example federation_example
+
+use oxirs_gql::apollo_federation::{EntityKey, FederationSchemaBuilder, FederationVersion};
+use oxirs_gql::federation_composer::{Subgraph, SubgraphRegistry, SchemaComposer, QueryPlanner};
+use oxirs_gql::federation_optimizer::{
+    FederationCache, FederationOptimizer, OptimizationStrategy,
+};
+use std::sync::Arc;
+use std::time::Duration;
+
+fn main() -> anyhow::Result<()> {
+    println!("🚀 OxiRS Apollo Federation v2 Example\n");
+
+    // Example 1: Create Federation schemas for individual subgraphs
+    println!("📋 Step 1: Creating Federation Schemas for Subgraphs");
+    println!("{}", "=".repeat(70));
+
+    // Users subgraph
+    let users_schema = FederationSchemaBuilder::new(FederationVersion::V2)
+        .add_entity("User", EntityKey::new(vec!["id".to_string()]))
+        .add_entity("User", EntityKey::new(vec!["email".to_string()]))
+        .build()?;
+
+    println!("\n📦 Users Subgraph SDL:\n{}", users_schema.to_sdl());
+
+    // Products subgraph
+    let products_schema = FederationSchemaBuilder::new(FederationVersion::V2)
+        .add_entity("Product", EntityKey::new(vec!["sku".to_string()]))
+        .add_shareable("Product")
+        .build()?;
+
+    println!("📦 Products Subgraph SDL:\n{}", products_schema.to_sdl());
+
+    // Reviews subgraph with @requires and @external
+    let reviews_schema = FederationSchemaBuilder::new(FederationVersion::V2)
+        .add_entity("Review", EntityKey::new(vec!["id".to_string()]))
+        .add_external_field("Review", "author")
+        .add_requires(
+            "Review",
+            "authorName",
+            vec!["author".to_string(), "email".to_string()],
+        )
+        .build()?;
+
+    println!("📦 Reviews Subgraph SDL:\n{}", reviews_schema.to_sdl());
+
+    // Example 2: Register subgraphs and compose supergraph
+    println!("\n📋 Step 2: Composing Supergraph from Multiple Subgraphs");
+    println!("{}", "=".repeat(70));
+
+    let mut registry = SubgraphRegistry::new();
+
+    registry.register(Subgraph::new(
+        "users",
+        "http://localhost:4001/graphql",
+        users_schema.to_sdl(),
+    ))?;
+
+    registry.register(Subgraph::new(
+        "products",
+        "http://localhost:4002/graphql",
+        products_schema.to_sdl(),
+    ))?;
+
+    registry.register(Subgraph::new(
+        "reviews",
+        "http://localhost:4003/graphql",
+        reviews_schema.to_sdl(),
+    ))?;
+
+    println!("✅ Registered {} subgraphs", registry.count());
+
+    let composer = SchemaComposer::new(registry.clone());
+    let supergraph = composer.compose()?;
+
+    println!("\n🌐 Supergraph SDL:\n{}", supergraph.sdl);
+    println!("\n📊 Supergraph Statistics:");
+    println!("  - Entities: {}", supergraph.entities.len());
+    println!("  - Subgraphs: {}", supergraph.subgraphs.len());
+
+    // Example 3: Query planning
+    println!("\n📋 Step 3: Generating Query Execution Plans");
+    println!("{}", "=".repeat(70));
+
+    let planner = QueryPlanner::new(supergraph.clone());
+
+    let query = r#"
+        query GetUserWithReviews {
+            user(id: "123") {
+                id
+                email
+                reviews {
+                    id
+                    rating
+                }
+            }
+        }
+    "#;
+
+    println!("\n📝 Sample Query:\n{}", query);
+
+    match planner.plan(query) {
+        Ok(plan) => {
+            println!("\n✅ Query Plan Generated:");
+            println!("  - Estimated Cost: {:.2}", plan.estimated_cost);
+            println!("  - Subgraphs Involved: {:?}", plan.subgraphs);
+            println!("  - Execution Plan: {:#?}", plan.root);
+        }
+        Err(e) => {
+            println!("⚠️  Query Planning Error: {}", e);
+        }
+    }
+
+    // Example 4: Query optimization with caching
+    println!("\n📋 Step 4: Optimizing Queries with Intelligent Caching");
+    println!("{}", "=".repeat(70));
+
+    let cache = Arc::new(FederationCache::new(
+        Duration::from_secs(300), // 5 min TTL
+        100,                       // 100MB max
+    ));
+
+    let strategies = vec![
+        OptimizationStrategy::MinLatency,
+        OptimizationStrategy::MinRequests,
+        OptimizationStrategy::Balanced,
+        OptimizationStrategy::MinCost,
+    ];
+
+    for strategy in strategies {
+        let optimizer = FederationOptimizer::new(
+            supergraph.clone(),
+            cache.clone(),
+            strategy,
+        );
+
+        println!("\n🔧 Optimization Strategy: {:?}", strategy);
+
+        // Create a sample plan
+        let sample_plan = planner.plan(query)?;
+
+        match optimizer.optimize(sample_plan) {
+            Ok(optimized) => {
+                println!("  ✅ Optimized Plan:");
+                println!("     - Estimated Cost: {:.2}", optimized.estimated_cost);
+                println!("     - Estimated Latency: {:.2}ms", optimized.estimated_latency);
+                println!("     - Cache Hits Expected: {}", optimized.cache_hits_expected);
+                println!("     - Optimizations Applied: {:?}", optimized.optimizations_applied);
+            }
+            Err(e) => {
+                println!("  ⚠️  Optimization Error: {}", e);
+            }
+        }
+    }
+
+    // Example 5: Cache operations
+    println!("\n📋 Step 5: Cache Management");
+    println!("{}", "=".repeat(70));
+
+    let cache_key = "{ user(id: \"123\") { id email } }";
+    let sample_data = serde_json::json!({
+        "user": {
+            "id": "123",
+            "email": "user@example.com"
+        }
+    });
+
+    // Store in cache
+    cache.set(cache_key.to_string(), sample_data.clone());
+    println!("\n✅ Stored query result in cache");
+
+    // Retrieve from cache
+    if let Some(cached_data) = cache.get(cache_key) {
+        println!("✅ Retrieved from cache: {}", cached_data);
+    }
+
+    // Cache statistics
+    let stats = cache.stats();
+    println!("\n📊 Cache Statistics:");
+    println!("  - Total Requests: {}", stats.total_requests);
+    println!("  - Cache Hits: {}", stats.hits);
+    println!("  - Cache Misses: {}", stats.misses);
+    println!("  - Hit Rate: {:.2}%", stats.hit_rate() * 100.0);
+    println!("  - Evictions: {}", stats.evictions);
+    println!("  - Cache Size: {} bytes", cache.size_bytes());
+
+    // Example 6: RDF integration
+    println!("\n📋 Step 6: Automatic Federation from RDF Ontologies");
+    println!("{}", "=".repeat(70));
+
+    println!("\n💡 To generate Federation schemas from RDF:");
+    println!("
+use oxirs_gql::schema::{{SchemaGenerator, SchemaGenerationConfig}};
+use oxirs_gql::apollo_federation::FederationVersion;
+
+async fn generate_from_rdf() -> anyhow::Result<()> {{
+    let mut config = SchemaGenerationConfig::default();
+    config.enable_federation = true;
+    config.federation_version = FederationVersion::V2;
+
+    let generator = SchemaGenerator::new().with_config(config);
+
+    // From HTTP ontology
+    let schema = generator
+        .generate_federation_sdl_from_ontology(\"http://xmlns.com/foaf/0.1/\")
+        .await?;
+
+    println!(\"Federation SDL: {{}}\", schema);
+    Ok(())
+}}
+    ");
+
+    println!("\n✅ Federation Example Complete!");
+    println!("\n📚 Key Takeaways:");
+    println!("  1. Create Federation schemas with @key directives");
+    println!("  2. Register multiple subgraphs in SubgraphRegistry");
+    println!("  3. Compose them into a unified supergraph");
+    println!("  4. Generate optimal query execution plans");
+    println!("  5. Apply intelligent caching and optimization");
+    println!("  6. Generate Federation schemas from RDF ontologies");
+
+    println!("\n🔗 Next Steps:");
+    println!("  - Deploy subgraphs to different services");
+    println!("  - Configure federation gateway (oxirs-fuseki)");
+    println!("  - Monitor with cache statistics");
+    println!("  - Optimize based on real query patterns");
+
+    Ok(())
+}

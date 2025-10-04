@@ -1,38 +1,32 @@
-//! # Service Mesh Integration Module
-//!
-//! Comprehensive service mesh integration for OxiRS Stream, providing enterprise-grade
-//! traffic management, security, and observability across microservices.
+//! Service Mesh Integration Types
 
-use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-/// Service mesh configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+use std::time::Duration;
 pub struct ServiceMeshConfig {
-    /// Enable service mesh integration
-    pub enabled: bool,
-    /// Service mesh provider (istio, linkerd, consul)
+    /// Service mesh provider
     pub provider: ServiceMeshProvider,
-    /// Mutual TLS configuration
-    pub mtls: MutualTlsConfig,
-    /// Traffic policies
-    pub traffic_policies: Vec<TrafficPolicy>,
-    /// Security policies
-    pub security_policies: Vec<SecurityPolicy>,
+    /// Enable service mesh
+    pub enabled: bool,
+    /// mTLS configuration
+    pub mtls: MutualTLSConfig,
+    /// Traffic management
+    pub traffic_management: TrafficManagementConfig,
     /// Observability configuration
     pub observability: ServiceMeshObservabilityConfig,
+    /// Security policies
+    pub security_policies: SecurityPolicyConfig,
 }
 
 impl Default for ServiceMeshConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
             provider: ServiceMeshProvider::Istio,
-            mtls: MutualTlsConfig::default(),
-            traffic_policies: vec![],
-            security_policies: vec![],
+            enabled: true,
+            mtls: MutualTLSConfig::default(),
+            traffic_management: TrafficManagementConfig::default(),
             observability: ServiceMeshObservabilityConfig::default(),
+            security_policies: SecurityPolicyConfig::default(),
         }
     }
 }
@@ -40,348 +34,238 @@ impl Default for ServiceMeshConfig {
 /// Service mesh providers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ServiceMeshProvider {
-    /// Istio service mesh
     Istio,
-    /// Linkerd service mesh
     Linkerd,
-    /// Consul Connect service mesh
     ConsulConnect,
+    OpenServiceMesh,
+    Kuma,
 }
 
 /// Mutual TLS configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MutualTlsConfig {
+pub struct MutualTLSConfig {
     /// Enable mTLS
     pub enabled: bool,
-    /// mTLS mode (strict, permissive)
-    pub mode: String,
+    /// mTLS mode
+    pub mode: MutualTLSMode,
     /// Certificate authority
-    pub ca_cert_path: String,
-    /// Client certificate
-    pub client_cert_path: String,
-    /// Client key
-    pub client_key_path: String,
+    pub ca_provider: CertificateAuthorityProvider,
+    /// Certificate rotation interval
+    pub cert_rotation_interval: ChronoDuration,
+    /// Key size
+    pub key_size: u32,
 }
 
-impl Default for MutualTlsConfig {
+impl Default for MutualTLSConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            mode: "strict".to_string(),
-            ca_cert_path: "/etc/ssl/certs/ca.crt".to_string(),
-            client_cert_path: "/etc/ssl/certs/client.crt".to_string(),
-            client_key_path: "/etc/ssl/private/client.key".to_string(),
+            mode: MutualTLSMode::Strict,
+            ca_provider: CertificateAuthorityProvider::Istio,
+            cert_rotation_interval: ChronoDuration::days(30),
+            key_size: 2048,
         }
     }
 }
 
-/// Traffic policy configuration
+/// Mutual TLS modes
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrafficPolicy {
-    /// Policy name
-    pub name: String,
-    /// Target service
-    pub service: String,
+pub enum MutualTLSMode {
+    Disabled,
+    Permissive,
+    Strict,
+}
+
+/// Certificate authority providers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CertificateAuthorityProvider {
+    Istio,
+    CertManager,
+    Vault,
+    External,
+}
+
+/// Traffic management configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrafficManagementConfig {
     /// Load balancing strategy
     pub load_balancing: LoadBalancingStrategy,
     /// Circuit breaker configuration
-    pub circuit_breaker: Option<CircuitBreakerConfig>,
-    /// Retry policy
-    pub retry_policy: Option<RetryPolicy>,
+    pub circuit_breaker: CircuitBreakerConfig,
+    /// Retry configuration
+    pub retry: RetryConfig,
     /// Timeout configuration
-    pub timeout: Option<TimeoutConfig>,
+    pub timeout: TimeoutConfig,
+    /// Rate limiting
+    pub rate_limiting: ServiceMeshRateLimitConfig,
+}
+
+impl Default for TrafficManagementConfig {
+    fn default() -> Self {
+        Self {
+            load_balancing: LoadBalancingStrategy::RoundRobin,
+            circuit_breaker: CircuitBreakerConfig::default(),
+            retry: RetryConfig::default(),
+            timeout: TimeoutConfig::default(),
+            rate_limiting: ServiceMeshRateLimitConfig::default(),
+        }
+    }
 }
 
 /// Load balancing strategies
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum LoadBalancingStrategy {
-    /// Round robin
     RoundRobin,
-    /// Least connections
-    LeastConnections,
-    /// Random
+    LeastConnection,
     Random,
-    /// Weighted round robin
-    WeightedRoundRobin { weights: HashMap<String, u32> },
+    WeightedRoundRobin,
+    ConsistentHash,
 }
 
 /// Circuit breaker configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CircuitBreakerConfig {
+    /// Enable circuit breaker
+    pub enabled: bool,
+    /// Consecutive errors threshold
+    pub consecutive_errors: u32,
     /// Error threshold percentage
     pub error_threshold_percentage: f64,
-    /// Minimum requests before circuit breaking
-    pub min_requests: u32,
-    /// Sleep window duration in seconds
-    pub sleep_window_seconds: u64,
+    /// Minimum request threshold
+    pub min_request_amount: u32,
+    /// Sleep window
+    pub sleep_window: Duration,
 }
 
-/// Retry policy configuration
+impl Default for CircuitBreakerConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            consecutive_errors: 5,
+            error_threshold_percentage: 50.0,
+            min_request_amount: 20,
+            sleep_window: Duration::from_secs(30),
+        }
+    }
+}
+
+/// Retry configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RetryPolicy {
-    /// Maximum number of retries
-    pub max_retries: u32,
-    /// Retry timeout in milliseconds
-    pub retry_timeout_ms: u64,
-    /// Retryable status codes
-    pub retryable_status_codes: Vec<u16>,
+pub struct RetryConfig {
+    /// Number of retry attempts
+    pub attempts: u32,
+    /// Per-try timeout
+    pub per_try_timeout: Duration,
+    /// Retry conditions
+    pub retry_on: Vec<RetryCondition>,
+    /// Backoff strategy
+    pub backoff: BackoffStrategy,
+}
+
+impl Default for RetryConfig {
+    fn default() -> Self {
+        Self {
+            attempts: 3,
+            per_try_timeout: Duration::from_secs(5),
+            retry_on: vec![
+                RetryCondition::FiveXX,
+                RetryCondition::GatewayError,
+                RetryCondition::ConnectFailure,
+            ],
+            backoff: BackoffStrategy::Exponential {
+                base_interval: Duration::from_millis(25),
+                max_interval: Duration::from_secs(30),
+            },
+        }
+    }
+}
+
+/// Retry conditions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum RetryCondition {
+    FiveXX,
+    GatewayError,
+    ConnectFailure,
+    RefusedStream,
+    Cancelled,
+    DeadlineExceeded,
+    ResourceExhausted,
+}
+
+/// Backoff strategies
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum BackoffStrategy {
+    Fixed {
+        interval: Duration,
+    },
+    Exponential {
+        base_interval: Duration,
+        max_interval: Duration,
+    },
 }
 
 /// Timeout configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeoutConfig {
-    /// Connection timeout in milliseconds
-    pub connection_timeout_ms: u64,
-    /// Request timeout in milliseconds
-    pub request_timeout_ms: u64,
+    /// Request timeout
+    pub request_timeout: Duration,
+    /// Connection timeout
+    pub connection_timeout: Duration,
+    /// Stream idle timeout
+    pub stream_idle_timeout: Duration,
 }
 
-/// Security policy configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SecurityPolicy {
-    /// Policy name
-    pub name: String,
-    /// Source selector
-    pub source: ServiceSelector,
-    /// Destination selector
-    pub destination: ServiceSelector,
-    /// Allowed operations
-    pub operations: Vec<String>,
-    /// Required claims
-    pub required_claims: HashMap<String, String>,
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self {
+            request_timeout: Duration::from_secs(30),
+            connection_timeout: Duration::from_secs(10),
+            stream_idle_timeout: Duration::from_secs(300),
+        }
+    }
 }
 
-/// Service selector for policies
+/// Service mesh rate limiting configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceSelector {
-    /// Service name
-    pub service: Option<String>,
-    /// Namespace
-    pub namespace: Option<String>,
-    /// Labels
-    pub labels: HashMap<String, String>,
+pub struct ServiceMeshRateLimitConfig {
+    /// Enable rate limiting
+    pub enabled: bool,
+    /// Rate limit per second
+    pub requests_per_second: u32,
+    /// Burst size
+    pub burst_size: u32,
+    /// Rate limit headers
+    pub fill_interval: Duration,
+}
+
+impl Default for ServiceMeshRateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            requests_per_second: 100,
+            burst_size: 200,
+            fill_interval: Duration::from_secs(1),
+        }
+    }
 }
 
 /// Service mesh observability configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceMeshObservabilityConfig {
     /// Enable distributed tracing
-    pub tracing_enabled: bool,
-    /// Trace sampling rate
-    pub trace_sampling_rate: f64,
-    /// Metrics collection
-    pub metrics_enabled: bool,
-    /// Access logging
-    pub access_logs_enabled: bool,
+    pub tracing: TracingConfig,
+    /// Enable metrics collection
+    pub metrics: MetricsConfig,
+    /// Enable access logging
+    pub access_logs: AccessLogsConfig,
 }
 
 impl Default for ServiceMeshObservabilityConfig {
     fn default() -> Self {
         Self {
-            tracing_enabled: true,
-            trace_sampling_rate: 0.1,
-            metrics_enabled: true,
-            access_logs_enabled: true,
+            tracing: TracingConfig::default(),
+            metrics: MetricsConfig::default(),
+            access_logs: AccessLogsConfig::default(),
         }
-    }
-}
-
-/// Service mesh manager
-#[derive(Debug)]
-pub struct ServiceMeshManager {
-    config: ServiceMeshConfig,
-}
-
-impl ServiceMeshManager {
-    /// Create a new service mesh manager
-    pub fn new(config: ServiceMeshConfig) -> Self {
-        Self { config }
-    }
-
-    /// Configure the service mesh
-    pub async fn configure(&self) -> Result<()> {
-        if !self.config.enabled {
-            return Ok(());
-        }
-
-        match self.config.provider {
-            ServiceMeshProvider::Istio => self.configure_istio().await?,
-            ServiceMeshProvider::Linkerd => self.configure_linkerd().await?,
-            ServiceMeshProvider::ConsulConnect => self.configure_consul().await?,
-        }
-
-        Ok(())
-    }
-
-    /// Configure Istio service mesh
-    async fn configure_istio(&self) -> Result<()> {
-        println!("Configuring Istio service mesh");
-        
-        // Configure mTLS
-        if self.config.mtls.enabled {
-            self.configure_istio_mtls().await?;
-        }
-
-        // Apply traffic policies
-        for policy in &self.config.traffic_policies {
-            self.apply_istio_traffic_policy(policy).await?;
-        }
-
-        // Apply security policies
-        for policy in &self.config.security_policies {
-            self.apply_istio_security_policy(policy).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Configure Linkerd service mesh
-    async fn configure_linkerd(&self) -> Result<()> {
-        println!("Configuring Linkerd service mesh");
-        
-        // Configure mTLS
-        if self.config.mtls.enabled {
-            self.configure_linkerd_mtls().await?;
-        }
-
-        // Apply traffic policies
-        for policy in &self.config.traffic_policies {
-            self.apply_linkerd_traffic_policy(policy).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Configure Consul Connect service mesh
-    async fn configure_consul(&self) -> Result<()> {
-        println!("Configuring Consul Connect service mesh");
-        
-        // Configure Connect
-        self.configure_consul_connect().await?;
-
-        // Apply intentions (security policies)
-        for policy in &self.config.security_policies {
-            self.apply_consul_intention(policy).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Configure Istio mTLS
-    async fn configure_istio_mtls(&self) -> Result<()> {
-        println!("Configuring Istio mTLS with mode: {}", self.config.mtls.mode);
-        Ok(())
-    }
-
-    /// Apply Istio traffic policy
-    async fn apply_istio_traffic_policy(&self, policy: &TrafficPolicy) -> Result<()> {
-        println!("Applying Istio traffic policy: {}", policy.name);
-        Ok(())
-    }
-
-    /// Apply Istio security policy
-    async fn apply_istio_security_policy(&self, policy: &SecurityPolicy) -> Result<()> {
-        println!("Applying Istio security policy: {}", policy.name);
-        Ok(())
-    }
-
-    /// Configure Linkerd mTLS
-    async fn configure_linkerd_mtls(&self) -> Result<()> {
-        println!("Configuring Linkerd mTLS");
-        Ok(())
-    }
-
-    /// Apply Linkerd traffic policy
-    async fn apply_linkerd_traffic_policy(&self, policy: &TrafficPolicy) -> Result<()> {
-        println!("Applying Linkerd traffic policy: {}", policy.name);
-        Ok(())
-    }
-
-    /// Configure Consul Connect
-    async fn configure_consul_connect(&self) -> Result<()> {
-        println!("Configuring Consul Connect");
-        Ok(())
-    }
-
-    /// Apply Consul intention
-    async fn apply_consul_intention(&self, policy: &SecurityPolicy) -> Result<()> {
-        println!("Applying Consul intention: {}", policy.name);
-        Ok(())
-    }
-
-    /// Get service mesh status
-    pub async fn get_status(&self) -> Result<ServiceMeshStatus> {
-        if !self.config.enabled {
-            return Err(anyhow!("Service mesh is disabled"));
-        }
-
-        Ok(ServiceMeshStatus {
-            provider: self.config.provider.clone(),
-            mtls_enabled: self.config.mtls.enabled,
-            active_policies: self.config.traffic_policies.len() + self.config.security_policies.len(),
-            healthy_services: 10, // Mock data
-            total_services: 12,   // Mock data
-        })
-    }
-}
-
-/// Service mesh status
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceMeshStatus {
-    /// Service mesh provider
-    pub provider: ServiceMeshProvider,
-    /// mTLS enabled status
-    pub mtls_enabled: bool,
-    /// Number of active policies
-    pub active_policies: usize,
-    /// Number of healthy services
-    pub healthy_services: u32,
-    /// Total number of services
-    pub total_services: u32,
-}
-
-/// Initialize service mesh integration
-pub async fn initialize(config: &ServiceMeshConfig) -> Result<()> {
-    if !config.enabled {
-        return Ok(());
-    }
-    
-    let manager = ServiceMeshManager::new(config.clone());
-    manager.configure().await?;
-    
-    println!("Service mesh integration initialized successfully");
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_service_mesh_config_default() {
-        let config = ServiceMeshConfig::default();
-        assert!(!config.enabled);
-        assert!(matches!(config.provider, ServiceMeshProvider::Istio));
-    }
-
-    #[test]
-    fn test_service_mesh_manager_creation() {
-        let config = ServiceMeshConfig::default();
-        let manager = ServiceMeshManager::new(config);
-        assert!(!manager.config.enabled);
-    }
-
-    #[tokio::test]
-    async fn test_service_mesh_configure_disabled() {
-        let config = ServiceMeshConfig::default();
-        let manager = ServiceMeshManager::new(config);
-        assert!(manager.configure().await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_service_mesh_status_disabled() {
-        let config = ServiceMeshConfig::default();
-        let manager = ServiceMeshManager::new(config);
-        assert!(manager.get_status().await.is_err());
     }
 }

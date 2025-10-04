@@ -21,7 +21,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -49,23 +49,23 @@ noop_method_call = "allow"
 unsafe_code = "warn"
 
 [workspace.dependencies]
-# Internal OxiRS crates
-oxirs-core = { path = "core/oxirs-core", version = "0.1.0-alpha.1" }
-oxirs-fuseki = { path = "server/oxirs-fuseki", version = "0.1.0-alpha.1" }
-oxirs-gql = { path = "server/oxirs-gql", version = "0.1.0-alpha.1" }
-oxirs-arq = { path = "engine/oxirs-arq", version = "0.1.0-alpha.1" }
-oxirs-rule = { path = "engine/oxirs-rule", version = "0.1.0-alpha.1" }
-oxirs-shacl = { path = "engine/oxirs-shacl", version = "0.1.0-alpha.1" }
-oxirs-star = { path = "engine/oxirs-star", version = "0.1.0-alpha.1" }
-oxirs-ttl = { path = "engine/oxirs-ttl", version = "0.1.0-alpha.1" }
-oxirs-vec = { path = "engine/oxirs-vec", version = "0.1.0-alpha.1" }
-oxirs-tdb = { path = "storage/oxirs-tdb", version = "0.1.0-alpha.1" }
-oxirs-cluster = { path = "storage/oxirs-cluster", version = "0.1.0-alpha.1" }
-oxirs-stream = { path = "stream/oxirs-stream", version = "0.1.0-alpha.1" }
-oxirs-federate = { path = "stream/oxirs-federate", version = "0.1.0-alpha.1" }
-oxirs-embed = { path = "ai/oxirs-embed", version = "0.1.0-alpha.1" }
-oxirs-shacl-ai = { path = "ai/oxirs-shacl-ai", version = "0.1.0-alpha.1" }
-oxirs-chat = { path = "ai/oxirs-chat", version = "0.1.0-alpha.1" }
+# Internal OxiRS crates (version inherited from workspace.package)
+oxirs-core = { version = "0.1.0-alpha.2", path = "core/oxirs-core" }
+oxirs-fuseki = { version = "0.1.0-alpha.2", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.1.0-alpha.2", path = "server/oxirs-gql" }
+oxirs-arq = { version = "0.1.0-alpha.2", path = "engine/oxirs-arq" }
+oxirs-rule = { version = "0.1.0-alpha.2", path = "engine/oxirs-rule" }
+oxirs-shacl = { version = "0.1.0-alpha.2", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.1.0-alpha.2", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.1.0-alpha.2", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.1.0-alpha.2", path = "engine/oxirs-vec" }
+oxirs-tdb = { version = "0.1.0-alpha.2", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.1.0-alpha.2", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.1.0-alpha.2", path = "stream/oxirs-stream" }
+oxirs-federate = { version = "0.1.0-alpha.2", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.1.0-alpha.2", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.1.0-alpha.2", path = "ai/oxirs-shacl-ai" }
+oxirs-chat = { version = "0.1.0-alpha.2", path = "ai/oxirs-chat" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
@@ -74,6 +74,12 @@ oxirs-chat = { path = "ai/oxirs-chat", version = "0.1.0-alpha.1" }
 rio_api = "0.8"
 rio_turtle = "0.8"
 rio_xml = "0.8"
+
+# Temporary: OxiGraph parser dependencies (until native implementations complete)
+oxttl = "0.1.1"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
+oxrdfxml = "0.1.0"      # RDF/XML parser
+oxjsonld = "0.1.0"      # JSON-LD parser
+oxrdf = "0.2.2"         # RDF data model (required by parsers)
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri = "0.2"         # Fast IRI validation and parsing
@@ -166,21 +172,21 @@ futures = "0.3"
 # Direct rand and ndarray usage removed per SciRS2 integration policy
 # Use scirs2-core::random and scirs2-core::ndarray_ext instead
 
-# SciRS2 dependencies (Scientific Computing Library) - Using beta.2 from crates.io
-scirs2 = { version = "0.1.0-beta.3" }
-scirs2-core = { version = "0.1.0-beta.3", features = ["random"] }
-scirs2-linalg = { version = "0.1.0-beta.3" }
-scirs2-stats = { version = "0.1.0-beta.3" }
-scirs2-neural = { version = "0.1.0-beta.3" }
-scirs2-graph = { version = "0.1.0-beta.3" }
-scirs2-metrics = { version = "0.1.0-beta.3" }
-scirs2-fft = { version = "0.1.0-beta.3" }
-scirs2-signal = { version = "0.1.0-beta.3" }
-scirs2-optimize = { version = "0.1.0-beta.3" }
-scirs2-cluster = { version = "0.1.0-beta.3" }
-scirs2-text = { version = "0.1.0-beta.3" }
-scirs2-vision = { version = "0.1.0-beta.3" }
-scirs2-autograd = { version = "0.1.0-beta.3" }  # For array! macro support
+# SciRS2 dependencies (Scientific Computing Library) - Using rc.1 from crates.io
+# Note: scirs2 meta crate removed - we only use specific sub-crates as needed
+scirs2-core = { version = "0.1.0-rc.1", features = ["random"] }
+scirs2-linalg = { version = "0.1.0-rc.1" }
+scirs2-stats = { version = "0.1.0-rc.1" }
+scirs2-neural = { version = "0.1.0-rc.1" }
+scirs2-graph = { version = "0.1.0-rc.1" }
+scirs2-metrics = { version = "0.1.0-rc.1" }
+scirs2-fft = { version = "0.1.0-rc.1" }
+scirs2-signal = { version = "0.1.0-rc.1" }
+scirs2-optimize = { version = "0.1.0-rc.1" }
+scirs2-cluster = { version = "0.1.0-rc.1" }
+scirs2-text = { version = "0.1.0-rc.1" }
+scirs2-vision = { version = "0.1.0-rc.1" }
+scirs2-autograd = { version = "0.1.0-rc.1" }  # For array! macro support
 
 # System utilities
 num_cpus = "1.17"

@@ -4,7 +4,7 @@
 //! integrated into oxirs-shacl for enhanced graph validation and analysis.
 
 use anyhow::Result;
-use scirs2_graph::{algorithms::connectivity::*, base::DiGraph};
+use scirs2_graph::base::DiGraph;
 use serde::{Deserialize, Serialize};
 
 /// Configuration for SciRS2 graph-enhanced SHACL validation
@@ -60,7 +60,7 @@ impl SciRS2GraphValidator {
         println!("Number of triples: {}", self.triples.len());
 
         // Create a simple graph to demonstrate scirs2-graph usage
-        let mut graph = DiGraph::<String, String>::new();
+        let _graph = DiGraph::<String, String>::new();
 
         // Add some nodes and edges to demonstrate graph creation
         if self.triples.len() > 0 {

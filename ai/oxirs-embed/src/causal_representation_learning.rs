@@ -585,9 +585,9 @@ impl StructuralEquation {
 
         // Add noise
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            result += random.gen::<f32>() * self.noise_variance.sqrt();
+            result += random.random::<f32>() * self.noise_variance.sqrt();
         }
 
         result
@@ -681,19 +681,19 @@ impl CausalRepresentationModel {
             variable_embeddings: HashMap::new(),
             latent_factors: Array2::zeros((0, dimensions)),
             factual_network: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                Array2::from_shape_fn((dimensions, dimensions), |_| random.gen::<f32>() * 0.1)
+                Array2::from_shape_fn((dimensions, dimensions), |_| random.random::<f32>() * 0.1)
             },
             counterfactual_network: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                Array2::from_shape_fn((dimensions, dimensions), |_| random.gen::<f32>() * 0.1)
+                Array2::from_shape_fn((dimensions, dimensions), |_| random.random::<f32>() * 0.1)
             },
             shared_network: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                Array2::from_shape_fn((dimensions, dimensions), |_| random.gen::<f32>() * 0.1)
+                Array2::from_shape_fn((dimensions, dimensions), |_| random.random::<f32>() * 0.1)
             },
             observational_data: Vec::new(),
             interventional_data: Vec::new(),
@@ -838,9 +838,9 @@ impl CausalRepresentationModel {
         // Initialize with random weights
         let n = variables.len();
         let mut weights = {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            Array2::from_shape_fn((n, n), |_| random.gen::<f32>() * 0.1)
+            Array2::from_shape_fn((n, n), |_| random.random::<f32>() * 0.1)
         };
 
         // Iterative optimization (simplified)
@@ -1262,10 +1262,10 @@ impl CausalRepresentationModel {
 
         // Initialize latent factors
         self.latent_factors = {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
             Array2::from_shape_fn((self.observational_data.len(), num_factors), |_| {
-                random.gen::<f32>()
+                random.random::<f32>()
             })
         };
 
@@ -1300,10 +1300,10 @@ impl CausalRepresentationModel {
 
         // FastICA algorithm (simplified)
         self.latent_factors = {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
             Array2::from_shape_fn((self.observational_data.len(), num_factors), |_| {
-                random.gen::<f32>()
+                random.random::<f32>()
             })
         };
 
@@ -1367,9 +1367,9 @@ impl EmbeddingModel for CausalRepresentationModel {
             }
 
             let epoch_loss = {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                0.1 * random.gen::<f64>()
+                0.1 * random.random::<f64>()
             };
             loss_history.push(epoch_loss);
 

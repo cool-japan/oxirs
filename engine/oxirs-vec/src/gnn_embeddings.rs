@@ -4,13 +4,13 @@
 //! - GCN: Graph Convolutional Networks
 //! - GraphSAGE: Graph Sample and Aggregate
 
+use crate::random_utils::NormalSampler as Normal;
 use crate::{
     kg_embeddings::{KGEmbeddingConfig, KGEmbeddingModel, Triple},
     Vector,
 };
 use anyhow::{anyhow, Result};
 use nalgebra::{DMatrix, DVector};
-use crate::random_utils::NormalSampler as Normal;
 use scirs2_core::random::{Random, Rng};
 use std::collections::HashMap;
 
@@ -460,6 +460,7 @@ impl GraphSAGE {
     }
 
     /// Sample neighbors for a node using different strategies
+    #[allow(deprecated)]
     fn sample_neighbors(&self, node: &str, rng: &mut impl Rng) -> Vec<String> {
         if let Some(neighbors) = self.graph.get(node) {
             if neighbors.len() <= self.sample_size {
@@ -505,6 +506,7 @@ impl GraphSAGE {
     }
 
     /// Degree-based sampling: prefer neighbors with higher degree
+    #[allow(deprecated)]
     fn degree_based_sampling(&self, neighbors: &[String], rng: &mut impl Rng) -> Vec<String> {
         let mut neighbor_degrees: Vec<(String, usize)> = neighbors
             .iter()

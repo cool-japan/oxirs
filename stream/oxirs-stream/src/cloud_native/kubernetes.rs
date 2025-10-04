@@ -1,33 +1,22 @@
-//! # Kubernetes Integration Module
-//!
-//! Comprehensive Kubernetes integration for OxiRS Stream, providing enterprise-grade
-//! container orchestration, deployment, and management capabilities.
+//! Kubernetes Integration Types
 
-use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-/// Kubernetes configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KubernetesConfig {
     /// Enable Kubernetes integration
     pub enabled: bool,
-    /// Kubernetes namespace
+    /// Namespace for OxiRS resources
     pub namespace: String,
-    /// Cluster name
-    pub cluster_name: String,
-    /// Service account name
-    pub service_account: String,
-    /// Resource limits
-    pub resource_limits: ResourceLimits,
-    /// Deployment configuration
-    pub deployment: DeploymentConfig,
-    /// Service configuration
-    pub service: ServiceConfig,
-    /// Ingress configuration
-    pub ingress: Option<IngressConfig>,
     /// Custom Resource Definitions
     pub crds: Vec<CustomResourceDefinition>,
+    /// Operator configuration
+    pub operator: OperatorConfig,
+    /// Health check configuration
+    pub health_checks: HealthCheckConfig,
+    /// Network policies
+    pub network_policies: NetworkPolicyConfig,
+    /// Resource quotas
+    pub resource_quotas: ResourceQuotaConfig,
 }
 
 impl Default for KubernetesConfig {
@@ -35,337 +24,600 @@ impl Default for KubernetesConfig {
         Self {
             enabled: true,
             namespace: "oxirs".to_string(),
-            cluster_name: "oxirs-cluster".to_string(),
-            service_account: "oxirs-stream".to_string(),
-            resource_limits: ResourceLimits::default(),
-            deployment: DeploymentConfig::default(),
-            service: ServiceConfig::default(),
-            ingress: None,
-            crds: vec![],
-        }
-    }
-}
-
-/// Resource limits for containers
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResourceLimits {
-    /// CPU request
-    pub cpu_request: String,
-    /// CPU limit
-    pub cpu_limit: String,
-    /// Memory request
-    pub memory_request: String,
-    /// Memory limit
-    pub memory_limit: String,
-}
-
-impl Default for ResourceLimits {
-    fn default() -> Self {
-        Self {
-            cpu_request: "100m".to_string(),
-            cpu_limit: "500m".to_string(),
-            memory_request: "128Mi".to_string(),
-            memory_limit: "512Mi".to_string(),
-        }
-    }
-}
-
-/// Deployment configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DeploymentConfig {
-    /// Number of replicas
-    pub replicas: u32,
-    /// Image name
-    pub image: String,
-    /// Image pull policy
-    pub image_pull_policy: String,
-    /// Environment variables
-    pub env_vars: HashMap<String, String>,
-    /// Volume mounts
-    pub volume_mounts: Vec<VolumeMount>,
-}
-
-impl Default for DeploymentConfig {
-    fn default() -> Self {
-        Self {
-            replicas: 3,
-            image: "oxirs/stream:latest".to_string(),
-            image_pull_policy: "IfNotPresent".to_string(),
-            env_vars: HashMap::new(),
-            volume_mounts: vec![],
-        }
-    }
-}
-
-/// Volume mount configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct VolumeMount {
-    /// Volume name
-    pub name: String,
-    /// Mount path
-    pub mount_path: String,
-    /// Read-only flag
-    pub read_only: bool,
-}
-
-/// Service configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceConfig {
-    /// Service type
-    pub service_type: String,
-    /// Port mappings
-    pub ports: Vec<ServicePort>,
-    /// Load balancer source ranges
-    pub load_balancer_source_ranges: Vec<String>,
-}
-
-impl Default for ServiceConfig {
-    fn default() -> Self {
-        Self {
-            service_type: "ClusterIP".to_string(),
-            ports: vec![
-                ServicePort {
-                    name: "http".to_string(),
-                    port: 8080,
-                    target_port: 8080,
-                    protocol: "TCP".to_string(),
-                },
-                ServicePort {
-                    name: "metrics".to_string(),
-                    port: 9090,
-                    target_port: 9090,
-                    protocol: "TCP".to_string(),
-                },
+            crds: vec![
+                CustomResourceDefinition::stream_processor(),
+                CustomResourceDefinition::stream_cluster(),
+                CustomResourceDefinition::stream_policy(),
             ],
-            load_balancer_source_ranges: vec![],
+            operator: OperatorConfig::default(),
+            health_checks: HealthCheckConfig::default(),
+            network_policies: NetworkPolicyConfig::default(),
+            resource_quotas: ResourceQuotaConfig::default(),
         }
     }
-}
-
-/// Service port configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServicePort {
-    /// Port name
-    pub name: String,
-    /// Service port
-    pub port: u16,
-    /// Target port on pod
-    pub target_port: u16,
-    /// Protocol
-    pub protocol: String,
-}
-
-/// Ingress configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IngressConfig {
-    /// Ingress class
-    pub ingress_class: String,
-    /// Host name
-    pub host: String,
-    /// Path prefix
-    pub path: String,
-    /// TLS configuration
-    pub tls: Option<TlsConfig>,
-    /// Annotations
-    pub annotations: HashMap<String, String>,
-}
-
-/// TLS configuration for ingress
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TlsConfig {
-    /// Secret name containing TLS certificate
-    pub secret_name: String,
-    /// Hosts covered by certificate
-    pub hosts: Vec<String>,
 }
 
 /// Custom Resource Definition
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CustomResourceDefinition {
-    /// CRD name
-    pub name: String,
-    /// API version
     pub api_version: String,
-    /// Kind
     pub kind: String,
-    /// Scope (Namespaced or Cluster)
-    pub scope: String,
-    /// Schema definition
-    pub schema: serde_json::Value,
+    pub metadata: ObjectMetadata,
+    pub spec: CRDSpec,
 }
 
-/// Kubernetes manager for handling all Kubernetes operations
-#[derive(Debug)]
-pub struct KubernetesManager {
-    config: KubernetesConfig,
-}
-
-impl KubernetesManager {
-    /// Create a new Kubernetes manager
-    pub fn new(config: KubernetesConfig) -> Self {
-        Self { config }
-    }
-
-    /// Deploy the stream application to Kubernetes
-    pub async fn deploy(&self) -> Result<()> {
-        if !self.config.enabled {
-            return Ok(());
-        }
-
-        // Create namespace if it doesn't exist
-        self.create_namespace().await?;
-        
-        // Create service account
-        self.create_service_account().await?;
-        
-        // Deploy Custom Resource Definitions
-        self.deploy_crds().await?;
-        
-        // Create deployment
-        self.create_deployment().await?;
-        
-        // Create service
-        self.create_service().await?;
-        
-        // Create ingress if configured
-        if let Some(ingress) = &self.config.ingress {
-            self.create_ingress(ingress).await?;
-        }
-        
-        Ok(())
-    }
-
-    /// Create namespace
-    async fn create_namespace(&self) -> Result<()> {
-        // In a real implementation, this would use the Kubernetes API
-        println!("Creating namespace: {}", self.config.namespace);
-        Ok(())
-    }
-
-    /// Create service account
-    async fn create_service_account(&self) -> Result<()> {
-        // In a real implementation, this would use the Kubernetes API
-        println!("Creating service account: {}", self.config.service_account);
-        Ok(())
-    }
-
-    /// Deploy Custom Resource Definitions
-    async fn deploy_crds(&self) -> Result<()> {
-        for crd in &self.config.crds {
-            println!("Deploying CRD: {}", crd.name);
-            // In a real implementation, this would apply the CRD to the cluster
-        }
-        Ok(())
-    }
-
-    /// Create deployment
-    async fn create_deployment(&self) -> Result<()> {
-        println!("Creating deployment with {} replicas", self.config.deployment.replicas);
-        Ok(())
-    }
-
-    /// Create service
-    async fn create_service(&self) -> Result<()> {
-        println!("Creating service of type: {}", self.config.service.service_type);
-        Ok(())
-    }
-
-    /// Create ingress
-    async fn create_ingress(&self, _ingress: &IngressConfig) -> Result<()> {
-        println!("Creating ingress");
-        Ok(())
-    }
-
-    /// Scale deployment
-    pub async fn scale(&self, replicas: u32) -> Result<()> {
-        if !self.config.enabled {
-            return Err(anyhow!("Kubernetes integration is disabled"));
-        }
-        
-        println!("Scaling deployment to {} replicas", replicas);
-        Ok(())
-    }
-
-    /// Get pod status
-    pub async fn get_pod_status(&self) -> Result<Vec<PodStatus>> {
-        if !self.config.enabled {
-            return Err(anyhow!("Kubernetes integration is disabled"));
-        }
-        
-        // Mock pod status for now
-        Ok(vec![
-            PodStatus {
-                name: "oxirs-stream-pod-1".to_string(),
-                status: "Running".to_string(),
-                ready: true,
-                restarts: 0,
+impl CustomResourceDefinition {
+    /// Create StreamProcessor CRD
+    pub fn stream_processor() -> Self {
+        Self {
+            api_version: "apiextensions.k8s.io/v1".to_string(),
+            kind: "CustomResourceDefinition".to_string(),
+            metadata: ObjectMetadata {
+                name: "streamprocessors.oxirs.io".to_string(),
+                namespace: None,
+                labels: BTreeMap::from([
+                    ("app".to_string(), "oxirs".to_string()),
+                    ("component".to_string(), "stream-processor".to_string()),
+                ]),
+                annotations: BTreeMap::new(),
             },
-            PodStatus {
-                name: "oxirs-stream-pod-2".to_string(),
-                status: "Running".to_string(),
-                ready: true,
-                restarts: 0,
+            spec: CRDSpec {
+                group: "oxirs.io".to_string(),
+                versions: vec![CRDVersion {
+                    name: "v1".to_string(),
+                    served: true,
+                    storage: true,
+                    schema: ResourceSchema::stream_processor_schema(),
+                }],
+                scope: "Namespaced".to_string(),
+                names: CRDNames {
+                    plural: "streamprocessors".to_string(),
+                    singular: "streamprocessor".to_string(),
+                    kind: "StreamProcessor".to_string(),
+                    short_names: vec!["sp".to_string()],
+                },
             },
-        ])
+        }
+    }
+
+    /// Create StreamCluster CRD
+    pub fn stream_cluster() -> Self {
+        Self {
+            api_version: "apiextensions.k8s.io/v1".to_string(),
+            kind: "CustomResourceDefinition".to_string(),
+            metadata: ObjectMetadata {
+                name: "streamclusters.oxirs.io".to_string(),
+                namespace: None,
+                labels: BTreeMap::from([
+                    ("app".to_string(), "oxirs".to_string()),
+                    ("component".to_string(), "stream-cluster".to_string()),
+                ]),
+                annotations: BTreeMap::new(),
+            },
+            spec: CRDSpec {
+                group: "oxirs.io".to_string(),
+                versions: vec![CRDVersion {
+                    name: "v1".to_string(),
+                    served: true,
+                    storage: true,
+                    schema: ResourceSchema::stream_cluster_schema(),
+                }],
+                scope: "Namespaced".to_string(),
+                names: CRDNames {
+                    plural: "streamclusters".to_string(),
+                    singular: "streamcluster".to_string(),
+                    kind: "StreamCluster".to_string(),
+                    short_names: vec!["sc".to_string()],
+                },
+            },
+        }
+    }
+
+    /// Create StreamPolicy CRD
+    pub fn stream_policy() -> Self {
+        Self {
+            api_version: "apiextensions.k8s.io/v1".to_string(),
+            kind: "CustomResourceDefinition".to_string(),
+            metadata: ObjectMetadata {
+                name: "streampolicies.oxirs.io".to_string(),
+                namespace: None,
+                labels: BTreeMap::from([
+                    ("app".to_string(), "oxirs".to_string()),
+                    ("component".to_string(), "stream-policy".to_string()),
+                ]),
+                annotations: BTreeMap::new(),
+            },
+            spec: CRDSpec {
+                group: "oxirs.io".to_string(),
+                versions: vec![CRDVersion {
+                    name: "v1".to_string(),
+                    served: true,
+                    storage: true,
+                    schema: ResourceSchema::stream_policy_schema(),
+                }],
+                scope: "Namespaced".to_string(),
+                names: CRDNames {
+                    plural: "streampolicies".to_string(),
+                    singular: "streampolicy".to_string(),
+                    kind: "StreamPolicy".to_string(),
+                    short_names: vec!["spol".to_string()],
+                },
+            },
+        }
     }
 }
 
-/// Pod status information
+/// Object metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PodStatus {
-    /// Pod name
+pub struct ObjectMetadata {
     pub name: String,
-    /// Current status
-    pub status: String,
-    /// Ready flag
-    pub ready: bool,
-    /// Restart count
-    pub restarts: u32,
+    pub namespace: Option<String>,
+    pub labels: BTreeMap<String, String>,
+    pub annotations: BTreeMap<String, String>,
 }
 
-/// Initialize Kubernetes integration
-pub async fn initialize(config: &KubernetesConfig) -> Result<()> {
-    if !config.enabled {
-        return Ok(());
-    }
-    
-    let manager = KubernetesManager::new(config.clone());
-    manager.deploy().await?;
-    
-    println!("Kubernetes integration initialized successfully");
-    Ok(())
+/// CRD specification
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CRDSpec {
+    pub group: String,
+    pub versions: Vec<CRDVersion>,
+    pub scope: String,
+    pub names: CRDNames,
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// CRD version
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CRDVersion {
+    pub name: String,
+    pub served: bool,
+    pub storage: bool,
+    pub schema: ResourceSchema,
+}
 
-    #[test]
-    fn test_kubernetes_config_default() {
-        let config = KubernetesConfig::default();
-        assert_eq!(config.namespace, "oxirs");
-        assert_eq!(config.deployment.replicas, 3);
+/// CRD names
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CRDNames {
+    pub plural: String,
+    pub singular: String,
+    pub kind: String,
+    pub short_names: Vec<String>,
+}
+
+/// Resource schema
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceSchema {
+    pub open_api_v3_schema: OpenAPIV3Schema,
+}
+
+impl ResourceSchema {
+    /// StreamProcessor schema
+    pub fn stream_processor_schema() -> Self {
+        Self {
+            open_api_v3_schema: OpenAPIV3Schema {
+                schema_type: "object".to_string(),
+                properties: BTreeMap::from([
+                    ("spec".to_string(), SchemaProperty::stream_processor_spec()),
+                    ("status".to_string(), SchemaProperty::stream_processor_status()),
+                ]),
+                required: vec!["spec".to_string()],
+            },
+        }
     }
 
-    #[test]
-    fn test_kubernetes_manager_creation() {
-        let config = KubernetesConfig::default();
-        let manager = KubernetesManager::new(config);
-        assert_eq!(manager.config.namespace, "oxirs");
+    /// StreamCluster schema
+    pub fn stream_cluster_schema() -> Self {
+        Self {
+            open_api_v3_schema: OpenAPIV3Schema {
+                schema_type: "object".to_string(),
+                properties: BTreeMap::from([
+                    ("spec".to_string(), SchemaProperty::stream_cluster_spec()),
+                    ("status".to_string(), SchemaProperty::stream_cluster_status()),
+                ]),
+                required: vec!["spec".to_string()],
+            },
+        }
     }
 
-    #[tokio::test]
-    async fn test_kubernetes_manager_scale() {
-        let config = KubernetesConfig::default();
-        let manager = KubernetesManager::new(config);
-        assert!(manager.scale(5).await.is_ok());
+    /// StreamPolicy schema
+    pub fn stream_policy_schema() -> Self {
+        Self {
+            open_api_v3_schema: OpenAPIV3Schema {
+                schema_type: "object".to_string(),
+                properties: BTreeMap::from([
+                    ("spec".to_string(), SchemaProperty::stream_policy_spec()),
+                    ("status".to_string(), SchemaProperty::stream_policy_status()),
+                ]),
+                required: vec!["spec".to_string()],
+            },
+        }
+    }
+}
+
+/// OpenAPI v3 schema
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpenAPIV3Schema {
+    #[serde(rename = "type")]
+    pub schema_type: String,
+    pub properties: BTreeMap<String, SchemaProperty>,
+    pub required: Vec<String>,
+}
+
+/// Schema property
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaProperty {
+    #[serde(rename = "type")]
+    pub property_type: String,
+    pub description: Option<String>,
+    pub properties: Option<BTreeMap<String, SchemaProperty>>,
+    pub items: Option<Box<SchemaProperty>>,
+    pub required: Option<Vec<String>>,
+}
+
+impl SchemaProperty {
+    /// StreamProcessor spec schema
+    pub fn stream_processor_spec() -> Self {
+        Self {
+            property_type: "object".to_string(),
+            description: Some("StreamProcessor specification".to_string()),
+            properties: Some(BTreeMap::from([
+                ("replicas".to_string(), SchemaProperty {
+                    property_type: "integer".to_string(),
+                    description: Some("Number of replicas".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+                ("image".to_string(), SchemaProperty {
+                    property_type: "string".to_string(),
+                    description: Some("Container image".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+                ("config".to_string(), SchemaProperty {
+                    property_type: "object".to_string(),
+                    description: Some("Configuration".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+            ])),
+            items: None,
+            required: Some(vec!["replicas".to_string(), "image".to_string()]),
+        }
     }
 
-    #[tokio::test]
-    async fn test_kubernetes_pod_status() {
-        let config = KubernetesConfig::default();
-        let manager = KubernetesManager::new(config);
-        let status = manager.get_pod_status().await.unwrap();
-        assert_eq!(status.len(), 2);
+    /// StreamProcessor status schema
+    pub fn stream_processor_status() -> Self {
+        Self {
+            property_type: "object".to_string(),
+            description: Some("StreamProcessor status".to_string()),
+            properties: Some(BTreeMap::from([
+                ("phase".to_string(), SchemaProperty {
+                    property_type: "string".to_string(),
+                    description: Some("Current phase".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+                ("ready_replicas".to_string(), SchemaProperty {
+                    property_type: "integer".to_string(),
+                    description: Some("Number of ready replicas".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+            ])),
+            items: None,
+            required: None,
+        }
+    }
+
+    /// StreamCluster spec schema
+    pub fn stream_cluster_spec() -> Self {
+        Self {
+            property_type: "object".to_string(),
+            description: Some("StreamCluster specification".to_string()),
+            properties: Some(BTreeMap::from([
+                ("size".to_string(), SchemaProperty {
+                    property_type: "integer".to_string(),
+                    description: Some("Cluster size".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+                ("storage".to_string(), SchemaProperty {
+                    property_type: "object".to_string(),
+                    description: Some("Storage configuration".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+            ])),
+            items: None,
+            required: Some(vec!["size".to_string()]),
+        }
+    }
+
+    /// StreamCluster status schema
+    pub fn stream_cluster_status() -> Self {
+        Self {
+            property_type: "object".to_string(),
+            description: Some("StreamCluster status".to_string()),
+            properties: Some(BTreeMap::from([
+                ("phase".to_string(), SchemaProperty {
+                    property_type: "string".to_string(),
+                    description: Some("Current phase".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+                ("nodes".to_string(), SchemaProperty {
+                    property_type: "array".to_string(),
+                    description: Some("Cluster nodes".to_string()),
+                    properties: None,
+                    items: Some(Box::new(SchemaProperty {
+                        property_type: "object".to_string(),
+                        description: None,
+                        properties: None,
+                        items: None,
+                        required: None,
+                    })),
+                    required: None,
+                }),
+            ])),
+            items: None,
+            required: None,
+        }
+    }
+
+    /// StreamPolicy spec schema
+    pub fn stream_policy_spec() -> Self {
+        Self {
+            property_type: "object".to_string(),
+            description: Some("StreamPolicy specification".to_string()),
+            properties: Some(BTreeMap::from([
+                ("rules".to_string(), SchemaProperty {
+                    property_type: "array".to_string(),
+                    description: Some("Policy rules".to_string()),
+                    properties: None,
+                    items: Some(Box::new(SchemaProperty {
+                        property_type: "object".to_string(),
+                        description: None,
+                        properties: None,
+                        items: None,
+                        required: None,
+                    })),
+                    required: None,
+                }),
+            ])),
+            items: None,
+            required: Some(vec!["rules".to_string()]),
+        }
+    }
+
+    /// StreamPolicy status schema
+    pub fn stream_policy_status() -> Self {
+        Self {
+            property_type: "object".to_string(),
+            description: Some("StreamPolicy status".to_string()),
+            properties: Some(BTreeMap::from([
+                ("applied".to_string(), SchemaProperty {
+                    property_type: "boolean".to_string(),
+                    description: Some("Policy applied status".to_string()),
+                    properties: None,
+                    items: None,
+                    required: None,
+                }),
+            ])),
+            items: None,
+            required: None,
+        }
+    }
+}
+
+/// Operator configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OperatorConfig {
+    /// Enable operator
+    pub enabled: bool,
+    /// Operator image
+    pub image: String,
+    /// Watch all namespaces
+    pub cluster_scoped: bool,
+    /// Reconciliation interval
+    pub reconcile_interval: Duration,
+    /// Leader election configuration
+    pub leader_election: LeaderElectionConfig,
+}
+
+impl Default for OperatorConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            image: "oxirs/operator:latest".to_string(),
+            cluster_scoped: false,
+            reconcile_interval: Duration::from_secs(30),
+            leader_election: LeaderElectionConfig::default(),
+        }
+    }
+}
+
+/// Leader election configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaderElectionConfig {
+    pub enabled: bool,
+    pub lock_name: String,
+    pub lease_duration: Duration,
+    pub renew_deadline: Duration,
+    pub retry_period: Duration,
+}
+
+impl Default for LeaderElectionConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            lock_name: "oxirs-operator-lock".to_string(),
+            lease_duration: Duration::from_secs(15),
+            renew_deadline: Duration::from_secs(10),
+            retry_period: Duration::from_secs(2),
+        }
+    }
+}
+
+/// Health check configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HealthCheckConfig {
+    /// Enable health checks
+    pub enabled: bool,
+    /// Liveness probe configuration
+    pub liveness_probe: ProbeConfig,
+    /// Readiness probe configuration
+    pub readiness_probe: ProbeConfig,
+    /// Startup probe configuration
+    pub startup_probe: ProbeConfig,
+}
+
+impl Default for HealthCheckConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            liveness_probe: ProbeConfig {
+                path: "/health/live".to_string(),
+                port: 8080,
+                initial_delay_seconds: 30,
+                period_seconds: 10,
+                timeout_seconds: 5,
+                failure_threshold: 3,
+                success_threshold: 1,
+            },
+            readiness_probe: ProbeConfig {
+                path: "/health/ready".to_string(),
+                port: 8080,
+                initial_delay_seconds: 10,
+                period_seconds: 5,
+                timeout_seconds: 3,
+                failure_threshold: 3,
+                success_threshold: 1,
+            },
+            startup_probe: ProbeConfig {
+                path: "/health/startup".to_string(),
+                port: 8080,
+                initial_delay_seconds: 0,
+                period_seconds: 5,
+                timeout_seconds: 3,
+                failure_threshold: 30,
+                success_threshold: 1,
+            },
+        }
+    }
+}
+
+/// Probe configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProbeConfig {
+    pub path: String,
+    pub port: u16,
+    pub initial_delay_seconds: u32,
+    pub period_seconds: u32,
+    pub timeout_seconds: u32,
+    pub failure_threshold: u32,
+    pub success_threshold: u32,
+}
+
+/// Network policy configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkPolicyConfig {
+    /// Enable network policies
+    pub enabled: bool,
+    /// Default deny all traffic
+    pub default_deny: bool,
+    /// Allowed ingress rules
+    pub ingress_rules: Vec<NetworkPolicyRule>,
+    /// Allowed egress rules
+    pub egress_rules: Vec<NetworkPolicyRule>,
+}
+
+impl Default for NetworkPolicyConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            default_deny: true,
+            ingress_rules: vec![
+                NetworkPolicyRule {
+                    description: "Allow ingress from service mesh".to_string(),
+                    from_selector: Some(LabelSelector {
+                        match_labels: BTreeMap::from([
+                            ("app".to_string(), "istio-proxy".to_string()),
+                        ]),
+                    }),
+                    ports: vec![NetworkPolicyPort {
+                        port: 8080,
+                        protocol: "TCP".to_string(),
+                    }],
+                },
+            ],
+            egress_rules: vec![
+                NetworkPolicyRule {
+                    description: "Allow egress to Kubernetes API".to_string(),
+                    from_selector: None,
+                    ports: vec![NetworkPolicyPort {
+                        port: 443,
+                        protocol: "TCP".to_string(),
+                    }],
+                },
+            ],
+        }
+    }
+}
+
+/// Network policy rule
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkPolicyRule {
+    pub description: String,
+    pub from_selector: Option<LabelSelector>,
+    pub ports: Vec<NetworkPolicyPort>,
+}
+
+/// Label selector
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelSelector {
+    pub match_labels: BTreeMap<String, String>,
+}
+
+/// Network policy port
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NetworkPolicyPort {
+    pub port: u16,
+    pub protocol: String,
+}
+
+/// Resource quota configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResourceQuotaConfig {
+    /// Enable resource quotas
+    pub enabled: bool,
+    /// CPU limit
+    pub cpu_limit: String,
+    /// Memory limit
+    pub memory_limit: String,
+    /// Storage limit
+    pub storage_limit: String,
+    /// Pod limit
+    pub pod_limit: u32,
+    /// Service limit
+    pub service_limit: u32,
+}
+
+impl Default for ResourceQuotaConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            cpu_limit: "10".to_string(),
+            memory_limit: "20Gi".to_string(),
+            storage_limit: "100Gi".to_string(),
+            pod_limit: 50,
+            service_limit: 10,
+        }
     }
 }

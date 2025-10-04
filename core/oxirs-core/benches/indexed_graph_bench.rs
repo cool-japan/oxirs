@@ -3,7 +3,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::model::{Literal, NamedNode, Object, Predicate, Subject, Triple};
 use oxirs_core::store::IndexedGraph;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 
 /// Helper to create a test triple
 fn create_triple(s: &str, p: &str, o: &str) -> Triple {
@@ -20,9 +20,9 @@ fn generate_test_triples(count: usize) -> Vec<Triple> {
     (0..count)
         .map(|_| {
             create_triple(
-                &format!("http://example.org/s{}", random.gen_range(0..1000)),
-                &format!("http://example.org/p{}", random.gen_range(0..10)),
-                &format!("object{}", random.gen_range(0..10000)),
+                &format!("http://example.org/s{}", random.random_range(0, 1000)),
+                &format!("http://example.org/p{}", random.random_range(0, 10)),
+                &format!("object{}", random.random_range(0, 10000)),
             )
         })
         .collect()

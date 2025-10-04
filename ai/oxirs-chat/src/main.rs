@@ -326,96 +326,28 @@ fn parse_rdf_content(
     format: RdfFormat,
     store: &mut ConcreteStore,
 ) -> Result<usize, Box<dyn std::error::Error>> {
-    use oxirs_core::format::parser::simple;
-    // std::io::Cursor removed - unused import
+    use oxirs_core::format::RdfParser;
 
     let mut count = 0;
+    let parser = RdfParser::new(format);
 
-    match format {
-        RdfFormat::Turtle => {
-            let triples = simple::parse_turtle(content)?;
-            for triple in triples {
-                let quad = Quad::new(
-                    triple.subject().clone(),
-                    triple.predicate().clone(),
-                    triple.object().clone(),
-                    GraphName::DefaultGraph,
-                );
-                store.insert_quad(quad)?;
-                count += 1;
-            }
-        }
-        RdfFormat::NTriples => {
-            let triples = simple::parse_ntriples(content)?;
-            for triple in triples {
-                let quad = Quad::new(
-                    triple.subject().clone(),
-                    triple.predicate().clone(),
-                    triple.object().clone(),
-                    GraphName::DefaultGraph,
-                );
-                store.insert_quad(quad)?;
-                count += 1;
-            }
-        }
-        RdfFormat::RdfXml => {
-            // Use generic parser for RDF/XML
-            use oxirs_core::format::RdfParser;
-            let parser = RdfParser::new(oxirs_core::format::RdfFormat::RdfXml);
-            let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
-
-            match quads {
-                Ok(quads) => {
-                    for quad in quads {
-                        store.insert_quad(quad)?;
-                        count += 1;
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Failed to parse RDF/XML: {e}").into());
-                }
-            }
-        }
-        RdfFormat::JsonLd { .. } => {
-            // Use generic parser for JSON-LD
-            use oxirs_core::format::RdfParser;
-            let parser = RdfParser::new(format);
-            let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
-
-            match quads {
-                Ok(quads) => {
-                    for quad in quads {
-                        store.insert_quad(quad)?;
-                        count += 1;
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Failed to parse JSON-LD: {e}").into());
-                }
-            }
-        }
-        _ => {
-            // For other formats, use the generic parser
-            use oxirs_core::format::RdfParser;
-            let format_debug = format!("{format:?}"); // Capture debug representation before move
-            let parser = RdfParser::new(format);
-            let quads: Result<Vec<_>, _> = parser.for_slice(content.as_bytes()).collect();
-
-            match quads {
-                Ok(quads) => {
-                    for quad in quads {
-                        store.insert_quad(quad)?;
-                        count += 1;
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Failed to parse RDF format {format_debug}: {e}").into());
-                }
-            }
-        }
+    for quad_result in parser.for_slice(content.as_bytes()) {
+        let quad = quad_result?;
+        store.insert_quad(quad)?;
+        count += 1;
     }
 
     Ok(count)
+}
+
+// Old match-based implementation removed - using unified parser API
+fn _old_parse_rdf_content_match(
+    _content: &str,
+    _format: RdfFormat,
+    _store: &mut ConcreteStore,
+) -> Result<usize, Box<dyn std::error::Error>> {
+    // Keeping this as reference - old match-based approach
+    unimplemented!("Use parse_rdf_content() instead")
 }
 
 /// Add sample RDF data for demonstration when no dataset is provided

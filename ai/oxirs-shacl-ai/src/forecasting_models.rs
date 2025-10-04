@@ -5,7 +5,7 @@
 
 use crate::ShaclAiError;
 use chrono::{DateTime, Duration, Utc};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -666,7 +666,13 @@ impl QualityForecastingModel {
 
                 for i in 0..steps {
                     let timestamp = now + step_duration * i as i32;
-                    let predicted_value = base_value * (1.0 + ({ let mut random = Random::default(); random.gen::<f64>() }) * 0.1 - 0.05);
+                    let predicted_value = base_value
+                        * (1.0
+                            + ({
+                                let mut random = Random::default();
+                                random.random::<f64>()
+                            }) * 0.1
+                            - 0.05);
                     let confidence = 0.7;
 
                     predictions.push(ForecastedDataPoint {
@@ -794,7 +800,7 @@ impl QualityForecastingModel {
 
     /// Xavier weight initialization for neural networks
     fn xavier_initialization(&self) -> f64 {
-        use scirs2_core::random::{Rng, Random};
+        use scirs2_core::random::{Random, Rng};
         let mut random = Random::default();
 
         // Xavier/Glorot initialization: sample from uniform distribution
@@ -803,7 +809,7 @@ impl QualityForecastingModel {
         let fan_out = 128.0; // Approximate fan-out
         let limit = (6.0_f64 / (fan_in + fan_out)).sqrt();
 
-        random.gen_range(-limit..limit)
+        random.random_range(-limit, limit)
     }
 
     /// Calculate advanced model accuracy with cross-validation

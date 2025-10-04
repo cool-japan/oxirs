@@ -1,8 +1,8 @@
 # OxiRS SHACL-AI - AI-Enhanced SHACL Validation
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
 
@@ -35,8 +35,8 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-shacl-ai = "0.1.0-alpha.1"
-oxirs-shacl = "0.1.0-alpha.1"
+oxirs-shacl-ai = "0.1.0-alpha.2"
+oxirs-shacl = "0.1.0-alpha.2"
 ```
 
 ## Quick Start
@@ -349,13 +349,13 @@ let config = AiConfig {
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.1)
-- ✅ Basic shape learning
-- ✅ Neural network validation
-- ✅ Anomaly detection
-- ✅ Confidence scoring
-- 🚧 Explainability features (in progress)
-- 🚧 Transfer learning (in progress)
+### Alpha Release (v0.1.0-alpha.2)
+- ✅ Shape learning with persisted dataset snapshots and CLI integration
+- ✅ Neural network validation leveraging SciRS2 telemetry for drift detection
+- ✅ Anomaly detection with vector-based similarity checks
+- ✅ Confidence scoring and remediation guidance integrated into Fuseki UI
+- 🚧 Explainability features (saliency reporting) – in progress
+- 🚧 Transfer learning (cross-dataset models) – in progress
 - ⏳ Auto-fix suggestions (planned for beta)
 - ⏳ Active learning (planned for v0.2.0)
 

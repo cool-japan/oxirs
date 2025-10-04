@@ -807,9 +807,9 @@ pub mod processing {
 
         #[test]
         fn test_random_data_compression() {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random_gen = Random::default();
-            let test_data: Vec<u8> = (0..1000).map(|_| random_gen.gen()).collect();
+            let test_data: Vec<u8> = (0..1000).map(|_| random_gen.random()).collect();
             let compression_types = vec![
                 CompressionType::None,
                 CompressionType::Gzip,

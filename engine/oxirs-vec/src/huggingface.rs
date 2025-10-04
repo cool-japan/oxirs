@@ -210,7 +210,6 @@ impl HuggingFaceEmbedder {
         let seed = hasher.finish();
 
         let mut rng = Random::seed(seed);
-        use scirs2_core::random::Rng;
 
         let mut embedding = vec![0.0f32; dimensions];
         for value in embedding.iter_mut().take(dimensions) {

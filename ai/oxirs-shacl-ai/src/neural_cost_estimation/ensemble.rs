@@ -1,7 +1,7 @@
 //! Ensemble cost predictor for neural cost estimation
 
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 
 use super::{config::*, types::*};
 use crate::Result;
@@ -185,7 +185,11 @@ impl EnsembleCostPredictor {
 impl BaseModel {
     pub fn new(model_type: ModelType, input_dim: usize, output_dim: usize) -> Self {
         let weights = Array2::from_shape_fn((output_dim, input_dim), |(_i, _j)| {
-            (({ let mut random = Random::default(); random.gen::<f64>() }) - 0.5) * 0.2 // Random values between -0.1 and 0.1
+            (({
+                let mut random = Random::default();
+                random.random::<f64>()
+            }) - 0.5)
+                * 0.2 // Random values between -0.1 and 0.1
         });
         let bias = Array1::zeros(output_dim);
 

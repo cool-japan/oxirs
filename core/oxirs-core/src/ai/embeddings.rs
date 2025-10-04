@@ -6,7 +6,7 @@
 use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -205,7 +205,7 @@ impl TransE {
         for entity in entities {
             let embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             entity_embs.insert(entity, embedding);
         }
@@ -213,7 +213,7 @@ impl TransE {
         for relation in relations {
             let embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             relation_embs.insert(relation, embedding);
         }
@@ -257,18 +257,18 @@ impl TransE {
             // Randomly corrupt head or tail
             let positive_idx = {
                 let mut rng = Random::default();
-                rng.gen_range(0..positive_triples.len())
+                rng.random_range(0, positive_triples.len())
             };
             let (h, r, t) = &positive_triples[positive_idx];
 
             if {
                 let mut rng = Random::default();
-                rng.gen_bool(0.5)
+                rng.random_bool_with_chance(0.5)
             } {
                 // Corrupt head
                 let new_head_idx = {
                     let mut rng = Random::default();
-                    rng.gen_range(0..entities.len())
+                    rng.random_range(0, entities.len())
                 };
                 let new_head = &entities[new_head_idx];
                 if new_head != h {
@@ -278,7 +278,7 @@ impl TransE {
                 // Corrupt tail
                 let new_tail_idx = {
                     let mut rng = Random::default();
-                    rng.gen_range(0..entities.len())
+                    rng.random_range(0, entities.len())
                 };
                 let new_tail = &entities[new_tail_idx];
                 if new_tail != t {
@@ -307,13 +307,13 @@ impl TransE {
             if entities.len() >= 2 {
                 let corrupt_idx = {
                     let mut rng = Random::default();
-                    rng.gen_range(0..entities.len())
+                    rng.random_range(0, entities.len())
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
                 let negative_score = if {
                     let mut rng = Random::default();
-                    rng.gen_bool(0.5)
+                    rng.random_bool_with_chance(0.5)
                 } {
                     self.compute_score(corrupt_entity, &triple.1, &triple.2)
                         .await?
@@ -632,7 +632,7 @@ impl DistMult {
         for entity in entities {
             let embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             entity_embs.insert(entity, embedding);
         }
@@ -640,7 +640,7 @@ impl DistMult {
         for relation in relations {
             let embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             relation_embs.insert(relation, embedding);
         }
@@ -665,13 +665,13 @@ impl DistMult {
             if entities.len() >= 2 {
                 let corrupt_idx = {
                     let mut rng = Random::default();
-                    rng.gen_range(0..entities.len())
+                    rng.random_range(0, entities.len())
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
                 let negative_score = if {
                     let mut rng = Random::default();
-                    rng.gen_bool(0.5)
+                    rng.random_bool_with_chance(0.5)
                 } {
                     self.compute_score(corrupt_entity, &triple.1, &triple.2)
                         .await?
@@ -895,11 +895,11 @@ impl ComplEx {
         for entity in entities {
             let real_embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             let imag_embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             entity_real.insert(entity.clone(), real_embedding);
             entity_imag.insert(entity, imag_embedding);
@@ -908,11 +908,11 @@ impl ComplEx {
         for relation in relations {
             let real_embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             let imag_embedding = Array1::from_shape_simple_fn(self.config.embedding_dim, || {
                 let mut rng = Random::default();
-                rng.gen::<f32>() * 2.0 * bound - bound
+                rng.random::<f32>() * 2.0 * bound - bound
             });
             relation_real.insert(relation.clone(), real_embedding);
             relation_imag.insert(relation, imag_embedding);
@@ -938,13 +938,13 @@ impl ComplEx {
             if entities.len() >= 2 {
                 let corrupt_idx = {
                     let mut rng = Random::default();
-                    rng.gen_range(0..entities.len())
+                    rng.random_range(0, entities.len())
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
                 let negative_score = if {
                     let mut rng = Random::default();
-                    rng.gen_bool(0.5)
+                    rng.random_bool_with_chance(0.5)
                 } {
                     self.compute_score(corrupt_entity, &triple.1, &triple.2)
                         .await?

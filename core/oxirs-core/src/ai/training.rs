@@ -9,7 +9,7 @@ use crate::{
     Triple,
 };
 use anyhow::{anyhow, Result};
-use scirs2_core::random::{sampling, DistributionExt, Random};
+use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

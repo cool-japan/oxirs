@@ -61,7 +61,7 @@ pub struct UpdateStats {
 #[derive(Clone)]
 pub struct Store {
     /// Default dataset store
-    default_store: Arc<RwLock<dyn CoreStore>>,
+    pub(crate) default_store: Arc<RwLock<dyn CoreStore>>,
     /// Named datasets
     datasets: DatasetMap,
     /// Query engine for SPARQL execution

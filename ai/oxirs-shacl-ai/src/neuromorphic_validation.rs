@@ -4,7 +4,7 @@
 //! utilizing spiking neural networks, synaptic plasticity, and neural adaptation
 //! for ultra-efficient, biologically-inspired validation processing.
 
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -452,13 +452,21 @@ impl NeuromorphicValidationNetwork {
         // Connect input to hidden layers
         for input_id in neurons.keys().filter(|id| id.starts_with("input_")) {
             for hidden_id in neurons.keys().filter(|id| id.starts_with("hidden_")) {
-                if ({ let mut random = Random::default(); random.gen::<f64>() }) < self.topology.connection_density {
+                if ({
+                    let mut random = Random::default();
+                    random.random::<f64>()
+                }) < self.topology.connection_density
+                {
                     let synapse_id = format!("synapse_{synapse_counter}");
                     let synapse = ValidationSynapse {
                         synapse_id: synapse_id.clone(),
                         pre_neuron_id: input_id.clone(),
                         post_neuron_id: hidden_id.clone(),
-                        weight: (({ let mut random = Random::default(); random.gen::<f64>() }) - 0.5) * 2.0, // Random weight [-1, 1]
+                        weight: (({
+                            let mut random = Random::default();
+                            random.random::<f64>()
+                        }) - 0.5)
+                            * 2.0, // Random weight [-1, 1]
                         delay: Duration::from_millis(1),
                         plasticity: SynapticPlasticity::default(),
                         synapse_type: SynapseType::Excitatory,
@@ -472,13 +480,21 @@ impl NeuromorphicValidationNetwork {
         // Connect hidden to output layers
         for hidden_id in neurons.keys().filter(|id| id.starts_with("hidden_")) {
             for output_id in neurons.keys().filter(|id| id.starts_with("output_")) {
-                if ({ let mut random = Random::default(); random.gen::<f64>() }) < self.topology.connection_density {
+                if ({
+                    let mut random = Random::default();
+                    random.random::<f64>()
+                }) < self.topology.connection_density
+                {
                     let synapse_id = format!("synapse_{synapse_counter}");
                     let synapse = ValidationSynapse {
                         synapse_id: synapse_id.clone(),
                         pre_neuron_id: hidden_id.clone(),
                         post_neuron_id: output_id.clone(),
-                        weight: (({ let mut random = Random::default(); random.gen::<f64>() }) - 0.5) * 2.0,
+                        weight: (({
+                            let mut random = Random::default();
+                            random.random::<f64>()
+                        }) - 0.5)
+                            * 2.0,
                         delay: Duration::from_millis(1),
                         plasticity: SynapticPlasticity::default(),
                         synapse_type: SynapseType::Excitatory,

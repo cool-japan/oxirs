@@ -269,9 +269,9 @@ impl UncertaintyQuantifier {
         // Simplified prediction sampling
         // In practice, this would use the actual model with dropout enabled
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.5 + (random.gen::<f32>() - 0.5) * 0.2
+            0.5 + (random.random::<f32>() - 0.5) * 0.2
         })
     }
 
@@ -450,9 +450,9 @@ impl AdversarialAttackGenerator {
         // Evaluate model on perturbed data
         // In practice, this would use the actual model evaluation
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.5 + (random.gen::<f32>() - 0.5) * 0.3
+            0.5 + (random.random::<f32>() - 0.5) * 0.3
         })
     }
 
@@ -460,9 +460,9 @@ impl AdversarialAttackGenerator {
         // Calculate L2 norm of perturbation
         // Simplified calculation
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.1 * random.gen::<f32>()
+            0.1 * random.random::<f32>()
         }
     }
 
@@ -538,9 +538,9 @@ impl FairnessAssessment {
         // Calculate demographic parity difference
         // Simplified calculation
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.05 + random.gen::<f32>() * 0.1
+            0.05 + random.random::<f32>() * 0.1
         })
     }
 
@@ -550,9 +550,9 @@ impl FairnessAssessment {
     ) -> Result<f32> {
         // Calculate equal opportunity difference
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.03 + random.gen::<f32>() * 0.08
+            0.03 + random.random::<f32>() * 0.08
         })
     }
 
@@ -562,9 +562,9 @@ impl FairnessAssessment {
     ) -> Result<f32> {
         // Calculate equalized odds difference
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.04 + random.gen::<f32>() * 0.09
+            0.04 + random.random::<f32>() * 0.09
         })
     }
 
@@ -575,9 +575,9 @@ impl FairnessAssessment {
     ) -> Result<f32> {
         // Calculate individual fairness score
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.9 + random.gen::<f32>() * 0.1
+            0.9 + random.random::<f32>() * 0.1
         })
     }
 }
@@ -654,9 +654,9 @@ impl ExplanationQualityEvaluator {
     ) -> Result<f32> {
         // Calculate explanation fidelity
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.85 + random.gen::<f32>() * 0.1
+            0.85 + random.random::<f32>() * 0.1
         })
     }
 
@@ -667,9 +667,9 @@ impl ExplanationQualityEvaluator {
     ) -> Result<f32> {
         // Calculate explanation stability
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.8 + random.gen::<f32>() * 0.15
+            0.8 + random.random::<f32>() * 0.15
         })
     }
 
@@ -679,9 +679,9 @@ impl ExplanationQualityEvaluator {
     ) -> Result<f32> {
         // Calculate explanation comprehensibility
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.75 + random.gen::<f32>() * 0.2
+            0.75 + random.random::<f32>() * 0.2
         })
     }
 
@@ -692,9 +692,9 @@ impl ExplanationQualityEvaluator {
     ) -> Result<f32> {
         // Calculate feature importance consistency
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.82 + random.gen::<f32>() * 0.12
+            0.82 + random.random::<f32>() * 0.12
         })
     }
 
@@ -705,9 +705,9 @@ impl ExplanationQualityEvaluator {
     ) -> Result<f32> {
         // Calculate counterfactual validity
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.78 + random.gen::<f32>() * 0.15
+            0.78 + random.random::<f32>() * 0.15
         })
     }
 
@@ -718,9 +718,9 @@ impl ExplanationQualityEvaluator {
     ) -> Result<f32> {
         // Calculate local vs global explanation consistency
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            0.79 + random.gen::<f32>() * 0.16
+            0.79 + random.random::<f32>() * 0.16
         })
     }
 }

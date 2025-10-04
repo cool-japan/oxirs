@@ -1,18 +1,18 @@
 # OxiRS SHACL-AI - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-shacl-ai** provides AI-enhanced SHACL validation (experimental feature).
 
-### Alpha Release Status
-- **278 tests passing** (100% success rate)
-- **Zero compilation errors/warnings**
-- **Neural network-based validation**
-- **Shape learning capabilities**
-- **AI-powered constraint generation**
-- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **278 tests passing** (unit + integration) with zero warnings
+- **Neural network validation** wired into persisted dataset workflow & telemetry
+- **Shape learning** leveraging CLI pipelines and vector embeddings
+- **AI-powered constraint generation** with remediation hints and confidence scoring
+- **Observability**: SciRS2 metrics tracking model drift and inference latency
+- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

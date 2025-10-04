@@ -1505,7 +1505,7 @@ impl StarStore {
 
     /// Get a streaming iterator that processes triples in chunks
     /// This is more memory-efficient for large stores
-    pub fn streaming_iter(&self, chunk_size: usize) -> StreamingTripleIterator {
+    pub fn streaming_iter(&self, chunk_size: usize) -> StreamingTripleIterator<'_> {
         StreamingTripleIterator::new(self, chunk_size)
     }
 

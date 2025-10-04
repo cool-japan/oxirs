@@ -1,0 +1,193 @@
+//! SHACL Validation Integration Tests
+//!
+//! Tests W3C SHACL validation endpoint compliance
+
+use axum::{
+    body::Body,
+    http::{header, Request, StatusCode},
+};
+use oxirs_core::rdf_store::ConcreteStore;
+use std::sync::Arc;
+use tower::ServiceExt;
+
+/// Test SHACL validation on default graph with conforming data
+#[tokio::test]
+async fn test_shacl_validation_conforms() {
+    let store = Arc::new(ConcreteStore::new());
+
+    // Add test data that conforms to shape
+    let turtle_data = r#"
+        @prefix ex: <http://example.org/> .
+        ex:Alice a ex:Person ;
+            ex:name "Alice" ;
+            ex:age 30 .
+    "#;
+
+    // Parse and insert data
+    use oxirs_core::format::parser::parse_turtle;
+    let triples = parse_turtle(turtle_data, None).unwrap();
+    for triple in triples {
+        store.insert_triple(triple).unwrap();
+    }
+
+    // SHACL shape requiring ex:name for ex:Person
+    let shape = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:PersonShape
+            a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minCount 1 ;
+                sh:datatype xsd:string ;
+            ] .
+    "#;
+
+    // TODO: Build router with SHACL handler and test
+    // This requires access to build_app or similar
+}
+
+/// Test SHACL validation on default graph with non-conforming data
+#[tokio::test]
+async fn test_shacl_validation_fails() {
+    let store = Arc::new(ConcreteStore::new());
+
+    // Add test data that violates shape (missing ex:name)
+    let turtle_data = r#"
+        @prefix ex: <http://example.org/> .
+        ex:Bob a ex:Person ;
+            ex:age 25 .
+    "#;
+
+    use oxirs_core::format::parser::parse_turtle;
+    let triples = parse_turtle(turtle_data, None).unwrap();
+    for triple in triples {
+        store.insert_triple(triple).unwrap();
+    }
+
+    // SHACL shape requiring ex:name for ex:Person
+    let shape = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+
+        ex:PersonShape
+            a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minCount 1 ;
+            ] .
+    "#;
+
+    // TODO: Build router and test - should return 400 with validation errors
+}
+
+/// Test SHACL validation with target node parameter
+#[tokio::test]
+async fn test_shacl_validation_with_target_node() {
+    // Test focused validation on specific node
+    // Placeholder for actual test
+}
+
+/// Test SHACL validation on named graph
+#[tokio::test]
+async fn test_shacl_validation_named_graph() {
+    let store = Arc::new(ConcreteStore::new());
+
+    // Add test data to named graph
+    let turtle_data = r#"
+        @prefix ex: <http://example.org/> .
+        ex:Charlie a ex:Person ;
+            ex:name "Charlie" ;
+            ex:email "charlie@example.org" .
+    "#;
+
+    // TODO: Insert into named graph and validate
+}
+
+/// Test SHACL validation on union graph
+#[tokio::test]
+async fn test_shacl_validation_union_graph() {
+    // Test validation across all graphs
+    // Placeholder for actual test
+}
+
+/// Test SHACL validation error handling - graph not found
+#[tokio::test]
+async fn test_shacl_error_graph_not_found() {
+    // Test accessing non-existent graph
+    // Should return 404 Not Found
+}
+
+/// Test SHACL validation error handling - invalid shapes
+#[tokio::test]
+async fn test_shacl_error_invalid_shapes() {
+    // Test with malformed SHACL shapes graph
+    // Should return 400 Bad Request with parse error
+}
+
+/// Test SHACL validation error handling - wrong content type
+#[tokio::test]
+async fn test_shacl_error_wrong_content_type() {
+    // Test with non-Turtle content type
+    // Should return 400 Bad Request
+}
+
+/// Test SHACL validation report format
+#[tokio::test]
+async fn test_shacl_validation_report_format() {
+    // Test that validation report follows W3C SHACL spec
+    // Should contain sh:ValidationReport, sh:conforms, etc.
+}
+
+/// Test SHACL validation with complex constraints
+#[tokio::test]
+async fn test_shacl_complex_constraints() {
+    let store = Arc::new(ConcreteStore::new());
+
+    // Complex shape with multiple constraints
+    let shape = r#"
+        @prefix sh: <http://www.w3.org/ns/shacl#> .
+        @prefix ex: <http://example.org/> .
+        @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+        ex:PersonShape
+            a sh:NodeShape ;
+            sh:targetClass ex:Person ;
+            sh:property [
+                sh:path ex:name ;
+                sh:minCount 1 ;
+                sh:maxCount 1 ;
+                sh:datatype xsd:string ;
+            ] ;
+            sh:property [
+                sh:path ex:age ;
+                sh:minInclusive 0 ;
+                sh:maxInclusive 150 ;
+                sh:datatype xsd:integer ;
+            ] ;
+            sh:property [
+                sh:path ex:email ;
+                sh:pattern "^[\\w\\.]+@[\\w\\.]+\\.[a-z]{2,}$" ;
+            ] .
+    "#;
+
+    // TODO: Test with various data scenarios
+}
+
+/// Test SHACL validation performance metrics
+#[tokio::test]
+async fn test_shacl_validation_metrics() {
+    // Test that X-Duration-Ms and X-SHACL-Conforms headers are present
+    // Placeholder for actual test
+}
+
+/// Test SHACL validation with RDF-star data
+#[tokio::test]
+#[cfg(feature = "rdf-star")]
+async fn test_shacl_validation_rdf_star() {
+    // Test validation on RDF-star triples
+    // Placeholder for actual test
+}

@@ -599,7 +599,7 @@ impl MultiverseComputingEngine {
                 validation_rules: UniverseValidationRules::random_variant(),
                 computational_power: ComputationalPower::random_variant(),
                 timeline_coordinate: TimelineCoordinate::random_position(),
-                entanglement_level: ({ let mut random = Random::default(); random.gen::<f64>() }),
+                entanglement_level: ({ let mut random = Random::default(); random.random::<f64>() }),
             };
             
             universes.push(universe);
@@ -616,9 +616,9 @@ impl MultiverseComputingEngine {
         for (i, universe_a) in universes.iter().enumerate() {
             for universe_b in universes.iter().skip(i + 1) {
                 let entanglement = EntanglementStrength {
-                    coherence: ({ let mut random = Random::default(); random.gen::<f64>() }),
-                    bandwidth: ({ let mut random = Random::default(); random.gen::<f64>() }) * 1000.0,
-                    decay_rate: ({ let mut random = Random::default(); random.gen::<f64>() }) * 0.1,
+                    coherence: ({ let mut random = Random::default(); random.random::<f64>() }),
+                    bandwidth: ({ let mut random = Random::default(); random.random::<f64>() }) * 1000.0,
+                    decay_rate: ({ let mut random = Random::default(); random.random::<f64>() }) * 0.1,
                     last_sync: std::time::Instant::now(),
                 };
                 
@@ -710,7 +710,7 @@ impl MultiverseComputingEngine {
     /// Quantum superposition logic validation
     async fn quantum_validation(&self, query: &str) -> Result<ValidationOutcome, ShaclAIError> {
         // Simulate quantum validation with superposition
-        let superposition_factor = ({ let mut random = Random::default(); random.gen::<f64>() });
+        let superposition_factor = ({ let mut random = Random::default(); random.random::<f64>() });
         
         if superposition_factor > 0.8 {
             Ok(ValidationOutcome::Valid)
@@ -726,7 +726,7 @@ impl MultiverseComputingEngine {
 
     /// Fuzzy logic validation with uncertainty
     async fn fuzzy_validation(&self, query: &str) -> Result<ValidationOutcome, ShaclAIError> {
-        let fuzzy_degree = ({ let mut random = Random::default(); random.gen::<f64>() });
+        let fuzzy_degree = ({ let mut random = Random::default(); random.random::<f64>() });
         
         if fuzzy_degree > 0.7 {
             Ok(ValidationOutcome::Valid)
@@ -792,10 +792,10 @@ pub struct MultiverseValidationResult {
 impl PhysicsConstants {
     fn random_variant() -> Self {
         Self {
-            light_speed: 299792458.0 * (0.8 + ({ let mut random = Random::default(); random.gen::<f64>() }) * 0.4),
-            planck_constant: 6.62607015e-34 * (0.8 + ({ let mut random = Random::default(); random.gen::<f64>() }) * 0.4),
-            logic_factor: ({ let mut random = Random::default(); random.gen::<f64>() }),
-            information_density: ({ let mut random = Random::default(); random.gen::<f64>() }) * 1e12,
+            light_speed: 299792458.0 * (0.8 + ({ let mut random = Random::default(); random.random::<f64>() }) * 0.4),
+            planck_constant: 6.62607015e-34 * (0.8 + ({ let mut random = Random::default(); random.random::<f64>() }) * 0.4),
+            logic_factor: ({ let mut random = Random::default(); random.random::<f64>() }),
+            information_density: ({ let mut random = Random::default(); random.random::<f64>() }) * 1e12,
         }
     }
 }
@@ -803,9 +803,9 @@ impl PhysicsConstants {
 impl UniverseValidationRules {
     fn random_variant() -> Self {
         Self {
-            causality_strict: ({ let mut random = Random::default(); random.gen::<bool>() }),
-            paradox_tolerance: ({ let mut random = Random::default(); random.gen::<bool>() }),
-            logic_system: match ({ let mut random = Random::default(); random.gen::<u8>() }) % 6 {
+            causality_strict: ({ let mut random = Random::default(); random.random::<bool>() }),
+            paradox_tolerance: ({ let mut random = Random::default(); random.random::<bool>() }),
+            logic_system: match ({ let mut random = Random::default(); random.random::<u8>() }) % 6 {
                 0 => LogicSystem::Classical,
                 1 => LogicSystem::Quantum,
                 2 => LogicSystem::Fuzzy,
@@ -814,10 +814,10 @@ impl UniverseValidationRules {
                 _ => LogicSystem::Transcendent,
             },
             reality_consistency: RealityConsistency {
-                temporal_strict: ({ let mut random = Random::default(); random.gen::<bool>() }),
-                spatial_strict: ({ let mut random = Random::default(); random.gen::<bool>() }),
-                dimensional_strict: ({ let mut random = Random::default(); random.gen::<bool>() }),
-                causal_loop_tolerance: ({ let mut random = Random::default(); random.gen::<bool>() }),
+                temporal_strict: ({ let mut random = Random::default(); random.random::<bool>() }),
+                spatial_strict: ({ let mut random = Random::default(); random.random::<bool>() }),
+                dimensional_strict: ({ let mut random = Random::default(); random.random::<bool>() }),
+                causal_loop_tolerance: ({ let mut random = Random::default(); random.random::<bool>() }),
             },
         }
     }
@@ -826,10 +826,10 @@ impl UniverseValidationRules {
 impl ComputationalPower {
     fn random_variant() -> Self {
         Self {
-            speed_multiplier: 0.1 + ({ let mut random = Random::default(); random.gen::<f64>() }) * 10.0,
-            memory_multiplier: 0.1 + ({ let mut random = Random::default(); random.gen::<f64>() }) * 10.0,
-            coherence_time: ({ let mut random = Random::default(); random.gen::<f64>() }) * 1000.0,
-            parallel_capacity: (({ let mut random = Random::default(); random.gen::<usize>() }) % 1000) + 1,
+            speed_multiplier: 0.1 + ({ let mut random = Random::default(); random.random::<f64>() }) * 10.0,
+            memory_multiplier: 0.1 + ({ let mut random = Random::default(); random.random::<f64>() }) * 10.0,
+            coherence_time: ({ let mut random = Random::default(); random.random::<f64>() }) * 1000.0,
+            parallel_capacity: (({ let mut random = Random::default(); random.random::<usize>() }) % 1000) + 1,
         }
     }
 }
@@ -838,9 +838,9 @@ impl TimelineCoordinate {
     fn random_position() -> Self {
         Self {
             timeline_id: Uuid::new_v4().to_string(),
-            temporal_position: ({ let mut random = Random::default(); random.gen::<f64>() }) * 1000.0,
-            branching_factor: ({ let mut random = Random::default(); random.gen::<f64>() }) * 10.0,
-            probability_weight: ({ let mut random = Random::default(); random.gen::<f64>() }),
+            temporal_position: ({ let mut random = Random::default(); random.random::<f64>() }) * 1000.0,
+            branching_factor: ({ let mut random = Random::default(); random.random::<f64>() }) * 10.0,
+            probability_weight: ({ let mut random = Random::default(); random.random::<f64>() }),
         }
     }
 }
@@ -885,7 +885,7 @@ impl PossibilitySpaceNavigator {
 impl InfinitePossibilityGenerator {
     fn new() -> Self {
         Self {
-            seed: ({ let mut random = Random::default(); random.gen::<bool>() }),
+            seed: ({ let mut random = Random::default(); random.random::<bool>() }),
             algorithm: GenerationAlgorithm::Fractal,
             constraints: PossibilityConstraints {
                 physics_bounds: HashMap::new(),

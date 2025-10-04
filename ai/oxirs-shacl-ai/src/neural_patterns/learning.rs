@@ -9,7 +9,7 @@
 
 use scirs2_core::array_protocol::concatenate;
 use scirs2_core::ndarray_ext::{Array1, Array2, Axis};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use std::collections::HashMap;
 use std::time::Instant;
 
@@ -266,7 +266,10 @@ impl NeuralPatternLearner {
 
         // Placeholder feature extraction
         for i in 0..feature_dim {
-            features[i] = ({ let mut random = Random::default(); random.gen::<f64>() });
+            features[i] = {
+                let mut random = Random::default();
+                random.random::<f64>()
+            };
         }
 
         Ok(features)
@@ -551,7 +554,7 @@ impl NeuralPatternLearner {
         let mut replay_correlations = HashMap::new();
 
         for _ in 0..replay_size.min(replay_buffer.len()) {
-            let idx = rng.gen_range(0..replay_buffer.len());
+            let idx = rng.random_range(0, replay_buffer.len());
             let (pattern, correlations) = &replay_buffer[idx];
             replay_patterns.push(pattern.clone());
             replay_correlations.extend(correlations.clone());
@@ -639,7 +642,7 @@ impl NeuralPatternLearner {
 
             // Update weights
             let update =
-                corrected_momentum.mapv(|m| m) / corrected_squared_grad.mapv(|v| (v.sqrt() + eps));
+                corrected_momentum.mapv(|m| m) / corrected_squared_grad.mapv(|v| v.sqrt() + eps);
 
             // Apply update to appropriate weight matrix
             if param_name == "embedding" {
@@ -700,10 +703,10 @@ impl NeuralPatternLearner {
 
             for mut row in predictions.rows_mut() {
                 for elem in row.iter_mut() {
-                    if rng.r#gen::<f64>() < dropout_rate {
+                    if rng.random::<f64>() < dropout_rate {
                         *elem = 0.0;
                     } else {
-                        *elem = rng.r#gen::<f64>() / (1.0 - dropout_rate); // Scale to maintain expected value
+                        *elem = rng.random::<f64>() / (1.0 - dropout_rate); // Scale to maintain expected value
                     }
                 }
             }
@@ -940,7 +943,12 @@ impl NetworkWeights {
         let mut weights = Array2::zeros((input_dim, output_dim));
 
         for elem in weights.iter_mut() {
-            *elem = ({ let mut random = Random::default(); random.gen::<f64>() }) * 2.0 * bound - bound;
+            *elem = ({
+                let mut random = Random::default();
+                random.random::<f64>()
+            }) * 2.0
+                * bound
+                - bound;
         }
 
         weights

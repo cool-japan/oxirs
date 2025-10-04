@@ -5,7 +5,8 @@
 
 use anyhow::Result;
 // MIGRATED: Using scirs2-core instead of direct rand dependency
-use scirs2_core::random::{Rng, Random};
+#[allow(unused_imports)]
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -460,11 +461,11 @@ impl RaftStateMachine {
             // Generate random values outside the async block
             let delay_ms = {
                 let mut random = Random::default();
-                random.gen_range(10..50)
+                random.random_range(10, 50)
             };
             let vote_granted = {
                 let mut random = Random::default();
-                random.gen_bool(0.5)
+                random.random_bool_with_chance(0.5)
             };
 
             // Simulate vote request (in real implementation, this would be an RPC)

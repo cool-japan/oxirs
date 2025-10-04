@@ -1,10 +1,10 @@
 # OxiRS ARQ
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL query engine with algebra and optimization**
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-arq = "0.1.0-alpha.1"
+oxirs-arq = "0.1.0-alpha.2"
 ```
 
 ## Quick Start
@@ -461,13 +461,13 @@ at your option.
 
 ## Status
 
-🚧 **Alpha Release (v0.1.0-alpha.1)** - September 30, 2025
+� **Alpha Release (v0.1.0-alpha.2)** - October 4, 2025
 
 Current alpha implementation status:
-- ✅ Basic SPARQL 1.1 parsing and execution
-- ✅ Query optimization passes
-- 🚧 Parallel execution framework (experimental)
-- 🚧 Federation support (basic)
-- ✅ Custom function framework
+- ✅ Full SPARQL 1.1/1.2 parsing and execution across persisted datasets
+- ✅ Federation (`SERVICE`) with retries, `SERVICE SILENT`, and result merging
+- ✅ Parallel execution framework instrumented with SciRS2 metrics
+- ✅ Custom function framework with dynamic registration
+- 🚧 Adaptive cardinality estimation (in progress)
 
-Note: This is an alpha release. Some features are incomplete and APIs may change.
+Note: This is an alpha release. Some features remain experimental and APIs may evolve before beta.

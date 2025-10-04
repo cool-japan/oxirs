@@ -12,16 +12,14 @@ categories = ["database", "data-structures", "parsing"]
 rust-version.workspace = true
 
 [dependencies]
-# oxigraph.workspace = true    # REMOVED: Replaced with native implementations
-# oxrdf.workspace = true       # REMOVED: Replaced with native implementations
-# oxjsonld.workspace = true    # REMOVED: Replaced with native implementations
-# rio_api.workspace = true     # REMOVED: Using native parsing implementations
-# rio_turtle.workspace = true  # REMOVED: Using native parsing implementations  
-# rio_xml.workspace = true     # REMOVED: Using native parsing implementations
+# Temporary: OxiGraph dependencies for parser implementations (until native implementations complete)
+oxttl.workspace = true         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
+oxrdfxml.workspace = true      # RDF/XML parser
+oxjsonld.workspace = true      # JSON-LD parser
+oxrdf.workspace = true         # RDF data model (required by parsers)
+
 json-event-parser = { version = "0.2", features = ["async-tokio"] }
-# oxiri = "0.2"              # REMOVED: Using native IRI validation
 quick-xml = { version = "0.38", features = ["async-tokio"] }
-# oxilangtag = "0.1"         # REMOVED: Using native language tag validation
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 anyhow.workspace = true
@@ -51,6 +49,9 @@ tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util
 async-trait = "0.1"
 smallvec = "1.15"
 futures = "0.3"
+
+# HTTP client for federated SPARQL queries
+reqwest = { version = "0.12", features = ["json", "stream"] }
 
 # Hash function dependencies for SPARQL 1.2
 sha1 = "0.10"

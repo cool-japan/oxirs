@@ -157,16 +157,18 @@ impl SparqlParser {
         let content = content[1..content.len() - 1].trim();
         let mut triple_patterns: Vec<AlgebraTriplePattern> = Vec::new();
 
-        // Split by periods (very naive approach)
-        for triple_str in content.split('.') {
+        // Split by periods, but respect IRI brackets
+        let triple_strings = self.split_triples_by_period(content);
+
+        for triple_str in triple_strings {
             let triple_str = triple_str.trim();
-            if triple_str.is_empty() {
+            if triple_str.is_empty() || triple_str.starts_with("FILTER") {
                 continue;
             }
 
             // Parse triple pattern (subject predicate object)
             let parts: Vec<&str> = triple_str.split_whitespace().collect();
-            if parts.len() != 3 {
+            if parts.len() < 3 {
                 return Err(OxirsError::Parse(format!(
                     "Invalid triple pattern: '{triple_str}'"
                 )));
@@ -235,16 +237,18 @@ impl SparqlParser {
         let content = content[1..content.len() - 1].trim();
         let mut triple_patterns: Vec<TriplePattern> = Vec::new();
 
-        // Split by periods (very naive approach)
-        for triple_str in content.split('.') {
+        // Split by periods, but respect IRI brackets
+        let triple_strings = self.split_triples_by_period(content);
+
+        for triple_str in triple_strings {
             let triple_str = triple_str.trim();
-            if triple_str.is_empty() {
+            if triple_str.is_empty() || triple_str.starts_with("FILTER") {
                 continue;
             }
 
             // Parse triple pattern (subject predicate object)
             let parts: Vec<&str> = triple_str.split_whitespace().collect();
-            if parts.len() != 3 {
+            if parts.len() < 3 {
                 return Err(OxirsError::Parse(format!(
                     "Invalid triple pattern: '{triple_str}'"
                 )));
@@ -330,6 +334,61 @@ impl SparqlParser {
             self.convert_term_pattern_back(&pattern.predicate),
             self.convert_term_pattern_back(&pattern.object),
         )
+    }
+
+    /// Split triples by period while respecting IRI brackets
+    fn split_triples_by_period(&self, content: &str) -> Vec<String> {
+        let mut triples = Vec::new();
+        let mut current = String::new();
+        let mut in_iri = false;
+        let mut in_literal = false;
+        let mut escape_next = false;
+
+        for ch in content.chars() {
+            if escape_next {
+                current.push(ch);
+                escape_next = false;
+                continue;
+            }
+
+            match ch {
+                '\\' => {
+                    escape_next = true;
+                    current.push(ch);
+                }
+                '<' if !in_literal => {
+                    in_iri = true;
+                    current.push(ch);
+                }
+                '>' if in_iri && !in_literal => {
+                    in_iri = false;
+                    current.push(ch);
+                }
+                '"' => {
+                    in_literal = !in_literal;
+                    current.push(ch);
+                }
+                '.' if !in_iri && !in_literal => {
+                    // End of triple
+                    let trimmed = current.trim();
+                    if !trimmed.is_empty() {
+                        triples.push(trimmed.to_string());
+                    }
+                    current.clear();
+                }
+                _ => {
+                    current.push(ch);
+                }
+            }
+        }
+
+        // Don't forget the last triple if there's no trailing period
+        let trimmed = current.trim();
+        if !trimmed.is_empty() {
+            triples.push(trimmed.to_string());
+        }
+
+        triples
     }
 }
 

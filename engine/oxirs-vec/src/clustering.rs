@@ -517,6 +517,7 @@ impl ClusteringEngine {
     // Helper methods
 
     /// Initialize centroids using k-means++
+    #[allow(deprecated)]
     fn initialize_centroids_kmeans_plus_plus(
         &self,
         resources: &[(String, Vector)],
@@ -547,7 +548,7 @@ impl ClusteringEngine {
                 total_distance += min_dist_sq;
             }
 
-            let target = rng.gen::<f32>() * total_distance;
+            let target = rng.random::<f32>() * total_distance;
             let mut cumulative = 0.0;
 
             for (i, &dist) in distances.iter().enumerate() {

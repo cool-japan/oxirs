@@ -500,7 +500,7 @@ impl QueryExecutor {
     fn should_use_streaming(&self, algebra: &Algebra) -> bool {
         self.estimate_cardinality(algebra) > 50_000
     }
-    // 
+    //
     //     /// Check if query should use vectorized execution
     //     fn should_use_vectorized(&self, algebra: &Algebra) -> bool {
     //         self.vectorized_context.is_some() &&
@@ -508,7 +508,7 @@ impl QueryExecutor {
     //         self.estimate_cardinality(algebra) > 1000 &&
     //         self.estimate_complexity(algebra) <= 10  // Not too complex for vectorization
     //     }
-    // 
+    //
     //     /// Check if algebra can be vectorized efficiently
     //     fn is_vectorizable_algebra(&self, algebra: &Algebra) -> bool {
     //         match algebra {
@@ -525,13 +525,13 @@ impl QueryExecutor {
     //             _ => false,  // Other operations not yet vectorized
     //         }
     //     }
-    // 
+    //
     //     /// Execute using vectorized SIMD strategy
     //     fn execute_vectorized(&mut self, algebra: &Algebra, dataset: &dyn Dataset) -> Result<Solution> {
     //         if let Some(ref mut vectorized_context) = self.vectorized_context {
     //             // Convert dataset to columnar format for vectorized processing
     //             let columnar_data = self.dataset_to_columnar(dataset)?;
-    // 
+    //
     //             // Execute using vectorized operations
     //             vectorized_context.execute_optimal(algebra, &columnar_data)
     //         } else {
@@ -1934,7 +1934,7 @@ impl QueryExecutor {
     fn estimate_memory_usage(&self, solution: &Solution) -> usize {
         solution.len() * 1024 // Rough estimate: 1KB per binding
     }
-    // 
+    //
     //     /// Convert dataset to columnar format for vectorized processing
     //     fn dataset_to_columnar(&self, dataset: &dyn Dataset) -> Result<vectorized::ColumnarData> {
     //         // Get all triples from dataset (simplified approach)
@@ -1943,23 +1943,23 @@ impl QueryExecutor {
     //             predicate: Term::Variable(Variable::new("p")),
     //             object: Term::Variable(Variable::new("o")),
     //         };
-    // 
+    //
     //         let triples = dataset.find_triples(&all_triples_pattern)?;
     //         let mut columnar_data = vectorized::ColumnarData::new(triples.len());
-    // 
+    //
     //         // Convert each triple to columnar format
     //         for (subject, predicate, object) in triples {
     //             columnar_data.add_triple(subject, predicate, object)?;
     //         }
-    // 
+    //
     //         Ok(columnar_data)
     //     }
-    // 
+    //
     //     /// Get vectorized execution performance report
     //     pub fn get_vectorized_performance_report(&self) -> Option<vectorized::VectorizedPerformanceReport> {
     //         self.vectorized_context.as_ref().map(|ctx| ctx.get_performance_report())
     //     }
-    // 
+    //
     //     /// Enable or disable vectorized execution
     //     pub fn set_vectorized_enabled(&mut self, enabled: bool) {
     //         if enabled && self.vectorized_context.is_none() {
@@ -1973,7 +1973,7 @@ impl QueryExecutor {
     //             self.vectorized_context = None;
     //         }
     //     }
-    // 
+    //
     //     /// Check if vectorized execution is available
     //     pub fn is_vectorized_available(&self) -> bool {
     //         self.vectorized_context.is_some()

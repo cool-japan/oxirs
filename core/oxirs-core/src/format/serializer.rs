@@ -156,66 +156,99 @@ impl RdfSerializer {
     // Format-specific serializer implementations
 
     fn create_turtle_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement actual Turtle serialization using extracted oxttl components
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use existing Turtle serializer implementation
+        let mut turtle_serializer = super::turtle::TurtleSerializer::new();
+
+        // Apply configuration
+        if let Some(base) = self.base_iri {
+            turtle_serializer = turtle_serializer.with_base_iri(&base);
+        }
+        for (prefix, iri) in self.prefixes {
+            turtle_serializer = turtle_serializer.with_prefix(&prefix, &iri);
+        }
+        if self.pretty {
+            turtle_serializer = turtle_serializer.pretty();
+        }
+
+        WriterQuadSerializer::new(Box::new(turtle_serializer.for_writer(writer)))
     }
 
     fn create_ntriples_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement N-Triples serialization
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use existing N-Triples serializer implementation
+        let ntriples_serializer = super::ntriples::NTriplesSerializer::new().for_writer(writer);
+        WriterQuadSerializer::new(Box::new(ntriples_serializer))
     }
 
     fn create_nquads_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement N-Quads serialization
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use N-Quads serializer implementation
+        let nquads_serializer = super::nquads::NQuadsSerializer::new().for_writer(writer);
+        WriterQuadSerializer::new(Box::new(nquads_serializer))
     }
 
     fn create_trig_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement TriG serialization
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use TriG serializer implementation
+        let mut trig_serializer = super::trig::TriGSerializer::new();
+
+        // Apply configuration
+        if let Some(base) = self.base_iri {
+            trig_serializer = trig_serializer.with_base_iri(&base);
+        }
+        for (prefix, iri) in self.prefixes {
+            trig_serializer = trig_serializer.with_prefix(&prefix, &iri);
+        }
+        if self.pretty {
+            trig_serializer = trig_serializer.pretty();
+        }
+
+        WriterQuadSerializer::new(Box::new(trig_serializer.for_writer(writer)))
     }
 
     fn create_rdfxml_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement RDF/XML serialization using extracted oxrdfxml components
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use existing RDF/XML serializer implementation
+        let mut rdfxml_serializer = super::rdfxml::RdfXmlSerializer::new();
+
+        // Apply configuration
+        if self.pretty {
+            rdfxml_serializer = rdfxml_serializer.pretty();
+        }
+
+        WriterQuadSerializer::new(Box::new(rdfxml_serializer.for_writer(writer)))
     }
 
     fn create_jsonld_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement JSON-LD serialization using extracted oxjsonld components
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use existing JSON-LD serializer implementation
+        let mut jsonld_serializer = super::jsonld::JsonLdSerializer::new();
+
+        // Apply configuration
+        if self.pretty {
+            jsonld_serializer = jsonld_serializer.pretty();
+        }
+
+        WriterQuadSerializer::new(Box::new(jsonld_serializer.for_writer(writer)))
     }
 
     fn create_n3_serializer<W: Write + 'static>(self, writer: W) -> WriterQuadSerializer<W> {
-        // TODO: Implement N3 serialization
-        WriterQuadSerializer::new(Box::new(DummySerializer::new(writer)))
+        // Use N3 serializer implementation
+        let mut n3_serializer = super::n3::N3Serializer::new();
+
+        // Apply configuration
+        if let Some(base) = self.base_iri {
+            n3_serializer = n3_serializer.with_base_iri(&base);
+        }
+        for (prefix, iri) in self.prefixes {
+            n3_serializer = n3_serializer.with_prefix(&prefix, &iri);
+        }
+        if self.pretty {
+            n3_serializer = n3_serializer.pretty();
+        }
+
+        WriterQuadSerializer::new(Box::new(n3_serializer.for_writer(writer)))
     }
 }
 
 impl Default for RdfSerializer {
     fn default() -> Self {
         Self::new(RdfFormat::default())
-    }
-}
-
-/// Temporary dummy serializer for stub implementation
-struct DummySerializer<W: Write> {
-    writer: W,
-}
-
-impl<W: Write> DummySerializer<W> {
-    fn new(writer: W) -> Self {
-        Self { writer }
-    }
-}
-
-impl<W: Write> QuadSerializer<W> for DummySerializer<W> {
-    fn serialize_quad(&mut self, _quad: QuadRef<'_>) -> QuadSerializeResult {
-        // TODO: Replace with actual serialization logic
-        Ok(())
-    }
-
-    fn finish(self: Box<Self>) -> SerializeResult<W> {
-        Ok(self.writer)
     }
 }
 

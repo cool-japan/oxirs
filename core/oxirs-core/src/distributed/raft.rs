@@ -597,7 +597,8 @@ impl RaftNode {
         let stats = self.stats.clone();
 
         tokio::spawn(async move {
-            use scirs2_core::random::{Rng, Random};
+            #[allow(unused_imports)]
+            use scirs2_core::random::{Random, Rng};
 
             loop {
                 // Random election timeout

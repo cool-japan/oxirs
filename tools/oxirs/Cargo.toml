@@ -100,3 +100,6 @@ optional = true
 name = "oxirs"
 path = "src/main.rs"
 
+[[bench]]
+name = "cli_performance"
+harness = false

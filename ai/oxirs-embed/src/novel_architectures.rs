@@ -12,7 +12,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use scirs2_core::ndarray_ext::{s, Array1, Array2, Array3};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -828,13 +828,13 @@ impl NovelArchitectureModel {
             let mut random = Random::default();
             let structural_features =
                 Array2::from_shape_fn((num_entities, params.structural_dim), |_| {
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 });
 
             let position_encodings = if params.use_positional_encoding {
                 Some(Array2::from_shape_fn(
                     (num_entities, params.attention_dim),
-                    |_| random.gen::<f64>(),
+                    |_| random.random::<f64>(),
                 ))
             } else {
                 None
@@ -858,7 +858,7 @@ impl NovelArchitectureModel {
 
         let mut random = Random::default();
         let ode_params =
-            Array2::from_shape_fn((dimensions, params.hidden_dims[0]), |_| random.gen::<f64>());
+            Array2::from_shape_fn((dimensions, params.hidden_dims[0]), |_| random.random::<f64>());
 
         self.architecture_state.ode_state = Some(NeuralODEState {
             current_time: 0.0,
@@ -886,14 +886,14 @@ impl NovelArchitectureModel {
             let manifold_embeddings = match params.initialization {
                 HyperbolicInit::RandomNormal => {
                     Array2::from_shape_fn((num_entities, params.manifold_dim), |_| {
-                        random.gen::<f64>()
+                        random.random::<f64>()
                     })
                 }
                 HyperbolicInit::UniformHyperbolic => {
                     // Initialize uniformly on hyperbolic space
                     let mut embeddings =
                         Array2::from_shape_fn((num_entities, params.manifold_dim), |_| {
-                            random.gen::<f64>() * 2.0 - 1.0
+                            random.random::<f64>() * 2.0 - 1.0
                         });
                     // Project to Poincaré ball
                     for mut row in embeddings.rows_mut() {
@@ -905,7 +905,7 @@ impl NovelArchitectureModel {
                     embeddings
                 }
                 _ => Array2::from_shape_fn((num_entities, params.manifold_dim), |_| {
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 }),
             };
 
@@ -931,11 +931,11 @@ impl NovelArchitectureModel {
 
         let mut random = Random::default();
         let connection = Array3::from_shape_fn((dimensions, dimensions, dimensions), |_| {
-            random.gen::<f64>()
+            random.random::<f64>()
         });
 
         let curvature_tensor = Array3::from_shape_fn((dimensions, dimensions, dimensions), |_| {
-            random.gen::<f64>()
+            random.random::<f64>()
         });
 
         self.architecture_state.geometric_state = Some(GeometricState {

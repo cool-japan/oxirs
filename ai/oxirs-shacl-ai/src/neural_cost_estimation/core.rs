@@ -2,8 +2,8 @@
 
 use crate::{Result, ShaclAiError};
 
-use scirs2_core::ndarray_ext::{Array1, Array2};
 use oxirs_core::query::algebra::AlgebraTriplePattern;
+use scirs2_core::ndarray_ext::{Array1, Array2};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Instant, SystemTime};
 

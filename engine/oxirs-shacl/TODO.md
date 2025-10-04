@@ -1,18 +1,18 @@
 # OxiRS SHACL - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released
+## ✅ Current Status: v0.1.0-alpha.2 Released
 
 **oxirs-shacl** provides SHACL (Shapes Constraint Language) validation for RDF data.
 
-### Alpha Release Status
-- **Extensive test suite**
-- **Zero compilation errors/warnings**
-- **Core constraint types implemented**
-- **Property path support**
-- **Basic validation engine**
-- **Released on crates.io**: `oxirs-shacl = "0.1.0-alpha.1"`
+### Alpha.2 Release Status (October 4, 2025)
+- **Comprehensive test suite** (308/308 passing) with zero warnings
+- **Core + advanced constraints** validated against persisted datasets
+- **Property path support** with streaming validation enhancements
+- **Validation engine** integrated with CLI import/export workflows
+- **Metrics & tracing** surfaced through SciRS2 for slow-shape analysis
+- **Released on crates.io**: `oxirs-shacl = "0.1.0-alpha.2"`
 
 ## 🎯 Post-Alpha Development Roadmap
 

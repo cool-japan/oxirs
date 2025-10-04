@@ -8,8 +8,10 @@ use anyhow::Result;
 use scirs2_core::error::CoreError;
 use scirs2_core::memory::BufferPool;
 use scirs2_core::memory_efficient::ChunkedArray;
-// Temporary: Use compatibility shim until scirs2-core beta.4
-use crate::scirs2_compat::{Counter, Profiler, Histogram, Timer, SimdArray};
+// Native SciRS2 APIs (beta.4+)
+use scirs2_core::metrics::{Counter, Histogram, Timer};
+use scirs2_core::profiling::Profiler;
+use scirs2_core::simd::SimdArray;
 use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1, ArrayView2, Axis};
 use scirs2_core::parallel_ops::{ParallelIterator, IntoParallelIterator};
 use scirs2_core::random::{Rng, Random, seeded_rng, ThreadLocalRngPool, ScientificSliceRandom};

@@ -3,7 +3,8 @@
 use crate::{ModelConfig, ModelStats, Triple};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use scirs2_core::random::{Rng, Random};
+#[allow(unused_imports)]
+use scirs2_core::random::{Random, Rng};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -166,7 +167,7 @@ impl BaseModel {
                 let &(s, p, o) = &self.triples[idx];
 
                 // Corrupt either subject or object
-                let corrupt_subject = rng.gen_bool(0.5);
+                let corrupt_subject = rng.random_bool_with_chance(0.5);
 
                 let negative_triple = if corrupt_subject {
                     let new_subject = rng.random_range(0, num_entities);

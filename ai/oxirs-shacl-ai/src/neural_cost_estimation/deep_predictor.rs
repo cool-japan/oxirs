@@ -259,9 +259,9 @@ impl NetworkLayer {
         // Initialize weights with Xavier initialization
         let scale = (2.0 / (input_dim + output_dim) as f64).sqrt();
         let weights = {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut rng = Random::default();
-            Array2::from_shape_fn((output_dim, input_dim), |_| rng.gen_range(-scale..scale))
+            Array2::from_shape_fn((output_dim, input_dim), |_| rng.random_range(-scale, scale))
         };
         let bias = Array1::zeros(output_dim);
 
@@ -298,24 +298,24 @@ impl AttentionLayer {
 
         Self {
             query_weights: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut rng = Random::default();
-                Array2::from_shape_fn((input_dim, input_dim), |_| rng.gen_range(-scale..scale))
+                Array2::from_shape_fn((input_dim, input_dim), |_| rng.random_range(-scale, scale))
             },
             key_weights: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut rng = Random::default();
-                Array2::from_shape_fn((input_dim, input_dim), |_| rng.gen_range(-scale..scale))
+                Array2::from_shape_fn((input_dim, input_dim), |_| rng.random_range(-scale, scale))
             },
             value_weights: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut rng = Random::default();
-                Array2::from_shape_fn((input_dim, input_dim), |_| rng.gen_range(-scale..scale))
+                Array2::from_shape_fn((input_dim, input_dim), |_| rng.random_range(-scale, scale))
             },
             output_weights: {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut rng = Random::default();
-                Array2::from_shape_fn((input_dim, input_dim), |_| rng.gen_range(-scale..scale))
+                Array2::from_shape_fn((input_dim, input_dim), |_| rng.random_range(-scale, scale))
             },
             num_heads,
         }

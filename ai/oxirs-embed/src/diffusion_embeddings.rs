@@ -14,7 +14,7 @@ use crate::{EmbeddingError, EmbeddingModel, ModelConfig, Vector};
 use anyhow::Result;
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::{s, Array1, Array2, Axis};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

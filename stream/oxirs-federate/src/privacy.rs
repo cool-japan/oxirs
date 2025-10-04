@@ -484,6 +484,7 @@ impl PrivacyManager {
         data: &mut serde_json::Value,
         scale: f64,
     ) -> Result<(), PrivacyError> {
+        #[allow(unused_imports)]
         use scirs2_core::random::{Random, Rng};
 
         let mut rng = Random::seed(42);
@@ -515,8 +516,8 @@ impl PrivacyManager {
 
         // Helper to generate normal distribution samples using Box-Muller transform
         let mut sample_normal = || -> f64 {
-            let u1: f64 = rng.gen::<f64>();
-            let u2: f64 = rng.gen::<f64>();
+            let u1: f64 = rng.random::<f64>();
+            let u2: f64 = rng.random::<f64>();
             let z = (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos();
             z * sigma
         };
@@ -791,9 +792,9 @@ impl PrivacyManager {
                     if let Some(f) = n.as_f64() {
                         // Add small amount of differential privacy noise
                         let noise = ({
-                            use scirs2_core::random::{Rng, Random};
+                            use scirs2_core::random::{Random, Rng};
                             let mut random = Random::default();
-                            random.gen::<f64>()
+                            random.random::<f64>()
                         } - 0.5)
                             * 0.01
                             * f.abs();
@@ -1254,7 +1255,8 @@ fn generalize_number(value: f64) -> String {
 /// Perturb a string by introducing small changes
 #[allow(dead_code)]
 fn perturb_string(value: &str) -> String {
-    use scirs2_core::random::{Rng, Random};
+    #[allow(unused_imports)]
+    use scirs2_core::random::{Random, Rng};
     let mut random = Random::default();
     let chars: Vec<char> = value.chars().collect();
 
@@ -1265,13 +1267,13 @@ fn perturb_string(value: &str) -> String {
     // Randomly change one character
     let mut result = chars.clone();
     if !result.is_empty() {
-        let idx = random.gen_range(0..result.len());
+        let idx = random.random_range(0, result.len());
         if result[idx].is_ascii_alphabetic() {
             // Replace with a random letter
             let replacement = if result[idx].is_ascii_uppercase() {
-                char::from(random.gen_range(b'A'..=b'Z'))
+                char::from(random.random_range(b'A', b'Z' + 1))
             } else {
-                char::from(random.gen_range(b'a'..=b'z'))
+                char::from(random.random_range(b'a', b'z' + 1))
             };
             result[idx] = replacement;
         }
@@ -1289,11 +1291,12 @@ fn substitute_value(value: &str) -> String {
         "synthetic.user@example.com".to_string()
     } else if value.chars().all(|c| c.is_ascii_digit()) {
         // Numeric ID substitution
-        use scirs2_core::random::{Rng, Random};
+        #[allow(unused_imports)]
+        use scirs2_core::random::{Random, Rng};
         let mut random = Random::default();
         let len = value.len();
         (0..len)
-            .map(|_| char::from(random.gen_range(b'0'..=b'9')))
+            .map(|_| char::from(random.random_range(b'0', b'9' + 1)))
             .collect()
     } else if value.chars().all(|c| c.is_ascii_alphabetic()) {
         // Text substitution

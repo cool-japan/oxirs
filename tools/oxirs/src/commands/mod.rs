@@ -19,6 +19,9 @@ pub mod export;
 /// Data import/export commands
 pub mod import;
 
+/// Batch operations for high-performance processing
+pub mod batch;
+
 /// Query and update commands
 pub mod query;
 pub mod update;
@@ -34,6 +37,9 @@ pub mod migrate;
 
 /// Configuration management commands
 pub mod config;
+
+/// Interactive REPL mode
+pub mod interactive;
 
 /// Command stubs and utilities
 pub mod stubs;

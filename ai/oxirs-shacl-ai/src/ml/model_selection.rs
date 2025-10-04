@@ -4,7 +4,7 @@
 //! their hyperparameters for shape learning tasks.
 
 use super::{ModelError, ModelMetrics, ModelParams, ShapeLearningModel, ShapeTrainingData};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -248,7 +248,7 @@ impl ModelSelector {
 
         for _ in 0..self.config.n_iter {
             // Randomly select a model
-            let model_idx = rng.gen_range(0..models.len());
+            let model_idx = rng.random_range(0, models.len());
             let model = &mut models[model_idx];
             let model_name = format!("model_{model_idx}");
 
@@ -510,12 +510,12 @@ impl ModelSelector {
                 ScaleType::Log => {
                     let log_min = cont_param.min.ln();
                     let log_max = cont_param.max.ln();
-                    rng.gen_range(log_min..log_max).exp()
+                    rng.random_range(log_min, log_max).exp()
                 }
                 ScaleType::Exponential => {
                     let exp_min = cont_param.min.exp();
                     let exp_max = cont_param.max.exp();
-                    rng.gen_range(exp_min..exp_max).ln()
+                    rng.random_range(exp_min, exp_max).ln()
                 }
             };
 
@@ -629,7 +629,7 @@ impl CrossValidator {
             let mut random = Random::default();
             // Note: Seeding not implemented here - would need to be added to scirs2_core if needed
             for i in (1..indices.len()).rev() {
-                let j = random.gen_range(0..=i);
+                let j = random.random_range(0, i + 1);
                 indices.swap(i, j);
             }
         }

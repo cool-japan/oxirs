@@ -6,12 +6,7 @@
 use crate::models::common::*;
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
-use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, RwLock};
+use scirs2_core::random::Random;
 
 #[cfg(feature = "gpu")]
 use scirs2_linalg::gpu::{GpuArray, GpuContext, GpuError};
@@ -522,6 +517,7 @@ pub struct AdaptiveEmbeddingAccelerator {
 impl AdaptiveEmbeddingAccelerator {
     /// Create adaptive accelerator with optional GPU support
     pub fn new(device_id: Option<u32>, gpu_threshold: usize) -> Result<Self> {
+    #[allow(unused_variables)]
         let gpu_accelerator = if let Some(id) = device_id {
             #[cfg(feature = "gpu")]
             {

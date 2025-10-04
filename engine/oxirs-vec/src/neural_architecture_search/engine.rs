@@ -134,36 +134,36 @@ impl NeuralArchitectureSearch {
             let layer_type = if search_space.layer_types.is_empty() {
                 return Err(anyhow::anyhow!("No layer types available"));
             } else {
-                let idx = rng.gen_range(0..search_space.layer_types.len());
+                let idx = rng.random_range(0, search_space.layer_types.len());
                 search_space.layer_types[idx].clone()
             };
 
             let activation = if search_space.activations.is_empty() {
                 return Err(anyhow::anyhow!("No activation functions available"));
             } else {
-                let idx = rng.gen_range(0..search_space.activations.len());
+                let idx = rng.random_range(0, search_space.activations.len());
                 search_space.activations[idx].clone()
             };
 
             let normalization = if search_space.normalizations.is_empty() {
                 return Err(anyhow::anyhow!("No normalization types available"));
             } else {
-                let idx = rng.gen_range(0..search_space.normalizations.len());
+                let idx = rng.random_range(0, search_space.normalizations.len());
                 search_space.normalizations[idx].clone()
             };
 
             let skip_pattern = if search_space.skip_patterns.is_empty() {
                 return Err(anyhow::anyhow!("No skip patterns available"));
             } else {
-                let idx = rng.gen_range(0..search_space.skip_patterns.len());
+                let idx = rng.random_range(0, search_space.skip_patterns.len());
                 search_space.skip_patterns[idx].clone()
             };
 
             // Generate random hyperparameters
             let mut hyperparameters = HashMap::new();
-            hyperparameters.insert("learning_rate".to_string(), rng.gen_range(1e-5..1e-1));
+            hyperparameters.insert("learning_rate".to_string(), rng.random_range(1e-5, 1e-1));
             hyperparameters.insert("dropout_rate".to_string(), rng.gen_range(0.0..0.5));
-            hyperparameters.insert("weight_decay".to_string(), rng.gen_range(1e-6..1e-2));
+            hyperparameters.insert("weight_decay".to_string(), rng.random_range(1e-6, 1e-2));
 
             let layer_config = LayerConfig {
                 layer_type,
@@ -180,14 +180,14 @@ impl NeuralArchitectureSearch {
         let embedding_dim = if search_space.embedding_dims.is_empty() {
             return Err(anyhow::anyhow!("No embedding dimensions available"));
         } else {
-            let idx = rng.gen_range(0..search_space.embedding_dims.len());
+            let idx = rng.random_range(0, search_space.embedding_dims.len());
             &search_space.embedding_dims[idx]
         };
 
         let global_config = GlobalArchConfig {
-            input_dim: rng.gen_range(128..2048),
+            input_dim: rng.random_range(128, 2048),
             output_dim: *embedding_dim,
-            learning_rate: rng.gen_range(1e-5..1e-2),
+            learning_rate: rng.random_range(1e-5, 1e-2),
             optimizer: OptimizerType::Adam {
                 beta1: 0.9,
                 beta2: 0.999,
@@ -198,15 +198,15 @@ impl NeuralArchitectureSearch {
                 l2_weight: rng.gen_range(0.0..1e-2),
                 dropout_rate: rng.gen_range(0.0..0.5),
                 label_smoothing: rng.gen_range(0.0..0.1),
-                early_stopping_patience: rng.gen_range(5..20),
+                early_stopping_patience: rng.random_range(5, 20),
             },
             training_config: TrainingConfig {
                 batch_size: {
                     let batch_sizes = [16, 32, 64, 128, 256];
-                    let idx = rng.gen_range(0..batch_sizes.len());
+                    let idx = rng.random_range(0, batch_sizes.len());
                     batch_sizes[idx]
                 },
-                epochs: rng.gen_range(10..100),
+                epochs: rng.random_range(10, 100),
                 validation_split: rng.gen_range(0.1..0.3),
                 lr_schedule: LRScheduleType::CosineAnnealingLR { t_max: 50 },
                 loss_function: LossFunction::CosineSimilarity,
@@ -230,7 +230,7 @@ impl NeuralArchitectureSearch {
                 inference_latency_ms: self.rng.gen_range(1.0..100.0),
                 model_size_params: arch.estimate_complexity(),
                 memory_usage_mb: self.rng.gen_range(50.0..500.0),
-                flops: self.rng.gen_range(1_000_000..100_000_000),
+                flops: self.rng.random_range(1_000_000, 100_000_000),
                 training_time_minutes: self.rng.gen_range(5.0..120.0),
                 energy_consumption: self.rng.gen_range(10.0..200.0),
                 task_metrics: HashMap::new(),

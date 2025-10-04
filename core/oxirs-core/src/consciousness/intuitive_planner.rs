@@ -6,7 +6,7 @@
 use crate::query::algebra::{AlgebraTriplePattern, TermPattern as AlgebraTermPattern};
 use crate::query::pattern_optimizer::IndexStats;
 use crate::OxirsError;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -148,7 +148,7 @@ impl IntuitionNetwork {
                 characteristic,
                 {
                     let mut rng = Random::default();
-                    rng.gen::<f64>()
+                    rng.random::<f64>()
                 } * 2.0
                     - 1.0,
             );
@@ -159,7 +159,7 @@ impl IntuitionNetwork {
             vec![
                 {
                     let mut rng = Random::default();
-                    rng.gen::<f64>()
+                    rng.random::<f64>()
                 } * 2.0
                     - 1.0;
                 8
@@ -167,7 +167,7 @@ impl IntuitionNetwork {
             vec![
                 {
                     let mut rng = Random::default();
-                    rng.gen::<f64>()
+                    rng.random::<f64>()
                 } * 2.0
                     - 1.0;
                 8
@@ -175,7 +175,7 @@ impl IntuitionNetwork {
             vec![
                 {
                     let mut rng = Random::default();
-                    rng.gen::<f64>()
+                    rng.random::<f64>()
                 } * 2.0
                     - 1.0;
                 8
@@ -183,7 +183,7 @@ impl IntuitionNetwork {
             vec![
                 {
                     let mut rng = Random::default();
-                    rng.gen::<f64>()
+                    rng.random::<f64>()
                 } * 2.0
                     - 1.0;
                 8
@@ -191,7 +191,7 @@ impl IntuitionNetwork {
             vec![
                 {
                     let mut rng = Random::default();
-                    rng.gen::<f64>()
+                    rng.random::<f64>()
                 } * 2.0
                     - 1.0;
                 8
@@ -201,7 +201,7 @@ impl IntuitionNetwork {
         let output_weights = vec![
             {
                 let mut rng = Random::default();
-                rng.gen::<f64>()
+                rng.random::<f64>()
             } * 2.0
                 - 1.0;
             5
@@ -433,7 +433,7 @@ impl CreativityEngine {
         for technique in &self.techniques {
             if {
                 let mut rng = Random::default();
-                rng.gen::<f64>()
+                rng.random::<f64>()
             } < self.exploration_factor
             {
                 match technique {

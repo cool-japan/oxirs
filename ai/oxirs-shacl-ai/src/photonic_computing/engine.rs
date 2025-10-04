@@ -2,7 +2,7 @@
 
 use super::types::*;
 use crate::{Result, ShaclAiError};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
@@ -315,7 +315,10 @@ impl PhotonicComputingEngine {
         // Generate entanglement parameters
         let entanglement_id = uuid::Uuid::new_v4().to_string();
         let base_frequency = 1e14; // 1 THz base frequency
-        let frequency_offset = ({ let mut random = Random::default(); random.gen::<f64>() }) * 1e12; // ±1 THz variation
+        let frequency_offset = ({
+            let mut random = Random::default();
+            random.random::<f64>()
+        }) * 1e12; // ±1 THz variation
 
         // Calculate Bell state parameters for maximal entanglement
         let entanglement_fidelity = self.calculate_entanglement_fidelity();
@@ -399,7 +402,10 @@ impl PhotonicComputingEngine {
         let network_degradation = (pairs_count as f64 * 0.001).min(0.1); // Max 10% degradation
 
         // Environmental factors (simplified)
-        let environmental_degradation = ({ let mut random = Random::default(); random.gen::<f64>() }) * 0.05; // Up to 5% random degradation
+        let environmental_degradation = ({
+            let mut random = Random::default();
+            random.random::<f64>()
+        }) * 0.05; // Up to 5% random degradation
 
         (base_fidelity - network_degradation - environmental_degradation).max(0.7)
     }

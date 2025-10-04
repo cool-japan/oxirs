@@ -1,9 +1,9 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.

@@ -1,13 +1,16 @@
 //! Data import command
 
-use super::stubs::Store;
 use super::CommandResult;
 use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::{DataLogger, PerfLogger};
 use crate::cli::validation::MultiValidator;
 use crate::cli::validation::{dataset_validation, fs_validation, validate_rdf_format};
 use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
+use oxirs_core::format::{RdfFormat, RdfParser};
+use oxirs_core::model::{GraphName, NamedNode};
+use oxirs_core::rdf_store::RdfStore;
 use std::fs;
+use std::io::BufReader;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -24,13 +27,17 @@ pub async fn run(
     // Validate arguments using the advanced validation framework
     let mut validator = MultiValidator::new();
 
-    // Validate dataset name
+    // Validate dataset name (only if it's not a path to an existing directory)
     validator.add(
         ArgumentValidator::new("dataset", Some(&dataset))
             .required()
             .custom(|d| !d.trim().is_empty(), "Dataset name cannot be empty"),
     );
-    dataset_validation::validate_dataset_name(&dataset)?;
+
+    // Only validate dataset name format if it's not an existing directory path
+    if !PathBuf::from(&dataset).exists() {
+        dataset_validation::validate_dataset_name(&dataset)?;
+    }
 
     // Validate input file
     validator.add(
@@ -67,17 +74,24 @@ pub async fn run(
     }
 
     // Load dataset configuration or use dataset path directly
-    let dataset_path = if PathBuf::from(&dataset).join("oxirs.toml").exists() {
-        // Dataset with configuration file
-        load_dataset_from_config(&dataset)?
+    let dataset_dir = PathBuf::from(&dataset);
+    let dataset_path = if dataset_dir.join("oxirs.toml").exists() {
+        // Dataset with configuration file - extract dataset name from directory name
+        let dataset_name = dataset_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&dataset);
+        let (storage_path, _config) =
+            crate::config::load_named_dataset(&dataset_dir, dataset_name)?;
+        storage_path
     } else {
         // Assume dataset is a directory path
-        PathBuf::from(&dataset)
+        dataset_dir
     };
 
     // Open store
-    let mut store = if dataset_path.is_dir() {
-        Store::open(&dataset_path)?
+    let store = if dataset_path.is_dir() {
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?
     } else {
         return Err(error_helpers::dataset_not_found_error(&dataset));
     };
@@ -103,18 +117,18 @@ pub async fn run(
     let read_progress = helpers::download_progress(file_size, &file.display().to_string());
     read_progress.set_message("Reading file");
 
-    // Read file with progress updates
-    let content = fs::read_to_string(&file)?;
-    read_progress.finish_with_message("File read complete");
+    // Open file for reading
+    let file_handle = fs::File::open(&file)?;
+    read_progress.finish_with_message("File opened");
     data_logger.update_progress(file_size, 0);
 
     // Create progress spinner for parsing
     let parse_progress = helpers::query_progress();
-    parse_progress.set_message("Parsing RDF data");
+    parse_progress.set_message("Parsing and importing RDF data");
 
     // Parse and import with progress
     let (triple_count, error_count) =
-        parse_and_import(&mut store, &content, &detected_format, graph.as_deref())?;
+        parse_and_import(&store, file_handle, &detected_format, graph.as_deref())?;
 
     parse_progress.finish_with_message("Import complete");
 
@@ -175,82 +189,83 @@ fn is_supported_format(format: &str) -> bool {
     )
 }
 
-/// Load dataset configuration from oxirs.toml file
-fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let config_path = PathBuf::from(dataset).join("oxirs.toml");
-
-    if !config_path.exists() {
-        return Err(error_helpers::file_not_found_error(&config_path).into());
-    }
-
-    // For now, just return the dataset directory
-    // TODO: Parse TOML configuration and extract actual storage path
-    Ok(PathBuf::from(dataset))
-}
-
 /// Parse RDF content and import into store
-fn parse_and_import(
-    _store: &mut Store,
-    content: &str,
+fn parse_and_import<S: oxirs_core::Store>(
+    store: &S,
+    file: fs::File,
     format: &str,
-    _graph: Option<&str>,
+    graph: Option<&str>,
 ) -> Result<(usize, usize), Box<dyn std::error::Error>> {
+    // Step 1: Determine RDF format from string
+    let rdf_format = match format {
+        "turtle" | "ttl" => RdfFormat::Turtle,
+        "ntriples" | "nt" => RdfFormat::NTriples,
+        "nquads" | "nq" => RdfFormat::NQuads,
+        "trig" => RdfFormat::TriG,
+        "rdfxml" | "rdf" | "xml" => RdfFormat::RdfXml,
+        "jsonld" | "json-ld" | "json" => RdfFormat::JsonLd {
+            profile: oxirs_core::format::JsonLdProfileSet::empty(),
+        },
+        "n3" => RdfFormat::N3,
+        _ => {
+            return Err(format!("Unsupported import format: {format}").into());
+        }
+    };
+
+    // Step 2: Determine target graph
+    let target_graph = if let Some(graph_iri) = graph {
+        if graph_iri == "default" {
+            GraphName::DefaultGraph
+        } else {
+            GraphName::NamedNode(
+                NamedNode::new(graph_iri).map_err(|e| format!("Invalid graph IRI: {e}"))?,
+            )
+        }
+    } else {
+        GraphName::DefaultGraph
+    };
+
+    // Step 3: Parse RDF file
+    let reader = BufReader::new(file);
+    let parser = RdfParser::new(rdf_format);
+
     let mut triple_count = 0;
     let mut error_count = 0;
 
-    // Simple parsing simulation - in reality this would use proper RDF parsers
-    match format {
-        "turtle" | "ntriples" => {
-            // Very basic N-Triples/Turtle parsing simulation
-            for line in content.lines() {
-                let line = line.trim();
-                if line.is_empty() || line.starts_with('#') {
-                    continue;
+    // Step 4: Parse and insert quads
+    for quad_result in parser.for_reader(reader) {
+        match quad_result {
+            Ok(mut quad) => {
+                // If a target graph is specified and the quad is in the default graph,
+                // move it to the target graph
+                if matches!(target_graph, GraphName::NamedNode(_))
+                    && matches!(quad.graph_name(), GraphName::DefaultGraph)
+                {
+                    quad = oxirs_core::model::Quad::new(
+                        quad.subject().clone(),
+                        quad.predicate().clone(),
+                        quad.object().clone(),
+                        target_graph.clone(),
+                    );
                 }
 
-                // Try to parse as simple triple format: <s> <p> <o> .
-                if let Some(_triple) = parse_simple_triple(line) {
-                    // TODO: Convert triple to Statement and insert
-                    // For now, just count it as successful
-                    triple_count += 1;
-                } else {
-                    error_count += 1;
+                // Insert quad into store
+                match store.insert_quad(quad) {
+                    Ok(_) => {
+                        triple_count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to insert quad: {e}");
+                        error_count += 1;
+                    }
                 }
             }
-        }
-        _ => {
-            // For other formats, we'd need proper parsers
-            return Err(error_helpers::invalid_rdf_format_error(
-                format,
-                &["turtle", "ttl", "ntriples", "nt"],
-            )
-            .with_context("Import operation failed")
-            .into());
+            Err(e) => {
+                eprintln!("Warning: Parse error: {e}");
+                error_count += 1;
+            }
         }
     }
 
     Ok((triple_count, error_count))
-}
-
-/// Parse a simple triple line: <subject> <predicate> <object> .
-fn parse_simple_triple(line: &str) -> Option<(String, String, String)> {
-    // Very basic parsing - just for demonstration
-    // Real implementation would use proper RDF parsing libraries
-    let parts: Vec<&str> = line.split_whitespace().collect();
-    if parts.len() >= 4 && line.ends_with('.') {
-        let subject = parts[0].trim_matches('<').trim_matches('>').to_string();
-        let predicate = parts[1].trim_matches('<').trim_matches('>').to_string();
-        let object = if parts[2].starts_with('<') {
-            parts[2].trim_matches('<').trim_matches('>').to_string()
-        } else {
-            // Handle literal values
-            parts[2..parts.len() - 1]
-                .join(" ")
-                .trim_matches('"')
-                .to_string()
-        };
-        Some((subject, predicate, object))
-    } else {
-        None
-    }
 }

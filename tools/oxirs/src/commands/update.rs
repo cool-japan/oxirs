@@ -1,7 +1,7 @@
 //! SPARQL update command
 
-use super::stubs::Store;
 use super::CommandResult;
+use oxirs_core::rdf_store::RdfStore;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -35,23 +35,20 @@ pub async fn run(dataset: String, update: String, file: bool) -> CommandResult {
         PathBuf::from(&dataset)
     };
 
-    // Open store
-    let mut store = if dataset_path.is_dir() {
-        Store::open(&dataset_path)?
+    // Open or create store
+    println!("Opening dataset at: {}", dataset_path.display());
+    let store = if dataset_path.exists() {
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?
     } else {
-        return Err(format!(
-            "Dataset '{dataset}' not found. Use 'oxirs init' to create a dataset."
-        )
-        .into());
+        println!("Creating new dataset at: {}", dataset_path.display());
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to create dataset: {e}"))?
     };
 
     // Execute update
     let start_time = Instant::now();
-    println!("Executing update...");
+    println!("\nExecuting SPARQL update...");
 
-    // TODO: Implement actual SPARQL update execution
-    // For now, just simulate success
-    execute_update(&mut store, &sparql_update)?;
+    execute_update(&store, &sparql_update)?;
 
     let duration = start_time.elapsed();
 
@@ -65,26 +62,33 @@ pub async fn run(dataset: String, update: String, file: bool) -> CommandResult {
 
 /// Load dataset configuration from oxirs.toml file
 fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let config_path = PathBuf::from(dataset).join("oxirs.toml");
-
-    if !config_path.exists() {
-        return Err(format!("Configuration file '{}' not found", config_path.display()).into());
-    }
-
-    // For now, just return the dataset directory
-    // TODO: Parse TOML configuration and extract actual storage path
-    Ok(PathBuf::from(dataset))
+    // Use shared configuration loader
+    crate::config::load_dataset_from_config(dataset)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 /// Execute SPARQL update operation
-fn execute_update(_store: &mut Store, _update: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement actual SPARQL update parsing and execution
-    // This would involve:
-    // 1. Parse the SPARQL update query
-    // 2. Execute INSERT, DELETE, MODIFY operations
-    // 3. Handle graph management operations (CREATE, DROP, etc.)
-    // 4. Return appropriate results
+fn execute_update(store: &RdfStore, update: &str) -> Result<(), Box<dyn std::error::Error>> {
+    use oxirs_core::query::update::{UpdateExecutor, UpdateParser};
 
-    println!("SPARQL update execution simulated (implementation pending)");
+    // Step 1: Parse the SPARQL update query
+    println!("   [1/2] Parsing SPARQL UPDATE...");
+    let parser = UpdateParser::new();
+    let parsed_update = parser
+        .parse(update)
+        .map_err(|e| format!("SPARQL UPDATE parse error: {e}"))?;
+
+    println!("       ✓ Parsed successfully");
+    println!("       Operations: {}", parsed_update.operations.len());
+
+    // Step 2: Execute the parsed update
+    println!("   [2/2] Executing update operations...");
+    let executor = UpdateExecutor::new(store);
+    executor
+        .execute(&parsed_update)
+        .map_err(|e| format!("SPARQL UPDATE execution error: {e}"))?;
+
+    println!("       ✓ All operations completed successfully");
+
     Ok(())
 }

@@ -1570,10 +1570,10 @@ mod uuid {
             write!(
                 f,
                 "{:x}-{:x}-{:x}-{:x}",
-                rng.gen_range(0..u32::MAX),
-                rng.gen_range(0..u16::MAX),
-                rng.gen_range(0..u16::MAX),
-                rng.gen_range(0..u32::MAX)
+                rng.random_range(0, u32::MAX),
+                rng.random_range(0, u16::MAX),
+                rng.random_range(0, u16::MAX),
+                rng.random_range(0, u32::MAX)
             )
         }
     }

@@ -58,7 +58,7 @@ async-graphql = { version = "7.0", optional = true }
 async-graphql-parser = { version = "7.0", optional = true }
 mdns-sd = { version = "0.15", optional = true }
 kube = { version = "0.88", features = ["client", "config"], optional = true }
-k8s-openapi = { version = "0.26", features = ["v1_30"], optional = true }
+k8s-openapi = { version = "0.26", default-features = false, optional = true }
 oauth2 = { version = "5.0", optional = true }
 redis = { version = "0.27", features = ["aio", "tokio-comp"], optional = true }
 lru = { version = "0.16", optional = true }
@@ -85,6 +85,7 @@ wiremock = "0.6"
 proptest = "1.7"
 serial_test = "3.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+k8s-openapi = { version = "0.26", features = ["v1_30"] }
 
 [features]
 default = ["caching", "monitoring", "redis-cache"]

@@ -8,7 +8,7 @@ use super::{
     ShapeLearningModel, ShapeTrainingData,
 };
 
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 
@@ -175,9 +175,9 @@ impl ReinforcementLearner {
         match &self.policy {
             Policy::EpsilonGreedy(epsilon) => {
                 let mut rng = Random::default();
-                if rng.r#gen::<f64>() < *epsilon {
+                if rng.random::<f64>() < *epsilon {
                     // Explore: random action
-                    available_actions[rng.gen_range(0..available_actions.len())].clone()
+                    available_actions[rng.random_range(0, available_actions.len())].clone()
                 } else {
                     // Exploit: best action
                     self.get_best_action(state, available_actions)
@@ -226,7 +226,7 @@ impl ReinforcementLearner {
 
         // Sample action based on probabilities
         let mut cumsum = 0.0;
-        let sample = rng.r#gen::<f64>();
+        let sample = rng.random::<f64>();
 
         for (i, &prob) in probabilities.iter().enumerate() {
             cumsum += prob;
@@ -475,16 +475,16 @@ impl ReinforcementLearner {
         let mut rng = Random::default();
 
         ValidationResult {
-            success: rng.gen::<bool>(),
-            violations_found: if rng.gen::<bool>() {
-                rng.gen_range(1..5)
+            success: rng.random::<bool>(),
+            violations_found: if rng.random::<bool>() {
+                rng.random_range(1, 5)
             } else {
                 0
             },
             constraints_checked: 1,
-            time_taken: std::time::Duration::from_millis(rng.gen_range(10..100)),
+            time_taken: std::time::Duration::from_millis(rng.random_range(10, 100)),
             cache_hits: if matches!(action, Action::EnableCaching) {
-                rng.gen_range(0..10)
+                rng.random_range(0, 10)
             } else {
                 0
             },
@@ -676,7 +676,7 @@ impl ReplayBuffer {
 
         (0..sample_size)
             .map(|_| {
-                let idx = rng.gen_range(0..self.buffer.len());
+                let idx = rng.random_range(0, self.buffer.len());
                 self.buffer[idx].clone()
             })
             .collect()

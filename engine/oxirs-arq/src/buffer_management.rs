@@ -39,7 +39,7 @@ impl BufferPoolManager {
     }
 
     /// Get a solution from the pool (or create new one)
-    pub fn acquire_solution(&self) -> PooledSolution {
+    pub fn acquire_solution(&self) -> PooledSolution<'_> {
         let solution = self.solution_pool.lock().unwrap().acquire();
         self.update_stats("solution", true);
 
@@ -51,7 +51,7 @@ impl BufferPoolManager {
     }
 
     /// Get a binding from the pool (or create new one)
-    pub fn acquire_binding(&self) -> PooledBinding {
+    pub fn acquire_binding(&self) -> PooledBinding<'_> {
         let binding = self.binding_pool.lock().unwrap().acquire();
         self.update_stats("binding", true);
 
@@ -63,7 +63,7 @@ impl BufferPoolManager {
     }
 
     /// Get a hashmap from the pool (or create new one)
-    pub fn acquire_hashmap(&self) -> PooledHashMap {
+    pub fn acquire_hashmap(&self) -> PooledHashMap<'_> {
         let hashmap = self.hashmap_pool.lock().unwrap().acquire();
         self.update_stats("hashmap", true);
 
@@ -75,7 +75,7 @@ impl BufferPoolManager {
     }
 
     /// Get a vector from the pool (or create new one)
-    pub fn acquire_vector(&self) -> PooledVector {
+    pub fn acquire_vector(&self) -> PooledVector<'_> {
         let vector = self.vector_pool.lock().unwrap().acquire();
         self.update_stats("vector", true);
 

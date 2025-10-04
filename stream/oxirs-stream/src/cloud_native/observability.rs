@@ -1,79 +1,63 @@
-//! # Cloud-Native Observability Module
-//!
-//! Comprehensive observability solution for OxiRS Stream in cloud-native environments,
-//! providing metrics, logging, tracing, and alerting capabilities.
+//! Observability Configuration Types
 
-use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, SystemTime};
-
-/// Observability configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObservabilityConfig {
-    /// Enable observability
-    pub enabled: bool,
-    /// Metrics configuration
-    pub metrics: MetricsConfig,
+    /// Monitoring configuration
+    pub monitoring: MonitoringConfig,
     /// Logging configuration
     pub logging: LoggingConfig,
-    /// Tracing configuration
-    pub tracing: TracingConfig,
     /// Alerting configuration
     pub alerting: AlertingConfig,
-    /// Service Level Objectives
-    pub slo: ServiceLevelObjectives,
+    /// Dashboards configuration
+    pub dashboards: DashboardConfig,
 }
 
 impl Default for ObservabilityConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            metrics: MetricsConfig::default(),
+            monitoring: MonitoringConfig::default(),
             logging: LoggingConfig::default(),
-            tracing: TracingConfig::default(),
             alerting: AlertingConfig::default(),
-            slo: ServiceLevelObjectives::default(),
+            dashboards: DashboardConfig::default(),
         }
     }
 }
 
-/// Metrics configuration
+/// Monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MetricsConfig {
-    /// Enable metrics collection
-    pub enabled: bool,
-    /// Prometheus endpoint configuration
+pub struct MonitoringConfig {
+    /// Prometheus configuration
     pub prometheus: PrometheusConfig,
-    /// Custom metrics definitions
-    pub custom_metrics: Vec<CustomMetricDefinition>,
-    /// Metrics retention period in days
-    pub retention_days: u32,
-    /// Collection interval in seconds
-    pub collection_interval_seconds: u64,
+    /// Service monitors
+    pub service_monitors: Vec<ServiceMonitor>,
+    /// Pod monitors
+    pub pod_monitors: Vec<PodMonitor>,
 }
 
-impl Default for MetricsConfig {
+impl Default for MonitoringConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
             prometheus: PrometheusConfig::default(),
-            custom_metrics: vec![
-                CustomMetricDefinition {
-                    name: "stream_events_processed_total".to_string(),
-                    metric_type: MetricType::Counter,
-                    help: "Total number of stream events processed".to_string(),
-                    labels: vec!["backend".to_string(), "topic".to_string()],
-                },
-                CustomMetricDefinition {
-                    name: "stream_processing_latency_seconds".to_string(),
-                    metric_type: MetricType::Histogram,
-                    help: "Stream processing latency in seconds".to_string(),
-                    labels: vec!["operation".to_string()],
+            service_monitors: vec![
+                ServiceMonitor {
+                    name: "oxirs-stream-monitor".to_string(),
+                    namespace: "oxirs".to_string(),
+                    selector: LabelSelector {
+                        match_labels: BTreeMap::from([
+                            ("app".to_string(), "oxirs-stream".to_string()),
+                        ]),
+                    },
+                    endpoints: vec![
+                        ServiceMonitorEndpoint {
+                            port: "metrics".to_string(),
+                            path: "/metrics".to_string(),
+                            interval: Duration::from_secs(30),
+                        },
+                    ],
                 },
             ],
-            retention_days: 30,
-            collection_interval_seconds: 15,
+            pod_monitors: vec![],
         }
     }
 }
@@ -81,163 +65,186 @@ impl Default for MetricsConfig {
 /// Prometheus configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PrometheusConfig {
-    /// Prometheus server endpoint
-    pub endpoint: String,
-    /// Metrics path
-    pub metrics_path: String,
-    /// Scrape interval
-    pub scrape_interval: Duration,
-    /// Authentication configuration
-    pub auth: Option<PrometheusAuth>,
+    /// Enable Prometheus
+    pub enabled: bool,
+    /// Retention period
+    pub retention: Duration,
+    /// Storage size
+    pub storage_size: String,
+    /// Resource requirements
+    pub resources: ResourceRequirements,
 }
 
 impl Default for PrometheusConfig {
     fn default() -> Self {
         Self {
-            endpoint: "http://prometheus:9090".to_string(),
-            metrics_path: "/metrics".to_string(),
-            scrape_interval: Duration::from_secs(15),
-            auth: None,
+            enabled: true,
+            retention: Duration::from_secs(30 * 24 * 3600), // 30 days
+            storage_size: "50Gi".to_string(),
+            resources: ResourceRequirements {
+                cpu: "2".to_string(),
+                memory: "4Gi".to_string(),
+            },
         }
     }
 }
 
-/// Prometheus authentication
+/// Service monitor
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PrometheusAuth {
-    /// Username for basic auth
-    pub username: String,
-    /// Password for basic auth
-    pub password: String,
-    /// Bearer token
-    pub bearer_token: Option<String>,
-}
-
-/// Custom metric definition
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct CustomMetricDefinition {
-    /// Metric name
+pub struct ServiceMonitor {
     pub name: String,
-    /// Metric type
-    pub metric_type: MetricType,
-    /// Help description
-    pub help: String,
-    /// Label names
-    pub labels: Vec<String>,
+    pub namespace: String,
+    pub selector: LabelSelector,
+    pub endpoints: Vec<ServiceMonitorEndpoint>,
 }
 
-/// Metric types
+/// Service monitor endpoint
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum MetricType {
-    Counter,
-    Gauge,
-    Histogram,
-    Summary,
+pub struct ServiceMonitorEndpoint {
+    pub port: String,
+    pub path: String,
+    pub interval: Duration,
+}
+
+/// Pod monitor
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodMonitor {
+    pub name: String,
+    pub namespace: String,
+    pub selector: LabelSelector,
+    pub pod_metrics_endpoints: Vec<PodMetricsEndpoint>,
+}
+
+/// Pod metrics endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PodMetricsEndpoint {
+    pub port: String,
+    pub path: String,
+    pub interval: Duration,
 }
 
 /// Logging configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LoggingConfig {
-    /// Enable structured logging
-    pub enabled: bool,
-    /// Log level
-    pub level: LogLevel,
-    /// Log format
-    pub format: LogFormat,
-    /// Log destinations
-    pub destinations: Vec<LogDestination>,
-    /// Log sampling rate
-    pub sampling_rate: f64,
+    /// Log aggregation
+    pub aggregation: LogAggregationConfig,
+    /// Log forwarding
+    pub forwarding: LogForwardingConfig,
+    /// Log retention
+    pub retention: LogRetentionConfig,
 }
 
 impl Default for LoggingConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
-            level: LogLevel::Info,
-            format: LogFormat::Json,
-            destinations: vec![
-                LogDestination::Stdout,
-                LogDestination::File { path: "/var/log/oxirs-stream.log".to_string() },
-            ],
-            sampling_rate: 1.0,
+            aggregation: LogAggregationConfig::default(),
+            forwarding: LogForwardingConfig::default(),
+            retention: LogRetentionConfig::default(),
         }
     }
 }
 
-/// Log levels
+/// Log aggregation configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LogLevel {
-    Trace,
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-/// Log formats
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LogFormat {
-    Json,
-    Text,
-    Logfmt,
-}
-
-/// Log destinations
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum LogDestination {
-    Stdout,
-    Stderr,
-    File { path: String },
-    Elasticsearch { endpoint: String, index: String },
-    Loki { endpoint: String },
-}
-
-/// Tracing configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TracingConfig {
-    /// Enable distributed tracing
+pub struct LogAggregationConfig {
+    /// Enable log aggregation
     pub enabled: bool,
-    /// Tracing backend
-    pub backend: TracingBackend,
-    /// Sampling rate
-    pub sampling_rate: f64,
-    /// Service name
-    pub service_name: String,
-    /// Additional tags
-    pub tags: HashMap<String, String>,
+    /// Aggregation provider
+    pub provider: LogAggregationProvider,
+    /// Buffer size
+    pub buffer_size: usize,
+    /// Flush interval
+    pub flush_interval: Duration,
 }
 
-impl Default for TracingConfig {
+impl Default for LogAggregationConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            backend: TracingBackend::Jaeger {
-                endpoint: "http://jaeger-collector:14268/api/traces".to_string(),
-            },
-            sampling_rate: 0.1,
-            service_name: "oxirs-stream".to_string(),
-            tags: HashMap::from([
-                ("version".to_string(), "1.0.0".to_string()),
-                ("environment".to_string(), "production".to_string()),
-            ]),
+            provider: LogAggregationProvider::Fluentd,
+            buffer_size: 64 * 1024, // 64KB
+            flush_interval: Duration::from_secs(10),
         }
     }
 }
 
-/// Tracing backends
+/// Log aggregation providers
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TracingBackend {
-    Jaeger { endpoint: String },
-    Zipkin { endpoint: String },
-    OpenTelemetry { endpoint: String },
+pub enum LogAggregationProvider {
+    Fluentd,
+    Fluent_Bit,
+    Logstash,
+    Vector,
+}
+
+/// Log forwarding configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogForwardingConfig {
+    /// Enable log forwarding
+    pub enabled: bool,
+    /// Forwarding destinations
+    pub destinations: Vec<LogDestination>,
+}
+
+impl Default for LogForwardingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            destinations: vec![
+                LogDestination {
+                    name: "elasticsearch".to_string(),
+                    destination_type: LogDestinationType::Elasticsearch,
+                    endpoint: "https://elasticsearch.example.com:9200".to_string(),
+                    index: "oxirs-logs".to_string(),
+                },
+            ],
+        }
+    }
+}
+
+/// Log destination
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogDestination {
+    pub name: String,
+    pub destination_type: LogDestinationType,
+    pub endpoint: String,
+    pub index: String,
+}
+
+/// Log destination types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum LogDestinationType {
+    Elasticsearch,
+    Splunk,
+    CloudWatch,
+    BigQuery,
+    S3,
+}
+
+/// Log retention configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LogRetentionConfig {
+    /// Retention period
+    pub retention_period: Duration,
+    /// Compression enabled
+    pub compression: bool,
+    /// Archive to cold storage
+    pub cold_storage: bool,
+}
+
+impl Default for LogRetentionConfig {
+    fn default() -> Self {
+        Self {
+            retention_period: Duration::from_secs(90 * 24 * 3600), // 90 days
+            compression: true,
+            cold_storage: true,
+        }
+    }
 }
 
 /// Alerting configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertingConfig {
-    /// Enable alerting
-    pub enabled: bool,
     /// Alert manager configuration
     pub alert_manager: AlertManagerConfig,
     /// Alert rules
@@ -249,22 +256,33 @@ pub struct AlertingConfig {
 impl Default for AlertingConfig {
     fn default() -> Self {
         Self {
-            enabled: true,
             alert_manager: AlertManagerConfig::default(),
             rules: vec![
                 AlertRule {
-                    name: "HighErrorRate".to_string(),
-                    expression: "rate(stream_errors_total[5m]) > 0.1".to_string(),
+                    name: "high-cpu-usage".to_string(),
+                    expression: "rate(container_cpu_usage_seconds_total[5m]) > 0.8".to_string(),
+                    duration: Duration::from_secs(300),
+                    severity: AlertSeverity::Warning,
+                    summary: "High CPU usage detected".to_string(),
+                    description: "CPU usage is above 80% for more than 5 minutes".to_string(),
+                },
+                AlertRule {
+                    name: "high-memory-usage".to_string(),
+                    expression: "container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9".to_string(),
                     duration: Duration::from_secs(300),
                     severity: AlertSeverity::Critical,
-                    labels: HashMap::from([("team".to_string(), "platform".to_string())]),
-                    annotations: HashMap::from([
-                        ("summary".to_string(), "High error rate detected".to_string()),
-                        ("description".to_string(), "Error rate is above 10% for 5 minutes".to_string()),
-                    ]),
+                    summary: "High memory usage detected".to_string(),
+                    description: "Memory usage is above 90% for more than 5 minutes".to_string(),
                 },
             ],
-            notification_channels: vec![],
+            notification_channels: vec![
+                NotificationChannel {
+                    name: "slack".to_string(),
+                    channel_type: NotificationChannelType::Slack,
+                    webhook_url: Some("https://hooks.slack.com/services/...".to_string()),
+                    email_addresses: None,
+                },
+            ],
         }
     }
 }
@@ -272,309 +290,168 @@ impl Default for AlertingConfig {
 /// Alert manager configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertManagerConfig {
-    /// Alert manager endpoint
-    pub endpoint: String,
-    /// Webhook URL for alerts
-    pub webhook_url: Option<String>,
+    /// Enable alert manager
+    pub enabled: bool,
+    /// Storage size
+    pub storage_size: String,
+    /// Retention period
+    pub retention: Duration,
+    /// Resource requirements
+    pub resources: ResourceRequirements,
 }
 
 impl Default for AlertManagerConfig {
     fn default() -> Self {
         Self {
-            endpoint: "http://alertmanager:9093".to_string(),
-            webhook_url: None,
+            enabled: true,
+            storage_size: "10Gi".to_string(),
+            retention: Duration::from_secs(30 * 24 * 3600), // 30 days
+            resources: ResourceRequirements {
+                cpu: "500m".to_string(),
+                memory: "1Gi".to_string(),
+            },
         }
     }
 }
 
-/// Alert rule definition
+/// Alert rule
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AlertRule {
-    /// Rule name
     pub name: String,
-    /// PromQL expression
     pub expression: String,
-    /// Alert duration threshold
     pub duration: Duration,
-    /// Alert severity
     pub severity: AlertSeverity,
-    /// Additional labels
-    pub labels: HashMap<String, String>,
-    /// Alert annotations
-    pub annotations: HashMap<String, String>,
+    pub summary: String,
+    pub description: String,
 }
 
 /// Alert severity levels
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AlertSeverity {
-    Critical,
-    Warning,
     Info,
+    Warning,
+    Critical,
 }
 
-/// Notification channels
+/// Notification channel
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum NotificationChannel {
-    Slack { webhook_url: String, channel: String },
-    Email { smtp_server: String, recipients: Vec<String> },
-    PagerDuty { integration_key: String },
-    Webhook { url: String },
+pub struct NotificationChannel {
+    pub name: String,
+    pub channel_type: NotificationChannelType,
+    pub webhook_url: Option<String>,
+    pub email_addresses: Option<Vec<String>>,
 }
 
-/// Service Level Objectives
+/// Notification channel types
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ServiceLevelObjectives {
-    /// SLOs enabled
+pub enum NotificationChannelType {
+    Slack,
+    Email,
+    PagerDuty,
+    Webhook,
+}
+
+/// Dashboard configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardConfig {
+    /// Grafana configuration
+    pub grafana: GrafanaConfig,
+    /// Dashboard definitions
+    pub dashboards: Vec<Dashboard>,
+}
+
+impl Default for DashboardConfig {
+    fn default() -> Self {
+        Self {
+            grafana: GrafanaConfig::default(),
+            dashboards: vec![
+                Dashboard {
+                    name: "oxirs-overview".to_string(),
+                    title: "OxiRS Stream Overview".to_string(),
+                    description: "Overview dashboard for OxiRS Stream".to_string(),
+                    panels: vec![
+                        DashboardPanel {
+                            title: "Events per Second".to_string(),
+                            panel_type: PanelType::Graph,
+                            query: "rate(oxirs_stream_events_total[1m])".to_string(),
+                        },
+                        DashboardPanel {
+                            title: "Processing Latency".to_string(),
+                            panel_type: PanelType::Graph,
+                            query: "histogram_quantile(0.95, oxirs_stream_latency_seconds)".to_string(),
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+}
+
+/// Grafana configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GrafanaConfig {
+    /// Enable Grafana
     pub enabled: bool,
-    /// Availability SLO
-    pub availability: SloDefinition,
-    /// Latency SLO
-    pub latency: SloDefinition,
-    /// Error rate SLO
-    pub error_rate: SloDefinition,
+    /// Admin user
+    pub admin_user: String,
+    /// Admin password
+    pub admin_password: String,
+    /// Persistence configuration
+    pub persistence: PersistenceConfig,
+    /// Resource requirements
+    pub resources: ResourceRequirements,
 }
 
-impl Default for ServiceLevelObjectives {
+impl Default for GrafanaConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            availability: SloDefinition {
-                target: 99.9,
-                time_window: Duration::from_secs(86400 * 30), // 30 days
-                query: "up".to_string(),
+            admin_user: "admin".to_string(),
+            admin_password: "admin".to_string(), // Should be changed in production
+            persistence: PersistenceConfig {
+                enabled: true,
+                size: "10Gi".to_string(),
+                storage_class: "default".to_string(),
             },
-            latency: SloDefinition {
-                target: 95.0, // 95th percentile
-                time_window: Duration::from_secs(3600), // 1 hour
-                query: "histogram_quantile(0.95, stream_processing_latency_seconds) < 0.1".to_string(),
-            },
-            error_rate: SloDefinition {
-                target: 99.0, // 99% success rate
-                time_window: Duration::from_secs(3600), // 1 hour
-                query: "rate(stream_errors_total[5m]) < 0.01".to_string(),
+            resources: ResourceRequirements {
+                cpu: "500m".to_string(),
+                memory: "1Gi".to_string(),
             },
         }
     }
 }
 
-/// SLO definition
+/// Persistence configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SloDefinition {
-    /// Target percentage
-    pub target: f64,
-    /// Time window for evaluation
-    pub time_window: Duration,
-    /// PromQL query for evaluation
+pub struct PersistenceConfig {
+    pub enabled: bool,
+    pub size: String,
+    pub storage_class: String,
+}
+
+/// Dashboard
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Dashboard {
+    pub name: String,
+    pub title: String,
+    pub description: String,
+    pub panels: Vec<DashboardPanel>,
+}
+
+/// Dashboard panel
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardPanel {
+    pub title: String,
+    pub panel_type: PanelType,
     pub query: String,
 }
 
-/// Observability manager
-#[derive(Debug)]
-pub struct ObservabilityManager {
-    config: ObservabilityConfig,
-}
-
-impl ObservabilityManager {
-    /// Create a new observability manager
-    pub fn new(config: ObservabilityConfig) -> Self {
-        Self { config }
-    }
-
-    /// Initialize observability components
-    pub async fn initialize(&self) -> Result<()> {
-        if !self.config.enabled {
-            return Ok(());
-        }
-
-        // Initialize metrics collection
-        if self.config.metrics.enabled {
-            self.initialize_metrics().await?;
-        }
-
-        // Initialize logging
-        if self.config.logging.enabled {
-            self.initialize_logging().await?;
-        }
-
-        // Initialize tracing
-        if self.config.tracing.enabled {
-            self.initialize_tracing().await?;
-        }
-
-        // Initialize alerting
-        if self.config.alerting.enabled {
-            self.initialize_alerting().await?;
-        }
-
-        // Initialize SLO monitoring
-        if self.config.slo.enabled {
-            self.initialize_slo_monitoring().await?;
-        }
-
-        Ok(())
-    }
-
-    /// Initialize metrics collection
-    async fn initialize_metrics(&self) -> Result<()> {
-        println!("Initializing metrics collection with Prometheus endpoint: {}", 
-                self.config.metrics.prometheus.endpoint);
-        
-        // Register custom metrics
-        for metric in &self.config.metrics.custom_metrics {
-            println!("Registering custom metric: {} ({})", metric.name, 
-                    match metric.metric_type {
-                        MetricType::Counter => "counter",
-                        MetricType::Gauge => "gauge",
-                        MetricType::Histogram => "histogram",
-                        MetricType::Summary => "summary",
-                    });
-        }
-
-        Ok(())
-    }
-
-    /// Initialize logging
-    async fn initialize_logging(&self) -> Result<()> {
-        println!("Initializing structured logging with level: {:?}", self.config.logging.level);
-        
-        for destination in &self.config.logging.destinations {
-            match destination {
-                LogDestination::Stdout => println!("Log destination: stdout"),
-                LogDestination::Stderr => println!("Log destination: stderr"),
-                LogDestination::File { path } => println!("Log destination: file ({})", path),
-                LogDestination::Elasticsearch { endpoint, index } => 
-                    println!("Log destination: Elasticsearch ({}, index: {})", endpoint, index),
-                LogDestination::Loki { endpoint } => 
-                    println!("Log destination: Loki ({})", endpoint),
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Initialize tracing
-    async fn initialize_tracing(&self) -> Result<()> {
-        println!("Initializing distributed tracing for service: {}", 
-                self.config.tracing.service_name);
-        
-        match &self.config.tracing.backend {
-            TracingBackend::Jaeger { endpoint } => 
-                println!("Tracing backend: Jaeger ({})", endpoint),
-            TracingBackend::Zipkin { endpoint } => 
-                println!("Tracing backend: Zipkin ({})", endpoint),
-            TracingBackend::OpenTelemetry { endpoint } => 
-                println!("Tracing backend: OpenTelemetry ({})", endpoint),
-        }
-
-        Ok(())
-    }
-
-    /// Initialize alerting
-    async fn initialize_alerting(&self) -> Result<()> {
-        println!("Initializing alerting with {} rules", self.config.alerting.rules.len());
-        
-        for rule in &self.config.alerting.rules {
-            println!("Alert rule: {} (severity: {:?})", rule.name, rule.severity);
-        }
-
-        Ok(())
-    }
-
-    /// Initialize SLO monitoring
-    async fn initialize_slo_monitoring(&self) -> Result<()> {
-        println!("Initializing SLO monitoring");
-        println!("Availability SLO: {}%", self.config.slo.availability.target);
-        println!("Latency SLO: {}%", self.config.slo.latency.target);
-        println!("Error rate SLO: {}%", self.config.slo.error_rate.target);
-        Ok(())
-    }
-
-    /// Collect current observability status
-    pub async fn get_status(&self) -> Result<ObservabilityStatus> {
-        if !self.config.enabled {
-            return Err(anyhow!("Observability is disabled"));
-        }
-
-        Ok(ObservabilityStatus {
-            metrics_enabled: self.config.metrics.enabled,
-            logging_enabled: self.config.logging.enabled,
-            tracing_enabled: self.config.tracing.enabled,
-            alerting_enabled: self.config.alerting.enabled,
-            slo_enabled: self.config.slo.enabled,
-            active_alerts: 0, // Mock data
-            slo_compliance: HashMap::from([
-                ("availability".to_string(), 99.95),
-                ("latency".to_string(), 96.2),
-                ("error_rate".to_string(), 99.8),
-            ]),
-        })
-    }
-}
-
-/// Observability status
+/// Panel types
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ObservabilityStatus {
-    /// Metrics collection enabled
-    pub metrics_enabled: bool,
-    /// Logging enabled
-    pub logging_enabled: bool,
-    /// Tracing enabled
-    pub tracing_enabled: bool,
-    /// Alerting enabled
-    pub alerting_enabled: bool,
-    /// SLO monitoring enabled
-    pub slo_enabled: bool,
-    /// Number of active alerts
-    pub active_alerts: u32,
-    /// SLO compliance percentages
-    pub slo_compliance: HashMap<String, f64>,
-}
-
-/// Initialize observability
-pub async fn initialize(config: &ObservabilityConfig) -> Result<()> {
-    if !config.enabled {
-        return Ok(());
-    }
-    
-    let manager = ObservabilityManager::new(config.clone());
-    manager.initialize().await?;
-    
-    println!("Cloud-native observability initialized successfully");
-    Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_observability_config_default() {
-        let config = ObservabilityConfig::default();
-        assert!(config.enabled);
-        assert!(config.metrics.enabled);
-        assert_eq!(config.tracing.service_name, "oxirs-stream");
-    }
-
-    #[test]
-    fn test_observability_manager_creation() {
-        let config = ObservabilityConfig::default();
-        let manager = ObservabilityManager::new(config);
-        assert!(manager.config.enabled);
-    }
-
-    #[tokio::test]
-    async fn test_observability_initialization() {
-        let config = ObservabilityConfig::default();
-        let manager = ObservabilityManager::new(config);
-        assert!(manager.initialize().await.is_ok());
-    }
-
-    #[tokio::test]
-    async fn test_observability_status() {
-        let config = ObservabilityConfig::default();
-        let manager = ObservabilityManager::new(config);
-        let status = manager.get_status().await.unwrap();
-        assert!(status.metrics_enabled);
-        assert!(status.slo_compliance.contains_key("availability"));
-    }
+pub enum PanelType {
+    Graph,
+    SingleStat,
+    Table,
+    Heatmap,
+    Logs,
 }

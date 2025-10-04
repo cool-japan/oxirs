@@ -7,7 +7,7 @@
 
 use crate::EmbeddingModel;
 use anyhow::Result;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -459,15 +459,15 @@ impl DynamicArchitectureOptimizer {
 
         // Mutate embedding dimension
         let mut random = Random::default();
-        if random.gen::<f32>() < 0.3 {
-            let adjustment = if random.gen::<bool>() { 1.1 } else { 0.9 };
+        if random.random::<f32>() < 0.3 {
+            let adjustment = if random.random::<bool>() { 1.1 } else { 0.9 };
             new_config.embedding_dim =
                 ((new_config.embedding_dim as f32 * adjustment) as usize).clamp(32, 1024);
         }
 
         // Mutate number of layers
-        if random.gen::<f32>() < 0.2 {
-            new_config.num_layers = if random.gen::<bool>() {
+        if random.random::<f32>() < 0.2 {
+            new_config.num_layers = if random.random::<bool>() {
                 (new_config.num_layers + 1).min(10)
             } else {
                 (new_config.num_layers.saturating_sub(1)).max(1)
@@ -476,8 +476,8 @@ impl DynamicArchitectureOptimizer {
 
         // Mutate hidden dimensions
         for hidden_dim in &mut new_config.hidden_dims {
-            if random.gen::<f32>() < 0.2 {
-                let adjustment = 0.8 + random.gen::<f32>() * 0.4; // 0.8 to 1.2
+            if random.random::<f32>() < 0.2 {
+                let adjustment = 0.8 + random.random::<f32>() * 0.4; // 0.8 to 1.2
                 *hidden_dim = ((*hidden_dim as f32 * adjustment) as usize).clamp(16, 2048);
             }
         }
@@ -553,13 +553,13 @@ impl DynamicArchitectureOptimizer {
         // Optimize dropout rates
         let mut random = Random::default();
         for dropout_rate in &mut new_config.dropout_rates {
-            *dropout_rate = random.gen::<f32>() * 0.5; // 0.0 to 0.5
+            *dropout_rate = random.random::<f32>() * 0.5; // 0.0 to 0.5
         }
 
         // Optimize layer dimensions using Bayesian optimization principles
         for hidden_dim in &mut new_config.hidden_dims {
             let log_dim = (*hidden_dim as f32).ln();
-            let noise = (random.gen::<f32>() - 0.5) * 0.2;
+            let noise = (random.random::<f32>() - 0.5) * 0.2;
             let new_log_dim = log_dim + noise;
             *hidden_dim = new_log_dim.exp() as usize;
         }
@@ -611,12 +611,12 @@ impl DynamicArchitectureOptimizer {
             // Random mutations
             let mut random = Random::default();
             config.embedding_dim =
-                (64..=512).step_by(32).collect::<Vec<_>>()[random.gen_range(0..15)];
-            config.num_layers = (1..=6).collect::<Vec<_>>()[random.gen_range(0..6)];
+                (64..=512).step_by(32).collect::<Vec<_>>()[random.random_range(0, 15)];
+            config.num_layers = (1..=6).collect::<Vec<_>>()[random.random_range(0, 6)];
 
             // Generate random hidden dimensions
             config.hidden_dims = (0..config.num_layers)
-                .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[random.gen_range(0..31)])
+                .map(|_| (32..=1024).step_by(32).collect::<Vec<_>>()[random.random_range(0, 31)])
                 .collect();
 
             population.push(config);
@@ -632,12 +632,12 @@ impl DynamicArchitectureOptimizer {
     ) -> ArchitectureConfig {
         let mut random = Random::default();
         ArchitectureConfig {
-            embedding_dim: if random.gen::<bool>() {
+            embedding_dim: if random.random::<bool>() {
                 parent1.embedding_dim
             } else {
                 parent2.embedding_dim
             },
-            num_layers: if random.gen::<bool>() {
+            num_layers: if random.random::<bool>() {
                 parent1.num_layers
             } else {
                 parent2.num_layers
@@ -646,9 +646,9 @@ impl DynamicArchitectureOptimizer {
                 .hidden_dims
                 .iter()
                 .zip(parent2.hidden_dims.iter())
-                .map(|(d1, d2)| if random.gen::<bool>() { *d1 } else { *d2 })
+                .map(|(d1, d2)| if random.random::<bool>() { *d1 } else { *d2 })
                 .collect(),
-            activations: if random.gen::<bool>() {
+            activations: if random.random::<bool>() {
                 parent1.activations.clone()
             } else {
                 parent2.activations.clone()
@@ -657,9 +657,9 @@ impl DynamicArchitectureOptimizer {
                 .dropout_rates
                 .iter()
                 .zip(parent2.dropout_rates.iter())
-                .map(|(r1, r2)| if random.gen::<bool>() { *r1 } else { *r2 })
+                .map(|(r1, r2)| if random.random::<bool>() { *r1 } else { *r2 })
                 .collect(),
-            normalizations: if random.gen::<bool>() {
+            normalizations: if random.random::<bool>() {
                 parent1.normalizations.clone()
             } else {
                 parent2.normalizations.clone()
@@ -670,22 +670,22 @@ impl DynamicArchitectureOptimizer {
     fn mutate_architecture(&self, mut config: ArchitectureConfig) -> ArchitectureConfig {
         let mut random = Random::default();
         // Mutate embedding dimension
-        if random.gen::<f32>() < 0.3 {
+        if random.random::<f32>() < 0.3 {
             config.embedding_dim =
-                (config.embedding_dim as f32 * (0.8 + random.gen::<f32>() * 0.4)) as usize;
+                (config.embedding_dim as f32 * (0.8 + random.random::<f32>() * 0.4)) as usize;
         }
 
         // Mutate hidden dimensions
         for hidden_dim in &mut config.hidden_dims {
-            if random.gen::<f32>() < 0.2 {
-                *hidden_dim = (*hidden_dim as f32 * (0.8 + random.gen::<f32>() * 0.4)) as usize;
+            if random.random::<f32>() < 0.2 {
+                *hidden_dim = (*hidden_dim as f32 * (0.8 + random.random::<f32>() * 0.4)) as usize;
             }
         }
 
         // Mutate dropout rates
         for dropout_rate in &mut config.dropout_rates {
-            if random.gen::<f32>() < 0.2 {
-                *dropout_rate = (*dropout_rate + (random.gen::<f32>() - 0.5) * 0.1).clamp(0.0, 0.5);
+            if random.random::<f32>() < 0.2 {
+                *dropout_rate = (*dropout_rate + (random.random::<f32>() - 0.5) * 0.1).clamp(0.0, 0.5);
             }
         }
 
@@ -704,7 +704,7 @@ impl DynamicArchitectureOptimizer {
         let complexity_penalty =
             (config.embedding_dim as f32 / 512.0 + config.num_layers as f32 / 6.0) * 0.1;
         let mut random = Random::default();
-        let base_score = 0.7 + random.gen::<f32>() * 0.2;
+        let base_score = 0.7 + random.random::<f32>() * 0.2;
 
         Ok((base_score - complexity_penalty).clamp(0.0, 1.0))
     }
@@ -875,12 +875,12 @@ impl OnlineLearningManager {
         sleep(Duration::from_millis(100)).await;
 
         let mut random = Random::default();
-        let performance_after = performance_before + random.gen::<f32>() * 0.05;
+        let performance_after = performance_before + random.random::<f32>() * 0.05;
 
         Ok(IncrementalUpdateStats {
             performance_improvement: performance_after - performance_before,
             memory_usage: 1024.0,
-            drift_detected: random.gen::<f32>() < 0.1,
+            drift_detected: random.random::<f32>() < 0.1,
         })
     }
 }
@@ -1292,14 +1292,14 @@ impl RealTimeOptimizer {
         let mut random = Random::default();
         Ok(PerformanceMetrics {
             timestamp: chrono::Utc::now(),
-            training_loss: 0.5 + random.gen::<f32>() * 0.3,
-            validation_accuracy: 0.7 + random.gen::<f32>() * 0.2,
-            inference_latency: 50.0 + random.gen::<f32>() * 100.0,
-            memory_usage: 2048.0 + random.gen::<f32>() * 1024.0,
-            gpu_utilization: 60.0 + random.gen::<f32>() * 30.0,
-            throughput: 80.0 + random.gen::<f32>() * 40.0,
+            training_loss: 0.5 + random.random::<f32>() * 0.3,
+            validation_accuracy: 0.7 + random.random::<f32>() * 0.2,
+            inference_latency: 50.0 + random.random::<f32>() * 100.0,
+            memory_usage: 2048.0 + random.random::<f32>() * 1024.0,
+            gpu_utilization: 60.0 + random.random::<f32>() * 30.0,
+            throughput: 80.0 + random.random::<f32>() * 40.0,
             learning_rate: self.learning_rate_scheduler.current_lr,
-            model_complexity: 0.5 + random.gen::<f32>() * 0.3,
+            model_complexity: 0.5 + random.random::<f32>() * 0.3,
         })
     }
 
@@ -1361,10 +1361,10 @@ impl RealTimeOptimizer {
         let mut random = Random::default();
         let current_usage = ResourceUsage {
             timestamp: chrono::Utc::now(),
-            cpu_utilization: 60.0 + random.gen::<f32>() * 30.0,
+            cpu_utilization: 60.0 + random.random::<f32>() * 30.0,
             memory_usage: current_metrics.memory_usage / 8192.0,
             gpu_utilization: current_metrics.gpu_utilization / 100.0,
-            gpu_memory_usage: 0.7 + random.gen::<f32>() * 0.2,
+            gpu_memory_usage: 0.7 + random.random::<f32>() * 0.2,
             throughput: current_metrics.throughput,
             latency: current_metrics.inference_latency,
         };

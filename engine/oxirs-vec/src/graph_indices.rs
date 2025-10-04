@@ -13,6 +13,7 @@ use anyhow::Result;
 use oxirs_core::parallel::*;
 use oxirs_core::simd::SimdOps;
 use petgraph::graph::{Graph, NodeIndex};
+#[allow(unused_imports)]
 use scirs2_core::random::{Random, Rng};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
@@ -162,7 +163,7 @@ impl NSWGraph {
         let mut indices: Vec<usize> = (0..self.data.len()).collect();
         // Manually shuffle using Fisher-Yates algorithm
         for i in (1..indices.len()).rev() {
-            let j = rng.gen_range(0..=i);
+            let j = rng.random_range(0, i + 1);
             indices.swap(i, j);
         }
 
@@ -487,7 +488,7 @@ impl ONNGGraph {
         // Note: Using manual random selection instead of SliceRandom
         // Manually shuffle using Fisher-Yates algorithm
         for i in (1..indices.len()).rev() {
-            let j = rng.gen_range(0..=i);
+            let j = rng.random_range(0, i + 1);
             indices.swap(i, j);
         }
         indices.truncate(num_points.max(1));

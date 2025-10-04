@@ -1,41 +1,88 @@
 //! # OxiRS CLI Tool
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
-//! Command-line interface for OxiRS providing import, export, migration,
+//! Command-line interface for OxiRS providing import, export, SPARQL queries,
 //! benchmarking, and server management tools.
+//!
+//! ## Features
+//!
+//! - ✅ **Persistent RDF Storage**: Data automatically saved to disk in N-Quads format
+//! - ✅ **SPARQL Queries**: Support for SELECT, ASK, CONSTRUCT, and DESCRIBE queries
+//! - ✅ **Multi-format Import/Export**: Turtle, N-Triples, RDF/XML, JSON-LD, N-Quads, TriG
+//! - ✅ **Interactive REPL**: Explore RDF data interactively
+//! - 🚧 **Prefix Support**: Coming soon in next release
 //!
 //! ## Commands
 //!
 //! - `init`: Initialize a new knowledge graph dataset
-//! - `serve`: Start the OxiRS server
-//! - `import`: Import RDF data from various formats
+//! - `import`: Import RDF data from various formats (data persisted automatically)
+//! - `query`: Execute SPARQL queries (SELECT, ASK, CONSTRUCT, DESCRIBE)
 //! - `export`: Export RDF data to various formats
-//! - `query`: Execute SPARQL queries
-//! - `update`: Execute SPARQL updates
+//! - `interactive`: Interactive REPL for SPARQL queries
+//! - `serve`: Start the OxiRS SPARQL server
 //! - `benchmark`: Run performance benchmarks
-//! - `migrate`: Migrate data between formats/versions
-//! - `config`: Manage server configuration
+//! - Various tools: `tdbloader`, `tdbquery`, `arq`, `sparql`, etc.
 //!
-//! ## Examples
+//! ## Quick Start
 //!
 //! ```bash
-//! # Initialize a new dataset
-//! oxirs init mykg --format tdb2
+//! # 1. Initialize a new dataset
+//! oxirs init mykg
 //!
-//! # Import data
+//! # 2. Import RDF data (automatically persisted to mykg/data.nq)
 //! oxirs import mykg data.ttl --format turtle
 //!
-//! # Start server
-//! oxirs serve mykg.toml --port 3030
+//! # 3. Query the data (data loaded from disk automatically)
+//! oxirs query mykg "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
 //!
-//! # Run benchmarks
-//! oxirs benchmark mykg --suite sp2bench
+//! # 4. Query with specific patterns
+//! oxirs query mykg "SELECT ?name WHERE { ?person <http://example.org/name> ?name }"
+//!
+//! # 5. Start SPARQL server
+//! oxirs serve mykg/oxirs.toml --port 3030
 //! ```
+//!
+//! ## Dataset Name Rules
+//!
+//! Dataset names must follow these rules:
+//! - Only letters (a-z, A-Z), numbers (0-9), underscores (_), and hyphens (-)
+//! - No dots (.), slashes (/), or other special characters
+//! - Maximum length: 255 characters
+//! - Cannot be empty
+//!
+//! Valid examples: `mykg`, `my_dataset`, `test-data-2024`
+//! Invalid examples: `dataset.oxirs`, `my/data`, `data.ttl`
+//!
+//! ## SPARQL Query Examples
+//!
+//! ```bash
+//! # Get all triples
+//! oxirs query mykg "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"
+//!
+//! # Filter by type
+//! oxirs query mykg "SELECT ?s WHERE {
+//!   ?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Person>
+//! }"
+//!
+//! # ASK query (returns true/false)
+//! oxirs query mykg "ASK { ?s <http://example.org/age> \"30\" }"
+//!
+//! # CONSTRUCT new triples
+//! oxirs query mykg "CONSTRUCT { ?s <http://example.org/hasName> ?name }
+//!                   WHERE { ?s <http://example.org/name> ?name }"
+//! ```
+//!
+//! ## Data Persistence
+//!
+//! - Data is automatically saved to `<dataset>/data.nq` in N-Quads format
+//! - On `oxirs import`, data is appended and persisted
+//! - On `oxirs query`, data is loaded from disk automatically
+//! - No manual save/load commands needed!
 
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -120,7 +167,7 @@ pub enum Commands {
     },
     /// Import RDF data
     Import {
-        /// Target dataset
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
         dataset: String,
         /// Input file path
         file: PathBuf,
@@ -133,7 +180,7 @@ pub enum Commands {
     },
     /// Export RDF data
     Export {
-        /// Source dataset
+        /// Source dataset (alphanumeric, _, - only; no dots or extensions)
         dataset: String,
         /// Output file path
         file: PathBuf,
@@ -146,7 +193,7 @@ pub enum Commands {
     },
     /// Execute SPARQL query
     Query {
-        /// Target dataset
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
         dataset: String,
         /// SPARQL query string or file
         query: String,
@@ -159,7 +206,7 @@ pub enum Commands {
     },
     /// Execute SPARQL update
     Update {
-        /// Target dataset
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
         dataset: String,
         /// SPARQL update string or file
         update: String,
@@ -169,7 +216,7 @@ pub enum Commands {
     },
     /// Run performance benchmarks
     Benchmark {
-        /// Target dataset
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
         dataset: String,
         /// Benchmark suite (sp2bench, watdiv, ldbc)
         #[arg(short, long, default_value = "sp2bench")]
@@ -950,15 +997,10 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
             output,
         } => tools::rset::run(input, input_format, output_format, output).await,
-        Commands::Interactive {
-            dataset: _,
-            history: _,
-        } => {
-            use cli::InteractiveMode;
-
-            ctx.info("Starting interactive mode...");
-            let mut interactive = InteractiveMode::new()?;
-            interactive.run().await
+        Commands::Interactive { dataset, history: _ } => {
+            ctx.info("Starting interactive SPARQL shell...");
+            commands::interactive::execute(dataset, cli.config)
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
         }
         Commands::Performance { action } => {
             let config = config::Config::default();

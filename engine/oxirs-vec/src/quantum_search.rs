@@ -6,11 +6,11 @@
 //! classical algorithms in specific scenarios, particularly for high-dimensional
 //! similarity search and complex optimization landscapes.
 
+use crate::random_utils::NormalSampler as Normal;
 use crate::Vector;
 use anyhow::{anyhow, Result};
 use oxirs_core::parallel::*;
 use oxirs_core::simd::SimdOps;
-use crate::random_utils::NormalSampler as Normal;
 use scirs2_core::random::{Random, Rng};
 use scirs2_core::rngs::StdRng;
 use serde::{Deserialize, Serialize};
@@ -665,6 +665,7 @@ impl QuantumVectorSearch {
         normal.sample(&mut *rng)
     }
 
+    #[allow(deprecated)]
     fn generate_random(&self) -> f32 {
         // Use proper random number generator
         let mut rng = self.rng.write().unwrap();

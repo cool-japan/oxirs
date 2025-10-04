@@ -3,6 +3,10 @@
 **/*.rs.bk
 *.pdb
 Cargo.lock
+**/*.rs.backup
+**/*.rs.bak
+**/*.rs.bak2
+**/*.rs.bak3
 
 # IDE
 .vscode/

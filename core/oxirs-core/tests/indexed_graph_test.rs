@@ -15,6 +15,7 @@ fn create_triple(s: &str, p: &str, o: &str) -> Triple {
 }
 
 /// Helper to create a test triple with a named node object
+#[allow(dead_code)]
 fn create_triple_nn(s: &str, p: &str, o: &str) -> Triple {
     Triple::new(
         NamedNode::new(s).unwrap(),

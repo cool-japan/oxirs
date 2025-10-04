@@ -12,7 +12,6 @@ use crate::{
     Result, ShaclAiError,
 };
 
-use scirs2_core::ndarray_ext::{Array1, Array2, Array3};
 use oxirs_core::{
     model::Variable,
     query::{
@@ -20,6 +19,7 @@ use oxirs_core::{
         pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternOptimizer, PatternStrategy},
     },
 };
+use scirs2_core::ndarray_ext::{Array1, Array2, Array3};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};

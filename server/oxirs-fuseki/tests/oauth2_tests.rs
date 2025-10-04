@@ -108,6 +108,9 @@ async fn test_oauth2_handler_authorization_flow() {
         subscription_manager: None,
         federation_manager: None,
         streaming_manager: None,
+        prefix_store: std::sync::Arc::new(oxirs_fuseki::handlers::PrefixStore::new()),
+        task_manager: std::sync::Arc::new(oxirs_fuseki::handlers::TaskManager::new()),
+        request_logger: std::sync::Arc::new(oxirs_fuseki::handlers::RequestLogger::new()),
         #[cfg(feature = "rate-limit")]
         rate_limiter: None,
     };

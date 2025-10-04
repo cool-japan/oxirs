@@ -83,9 +83,9 @@ impl AnalyticsEngine {
     /// Record a validation event
     pub fn record_validation_event(&mut self, event: ValidationEvent) {
         if self.config.sampling_rate < 1.0 && {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            random.gen::<f64>()
+            random.random::<f64>()
         } > self.config.sampling_rate
         {
             return; // Skip this event based on sampling rate

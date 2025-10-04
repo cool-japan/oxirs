@@ -258,7 +258,6 @@ impl PyTorchEmbedder {
 
         // Mock forward pass - generate deterministic embeddings based on tokens
         let mut rng = Random::seed(tokens.iter().map(|&t| t as u64).sum::<u64>());
-        use scirs2_core::random::Rng;
 
         let mut embedding = vec![0.0f32; metadata.embedding_dimension];
         for value in &mut embedding {

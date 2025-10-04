@@ -1,9 +1,9 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! GraphQL interface for RDF data with automatic schema generation from ontologies.

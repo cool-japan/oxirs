@@ -351,9 +351,11 @@ impl DomFreeStreamingRdfXmlParser {
         let text_content = if self.config.enable_zero_copy {
             self.process_text_zero_copy(text)?
         } else {
-            unescape(std::str::from_utf8(text).map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?)
-                .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
-                .into_owned()
+            unescape(
+                std::str::from_utf8(text).map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?,
+            )
+            .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
+            .into_owned()
         };
 
         if let Some(context) = self.element_stack.last_mut() {
@@ -664,8 +666,8 @@ impl DomFreeStreamingRdfXmlParser {
             );
             Ok(text_str.to_string()) // Still need to copy for return value
         } else {
-            let text_str = std::str::from_utf8(text)
-                .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?;
+            let text_str =
+                std::str::from_utf8(text).map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?;
             Ok(unescape(text_str)
                 .map_err(|e| RdfXmlParseError::XmlError(e.to_string()))?
                 .into_owned())

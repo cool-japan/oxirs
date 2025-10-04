@@ -2,7 +2,8 @@
 
 // Removed unused import
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+#[allow(unused_imports)]
+use scirs2_core::random::{Random, Rng};
 
 /// Initialize embeddings with Xavier/Glorot initialization (optimized)
 pub fn xavier_init(

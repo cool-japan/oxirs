@@ -9,7 +9,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
@@ -571,20 +571,20 @@ impl ContinualLearningModel {
             network_columns: {
                 let mut random = Random::default();
                 vec![Array2::from_shape_fn((dimensions, dimensions), |_| {
-                    random.gen::<f64>() as f32 * 0.1
+                    random.random::<f64>() as f32 * 0.1
                 })]
             },
             lateral_connections: Vec::new(),
             generator: Some({
                 let mut random = Random::default();
                 Array2::from_shape_fn((dimensions, dimensions), |_| {
-                    random.gen::<f64>() as f32 * 0.1
+                    random.random::<f64>() as f32 * 0.1
                 })
             }),
             discriminator: Some({
                 let mut random = Random::default();
                 Array2::from_shape_fn((dimensions, dimensions), |_| {
-                    random.gen::<f64>() as f32 * 0.1
+                    random.random::<f64>() as f32 * 0.1
                 })
             }),
             entities: HashMap::new(),
@@ -666,7 +666,7 @@ impl ContinualLearningModel {
             let output_dim = target.len();
             self.embeddings = Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
                 let mut random = Random::default();
-                (random.gen::<f64>() as f32 - 0.5) * 0.1
+                (random.random::<f64>() as f32 - 0.5) * 0.1
             });
             self.synaptic_importance = Array2::zeros((output_dim, input_dim));
             self.parameter_trajectory = Array2::zeros((output_dim, input_dim));
@@ -707,7 +707,7 @@ impl ContinualLearningModel {
             }
             MemoryUpdateStrategy::Random => {
                 if self.episodic_memory.len() >= self.config.memory_config.memory_capacity {
-                    let idx = random.gen_range(0..self.episodic_memory.len());
+                    let idx = random.random_range(0, self.episodic_memory.len());
                     self.episodic_memory.remove(idx);
                 }
                 self.episodic_memory.push_back(entry);
@@ -717,7 +717,7 @@ impl ContinualLearningModel {
                     self.episodic_memory.push_back(entry);
                 } else {
                     let k = self.episodic_memory.len();
-                    let j = random.gen_range(0..=self.examples_seen);
+                    let j = random.random_range(0, self.examples_seen + 1);
                     if j < k {
                         self.episodic_memory[j] = entry;
                     }
@@ -971,7 +971,7 @@ impl ContinualLearningModel {
             let new_rows = gradients.nrows();
             let mut random = Random::default();
             self.embeddings =
-                Array2::from_shape_fn((new_rows, dimensions), |_| random.gen::<f32>() * 0.1);
+                Array2::from_shape_fn((new_rows, dimensions), |_| random.random::<f32>() * 0.1);
         }
 
         // Update embeddings
@@ -1060,7 +1060,7 @@ impl ContinualLearningModel {
         let batch_size = replay_batch_size.min(self.episodic_memory.len());
 
         for _ in 0..batch_size {
-            let idx = random.gen_range(0..self.episodic_memory.len());
+            let idx = random.random_range(0, self.episodic_memory.len());
 
             // Extract data before modifying entry to avoid borrow conflicts
             let (data, target) = {
@@ -1095,7 +1095,7 @@ impl ContinualLearningModel {
             for _ in 0..replay_batch_size {
                 // Generate synthetic data
                 let mut random = Random::default();
-                let noise = Array1::from_shape_fn(generator.ncols(), |_| random.gen::<f32>());
+                let noise = Array1::from_shape_fn(generator.ncols(), |_| random.random::<f32>());
                 let generated_data = generator.dot(&noise);
 
                 // Generate corresponding target (simplified)
@@ -1162,13 +1162,13 @@ impl ContinualLearningModel {
         let dimensions = self.config.base_config.dimensions;
         let mut random = Random::default();
         let new_column =
-            Array2::from_shape_fn((dimensions, dimensions), |_| random.gen::<f32>() * 0.1);
+            Array2::from_shape_fn((dimensions, dimensions), |_| random.random::<f32>() * 0.1);
         self.network_columns.push(new_column);
 
         // Add lateral connections to previous columns
         if self.network_columns.len() > 1 {
             let lateral_connection = Array2::from_shape_fn((dimensions, dimensions), |_| {
-                random.gen::<f32>()
+                random.random::<f32>()
                     * self
                         .config
                         .architecture_config
@@ -1215,7 +1215,7 @@ impl ContinualLearningModel {
         let consolidation_steps = 100;
         for _ in 0..consolidation_steps {
             if !self.episodic_memory.is_empty() {
-                let idx = random.gen_range(0..self.episodic_memory.len());
+                let idx = random.random_range(0, self.episodic_memory.len());
                 let entry = &self.episodic_memory[idx];
 
                 // Weak replay for consolidation
@@ -1272,7 +1272,7 @@ impl ContinualLearningModel {
     fn evaluate_task_performance(&self, _task_id: &str) -> f32 {
         // Simplified evaluation - would need proper test set
         let mut random = Random::default();
-        random.gen::<f32>() * 0.1 + 0.8
+        random.random::<f32>() * 0.1 + 0.8
     }
 
     /// Euclidean distance between two vectors
@@ -1332,7 +1332,7 @@ impl EmbeddingModel for ContinualLearningModel {
         for epoch in 0..epochs {
             // Simulate continual learning training
             let mut random = Random::default();
-            let epoch_loss = 0.1 * random.gen::<f64>();
+            let epoch_loss = 0.1 * random.random::<f64>();
             loss_history.push(epoch_loss);
 
             // Simulate task switching
@@ -1684,8 +1684,8 @@ mod tests {
     #[test]
     fn test_ewc_state_creation() {
         let mut random = Random::default();
-        let fisher = Array2::from_shape_fn((5, 5), |_| random.gen::<f32>());
-        let params = Array2::from_shape_fn((5, 5), |_| random.gen::<f32>());
+        let fisher = Array2::from_shape_fn((5, 5), |_| random.random::<f32>());
+        let params = Array2::from_shape_fn((5, 5), |_| random.random::<f32>());
 
         let ewc_state = EWCState {
             fisher_information: fisher,

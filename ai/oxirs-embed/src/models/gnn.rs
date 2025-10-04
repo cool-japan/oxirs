@@ -10,7 +10,8 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Utc;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+#[allow(unused_imports)]
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
@@ -164,7 +165,6 @@ impl GNNEmbedding {
     /// Initialize GNN layers
     fn initialize_layers(&mut self) -> Result<()> {
         self.layers.clear();
-        use scirs2_core::random::Rng;
         let mut rng = Random::seed(42);
 
         let mut input_dim = self.config.base_config.dimensions;
@@ -559,7 +559,6 @@ impl GNNEmbedding {
 
             // Apply dropout during training (simplified - always applied here)
             let dropout_rate = self.config.dropout;
-            use scirs2_core::random::Rng;
             let mut rng = Random::seed(42);
 
             features = new_features
@@ -635,7 +634,6 @@ impl EmbeddingModel for GNNEmbedding {
         self.initialize_layers()?;
 
         // Initialize random embeddings
-        use scirs2_core::random::Rng;
         let mut rng = Random::seed(42);
         let dimensions = self.config.base_config.dimensions;
 

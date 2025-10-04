@@ -666,9 +666,9 @@ fn fn_round(args: &[Term]) -> Result<Term, OxirsError> {
 }
 
 fn fn_rand(_args: &[Term]) -> Result<Term, OxirsError> {
-    use scirs2_core::random::{Rng, Random};
+    use scirs2_core::random::{Random, Rng};
     let mut random = Random::default();
-    let value: f64 = random.gen();
+    let value: f64 = random.random();
     Ok(Term::Literal(Literal::new_typed(
         value.to_string(),
         NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
@@ -1310,7 +1310,7 @@ fn fn_md5(args: &[Term]) -> Result<Term, OxirsError> {
         Term::Literal(lit) => {
             let mut hasher = md5::Context::new();
             hasher.consume(lit.value().as_bytes());
-            let result = hasher.compute();
+            let result = hasher.finalize();
             let hex = format!("{result:x}");
             Ok(Term::Literal(Literal::new(&hex)))
         }

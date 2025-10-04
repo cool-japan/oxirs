@@ -42,8 +42,8 @@ impl Beta3CapabilitiesDemo {
         let mut rng1 = seeded_rng(12345);
         let mut rng2 = seeded_rng(12345);
 
-        let sample1: Vec<f64> = (0..10).map(|_| rng1.gen::<f64>()).collect();
-        let sample2: Vec<f64> = (0..10).map(|_| rng2.gen::<f64>()).collect();
+        let sample1: Vec<f64> = (0..10).map(|_| rng1.random::<f64>()).collect();
+        let sample2: Vec<f64> = (0..10).map(|_| rng2.random::<f64>()).collect();
 
         assert_eq!(sample1, sample2);
         println!("✅ Deterministic RNG: Reproducible sequences verified");
@@ -138,7 +138,7 @@ impl Beta3CapabilitiesDemo {
         // ✅ Beta.3 Feature: Thread-safe RNG pool for parallel processing
         let results: Vec<f64> = (0..1000).into_par_iter().map(|_| {
             let mut rng = self.rng_pool.get();
-            rng.gen::<f64>()
+            rng.random::<f64>()
         }).collect();
 
         println!("✅ Parallel random generation: {} samples", results.len());
@@ -146,12 +146,12 @@ impl Beta3CapabilitiesDemo {
         // ✅ Beta.3 Feature: Deterministic parallel execution
         let deterministic_results1: Vec<f64> = (0..100).into_par_iter().map(|i| {
             let mut rng = seeded_rng(i as u64);
-            rng.gen::<f64>()
+            rng.random::<f64>()
         }).collect();
 
         let deterministic_results2: Vec<f64> = (0..100).into_par_iter().map(|i| {
             let mut rng = seeded_rng(i as u64);
-            rng.gen::<f64>()
+            rng.random::<f64>()
         }).collect();
 
         assert_eq!(deterministic_results1, deterministic_results2);
@@ -275,7 +275,7 @@ mod tests {
         let mut rng2 = seeded_rng(999);
 
         for _ in 0..100 {
-            assert_eq!(rng1.gen::<f64>(), rng2.gen::<f64>());
+            assert_eq!(rng1.random::<f64>(), rng2.random::<f64>());
         }
 
         Ok(())

@@ -620,9 +620,9 @@ impl DistributedTracingManager {
     // Private helper methods
 
     fn should_sample(&self) -> bool {
-        use scirs2_core::random::{Rng, Random};
+        use scirs2_core::random::{Random, Rng};
         let mut random = Random::default();
-        random.gen::<f64>() < self.config.sampling_rate
+        random.random::<f64>() < self.config.sampling_rate
     }
 
     async fn update_service_latency_stats(&self, service_name: &str, duration: Duration) {

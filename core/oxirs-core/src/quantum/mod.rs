@@ -331,7 +331,8 @@ impl QuantumGraphProcessor {
                 Ok(max_idx)
             }
             MeasurementStrategy::WeightedRandom => {
-                use scirs2_core::random::{Rng, Random};
+                #[allow(unused_imports)]
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
                 let probabilities = state.amplitudes.mapv(|a| a * a);
                 let total: f64 = probabilities.sum();

@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
@@ -855,12 +855,12 @@ impl PerformanceMonitor {
         // In production, this would use actual system monitoring libraries
         let mut random = Random::default();
         ResourceMetrics {
-            cpu_utilization_percent: random.gen::<f64>() * 100.0,
-            memory_usage_mb: 1024.0 + random.gen::<f64>() * 2048.0,
-            gpu_utilization_percent: random.gen::<f64>() * 100.0,
-            gpu_memory_usage_mb: 2048.0 + random.gen::<f64>() * 4096.0,
-            network_io_mbps: random.gen::<f64>() * 100.0,
-            disk_io_mbps: random.gen::<f64>() * 50.0,
+            cpu_utilization_percent: random.random::<f64>() * 100.0,
+            memory_usage_mb: 1024.0 + random.random::<f64>() * 2048.0,
+            gpu_utilization_percent: random.random::<f64>() * 100.0,
+            gpu_memory_usage_mb: 2048.0 + random.random::<f64>() * 4096.0,
+            network_io_mbps: random.random::<f64>() * 100.0,
+            disk_io_mbps: random.random::<f64>() * 50.0,
             peak_memory_mb: 3072.0,
             peak_gpu_memory_mb: 6144.0,
         }
@@ -885,9 +885,9 @@ impl PerformanceMonitor {
         let mut random = Random::default();
         DriftMetrics {
             quality_drift_score: quality_drift,
-            performance_drift_score: random.gen::<f64>() * 0.1,
+            performance_drift_score: random.random::<f64>() * 0.1,
             distribution_shift: quality_drift > 0.1,
-            concept_drift_score: random.gen::<f64>() * 0.05,
+            concept_drift_score: random.random::<f64>() * 0.05,
             data_quality_issues: if quality_drift > 0.2 { 1 } else { 0 },
             drift_alerts: if quality_drift > 0.15 { 1 } else { 0 },
             last_drift_check: Utc::now(),
@@ -899,21 +899,21 @@ impl PerformanceMonitor {
         // Simulate quality assessment
         // In production, this would perform actual quality metrics calculation
         let mut random = Random::default();
-        let quality_score = 0.8 + random.gen::<f64>() * 0.2;
+        let quality_score = 0.8 + random.random::<f64>() * 0.2;
 
         let mut metrics = HashMap::new();
-        metrics.insert("isotropy".to_string(), 0.7 + random.gen::<f64>() * 0.3);
+        metrics.insert("isotropy".to_string(), 0.7 + random.random::<f64>() * 0.3);
         metrics.insert(
             "neighborhood_preservation".to_string(),
-            0.8 + random.gen::<f64>() * 0.2,
+            0.8 + random.random::<f64>() * 0.2,
         );
         metrics.insert(
             "clustering_quality".to_string(),
-            0.75 + random.gen::<f64>() * 0.25,
+            0.75 + random.random::<f64>() * 0.25,
         );
         metrics.insert(
             "similarity_correlation".to_string(),
-            0.85 + random.gen::<f64>() * 0.15,
+            0.85 + random.random::<f64>() * 0.15,
         );
 
         QualityAssessment {

@@ -3,7 +3,7 @@
 //! This example demonstrates the core functionality of the embedding system.
 
 use oxirs_embed::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -43,7 +43,7 @@ impl SimpleTransE {
             // Initialize random embedding
             let mut random_gen = Random::default();
             let embedding: Vec<f64> = (0..self.config.dimensions)
-                .map(|_| (random_gen.gen::<f64>() - 0.5) * 0.1)
+                .map(|_| (random_gen.random::<f64>() - 0.5) * 0.1)
                 .collect();
             self.entity_embeddings.push(embedding);
 
@@ -61,7 +61,7 @@ impl SimpleTransE {
             // Initialize random embedding
             let mut random_gen = Random::default();
             let embedding: Vec<f64> = (0..self.config.dimensions)
-                .map(|_| (random_gen.gen::<f64>() - 0.5) * 0.1)
+                .map(|_| (random_gen.random::<f64>() - 0.5) * 0.1)
                 .collect();
             self.relation_embeddings.push(embedding);
 
@@ -102,7 +102,7 @@ impl SimpleTransE {
         let mut random_gen = Random::default();
         for &(s, p, o) in &self.triples {
             // Generate negative sample by corrupting object
-            let neg_o = random_gen.gen_range(0..self.entity_embeddings.len());
+            let neg_o = random_gen.random_range(0, self.entity_embeddings.len());
 
             if neg_o != o {
                 // Make sure it's actually negative

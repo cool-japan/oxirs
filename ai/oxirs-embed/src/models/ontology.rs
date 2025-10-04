@@ -911,9 +911,9 @@ impl EmbeddingModel for OntologyAwareEmbedding {
             let embedding = Array1::from_vec(
                 (0..dimensions)
                     .map(|_| {
-                        use scirs2_core::random::{Rng, Random};
+                        use scirs2_core::random::{Random, Rng};
                         let mut random = Random::default();
-                        (random.gen::<f32>() - 0.5) * 0.1
+                        (random.random::<f32>() - 0.5) * 0.1
                     })
                     .collect(),
             );
@@ -924,9 +924,9 @@ impl EmbeddingModel for OntologyAwareEmbedding {
             let embedding = Array1::from_vec(
                 (0..dimensions)
                     .map(|_| {
-                        use scirs2_core::random::{Rng, Random};
+                        use scirs2_core::random::{Random, Rng};
                         let mut random = Random::default();
-                        (random.gen::<f32>() - 0.5) * 0.1
+                        (random.random::<f32>() - 0.5) * 0.1
                     })
                     .collect(),
             );

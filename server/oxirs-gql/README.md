@@ -1,10 +1,10 @@
 # OxiRS GraphQL
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **High-performance GraphQL server for RDF data with automatic schema generation**
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-gql = "0.1.0-alpha.1"
+oxirs-gql = "0.1.0-alpha.2"
 ```
 
 ## Quick Start
@@ -483,13 +483,13 @@ at your option.
 
 ## Status
 
-🚧 **Alpha Release (v0.1.0-alpha.1)** - September 30, 2025
+� **Alpha Release (v0.1.0-alpha.2)** - October 4, 2025
 
 Current alpha features:
-- ✅ Basic GraphQL server setup
-- ✅ Schema generation from RDF vocabularies (basic)
-- ✅ GraphQL to SPARQL translation (basic)
-- 🚧 Subscription support (experimental)
-- ⏳ Federation features (planned)
+- ✅ GraphQL server with persisted dataset introspection and hot-reload
+- ✅ GraphQL ⇄ SPARQL translation covering vector/federation-aware resolvers
+- ✅ Schema generation with CLI configuration parity and dataset auto-sync
+- ✅ Subscriptions bridged to SPARQL/stream events (experimental)
+- 🚧 Apollo Federation interoperability (in progress)
 
-Note: This is an alpha release. Some features are incomplete and APIs may change.
+Note: This is an alpha release. Some features remain experimental and APIs may evolve before beta.

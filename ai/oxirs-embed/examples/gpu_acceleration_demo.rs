@@ -151,17 +151,11 @@ async fn demo_tensor_caching() -> Result<()> {
     let entity_tensors = vec![
         (
             "entity_1",
-            Array2::from_shape_vec(
-                (64, 128),
-                (0..8192).map(|i| i as f32 / 1000.0).collect(),
-            )?,
+            Array2::from_shape_vec((64, 128), (0..8192).map(|i| i as f32 / 1000.0).collect())?,
         ),
         (
             "entity_2",
-            Array2::from_shape_vec(
-                (64, 128),
-                (1000..9192).map(|i| i as f32 / 1000.0).collect(),
-            )?,
+            Array2::from_shape_vec((64, 128), (1000..9192).map(|i| i as f32 / 1000.0).collect())?,
         ),
         (
             "entity_3",
@@ -301,10 +295,8 @@ async fn demo_mixed_precision() -> Result<()> {
 
     // Simulate gradient computation and unscaling
     println!("\n🔄 Gradient processing:");
-    let mut gradients = Array2::from_shape_vec(
-        (64, 128),
-        (0..8192).map(|i| (i as f32) / 10000.0).collect(),
-    )?;
+    let mut gradients =
+        Array2::from_shape_vec((64, 128), (0..8192).map(|i| (i as f32) / 10000.0).collect())?;
 
     println!(
         "   Original gradient norm: {:.6}",

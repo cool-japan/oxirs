@@ -1,19 +1,18 @@
 # OxiRS-Star - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-star** provides RDF-star and SPARQL-star support for quoted triples (experimental feature).
 
-### Alpha Release Status
-- **Complete test suite** (157 tests passing)
-- **Zero compilation errors/warnings**
-- **Quoted triple support**
-- **RDF-star parsing**
-- **SPARQL-star queries**
-- **Multiple format support**
-- **Released on crates.io**: `oxirs-star = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **Complete test suite** (157 passing) with zero warnings
+- **Quoted triple support** integrated with disk-backed persistence
+- **RDF-star parsing & serialization** across CLI import/export pipelines
+- **SPARQL-star queries** federating with external endpoints via `SERVICE`
+- **SciRS2 instrumentation** for nested quoted triple performance insights
+- **Released on crates.io**: `oxirs-star = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

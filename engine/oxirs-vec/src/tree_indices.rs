@@ -583,6 +583,7 @@ impl VpTree {
         self.build_node_safe(indices, rng, 0)
     }
 
+    #[allow(deprecated)]
     fn build_node_safe<R: Rng>(
         &self,
         mut indices: Vec<usize>,
@@ -944,6 +945,7 @@ impl RandomProjectionTree {
         self.build_node_safe(indices, dimensions, rng, 0)
     }
 
+    #[allow(deprecated)]
     fn build_node_safe<R: Rng>(
         &self,
         indices: Vec<usize>,

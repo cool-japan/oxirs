@@ -858,6 +858,7 @@ impl AdaptiveCompressor {
     }
 
     fn should_explore(&self) -> bool {
+        #[allow(unused_imports)]
         use scirs2_core::random::{Random, Rng};
         let mut rng = Random::seed(42);
         rng.gen_range(0.0..1.0) < self.exploration_rate

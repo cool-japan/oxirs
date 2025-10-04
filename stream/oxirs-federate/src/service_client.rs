@@ -828,7 +828,7 @@ impl ConnectionPool {
         }
     }
 
-    async fn acquire(&self) -> Result<tokio::sync::SemaphorePermit> {
+    async fn acquire(&self) -> Result<tokio::sync::SemaphorePermit<'_>> {
         self.semaphore
             .acquire()
             .await

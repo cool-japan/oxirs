@@ -9,8 +9,8 @@
 //! - Storage virtualization with transparent migration
 //! - Multi-Version Concurrency Control (MVCC) for high-concurrency operations
 
-#[cfg(feature = "columnar")]
-pub mod columnar;
+// #[cfg(feature = "columnar")]
+// pub mod columnar; // TODO: Add 'columnar' feature to Cargo.toml when ready
 pub mod compression;
 pub mod immutable;
 pub mod mvcc;

@@ -15,7 +15,7 @@ use crate::{EmbeddingError, EmbeddingModel, ModelConfig, Vector};
 use anyhow::Result;
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::Array2;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -636,7 +636,7 @@ impl EnzymaticNetwork {
 
         if {
             let mut random = Random::default();
-            random.gen::<f64>() < reaction_probability
+            random.random::<f64>() < reaction_probability
         } {
             // Modify substrate
             if let Some(substrate) = self
@@ -922,7 +922,7 @@ impl MolecularAssembly {
         for rule in &assembly_rules {
             let binding_probability = self.calculate_binding_probability(rule);
 
-            if random.gen::<f64>() < binding_probability {
+            if random.random::<f64>() < binding_probability {
                 self.execute_assembly_rule(rule);
             }
         }
@@ -979,7 +979,7 @@ impl MolecularAssembly {
         // Disassembly due to thermal energy
         self.assembled_structures.retain(|structure| {
             let disassembly_probability = (self.temperature / 1000.0) / structure.stability;
-            !(random.gen::<f64>() < disassembly_probability)
+            !(random.random::<f64>() < disassembly_probability)
         });
     }
 
@@ -1204,12 +1204,12 @@ impl BiologicalEmbeddingModel {
         // Add regulatory relationships
         for i in 0..embedding.values.len() {
             for j in 0..embedding.values.len() {
-                if i != j && random.gen::<f64>() < 0.1 {
+                if i != j && random.random::<f64>() < 0.1 {
                     // 10% chance of regulation
                     let relationship = RegulatoryRelationship {
                         regulator_gene_id: self.gene_network.genes[i].id,
                         target_gene_id: self.gene_network.genes[j].id,
-                        regulation_type: if random.gen::<f64>() < 0.5 {
+                        regulation_type: if random.random::<f64>() < 0.5 {
                             RegulationType::Activation
                         } else {
                             RegulationType::Repression

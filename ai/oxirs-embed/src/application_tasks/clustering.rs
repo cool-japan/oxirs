@@ -8,7 +8,8 @@ use super::ApplicationEvalConfig;
 use crate::EmbeddingModel;
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::Array2;
-use scirs2_core::random::{Rng, Random};
+#[allow(unused_imports)]
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 

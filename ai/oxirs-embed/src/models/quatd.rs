@@ -10,7 +10,7 @@ use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vect
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::{AddAssign, SubAssign};
 use std::time::Instant;
@@ -193,19 +193,17 @@ impl QuatD {
             use scirs2_core::random::{SeedableRng, StdRng};
             StdRng::seed_from_u64(seed)
         } else {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             Random::default()
         };
 
         // Initialize entity embeddings as quaternions
-        self.entity_embeddings = {
-            Array2::from_shape_fn((num_entities, 4), |_| rng.gen_range(-0.1..0.1))
-        };
+        self.entity_embeddings =
+            { Array2::from_shape_fn((num_entities, 4), |_| rng.gen_range(-0.1..0.1)) };
 
         // Initialize relation embeddings as quaternions
-        self.relation_embeddings = {
-            Array2::from_shape_fn((num_relations, 4), |_| rng.gen_range(-0.1..0.1))
-        };
+        self.relation_embeddings =
+            { Array2::from_shape_fn((num_relations, 4), |_| rng.gen_range(-0.1..0.1)) };
 
         // Normalize quaternions to unit length
         self.normalize_all_quaternions();
@@ -442,9 +440,9 @@ impl QuatD {
         let mut rng = if let Some(seed) = self.base.config.seed {
             use scirs2_core::random::{Rng, SeedableRng, StdRng};
             let mut thread_rng = Random::default();
-            StdRng::seed_from_u64(seed + thread_rng.gen::<u64>())
+            StdRng::seed_from_u64(seed + thread_rng.random::<u64>())
         } else {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             Random::default()
         };
 

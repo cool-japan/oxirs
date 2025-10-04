@@ -1,10 +1,10 @@
 # OxiRS Fuseki
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility**
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.1.0-alpha.1"
+oxirs-fuseki = "0.1.0-alpha.2"
 ```
 
 ### As a Binary
@@ -551,13 +551,15 @@ at your option.
 
 ## Status
 
-🚧 **Alpha Release (v0.1.0-alpha.1)** - September 30, 2025
+� **Alpha Release (v0.1.0-alpha.2)** - October 4, 2025
 
 Current alpha features:
-- ✅ Basic HTTP server infrastructure
-- ✅ SPARQL query endpoint
-- ✅ SPARQL update endpoint (basic)
-- ✅ Multi-dataset support (basic)
+- ✅ SPARQL query/update endpoints backed by persisted N-Quads datasets
+- ✅ Federation (`SERVICE` clause) with retries, `SERVICE SILENT`, and result merging
+- ✅ OAuth2/OIDC + JWT security with hardened headers and HSTS
+- ✅ Prometheus metrics, slow-query tracing, and structured logging via SciRS2
+- ✅ Multi-dataset support with auto save/load and CLI integration
+- 🚧 Advanced admin UI & live reconfiguration (planned for beta)
 - 🚧 Authentication system (in progress)
 - 🚧 GraphQL integration (in progress)
 

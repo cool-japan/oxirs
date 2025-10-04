@@ -1,8 +1,8 @@
 # OxiRS TTL - RDF Format Support
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -38,7 +38,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.1.0-alpha.1"
+oxirs-ttl = "0.1.0-alpha.2"
 ```
 
 ## Quick Start
@@ -253,15 +253,13 @@ let dataset = Dataset::from_parser(
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.1)
-- ✅ Turtle parser and writer
-- ✅ N-Triples parser and writer
-- ✅ TriG parser and writer
-- ✅ N-Quads parser and writer
-- ✅ JSON-LD parser (basic)
-- ✅ RDF/XML parser (basic)
-- 🚧 Streaming optimizations (in progress)
-- 🚧 Full JSON-LD context support (planned for beta)
+### Alpha Release (v0.1.0-alpha.2)
+- ✅ Turtle, TriG, N-Triples, N-Quads, JSON-LD, RDF/XML parsing & serialization
+- ✅ Streaming pipelines powering CLI import/export/migrate commands
+- ✅ Automatic dataset persistence with N-Quads-backed save/load
+- ✅ Progress instrumentation and SciRS2 metrics for large batch operations
+- 🚧 Full JSON-LD context management (beta target)
+- 🚧 Advanced streaming optimizations (ongoing)
 
 ## Contributing
 

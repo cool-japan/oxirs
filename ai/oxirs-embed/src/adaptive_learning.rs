@@ -563,9 +563,9 @@ impl AdaptiveLearningSystem {
         for i in 0..gradient.nrows() {
             for j in 0..gradient.ncols() {
                 gradient[(i, j)] = ({
-                    use scirs2_core::random::{Rng, Random};
+                    use scirs2_core::random::{Random, Rng};
                     let mut random = Random::default();
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 } - 0.5)
                     * 0.001;
             }
@@ -617,15 +617,15 @@ impl AdaptiveLearningSystem {
                 for i in 0..mutated.nrows() {
                     for j in 0..mutated.ncols() {
                         if {
-                            use scirs2_core::random::{Rng, Random};
+                            use scirs2_core::random::{Random, Rng};
                             let mut random = Random::default();
-                            random.gen::<f64>()
+                            random.random::<f64>()
                         } < mutation_rate
                         {
                             mutated[(i, j)] += ({
-                                use scirs2_core::random::{Rng, Random};
+                                use scirs2_core::random::{Random, Rng};
                                 let mut random = Random::default();
-                                random.gen::<f64>()
+                                random.random::<f64>()
                             } - 0.5)
                                 * 0.01;
                         }
@@ -653,9 +653,9 @@ impl AdaptiveLearningSystem {
         // Simplified fitness evaluation
         // In practice, this would evaluate how well the parameters perform on the samples
         Ok({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            random.gen::<f64>()
+            random.random::<f64>()
         })
     }
 
@@ -683,9 +683,9 @@ impl AdaptiveLearningSystem {
                 for i in 0..candidate.nrows() {
                     for j in 0..candidate.ncols() {
                         candidate[(i, j)] += ({
-                            use scirs2_core::random::{Rng, Random};
+                            use scirs2_core::random::{Random, Rng};
                             let mut random = Random::default();
-                            random.gen::<f64>()
+                            random.random::<f64>()
                         } - 0.5)
                             * exploration_factor;
                     }
@@ -694,9 +694,9 @@ impl AdaptiveLearningSystem {
                 let fitness = Self::evaluate_fitness(samples, &candidate)?;
                 let acquisition = fitness
                     + exploration_factor * {
-                        use scirs2_core::random::{Rng, Random};
+                        use scirs2_core::random::{Random, Rng};
                         let mut random = Random::default();
-                        random.gen::<f64>()
+                        random.random::<f64>()
                     };
 
                 if acquisition > best_acquisition {

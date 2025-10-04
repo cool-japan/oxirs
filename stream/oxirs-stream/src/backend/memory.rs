@@ -285,7 +285,10 @@ mod tests {
 
         // List topics - check our topic exists (may have other topics from parallel tests)
         let topics = backend.list_topics().await.unwrap();
-        assert!(topics.iter().any(|t| t.as_str() == topic.as_str()), "Our topic should exist");
+        assert!(
+            topics.iter().any(|t| t.as_str() == topic.as_str()),
+            "Our topic should exist"
+        );
 
         // Send event
         let event = StreamEvent::TripleAdded {
@@ -309,7 +312,10 @@ mod tests {
         // Delete topic
         backend.delete_topic(&topic).await.unwrap();
         let topics = backend.list_topics().await.unwrap();
-        assert!(!topics.iter().any(|t| t.as_str() == topic.as_str()), "Our topic should be deleted");
+        assert!(
+            !topics.iter().any(|t| t.as_str() == topic.as_str()),
+            "Our topic should be deleted"
+        );
     }
 
     #[tokio::test]

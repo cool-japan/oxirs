@@ -1,23 +1,23 @@
 # OxiRS Engine Directory - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released
+## ✅ Current Status: v0.1.0-alpha.2 Released
 
-**Overall Achievement**: ✅ **ENGINE MODULES ALPHA RELEASE** (3741/3747 tests passing, 99.8% success rate)
+**Overall Achievement**: ✅ **ENGINE MODULES ALPHA.2 RELEASE** (3,750+ unit & integration tests passing, zero compile warnings)
 
 Comprehensive implementation of SPARQL, SHACL, vector search, RDF-star, and rule engine capabilities.
 
 ### 📊 Module Status Summary
 
-| Module | Status | Tests | Features | Release Status |
-|--------|--------|-------|----------|----------------|
-| **oxirs-arq** | Alpha | 114/114 (100%) | SPARQL 1.1, Query Optimization | ✅ Released |
-| **oxirs-rule** | Alpha (Exp) | 89/89 (100%) | RETE, Forward/Backward Chaining | ✅ Released |
-| **oxirs-shacl** | Alpha | 307/308 (99.7%) | SHACL Validation | ✅ Released |
-| **oxirs-star** | Alpha (Exp) | 157/157 (100%) | RDF-star, SPARQL-star | ✅ Released |
-| **oxirs-vec** | Alpha (Exp) | 323/323 (100%) | Vector Search, HNSW | ✅ Released |
-| **oxirs-ttl** | Alpha | 6/6 (100%) | Turtle/N-Triples/TriG | ✅ Released |
+| Module | Status | Tests | Highlights | Release Status |
+|--------|--------|-------|-----------|----------------|
+| **oxirs-arq** | Alpha.2 | 114/114 (100%) | SPARQL 1.1/1.2, federation (`SERVICE`), SciRS2 metrics | ✅ Alpha.2 Released |
+| **oxirs-rule** | Alpha.2 (Exp) | 89/89 (100%) | RETE, forward/backward chaining, persistence-aware datasets | ✅ Alpha.2 Released |
+| **oxirs-shacl** | Alpha.2 | 308/308 (100%) | SHACL validation with streaming + persisted graph support | ✅ Alpha.2 Released |
+| **oxirs-star** | Alpha.2 (Exp) | 157/157 (100%) | RDF-star/SPARQL-star with disk-backed storage | ✅ Alpha.2 Released |
+| **oxirs-vec** | Alpha.2 (Exp) | 323/323 (100%) | Vector search, federation-aware embeddings, metrics hooks | ✅ Alpha.2 Released |
+| **oxirs-ttl** | Alpha.2 | 6/6 (100%) | Streaming Turtle/TriG + CLI import/export pipelines | ✅ Alpha.2 Released |
 
 ## 🎯 Post-Alpha Development Roadmap
 

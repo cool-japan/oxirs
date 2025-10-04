@@ -8,7 +8,7 @@
 //! - Health checks and alerting
 
 use chrono::{DateTime, Utc};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
@@ -1227,7 +1227,11 @@ impl HealthChecker {
         let status = match check.check_type {
             HealthCheckType::Memory => {
                 // Simulate memory check
-                if ({ let mut random = Random::default(); random.gen::<f64>() }) > 0.1 {
+                if ({
+                    let mut random = Random::default();
+                    random.random::<f64>()
+                }) > 0.1
+                {
                     HealthStatus::Healthy
                 } else {
                     HealthStatus::Warning
@@ -1235,7 +1239,11 @@ impl HealthChecker {
             }
             HealthCheckType::CPU => {
                 // Simulate CPU check
-                if ({ let mut random = Random::default(); random.gen::<f64>() }) > 0.05 {
+                if ({
+                    let mut random = Random::default();
+                    random.random::<f64>()
+                }) > 0.05
+                {
                     HealthStatus::Healthy
                 } else {
                     HealthStatus::Critical
@@ -1249,7 +1257,10 @@ impl HealthChecker {
             component: check.component.clone(),
             timestamp,
             status,
-            response_time_ms: ({ let mut random = Random::default(); random.gen::<f64>() }) * 100.0,
+            response_time_ms: ({
+                let mut random = Random::default();
+                random.random::<f64>()
+            }) * 100.0,
             message: "Health check completed".to_string(),
             error: None,
         })

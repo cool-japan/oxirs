@@ -137,25 +137,25 @@ impl Default for PrototypicalNetwork {
         feature_extractor.insert(
             "conv1".to_string(),
             Array2::from_shape_fn((64, 32), |(_, _)| {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
         feature_extractor.insert(
             "conv2".to_string(),
             Array2::from_shape_fn((128, 64), |(_, _)| {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
         feature_extractor.insert(
             "fc".to_string(),
             Array2::from_shape_fn((256, 128), |(_, _)| {
-                use scirs2_core::random::{Rng, Random};
+                use scirs2_core::random::{Random, Rng};
                 let mut random = Random::default();
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -177,17 +177,17 @@ impl Default for MAMLComponents {
             inner_params.insert(
                 layer.to_string(),
                 Array2::from_shape_fn((128, 128), |(_, _)| {
-                    use scirs2_core::random::{Rng, Random};
+                    use scirs2_core::random::{Random, Rng};
                     let mut random = Random::default();
-                    (random.gen::<f32>() - 0.5) * 0.1
+                    (random.random::<f32>() - 0.5) * 0.1
                 }),
             );
             outer_params.insert(
                 layer.to_string(),
                 Array2::from_shape_fn((128, 128), |(_, _)| {
-                    use scirs2_core::random::{Rng, Random};
+                    use scirs2_core::random::{Random, Rng};
                     let mut random = Random::default();
-                    (random.gen::<f32>() - 0.5) * 0.1
+                    (random.random::<f32>() - 0.5) * 0.1
                 }),
             );
             meta_grads.insert(layer.to_string(), Array2::zeros((128, 128)));
@@ -316,9 +316,9 @@ impl FewShotLearning {
         model: &MultiModalEmbedding,
     ) -> Result<Vec<(String, f32)>> {
         let task_id = {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            format!("task_{}", random.gen::<u32>())
+            format!("task_{}", random.random::<u32>())
         };
 
         // Initialize task-specific parameters
@@ -614,9 +614,9 @@ impl FewShotLearning {
                     // Simulate task-specific adaptation
                     for layer_name in self.maml_components.outer_loop_params.keys() {
                         let grad = Array2::from_shape_fn((128, 128), |(_, _)| {
-                            use scirs2_core::random::{Rng, Random};
+                            use scirs2_core::random::{Random, Rng};
                             let mut random = Random::default();
-                            (random.gen::<f32>() - 0.5) * 0.01
+                            (random.random::<f32>() - 0.5) * 0.01
                         });
                         *meta_gradients
                             .entry(layer_name.clone())
@@ -637,9 +637,9 @@ impl FewShotLearning {
                     // Simulate task adaptation and update toward adapted parameters
                     for params in self.maml_components.outer_loop_params.values_mut() {
                         let update = Array2::from_shape_fn(params.dim(), |(_, _)| {
-                            use scirs2_core::random::{Rng, Random};
+                            use scirs2_core::random::{Random, Rng};
                             let mut random = Random::default();
-                            (random.gen::<f32>() - 0.5) * 0.001
+                            (random.random::<f32>() - 0.5) * 0.001
                         });
                         *params = &*params + &update;
                     }
@@ -649,9 +649,9 @@ impl FewShotLearning {
                 // For prototypical networks, update feature extractor
                 for params in self.prototypical_network.feature_extractor.values_mut() {
                     let update = Array2::from_shape_fn(params.dim(), |(_, _)| {
-                        use scirs2_core::random::{Rng, Random};
+                        use scirs2_core::random::{Random, Rng};
                         let mut random = Random::default();
-                        (random.gen::<f32>() - 0.5) * 0.001
+                        (random.random::<f32>() - 0.5) * 0.001
                     });
                     *params = &*params + &update;
                 }

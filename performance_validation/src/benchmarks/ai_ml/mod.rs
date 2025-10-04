@@ -955,8 +955,8 @@ fn generate_normal_samples_baseline(count: usize) -> Vec<f64> {
 
     (0..count).map(|_| {
         // Box-Muller transform using standard library rand
-        let u1: f64 = rng.gen();
-        let u2: f64 = rng.gen();
+        let u1: f64 = rng.random();
+        let u2: f64 = rng.random();
         (-2.0 * u1.ln()).sqrt() * (2.0 * std::f64::consts::PI * u2).cos()
     }).collect()
 }

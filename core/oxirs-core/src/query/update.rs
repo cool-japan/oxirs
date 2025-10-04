@@ -615,26 +615,96 @@ impl UpdateParser {
 
     /// Parse a SPARQL UPDATE string into an Update struct
     pub fn parse(&self, update_str: &str) -> Result<Update> {
-        // This is a very simplified parser that only handles basic cases
+        // This is a simplified parser that handles common UPDATE operations
         // A full implementation would need a complete SPARQL UPDATE grammar parser
 
         let trimmed = update_str.trim();
 
-        if trimmed.starts_with("INSERT DATA") {
-            self.parse_insert_data(trimmed)
-        } else if trimmed.starts_with("DELETE DATA") {
-            self.parse_delete_data(trimmed)
-        } else if trimmed.starts_with("CLEAR") {
-            self.parse_clear(trimmed)
+        // Extract prefixes first
+        let (prefixes, remaining) = self.extract_prefixes(trimmed)?;
+
+        // Determine operation type
+        if remaining.contains("INSERT DATA") {
+            self.parse_insert_data(&remaining, prefixes)
+        } else if remaining.contains("DELETE DATA") {
+            self.parse_delete_data(&remaining, prefixes)
+        } else if self.is_delete_where_shorthand(&remaining) {
+            self.parse_delete_where(&remaining, prefixes)
+        } else if remaining.contains("DELETE") && remaining.contains("WHERE") {
+            self.parse_delete_modify(&remaining, prefixes)
+        } else if remaining.contains("INSERT") && remaining.contains("WHERE") {
+            self.parse_insert_where(&remaining, prefixes)
+        } else if remaining.contains("CLEAR") {
+            self.parse_clear(&remaining, prefixes)
         } else {
             Err(OxirsError::Parse(format!(
-                "Unsupported UPDATE operation: {trimmed}"
+                "Unsupported UPDATE operation: {}",
+                remaining
             )))
         }
     }
 
+    /// Check if this is DELETE WHERE shorthand (no braces between DELETE and WHERE)
+    fn is_delete_where_shorthand(&self, update_str: &str) -> bool {
+        // DELETE WHERE means DELETE followed directly by WHERE with only whitespace between
+        // DELETE { ... } WHERE { ... } should return false
+        if let Some(delete_pos) = update_str.find("DELETE") {
+            if let Some(where_pos) = update_str.find("WHERE") {
+                let between = &update_str[delete_pos + 6..where_pos];
+                // If there's an opening brace between DELETE and WHERE, it's not shorthand
+                return !between.contains('{');
+            }
+        }
+        false
+    }
+
+    /// Extract PREFIX declarations from UPDATE string
+    fn extract_prefixes(&self, update_str: &str) -> Result<(HashMap<String, NamedNode>, String)> {
+        let mut prefixes = HashMap::new();
+        let mut remaining = update_str.to_string();
+
+        // Handle PREFIX declarations that may be inline or multi-line
+        loop {
+            let trimmed = remaining.trim();
+
+            if let Some(prefix_start) = trimmed.find("PREFIX") {
+                // Check if this is at the start or after whitespace (not in the middle of an IRI)
+                if prefix_start == 0 || trimmed[..prefix_start].chars().all(|c| c.is_whitespace()) {
+                    // Extract PREFIX declaration: PREFIX prefix: <iri>
+                    let after_prefix = &trimmed[prefix_start + 6..];
+
+                    if let Some(colon_pos) = after_prefix.find(':') {
+                        if let Some(iri_start) = after_prefix.find('<') {
+                            if let Some(iri_end) = after_prefix.find('>') {
+                                let prefix = after_prefix[..colon_pos].trim().to_string();
+                                let iri_str = &after_prefix[iri_start + 1..iri_end];
+                                let iri_node = NamedNode::new(iri_str).map_err(|e| {
+                                    OxirsError::Parse(format!("Invalid prefix IRI: {e}"))
+                                })?;
+                                prefixes.insert(prefix, iri_node);
+
+                                // Remove this PREFIX declaration from remaining
+                                remaining = after_prefix[iri_end + 1..].to_string();
+                                continue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // No more PREFIX declarations found
+            break;
+        }
+
+        Ok((prefixes, remaining.trim().to_string()))
+    }
+
     /// Parse INSERT DATA operation
-    fn parse_insert_data(&self, update_str: &str) -> Result<Update> {
+    fn parse_insert_data(
+        &self,
+        update_str: &str,
+        prefixes: HashMap<String, NamedNode>,
+    ) -> Result<Update> {
         use crate::query::algebra::UpdateOperation;
 
         // Extract the data block from "INSERT DATA { ... }"
@@ -642,14 +712,14 @@ impl UpdateParser {
         let data_end = update_str.rfind('}');
 
         if let (Some(start), Some(end)) = (data_start, data_end) {
-            let data_block = &update_str[start + 1..end].trim();
+            let data_block = update_str[start + 1..end].trim();
 
             // Parse the quads from the data block
-            let quads = self.parse_quad_data(data_block)?;
+            let quads = self.parse_quad_data(data_block, &prefixes)?;
 
             Ok(Update {
                 base: None,
-                prefixes: HashMap::new(),
+                prefixes,
                 operations: vec![UpdateOperation::InsertData { data: quads }],
             })
         } else {
@@ -660,7 +730,11 @@ impl UpdateParser {
     }
 
     /// Parse DELETE DATA operation
-    fn parse_delete_data(&self, update_str: &str) -> Result<Update> {
+    fn parse_delete_data(
+        &self,
+        update_str: &str,
+        prefixes: HashMap<String, NamedNode>,
+    ) -> Result<Update> {
         use crate::query::algebra::UpdateOperation;
 
         // Extract the data block from "DELETE DATA { ... }"
@@ -668,14 +742,14 @@ impl UpdateParser {
         let data_end = update_str.rfind('}');
 
         if let (Some(start), Some(end)) = (data_start, data_end) {
-            let data_block = &update_str[start + 1..end].trim();
+            let data_block = update_str[start + 1..end].trim();
 
             // Parse the quads from the data block
-            let quads = self.parse_quad_data(data_block)?;
+            let quads = self.parse_quad_data(data_block, &prefixes)?;
 
             Ok(Update {
                 base: None,
-                prefixes: HashMap::new(),
+                prefixes,
                 operations: vec![UpdateOperation::DeleteData { data: quads }],
             })
         } else {
@@ -685,14 +759,473 @@ impl UpdateParser {
         }
     }
 
-    /// Parse quad data from a data block
-    fn parse_quad_data(&self, _data_block: &str) -> Result<Vec<Quad>> {
-        // For now, return empty vector - in a full implementation this would parse the quad data
-        Ok(Vec::new())
+    /// Parse quad data from a data block using Turtle syntax
+    fn parse_quad_data(
+        &self,
+        data_block: &str,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<Vec<Quad>> {
+        use crate::format::format::RdfFormat;
+        use crate::format::RdfParser;
+        use std::io::Cursor;
+
+        // Build a complete Turtle document with prefixes
+        let mut turtle_doc = String::new();
+        for (prefix, iri) in prefixes {
+            turtle_doc.push_str(&format!("@prefix {}: <{}> .\n", prefix, iri.as_str()));
+        }
+        turtle_doc.push_str("\n");
+        turtle_doc.push_str(data_block);
+
+        // Parse using Turtle parser
+        let parser = RdfParser::new(RdfFormat::Turtle);
+        let turtle_bytes = turtle_doc.into_bytes();
+        let cursor = Cursor::new(turtle_bytes);
+
+        let quads: Vec<Quad> = parser
+            .for_reader(cursor)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| OxirsError::Parse(format!("Failed to parse UPDATE data: {}", e)))?;
+
+        Ok(quads)
+    }
+
+    /// Parse DELETE { ... } WHERE { ... } operation
+    fn parse_delete_modify(
+        &self,
+        update_str: &str,
+        prefixes: HashMap<String, NamedNode>,
+    ) -> Result<Update> {
+        use crate::query::algebra::UpdateOperation;
+
+        // Parse "DELETE { template } WHERE { pattern }"
+        let delete_pos = update_str.find("DELETE");
+        let where_pos = update_str.find("WHERE");
+
+        if delete_pos.is_none() || where_pos.is_none() {
+            return Err(OxirsError::Parse(
+                "Malformed DELETE/WHERE: missing DELETE or WHERE keyword".to_string(),
+            ));
+        }
+
+        let delete_start = update_str[delete_pos.unwrap()..].find('{');
+        let delete_end = update_str[delete_pos.unwrap()..].find('}');
+
+        if delete_start.is_none() || delete_end.is_none() {
+            return Err(OxirsError::Parse(
+                "Malformed DELETE/WHERE: missing template block".to_string(),
+            ));
+        }
+
+        let template_start = delete_pos.unwrap() + delete_start.unwrap() + 1;
+        let template_end = delete_pos.unwrap() + delete_end.unwrap();
+        let template_block = update_str[template_start..template_end].trim();
+
+        // Parse delete template as template patterns (can contain variables)
+        let delete_patterns = self.parse_template_patterns(template_block, &prefixes)?;
+
+        // Extract WHERE clause
+        let where_start = update_str[where_pos.unwrap()..].find('{');
+        let where_end = update_str[where_pos.unwrap()..].rfind('}');
+
+        if where_start.is_none() || where_end.is_none() {
+            return Err(OxirsError::Parse(
+                "Malformed DELETE/WHERE: missing WHERE pattern block".to_string(),
+            ));
+        }
+
+        let where_pattern_start = where_pos.unwrap() + where_start.unwrap() + 1;
+        let where_pattern_end = where_pos.unwrap() + where_end.unwrap();
+        let where_block = update_str[where_pattern_start..where_pattern_end].trim();
+
+        // Parse WHERE clause as graph pattern
+        let where_pattern = self.parse_where_pattern(where_block, &prefixes)?;
+
+        Ok(Update {
+            base: None,
+            prefixes,
+            operations: vec![UpdateOperation::Modify {
+                delete: Some(delete_patterns),
+                insert: None,
+                where_clause: Box::new(where_pattern),
+                using: crate::query::algebra::Dataset {
+                    default: vec![],
+                    named: vec![],
+                },
+            }],
+        })
+    }
+
+    /// Parse DELETE WHERE operation (shorthand)
+    fn parse_delete_where(
+        &self,
+        update_str: &str,
+        prefixes: HashMap<String, NamedNode>,
+    ) -> Result<Update> {
+        use crate::query::algebra::UpdateOperation;
+
+        // Extract the pattern from "DELETE WHERE { ... }"
+        let pattern_start = update_str.find('{');
+        let pattern_end = update_str.rfind('}');
+
+        if let (Some(start), Some(end)) = (pattern_start, pattern_end) {
+            let pattern_block = update_str[start + 1..end].trim();
+
+            // Parse patterns as quad patterns
+            let patterns = self.parse_quad_patterns(pattern_block, &prefixes)?;
+
+            Ok(Update {
+                base: None,
+                prefixes,
+                operations: vec![UpdateOperation::DeleteWhere { pattern: patterns }],
+            })
+        } else {
+            Err(OxirsError::Parse(
+                "Malformed DELETE WHERE: missing pattern block".to_string(),
+            ))
+        }
+    }
+
+    /// Parse INSERT WHERE operation
+    fn parse_insert_where(
+        &self,
+        update_str: &str,
+        prefixes: HashMap<String, NamedNode>,
+    ) -> Result<Update> {
+        use crate::query::algebra::UpdateOperation;
+
+        // Parse "INSERT { template } WHERE { pattern }"
+        let insert_pos = update_str.find("INSERT");
+        let where_pos = update_str.find("WHERE");
+
+        if insert_pos.is_none() || where_pos.is_none() {
+            return Err(OxirsError::Parse(
+                "Malformed INSERT WHERE: missing INSERT or WHERE keyword".to_string(),
+            ));
+        }
+
+        let insert_start = update_str[insert_pos.unwrap()..].find('{');
+        let insert_end = update_str[insert_pos.unwrap()..].find('}');
+
+        if insert_start.is_none() || insert_end.is_none() {
+            return Err(OxirsError::Parse(
+                "Malformed INSERT WHERE: missing template block".to_string(),
+            ));
+        }
+
+        let template_start = insert_pos.unwrap() + insert_start.unwrap() + 1;
+        let template_end = insert_pos.unwrap() + insert_end.unwrap();
+        let template_block = update_str[template_start..template_end].trim();
+
+        // Parse insert template as template patterns (can contain variables)
+        let insert_patterns = self.parse_template_patterns(template_block, &prefixes)?;
+
+        // Extract WHERE clause
+        let where_start = update_str[where_pos.unwrap()..].find('{');
+        let where_end = update_str[where_pos.unwrap()..].rfind('}');
+
+        if where_start.is_none() || where_end.is_none() {
+            return Err(OxirsError::Parse(
+                "Malformed INSERT WHERE: missing WHERE pattern block".to_string(),
+            ));
+        }
+
+        let where_pattern_start = where_pos.unwrap() + where_start.unwrap() + 1;
+        let where_pattern_end = where_pos.unwrap() + where_end.unwrap();
+        let where_block = update_str[where_pattern_start..where_pattern_end].trim();
+
+        // Parse WHERE clause as graph pattern
+        let where_pattern = self.parse_where_pattern(where_block, &prefixes)?;
+
+        Ok(Update {
+            base: None,
+            prefixes,
+            operations: vec![UpdateOperation::Modify {
+                delete: None,
+                insert: Some(insert_patterns),
+                where_clause: Box::new(where_pattern),
+                using: crate::query::algebra::Dataset {
+                    default: vec![],
+                    named: vec![],
+                },
+            }],
+        })
+    }
+
+    /// Parse quad patterns from a pattern block (for concrete data without variables)
+    fn parse_quad_patterns(
+        &self,
+        pattern_block: &str,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<Vec<crate::query::algebra::QuadPattern>> {
+        use crate::format::format::RdfFormat;
+        use crate::format::RdfParser;
+        use crate::query::algebra::QuadPattern;
+        use std::io::Cursor;
+
+        // Build a complete Turtle document with prefixes to parse as triples
+        let mut turtle_doc = String::new();
+        for (prefix, iri) in prefixes {
+            turtle_doc.push_str(&format!("@prefix {}: <{}> .\n", prefix, iri.as_str()));
+        }
+        turtle_doc.push_str("\n");
+        turtle_doc.push_str(pattern_block);
+
+        // Parse using Turtle parser to get concrete quads
+        let parser = RdfParser::new(RdfFormat::Turtle);
+        let turtle_bytes = turtle_doc.into_bytes();
+        let cursor = Cursor::new(turtle_bytes);
+
+        let quads: Vec<Quad> = parser
+            .for_reader(cursor)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(|e| OxirsError::Parse(format!("Failed to parse pattern: {}", e)))?;
+
+        // Convert Quads to QuadPatterns (for DELETE WHERE, these are concrete patterns)
+        let quad_patterns: Vec<QuadPattern> = quads
+            .into_iter()
+            .map(|quad| QuadPattern {
+                subject: self.subject_to_term_pattern(&quad.subject()),
+                predicate: self.predicate_to_term_pattern(&quad.predicate()),
+                object: self.object_to_term_pattern(&quad.object()),
+                graph: Some(self.graph_to_term_pattern(&quad.graph_name())),
+            })
+            .collect();
+
+        Ok(quad_patterns)
+    }
+
+    /// Parse template patterns that can contain variables (for DELETE/INSERT templates)
+    fn parse_template_patterns(
+        &self,
+        template_block: &str,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<Vec<crate::query::algebra::QuadPattern>> {
+        use crate::query::algebra::QuadPattern;
+
+        // Split by periods to get individual triple patterns
+        let pattern_lines: Vec<&str> = template_block
+            .split('.')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty() && *s != "}")
+            .collect();
+
+        let mut quad_patterns = Vec::new();
+
+        for line in pattern_lines {
+            // Parse triple pattern: ?s ?p ?o or prefix:subject ?p ?o
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let subject = self.parse_term_pattern_with_prefix(parts[0], prefixes)?;
+                let predicate = self.parse_term_pattern_with_prefix(parts[1], prefixes)?;
+                let object = self.parse_term_pattern_with_prefix(parts[2], prefixes)?;
+
+                quad_patterns.push(QuadPattern {
+                    subject,
+                    predicate,
+                    object,
+                    graph: None, // Default graph
+                });
+            }
+        }
+
+        Ok(quad_patterns)
+    }
+
+    /// Parse WHERE clause pattern block
+    fn parse_where_pattern(
+        &self,
+        pattern_block: &str,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<crate::query::algebra::GraphPattern> {
+        use crate::query::algebra::{AlgebraTriplePattern, GraphPattern};
+
+        // For simplicity, parse as a basic graph pattern (BGP)
+        // A full implementation would use a complete SPARQL parser
+
+        // Split pattern block by periods to get individual triple patterns
+        let pattern_lines: Vec<&str> = pattern_block
+            .split('.')
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty() && !s.starts_with("FILTER"))
+            .collect();
+
+        let mut triple_patterns = Vec::new();
+
+        for line in pattern_lines {
+            // Simple triple pattern parsing: ?s ?p ?o or prefix:subject ?p ?o
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let subject = self.parse_term_pattern_with_prefix(parts[0], prefixes)?;
+                let predicate = self.parse_term_pattern_with_prefix(parts[1], prefixes)?;
+                let object = self.parse_term_pattern_with_prefix(parts[2], prefixes)?;
+
+                triple_patterns.push(AlgebraTriplePattern {
+                    subject,
+                    predicate,
+                    object,
+                });
+            }
+        }
+
+        Ok(GraphPattern::Bgp(triple_patterns))
+    }
+
+    /// Parse a term pattern from string
+    #[allow(dead_code)]
+    fn parse_term_pattern(&self, term_str: &str) -> Result<TermPattern> {
+        let trimmed = term_str.trim();
+
+        if trimmed.starts_with('?') {
+            // Variable
+            let var_name = &trimmed[1..];
+            let var = crate::model::Variable::new(var_name)
+                .map_err(|e| OxirsError::Parse(format!("Invalid variable: {e}")))?;
+            Ok(TermPattern::Variable(var))
+        } else if trimmed.starts_with('<') && trimmed.ends_with('>') {
+            // Named node (IRI)
+            let iri = &trimmed[1..trimmed.len() - 1];
+            let node =
+                NamedNode::new(iri).map_err(|e| OxirsError::Parse(format!("Invalid IRI: {e}")))?;
+            Ok(TermPattern::NamedNode(node))
+        } else if trimmed.starts_with('"') {
+            // Literal
+            // Simple literal parsing - full implementation would handle language tags and datatypes
+            let lit_value = trimmed.trim_matches('"');
+            Ok(TermPattern::Literal(
+                crate::model::Literal::new_simple_literal(lit_value),
+            ))
+        } else {
+            Err(OxirsError::Parse(format!(
+                "Cannot parse term pattern: {}",
+                term_str
+            )))
+        }
+    }
+
+    /// Parse a term pattern from string with prefix expansion
+    fn parse_term_pattern_with_prefix(
+        &self,
+        term_str: &str,
+        prefixes: &HashMap<String, NamedNode>,
+    ) -> Result<TermPattern> {
+        let trimmed = term_str.trim();
+
+        if trimmed.starts_with('?') {
+            // Variable
+            let var_name = &trimmed[1..];
+            let var = crate::model::Variable::new(var_name)
+                .map_err(|e| OxirsError::Parse(format!("Invalid variable: {e}")))?;
+            Ok(TermPattern::Variable(var))
+        } else if trimmed.starts_with('<') && trimmed.ends_with('>') {
+            // Named node (IRI)
+            let iri = &trimmed[1..trimmed.len() - 1];
+            let node =
+                NamedNode::new(iri).map_err(|e| OxirsError::Parse(format!("Invalid IRI: {e}")))?;
+            Ok(TermPattern::NamedNode(node))
+        } else if trimmed.starts_with('"') {
+            // Literal
+            // Simple literal parsing - full implementation would handle language tags and datatypes
+            let lit_value = trimmed.trim_matches('"');
+            Ok(TermPattern::Literal(
+                crate::model::Literal::new_simple_literal(lit_value),
+            ))
+        } else if trimmed.contains(':') {
+            // Prefixed name like foaf:name
+            let parts: Vec<&str> = trimmed.splitn(2, ':').collect();
+            if parts.len() == 2 {
+                let prefix = parts[0];
+                let local = parts[1];
+
+                if let Some(base_iri) = prefixes.get(prefix) {
+                    // Expand prefix to full IRI
+                    let full_iri = format!("{}{}", base_iri.as_str(), local);
+                    let node = NamedNode::new(&full_iri)
+                        .map_err(|e| OxirsError::Parse(format!("Invalid expanded IRI: {e}")))?;
+                    Ok(TermPattern::NamedNode(node))
+                } else {
+                    Err(OxirsError::Parse(format!("Unknown prefix: {}", prefix)))
+                }
+            } else {
+                Err(OxirsError::Parse(format!(
+                    "Invalid prefixed name: {}",
+                    term_str
+                )))
+            }
+        } else {
+            Err(OxirsError::Parse(format!(
+                "Cannot parse term pattern: {}",
+                term_str
+            )))
+        }
+    }
+
+    /// Convert Subject to TermPattern
+    fn subject_to_term_pattern(&self, subject: &crate::model::Subject) -> TermPattern {
+        use crate::model::Subject;
+        match subject {
+            Subject::NamedNode(n) => TermPattern::NamedNode(n.clone()),
+            Subject::BlankNode(b) => TermPattern::BlankNode(b.clone()),
+            Subject::Variable(v) => TermPattern::Variable(v.clone()),
+            Subject::QuotedTriple(_) => {
+                // RDF-star support - for now treat as variable
+                TermPattern::Variable(
+                    crate::model::Variable::new("quotedTriple")
+                        .expect("quotedTriple is a valid variable name"),
+                )
+            }
+        }
+    }
+
+    /// Convert Predicate to TermPattern
+    fn predicate_to_term_pattern(&self, predicate: &crate::model::Predicate) -> TermPattern {
+        use crate::model::Predicate;
+        match predicate {
+            Predicate::NamedNode(n) => TermPattern::NamedNode(n.clone()),
+            Predicate::Variable(v) => TermPattern::Variable(v.clone()),
+        }
+    }
+
+    /// Convert Object to TermPattern
+    fn object_to_term_pattern(&self, object: &crate::model::Object) -> TermPattern {
+        use crate::model::Object;
+        match object {
+            Object::NamedNode(n) => TermPattern::NamedNode(n.clone()),
+            Object::BlankNode(b) => TermPattern::BlankNode(b.clone()),
+            Object::Literal(l) => TermPattern::Literal(l.clone()),
+            Object::Variable(v) => TermPattern::Variable(v.clone()),
+            Object::QuotedTriple(_) => {
+                // RDF-star support
+                TermPattern::Variable(
+                    crate::model::Variable::new("quotedTripleObj")
+                        .expect("quotedTripleObj is a valid variable name"),
+                )
+            }
+        }
+    }
+
+    /// Convert GraphName to TermPattern
+    fn graph_to_term_pattern(&self, graph: &GraphName) -> TermPattern {
+        match graph {
+            GraphName::NamedNode(n) => TermPattern::NamedNode(n.clone()),
+            GraphName::BlankNode(b) => TermPattern::BlankNode(b.clone()),
+            GraphName::Variable(v) => TermPattern::Variable(v.clone()),
+            GraphName::DefaultGraph => {
+                // Default graph represented as a special variable
+                TermPattern::Variable(
+                    crate::model::Variable::new("defaultGraph")
+                        .expect("defaultGraph is a valid variable name"),
+                )
+            }
+        }
     }
 
     /// Parse CLEAR operation
-    fn parse_clear(&self, update_str: &str) -> Result<Update> {
+    fn parse_clear(
+        &self,
+        update_str: &str,
+        prefixes: HashMap<String, NamedNode>,
+    ) -> Result<Update> {
         use crate::query::algebra::{GraphTarget, UpdateOperation};
 
         let trimmed = update_str.trim();
@@ -725,7 +1258,7 @@ impl UpdateParser {
 
         Ok(Update {
             base: None,
-            prefixes: HashMap::new(),
+            prefixes,
             operations: vec![UpdateOperation::Clear {
                 graph: graph_target,
                 silent,

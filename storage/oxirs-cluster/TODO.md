@@ -1,18 +1,18 @@
 # OxiRS Cluster - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-cluster** provides distributed RDF storage with Raft consensus (experimental feature).
 
-### Alpha Release Status
-- **Comprehensive test suite**
-- **Zero compilation errors/warnings**
-- **Raft consensus implementation**
-- **Distributed RDF storage (basic)**
-- **High availability features**
-- **Released on crates.io**: `oxirs-cluster = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **Comprehensive test suite** with persisted dataset scenarios & zero warnings
+- **Raft consensus** integrated with durable storage checkpoints
+- **Distributed RDF storage** synchronized with CLI persistence pipeline
+- **High availability** plus Prometheus/SciRS2 metrics for cluster health
+- **Federation awareness** enabling cross-cluster SPARQL `SERVICE` routing
+- **Released on crates.io**: `oxirs-cluster = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

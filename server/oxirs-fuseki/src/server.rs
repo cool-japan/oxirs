@@ -14,7 +14,7 @@ use crate::{
     websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
-    extract::{Request, State},
+    extract::{Path, Query, Request, State},
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Json, Response},
@@ -192,6 +192,9 @@ impl Runtime {
             subscription_manager: self.subscription_manager.clone(),
             federation_manager: self.federation_manager.clone(),
             streaming_manager: self.streaming_manager.clone(),
+            prefix_store: Arc::new(handlers::PrefixStore::new()),
+            task_manager: Arc::new(handlers::TaskManager::new()),
+            request_logger: Arc::new(handlers::RequestLogger::new()),
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
         };
@@ -234,15 +237,67 @@ impl Runtime {
             "/sparql",
             get(handlers::query_handler_get).post(handlers::query_handler_post),
         );
-        // TODO: Re-enable these routes after fixing handler signatures
+
+        // W3C SPARQL 1.1 Graph Store Protocol (GSP)
+        app = app.route(
+            "/graph",
+            get(handlers::handle_gsp_get_server)
+                .head(handlers::handle_gsp_head_server)
+                .put(handlers::handle_gsp_put_server)
+                .post(handlers::handle_gsp_post_server)
+                .delete(handlers::handle_gsp_delete_server)
+                .options(handlers::handle_gsp_options_server),
+        );
+
+        // SHACL Validation endpoint
+        app = app.route("/shacl", post(handlers::handle_shacl_validation_server));
+
+        // RDF Bulk Upload endpoint
+        app = app.route("/upload", post(handlers::handle_upload_server));
+
+        // RDF Patch endpoint
+        app = app.route("/patch", post(handlers::handle_patch_server));
+
+        // Prefix Management endpoints
+        app = app
+            .route(
+                "/$/prefixes",
+                get(prefix_list_handler).post(prefix_add_handler),
+            )
+            .route(
+                "/$/prefixes/:prefix",
+                get(prefix_get_handler)
+                    .put(prefix_update_handler)
+                    .delete(prefix_delete_handler),
+            )
+            .route("/$/prefixes/expand", post(prefix_expand_handler));
+
+        // Async Task Management endpoints
+        app = app
+            .route("/$/tasks", get(task_list_handler).post(task_create_handler))
+            .route("/$/tasks/statistics", get(task_statistics_handler))
+            .route(
+                "/$/tasks/:id",
+                get(task_get_handler).delete(task_delete_handler),
+            )
+            .route("/$/tasks/:id/cancel", post(task_cancel_handler));
+
+        // Request Logging endpoints
+        app = app
+            .route("/$/logs", get(logs_get_handler).delete(logs_clear_handler))
+            .route("/$/logs/statistics", get(logs_statistics_handler))
+            .route(
+                "/$/logs/config",
+                get(logs_config_get_handler).put(logs_config_update_handler),
+            );
+
+        // Dataset Statistics endpoints
+        app = app
+            .route("/$/stats", get(stats_server_handler))
+            .route("/$/stats/:dataset", get(stats_dataset_handler));
+
+        // TODO: Re-enable update route after fixing handler signatures
         // .route("/update", post(handlers::sparql::update_handler))
-        // .route(
-        //     "/graph-store",
-        //     get(handlers::graph::graph_store_handler)
-        //         .post(handlers::graph::graph_store_handler)
-        //         .put(handlers::graph::graph_store_handler)
-        //         .delete(handlers::graph::graph_store_handler),
-        // );
 
         // TODO: Re-enable these routes after fixing handler signatures
         // Dataset management routes
@@ -416,21 +471,47 @@ impl Runtime {
         mut app: Router<Arc<AppState>>,
         _state: Arc<AppState>,
     ) -> FusekiResult<Router<Arc<AppState>>> {
+        use crate::middleware::{
+            api_version, health_check_bypass, https_security_headers, request_correlation_id,
+            request_timing, security_headers,
+        };
         use tower_http::{
             cors::CorsLayer, request_id::SetRequestIdLayer, timeout::TimeoutLayer,
             trace::TraceLayer,
         };
 
-        // Request ID generation
+        // Layer 1: Health check bypass (outermost - first to execute)
+        app = app.layer(axum::middleware::from_fn(health_check_bypass));
+
+        // Layer 2: Security headers for all requests
+        app = app.layer(axum::middleware::from_fn(security_headers));
+
+        // Layer 3: HTTPS-specific security headers if TLS is enabled
+        if self.config.server.tls.is_some() {
+            app = app.layer(axum::middleware::from_fn(https_security_headers));
+        }
+
+        // Layer 4: Request correlation ID for distributed tracing
+        app = app.layer(axum::middleware::from_fn(request_correlation_id));
+
+        // Layer 5: Request timing for performance monitoring
+        app = app.layer(axum::middleware::from_fn(request_timing));
+
+        // Layer 6: API version header
+        app = app.layer(axum::middleware::from_fn(api_version));
+
+        // Layer 7: Request ID generation (tower-http)
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
 
-        // Request tracing and logging
+        // Layer 8: Request tracing and logging
         app = app.layer(TraceLayer::new_for_http());
 
-        // Timeout middleware
-        app = app.layer(TimeoutLayer::new(Duration::from_secs(30)));
+        // Layer 9: Timeout middleware
+        app = app.layer(TimeoutLayer::new(Duration::from_secs(
+            self.config.server.request_timeout_secs,
+        )));
 
-        // CORS configuration if enabled
+        // Layer 10: CORS configuration if enabled
         if self.config.server.cors {
             let cors = CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
@@ -441,13 +522,16 @@ impl Runtime {
                     axum::http::Method::DELETE,
                     axum::http::Method::OPTIONS,
                 ])
-                .allow_headers(tower_http::cors::Any);
+                .allow_headers(tower_http::cors::Any)
+                .expose_headers([
+                    axum::http::HeaderName::from_static("x-request-id"),
+                    axum::http::HeaderName::from_static("x-response-time"),
+                    axum::http::HeaderName::from_static("x-api-version"),
+                ]);
             app = app.layer(cors);
         }
 
-        // Note: Auth and metrics middleware would be added here if type compatibility allows
-        // For now, commenting out to fix compilation
-        // TODO: Fix middleware type compatibility issues
+        info!("Middleware stack configured: security, tracing, timing, CORS");
 
         Ok(app)
     }
@@ -504,6 +588,9 @@ pub struct AppState {
     pub subscription_manager: Option<Arc<SubscriptionManager>>,
     pub federation_manager: Option<Arc<FederationManager>>,
     pub streaming_manager: Option<Arc<StreamingManager>>,
+    pub prefix_store: Arc<handlers::PrefixStore>,
+    pub task_manager: Arc<handlers::TaskManager>,
+    pub request_logger: Arc<handlers::RequestLogger>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<
         Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,
@@ -653,6 +740,137 @@ pub async fn health_handler(State(state): State<AppState>) -> Json<serde_json::V
             "timestamp": chrono::Utc::now()
         }))
     }
+}
+
+// Request Logging wrapper handlers
+async fn logs_get_handler(
+    params: Query<handlers::request_log::LogQuery>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::request_log::LogError> {
+    handlers::get_logs(params, State(state.request_logger.clone())).await
+}
+
+async fn logs_statistics_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::request_log::LogError> {
+    handlers::get_log_statistics(State(state.request_logger.clone())).await
+}
+
+async fn logs_clear_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::request_log::LogError> {
+    handlers::clear_logs(State(state.request_logger.clone())).await
+}
+
+async fn logs_config_get_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::request_log::LogError> {
+    handlers::get_log_config(State(state.request_logger.clone())).await
+}
+
+async fn logs_config_update_handler(
+    State(state): State<Arc<AppState>>,
+    Json(config): Json<handlers::request_log::LoggerConfig>,
+) -> Result<axum::response::Response, handlers::request_log::LogError> {
+    handlers::update_log_config(State(state.request_logger.clone()), Json(config)).await
+}
+
+// Dataset Statistics wrapper handlers
+async fn stats_server_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::dataset_stats::StatsError> {
+    handlers::get_server_stats(State(Arc::new(state.store.clone()))).await
+}
+
+async fn stats_dataset_handler(
+    Path(dataset): Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::dataset_stats::StatsError> {
+    handlers::get_dataset_stats(Path(dataset), State(Arc::new(state.store.clone()))).await
+}
+
+// Task Management wrapper handlers
+async fn task_list_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::tasks::TaskError> {
+    handlers::list_tasks(State(state.task_manager.clone())).await
+}
+
+async fn task_get_handler(
+    Path(task_id): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::tasks::TaskError> {
+    handlers::get_task(Path(task_id), State(state.task_manager.clone())).await
+}
+
+async fn task_create_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<handlers::tasks::CreateTaskRequest>,
+) -> Result<axum::response::Response, handlers::tasks::TaskError> {
+    handlers::create_task(State(state.task_manager.clone()), Json(req)).await
+}
+
+async fn task_delete_handler(
+    Path(task_id): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::tasks::TaskError> {
+    handlers::delete_task(Path(task_id), State(state.task_manager.clone())).await
+}
+
+async fn task_cancel_handler(
+    Path(task_id): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::tasks::TaskError> {
+    handlers::cancel_task(Path(task_id), State(state.task_manager.clone())).await
+}
+
+async fn task_statistics_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::tasks::TaskError> {
+    handlers::get_task_statistics(State(state.task_manager.clone())).await
+}
+
+// Prefix Management wrapper handlers
+async fn prefix_list_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::prefixes::PrefixError> {
+    handlers::list_prefixes(State(state.prefix_store.clone())).await
+}
+
+async fn prefix_get_handler(
+    Path(prefix): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::prefixes::PrefixError> {
+    handlers::get_prefix(Path(prefix), State(state.prefix_store.clone())).await
+}
+
+async fn prefix_add_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<handlers::prefixes::PrefixRequest>,
+) -> Result<axum::response::Response, handlers::prefixes::PrefixError> {
+    handlers::add_prefix(State(state.prefix_store.clone()), Json(req)).await
+}
+
+async fn prefix_update_handler(
+    Path(prefix): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<serde_json::Value>,
+) -> Result<axum::response::Response, handlers::prefixes::PrefixError> {
+    handlers::update_prefix(Path(prefix), State(state.prefix_store.clone()), Json(req)).await
+}
+
+async fn prefix_delete_handler(
+    Path(prefix): axum::extract::Path<String>,
+    State(state): State<Arc<AppState>>,
+) -> Result<axum::response::Response, handlers::prefixes::PrefixError> {
+    handlers::delete_prefix(Path(prefix), State(state.prefix_store.clone())).await
+}
+
+async fn prefix_expand_handler(
+    State(state): State<Arc<AppState>>,
+    Json(req): Json<serde_json::Value>,
+) -> Result<axum::response::Response, handlers::prefixes::PrefixError> {
+    handlers::expand_prefix(State(state.prefix_store.clone()), Json(req)).await
 }
 
 /// Kubernetes liveness probe
@@ -978,6 +1196,9 @@ mod tests {
             subscription_manager: None,
             federation_manager: None,
             streaming_manager: None,
+            prefix_store: Arc::new(handlers::PrefixStore::new()),
+            task_manager: Arc::new(handlers::TaskManager::new()),
+            request_logger: Arc::new(handlers::RequestLogger::new()),
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         };

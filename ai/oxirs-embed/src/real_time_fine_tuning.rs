@@ -8,7 +8,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use uuid::Uuid;
@@ -305,7 +305,7 @@ impl RealTimeFinetuningModel {
             let output_dim = target.len();
             self.embeddings = Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
                 let mut random = Random::default();
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             });
             self.fisher_information = Array2::zeros((output_dim, input_dim));
             self.optimal_parameters = Array2::zeros((output_dim, input_dim));
@@ -397,7 +397,7 @@ impl RealTimeFinetuningModel {
         // Sample with importance-based probability
         for _ in 0..batch_size {
             let mut random = Random::default();
-            let idx = random.gen_range(0..self.replay_buffer.len());
+            let idx = random.random_range(0, self.replay_buffer.len());
             batch.push(self.replay_buffer[idx].clone());
         }
 
@@ -455,7 +455,7 @@ impl RealTimeFinetuningModel {
             let new_rows = gradients.nrows();
             self.embeddings = Array2::from_shape_fn((new_rows, dimensions), |_| {
                 let mut random = Random::default();
-                random.gen::<f32>() * 0.1
+                random.random::<f32>() * 0.1
             });
         }
 
@@ -692,7 +692,7 @@ impl EmbeddingModel for RealTimeFinetuningModel {
             // Simulate training with online adaptation
             let epoch_loss = {
                 let mut random = Random::default();
-                0.1 * random.gen::<f64>()
+                0.1 * random.random::<f64>()
             };
             loss_history.push(epoch_loss);
 
@@ -968,7 +968,7 @@ mod tests {
         // Initialize embeddings
         model.embeddings = Array2::from_shape_fn((5, 10), |_| {
             let mut random = Random::default();
-            random.gen::<f32>()
+            random.random::<f32>()
         });
 
         // Save task parameters

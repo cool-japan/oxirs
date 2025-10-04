@@ -4,7 +4,7 @@ use super::types::{ModelWeights, TransformerConfig, TransformerTrainingStats};
 use crate::Triple;
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Zip};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use std::collections::HashMap;
 
 /// Training manager for transformer embeddings
@@ -51,7 +51,7 @@ impl TransformerTrainer {
             let mut shuffled_triples = triples.to_vec();
             // Manual Fisher-Yates shuffle using scirs2-core
             for i in (1..shuffled_triples.len()).rev() {
-                let j = random.gen_range(0..=i);
+                let j = random.random_range(0, i + 1);
                 shuffled_triples.swap(i, j);
             }
 
@@ -104,7 +104,7 @@ impl TransformerTrainer {
         for (idx, entity) in entities_vec.iter().enumerate() {
             let mut values = Vec::with_capacity(dimensions);
             for _ in 0..dimensions {
-                values.push((random.gen::<f64>() * 0.2 - 0.1) as f32);
+                values.push((random.random::<f64>() * 0.2 - 0.1) as f32);
             }
             let embedding = Array1::from_vec(values);
             self.entity_embeddings.insert((*entity).clone(), embedding);
@@ -119,7 +119,7 @@ impl TransformerTrainer {
         for (idx, relation) in relations_vec.iter().enumerate() {
             let mut values = Vec::with_capacity(dimensions);
             for _ in 0..dimensions {
-                values.push((random.gen::<f64>() * 0.2 - 0.1) as f32);
+                values.push((random.random::<f64>() * 0.2 - 0.1) as f32);
             }
             let embedding = Array1::from_vec(values);
             self.relation_embeddings
@@ -224,7 +224,7 @@ impl TransformerTrainer {
                         // Generate negative samples
                         let mut negative_scores = Vec::new();
                         for _ in 0..negative_samples {
-                            let neg_idx = random.gen_range(0..entity_keys.len());
+                            let neg_idx = random.random_range(0, entity_keys.len());
                             let neg_entity = &entity_keys[neg_idx];
                             {
                                 if neg_entity != entity1 && neg_entity != entity2 {
@@ -260,19 +260,15 @@ impl TransformerTrainer {
 
                             // In-place updates to avoid memory allocations
                             if let Some(embedding1) = self.entity_embeddings.get_mut(entity1) {
-                                Zip::from(embedding1)
-                                    .and(&emb2)
-                                    .for_each(|e1, &e2| {
-                                        *e1 += e2 * update_factor;
-                                    });
+                                Zip::from(embedding1).and(&emb2).for_each(|e1, &e2| {
+                                    *e1 += e2 * update_factor;
+                                });
                             }
 
                             if let Some(embedding2) = self.entity_embeddings.get_mut(entity2) {
-                                Zip::from(embedding2)
-                                    .and(&emb1)
-                                    .for_each(|e2, &e1| {
-                                        *e2 += e1 * update_factor;
-                                    });
+                                Zip::from(embedding2).and(&emb1).for_each(|e2, &e1| {
+                                    *e2 += e1 * update_factor;
+                                });
                             }
 
                             // Update training statistics

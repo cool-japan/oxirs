@@ -6,7 +6,7 @@
 use crate::bft::{BftConfig, BftConsensus, BftMessage};
 use crate::network::{NetworkService, RpcMessage};
 use crate::{ClusterError, Result};
-use ed25519_dalek::{Keypair, PublicKey, Signature};
+use ed25519_dalek::{SigningKey, VerifyingKey, Signature};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -43,13 +43,13 @@ pub struct BftNetworkService {
     /// Message cache for duplicate detection
     message_cache: Arc<RwLock<MessageCache>>,
     /// Peer public keys
-    peer_keys: Arc<RwLock<HashMap<String, PublicKey>>>,
+    peer_keys: Arc<RwLock<HashMap<String, VerifyingKey>>>,
     /// Message channel sender
     tx: mpsc::Sender<AuthenticatedMessage>,
     /// Message channel receiver
     rx: Arc<RwLock<mpsc::Receiver<AuthenticatedMessage>>>,
     /// Node's Ed25519 keypair for signing
-    keypair: Keypair,
+    keypair: SigningKey,
 }
 
 /// Message cache for duplicate detection and ordering
@@ -124,7 +124,7 @@ impl BftNetworkService {
 
         // Generate a new Ed25519 keypair for this node
         let mut csprng = rand::rngs::OsRng {};
-        let keypair = Keypair::generate(&mut csprng);
+        let keypair = SigningKey::generate(&mut csprng);
 
         BftNetworkService {
             node_id,
@@ -162,17 +162,17 @@ impl BftNetworkService {
     }
 
     /// Get the node's public key
-    pub fn public_key(&self) -> PublicKey {
-        self.keypair.public
+    pub fn public_key(&self) -> VerifyingKey {
+        self.keypair.verifying_key()
     }
 
     /// Get the node's public key as bytes
     pub fn public_key_bytes(&self) -> [u8; 32] {
-        self.keypair.public.to_bytes()
+        self.keypair.verifying_key().to_bytes()
     }
 
     /// Register a peer's public key
-    pub async fn register_peer(&self, peer_id: String, public_key: PublicKey) -> Result<()> {
+    pub async fn register_peer(&self, peer_id: String, public_key: VerifyingKey) -> Result<()> {
         let mut keys = self.peer_keys.write().await;
         keys.insert(peer_id.clone(), public_key);
 
@@ -476,7 +476,7 @@ impl BftNetworkService {
         &self,
         message: &[u8],
         signature: &[u8],
-        public_key: &PublicKey,
+        public_key: &VerifyingKey,
     ) -> Result<bool> {
         let signature = match Signature::from_bytes(signature) {
             Ok(sig) => sig,

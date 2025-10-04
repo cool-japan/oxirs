@@ -234,12 +234,12 @@ impl DecisionTreeLearner {
         // Consider subset of features if max_features is set
         let features_to_consider: Vec<usize> = if let Some(max_features) = self.config.max_features
         {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut indices: Vec<usize> = (0..n_features).collect();
             let mut random = Random::default();
             // Fisher-Yates shuffle
             for i in (1..indices.len()).rev() {
-                let j = random.gen_range(0..=i);
+                let j = random.random_range(0, i + 1);
                 indices.swap(i, j);
             }
             indices.into_iter().take(max_features).collect()

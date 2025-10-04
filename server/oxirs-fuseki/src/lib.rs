@@ -1,9 +1,9 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
@@ -56,11 +56,13 @@ pub mod federation;
 pub mod graph_analytics;
 pub mod handlers;
 pub mod metrics;
+pub mod middleware;
 pub mod optimization;
 pub mod performance;
 pub mod property_path_optimizer;
 pub mod server;
 pub mod store;
+pub mod store_impl;
 pub mod streaming;
 pub mod subquery_optimizer;
 pub mod vector_search;

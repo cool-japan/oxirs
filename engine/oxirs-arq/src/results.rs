@@ -23,7 +23,7 @@ pub enum QueryResult {
 }
 
 /// Result format types
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ResultFormat {
     /// SPARQL Results JSON Format
     Json,
@@ -300,12 +300,10 @@ impl ResultSerializer {
             ResultFormat::Csv => CsvResultSerializer::serialize(result, writer),
             ResultFormat::Tsv => TsvResultSerializer::serialize(result, writer),
             ResultFormat::Xml => {
-                // TODO: Implement XML serializer
-                Err(anyhow!("XML format not yet implemented"))
+                crate::result_formats::XmlResultSerializer::serialize(result, writer)
             }
             ResultFormat::Binary => {
-                // TODO: Implement binary format
-                Err(anyhow!("Binary format not yet implemented"))
+                crate::result_formats::BinaryResultSerializer::serialize(result, writer)
             }
         }
     }

@@ -1,18 +1,18 @@
 # OxiRS GraphQL - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released
+## ✅ Current Status: v0.1.0-alpha.2 Released
 
 **oxirs-gql** provides a GraphQL interface for RDF data with automatic schema generation.
 
-### Alpha Release Status
-- **118 tests passing**
-- **Zero compilation errors/warnings**
-- **Basic GraphQL server**
-- **Schema generation from RDF (basic)**
-- **GraphQL to SPARQL translation (basic)**
-- **Released on crates.io**: `oxirs-gql = "0.1.0-alpha.1"`
+### Alpha.2 Release Status (October 4, 2025)
+- **118 tests passing** with zero warnings (unit + integration)
+- **GraphQL server** synchronized with persisted datasets & CLI configs
+- **Schema generation** with hot-reload and prefix-aware mapping
+- **GraphQL ⇄ SPARQL translation** covering vector/federation resolvers
+- **Subscription bridge** to streaming SPARQL updates (experimental)
+- **Released on crates.io**: `oxirs-gql = "0.1.0-alpha.2"`
 
 ## 🎯 Post-Alpha Development Roadmap
 

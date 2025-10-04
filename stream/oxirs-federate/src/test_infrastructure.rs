@@ -663,9 +663,9 @@ input CreateCommentInput {
 
                 // Simulate error injection
                 if {
-                    use scirs2_core::random::{Rng, Random};
+                    use scirs2_core::random::{Random, Rng};
                     let mut random = Random::default();
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 } < service.error_rate
                 {
                     return Err(anyhow!("Mock service error from {}", service_id));

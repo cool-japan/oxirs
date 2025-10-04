@@ -237,7 +237,6 @@ impl TensorFlowEmbedder {
 
         // Mock inference - generate random embeddings
         let mut rng = Random::seed(text.len() as u64);
-        use scirs2_core::random::Rng;
 
         let mut embedding = vec![0.0f32; model_info.dimensions];
         for value in &mut embedding {

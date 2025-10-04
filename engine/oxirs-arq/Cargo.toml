@@ -21,12 +21,6 @@ scirs2-neural = { workspace = true }
 scirs2-cluster = { workspace = true }
 scirs2-core = { workspace = true, features = ["all"] }
 
-# Temporary fallback dependencies (until scirs2-core beta.4)
-# Used for metrics, profiling, and advanced features not yet in scirs2-core
-prometheus = { version = "0.13", default-features = false }
-once_cell.workspace = true
-sysinfo.workspace = true
-
 serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
@@ -47,7 +41,7 @@ urlencoding = "2.1"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 dashmap = "6.1"
 parking_lot = "0.12"
-ordered-float = "5.0"
+ordered-float = "5.1"
 rust_decimal = "1.38"
 hex = "0.4"
 base64 = "0.22"

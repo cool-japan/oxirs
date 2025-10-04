@@ -61,6 +61,8 @@ use crate::model::{Object, Predicate, Subject, Term, Variable};
 use crate::OxirsError;
 use crate::Store;
 use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
 
 // Import TermPattern for internal usage
 use algebra::TermPattern;
@@ -80,12 +82,19 @@ pub enum QueryResult {
 }
 
 /// Simplified QueryEngine for SHACL compatibility
-#[derive(Default)]
 pub struct QueryEngine {
     /// Query parser for converting SPARQL strings to Query objects
     parser: parser::SparqlParser,
     /// Query executor for executing plans
     executor_config: QueryExecutorConfig,
+    /// Federation executor for SERVICE clause support
+    federation_executor: Option<crate::federation::FederationExecutor>,
+}
+
+impl Default for QueryEngine {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 /// Configuration for query execution
@@ -115,6 +124,7 @@ impl QueryEngine {
         Self {
             parser: parser::SparqlParser::new(),
             executor_config: QueryExecutorConfig::default(),
+            federation_executor: crate::federation::FederationExecutor::new().ok(),
         }
     }
 
@@ -123,7 +133,20 @@ impl QueryEngine {
         Self {
             parser: parser::SparqlParser::new(),
             executor_config: config,
+            federation_executor: crate::federation::FederationExecutor::new().ok(),
         }
+    }
+
+    /// Enable federation support
+    pub fn with_federation(mut self) -> Self {
+        self.federation_executor = crate::federation::FederationExecutor::new().ok();
+        self
+    }
+
+    /// Disable federation support
+    pub fn without_federation(mut self) -> Self {
+        self.federation_executor = None;
+        self
     }
 
     /// Execute a SPARQL query string against a store
@@ -677,6 +700,260 @@ impl QueryEngine {
         };
 
         Ok(Some(Triple::new(subject, predicate, object)))
+    }
+
+    /// Execute a SPARQL query string against a store (async version with federation support)
+    pub async fn query_async(
+        &self,
+        query_str: &str,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        // Parse the query string
+        let parsed_query = self.parser.parse(query_str)?;
+
+        // Execute the parsed query
+        self.execute_query_async(&parsed_query, store).await
+    }
+
+    /// Execute a parsed Query object against a store (async version)
+    pub async fn execute_query_async(
+        &self,
+        query: &sparql_query::Query,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        match query {
+            sparql_query::Query::Select {
+                pattern, dataset, ..
+            } => {
+                self.execute_select_query_async(pattern, dataset.as_ref(), store)
+                    .await
+            }
+            sparql_query::Query::Ask {
+                pattern, dataset, ..
+            } => {
+                self.execute_ask_query_async(pattern, dataset.as_ref(), store)
+                    .await
+            }
+            sparql_query::Query::Construct {
+                template,
+                pattern,
+                dataset,
+                ..
+            } => {
+                self.execute_construct_query_async(template, pattern, dataset.as_ref(), store)
+                    .await
+            }
+            sparql_query::Query::Describe {
+                pattern, dataset, ..
+            } => {
+                self.execute_describe_query_async(pattern, dataset.as_ref(), store)
+                    .await
+            }
+        }
+    }
+
+    /// Execute a SELECT query (async version with federation support)
+    async fn execute_select_query_async(
+        &self,
+        pattern: &SparqlGraphPattern,
+        _dataset: Option<&QueryDataset>,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        // Check if pattern contains SERVICE clause
+        if self.contains_service_clause(pattern) {
+            // Use federation executor
+            return self.execute_federated_select(pattern, store).await;
+        }
+
+        // Fall back to regular execution
+        self.execute_select_query(pattern, _dataset, store)
+    }
+
+    /// Execute an ASK query (async version)
+    async fn execute_ask_query_async(
+        &self,
+        pattern: &SparqlGraphPattern,
+        dataset: Option<&QueryDataset>,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        if self.contains_service_clause(pattern) {
+            let result = self.execute_federated_select(pattern, store).await?;
+            if let QueryResult::Select { bindings, .. } = result {
+                return Ok(QueryResult::Ask(!bindings.is_empty()));
+            }
+        }
+        self.execute_ask_query(pattern, dataset, store)
+    }
+
+    /// Execute a CONSTRUCT query (async version)
+    async fn execute_construct_query_async(
+        &self,
+        template: &[SparqlTriplePattern],
+        pattern: &SparqlGraphPattern,
+        dataset: Option<&QueryDataset>,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        if self.contains_service_clause(pattern) {
+            return Err(OxirsError::Federation(
+                "CONSTRUCT with SERVICE is not yet fully supported".to_string(),
+            ));
+        }
+        self.execute_construct_query(template, pattern, dataset, store)
+    }
+
+    /// Execute a DESCRIBE query (async version)
+    async fn execute_describe_query_async(
+        &self,
+        pattern: &SparqlGraphPattern,
+        dataset: Option<&QueryDataset>,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        if self.contains_service_clause(pattern) {
+            return Err(OxirsError::Federation(
+                "DESCRIBE with SERVICE is not yet fully supported".to_string(),
+            ));
+        }
+        self.execute_describe_query(pattern, dataset, store)
+    }
+
+    /// Check if a pattern contains a SERVICE clause
+    fn contains_service_clause(&self, pattern: &SparqlGraphPattern) -> bool {
+        
+
+        // Convert SparqlGraphPattern to algebra::GraphPattern for checking
+        // For now, we'll do a simple string-based check
+        // TODO: Implement proper pattern traversal
+        matches!(pattern, SparqlGraphPattern::Service { .. })
+            || self.pattern_contains_service_recursive(pattern)
+    }
+
+    /// Recursively check for SERVICE in nested patterns
+    fn pattern_contains_service_recursive(&self, pattern: &SparqlGraphPattern) -> bool {
+        match pattern {
+            SparqlGraphPattern::Service { .. } => true,
+            SparqlGraphPattern::Join { left, right }
+            | SparqlGraphPattern::Union { left, right } => {
+                self.pattern_contains_service_recursive(left)
+                    || self.pattern_contains_service_recursive(right)
+            }
+            SparqlGraphPattern::Filter { inner, .. }
+            | SparqlGraphPattern::Distinct { inner }
+            | SparqlGraphPattern::Reduced { inner }
+            | SparqlGraphPattern::Project { inner, .. } => {
+                self.pattern_contains_service_recursive(inner)
+            }
+            SparqlGraphPattern::LeftJoin { left, right, .. } => {
+                self.pattern_contains_service_recursive(left)
+                    || self.pattern_contains_service_recursive(right)
+            }
+            _ => false,
+        }
+    }
+
+    /// Execute a federated SELECT query
+    async fn execute_federated_select(
+        &self,
+        pattern: &SparqlGraphPattern,
+        store: &dyn Store,
+    ) -> Result<QueryResult, OxirsError> {
+        let federation_executor = self.federation_executor.as_ref().ok_or_else(|| {
+            OxirsError::Federation("Federation executor not available".to_string())
+        })?;
+
+        // Start with empty bindings from local store
+        let local_bindings = Vec::new();
+
+        // Execute the federated pattern
+        let bindings = self
+            .execute_pattern_with_federation(pattern, local_bindings, federation_executor, store)
+            .await?;
+
+        // Extract variable names
+        let variables = self
+            .extract_variables(pattern)
+            .into_iter()
+            .map(|v| v.name().to_string())
+            .collect();
+
+        Ok(QueryResult::Select {
+            variables,
+            bindings,
+        })
+    }
+
+    /// Execute a pattern with federation support
+    fn execute_pattern_with_federation<'a>(
+        &'a self,
+        pattern: &'a SparqlGraphPattern,
+        current_bindings: Vec<HashMap<String, Term>>,
+        federation_executor: &'a crate::federation::FederationExecutor,
+        store: &'a dyn Store,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<HashMap<String, Term>>, OxirsError>> + 'a>> {
+        Box::pin(async move {
+            let current_bindings = current_bindings;
+            match pattern {
+                SparqlGraphPattern::Service {
+                    name,
+                    inner,
+                    silent,
+                } => {
+                    // Execute SERVICE clause
+                    let remote_bindings = federation_executor
+                        .execute_service(name, inner, *silent, &current_bindings)
+                        .await?;
+
+                    // Merge local and remote bindings
+                    if current_bindings.is_empty() {
+                        Ok(remote_bindings)
+                    } else {
+                        Ok(federation_executor.merge_bindings(current_bindings, remote_bindings))
+                    }
+                }
+                SparqlGraphPattern::Join { left, right } => {
+                    // Execute left side first
+                    let left_bindings = self
+                        .execute_pattern_with_federation(
+                            left,
+                            current_bindings,
+                            federation_executor,
+                            store,
+                        )
+                        .await?;
+
+                    // Then execute right side with left bindings
+                    self.execute_pattern_with_federation(
+                        right,
+                        left_bindings,
+                        federation_executor,
+                        store,
+                    )
+                    .await
+                }
+                _ => {
+                    // For non-federated patterns, use regular execution
+                    let executor = QueryExecutor::new(store);
+                    let plan = self.pattern_to_plan(pattern)?;
+                    let solutions = executor.execute(&plan)?;
+
+                    let bindings: Vec<HashMap<String, Term>> = solutions
+                        .into_iter()
+                        .take(self.executor_config.max_results)
+                        .map(|sol| {
+                            sol.iter()
+                                .map(|(var, term)| (var.name().to_string(), term.clone()))
+                                .collect()
+                        })
+                        .collect();
+
+                    if current_bindings.is_empty() {
+                        Ok(bindings)
+                    } else {
+                        // Merge current and new bindings
+                        Ok(federation_executor.merge_bindings(current_bindings, bindings))
+                    }
+                }
+            }
+        })
     }
 
     /// Check if a triple involves a specific term

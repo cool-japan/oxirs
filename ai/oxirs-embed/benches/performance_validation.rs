@@ -6,7 +6,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_embed::models::common::*;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 
 /// Benchmark vectorized vs non-vectorized distance computations
 fn bench_distance_computations(c: &mut Criterion) {
@@ -90,7 +90,12 @@ fn bench_gradient_updates(c: &mut Criterion) {
                     .collect();
 
                 b.iter(|| {
-                    black_box(batch_gradient_update(&mut embeddings, &gradients, 0.01, 0.001));
+                    black_box(batch_gradient_update(
+                        &mut embeddings,
+                        &gradients,
+                        0.01,
+                        0.001,
+                    ));
                 });
             },
         );
@@ -135,7 +140,11 @@ fn bench_sampling_optimizations(c: &mut Criterion) {
             &data,
             |b, data| {
                 b.iter(|| {
-                    black_box(sample_without_replacement(data, (size / 10) as usize, &mut rng));
+                    black_box(sample_without_replacement(
+                        data,
+                        (size / 10) as usize,
+                        &mut rng,
+                    ));
                 });
             },
         );

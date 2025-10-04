@@ -54,9 +54,9 @@ fn generate_uuid() -> String {
         .as_nanos();
 
     let random_part = {
-        use scirs2_core::random::{Rng, Random};
+        use scirs2_core::random::{Random, Rng};
         let mut random = Random::default();
-        random.gen::<u64>()
+        random.random::<u64>()
     };
 
     // Create a pseudo-UUID v4 format

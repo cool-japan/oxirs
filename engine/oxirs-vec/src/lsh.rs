@@ -6,9 +6,10 @@
 //! - SimHash for binary vectors
 //! - Multi-probe LSH for improved recall
 
+use crate::random_utils::NormalSampler as Normal;
 use crate::{Vector, VectorIndex};
 use anyhow::{anyhow, Result};
-use crate::random_utils::NormalSampler as Normal;
+#[allow(unused_imports)]
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -122,8 +123,8 @@ impl MinHashFunction {
         let mut rng = Random::seed(seed);
         let prime = 4294967311u64; // Large prime
 
-        let a: Vec<u64> = (0..num_hashes).map(|_| rng.gen_range(1..prime)).collect();
-        let b: Vec<u64> = (0..num_hashes).map(|_| rng.gen_range(0..prime)).collect();
+        let a: Vec<u64> = (0..num_hashes).map(|_| rng.random_range(1, prime)).collect();
+        let b: Vec<u64> = (0..num_hashes).map(|_| rng.random_range(0, prime)).collect();
 
         Self { a, b, prime }
     }

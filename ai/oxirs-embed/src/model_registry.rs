@@ -547,9 +547,9 @@ impl ModelServer {
 
         // Simple random routing based on traffic split
         let random = {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            random.gen::<f32>()
+            random.random::<f32>()
         };
         Ok(if random < test.traffic_split {
             test.version_b

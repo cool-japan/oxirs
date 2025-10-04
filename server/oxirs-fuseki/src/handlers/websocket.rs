@@ -867,7 +867,7 @@ async fn check_transaction_log_changes(
                 change_type: change_type.to_string(),
                 affected_graphs: vec![graph_name],
                 timestamp: Utc::now(),
-                change_count: rng.gen_range(0..10) + 1,
+                change_count: rng.random_range(0, 10) + 1,
             });
         }
     }

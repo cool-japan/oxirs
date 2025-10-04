@@ -1,18 +1,26 @@
 # OxiRS ARQ - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released
+## ✅ Current Status: v0.1.0-alpha.2 Production-Ready
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
 
-### Alpha Release Status
-- **114 tests passing**
-- **Zero compilation errors/warnings**
-- **SPARQL 1.1 support**
-- **Basic query optimization**
-- **Custom function framework**
-- **Released on crates.io**: `oxirs-arq = "0.1.0-alpha.1"`
+### Alpha.2 Release Status (October 4, 2025)
+- **114 tests** (unit + integration) with zero compilation warnings
+- **SPARQL 1.1/1.2 support** with persisted dataset awareness
+- **Federation (`SERVICE`)** with retries, failover, and JSON result merging
+- **SciRS2 instrumentation** powering query metrics and slow-query tracing
+- **CLI Integration** ✨ Full parity with `oxirs query` and REPL workflows
+- **Production Tested**: SELECT/ASK/CONSTRUCT/DESCRIBE across persisted stores
+
+### 🎉 Alpha.2 Achievements
+
+#### Federation & Tooling ✅
+- ✅ **Query Command Integration**: Full SPARQL execution via CLI & REPL with streaming output
+- ✅ **Federated Execution**: Resilient remote endpoint calls with backoff and `SERVICE SILENT`
+- ✅ **Instrumentation**: Exposed metrics and tracing hooks through SciRS2
+- ✅ **Production Testing**: Validated with 7 integration tests plus federation smoke tests
 
 ## 🎯 Post-Alpha Development Roadmap
 

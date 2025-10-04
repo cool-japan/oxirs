@@ -74,6 +74,20 @@ pub fn register_builtin_functions(registry: &ExtensionRegistry) -> Result<()> {
     // Regex function
     registry.register_function(RegexFunction)?;
 
+    // RDF-star TRIPLE functions
+    registry.register_function(crate::triple_functions::TripleFunction)?;
+    registry.register_function(crate::triple_functions::SubjectFunction)?;
+    registry.register_function(crate::triple_functions::PredicateFunction)?;
+    registry.register_function(crate::triple_functions::ObjectFunction)?;
+    registry.register_function(crate::triple_functions::IsTripleFunction)?;
+
+    // Enhanced string functions (SPARQL 1.1+)
+    registry.register_function(crate::string_functions_ext::StrBeforeFunction)?;
+    registry.register_function(crate::string_functions_ext::StrAfterFunction)?;
+    registry.register_function(crate::string_functions_ext::StrLangFunction)?;
+    registry.register_function(crate::string_functions_ext::StrLangDirFunction)?;
+    registry.register_function(crate::string_functions_ext::StrDtFunction)?;
+
     // Aggregate functions
     registry.register_aggregate(CountAggregate)?;
     registry.register_aggregate(SumAggregate)?;
@@ -378,9 +392,9 @@ impl CustomFunction for BlankFunction {
                 let id = format!(
                     "_:gen{r}",
                     r = {
-                        use scirs2_core::random::{Rng, Random};
+                        use scirs2_core::random::{Random, Rng};
                         let mut random = Random::default();
-                        random.gen::<u32>()
+                        random.random::<u32>()
                     }
                 );
                 Ok(Value::BlankNode(id))
@@ -1101,9 +1115,9 @@ impl CustomFunction for RandFunction {
         }
 
         Ok(Value::Float({
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             let mut random = Random::default();
-            random.gen::<f64>()
+            random.random::<f64>()
         }))
     }
 }

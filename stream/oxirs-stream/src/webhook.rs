@@ -9,7 +9,7 @@
 
 use anyhow::{anyhow, Result};
 // MIGRATED: Using scirs2-core instead of direct rand dependency
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::{HashMap, VecDeque};
@@ -912,7 +912,7 @@ impl WebhookManager {
                 * 0.1
                 * ({
                     let mut random = Random::default();
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 } - 0.5)) as u64;
             delay + Duration::from_millis(jitter)
         } else {

@@ -264,6 +264,101 @@ use scirs2_core::advanced_distributed_computing::{DistributedOptimizer, AllReduc
 8. **No Warnings**: Code must compile without any warnings
 9. **Module Independence**: Each crate should be usable standalone
 
+## Refactoring Large Files with SplitRS
+
+For files exceeding 2000 lines or with large impl blocks (>500 lines), use [SplitRS](https://crates.io/crates/splitrs) - our production-ready AST-based refactoring tool:
+
+### Installation
+
+```bash
+cargo install splitrs
+```
+
+### Usage
+
+```bash
+# Basic refactoring
+splitrs --input src/large_file.rs --output src/large_file/
+
+# Recommended: Split large impl blocks
+splitrs \
+  --input src/large_file.rs \
+  --output src/large_file/ \
+  --split-impl-blocks \
+  --max-impl-lines 200
+```
+
+### When to Use SplitRS
+
+| File Characteristics | Action | Tool |
+|---------------------|--------|------|
+| File <2000 lines | Leave as-is | - |
+| Impl block <500 lines | Manual refactoring | - |
+| Impl block 500-1000 lines | Consider tool | SplitRS (optional) |
+| Impl block >1000 lines | **Use tool** | **SplitRS (required)** |
+
+### Example: Refactoring OxiRS Modules
+
+```bash
+# Example: Refactor a large stream module
+cd ***/oxirs
+splitrs \
+  --input stream/oxirs-stream/src/connection_pool.rs \
+  --output stream/oxirs-stream/src/connection_pool/ \
+  --split-impl-blocks \
+  --max-impl-lines 200
+
+# Review generated modules
+ls stream/oxirs-stream/src/connection_pool/
+
+# Verify compilation
+cargo build -p oxirs-stream
+
+# Run tests
+cargo test -p oxirs-stream
+```
+
+### What SplitRS Does
+
+- ✅ **AST-based analysis**: Uses `syn` for accurate Rust parsing
+- ✅ **Intelligent clustering**: Groups related methods using call graphs
+- ✅ **Auto-generates imports**: Context-aware `use` statements
+- ✅ **Infers visibility**: Automatically applies `pub(super)`, `pub(crate)`, or `pub`
+- ✅ **Handles complexity**: Generics, async, Arc/Mutex, nested types
+- ✅ **Fast**: Processes 1600+ line files in <1 second
+
+### Integration Workflow
+
+1. **Run SplitRS**: Generate modules in a temporary directory
+2. **Review output**: Check module organization and imports
+3. **Verify compilation**: Ensure generated code compiles
+4. **Copy to project**: Replace original file with generated modules
+5. **Update parent mod.rs**: Add module declaration
+6. **Test**: Run full test suite
+
+### Example Output Structure
+
+Input: `connection_pool.rs` (1660 lines)
+
+Output:
+```
+connection_pool/
+├── mod.rs                          # Module organization
+├── connectionpool_type.rs          # Type definition
+├── connectionpool_new_group.rs     # Constructors
+├── connectionpool_acquire_group.rs # Acquisition methods
+├── connectionpool_release_group.rs # Release methods
+└── ... (20 more focused modules)
+```
+
+### Tool Status
+
+- **Current version**: 0.2.0 (80% production-ready)
+- **Repository**: https://github.com/cool-japan/splitrs
+- **Documentation**: https://docs.rs/splitrs
+
+SplitRS was developed during the OxiRS refactoring project and successfully refactored 32,398 lines across 17 large files.
+
 ## Common Workflows
 
 ### Importing Core Types - FULL SciRS2 Usage

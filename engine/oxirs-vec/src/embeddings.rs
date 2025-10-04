@@ -1398,6 +1398,7 @@ impl OpenAIEmbeddingGenerator {
                 let delay = base_delay * (2_u64.pow(attempt - 1));
                 // Add jitter (±25%)
                 let jitter = {
+                    #[allow(unused_imports)]
                     use scirs2_core::random::{Random, Rng};
                     let mut rng = Random::seed(42);
                     (delay as f64 * 0.25 * (rng.gen_range(0.0..1.0) - 0.5)) as u64

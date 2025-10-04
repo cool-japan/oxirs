@@ -1,9 +1,9 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.1)
+//! **Status**: Alpha Release (v0.1.0-alpha.2)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Zero-dependency, Rust-native RDF data model and SPARQL foundation for the OxiRS semantic web platform.
@@ -64,6 +64,7 @@ pub mod ai;
 pub mod concurrent;
 pub mod consciousness; // Consciousness-inspired computing for intuitive query optimization
 pub mod distributed;
+pub mod federation; // SPARQL federation support for distributed query execution
 pub mod format; // Phase 3: Complete RDF format support with zero dependencies
 pub mod graph;
 pub mod indexing;
@@ -77,6 +78,7 @@ pub mod quantum; // Quantum-inspired computing for next-generation RDF processin
 pub mod query;
 pub mod rdf_store;
 pub mod serializer;
+pub mod sparql; // SPARQL query processing modules
 pub mod storage;
 pub mod store;
 pub mod transaction;
@@ -124,6 +126,8 @@ pub enum OxirsError {
     NotSupported(String),
     #[error("Update error: {0}")]
     Update(String),
+    #[error("Federation error: {0}")]
+    Federation(String),
 }
 
 impl From<std::io::Error> for OxirsError {
@@ -152,26 +156,8 @@ impl From<rocksdb::Error> for OxirsError {
     }
 }
 
-#[cfg(feature = "datafusion")]
-impl From<datafusion::error::DataFusionError> for OxirsError {
-    fn from(err: datafusion::error::DataFusionError) -> Self {
-        OxirsError::Query(err.to_string())
-    }
-}
-
-#[cfg(feature = "arrow")]
-impl From<arrow::error::ArrowError> for OxirsError {
-    fn from(err: arrow::error::ArrowError) -> Self {
-        OxirsError::Store(err.to_string())
-    }
-}
-
-#[cfg(feature = "parquet")]
-impl From<parquet::errors::ParquetError> for OxirsError {
-    fn from(err: parquet::errors::ParquetError) -> Self {
-        OxirsError::Store(err.to_string())
-    }
-}
+// Note: DataFusion, Arrow, and Parquet error conversions removed
+// Add these features to Cargo.toml if these integrations are needed
 
 impl From<std::time::SystemTimeError> for OxirsError {
     fn from(err: std::time::SystemTimeError) -> Self {

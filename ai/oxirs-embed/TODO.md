@@ -1,18 +1,18 @@
 # OxiRS Embed - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-embed** provides vector embeddings for knowledge graphs (experimental feature).
 
-### Alpha Release Status
-- **296 tests passing** (100% success rate)
-- **Zero compilation errors/warnings**
-- **Knowledge graph embeddings**
-- **Multiple embedding models**
-- **Semantic similarity**
-- **Released on crates.io**: `oxirs-embed = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **296 tests passing** (unit + integration) with zero warnings
+- **Knowledge graph embeddings** integrated with persisted dataset pipelines
+- **Multiple embedding models** with provider failover and batch streaming
+- **Semantic similarity** surfaced via `vec:` SPARQL SERVICE bindings
+- **Telemetry & caching** via SciRS2 metrics and embedding cache
+- **Released on crates.io**: `oxirs-embed = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

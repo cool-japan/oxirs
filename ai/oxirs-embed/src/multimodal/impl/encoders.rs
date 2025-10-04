@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -28,7 +28,7 @@ impl TextEncoder {
         parameters.insert(
             "projection".to_string(),
             Array2::from_shape_fn((output_dim, input_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -36,7 +36,7 @@ impl TextEncoder {
         parameters.insert(
             "attention".to_string(),
             Array2::from_shape_fn((output_dim, output_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -117,7 +117,7 @@ impl KGEncoder {
         parameters.insert(
             "entity_projection".to_string(),
             Array2::from_shape_fn((output_dim, entity_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -125,7 +125,7 @@ impl KGEncoder {
         parameters.insert(
             "relation_projection".to_string(),
             Array2::from_shape_fn((output_dim, relation_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -234,7 +234,7 @@ impl AlignmentNetwork {
         parameters.insert(
             "text_hidden".to_string(),
             Array2::from_shape_fn((hidden_dim, text_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -242,7 +242,7 @@ impl AlignmentNetwork {
         parameters.insert(
             "text_output".to_string(),
             Array2::from_shape_fn((output_dim, hidden_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -251,7 +251,7 @@ impl AlignmentNetwork {
         parameters.insert(
             "kg_hidden".to_string(),
             Array2::from_shape_fn((hidden_dim, kg_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -259,7 +259,7 @@ impl AlignmentNetwork {
         parameters.insert(
             "kg_output".to_string(),
             Array2::from_shape_fn((output_dim, hidden_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 
@@ -268,7 +268,7 @@ impl AlignmentNetwork {
         parameters.insert(
             "cross_attention".to_string(),
             Array2::from_shape_fn((output_dim, output_dim), |(_, _)| {
-                (random.gen::<f32>() - 0.5) * 0.1
+                (random.random::<f32>() - 0.5) * 0.1
             }),
         );
 

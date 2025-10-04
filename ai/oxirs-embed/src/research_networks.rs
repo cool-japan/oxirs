@@ -6,7 +6,7 @@
 use crate::Vector;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -742,7 +742,7 @@ impl ResearchNetworkAnalyzer {
         let values = (0..self.config.embedding_dimension)
             .map(|_| {
                 let mut random = Random::default();
-                random.gen::<f32>()
+                random.random::<f32>()
             })
             .collect();
         Ok(Vector::new(values))
@@ -768,7 +768,7 @@ impl ResearchNetworkAnalyzer {
     async fn get_publication_citation_count(&self, _publication_id: &str) -> Result<u64> {
         // Placeholder - would query citation database
         let mut random = Random::default();
-        Ok(random.gen::<u64>() % 100)
+        Ok(random.random::<u64>() % 100)
     }
 
     async fn extract_publication_topics(
@@ -781,13 +781,15 @@ impl ResearchNetworkAnalyzer {
         let mut distribution = vec![0.0; num_topics];
 
         // Generate random distribution that sums to 1.0
-        let total: f64 = (0..num_topics).map(|_| {
-            let mut random = Random::default();
-            random.gen::<f64>()
-        }).sum();
+        let total: f64 = (0..num_topics)
+            .map(|_| {
+                let mut random = Random::default();
+                random.random::<f64>()
+            })
+            .sum();
         for item in distribution.iter_mut().take(num_topics) {
             let mut random = Random::default();
-            *item = random.gen::<f64>() / total;
+            *item = random.random::<f64>() / total;
         }
 
         Ok(distribution)
@@ -803,7 +805,7 @@ impl ResearchNetworkAnalyzer {
         let values = (0..self.config.embedding_dimension)
             .map(|_| {
                 let mut random = Random::default();
-                random.gen::<f32>()
+                random.random::<f32>()
             })
             .collect();
         Ok(Vector::new(values))

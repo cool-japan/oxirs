@@ -17,8 +17,10 @@ use anyhow::Result;
 use scirs2_core::error::CoreError;
 use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::{Rng, Random};
-// Temporary: Use compatibility shim until scirs2-core beta.4
-use crate::scirs2_compat::{Counter, Gauge, Histogram, Timer, Profiler, MLPipeline, ModelPredictor};
+// Native SciRS2 APIs (beta.4+)
+use scirs2_core::metrics::{Counter, Gauge, Histogram, Timer};
+use scirs2_core::profiling::Profiler;
+use scirs2_core::ml_pipeline::{MLPipeline, ModelPredictor};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant, SystemTime};

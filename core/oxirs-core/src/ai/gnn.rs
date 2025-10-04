@@ -6,7 +6,7 @@
 use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -1045,7 +1045,7 @@ impl GraphConvLayer {
         let weight = Array2::from_shape_simple_fn((input_dim, output_dim), || {
             ({
                 let mut rng = Random::default();
-                rng.gen::<f32>()
+                rng.random::<f32>()
             }) * 2.0
                 / (input_dim as f32).sqrt()
                 - 1.0 / (input_dim as f32).sqrt()
@@ -1230,7 +1230,7 @@ pub fn apply_dropout(x: &Array2<f32>, rate: f32) -> Array2<f32> {
     x.mapv(|v| {
         if {
             let mut rng = Random::default();
-            rng.gen::<f32>()
+            rng.random::<f32>()
         } < keep_prob
         {
             v / keep_prob

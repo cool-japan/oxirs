@@ -1,18 +1,18 @@
 # OxiRS Rule - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-rule** provides rule-based reasoning engine for RDF data (experimental feature).
 
-### Alpha Release Status
-- **89 tests passing** (100% success rate)
-- **Zero compilation errors/warnings**
-- **RETE network implementation**
-- **Forward/backward chaining**
-- **RDFS/OWL reasoning (basic)**
-- **Released on crates.io**: `oxirs-rule = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **89 tests passing** (unit + integration) with zero compilation warnings
+- **RETE network** tuned with SciRS2 metrics & tracing
+- **Forward/backward chaining** over persisted datasets and federated query outputs
+- **RDFS/OWL RL reasoning** expanded with new inference profiles
+- **CLI + server integration** for automatic inference refresh (cron + on-demand)
+- **Released on crates.io**: `oxirs-rule = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

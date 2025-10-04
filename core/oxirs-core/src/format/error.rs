@@ -231,6 +231,9 @@ impl From<crate::OxirsError> for RdfParseError {
                 Self::unsupported(format!("Not supported: {msg}"))
             }
             crate::OxirsError::Update(msg) => Self::internal(format!("Update error: {msg}")),
+            crate::OxirsError::Federation(msg) => {
+                Self::internal(format!("Federation error: {msg}"))
+            }
         }
     }
 }

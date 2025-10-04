@@ -1314,11 +1314,13 @@ impl VectorAnalyticsEngine {
         // For now, return mock data
         Ok(SystemInfo {
             cpu_usage: {
+                #[allow(unused_imports)]
                 use scirs2_core::random::{Random, Rng};
                 let mut rng = Random::seed(42);
                 45.0 + (rng.gen_range(0.0..1.0) * 20.0) // Mock: 45-65%
             },
             memory_usage: {
+                #[allow(unused_imports)]
                 use scirs2_core::random::{Random, Rng};
                 let mut rng = Random::seed(42);
                 60.0 + (rng.gen_range(0.0..1.0) * 20.0) // Mock: 60-80%

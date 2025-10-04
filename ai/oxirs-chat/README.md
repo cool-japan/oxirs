@@ -1,10 +1,10 @@
 # OxiRS Chat
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **AI-powered conversational interface for RDF data with RAG and natural language to SPARQL**
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
 
@@ -32,10 +32,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-chat = "0.1.0-alpha.1"
+oxirs-chat = "0.1.0-alpha.2"
 
 # Enable specific LLM providers
-oxirs-chat = { version = "0.1.0-alpha.1", features = ["openai", "anthropic", "ollama"] }
+oxirs-chat = { version = "0.1.0-alpha.2", features = ["openai", "anthropic", "ollama"] }
 ```
 
 ## Quick Start
@@ -482,22 +482,22 @@ at your option.
 
 ## Status
 
-🎉 **Production Ready** - Core features implemented and tested.
+🚀 **Alpha Release (v0.1.0-alpha.2)** – October 4, 2025
 
 Implementation Status:
 - ✅ **Chat Infrastructure**: Session management, persistence, expiration handling
-- ✅ **Multi-LLM Support**: OpenAI, Anthropic Claude, Local models with intelligent routing
-- ✅ **RAG System**: Vector search, context assembly, knowledge retrieval
-- ✅ **Natural Language to SPARQL**: Query generation with validation and optimization
+- ✅ **Multi-LLM Support**: OpenAI, Anthropic Claude, Ollama/local with intelligent routing
+- ✅ **RAG System**: Vector search, context assembly, knowledge retrieval integrated with persisted datasets
+- ✅ **Natural Language to SPARQL**: Query generation with validation, optimization, and federation-aware prompts
 - ✅ **Advanced Caching**: Multi-tier caching with LRU/LFU eviction policies
-- ✅ **Performance Monitoring**: Real-time metrics, bottleneck analysis, auto-optimization
+- ✅ **Performance Monitoring**: Real-time metrics, slow-query tracing, and SciRS2 telemetry dashboards
 - ✅ **Analytics System**: Conversation tracking, pattern detection, quality analysis
 - ✅ **HTTP/WebSocket Server**: REST API and real-time WebSocket communication
 - ✅ **Session Recovery**: Backup/restore mechanisms with corruption handling
 - ✅ **Message Threading**: Reply chains and conversation threads
 - ✅ **Context Management**: Sliding window with summarization and topic tracking
-- ✅ **Concurrent Sessions**: Thread-safe multi-user session management
+- ✅ **CLI & Fuseki Integration**: Seamless dataset bootstrapping and persistence hand-off
 
 **Test Coverage**: 12/12 tests passing with comprehensive integration tests
 
-**Ready for Production Use** with all core features fully implemented and tested!
+Still considered alpha; expect rapid iteration and potential API changes before beta.

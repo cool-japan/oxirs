@@ -485,14 +485,14 @@ impl RevolutionaryBenchmarkingSuite {
 
         for i in 0..count {
             let query = match complexity {
-                "simple" => format!("SELECT ?s ?p ?o WHERE {{ ?s ?p ?o . }} LIMIT {}", self.rng.gen_range(1..100)),
+                "simple" => format!("SELECT ?s ?p ?o WHERE {{ ?s ?p ?o . }} LIMIT {}", self.rng.random_range(1, 100)),
                 "complex" => format!(
                     "SELECT ?entity ?type ?property WHERE {{
                         ?entity rdf:type ?type .
                         ?entity ?property ?value .
                         FILTER(CONTAINS(?value, 'test{}'))
                     }} ORDER BY ?entity LIMIT {}",
-                    i, self.rng.gen_range(100..1000)
+                    i, self.rng.random_range(100, 1000)
                 ),
                 "cosmic" => format!(
                     "SELECT ?entity ?cluster ?relation WHERE {{
@@ -501,7 +501,7 @@ impl RevolutionaryBenchmarkingSuite {
                         ?target rdf:type ?targetType .
                         FILTER(?cluster != ?targetType)
                     }} ORDER BY ?cluster LIMIT {}",
-                    self.rng.gen_range(10000..100000)
+                    self.rng.random_range(10000, 100000)
                 ),
                 _ => format!("SELECT ?s WHERE {{ ?s ?p ?o . }} LIMIT 10"),
             };

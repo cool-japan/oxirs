@@ -6,7 +6,6 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use scirs2_core::random::Random;
-use scirs2_core::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::{RwLock, Semaphore};
@@ -637,7 +636,7 @@ impl QuantumCommSystem {
         let mut rng = Random::default();
         for &byte in data {
             // Generate random basis and bit
-            let _basis = if rng.gen_bool(0.5) {
+            let _basis = if rng.random_bool_with_chance(0.5) {
                 MeasurementBasis::Computational
             } else {
                 MeasurementBasis::Diagonal

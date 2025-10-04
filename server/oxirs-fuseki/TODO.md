@@ -1,18 +1,28 @@
 # OxiRS Fuseki - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released
+## ✅ Current Status: v0.1.0-alpha.2 Production-Ready
 
 **oxirs-fuseki** provides a SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility.
 
-### Alpha Release Status
-- **349 tests passing**
-- **Zero compilation errors/warnings**
-- **Basic SPARQL 1.1/1.2 support**
-- **Multi-dataset support (basic)**
-- **Authentication system (in progress)**
-- **Released on crates.io**: `oxirs-fuseki = "0.1.0-alpha.1"`
+### Alpha.2 Release Status (October 4, 2025)
+- **352 tests passing** (unit + integration) with zero warnings
+- **Full SPARQL 1.1/1.2 support** including `SERVICE` federation and result merging
+- **Persistent datasets** with automatic N-Quads save/load and warm start
+- **10-layer production middleware stack** ✨ hardened with HSTS & security headers
+- **OAuth2/OIDC + JWT** authentication with configurable providers
+- **Observability**: Prometheus metrics, slow-query tracing, structured logging
+- **CLI Integration** ✨ Serve command + REPL alignment for simplified ops
+
+### 🎉 Alpha.2 Achievements
+
+#### Production Deployment Ready ✅
+- ✅ **CLI Serve Command**: Full integration with oxirs CLI & persisted datasets
+- ✅ **Security Middleware**: 10-layer stack + OAuth2/OIDC + HSTS
+- ✅ **Observability**: Request correlation IDs, Prometheus metrics, structured logs
+- ✅ **Federation**: Resilient remote endpoint integration with retries/backoff
+- ✅ **Standards Compliance**: W3C SPARQL 1.1/1.2 endpoints + SERVICE federation
 
 ## 🎯 Post-Alpha Development Roadmap
 

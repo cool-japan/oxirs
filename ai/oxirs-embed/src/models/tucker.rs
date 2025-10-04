@@ -10,7 +10,7 @@ use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vect
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use scirs2_core::ndarray_ext::{Array1, Array2, Array3};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::{AddAssign, SubAssign};
 use std::time::Instant;
@@ -115,7 +115,7 @@ impl TuckER {
             use scirs2_core::random::{SeedableRng, StdRng};
             StdRng::seed_from_u64(seed)
         } else {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             Random::default()
         };
 
@@ -140,7 +140,7 @@ impl TuckER {
         let std_dev = (2.0 / total_elements as f64).sqrt();
 
         for elem in self.core_tensor.iter_mut() {
-            *elem = rng.gen_range(-std_dev..std_dev);
+            *elem = rng.random_range(-std_dev, std_dev);
         }
 
         // Normalize embeddings
@@ -292,9 +292,9 @@ impl TuckER {
         let mut rng = if let Some(seed) = self.base.config.seed {
             use scirs2_core::random::{Rng, SeedableRng, StdRng};
             let mut thread_rng = Random::default();
-            StdRng::seed_from_u64(seed + thread_rng.gen::<u64>())
+            StdRng::seed_from_u64(seed + thread_rng.random::<u64>())
         } else {
-            use scirs2_core::random::{Rng, Random};
+            use scirs2_core::random::{Random, Rng};
             Random::default()
         };
 
@@ -634,7 +634,7 @@ impl EmbeddingModel for TuckER {
 /// Apply dropout to embeddings
 fn apply_dropout(embeddings: &mut Array2<f64>, dropout_rate: f64, rng: &mut StdRng) {
     for elem in embeddings.iter_mut() {
-        if rng.gen::<f64>() < dropout_rate {
+        if rng.random::<f64>() < dropout_rate {
             *elem = 0.0;
         } else {
             *elem /= 1.0 - dropout_rate;

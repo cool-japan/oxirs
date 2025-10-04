@@ -1,18 +1,18 @@
 # OxiRS Stream - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-stream** provides real-time RDF data streaming (experimental feature).
 
-### Alpha Release Status
-- **Comprehensive test suite**
-- **Zero compilation errors/warnings**
-- **Kafka integration**
-- **NATS integration**
-- **Stream processing**
-- **Released on crates.io**: `oxirs-stream = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **Comprehensive test suite** with streaming + persistence scenarios
+- **Kafka & NATS integrations** featuring checkpointed offsets and retries
+- **Stream processing** aligned with CLI persistence and SPARQL federation
+- **Metrics & monitoring** via Prometheus/SciRS2 instrumentation
+- **CLI integration** for batch ingest/export to live streams
+- **Released on crates.io**: `oxirs-stream = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

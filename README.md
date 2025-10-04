@@ -4,9 +4,9 @@
 
 [![Rust](https://github.com/cool-japan/oxirs/workflows/Rust/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 [![License: MIT/Apache-2.0](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -36,16 +36,31 @@ cargo build --workspace --release
 ### Usage
 
 ```bash
-# Initialize a new knowledge graph
+# Initialize a new knowledge graph (alphanumeric, _, - only)
 oxirs init mykg
 
+# Import RDF data (automatically persisted to mykg/data.nq)
+oxirs import mykg data.ttl --format turtle
+
+# Query the data (loaded automatically from disk)
+oxirs query mykg "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
+
+# Query with specific patterns
+oxirs query mykg "SELECT ?name WHERE { ?person <http://xmlns.com/foaf/0.1/name> ?name }"
+
 # Start the server
-oxirs serve mykg.toml --port 3030
+oxirs serve mykg/oxirs.toml --port 3030
 ```
+
+**Features:**
+- ✅ **Persistent storage**: Data automatically saved to disk in N-Quads format
+- ✅ **SPARQL queries**: SELECT, ASK, CONSTRUCT, DESCRIBE supported
+- ✅ **Auto-load**: No manual save/load needed
+- 🚧 **PREFIX support**: Coming in next release
 
 Open:
 - http://localhost:3030 for the Fuseki-style admin UI
-- http://localhost:3030/graphql for GraphiQL
+- http://localhost:3030/graphql for GraphiQL (if enabled)
 
 ## Published Crates
 
@@ -157,7 +172,7 @@ oxirs/                  # Cargo workspace root
     └─ benchmarks/       # SP2Bench, WatDiv, LDBC SGS
 ```
 
-## Feature Matrix (v0.1.0-alpha.1)
+## Feature Matrix (v0.1.0-alpha.2)
 
 | Capability | Oxirs crate(s) | Status | Jena / Fuseki parity |
 |------------|----------------|--------|----------------------|
@@ -258,7 +273,7 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 
 | Version | Target Date | Milestone | Deliverables |
 |---------|-------------|-----------|--------------|
-| **v0.1.0-alpha.1** | **✅ Sep 2025** | **Alpha Release** | Core SPARQL/GraphQL server, basic features |
+| **v0.1.0-alpha.2** | **✅ Oct 2025** | **Alpha Enhancements** | Persistent storage, CLI parity, federation, observability |
 | **v0.1.0-beta.1** | **Dec 2025** | **Beta Release** | API stability, production hardening, full docs |
 | **v0.2.0** | **Q1 2026** | **Enhanced Features** | Advanced optimization, AI capabilities, clustering |
 | **v0.3.0** | **Q2 2026** | **Text & Geo** | Full-text search, GeoSPARQL, bulk loader |
@@ -281,29 +296,33 @@ See [LICENSE](LICENSE) for details.
 - **Issues & RFCs**: https://github.com/cool-japan/oxirs
 - **Maintainer**: @cool-japan (KitaSan)
 
-## Release Notes (v0.1.0-alpha.1)
+## Release Notes (v0.1.0-alpha.2)
 
-### What's Included
-- ✅ Basic SPARQL 1.1/1.2 query engine
-- ✅ GraphQL endpoint generation
-- ✅ RDF parsing (Turtle, N-Triples, JSON-LD, RDF/XML)
-- ✅ In-memory and disk-based storage
-- ✅ Basic federated queries
-- ✅ Experimental AI features (embeddings, chat)
-- ✅ Experimental distributed clustering
+📄 Full notes live in [`docs/releases/0.1.0-alpha.2.md`](docs/releases/0.1.0-alpha.2.md).
+
+### Highlights
+- ⚙️ **Persistent RDF pipeline**: Automatic on-disk save/load in N-Quads, streaming import/export/migrate flows, and configurable parallel batch ingestion
+- 🧠 **Interactive SPARQL tooling**: Full-featured CLI REPL with history search, templates, syntax hints, SELECT */wildcard fixes, and multi-line editing
+- 🌐 **Federated querying**: SPARQL 1.1 `SERVICE` support with retries, `SERVICE SILENT`, JSON results merging, and verified interoperability with DBpedia/Wikidata
+- 🔐 **Production safeguards**: OAuth2/OIDC + JWT, seven security headers, HSTS, structured logging, and Prometheus metrics with slow-query tracing
+- 🚀 **Performance improvements**: SIMD-accelerated SciRS2 operators, streaming pipelines, and 3,750+ tests (including 7 integration suites) covering the new workflow
 
 ### Known Issues
-- Performance not yet optimized
-- Some advanced SPARQL features incomplete
-- Limited error handling in some areas
-- Documentation incomplete
-- API subject to change
+- Large dataset (>100M triples) performance work continues; benchmark feedback is appreciated
+- AI-centric crates (`oxirs-chat`, `oxirs-embed`, `oxirs-shacl-ai`) remain experimental and may change without notice
+- Documentation for advanced serialization scenarios is still being expanded
 
-### Feedback Welcome
-Please report bugs and feature requests at: https://github.com/cool-japan/oxirs/issues
+### Upgrade Notes
+- Install the new CLI with `cargo install oxirs --version 0.1.0-alpha.2` or update individual crates via `Cargo.toml`
+- Existing dataset directories from alpha.1 remain compatible; the new persistence layer will automatically detect and upgrade saved N-Quads data
+- Outbound HTTP access is required for federation; configure firewall rules and timeouts before enabling cross-endpoint queries
+
+## Prior Release (v0.1.0-alpha.1)
+
+Focused on delivering the initial SPARQL/GraphQL server, native RDF parsing, experimental AI modules, and eliminating the upstream OxiGraph dependency. See the [changelog](CHANGELOG.md#010-alpha1---2025-09-30) for the full breakdown.
 
 ---
 
 *"Rust makes memory safety table stakes; Oxirs makes knowledge-graph engineering table stakes."*
 
-**First alpha release - September 30, 2025**
+**Second alpha release - October 4, 2025**

@@ -1032,7 +1032,9 @@ impl From<GroundTerm> for Term {
                     GroundSubject::Triple(_) => {
                         // Nested triples - not fully supported yet
                         // Use a placeholder for now
-                        return Term::NamedNode(crate::model::NamedNode::new_unchecked("http://example.org/unsupported-nested-triple"));
+                        return Term::NamedNode(crate::model::NamedNode::new_unchecked(
+                            "http://example.org/unsupported-nested-triple",
+                        ));
                     }
                 };
 
@@ -1044,7 +1046,9 @@ impl From<GroundTerm> for Term {
                     GroundTerm::Literal(l) => l.into(),
                     GroundTerm::Triple(_) => {
                         // Nested triples - not fully supported yet
-                        return Term::NamedNode(crate::model::NamedNode::new_unchecked("http://example.org/unsupported-nested-triple"));
+                        return Term::NamedNode(crate::model::NamedNode::new_unchecked(
+                            "http://example.org/unsupported-nested-triple",
+                        ));
                     }
                 };
 
@@ -1106,7 +1110,11 @@ impl fmt::Display for GroundSubject {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NamedNode(node) => write!(f, "{}", node),
-            Self::Triple(triple) => write!(f, "<<( {} {} {} )>>", triple.subject, triple.predicate, triple.object),
+            Self::Triple(triple) => write!(
+                f,
+                "<<( {} {} {} )>>",
+                triple.subject, triple.predicate, triple.object
+            ),
         }
     }
 }

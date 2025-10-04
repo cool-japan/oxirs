@@ -542,7 +542,7 @@ impl PostprocessingPipeline {
                 }
 
                 // Generate random projection matrix (simplified)
-                use scirs2_core::random::{Random, SeedableRng};
+                use scirs2_core::random::Random;
                 let mut rng = Random::seed(42);
                 let mut projected = vec![0.0; *target_dims];
 

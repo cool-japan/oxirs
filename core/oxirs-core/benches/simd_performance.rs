@@ -5,7 +5,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::simd::SimdOps;
-use scirs2_core::random::{Rng, DistributionExt, Random};
+use scirs2_core::random::{DistributionExt, Random, Rng};
 
 /// Generate random f32 vector of given size
 fn generate_f32_vector(size: usize) -> Vec<f32> {

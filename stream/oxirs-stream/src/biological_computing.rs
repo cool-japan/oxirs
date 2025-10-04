@@ -5,7 +5,7 @@
 //! cellular automata, and evolutionary computation for streaming RDF data.
 
 // MIGRATED: Using scirs2-core instead of direct rand dependency
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -396,7 +396,7 @@ impl CellularAutomaton {
                 // Apply mutations
                 if {
                     let mut random = Random::default();
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 } < cell.mutation_rate
                 {
                     self.apply_mutation(&mut new_grid[y][x]);
@@ -500,7 +500,7 @@ impl EvolutionaryOptimizer {
             let genome: Vec<f64> = (0..genome_size)
                 .map(|_| {
                     let mut random = Random::default();
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 } * 2.0 - 1.0) // Random values between -1 and 1
                 .collect();
 
@@ -545,7 +545,7 @@ impl EvolutionaryOptimizer {
             // Crossover
             let (mut child1, mut child2) = if {
                 let mut random = Random::default();
-                random.gen::<f64>()
+                random.random::<f64>()
             } < self.crossover_rate
             {
                 self.crossover(parent1, parent2)
@@ -556,14 +556,14 @@ impl EvolutionaryOptimizer {
             // Mutation
             if {
                 let mut random = Random::default();
-                random.gen::<f64>()
+                random.random::<f64>()
             } < self.mutation_rate
             {
                 self.mutate(&mut child1);
             }
             if {
                 let mut random = Random::default();
-                random.gen::<f64>()
+                random.random::<f64>()
             } < self.mutation_rate
             {
                 self.mutate(&mut child2);
@@ -587,7 +587,7 @@ impl EvolutionaryOptimizer {
         for _ in 0..tournament_size {
             let candidate = &self.population[{
                 let mut random = Random::default();
-                random.gen_range(0..self.population.len())
+                random.random_range(0, self.population.len())
             }];
             if candidate.fitness > best_individual.fitness {
                 best_individual = candidate;
@@ -601,7 +601,7 @@ impl EvolutionaryOptimizer {
     fn crossover(&self, parent1: &Individual, parent2: &Individual) -> (Individual, Individual) {
         let crossover_point = {
             let mut random = Random::default();
-            random.gen_range(0..parent1.genome.len())
+            random.random_range(0, parent1.genome.len())
         };
 
         let mut child1_genome = parent1.genome.clone();
@@ -632,13 +632,13 @@ impl EvolutionaryOptimizer {
         for gene in &mut individual.genome {
             if {
                 let mut random = Random::default();
-                random.gen::<f64>()
+                random.random::<f64>()
             } < 0.1
             {
                 // Gene mutation probability
                 *gene += ({
                     let mut random = Random::default();
-                    random.gen::<f64>()
+                    random.random::<f64>()
                 } - 0.5)
                     * 0.2; // Small random change
                 *gene = gene.clamp(-1.0, 1.0); // Keep within bounds

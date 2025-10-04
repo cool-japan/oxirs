@@ -1,18 +1,18 @@
 # OxiRS Vec - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
 
 **oxirs-vec** provides vector search infrastructure for semantic similarity (experimental feature).
 
-### Alpha Release Status
-- **323 tests passing** (100% success rate)
-- **Zero compilation errors/warnings**
-- **Vector indexing support**
-- **Similarity search**
-- **Integration with embeddings**
-- **Released on crates.io**: `oxirs-vec = "0.1.0-alpha.1"` (experimental)
+### Alpha.2 Release Status (October 4, 2025)
+- **323 tests passing** (unit + integration) with zero compilation warnings
+- **Vector indexing** with persisted storage and streaming ingestion pipelines
+- **Similarity search** exposed via SPARQL `vec:` SERVICE bindings and GraphQL filters
+- **Embedding integrations** expanded with CLI batch tooling & SciRS2 telemetry
+- **Observability** hooks for index health and slow-query tracing
+- **Released on crates.io**: `oxirs-vec = "0.1.0-alpha.2"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

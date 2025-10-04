@@ -1,13 +1,12 @@
 //! SPARQL query command
 
-use super::stubs::Store;
 use super::CommandResult;
 use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::QueryLogger;
 use crate::cli::validation::MultiValidator;
 use crate::cli::validation::{dataset_validation, query_validation};
-use crate::cli::{progress::helpers, ArgumentValidator, CliContext, CliError};
-use serde_json;
+use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
+use oxirs_core::rdf_store::RdfStore;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -20,13 +19,17 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     // Validate arguments using the advanced validation framework
     let mut validator = MultiValidator::new();
 
-    // Validate dataset name
+    // Validate dataset name (only if it's not a path to an existing directory)
     validator.add(
         ArgumentValidator::new("dataset", Some(&dataset))
             .required()
             .custom(|d| !d.trim().is_empty(), "Dataset name cannot be empty"),
     );
-    dataset_validation::validate_dataset_name(&dataset)?;
+
+    // Only validate dataset name format if it's not an existing directory path
+    if !PathBuf::from(&dataset).exists() {
+        dataset_validation::validate_dataset_name(&dataset)?;
+    }
 
     // Validate output format
     validator.add(
@@ -72,17 +75,24 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     }
 
     // Load dataset configuration or use dataset path directly
-    let dataset_path = if PathBuf::from(&dataset).join("oxirs.toml").exists() {
-        // Dataset with configuration file
-        load_dataset_from_config(&dataset)?
+    let dataset_dir = PathBuf::from(&dataset);
+    let dataset_path = if dataset_dir.join("oxirs.toml").exists() {
+        // Dataset with configuration file - extract dataset name from directory name
+        let dataset_name = dataset_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or(&dataset);
+        let (storage_path, _config) =
+            crate::config::load_named_dataset(&dataset_dir, dataset_name)?;
+        storage_path
     } else {
         // Assume dataset is a directory path
-        PathBuf::from(&dataset)
+        dataset_dir
     };
 
     // Open store
     let store = if dataset_path.is_dir() {
-        Store::open(&dataset_path)?
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?
     } else {
         return Err(error_helpers::dataset_not_found_error(&dataset));
     };
@@ -100,12 +110,13 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
 
     let results = match store.query(&sparql_query) {
         Ok(res) => {
-            query_logger.complete(res.bindings.len());
+            let binding_count = res.len();
+            query_logger.complete(binding_count);
             res
         }
         Err(e) => {
             query_logger.error(&e.to_string());
-            return Err(CliError::from(e));
+            return Err(format!("Query execution failed: {e}").into());
         }
     };
 
@@ -121,10 +132,7 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
         "Execution time: {:.3} seconds",
         duration.as_secs_f64()
     ));
-    ctx.info(&format!(
-        "Result count: {} bindings",
-        results.bindings.len()
-    ));
+    ctx.info(&format!("Result count: {} solutions", results.len()));
 
     // Format and display results based on output format
     format_results_enhanced(&results, &output, &ctx)?;
@@ -136,19 +144,6 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
 #[allow(dead_code)]
 fn is_supported_output_format(format: &str) -> bool {
     matches!(format, "json" | "csv" | "tsv" | "table" | "xml")
-}
-
-/// Load dataset configuration from oxirs.toml file
-fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let config_path = PathBuf::from(dataset).join("oxirs.toml");
-
-    if !config_path.exists() {
-        return Err(error_helpers::file_not_found_error(&config_path).into());
-    }
-
-    // For now, just return the dataset directory
-    // TODO: Parse TOML configuration and extract actual storage path
-    Ok(PathBuf::from(dataset))
 }
 
 /// Format and display query results
@@ -234,76 +229,221 @@ fn format_xml_results(
     Ok(())
 }
 
-/// Enhanced format results using CLI context
+/// Enhanced format results using CLI context with comprehensive formatters
 fn format_results_enhanced(
-    results: &super::stubs::OxirsQueryResults,
+    results: &oxirs_core::rdf_store::OxirsQueryResults,
     output_format: &str,
-    ctx: &crate::cli::CliContext,
+    _ctx: &crate::cli::CliContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    match output_format {
-        "table" => {
-            // Use the table formatter from output module
-            let mut table = ctx.output_formatter.create_table();
-            if !results.variables.is_empty() {
-                use prettytable::{Cell, Row};
-                table.set_titles(Row::new(
-                    results.variables.iter().map(|v| Cell::new(v)).collect(),
-                ));
-            }
+    use crate::cli::formatters::{
+        create_formatter, Binding, QueryResults, RdfTerm,
+    };
+    use oxirs_core::rdf_store::QueryResults as CoreQueryResults;
+    use std::io;
 
-            for binding in &results.bindings {
-                let cells: Vec<prettytable::Cell> = binding
-                    .values
+    // Convert real OxirsQueryResults to formatter QueryResults
+    let formatter_results = match results.results() {
+        CoreQueryResults::Bindings(bindings) => {
+            let variables = results.variables();
+
+            QueryResults {
+                variables: variables.to_vec(),
+                bindings: bindings
                     .iter()
-                    .map(|opt| opt.as_deref().unwrap_or(""))
-                    .map(prettytable::Cell::new)
-                    .collect();
-                table.add_row(prettytable::Row::new(cells));
+                    .map(|var_binding| {
+                        // Get values in the order of variables
+                        let values: Vec<Option<RdfTerm>> = variables
+                            .iter()
+                            .map(|var| var_binding.get(var).map(|term| term_to_rdf_term(term)))
+                            .collect();
+
+                        Binding { values }
+                    })
+                    .collect(),
             }
-
-            table.printstd();
         }
-        "json" => {
-            let json_output = serde_json::json!({
-                "head": { "vars": results.variables },
-                "results": {
-                    "bindings": results.bindings.iter().map(|b| {
-                        let mut binding_map = serde_json::Map::new();
-                        for (i, var) in results.variables.iter().enumerate() {
-                            if let Some(Some(value)) = b.values.get(i) {
-                                binding_map.insert(var.clone(), serde_json::Value::String(value.clone()));
-                            }
-                        }
-                        binding_map
-                    }).collect::<Vec<_>>()
-                }
-            });
-            ctx.output_formatter.json(&json_output)?;
+        CoreQueryResults::Boolean(value) => {
+            // For ASK queries, return a single binding with the boolean result
+            QueryResults {
+                variables: vec!["result".to_string()],
+                bindings: vec![Binding {
+                    values: vec![Some(RdfTerm::Literal {
+                        value: value.to_string(),
+                        lang: None,
+                        datatype: Some("http://www.w3.org/2001/XMLSchema#boolean".to_string()),
+                    })],
+                }],
+            }
         }
-        "csv" | "tsv" => {
-            let separator = if output_format == "csv" { "," } else { "\t" };
-
-            // Print headers
-            println!("{}", results.variables.join(separator));
-
-            // Print rows
-            for binding in &results.bindings {
-                let values: Vec<_> = binding
-                    .values
+        CoreQueryResults::Graph(quads) => {
+            // For CONSTRUCT/DESCRIBE queries, convert quads to bindings
+            QueryResults {
+                variables: vec![
+                    "subject".to_string(),
+                    "predicate".to_string(),
+                    "object".to_string(),
+                ],
+                bindings: quads
                     .iter()
-                    .map(|opt| opt.as_deref().unwrap_or(""))
-                    .collect();
-                println!("{}", values.join(separator));
+                    .map(|quad| Binding {
+                        values: vec![
+                            Some(subject_to_rdf_term(quad.subject())),
+                            Some(predicate_to_rdf_term(quad.predicate())),
+                            Some(object_to_rdf_term(quad.object())),
+                        ],
+                    })
+                    .collect(),
             }
         }
-        "xml" => {
-            format_xml_results(results)?;
-        }
-        _ => {
-            // This should not happen due to validation
-            return Err(format!("Unsupported output format: {output_format}").into());
-        }
+    };
+
+    // Use the comprehensive formatter
+    if let Some(formatter) = create_formatter(output_format) {
+        let mut stdout = io::stdout();
+        formatter.format(&formatter_results, &mut stdout)?;
+    } else {
+        return Err(format!("Unsupported output format: {output_format}").into());
     }
 
     Ok(())
+}
+
+/// Convert Term to RdfTerm
+fn term_to_rdf_term(term: &oxirs_core::model::Term) -> crate::cli::formatters::RdfTerm {
+    use crate::cli::formatters::RdfTerm;
+    use oxirs_core::model::Term;
+
+    match term {
+        Term::NamedNode(node) => RdfTerm::Uri {
+            value: node.as_str().to_string(),
+        },
+        Term::BlankNode(bnode) => RdfTerm::Bnode {
+            value: bnode.as_str().to_string(),
+        },
+        Term::Literal(lit) => RdfTerm::Literal {
+            value: lit.value().to_string(),
+            lang: lit.language().map(|l| l.to_string()),
+            datatype: Some(lit.datatype().as_str().to_string()),
+        },
+        Term::Variable(var) => {
+            // Variables displayed as special literals
+            RdfTerm::Literal {
+                value: format!("?{}", var.name()),
+                lang: None,
+                datatype: None,
+            }
+        }
+        Term::QuotedTriple(triple) => {
+            // RDF-star quoted triples displayed as special literals
+            RdfTerm::Literal {
+                value: format!(
+                    "<<{} {} {}>>",
+                    triple.subject(),
+                    triple.predicate(),
+                    triple.object()
+                ),
+                lang: None,
+                datatype: Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement".to_string()),
+            }
+        }
+    }
+}
+
+/// Convert Subject to RdfTerm
+fn subject_to_rdf_term(subject: &oxirs_core::model::Subject) -> crate::cli::formatters::RdfTerm {
+    use crate::cli::formatters::RdfTerm;
+    use oxirs_core::model::Subject;
+
+    match subject {
+        Subject::NamedNode(node) => RdfTerm::Uri {
+            value: node.as_str().to_string(),
+        },
+        Subject::BlankNode(bnode) => RdfTerm::Bnode {
+            value: bnode.as_str().to_string(),
+        },
+        Subject::Variable(var) => {
+            // Variables displayed as special literals
+            RdfTerm::Literal {
+                value: format!("?{}", var.name()),
+                lang: None,
+                datatype: None,
+            }
+        }
+        Subject::QuotedTriple(triple) => {
+            // RDF-star quoted triples displayed as special literals
+            RdfTerm::Literal {
+                value: format!(
+                    "<<{} {} {}>>",
+                    triple.subject(),
+                    triple.predicate(),
+                    triple.object()
+                ),
+                lang: None,
+                datatype: Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement".to_string()),
+            }
+        }
+    }
+}
+
+/// Convert Predicate to RdfTerm
+fn predicate_to_rdf_term(
+    predicate: &oxirs_core::model::Predicate,
+) -> crate::cli::formatters::RdfTerm {
+    use crate::cli::formatters::RdfTerm;
+    use oxirs_core::model::Predicate;
+
+    match predicate {
+        Predicate::NamedNode(node) => RdfTerm::Uri {
+            value: node.as_str().to_string(),
+        },
+        Predicate::Variable(var) => {
+            // Variables displayed as special literals
+            RdfTerm::Literal {
+                value: format!("?{}", var.name()),
+                lang: None,
+                datatype: None,
+            }
+        }
+    }
+}
+
+/// Convert Object to RdfTerm
+fn object_to_rdf_term(object: &oxirs_core::model::Object) -> crate::cli::formatters::RdfTerm {
+    use crate::cli::formatters::RdfTerm;
+    use oxirs_core::model::Object;
+
+    match object {
+        Object::NamedNode(node) => RdfTerm::Uri {
+            value: node.as_str().to_string(),
+        },
+        Object::BlankNode(bnode) => RdfTerm::Bnode {
+            value: bnode.as_str().to_string(),
+        },
+        Object::Literal(lit) => RdfTerm::Literal {
+            value: lit.value().to_string(),
+            lang: lit.language().map(|l| l.to_string()),
+            datatype: Some(lit.datatype().as_str().to_string()),
+        },
+        Object::Variable(var) => {
+            // Variables displayed as special literals
+            RdfTerm::Literal {
+                value: format!("?{}", var.name()),
+                lang: None,
+                datatype: None,
+            }
+        }
+        Object::QuotedTriple(triple) => {
+            // RDF-star quoted triples displayed as special literals
+            RdfTerm::Literal {
+                value: format!(
+                    "<<{} {} {}>>",
+                    triple.subject(),
+                    triple.predicate(),
+                    triple.object()
+                ),
+                lang: None,
+                datatype: Some("http://www.w3.org/1999/02/22-rdf-syntax-ns#Statement".to_string()),
+            }
+        }
+    }
 }

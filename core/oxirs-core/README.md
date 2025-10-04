@@ -1,10 +1,10 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.1-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: Alpha Release (v0.1.0-alpha.1) - Released September 30, 2025
+**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -55,10 +55,10 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0-alpha.1"
+oxirs-core = "0.1.0-alpha.2"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.1.0-alpha.1", features = ["async"] }
+oxirs-core = { version = "0.1.0-alpha.2", features = ["async"] }
 ```
 
 For maximum performance in production:
@@ -539,22 +539,21 @@ at your option.
 
 ## Status
 
-🚧 **Alpha Release (v0.1.0-alpha.1)** - Zero-dependency RDF and SPARQL implementation extracted from OxiGraph
+� **Alpha Release (v0.1.0-alpha.2)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
 
-### 🎉 Current Status (January 2025)
-- **OxiGraph Extraction**: ✅ **100% COMPLETE** - All core RDF model and SPARQL engine components
-- **Zero Dependencies**: ✅ **ACHIEVED** - No external crate dependencies
-- **SPARQL Support**: ✅ **COMPLETE** - Full SPARQL 1.1 query parsing and execution
-- **Performance**: Maintains OxiGraph's excellent performance characteristics
-- **API Compatibility**: Compatible with OxiGraph for easy migration
-- **Test Coverage**: Comprehensive test suite covering all functionality
+### 🎉 Current Status (October 2025)
+- **Disk Persistence**: ✅ **Delivered** – Native N-Quads save/load powering the CLI and server workflows
+- **Streaming Pipelines**: ✅ **Expanded** – Multi-format import/export/migrate with configurable parallel ingestion
+- **Federation Support**: ✅ **Integrated** – Core algebra updated for `SERVICE` clause execution and robust result merging
+- **Instrumentation**: ✅ **Hardened** – SciRS2 metrics, slow-query tracing, and structured logging wired through the execution engine
+- **Testing Depth**: 3,750+ unit/integration tests covering persistence, streaming, and federation paths
 
 ### 🏆 Key Features
 - **Zero External Dependencies**: Complete RDF/SPARQL implementation without external crates
 - **OxiGraph Compatibility**: Drop-in replacement maintaining API compatibility
-- **High Performance**: Optimized data structures and algorithms
-- **Complete SPARQL Engine**: Full SPARQL 1.1 support with query optimization
-- **Production Ready**: Battle-tested components extracted from mature codebase
+- **High Performance**: SIMD-enhanced operators with SciRS2 acceleration
+- **Complete SPARQL Engine**: Full SPARQL 1.1/1.2 support with cost-based optimisation and federation hooks
+- **Production Guardrails**: Persistence, telemetry, and error reporting suitable for controlled alpha deployments
 
 ### 🎯 Certification & Compliance
 - **W3C Standards**: Full RDF 1.2 and SPARQL 1.2 compliance

@@ -5,7 +5,7 @@
 
 use crate::ai::AiConfig;
 use anyhow::Result;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -679,7 +679,7 @@ impl TemporalReasoner {
         Ok(TemporalResult {
             query_id: format!("query_{}", {
                 let mut rng = Random::default();
-                rng.gen::<u32>()
+                rng.random::<u32>()
             }),
             results: filtered_facts,
             inference_trace: None, // TODO: Implement inference tracing

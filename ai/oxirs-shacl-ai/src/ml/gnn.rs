@@ -10,7 +10,7 @@ use super::{
 };
 
 use scirs2_core::ndarray_ext::{Array2, Array3, Axis};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -317,7 +317,7 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let weight =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         let bias = Some(Array2::zeros((1, output_dim)));
 
@@ -335,11 +335,11 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let weight = Array2::from_shape_fn((input_dim, output_dim * num_heads), |_| {
-            rng.gen_range(-scale..scale)
+            rng.random_range(-scale, scale)
         });
 
         let attention_weight = Array2::from_shape_fn((2 * output_dim, num_heads), |_| {
-            rng.gen_range(-scale..scale)
+            rng.random_range(-scale, scale)
         });
 
         let bias = Some(Array2::zeros((1, output_dim * num_heads)));
@@ -378,10 +378,10 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let weight_self =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         let weight_neighbor =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         let bias = Some(Array2::zeros((1, output_dim)));
 
@@ -427,10 +427,10 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let entity_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         let relation_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         GraphCompletionLayerState {
             entity_encoder,
@@ -450,14 +450,13 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let entity_embedding =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         let context_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
-        let completion_head = Array2::from_shape_fn((output_dim, output_dim), |_| {
-            rng.gen_range(-scale..scale)
-        });
+        let completion_head =
+            Array2::from_shape_fn((output_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         EntityCompletionLayerState {
             entity_embedding,
@@ -477,14 +476,13 @@ impl GraphNeuralNetwork {
         let scale = (2.0 / input_dim as f64).sqrt();
 
         let relation_embedding =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         let pattern_encoder =
-            Array2::from_shape_fn((input_dim, output_dim), |_| rng.gen_range(-scale..scale));
+            Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
-        let completion_head = Array2::from_shape_fn((output_dim, output_dim), |_| {
-            rng.gen_range(-scale..scale)
-        });
+        let completion_head =
+            Array2::from_shape_fn((output_dim, output_dim), |_| rng.random_range(-scale, scale));
 
         RelationCompletionLayerState {
             relation_embedding,
@@ -526,9 +524,8 @@ impl GraphNeuralNetwork {
                 _ => 10,                                 // Numerical or pattern
             };
 
-            let head = Array2::from_shape_fn((config.output_dim, head_dim), |_| {
-                rng.gen_range(-0.1..0.1)
-            });
+            let head =
+                Array2::from_shape_fn((config.output_dim, head_dim), |_| rng.gen_range(-0.1..0.1));
 
             constraint_heads.insert(constraint_type.to_string(), head);
         }

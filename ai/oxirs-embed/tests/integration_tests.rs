@@ -5,7 +5,6 @@
 
 use oxirs_embed::{
     models::{common::*, scirs_neural::SciRS2NeuralConfig, scirs_neural::SciRS2NeuralEmbedding},
-    ModelConfig,
 };
 use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::Random;

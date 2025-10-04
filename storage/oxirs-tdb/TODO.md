@@ -1,19 +1,18 @@
 # OxiRS TDB - TODO
 
-*Last Updated: September 30, 2025*
+*Last Updated: October 4, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.1 Released
+## ✅ Current Status: v0.1.0-alpha.2 Released
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC and ACID transactions.
 
-### Alpha Release Status
-- **Comprehensive test suite**
-- **Zero compilation errors/warnings**
-- **MVCC (Multi-Version Concurrency Control)**
-- **ACID transactions**
-- **B+ Tree indexing**
-- **TDB2 compatibility layer**
-- **Released on crates.io**: `oxirs-tdb = "0.1.0-alpha.1"`
+### Alpha.2 Release Status (October 4, 2025)
+- **Comprehensive test suite** with persisted dataset coverage & zero warnings
+- **MVCC + ACID transactions** powering disk-backed CLI workflows
+- **B+ Tree indexing** optimized for streaming import/export pipelines
+- **Federation-aware storage** cooperating with `SERVICE` queries and shards
+- **Telemetry hooks** for Prometheus metrics and cache diagnostics
+- **Released on crates.io**: `oxirs-tdb = "0.1.0-alpha.2"`
 
 ## 🎯 Post-Alpha Development Roadmap
 

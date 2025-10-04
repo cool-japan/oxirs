@@ -6,7 +6,7 @@
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, RwLock};
@@ -820,7 +820,7 @@ impl AdvancedProfiler {
     pub async fn record_metric(&self, metric: MetricDataPoint) -> Result<()> {
         let random_sample = {
             let mut random = Random::default();
-            random.gen::<f64>()
+            random.random::<f64>()
         };
         if random_sample > self.config.sampling_rate {
             return Ok(()); // Skip due to sampling

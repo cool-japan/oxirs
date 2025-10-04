@@ -101,7 +101,7 @@ impl MessageContent {
         self.to_text().to_lowercase()
     }
 
-    pub fn chars(&self) -> std::str::Chars {
+    pub fn chars(&self) -> std::str::Chars<'_> {
         self.to_text().chars()
     }
 

@@ -13,7 +13,7 @@ use oxirs_stream::connection_pool::{
 use oxirs_stream::health_monitor::HealthEvent;
 use oxirs_stream::reconnect::ReconnectEvent;
 use oxirs_stream::FailoverConfig;
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -122,11 +122,11 @@ impl ConnectionFactory<DemoConnection> for DemoConnectionFactory {
 
         // Randomly fail based on failure rate
         let mut random_gen = Random::default();
-        if random_gen.gen::<f32>() < self.failure_rate {
+        if random_gen.random::<f32>() < self.failure_rate {
             return Err(anyhow::anyhow!("Failed to create connection {}", id));
         }
 
-        let healthy = random_gen.gen::<f32>() > 0.1; // 90% start healthy
+        let healthy = random_gen.random::<f32>() > 0.1; // 90% start healthy
         Ok(DemoConnection::new(id, healthy, self.fail_after_ops))
     }
 }

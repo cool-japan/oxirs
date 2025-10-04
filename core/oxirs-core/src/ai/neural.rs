@@ -5,7 +5,7 @@
 
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2, Axis};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 
 /// Neural network layer trait
@@ -109,7 +109,7 @@ impl LinearLayer {
         let weight = Array2::from_shape_simple_fn((input_dim, output_dim), || {
             ({
                 let mut rng = Random::default();
-                rng.gen::<f32>()
+                rng.random::<f32>()
             }) * 2.0
                 * bound
                 - bound
@@ -191,7 +191,7 @@ impl NeuralLayer for DropoutLayer {
         let output = input.mapv(|v| {
             if {
                 let mut rng = Random::default();
-                rng.gen::<f32>()
+                rng.random::<f32>()
             } < keep_prob
             {
                 v / keep_prob
@@ -532,26 +532,26 @@ pub fn initialize_weights(shape: (usize, usize), init: &WeightInitialization) ->
     match init {
         WeightInitialization::Xavier => {
             let bound = (6.0 / (shape.0 + shape.1) as f32).sqrt();
-            Array2::from_shape_simple_fn(shape, || { let mut rng = Random::default(); rng.gen::<f32>() } * 2.0 * bound - bound)
+            Array2::from_shape_simple_fn(shape, || { let mut rng = Random::default(); rng.random::<f32>() } * 2.0 * bound - bound)
         }
         WeightInitialization::Kaiming => {
             let std = (2.0 / shape.0 as f32).sqrt();
             Array2::from_shape_simple_fn(shape, || {
                 // Box-Muller transform for normal distribution
-                let u1: f32 = { let mut rng = Random::default(); rng.gen::<f32>() };
-                let u2: f32 = { let mut rng = Random::default(); rng.gen::<f32>() };
+                let u1: f32 = { let mut rng = Random::default(); rng.random::<f32>() };
+                let u2: f32 = { let mut rng = Random::default(); rng.random::<f32>() };
                 let z = (-2.0_f32 * u1.ln()).sqrt() * (2.0_f32 * std::f32::consts::PI * u2).cos();
                 z * std
             })
         }
         WeightInitialization::Normal { mean, std } => Array2::from_shape_simple_fn(shape, || {
-            let u1: f32 = { let mut rng = Random::default(); rng.gen::<f32>() };
-            let u2: f32 = { let mut rng = Random::default(); rng.gen::<f32>() };
+            let u1: f32 = { let mut rng = Random::default(); rng.random::<f32>() };
+            let u2: f32 = { let mut rng = Random::default(); rng.random::<f32>() };
             let z = (-2.0_f32 * u1.ln()).sqrt() * (2.0_f32 * std::f32::consts::PI * u2).cos();
             z * std + mean
         }),
         WeightInitialization::Uniform { low, high } => {
-            Array2::from_shape_simple_fn(shape, || { let mut rng = Random::default(); rng.gen::<f32>() } * (high - low) + low)
+            Array2::from_shape_simple_fn(shape, || { let mut rng = Random::default(); rng.random::<f32>() } * (high - low) + low)
         }
         WeightInitialization::Zeros => Array2::zeros(shape),
         WeightInitialization::Ones => Array2::ones(shape),

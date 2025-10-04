@@ -16,12 +16,15 @@ pub mod error;
 #[allow(clippy::module_inception)]
 pub mod format;
 pub mod jsonld;
+pub mod n3;
 pub mod n3_lexer;
+pub mod nquads;
 pub mod ntriples;
 pub mod parser;
 pub mod rdfxml;
 pub mod serializer;
 pub mod toolkit;
+pub mod trig;
 pub mod turtle;
 pub mod turtle_grammar;
 pub mod w3c_tests;
@@ -35,8 +38,11 @@ pub use serializer::{QuadSerializeResult, RdfSerializer, WriterQuadSerializer};
 // Format-specific re-exports
 pub use format::{JsonLdProfile, JsonLdProfileSet};
 pub use jsonld::{JsonLdParser, JsonLdSerializer};
+pub use n3::N3Serializer;
+pub use nquads::NQuadsSerializer;
 pub use ntriples::{NTriplesParser, NTriplesSerializer};
 pub use rdfxml::{RdfXmlParser, RdfXmlSerializer};
+pub use trig::TriGSerializer;
 pub use turtle::{TurtleParser, TurtleSerializer};
 
 // W3C compliance testing
@@ -84,7 +90,7 @@ impl FormatHandler {
     }
 
     /// Parse RDF from a reader into quads
-    pub fn parse_quads<R: Read + Send>(&self, reader: R) -> FormatResult<Vec<Quad>> {
+    pub fn parse_quads<R: Read + Send + 'static>(&self, reader: R) -> FormatResult<Vec<Quad>> {
         let parser = RdfParser::new(self.format.clone());
         let mut quads = Vec::new();
 
@@ -96,7 +102,7 @@ impl FormatHandler {
     }
 
     /// Parse RDF from a reader into triples (only default graph)
-    pub fn parse_triples<R: Read + Send>(&self, reader: R) -> FormatResult<Vec<Triple>> {
+    pub fn parse_triples<R: Read + Send + 'static>(&self, reader: R) -> FormatResult<Vec<Triple>> {
         let quads = self.parse_quads(reader)?;
         Ok(quads
             .into_iter()

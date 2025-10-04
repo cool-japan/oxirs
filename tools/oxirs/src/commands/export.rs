@@ -1,7 +1,8 @@
 //! Data export command
 
-use super::stubs::Store;
 use super::CommandResult;
+use oxirs_core::format::{RdfFormat, RdfSerializer};
+use oxirs_core::rdf_store::RdfStore;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -52,7 +53,7 @@ pub async fn run(
 
     // Open store
     let store = if dataset_path.is_dir() {
-        Store::open(&dataset_path)?
+        RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?
     } else {
         return Err(format!(
             "Dataset '{dataset}' not found. Use 'oxirs init' to create a dataset."
@@ -91,71 +92,89 @@ fn is_supported_export_format(format: &str) -> bool {
 
 /// Load dataset configuration from oxirs.toml file
 fn load_dataset_from_config(dataset: &str) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let config_path = PathBuf::from(dataset).join("oxirs.toml");
-
-    if !config_path.exists() {
-        return Err(format!("Configuration file '{}' not found", config_path.display()).into());
-    }
-
-    // For now, just return the dataset directory
-    // TODO: Parse TOML configuration and extract actual storage path
-    Ok(PathBuf::from(dataset))
+    // Use shared configuration loader with full TOML parsing
+    crate::config::load_dataset_from_config(dataset)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
 }
 
 /// Export data from store to file
 fn export_data(
-    _store: &Store,
+    store: &RdfStore,
     file: &PathBuf,
     format: &str,
-    _graph: Option<&str>,
+    graph: Option<&str>,
 ) -> Result<usize, Box<dyn std::error::Error>> {
-    // TODO: Implement actual data export
-    // This would involve:
-    // 1. Query all triples from the store (optionally filtered by graph)
-    // 2. Serialize triples in the requested format
-    // 3. Write to the output file
-
-    // For now, create a sample output file
-    let sample_content = match format {
-        "turtle" => {
-            r#"@prefix ex: <http://example.org/> .
-@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
-@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
-
-# Sample data - implementation pending
-ex:subject1 rdf:type ex:Class1 ;
-            rdfs:label "Sample Resource 1" .
-
-ex:subject2 rdf:type ex:Class2 ;
-            rdfs:label "Sample Resource 2" ;
-            ex:relatedTo ex:subject1 .
-"#
-        }
-        "ntriples" => {
-            r#"<http://example.org/subject1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Class1> .
-<http://example.org/subject1> <http://www.w3.org/2000/01/rdf-schema#label> "Sample Resource 1" .
-<http://example.org/subject2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://example.org/Class2> .
-<http://example.org/subject2> <http://www.w3.org/2000/01/rdf-schema#label> "Sample Resource 2" .
-<http://example.org/subject2> <http://example.org/relatedTo> <http://example.org/subject1> .
-"#
-        }
+    // Step 1: Determine RDF format from string
+    let rdf_format = match format {
+        "turtle" | "ttl" => RdfFormat::Turtle,
+        "ntriples" | "nt" => RdfFormat::NTriples,
+        "nquads" | "nq" => RdfFormat::NQuads,
+        "trig" => RdfFormat::TriG,
+        "rdfxml" | "rdf" | "xml" => RdfFormat::RdfXml,
+        "jsonld" | "json" => RdfFormat::JsonLd {
+            profile: oxirs_core::format::JsonLdProfileSet::empty(),
+        },
+        "n3" => RdfFormat::N3,
         _ => {
-            return Err(
-                format!("Export format '{format}' serialization not yet implemented").into(),
-            );
+            return Err(format!("Unsupported export format: {format}").into());
         }
     };
 
-    fs::write(file, sample_content)?;
+    // Step 2: Query all quads from the store
+    println!("   [1/3] Querying triples from store...");
+    let all_quads = store
+        .quads()
+        .map_err(|e| format!("Failed to query quads: {e}"))?;
 
-    // Count sample triples
-    let triple_count = sample_content
-        .lines()
-        .filter(|line| {
-            let line = line.trim();
-            !line.is_empty() && !line.starts_with('#') && !line.starts_with('@')
-        })
-        .count();
+    let quads: Vec<_> = if let Some(graph_name) = graph {
+        // Filter by specific graph
+        use oxirs_core::model::{GraphName, NamedNode};
+        let graph_filter = if graph_name == "default" {
+            GraphName::DefaultGraph
+        } else {
+            GraphName::NamedNode(
+                NamedNode::new(graph_name).map_err(|e| format!("Invalid graph IRI: {e}"))?,
+            )
+        };
 
-    Ok(triple_count)
+        all_quads
+            .into_iter()
+            .filter(|quad| quad.graph_name() == &graph_filter)
+            .collect()
+    } else {
+        // Export all quads
+        all_quads
+    };
+
+    let quad_count = quads.len();
+    println!("       ✓ Retrieved {quad_count} quads from store");
+
+    // Step 3: Serialize quads to output format
+    println!("   [2/3] Serializing to {format} format...");
+    let output_file = fs::File::create(file)?;
+    let mut serializer = RdfSerializer::new(rdf_format)
+        .with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+        .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+        .with_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+        .with_prefix("owl", "http://www.w3.org/2002/07/owl#")
+        .pretty()
+        .for_writer(output_file);
+
+    for quad in &quads {
+        serializer
+            .serialize_quad(quad.as_ref())
+            .map_err(|e| format!("Serialization error: {e}"))?;
+    }
+
+    serializer
+        .finish()
+        .map_err(|e| format!("Failed to finalize serialization: {e}"))?;
+
+    println!("       ✓ Serialization completed");
+
+    // Step 4: Write and report
+    println!("   [3/3] Writing to file...");
+    println!("       ✓ Data written to {}", file.display());
+
+    Ok(quad_count)
 }

@@ -5,7 +5,7 @@
 
 use crate::{EmbeddingModel, Vector};
 use anyhow::{anyhow, Result};
-use scirs2_core::random::{Rng, Random};
+use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -990,7 +990,7 @@ impl CrossDomainTransferManager {
         // Simplified - in practice would analyze contextual differences
         Ok({
             let mut random = Random::default();
-            random.gen::<f64>() * 0.8
+            random.random::<f64>() * 0.8
         }) // Random for demonstration
     }
 
@@ -1065,11 +1065,11 @@ impl CrossDomainTransferManager {
                 let degradation = if domain_overlap {
                     // Less forgetting for overlapping entities
                     let mut random = Random::default();
-                    0.1 + random.gen::<f64>() * 0.2
+                    0.1 + random.random::<f64>() * 0.2
                 } else {
                     // More forgetting for non-overlapping entities
                     let mut random = Random::default();
-                    0.3 + random.gen::<f64>() * 0.4
+                    0.3 + random.random::<f64>() * 0.4
                 };
 
                 forgetting_scores.push(degradation);

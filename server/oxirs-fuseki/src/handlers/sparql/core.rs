@@ -144,10 +144,25 @@ pub async fn sparql_query(
     // Execute query
     match execute_sparql_query(&query_string, context, &state).await {
         Ok(result) => {
-            let _execution_time = start_time.elapsed().as_millis() as u64;
+            let execution_time = start_time.elapsed();
 
-            // TODO: Implement metrics recording
-            // state.metrics.record_query_execution(execution_time, true);
+            // Record metrics
+            if let Some(metrics) = &state.metrics_service {
+                let query_type = if query_string.to_uppercase().contains("SELECT") {
+                    "SELECT"
+                } else if query_string.to_uppercase().contains("CONSTRUCT") {
+                    "CONSTRUCT"
+                } else if query_string.to_uppercase().contains("ASK") {
+                    "ASK"
+                } else if query_string.to_uppercase().contains("DESCRIBE") {
+                    "DESCRIBE"
+                } else {
+                    "UNKNOWN"
+                };
+                metrics
+                    .record_sparql_query(execution_time, true, query_type)
+                    .await;
+            }
 
             // Determine response format based on Accept header
             let accept_header = headers
@@ -158,8 +173,25 @@ pub async fn sparql_query(
             format_query_response(result, accept_header)
         }
         Err(e) => {
-            let _execution_time = start_time.elapsed().as_millis() as u64;
-            // TODO: Implement metrics - state.metrics.record_query_execution(execution_time, false);
+            let execution_time = start_time.elapsed();
+
+            // Record metrics for failed query
+            if let Some(metrics) = &state.metrics_service {
+                let query_type = if query_string.to_uppercase().contains("SELECT") {
+                    "SELECT"
+                } else if query_string.to_uppercase().contains("CONSTRUCT") {
+                    "CONSTRUCT"
+                } else if query_string.to_uppercase().contains("ASK") {
+                    "ASK"
+                } else if query_string.to_uppercase().contains("DESCRIBE") {
+                    "DESCRIBE"
+                } else {
+                    "UNKNOWN"
+                };
+                metrics
+                    .record_sparql_query(execution_time, false, query_type)
+                    .await;
+            }
 
             error!("SPARQL query execution failed: {}", e);
             (
@@ -332,14 +364,48 @@ pub async fn sparql_update(
     // Execute update
     match execute_sparql_update(&params.update, context, &state).await {
         Ok(result) => {
-            let _execution_time = start_time.elapsed().as_millis() as u64;
-            // TODO: Implement metrics - state.metrics.record_update_execution(execution_time, true);
+            let execution_time = start_time.elapsed();
+
+            // Record metrics for successful update
+            if let Some(metrics) = &state.metrics_service {
+                let update_type = if params.update.to_uppercase().contains("INSERT") {
+                    "INSERT"
+                } else if params.update.to_uppercase().contains("DELETE") {
+                    "DELETE"
+                } else if params.update.to_uppercase().contains("LOAD") {
+                    "LOAD"
+                } else if params.update.to_uppercase().contains("CLEAR") {
+                    "CLEAR"
+                } else {
+                    "UNKNOWN"
+                };
+                metrics
+                    .record_sparql_update(execution_time, true, update_type)
+                    .await;
+            }
 
             Json(result).into_response()
         }
         Err(e) => {
-            let _execution_time = start_time.elapsed().as_millis() as u64;
-            // TODO: Implement metrics - state.metrics.record_update_execution(execution_time, false);
+            let execution_time = start_time.elapsed();
+
+            // Record metrics for failed update
+            if let Some(metrics) = &state.metrics_service {
+                let update_type = if params.update.to_uppercase().contains("INSERT") {
+                    "INSERT"
+                } else if params.update.to_uppercase().contains("DELETE") {
+                    "DELETE"
+                } else if params.update.to_uppercase().contains("LOAD") {
+                    "LOAD"
+                } else if params.update.to_uppercase().contains("CLEAR") {
+                    "CLEAR"
+                } else {
+                    "UNKNOWN"
+                };
+                metrics
+                    .record_sparql_update(execution_time, false, update_type)
+                    .await;
+            }
 
             error!("SPARQL update execution failed: {}", e);
             (
