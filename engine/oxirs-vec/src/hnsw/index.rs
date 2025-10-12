@@ -5,6 +5,8 @@ use crate::{Vector, VectorIndex};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
+#[cfg(feature = "gpu")]
+use std::sync::Arc;
 
 #[cfg(feature = "gpu")]
 use crate::gpu::GpuAccelerator;
@@ -154,6 +156,18 @@ impl HnswIndex {
         } else {
             None
         }
+    }
+
+    /// Get reference to GPU accelerator
+    #[cfg(feature = "gpu")]
+    pub fn gpu_accelerator(&self) -> Option<&Arc<GpuAccelerator>> {
+        self.gpu_accelerator.as_ref()
+    }
+
+    /// Get reference to multi-GPU accelerators
+    #[cfg(feature = "gpu")]
+    pub fn multi_gpu_accelerators(&self) -> &Vec<Arc<GpuAccelerator>> {
+        &self.multi_gpu_accelerators
     }
 
     /// Get the number of nodes in the index

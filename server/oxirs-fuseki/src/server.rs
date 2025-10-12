@@ -51,9 +51,7 @@ pub struct Runtime {
     federation_manager: Option<Arc<FederationManager>>,
     streaming_manager: Option<Arc<StreamingManager>>,
     #[cfg(feature = "rate-limit")]
-    rate_limiter: Option<
-        Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,
-    >,
+    rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
     #[cfg(feature = "hot-reload")]
     config_watcher: Option<watch::Receiver<ServerConfig>>,
 }
@@ -149,11 +147,11 @@ impl Runtime {
         {
             if let Some(rate_limit_config) = &self.config.performance.rate_limiting {
                 info!(
-                    "Initializing rate limiter: {} requests per second",
-                    rate_limit_config.requests_per_second
+                    "Initializing rate limiter: {} requests per minute",
+                    rate_limit_config.requests_per_minute
                 );
-                let quota = Quota::per_second(
-                    NonZeroU32::new(rate_limit_config.requests_per_second).unwrap(),
+                let quota = Quota::per_minute(
+                    NonZeroU32::new(rate_limit_config.requests_per_minute).unwrap(),
                 );
                 let limiter = RateLimiter::dashmap(quota);
                 self.rate_limiter = Some(Arc::new(limiter));
@@ -163,10 +161,9 @@ impl Runtime {
         // Initialize configuration hot-reload watcher
         #[cfg(feature = "hot-reload")]
         {
-            if self.config.server.hot_reload {
-                info!("Setting up configuration hot-reload");
-                // Implementation would go here
-            }
+            // TODO: Implement hot-reload configuration
+            // For now, hot-reload is available but not automatically enabled
+            info!("Hot-reload feature is available");
         }
 
         info!("Server services initialized successfully");
@@ -592,9 +589,7 @@ pub struct AppState {
     pub task_manager: Arc<handlers::TaskManager>,
     pub request_logger: Arc<handlers::RequestLogger>,
     #[cfg(feature = "rate-limit")]
-    pub rate_limiter: Option<
-        Arc<RateLimiter<String, governor::DefaultDirectRateLimiter, governor::clock::DefaultClock>>,
-    >,
+    pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
 }
 
 /// Request UUID generator for request IDs
@@ -1172,11 +1167,12 @@ mod tests {
     fn test_client_identifier_extraction() {
         #[cfg(feature = "rate-limit")]
         {
+            use axum::body::Body;
             use axum::http::Request;
 
             let request = Request::builder()
                 .header("x-forwarded-for", "192.168.1.1, 10.0.0.1")
-                .body(())
+                .body(Body::empty())
                 .unwrap();
 
             let client_id = extract_client_identifier(&request);

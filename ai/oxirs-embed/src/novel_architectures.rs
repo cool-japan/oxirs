@@ -857,8 +857,9 @@ impl NovelArchitectureModel {
         let dimensions = self.config.base_config.dimensions;
 
         let mut random = Random::default();
-        let ode_params =
-            Array2::from_shape_fn((dimensions, params.hidden_dims[0]), |_| random.random::<f64>());
+        let ode_params = Array2::from_shape_fn((dimensions, params.hidden_dims[0]), |_| {
+            random.random::<f64>()
+        });
 
         self.architecture_state.ode_state = Some(NeuralODEState {
             current_time: 0.0,

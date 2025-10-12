@@ -96,7 +96,11 @@ impl Term {
     pub fn estimated_size(&self) -> usize {
         match self {
             Term::Iri(iri) => 1 + iri.len(),
-            Term::Literal { value, language, datatype } => {
+            Term::Literal {
+                value,
+                language,
+                datatype,
+            } => {
                 1 + value.len()
                     + language.as_ref().map_or(0, |l| l.len())
                     + datatype.as_ref().map_or(0, |d| d.len())
@@ -110,10 +114,18 @@ impl fmt::Display for Term {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Term::Iri(iri) => write!(f, "<{}>", iri),
-            Term::Literal { value, language: Some(lang), .. } => {
+            Term::Literal {
+                value,
+                language: Some(lang),
+                ..
+            } => {
                 write!(f, "\"{}\"@{}", value, lang)
             }
-            Term::Literal { value, datatype: Some(dt), .. } => {
+            Term::Literal {
+                value,
+                datatype: Some(dt),
+                ..
+            } => {
                 write!(f, "\"{}\"^^<{}>", value, dt)
             }
             Term::Literal { value, .. } => write!(f, "\"{}\"", value),
@@ -160,7 +172,10 @@ mod tests {
         let term = Term::literal_with_datatype("42", "http://www.w3.org/2001/XMLSchema#integer");
 
         if let Term::Literal { datatype, .. } = &term {
-            assert_eq!(datatype.as_deref(), Some("http://www.w3.org/2001/XMLSchema#integer"));
+            assert_eq!(
+                datatype.as_deref(),
+                Some("http://www.w3.org/2001/XMLSchema#integer")
+            );
         } else {
             panic!("Expected literal");
         }
@@ -191,9 +206,15 @@ mod tests {
 
     #[test]
     fn test_term_display() {
-        assert_eq!(Term::iri("http://example.org").to_string(), "<http://example.org>");
+        assert_eq!(
+            Term::iri("http://example.org").to_string(),
+            "<http://example.org>"
+        );
         assert_eq!(Term::literal("test").to_string(), "\"test\"");
-        assert_eq!(Term::literal_with_lang("test", "en").to_string(), "\"test\"@en");
+        assert_eq!(
+            Term::literal_with_lang("test", "en").to_string(),
+            "\"test\"@en"
+        );
         assert_eq!(Term::blank_node("b1").to_string(), "_:b1");
     }
 }

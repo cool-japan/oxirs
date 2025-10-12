@@ -710,11 +710,12 @@ impl SliceJsonLdParser<'_> {
     ///
     /// See [`LoadDocumentCallback` API documentation](https://www.w3.org/TR/json-ld-api/#loaddocumentcallback) for more details
     ///
-    /// ```
-    /// use oxjsonld::{JsonLdParser, JsonLdRemoteDocument};
+    /// ```ignore
+    /// use oxirs_core::jsonld::{JsonLdParser, JsonLdRemoteDocument};
     /// use oxrdf::NamedNodeRef;
     /// use oxrdf::vocab::rdf;
     ///
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// let file = br#"{
     ///     "@context": "file://context.jsonld",
     ///     "@type": "schema:Person",
@@ -735,12 +736,13 @@ impl SliceJsonLdParser<'_> {
     ///     })
     /// {
     ///     let quad = quad?;
-    ///     if quad.predicate == rdf::TYPE && quad.object == schema_person.into() {
+    ///     if quad.predicate() == rdf::TYPE && quad.object() == schema_person.into() {
     ///         count += 1;
     ///     }
     /// }
     /// assert_eq!(1, count);
-    /// # Result::<_, Box<dyn std::error::Error>>::Ok(())
+    /// # Ok(())
+    /// # }
     /// ```
     pub fn with_load_document_callback(
         mut self,

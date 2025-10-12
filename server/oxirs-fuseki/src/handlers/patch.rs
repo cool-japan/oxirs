@@ -318,9 +318,9 @@ fn parse_subject(
         oxirs_core::model::NamedNode::new(iri)
             .map(oxirs_core::model::Subject::NamedNode)
             .map_err(|e| format!("Invalid IRI: {}", e))
-    } else if s.starts_with("_:") {
+    } else if let Some(id) = s.strip_prefix("_:") {
         // Blank node
-        oxirs_core::model::BlankNode::new(s[2..].to_string())
+        oxirs_core::model::BlankNode::new(id.to_string())
             .map(oxirs_core::model::Subject::BlankNode)
             .map_err(|e| format!("Invalid blank node: {}", e))
     } else if s.contains(':') {
@@ -372,9 +372,9 @@ fn parse_object(
         oxirs_core::model::NamedNode::new(iri)
             .map(oxirs_core::model::Object::NamedNode)
             .map_err(|e| format!("Invalid IRI: {}", e))
-    } else if first.starts_with("_:") {
+    } else if let Some(id) = first.strip_prefix("_:") {
         // Blank node
-        oxirs_core::model::BlankNode::new(first[2..].to_string())
+        oxirs_core::model::BlankNode::new(id.to_string())
             .map(oxirs_core::model::Object::BlankNode)
             .map_err(|e| format!("Invalid blank node: {}", e))
     } else if first.contains(':') {

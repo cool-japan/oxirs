@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
@@ -33,11 +33,25 @@
 //! ).unwrap();
 //!
 //! // Index some content
-//! store.index_resource("http://example.org/doc1", "This is a document about AI")?;
-//! store.index_resource("http://example.org/doc2", "Machine learning tutorial")?;
+//! store
+//!     .index_resource(
+//!         "http://example.org/doc1".to_string(),
+//!         "This is a document about AI",
+//!     )
+//!     .unwrap();
+//! store
+//!     .index_resource(
+//!         "http://example.org/doc2".to_string(),
+//!         "Machine learning tutorial",
+//!     )
+//!     .unwrap();
 //!
 //! // Search for similar content
-//! let results = store.similarity_search("artificial intelligence", 5)?;
+//! let results = store
+//!     .similarity_search("artificial intelligence", 5)
+//!     .unwrap();
+//!
+//! println!("Found {} matching resources", results.len());
 //! ```
 
 use anyhow::Result;
@@ -1103,6 +1117,106 @@ impl VectorStore {
     /// Get a vector by its ID (delegates to VectorIndex)
     pub fn get_vector(&self, id: &str) -> Option<&Vector> {
         self.index.get_vector(id)
+    }
+
+    /// Index a vector with metadata (stub)
+    pub fn index_vector_with_metadata(
+        &mut self,
+        uri: String,
+        vector: Vector,
+        _metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        // For now, just delegate to index_vector, ignoring metadata
+        // Future: Extend VectorIndex trait to support metadata
+        self.index_vector(uri, vector)
+    }
+
+    /// Index a resource with metadata (stub)
+    pub fn index_resource_with_metadata(
+        &mut self,
+        uri: String,
+        content: &str,
+        _metadata: HashMap<String, String>,
+    ) -> Result<()> {
+        // For now, just delegate to index_resource, ignoring metadata
+        // Future: Store and utilize metadata
+        self.index_resource(uri, content)
+    }
+
+    /// Search with additional parameters (stub)
+    pub fn similarity_search_with_params(
+        &self,
+        query: &str,
+        limit: usize,
+        _params: HashMap<String, String>,
+    ) -> Result<Vec<(String, f32)>> {
+        // For now, just delegate to similarity_search, ignoring params
+        // Future: Use params for filtering, threshold, etc.
+        self.similarity_search(query, limit)
+    }
+
+    /// Vector search with additional parameters (stub)
+    pub fn vector_search_with_params(
+        &self,
+        query: &Vector,
+        limit: usize,
+        _params: HashMap<String, String>,
+    ) -> Result<Vec<(String, f32)>> {
+        // For now, just delegate to similarity_search_vector, ignoring params
+        // Future: Use params for filtering, distance metric selection, etc.
+        self.similarity_search_vector(query, limit)
+    }
+
+    /// Get all vector IDs (stub)
+    pub fn get_vector_ids(&self) -> Result<Vec<String>> {
+        // VectorIndex trait doesn't provide this method yet
+        // Future: Add to VectorIndex trait or track separately
+        Ok(Vec::new())
+    }
+
+    /// Remove a vector by its URI (stub)
+    pub fn remove_vector(&mut self, uri: &str) -> Result<()> {
+        // Delegate to VectorIndex trait's remove_vector method
+        self.index.remove_vector(uri.to_string())
+    }
+
+    /// Get store statistics (stub)
+    pub fn get_statistics(&self) -> Result<HashMap<String, String>> {
+        // Return basic statistics as a map
+        // Future: Provide comprehensive stats from index
+        let mut stats = HashMap::new();
+        stats.insert("type".to_string(), "VectorStore".to_string());
+
+        if let Some((cache_size, cache_capacity)) = self.embedding_stats() {
+            stats.insert("embedding_cache_size".to_string(), cache_size.to_string());
+            stats.insert(
+                "embedding_cache_capacity".to_string(),
+                cache_capacity.to_string(),
+            );
+        }
+
+        Ok(stats)
+    }
+
+    /// Save store to disk (stub)
+    pub fn save_to_disk(&self, _path: &str) -> Result<()> {
+        // Stub implementation - serialization not yet implemented
+        // Future: Serialize index and configuration to disk
+        Err(anyhow::anyhow!("save_to_disk not yet implemented"))
+    }
+
+    /// Load store from disk (stub)
+    pub fn load_from_disk(_path: &str) -> Result<Self> {
+        // Stub implementation - deserialization not yet implemented
+        // Future: Deserialize index and configuration from disk
+        Err(anyhow::anyhow!("load_from_disk not yet implemented"))
+    }
+
+    /// Optimize the underlying index (stub)
+    pub fn optimize_index(&mut self) -> Result<()> {
+        // Stub implementation - optimization not yet implemented
+        // Future: Trigger index compaction, rebalancing, etc.
+        Ok(())
     }
 }
 

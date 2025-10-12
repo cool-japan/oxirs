@@ -2,10 +2,10 @@
 
 use crate::network::LogEntry;
 use crate::raft::{OxirsNodeId, RdfApp};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::time::{SystemTime, UNIX_EPOCH};
-use anyhow::Result;
 
 /// Persistent state required by Raft
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -106,6 +106,5 @@ where
         hasher.update(&data_bytes);
         let computed_checksum = format!("{:x}", hasher.finalize());
         Ok(computed_checksum == self.checksum)
-
     }
 }

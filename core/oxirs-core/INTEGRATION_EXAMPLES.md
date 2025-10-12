@@ -694,7 +694,7 @@ impl KafkaRdfStreamer {
 ```rust
 use tensorflow::{Graph as TfGraph, Session, SessionOptions, Tensor};
 use oxirs_core::{Graph, Triple, NamedNode};
-use ndarray::{Array2, Array1};
+use scirs2_core::ndarray_ext::{Array2, Array1};
 use std::collections::HashMap;
 
 pub struct GraphEmbeddings {
@@ -800,7 +800,7 @@ impl GraphEmbeddings {
     }
 }
 
-fn cosine_similarity(a: &ndarray::ArrayView1<f32>, b: &ndarray::ArrayView1<f32>) -> f32 {
+fn cosine_similarity(a: &scirs2_core::ndarray_ext::ArrayView1<f32>, b: &scirs2_core::ndarray_ext::ArrayView1<f32>) -> f32 {
     let dot_product = a.dot(b);
     let norm_a = a.dot(a).sqrt();
     let norm_b = b.dot(b).sqrt();

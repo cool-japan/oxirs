@@ -489,9 +489,8 @@ fn test_concurrent_operations() {
     for i in 0..10 {
         let graph_clone = Arc::clone(&graph);
         let handle = thread::spawn(move || {
-            let p = Predicate::NamedNode(
-                NamedNode::new(&format!("http://example.org/p{}", i)).unwrap(),
-            );
+            let p =
+                Predicate::NamedNode(NamedNode::new(format!("http://example.org/p{}", i)).unwrap());
             graph_clone.query(None, Some(&p), None).len()
         });
         handles.push(handle);

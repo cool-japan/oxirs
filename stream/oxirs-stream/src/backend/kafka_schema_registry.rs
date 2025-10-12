@@ -8,12 +8,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 #[cfg(feature = "kafka")]
 use reqwest::{Client as HttpClient, StatusCode};
 
-use crate::backend::kafka::{KafkaEvent, SchemaRegistryConfig};
+use crate::backend::kafka::SchemaRegistryConfig;
 
 /// Schema types supported by the registry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,26 +88,27 @@ pub struct SchemaRegistryClient {
 }
 
 impl SchemaRegistryClient {
+    /// Helper to create request builder with auth
+    #[cfg(feature = "kafka")]
+    fn request_builder(&self, method: reqwest::Method, url: &str) -> reqwest::RequestBuilder {
+        let mut builder = self.http_client.request(method, url);
+
+        // Add basic auth if configured
+        if let (Some(ref username), Some(ref password)) =
+            (&self.config.username, &self.config.password)
+        {
+            builder = builder.basic_auth(username, Some(password));
+        }
+
+        builder
+    }
+
     /// Create a new schema registry client
     pub fn new(config: SchemaRegistryConfig) -> Result<Self> {
         #[cfg(feature = "kafka")]
         {
-            let mut client_builder = HttpClient::builder()
+            let client_builder = HttpClient::builder()
                 .timeout(std::time::Duration::from_millis(config.timeout_ms as u64));
-
-            // Add basic auth if configured
-            if let (Some(username), Some(password)) = (&config.username, &config.password) {
-                let auth_header = format!(
-                    "Basic {}",
-                    aws_smithy_types::base64::encode(format!("{}:{}", username, password))
-                );
-                let mut headers = reqwest::header::HeaderMap::new();
-                headers.insert(
-                    reqwest::header::AUTHORIZATION,
-                    reqwest::header::HeaderValue::from_str(&auth_header)?,
-                );
-                client_builder = client_builder.default_headers(headers);
-            }
 
             let http_client = client_builder
                 .build()
@@ -149,8 +150,7 @@ impl SchemaRegistryClient {
         });
 
         let response = self
-            .http_client
-            .post(&url)
+            .request_builder(reqwest::Method::POST, &url)
             .header("Content-Type", "application/vnd.schemaregistry.v1+json")
             .json(&request_body)
             .send()
@@ -171,13 +171,14 @@ impl SchemaRegistryClient {
             // Get full schema metadata
             self.get_schema_by_id(id).await
         } else {
+            let status = response.status();
             let error_text = response
                 .text()
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             Err(anyhow!(
                 "Failed to register schema: {} - {}",
-                response.status(),
+                status,
                 error_text
             ))
         }
@@ -222,8 +223,7 @@ impl SchemaRegistryClient {
         let url = format!("{}/schemas/ids/{}", self.config.url, id);
 
         let response = self
-            .http_client
-            .get(&url)
+            .request_builder(reqwest::Method::GET, &url)
             .send()
             .await
             .map_err(|e| anyhow!("Failed to get schema: {}", e))?;
@@ -275,8 +275,7 @@ impl SchemaRegistryClient {
         let url = format!("{}/subjects/{}/versions/latest", self.config.url, subject);
 
         let response = self
-            .http_client
-            .get(&url)
+            .request_builder(reqwest::Method::GET, &url)
             .send()
             .await
             .map_err(|e| anyhow!("Failed to get latest schema: {}", e))?;
@@ -353,8 +352,7 @@ impl SchemaRegistryClient {
         });
 
         let response = self
-            .http_client
-            .post(&url)
+            .request_builder(reqwest::Method::POST, &url)
             .header("Content-Type", "application/vnd.schemaregistry.v1+json")
             .json(&request_body)
             .send()
@@ -401,8 +399,7 @@ impl SchemaRegistryClient {
         });
 
         let response = self
-            .http_client
-            .put(&url)
+            .request_builder(reqwest::Method::PUT, &url)
             .header("Content-Type", "application/vnd.schemaregistry.v1+json")
             .json(&request_body)
             .send()
@@ -444,8 +441,7 @@ impl SchemaRegistryClient {
         let url = format!("{}/subjects/{}", self.config.url, subject);
 
         let response = self
-            .http_client
-            .delete(&url)
+            .request_builder(reqwest::Method::DELETE, &url)
             .send()
             .await
             .map_err(|e| anyhow!("Failed to delete subject: {}", e))?;
@@ -637,7 +633,6 @@ mod tests {
             url: "http://localhost:8081".to_string(),
             username: None,
             password: None,
-            api_key: None,
             timeout_ms: 5000,
             cache_size: 100,
         };

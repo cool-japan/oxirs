@@ -5,9 +5,10 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant, SystemTime};
 use tracing::{debug, info, warn};
 
-use super::types::AccessTracker;
 use super::config::CacheConfiguration;
-use super::eviction::{AdaptiveEvictionPolicy, EvictionPolicy, LFUEvictionPolicy, LRUEvictionPolicy};
+use super::eviction::{
+    AdaptiveEvictionPolicy, EvictionPolicy, LFUEvictionPolicy, LRUEvictionPolicy,
+};
 use super::metrics::CachePerformanceMetrics;
 use super::ml_models::MLModels;
 use super::optimizer::CacheOptimizer;
@@ -15,6 +16,7 @@ use super::pattern_analyzer::AccessPatternAnalyzer;
 use super::prefetcher::PredictivePrefetcher;
 use super::storage::{CacheStorage, CompressedStorage, MemoryStorage, PersistentStorage};
 use super::tier::CacheTier;
+use super::types::AccessTracker;
 use super::types::{
     AccessEvent, CacheItem, CacheKey, CachePerformanceData, CacheStatistics, CacheValue,
     EstimatedImpact, ExportFormat, OptimizationEvent, OptimizationResult, TierConfiguration,

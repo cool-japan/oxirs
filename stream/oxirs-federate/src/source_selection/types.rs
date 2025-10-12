@@ -36,7 +36,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-
 /// Triple pattern for SPARQL queries
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct TriplePattern {
@@ -363,4 +362,3 @@ pub enum SelectionMethod {
     Hybrid,
     Fallback,
 }
-

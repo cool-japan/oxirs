@@ -642,6 +642,7 @@ impl TemporalReasoner {
     /// Perform temporal reasoning
     pub async fn reason(&self, query: &TemporalQuery) -> Result<TemporalResult> {
         let start_time = std::time::Instant::now();
+        let mut inference_steps = Vec::new();
 
         // Step 1: Retrieve relevant facts
         let mut facts = self.retrieve_facts(query)?;
@@ -649,6 +650,32 @@ impl TemporalReasoner {
         // Step 2: Apply temporal inference if enabled
         if self.config.enable_inference && query.include_inferred {
             let inferred_facts = self.inference_engine.infer(&self.temporal_kb, query)?;
+
+            // Track inference steps for each inferred fact
+            for (idx, inferred_fact) in inferred_facts.iter().enumerate() {
+                if let FactSource::Inferred { rule, premises } = &inferred_fact.source {
+                    let step = InferenceStep {
+                        step: idx + 1,
+                        rule: rule.clone(),
+                        inputs: premises
+                            .iter()
+                            .filter_map(|premise_id| {
+                                facts
+                                    .iter()
+                                    .find(|f| {
+                                        format!("{}:{}:{}", f.subject, f.predicate, f.object)
+                                            == *premise_id
+                                    })
+                                    .cloned()
+                            })
+                            .collect(),
+                        output: inferred_fact.clone(),
+                        confidence: inferred_fact.confidence,
+                    };
+                    inference_steps.push(step);
+                }
+            }
+
             facts.extend(inferred_facts);
         }
 
@@ -674,6 +701,15 @@ impl TemporalReasoner {
         // Step 4: Filter and rank results
         let filtered_facts = self.filter_and_rank_facts(facts, query)?;
 
+        // Compute overall confidence from filtered facts
+        let overall_confidence = if filtered_facts.is_empty() {
+            0.0
+        } else {
+            let sum: f32 = filtered_facts.iter().map(|f| f.confidence).sum();
+            let count = filtered_facts.len() as f32;
+            (sum / count).min(1.0) // Average confidence, capped at 1.0
+        };
+
         let execution_time = start_time.elapsed();
 
         Ok(TemporalResult {
@@ -682,9 +718,13 @@ impl TemporalReasoner {
                 rng.random::<u32>()
             }),
             results: filtered_facts,
-            inference_trace: None, // TODO: Implement inference tracing
+            inference_trace: if inference_steps.is_empty() {
+                None
+            } else {
+                Some(inference_steps)
+            },
             execution_time,
-            confidence: 0.8, // TODO: Compute actual confidence
+            confidence: overall_confidence,
         })
     }
 

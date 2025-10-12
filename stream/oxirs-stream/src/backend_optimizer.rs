@@ -509,6 +509,17 @@ impl BackendOptimizer {
                 strengths.push("Geo-replication".to_string());
                 strengths.push("Unified messaging".to_string());
             }
+            BackendType::RabbitMQ => {
+                strengths.push("Mature and stable".to_string());
+                strengths.push("Rich routing capabilities".to_string());
+                strengths.push("Strong reliability guarantees".to_string());
+                if matches!(
+                    pattern.consistency_requirements,
+                    ConsistencyLevel::AtLeastOnce
+                ) {
+                    strengths.push("Persistent message delivery".to_string());
+                }
+            }
             BackendType::Memory => {
                 strengths.push("Zero latency".to_string());
                 strengths.push("Perfect for testing".to_string());
@@ -557,6 +568,13 @@ impl BackendOptimizer {
             BackendType::Pulsar => {
                 weaknesses.push("Newer ecosystem".to_string());
                 weaknesses.push("Complex architecture".to_string());
+            }
+            BackendType::RabbitMQ => {
+                weaknesses.push("Lower throughput than Kafka".to_string());
+                weaknesses.push("Memory-based by default".to_string());
+                if matches!(pattern.pattern_type, PatternType::BatchOriented) {
+                    weaknesses.push("Not optimized for batch processing".to_string());
+                }
             }
             BackendType::Memory => {
                 weaknesses.push("No persistence".to_string());

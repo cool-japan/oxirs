@@ -578,7 +578,11 @@ impl LayerParameters {
             LayerType::LSTM => {
                 settings.insert(
                     "bidirectional".to_string(),
-                    if rng.random_bool_with_chance(0.5) { 1.0 } else { 0.0 },
+                    if rng.random_bool_with_chance(0.5) {
+                        1.0
+                    } else {
+                        0.0
+                    },
                 );
             }
             _ => {}

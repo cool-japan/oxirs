@@ -566,12 +566,12 @@ impl ValidationBuilder {
     pub async fn validate_store_async(self, store: &dyn Store) -> Result<ValidationReport> {
         // For now, delegate to sync implementation
         // In a full async implementation, this would use async operations
-        Ok(self.validator.validate_store(store, Some(self.config))?)
+        self.validator.validate_store(store, Some(self.config))
     }
 
     /// Validate a store (synchronous)
     pub fn validate_store(self, store: &dyn Store) -> Result<ValidationReport> {
-        Ok(self.validator.validate_store(store, Some(self.config))?)
+        self.validator.validate_store(store, Some(self.config))
     }
 
     /// Validate specific nodes against a shape
@@ -582,8 +582,8 @@ impl ValidationBuilder {
         nodes: &[oxirs_core::model::Term],
     ) -> Result<ValidationReport> {
         // For now, delegate to sync implementation
-        Ok(self.validator
-            .validate_nodes(store, shape_id, nodes, Some(self.config))?)
+        self.validator
+            .validate_nodes(store, shape_id, nodes, Some(self.config))
     }
 
     /// Validate specific nodes against a shape (synchronous)
@@ -593,8 +593,8 @@ impl ValidationBuilder {
         shape_id: &ShapeId,
         nodes: &[oxirs_core::model::Term],
     ) -> Result<ValidationReport> {
-        Ok(self.validator
-            .validate_nodes(store, shape_id, nodes, Some(self.config))?)
+        self.validator
+            .validate_nodes(store, shape_id, nodes, Some(self.config))
     }
 }
 

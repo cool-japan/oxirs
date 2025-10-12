@@ -75,7 +75,8 @@ impl Transaction {
             });
         }
 
-        self.lock_manager.lock(self.txn_id, page_id, LockMode::Shared)
+        self.lock_manager
+            .lock(self.txn_id, page_id, LockMode::Shared)
     }
 
     /// Acquire an exclusive lock
@@ -192,7 +193,11 @@ impl TransactionManager {
         let txn_id = *next_txn_id;
         *next_txn_id = next_txn_id.next();
 
-        Transaction::begin(txn_id, Arc::clone(&self.wal), Arc::clone(&self.lock_manager))
+        Transaction::begin(
+            txn_id,
+            Arc::clone(&self.wal),
+            Arc::clone(&self.lock_manager),
+        )
     }
 
     /// Checkpoint (write active transactions to WAL)
@@ -277,7 +282,8 @@ mod tests {
         let wal = Arc::new(WriteAheadLog::new(&temp_dir).unwrap());
         let lock_manager = Arc::new(LockManager::new());
 
-        let txn = Transaction::begin(TxnId::new(1), Arc::clone(&wal), Arc::clone(&lock_manager)).unwrap();
+        let txn =
+            Transaction::begin(TxnId::new(1), Arc::clone(&wal), Arc::clone(&lock_manager)).unwrap();
 
         let page1: PageId = 1;
         txn.lock_shared(page1).unwrap();
@@ -383,8 +389,10 @@ mod tests {
         let wal = Arc::new(WriteAheadLog::new(&temp_dir).unwrap());
         let lock_manager = Arc::new(LockManager::new());
 
-        let txn1 = Transaction::begin(TxnId::new(1), Arc::clone(&wal), Arc::clone(&lock_manager)).unwrap();
-        let txn2 = Transaction::begin(TxnId::new(2), Arc::clone(&wal), Arc::clone(&lock_manager)).unwrap();
+        let txn1 =
+            Transaction::begin(TxnId::new(1), Arc::clone(&wal), Arc::clone(&lock_manager)).unwrap();
+        let txn2 =
+            Transaction::begin(TxnId::new(2), Arc::clone(&wal), Arc::clone(&lock_manager)).unwrap();
 
         let page1: PageId = 1;
 

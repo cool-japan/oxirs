@@ -104,8 +104,7 @@ where
 
     /// Serialize node to page
     pub fn serialize_to_page(&self, page: &mut Page) -> Result<()> {
-        let data = bincode::serialize(self)
-            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let data = bincode::serialize(self).map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         if data.len() > PAGE_USABLE_SIZE {
             return Err(TdbError::NodeTooLarge {
@@ -121,8 +120,7 @@ where
     /// Deserialize node from page
     pub fn deserialize_from_page(page: &Page) -> Result<Self> {
         let data = page.read_at(0, PAGE_USABLE_SIZE)?;
-        bincode::deserialize(data)
-            .map_err(|e| TdbError::Deserialization(e.to_string()))
+        bincode::deserialize(data).map_err(|e| TdbError::Deserialization(e.to_string()))
     }
 }
 
@@ -134,8 +132,8 @@ where
     pub fn find_child(&self, key: &K) -> usize {
         // Binary search for the appropriate child
         match self.keys.binary_search(key) {
-            Ok(idx) => idx + 1,  // Key found, go to right child
-            Err(idx) => idx,     // Key not found, idx is insertion point
+            Ok(idx) => idx + 1, // Key found, go to right child
+            Err(idx) => idx,    // Key not found, idx is insertion point
         }
     }
 

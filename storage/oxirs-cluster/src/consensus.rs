@@ -8,7 +8,6 @@ use anyhow::Result;
 use std::collections::BTreeSet;
 
 /// Consensus manager for distributed RDF operations
-#[derive(Debug)]
 pub struct ConsensusManager {
     raft_node: RaftNode,
     peers: BTreeSet<OxirsNodeId>,

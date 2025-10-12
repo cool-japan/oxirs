@@ -22,6 +22,12 @@ impl RecoveryReport {
     }
 }
 
+impl Default for RecoveryReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// File corruption report
 #[derive(Debug, Clone)]
 pub struct CorruptionReport {
@@ -38,6 +44,12 @@ impl CorruptionReport {
     }
 }
 
+impl Default for CorruptionReport {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Log consistency report
 #[derive(Debug, Clone)]
 pub struct LogConsistencyReport {
@@ -51,6 +63,12 @@ impl LogConsistencyReport {
             is_consistent: true,
             issues: Vec::new(),
         }
+    }
+}
+
+impl Default for LogConsistencyReport {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -79,5 +97,11 @@ pub struct StateConsistencyReport {
 impl StateConsistencyReport {
     pub fn new() -> Self {
         Self { repaired: false }
+    }
+}
+
+impl Default for StateConsistencyReport {
+    fn default() -> Self {
+        Self::new()
     }
 }

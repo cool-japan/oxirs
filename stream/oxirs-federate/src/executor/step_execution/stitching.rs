@@ -1,11 +1,11 @@
 //! Result stitching functions for federated queries
 
+use super::super::types::*;
+use super::joins::{merge_json_values, perform_graphql_join};
+use super::result_processing::perform_sparql_join;
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use tracing::debug;
-use super::super::types::*;
-use super::result_processing::perform_sparql_join;
-use super::joins::{perform_graphql_join, merge_json_values};
 
 pub fn perform_intelligent_result_stitching(
     results: &[QueryResultData],

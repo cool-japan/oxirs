@@ -3,7 +3,7 @@
 //! This module contains handlers for knowledge graph prediction endpoints.
 
 #[cfg(feature = "api-server")]
-use super::super::helpers::get_production_model;
+use super::super::helpers::get_production_model_version;
 #[cfg(feature = "api-server")]
 use super::super::{ApiState, PredictionRequest, PredictionResponse, PredictionType};
 #[cfg(feature = "api-server")]

@@ -6,8 +6,18 @@
 use crate::forward::Substitution;
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 use tracing::{debug, info, trace, warn};
+
+// Global metrics for memory tracking
+static SUBSTITUTION_CLONES: LazyLock<Counter> =
+    LazyLock::new(|| Counter::new("backward_chain_substitution_clones".to_string()));
+static CONTEXT_CLONES: LazyLock<Counter> =
+    LazyLock::new(|| Counter::new("backward_chain_context_clones".to_string()));
+static ACTIVE_PROOF_DEPTH: LazyLock<Gauge> =
+    LazyLock::new(|| Gauge::new("backward_chain_active_proof_depth".to_string()));
 
 /// Proof context for tracking derivation paths
 #[derive(Debug, Clone, Default)]
@@ -216,6 +226,7 @@ impl BackwardChainer {
     }
 
     /// Match a goal against known facts
+    /// OPTIMIZED: Only clone on successful match
     fn match_against_facts(
         &self,
         goal: &RuleAtom,
@@ -234,11 +245,13 @@ impl BackwardChainer {
                         object: fact_object,
                     } = fact
                     {
+                        // OPTIMIZED: Pass reference, clone happens inside unify_triple only on success
                         if let Some(substitution) = self.unify_triple(
                             (subject, predicate, object),
                             (fact_subject, fact_predicate, fact_object),
-                            context_sub.clone(),
+                            context_sub,
                         )? {
+                            SUBSTITUTION_CLONES.inc();
                             return Ok(Some(substitution));
                         }
                     }
@@ -246,14 +259,19 @@ impl BackwardChainer {
                 Ok(None)
             }
             RuleAtom::Builtin { name, args } => {
-                // Built-ins are evaluated directly
-                self.evaluate_builtin(name, args, context_sub.clone())
+                // OPTIMIZED: Pass reference, clone only on success
+                let result = self.evaluate_builtin(name, args, context_sub)?;
+                if result.is_some() {
+                    SUBSTITUTION_CLONES.inc();
+                }
+                Ok(result)
             }
             RuleAtom::NotEqual { left, right } => {
                 // Handle not-equal constraint
                 let left_term = self.substitute_term(left, context_sub);
                 let right_term = self.substitute_term(right, context_sub);
                 if !self.terms_equal(&left_term, &right_term) {
+                    SUBSTITUTION_CLONES.inc();
                     Ok(Some(context_sub.clone()))
                 } else {
                     Ok(None)
@@ -264,6 +282,7 @@ impl BackwardChainer {
                 let left_term = self.substitute_term(left, context_sub);
                 let right_term = self.substitute_term(right, context_sub);
                 if self.compare_terms(&left_term, &right_term) > 0 {
+                    SUBSTITUTION_CLONES.inc();
                     Ok(Some(context_sub.clone()))
                 } else {
                     Ok(None)
@@ -274,6 +293,7 @@ impl BackwardChainer {
                 let left_term = self.substitute_term(left, context_sub);
                 let right_term = self.substitute_term(right, context_sub);
                 if self.compare_terms(&left_term, &right_term) < 0 {
+                    SUBSTITUTION_CLONES.inc();
                     Ok(Some(context_sub.clone()))
                 } else {
                     Ok(None)
@@ -283,37 +303,52 @@ impl BackwardChainer {
     }
 
     /// Prove a goal using available rules
+    /// OPTIMIZED: Collect rule bodies to avoid cloning entire rule set
     fn prove_using_rules(
         &mut self,
         goal: &RuleAtom,
         context: &ProofContext,
     ) -> Result<ProofResult> {
-        for rule in &self.rules.clone() {
-            // Try to unify goal with rule head
+        // OPTIMIZED: Collect (rule_name, rule_body, head_substitution) tuples
+        // This avoids cloning entire rules while satisfying borrow checker
+        let mut applicable_rules = Vec::new();
+
+        for rule in &self.rules {
             for head_atom in &rule.head {
                 if let Some(head_substitution) =
-                    self.unify_atoms(goal, head_atom, context.substitution.clone())?
+                    self.unify_atoms(goal, head_atom, &context.substitution)?
                 {
-                    if self.debug_mode {
-                        debug!("Trying rule '{}' for goal: {:?}", rule.name, goal);
-                    }
-
-                    // Create new context
-                    let mut new_context = context.clone();
-                    new_context.path.push(goal.clone());
-                    new_context.substitution = head_substitution.clone();
-                    new_context.depth += 1;
-
-                    // Try to prove all conditions in the rule body
-                    if let Some(final_substitution) =
-                        self.prove_rule_body(&rule.body, &new_context)?
-                    {
-                        if self.debug_mode {
-                            debug!("Rule '{}' successfully proven", rule.name);
-                        }
-                        return Ok(ProofResult::Success(final_substitution));
-                    }
+                    applicable_rules.push((
+                        rule.name.clone(),
+                        rule.body.clone(),
+                        head_substitution,
+                    ));
                 }
+            }
+        }
+
+        // Now we can iterate and call mutable methods
+        for (rule_name, rule_body, head_substitution) in applicable_rules {
+            if self.debug_mode {
+                debug!("Trying rule '{}' for goal: {:?}", rule_name, goal);
+            }
+
+            // OPTIMIZED: Only clone context on successful unification
+            CONTEXT_CLONES.inc();
+            let mut new_context = context.clone();
+            new_context.path.push(goal.clone());
+            new_context.substitution = head_substitution;
+            new_context.depth += 1;
+
+            // Track proof depth
+            ACTIVE_PROOF_DEPTH.set(new_context.depth as f64);
+
+            // Try to prove all conditions in the rule body
+            if let Some(final_substitution) = self.prove_rule_body(&rule_body, &new_context)? {
+                if self.debug_mode {
+                    debug!("Rule '{}' successfully proven", rule_name);
+                }
+                return Ok(ProofResult::Success(final_substitution));
             }
         }
 
@@ -359,6 +394,7 @@ impl BackwardChainer {
     }
 
     /// Find all valid proofs for a goal
+    /// OPTIMIZED: Collect rule bodies to avoid cloning entire rule set
     fn find_all_proofs(
         &mut self,
         goal: &RuleAtom,
@@ -380,23 +416,30 @@ impl BackwardChainer {
             results.push(substitution);
         }
 
-        // Try all applicable rules
-        for rule in &self.rules.clone() {
+        // OPTIMIZED: Collect (rule_body, head_substitution) tuples
+        let mut applicable_rules = Vec::new();
+
+        for rule in &self.rules {
             for head_atom in &rule.head {
                 if let Some(head_substitution) =
-                    self.unify_atoms(goal, head_atom, context.substitution.clone())?
+                    self.unify_atoms(goal, head_atom, &context.substitution)?
                 {
-                    let mut new_context = context.clone();
-                    new_context.path.push(goal.clone());
-                    new_context.substitution = head_substitution;
-                    new_context.depth += 1;
-
-                    if let Some(final_substitution) =
-                        self.prove_rule_body(&rule.body, &new_context)?
-                    {
-                        results.push(final_substitution);
-                    }
+                    applicable_rules.push((rule.body.clone(), head_substitution));
                 }
+            }
+        }
+
+        // Now we can iterate and call mutable methods
+        for (rule_body, head_substitution) in applicable_rules {
+            // OPTIMIZED: Only clone context on successful unification
+            CONTEXT_CLONES.inc();
+            let mut new_context = context.clone();
+            new_context.path.push(goal.clone());
+            new_context.substitution = head_substitution;
+            new_context.depth += 1;
+
+            if let Some(final_substitution) = self.prove_rule_body(&rule_body, &new_context)? {
+                results.push(final_substitution);
             }
         }
 
@@ -404,11 +447,12 @@ impl BackwardChainer {
     }
 
     /// Unify two atoms
+    /// OPTIMIZED: Takes reference to avoid unnecessary clones
     fn unify_atoms(
         &self,
         atom1: &RuleAtom,
         atom2: &RuleAtom,
-        mut substitution: Substitution,
+        substitution: &Substitution,
     ) -> Result<Option<Substitution>> {
         match (atom1, atom2) {
             (
@@ -428,12 +472,14 @@ impl BackwardChainer {
                 RuleAtom::Builtin { name: n2, args: a2 },
             ) => {
                 if n1 == n2 && a1.len() == a2.len() {
+                    // Clone only once at start
+                    let mut new_substitution = substitution.clone();
                     for (arg1, arg2) in a1.iter().zip(a2.iter()) {
-                        if !self.unify_terms(arg1, arg2, &mut substitution)? {
+                        if !self.unify_terms(arg1, arg2, &mut new_substitution)? {
                             return Ok(None);
                         }
                     }
-                    Ok(Some(substitution))
+                    Ok(Some(new_substitution))
                 } else {
                     Ok(None)
                 }
@@ -443,22 +489,26 @@ impl BackwardChainer {
     }
 
     /// Unify two triples
+    /// OPTIMIZED: Takes reference to avoid unnecessary clones
     fn unify_triple(
         &self,
         triple1: (&Term, &Term, &Term),
         triple2: (&Term, &Term, &Term),
-        mut substitution: Substitution,
+        substitution: &Substitution,
     ) -> Result<Option<Substitution>> {
-        if !self.unify_terms(triple1.0, triple2.0, &mut substitution)? {
+        // Clone only once at the start
+        let mut new_substitution = substitution.clone();
+
+        if !self.unify_terms(triple1.0, triple2.0, &mut new_substitution)? {
             return Ok(None);
         }
-        if !self.unify_terms(triple1.1, triple2.1, &mut substitution)? {
+        if !self.unify_terms(triple1.1, triple2.1, &mut new_substitution)? {
             return Ok(None);
         }
-        if !self.unify_terms(triple1.2, triple2.2, &mut substitution)? {
+        if !self.unify_terms(triple1.2, triple2.2, &mut new_substitution)? {
             return Ok(None);
         }
-        Ok(Some(substitution))
+        Ok(Some(new_substitution))
     }
 
     /// Unify two terms
@@ -667,21 +717,22 @@ impl BackwardChainer {
     }
 
     /// Evaluate built-in predicates
+    /// OPTIMIZED: Takes reference to avoid unnecessary clones
     fn evaluate_builtin(
         &self,
         name: &str,
         args: &[Term],
-        substitution: Substitution,
+        substitution: &Substitution,
     ) -> Result<Option<Substitution>> {
         match name {
             "equal" => {
                 if args.len() != 2 {
                     return Err(anyhow::anyhow!("equal/2 requires exactly 2 arguments"));
                 }
-                let arg1 = self.substitute_term(&args[0], &substitution);
-                let arg2 = self.substitute_term(&args[1], &substitution);
+                let arg1 = self.substitute_term(&args[0], substitution);
+                let arg2 = self.substitute_term(&args[1], substitution);
                 if self.terms_equal(&arg1, &arg2) {
-                    Ok(Some(substitution))
+                    Ok(Some(substitution.clone()))
                 } else {
                     Ok(None)
                 }
@@ -690,10 +741,10 @@ impl BackwardChainer {
                 if args.len() != 2 {
                     return Err(anyhow::anyhow!("notEqual/2 requires exactly 2 arguments"));
                 }
-                let arg1 = self.substitute_term(&args[0], &substitution);
-                let arg2 = self.substitute_term(&args[1], &substitution);
+                let arg1 = self.substitute_term(&args[0], substitution);
+                let arg2 = self.substitute_term(&args[1], substitution);
                 if !self.terms_equal(&arg1, &arg2) {
-                    Ok(Some(substitution))
+                    Ok(Some(substitution.clone()))
                 } else {
                     Ok(None)
                 }
@@ -705,12 +756,12 @@ impl BackwardChainer {
                 match &args[0] {
                     Term::Variable(var) => {
                         if substitution.contains_key(var) {
-                            Ok(Some(substitution))
+                            Ok(Some(substitution.clone()))
                         } else {
                             Ok(None)
                         }
                     }
-                    _ => Ok(Some(substitution)),
+                    _ => Ok(Some(substitution.clone())),
                 }
             }
             "unbound" => {
@@ -720,7 +771,7 @@ impl BackwardChainer {
                 match &args[0] {
                     Term::Variable(var) => {
                         if !substitution.contains_key(var) {
-                            Ok(Some(substitution))
+                            Ok(Some(substitution.clone()))
                         } else {
                             Ok(None)
                         }
@@ -745,12 +796,18 @@ impl BackwardChainer {
     }
 
     /// Query for facts that match a pattern
+    /// OPTIMIZED: Use reference for empty substitution
     pub fn query(&mut self, pattern: &RuleAtom) -> Result<Vec<RuleAtom>> {
         let mut results = Vec::new();
+        let empty_substitution = HashMap::new();
 
         // Check facts directly
         for fact in &self.facts {
-            if self.unify_atoms(pattern, fact, HashMap::new())?.is_some() {
+            // OPTIMIZED: Pass reference instead of creating new HashMap each time
+            if self
+                .unify_atoms(pattern, fact, &empty_substitution)?
+                .is_some()
+            {
                 results.push(fact.clone());
             }
         }

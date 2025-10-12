@@ -217,9 +217,9 @@ fn test_mmap_writer_reader() {
 
         for i in 0..100 {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap(),
+                NamedNode::new(format!("http://example.org/subject{}", i)).unwrap(),
                 NamedNode::new("http://example.org/predicate").unwrap(),
-                Literal::new(&format!("Object {}", i)),
+                Literal::new(format!("Object {}", i)),
             );
             writer.write_triple(&triple).unwrap();
         }
@@ -303,9 +303,9 @@ fn test_large_dataset() {
 
         for i in 0..10000 {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/entity/{}", i)).unwrap(),
+                NamedNode::new(format!("http://example.org/entity/{}", i)).unwrap(),
                 NamedNode::new("http://example.org/type").unwrap(),
-                NamedNode::new(&format!("http://example.org/class/{}", i % 100)).unwrap(),
+                NamedNode::new(format!("http://example.org/class/{}", i % 100)).unwrap(),
             );
             writer.write_triple(&triple).unwrap();
         }

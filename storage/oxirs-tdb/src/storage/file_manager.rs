@@ -33,7 +33,7 @@ impl FileManager {
     /// Open or create a file
     pub fn open<P: AsRef<Path>>(path: P, use_mmap: bool) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        
+
         // Create parent directory if needed
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
@@ -44,6 +44,7 @@ impl FileManager {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&path)?;
 
         let file_size = file.metadata()?.len();
@@ -77,7 +78,7 @@ impl FileManager {
     pub fn extend_to(&self, num_pages: u64) -> Result<()> {
         let new_size = num_pages * PAGE_SIZE as u64;
         let mut size_guard = self.file_size.write();
-        
+
         if new_size > *size_guard {
             let mut file_guard = self.file.write();
             file_guard.set_len(new_size)?;
@@ -136,14 +137,14 @@ impl FileManager {
     /// Write a page to disk
     pub fn write_page(&self, page: &mut Page) -> Result<()> {
         let page_id = page.page_id();
-        
+
         if page_id >= self.num_pages() {
             return Err(TdbError::PageNotFound(page_id));
         }
 
         // Update header before writing
         page.update_header();
-        
+
         let offset = page_id * PAGE_SIZE as u64;
         let page_data = page.raw_data();
 
@@ -215,7 +216,7 @@ mod tests {
     fn test_file_manager_creation() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), false).unwrap();
-        
+
         assert_eq!(fm.num_pages(), 0);
         assert_eq!(fm.file_size(), 0);
     }
@@ -224,7 +225,7 @@ mod tests {
     fn test_file_manager_extend() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), false).unwrap();
-        
+
         fm.extend_to(10).unwrap();
         assert_eq!(fm.num_pages(), 10);
         assert_eq!(fm.file_size(), 10 * PAGE_SIZE as u64);
@@ -234,11 +235,11 @@ mod tests {
     fn test_file_manager_allocate() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), false).unwrap();
-        
+
         let page_id = fm.allocate_page().unwrap();
         assert_eq!(page_id, 0);
         assert_eq!(fm.num_pages(), 1);
-        
+
         let page_id = fm.allocate_page().unwrap();
         assert_eq!(page_id, 1);
         assert_eq!(fm.num_pages(), 2);
@@ -248,15 +249,15 @@ mod tests {
     fn test_file_manager_read_write() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), false).unwrap();
-        
+
         // Allocate and write page
         let page_id = fm.allocate_page().unwrap();
         let mut page = Page::new(page_id, PageType::BTreeLeaf);
         page.write_at(0, b"test data").unwrap();
-        
+
         fm.write_page(&mut page).unwrap();
         assert!(!page.is_dirty());
-        
+
         // Read page back
         let read_page = fm.read_page(page_id).unwrap();
         let data = read_page.read_at(0, 9).unwrap();
@@ -267,15 +268,15 @@ mod tests {
     fn test_file_manager_mmap() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), true).unwrap();
-        
+
         // Allocate pages to create file
         fm.allocate_page().unwrap();
-        
+
         // Write with mmap
         let mut page = Page::new(0, PageType::BTreeLeaf);
         page.write_at(0, b"mmap test").unwrap();
         fm.write_page(&mut page).unwrap();
-        
+
         // Read with mmap
         let read_page = fm.read_page(0).unwrap();
         let data = read_page.read_at(0, 9).unwrap();
@@ -286,14 +287,14 @@ mod tests {
     fn test_file_manager_flush() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), false).unwrap();
-        
+
         let page_id = fm.allocate_page().unwrap();
         let mut page = Page::new(page_id, PageType::BTreeLeaf);
         page.write_at(0, b"flush test").unwrap();
         fm.write_page(&mut page).unwrap();
-        
+
         fm.flush().unwrap();
-        
+
         // Verify data persisted
         let read_page = fm.read_page(page_id).unwrap();
         assert_eq!(read_page.read_at(0, 10).unwrap(), b"flush test");
@@ -303,7 +304,7 @@ mod tests {
     fn test_file_manager_invalid_page() {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = FileManager::open(temp_file.path(), false).unwrap();
-        
+
         let result = fm.read_page(999);
         assert!(result.is_err());
     }

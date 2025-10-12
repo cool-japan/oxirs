@@ -38,9 +38,13 @@ impl NTriplesParser {
     }
 
     /// Parse N-Triples from a reader
-    pub fn parse_reader<R: Read>(&self, _reader: R) -> ParseResult<Vec<Triple>> {
-        // TODO: Implement actual N-Triples parsing
-        Ok(Vec::new())
+    pub fn parse_reader<R: Read>(&self, mut reader: R) -> ParseResult<Vec<Triple>> {
+        // Read all data from the reader
+        let mut buffer = String::new();
+        reader.read_to_string(&mut buffer)?;
+
+        // Use the string parser
+        self.parse_str(&buffer)
     }
 
     /// Parse N-Triples from a byte slice

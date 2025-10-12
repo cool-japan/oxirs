@@ -20,8 +20,9 @@ use tokio::sync::RwLock;
 use url::Url;
 #[cfg(feature = "saml")]
 use uuid::Uuid;
-#[cfg(feature = "saml")]
-use xmlsec::{XmlSecKey, XmlSecKeyFormat, XmlSecSignatureContext};
+// TODO: Uncomment when xmlsec crate is added and XML parsing is implemented
+// #[cfg(feature = "saml")]
+// use xmlsec::{XmlSecKey, XmlSecKeyFormat, XmlSecSignatureContext};
 
 use crate::{
     auth::{AuthResult, User},
@@ -134,7 +135,7 @@ impl Default for SessionConfig {
 
 /// SAML 2.0 authentication provider
 pub struct SamlProvider {
-    config: SamlConfig,
+    pub config: SamlConfig,
     sessions: Arc<RwLock<HashMap<String, SamlSession>>>,
     pending_requests: Arc<RwLock<HashMap<String, PendingRequest>>>,
 }
@@ -309,6 +310,7 @@ impl SamlProvider {
             timestamp: SystemTime::now(),
         };
 
+        let relay_state_clone = pending.relay_state.clone();
         let mut pending_requests = self.pending_requests.write().await;
         pending_requests.insert(request.id.clone(), pending);
 
@@ -319,7 +321,7 @@ impl SamlProvider {
         let mut url = self.config.idp.sso_url.clone();
         url.query_pairs_mut().append_pair("SAMLRequest", &encoded);
 
-        if let Some(relay) = &pending.relay_state {
+        if let Some(relay) = &relay_state_clone {
             url.query_pairs_mut().append_pair("RelayState", relay);
         }
 
@@ -335,10 +337,13 @@ impl SamlProvider {
         // Decode response
         let decoded = general_purpose::STANDARD
             .decode(saml_response)
-            .map_err(|e| FusekiError::custom(format!("Failed to decode SAML response: {}", e)))?;
+            .map_err(|e| {
+                FusekiError::authentication(format!("Failed to decode SAML response: {}", e))
+            })?;
 
-        let response_xml = String::from_utf8(decoded)
-            .map_err(|e| FusekiError::custom(format!("Invalid UTF-8 in SAML response: {}", e)))?;
+        let response_xml = String::from_utf8(decoded).map_err(|e| {
+            FusekiError::authentication(format!("Invalid UTF-8 in SAML response: {}", e))
+        })?;
 
         // Parse and validate response
         let response = self.parse_response(&response_xml)?;
@@ -375,11 +380,11 @@ impl SamlProvider {
     }
 
     /// Parse SAML response XML
-    fn parse_response(&self, xml: &str) -> FusekiResult<SamlResponse> {
+    fn parse_response(&self, _xml: &str) -> FusekiResult<SamlResponse> {
         // TODO: Implement proper XML parsing with xmlsec
         // For now, return a dummy response
-        Err(FusekiError::custom(
-            "SAML response parsing not yet implemented".to_string(),
+        Err(FusekiError::service_unavailable(
+            "SAML response parsing not yet implemented",
         ))
     }
 
@@ -387,7 +392,7 @@ impl SamlProvider {
     fn validate_response(&self, response: &SamlResponse) -> FusekiResult<()> {
         // Check status
         if response.status.code != "urn:oasis:names:tc:SAML:2.0:status:Success" {
-            return Err(FusekiError::custom(format!(
+            return Err(FusekiError::authentication(format!(
                 "SAML authentication failed: {}",
                 response
                     .status
@@ -399,8 +404,8 @@ impl SamlProvider {
 
         // Validate assertions
         if response.assertions.is_empty() {
-            return Err(FusekiError::custom(
-                "No assertions in SAML response".to_string(),
+            return Err(FusekiError::authentication(
+                "No assertions in SAML response",
             ));
         }
 
@@ -411,15 +416,13 @@ impl SamlProvider {
 
                 if let Some(not_before) = &conditions.not_before {
                     if now < *not_before {
-                        return Err(FusekiError::custom(
-                            "SAML assertion not yet valid".to_string(),
-                        ));
+                        return Err(FusekiError::authentication("SAML assertion not yet valid"));
                     }
                 }
 
                 if let Some(not_after) = &conditions.not_on_or_after {
                     if now >= *not_after {
-                        return Err(FusekiError::custom("SAML assertion expired".to_string()));
+                        return Err(FusekiError::authentication("SAML assertion expired"));
                     }
                 }
             }
@@ -435,7 +438,7 @@ impl SamlProvider {
         let assertion = response
             .assertions
             .first()
-            .ok_or_else(|| FusekiError::custom("No assertion found".to_string()))?;
+            .ok_or_else(|| FusekiError::authentication("No assertion found"))?;
 
         let mut user = User {
             username: assertion.subject.name_id.clone(),
@@ -523,6 +526,91 @@ impl SamlProvider {
                 < timeout
         });
     }
+
+    /// Get session ID by SAML session index
+    pub async fn get_session_by_index(&self, session_index: &str) -> FusekiResult<Option<String>> {
+        let sessions = self.sessions.read().await;
+
+        for (session_id, session) in sessions.iter() {
+            if let Some(index) = &session.session_index {
+                if index == session_index {
+                    return Ok(Some(session_id.clone()));
+                }
+            }
+        }
+
+        Ok(None)
+    }
+
+    /// Generate SAML logout request
+    pub async fn generate_logout_request(
+        &self,
+        session_index: &str,
+        name_id: &str,
+    ) -> FusekiResult<String> {
+        let slo_url = self
+            .config
+            .idp
+            .slo_url
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("SAML SLO not configured"))?;
+
+        // Generate logout request XML
+        let request_id = format!("_{}", Uuid::new_v4());
+        let logout_request = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<samlp:LogoutRequest
+    xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol"
+    xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"
+    ID="{}"
+    Version="2.0"
+    IssueInstant="{}"
+    Destination="{}">
+    <saml:Issuer>{}</saml:Issuer>
+    <saml:NameID>{}</saml:NameID>
+    <samlp:SessionIndex>{}</samlp:SessionIndex>
+</samlp:LogoutRequest>"#,
+            request_id,
+            chrono::Utc::now().to_rfc3339(),
+            slo_url,
+            self.config.sp.entity_id,
+            name_id,
+            session_index
+        );
+
+        // Encode the request
+        let encoded = general_purpose::STANDARD.encode(logout_request.as_bytes());
+
+        // Build the logout URL
+        let mut logout_url = slo_url.clone();
+        logout_url
+            .query_pairs_mut()
+            .append_pair("SAMLRequest", &encoded);
+
+        Ok(logout_url.to_string())
+    }
+
+    /// Get SAML metadata XML
+    pub fn get_metadata(&self) -> String {
+        format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
+                     entityID="{}">
+  <md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true"
+                      protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
+    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
+                                 Location="{}" index="1" isDefault="true"/>
+    {}
+  </md:SPSSODescriptor>
+</md:EntityDescriptor>"#,
+            self.config.sp.entity_id,
+            self.config.sp.acs_url,
+            self.config.sp.sls_url.as_ref()
+                .map(|url| format!(r#"<md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="{}"/>"#, url))
+                .unwrap_or_default()
+        )
+    }
 }
 
 impl SamlProvider {
@@ -550,7 +638,9 @@ impl SamlProvider {
     /// Refresh token (not applicable for SAML)
     pub async fn refresh_token(&self, _token: &str) -> FusekiResult<String> {
         // SAML doesn't support token refresh - need to re-authenticate
-        Err(FusekiError::custom("SAML does not support token refresh"))
+        Err(FusekiError::bad_request(
+            "SAML does not support token refresh",
+        ))
     }
 }
 

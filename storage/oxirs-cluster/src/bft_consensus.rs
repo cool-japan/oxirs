@@ -7,16 +7,28 @@
 use crate::bft::{BftConfig, BftConsensus, BftMessage};
 #[cfg(feature = "bft")]
 use crate::bft_network::BftNetworkService;
-use crate::consensus::{ConsensusManager, ConsensusStatus};
 use crate::network::{NetworkConfig, NetworkService};
-use crate::raft::{OxirsNodeId, RdfCommand, RdfResponse};
+use crate::raft::{RdfCommand, RdfResponse};
 use crate::storage::StorageBackend;
 use crate::{ClusterError, Result};
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use ed25519_dalek::VerifyingKey;
+#[allow(unused_imports)]
+use scirs2_core::random::rng; // Used in tests
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::info;
+
+/// BFT consensus state
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BftState {
+    /// Node is following
+    Follower,
+    /// Node is running and participating
+    Running,
+    /// Node is stopped
+    Stopped,
+}
 
 /// BFT consensus manager for Byzantine-tolerant clusters
 #[cfg(feature = "bft")]
@@ -28,16 +40,17 @@ pub struct BftConsensusManager {
     /// BFT network service
     network: Arc<BftNetworkService>,
     /// Storage backend
+    #[allow(dead_code)]
     storage: Arc<dyn StorageBackend>,
     /// Node status
-    status: Arc<RwLock<ConsensusStatus>>,
+    status: Arc<RwLock<BftState>>,
     /// Peer information
     peers: Arc<RwLock<HashMap<String, PeerInfo>>>,
 }
 
 /// Peer information for BFT consensus
 #[derive(Debug, Clone)]
-struct PeerInfo {
+pub struct PeerInfo {
     pub node_id: String,
     pub public_key: VerifyingKey,
     pub address: String,
@@ -80,7 +93,7 @@ impl BftConsensusManager {
             consensus,
             network: bft_network,
             storage,
-            status: Arc::new(RwLock::new(ConsensusStatus::Follower)),
+            status: Arc::new(RwLock::new(BftState::Follower)),
             peers: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -97,7 +110,7 @@ impl BftConsensusManager {
 
         // Update status
         let mut status = self.status.write().await;
-        *status = ConsensusStatus::Running;
+        *status = BftState::Running;
 
         Ok(())
     }
@@ -108,7 +121,7 @@ impl BftConsensusManager {
 
         // Update status
         let mut status = self.status.write().await;
-        *status = ConsensusStatus::Stopped;
+        *status = BftState::Stopped;
 
         Ok(())
     }
@@ -169,7 +182,7 @@ impl BftConsensusManager {
     }
 
     /// Get current consensus status
-    pub async fn get_status(&self) -> ConsensusStatus {
+    pub async fn get_status(&self) -> BftState {
         let status = self.status.read().await;
         *status
     }
@@ -191,79 +204,18 @@ impl BftConsensusManager {
     }
 }
 
-/// Consensus manager trait implementation for BFT
-#[cfg(feature = "bft")]
-impl ConsensusManager for BftConsensusManager {
-    fn start(&mut self) -> Result<()> {
-        tokio::runtime::Runtime::new()
-            .map_err(|e| ClusterError::Runtime(e.to_string()))?
-            .block_on(self.start())
-    }
-
-    fn stop(&mut self) -> Result<()> {
-        tokio::runtime::Runtime::new()
-            .map_err(|e| ClusterError::Runtime(e.to_string()))?
-            .block_on(self.stop())
-    }
-
-    fn is_leader(&self) -> bool {
-        self.is_primary().unwrap_or(false)
-    }
-
-    fn get_status(&self) -> ConsensusStatus {
-        tokio::runtime::Runtime::new()
-            .map(|rt| rt.block_on(self.get_status()))
-            .unwrap_or(ConsensusStatus::Unknown)
-    }
-
-    fn process_command(&mut self, command: RdfCommand) -> Result<RdfResponse> {
-        tokio::runtime::Runtime::new()
-            .map_err(|e| ClusterError::Runtime(e.to_string()))?
-            .block_on(self.process_request(command))
-    }
-}
-
-/// Factory function to create appropriate consensus manager
-pub fn create_consensus_manager(
-    node_id: OxirsNodeId,
-    peers: Vec<OxirsNodeId>,
-    storage: Arc<dyn StorageBackend>,
-    use_bft: bool,
-) -> Result<Box<dyn ConsensusManager>> {
-    if use_bft {
-        #[cfg(feature = "bft")]
-        {
-            let bft_manager = tokio::runtime::Runtime::new()
-                .map_err(|e| ClusterError::Runtime(e.to_string()))?
-                .block_on(BftConsensusManager::new(
-                    node_id.to_string(),
-                    peers.iter().map(|p| p.to_string()).collect(),
-                    storage,
-                    NetworkConfig::default(),
-                ))?;
-            Ok(Box::new(bft_manager))
-        }
-        #[cfg(not(feature = "bft"))]
-        {
-            Err(ClusterError::Config("BFT feature not enabled".to_string()))
-        }
-    } else {
-        // Create standard Raft consensus manager
-        Ok(Box::new(crate::consensus::ConsensusManager::new(
-            node_id, peers,
-        )))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ed25519_dalek::SigningKey;
+    use scirs2_core::random::RngCore;
 
     #[test]
     fn test_peer_info() {
-        use rand::rngs::OsRng;
-        let mut csprng = OsRng {};
-        let keypair = SigningKey::generate(&mut csprng);
+        let mut rng = rng();
+        let mut seed_bytes = [0u8; 32];
+        rng.fill_bytes(&mut seed_bytes);
+        let keypair = SigningKey::from_bytes(&seed_bytes);
 
         let peer = PeerInfo {
             node_id: "node1".to_string(),

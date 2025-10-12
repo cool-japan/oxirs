@@ -1,7 +1,7 @@
 //! Patch compression and optimization
 
-use crate::{PatchOperation, RdfPatch};
 use super::{PatchParser, PatchSerializer};
+use crate::{PatchOperation, RdfPatch};
 use anyhow::Result;
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use std::collections::HashMap;
@@ -284,8 +284,10 @@ impl Default for PatchCompressor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::patch::context::{PatchContext, apply_patch_with_context};
-    use crate::patch::result::{create_reverse_patch, optimize_patch, create_transactional_patch, validate_patch};
+    use crate::patch::context::{apply_patch_with_context, PatchContext};
+    use crate::patch::result::{
+        create_reverse_patch, create_transactional_patch, optimize_patch, validate_patch,
+    };
 
     #[test]
     fn test_patch_serialization() {

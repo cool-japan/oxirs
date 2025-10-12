@@ -1213,8 +1213,8 @@ mod tests {
             },
         };
 
-        assert!(manager.matches_filters(&event_match, &[filter.clone()]));
-        assert!(!manager.matches_filters(&event_no_match, &[filter]));
+        assert!(manager.matches_filters(&event_match, std::slice::from_ref(&filter)));
+        assert!(!manager.matches_filters(&event_no_match, std::slice::from_ref(&filter)));
     }
 
     #[test]

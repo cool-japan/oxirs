@@ -123,8 +123,12 @@ impl MinHashFunction {
         let mut rng = Random::seed(seed);
         let prime = 4294967311u64; // Large prime
 
-        let a: Vec<u64> = (0..num_hashes).map(|_| rng.random_range(1, prime)).collect();
-        let b: Vec<u64> = (0..num_hashes).map(|_| rng.random_range(0, prime)).collect();
+        let a: Vec<u64> = (0..num_hashes)
+            .map(|_| rng.random_range(1, prime))
+            .collect();
+        let b: Vec<u64> = (0..num_hashes)
+            .map(|_| rng.random_range(0, prime))
+            .collect();
 
         Self { a, b, prime }
     }

@@ -671,7 +671,7 @@ impl IntuitiveQueryPlanner {
         if let Ok(mut network) = self.intuition_network.write() {
             for (i, (_, pattern, predicted_score)) in plan.ordered_patterns.iter().enumerate() {
                 let characteristics =
-                    self.extract_pattern_characteristics(&[pattern.clone()])[0].clone();
+                    self.extract_pattern_characteristics(std::slice::from_ref(pattern))[0].clone();
                 let actual_score = actual_performance
                     .pattern_scores
                     .get(&i)

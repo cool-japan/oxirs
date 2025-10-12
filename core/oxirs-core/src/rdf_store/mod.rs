@@ -297,10 +297,8 @@ impl RdfStore {
             let reader = BufReader::new(file);
             let parser = RdfParser::new(RdfFormat::NQuads);
 
-            for quad_result in parser.for_reader(reader) {
-                if let Ok(quad) = quad_result {
-                    storage.insert_quad(quad);
-                }
+            for quad in parser.for_reader(reader).flatten() {
+                storage.insert_quad(quad);
             }
         }
 
@@ -748,12 +746,125 @@ impl RdfStore {
     }
 
     /// Load data from a URL into a graph
-    pub fn load_from_url(&mut self, url: &str, _graph: Option<&NamedNode>) -> Result<usize> {
-        // TODO: Implement HTTP fetching and parsing
-        // For now, return an error
-        Err(OxirsError::Store(format!(
-            "Loading from URL not yet implemented: {url}"
-        )))
+    pub fn load_from_url(&mut self, url: &str, graph: Option<&NamedNode>) -> Result<usize> {
+        use crate::parser::Parser;
+
+        // Parse URL to extract file extension if present
+        let url_path = url.split('?').next().unwrap_or(url);
+        let extension = url_path
+            .split('/')
+            .next_back()
+            .and_then(|filename| filename.rsplit('.').next());
+
+        // Fetch data from URL using reqwest
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| OxirsError::Store(format!("Failed to create runtime: {e}")))?;
+
+        let (content, content_type) = runtime.block_on(async {
+            let response = reqwest::get(url)
+                .await
+                .map_err(|e| OxirsError::Store(format!("Failed to fetch URL {url}: {e}")))?;
+
+            if !response.status().is_success() {
+                return Err(OxirsError::Store(format!(
+                    "HTTP error {} when fetching {url}",
+                    response.status()
+                )));
+            }
+
+            // Get content type from headers
+            let content_type = response
+                .headers()
+                .get("content-type")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.split(';').next().unwrap_or(s).trim().to_string());
+
+            // Get response body as text
+            let text = response
+                .text()
+                .await
+                .map_err(|e| OxirsError::Store(format!("Failed to read response body: {e}")))?;
+
+            Ok::<_, OxirsError>((text, content_type))
+        })?;
+
+        // Detect RDF format from content type or file extension
+        let format = Self::detect_format_from_url(&content_type, extension, &content)?;
+
+        // Parse the content
+        let parser = Parser::new(format);
+        let quads = parser
+            .parse_str_to_quads(&content)
+            .map_err(|e| OxirsError::Store(format!("Failed to parse RDF data from {url}: {e}")))?;
+
+        // Insert quads into the specified graph
+        let target_graph = graph.cloned().map(GraphName::NamedNode);
+        let mut inserted_count = 0;
+
+        for quad in quads {
+            // Override graph name if a target graph is specified
+            let final_quad = if let Some(ref target) = target_graph {
+                Quad::new(
+                    quad.subject().clone(),
+                    quad.predicate().clone(),
+                    quad.object().clone(),
+                    target.clone(),
+                )
+            } else {
+                quad
+            };
+
+            if self.insert_quad(final_quad)? {
+                inserted_count += 1;
+            }
+        }
+
+        Ok(inserted_count)
+    }
+
+    /// Detect RDF format from content type, file extension, or content
+    fn detect_format_from_url(
+        content_type: &Option<String>,
+        extension: Option<&str>,
+        content: &str,
+    ) -> Result<RdfFormat> {
+        // Try to detect from content type first
+        if let Some(ct) = content_type {
+            let ct_lower = ct.to_lowercase();
+            if let Some(format) = Self::format_from_media_type(&ct_lower) {
+                return Ok(format);
+            }
+        }
+
+        // Try to detect from file extension
+        if let Some(ext) = extension {
+            if let Some(format) = RdfFormat::from_extension(ext) {
+                return Ok(format);
+            }
+        }
+
+        // Try to detect from content
+        if let Some(format) = crate::parser::detect_format_from_content(content) {
+            return Ok(format);
+        }
+
+        // Default to N-Triples if we can't detect
+        Err(OxirsError::Store(
+            "Could not detect RDF format from URL, content type, or content".to_string(),
+        ))
+    }
+
+    /// Map media type to RDF format
+    fn format_from_media_type(media_type: &str) -> Option<RdfFormat> {
+        match media_type {
+            "text/turtle" | "application/x-turtle" => Some(RdfFormat::Turtle),
+            "application/n-triples" | "text/plain" => Some(RdfFormat::NTriples),
+            "application/trig" | "application/x-trig" => Some(RdfFormat::TriG),
+            "application/n-quads" | "text/x-nquads" => Some(RdfFormat::NQuads),
+            "application/rdf+xml" | "application/xml" | "text/xml" => Some(RdfFormat::RdfXml),
+            "application/ld+json" | "application/json" => Some(RdfFormat::JsonLd),
+            _ => None,
+        }
     }
 
     /// Convert string to Subject term

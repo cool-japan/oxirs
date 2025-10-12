@@ -402,6 +402,28 @@ impl GpuAccelerator {
     pub fn reset_stats(&self) {
         self.performance_stats.write().reset();
     }
+
+    /// Get current GPU memory usage in bytes
+    pub fn get_memory_usage(&self) -> Result<usize> {
+        #[cfg(feature = "cuda")]
+        {
+            use cuda_runtime_sys::*;
+            unsafe {
+                let mut free: usize = 0;
+                let mut total: usize = 0;
+                let result = cudaMemGetInfo(&mut free as *mut usize, &mut total as *mut usize);
+                if result != cudaError_t::cudaSuccess {
+                    return Err(anyhow!("Failed to get memory info"));
+                }
+                Ok(total - free)
+            }
+        }
+        #[cfg(not(feature = "cuda"))]
+        {
+            // Return dummy value for testing
+            Ok(0)
+        }
+    }
 }
 
 impl Drop for GpuAccelerator {
@@ -424,7 +446,7 @@ impl Drop for GpuAccelerator {
 pub fn is_gpu_available() -> bool {
     #[cfg(feature = "cuda")]
     {
-        match crate::gpu::device::GpuDevice::detect_devices() {
+        match crate::gpu::device::GpuDevice::get_all_devices() {
             Ok(devices) => !devices.is_empty(),
             Err(_) => false,
         }

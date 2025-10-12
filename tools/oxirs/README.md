@@ -1,16 +1,23 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
 ## Overview
 
 `oxirs` is the unified command-line tool for the OxiRS ecosystem, providing comprehensive functionality for RDF data management, SPARQL operations, server administration, and development workflows. It's designed to be the Swiss Army knife for semantic web developers and data engineers.
+
+## What's New in v0.1.0-alpha.3 (October 12, 2025)
+
+- **Query Intelligence Suite**: `oxirs explain` now offers PostgreSQL-style plans with analyze/full modes, complexity scoring, and optimization hints.
+- **Reusable Query Templates**: Nine parameterizable SPARQL templates across basic, analytics, federation, and property-path categories accelerate common workflows.
+- **Persistent Query History**: Automatic tracking, replay, search, and statistics for every query, saved under `~/.local/share/oxirs/query_history.json`.
+- **Cache-Ready Core**: Introduces TTL-configurable, thread-safe result caching primitives ahead of beta performance targets.
 
 ## Features
 
@@ -179,6 +186,69 @@ oxirs qparse query.sparql --print-algebra
 
 # Parse SPARQL update
 oxirs uparse update.sparql --print-ast
+
+# Query optimization analysis (PostgreSQL EXPLAIN-style)
+oxirs explain mydata "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
+oxirs explain mydata query.sparql --file --mode analyze
+oxirs explain mydata query.sparql --file --mode full
+
+# Shows: query structure, complexity score, optimization hints
+```
+
+#### Query Templates
+
+```bash
+# List all available query templates
+oxirs template list
+
+# Filter by category
+oxirs template list --category basic
+oxirs template list --category aggregation
+
+# Show template details
+oxirs template show select-by-type
+
+# Render query from template with parameters
+oxirs template render select-by-type \
+  --param type_iri=http://xmlns.com/foaf/0.1/Person \
+  --param limit=50
+
+# Available templates:
+# Basic: select-all, select-by-type, select-with-filter, ask-exists
+# Advanced: construct-graph
+# Aggregation: count-instances, group-by-count
+# PropertyPaths: transitive-closure
+# Federation: federated-query
+# Analytics: statistics-summary
+```
+
+#### Query History
+
+```bash
+# List recent queries (automatically tracked)
+oxirs history list
+oxirs history list --limit 20 --dataset mydata
+
+# Show full query details
+oxirs history show 1
+
+# Re-execute a previous query
+oxirs history replay 5
+oxirs history replay 5 --output json
+
+# Search query history
+oxirs history search "SELECT"
+oxirs history search "foaf:Person"
+
+# View history statistics
+oxirs history stats
+
+# Clear history
+oxirs history clear
+
+# History tracks: dataset, query text, execution time,
+# result count, success/failure, timestamps
+# Stored in: ~/.local/share/oxirs/query_history.json
 ```
 
 ### Server Management
@@ -563,7 +633,7 @@ at your option.
 
 ## Status
 
-🚧 **Alpha Release (v0.1.0-alpha.2)** - October 1, 2025
+🚧 **Alpha Release (v0.1.0-alpha.3)** - October 12, 2025
 
 Current alpha features:
 - ✅ Dataset initialization and management
@@ -572,6 +642,9 @@ Current alpha features:
 - ✅ **SPARQL query execution** (SELECT, ASK, CONSTRUCT, DESCRIBE)
 - ✅ Triple pattern matching with variable binding
 - ✅ **Automatic data persistence** (save/load from disk)
+- ✅ **Query optimization analysis** (EXPLAIN/ANALYZE commands)
+- ✅ **Query templates** (9 pre-built SPARQL patterns)
+- ✅ **Query history** (automatic tracking, replay, search)
 - ✅ Server management with configuration
 - ✅ Interactive REPL mode
 - ✅ RDF validation tools (syntax, SHACL, ShEx)
@@ -580,6 +653,32 @@ Current alpha features:
 - 🚧 Benchmarking tools (in progress)
 - 🚧 TDB storage tools (in progress)
 - ⏳ Migration utilities (planned)
+
+### Changes in v0.1.0-alpha.3
+
+- **Query Optimization** (`oxirs explain`): PostgreSQL EXPLAIN-style query analysis
+  - 3 analysis modes: explain, analyze, full
+  - Complexity estimation (joins, filters, optionals, unions)
+  - Optimization hints for query improvement
+  - Query algebra visualization
+
+- **Query Templates** (`oxirs template`): 9 pre-built SPARQL query patterns
+  - Categories: Basic, Advanced, Aggregation, PropertyPaths, Federation, Analytics
+  - Parameter substitution with required/optional parameters
+  - List, show details, and render queries from templates
+
+- **Query History** (`oxirs history`): Automatic query tracking and management
+  - Automatic recording of all query executions
+  - Track execution time, result count, success/failure
+  - Replay historical queries with `oxirs history replay <id>`
+  - Search history by query text
+  - View statistics (success rate, avg execution time, dataset breakdown)
+  - Persistent storage at `~/.local/share/oxirs/query_history.json`
+
+- **Query Caching Infrastructure**: Foundation for result caching (ready for integration)
+  - TTL-based expiration
+  - LRU eviction strategy
+  - Thread-safe singleton cache
 
 ### Changes in v0.1.0-alpha.2
 

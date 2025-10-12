@@ -3,11 +3,11 @@
 //! This module provides secure network communication for BFT consensus,
 //! including message authentication, ordering, and Byzantine node detection.
 
-use crate::bft::{BftConfig, BftConsensus, BftMessage};
+use crate::bft::{BftConsensus, BftMessage};
 use crate::network::{NetworkService, RpcMessage};
 use crate::{ClusterError, Result};
-use ed25519_dalek::{SigningKey, VerifyingKey, Signature};
-use rand::rngs::OsRng;
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use rand::rngs::OsRng; // Required by ed25519-dalek for key generation
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -123,8 +123,12 @@ impl BftNetworkService {
         let (tx, rx) = mpsc::channel(1000);
 
         // Generate a new Ed25519 keypair for this node
-        let mut csprng = rand::rngs::OsRng {};
-        let keypair = SigningKey::generate(&mut csprng);
+        // Note: ed25519-dalek 2.x doesn't have generate() method, use from_bytes
+        let mut csprng = OsRng;
+        let mut seed_bytes = [0u8; 32];
+        use rand::RngCore;
+        csprng.fill_bytes(&mut seed_bytes);
+        let keypair = SigningKey::from_bytes(&seed_bytes);
 
         BftNetworkService {
             node_id,
@@ -144,7 +148,7 @@ impl BftNetworkService {
         node_id: String,
         consensus: Arc<BftConsensus>,
         network: Arc<NetworkService>,
-        keypair: Keypair,
+        keypair: SigningKey,
     ) -> Self {
         let (tx, rx) = mpsc::channel(1000);
 
@@ -345,13 +349,19 @@ impl BftNetworkService {
         };
 
         // Convert signature bytes to signature
-        let signature = match ed25519_dalek::Signature::from_bytes(&auth_msg.signature) {
-            Ok(sig) => sig,
-            Err(e) => {
-                warn!("Invalid signature format from {}: {}", auth_msg.sender, e);
-                return Ok(false);
-            }
-        };
+        // ed25519-dalek 2.x requires exactly 64 bytes
+        if auth_msg.signature.len() != 64 {
+            warn!(
+                "Invalid signature length from {}: expected 64, got {}",
+                auth_msg.sender,
+                auth_msg.signature.len()
+            );
+            return Ok(false);
+        }
+
+        let mut signature_bytes = [0u8; 64];
+        signature_bytes.copy_from_slice(&auth_msg.signature);
+        let signature = ed25519_dalek::Signature::from_bytes(&signature_bytes);
 
         // Verify the signature
         match public_key.verify(&msg_bytes, &signature) {
@@ -478,10 +488,14 @@ impl BftNetworkService {
         signature: &[u8],
         public_key: &VerifyingKey,
     ) -> Result<bool> {
-        let signature = match Signature::from_bytes(signature) {
-            Ok(sig) => sig,
-            Err(_) => return Ok(false),
-        };
+        // ed25519-dalek 2.x requires exactly 64 bytes
+        if signature.len() != 64 {
+            return Ok(false);
+        }
+
+        let mut signature_bytes = [0u8; 64];
+        signature_bytes.copy_from_slice(signature);
+        let signature = Signature::from_bytes(&signature_bytes);
 
         match public_key.verify(message, &signature) {
             Ok(_) => Ok(true),

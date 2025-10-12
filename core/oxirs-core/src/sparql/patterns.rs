@@ -41,10 +41,10 @@ pub fn find_matching_brace(text: &str, start_pos: usize) -> Option<usize> {
     }
 
     let mut brace_count = 1;
-    for i in (start_pos + 1)..chars.len() {
-        if chars[i] == '{' {
+    for (i, &ch) in chars.iter().enumerate().skip(start_pos + 1) {
+        if ch == '{' {
             brace_count += 1;
-        } else if chars[i] == '}' {
+        } else if ch == '}' {
             brace_count -= 1;
             if brace_count == 0 {
                 return Some(i);

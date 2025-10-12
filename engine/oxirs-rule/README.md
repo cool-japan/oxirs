@@ -1,8 +1,8 @@
 # OxiRS Rule Engine
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io-badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
 
@@ -36,7 +36,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-rule = "0.1.0-alpha.2"
+oxirs-rule = "0.1.0-alpha.3"
 ```
 
 ## Quick Start
@@ -347,7 +347,7 @@ Licensed under the Apache License, Version 2.0 or the MIT License, at your optio
 
 ## Status
 
-🚀 **Alpha Release (v0.1.0-alpha.2)** – October 4, 2025
+🚀 **Alpha Release (v0.1.0-alpha.3)** – October 12, 2025
 
 Highlights:
 - ✅ Forward/backward chaining over persisted datasets with automatic inference snapshots

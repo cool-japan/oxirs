@@ -195,6 +195,12 @@ pub struct InMemoryVectorStore {
 
     /// Statistics
     stats: Arc<RwLock<VectorStoreStats>>,
+
+    /// Cache hit counter
+    cache_hits: Arc<std::sync::atomic::AtomicUsize>,
+
+    /// Cache miss counter
+    cache_misses: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 /// Vector store configuration
@@ -641,6 +647,8 @@ impl InMemoryVectorStore {
             config,
             query_cache: Arc::new(DashMap::new()),
             stats: Arc::new(RwLock::new(stats)),
+            cache_hits: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            cache_misses: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
 
@@ -685,8 +693,35 @@ impl InMemoryVectorStore {
                                 return false;
                             }
                         }
-                        _ => {
-                            // TODO: Implement numeric comparisons
+                        FilterOperation::GreaterThan => {
+                            // Try to parse both values as f64 for numeric comparison
+                            if let (Ok(val_num), Ok(filter_num)) =
+                                (value.parse::<f64>(), filter.value.parse::<f64>())
+                            {
+                                if val_num <= filter_num {
+                                    return false;
+                                }
+                            } else {
+                                // Fallback to lexicographic comparison if not numeric
+                                if value <= &filter.value {
+                                    return false;
+                                }
+                            }
+                        }
+                        FilterOperation::LessThan => {
+                            // Try to parse both values as f64 for numeric comparison
+                            if let (Ok(val_num), Ok(filter_num)) =
+                                (value.parse::<f64>(), filter.value.parse::<f64>())
+                            {
+                                if val_num >= filter_num {
+                                    return false;
+                                }
+                            } else {
+                                // Fallback to lexicographic comparison if not numeric
+                                if value >= &filter.value {
+                                    return false;
+                                }
+                            }
                         }
                     }
                 } else {
@@ -767,7 +802,14 @@ impl VectorStore for InMemoryVectorStore {
                 query.vector, query.k, metric, query.filters
             );
             if let Some(cached) = self.query_cache.get(&cache_key) {
+                // Cache hit
+                self.cache_hits
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return Ok(cached.clone());
+            } else {
+                // Cache miss
+                self.cache_misses
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             }
         }
 
@@ -907,7 +949,20 @@ impl VectorStore for InMemoryVectorStore {
     }
 
     async fn get_statistics(&self) -> Result<VectorStoreStats> {
-        Ok(self.stats.read().await.clone())
+        let mut stats = self.stats.read().await.clone();
+
+        // Calculate actual cache hit rate
+        let hits = self.cache_hits.load(std::sync::atomic::Ordering::Relaxed);
+        let misses = self.cache_misses.load(std::sync::atomic::Ordering::Relaxed);
+        let total = hits + misses;
+
+        stats.cache_hit_rate = if total > 0 {
+            hits as f32 / total as f32
+        } else {
+            0.0
+        };
+
+        Ok(stats)
     }
 }
 

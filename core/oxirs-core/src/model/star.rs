@@ -198,7 +198,11 @@ impl StarPattern {
     /// Check if pattern contains variables
     pub fn has_variables(&self) -> bool {
         match self {
-            StarPattern::Triple(_) => false, // TODO: implement properly when TriplePattern is available
+            StarPattern::Triple(pattern) => {
+                matches!(pattern.subject, TermPattern::Variable(_))
+                    || matches!(pattern.predicate, TermPattern::Variable(_))
+                    || matches!(pattern.object, TermPattern::Variable(_))
+            }
             StarPattern::QuotedTriple {
                 subject,
                 predicate: _,
@@ -221,8 +225,16 @@ impl StarPattern {
 
     fn collect_variables(&self, _vars: &mut Vec<crate::model::Variable>) {
         match self {
-            StarPattern::Triple(_) => {
-                // TODO: implement properly when query algebra is available
+            StarPattern::Triple(pattern) => {
+                if let TermPattern::Variable(ref v) = pattern.subject {
+                    _vars.push(v.clone());
+                }
+                if let TermPattern::Variable(ref v) = pattern.predicate {
+                    _vars.push(v.clone());
+                }
+                if let TermPattern::Variable(ref v) = pattern.object {
+                    _vars.push(v.clone());
+                }
             }
             StarPattern::QuotedTriple {
                 subject,
@@ -284,10 +296,7 @@ pub mod serialization {
         /// Format a star pattern for SPARQL
         pub fn format_star_pattern(pattern: &StarPattern) -> String {
             match pattern {
-                StarPattern::Triple(_) => {
-                    // TODO: implement properly when query algebra is available
-                    "TRIPLE_PATTERN".to_string()
-                }
+                StarPattern::Triple(pattern) => pattern.to_string(),
                 StarPattern::QuotedTriple {
                     subject,
                     predicate: _,

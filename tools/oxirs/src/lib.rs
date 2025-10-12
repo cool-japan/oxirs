@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Command-line interface for OxiRS providing import, export, SPARQL queries,
@@ -582,6 +582,24 @@ pub enum Commands {
         stats: bool,
     },
 
+    /// SAMM Aspect Model tools (Java ESMF SDK compatible)
+    Aspect {
+        #[command(subcommand)]
+        action: AspectAction,
+    },
+
+    /// Asset Administration Shell (AAS) tools (Java ESMF SDK compatible)
+    Aas {
+        #[command(subcommand)]
+        action: AasAction,
+    },
+
+    /// Package management tools (Java ESMF SDK compatible)
+    Package {
+        #[command(subcommand)]
+        action: PackageAction,
+    },
+
     // === Utility Tools ===
     /// IRI validation and processing
     Iri {
@@ -683,6 +701,32 @@ pub enum Commands {
         #[command(subcommand)]
         action: commands::performance::PerformanceCommand,
     },
+
+    /// Query explanation and analysis
+    Explain {
+        /// Target dataset
+        dataset: String,
+        /// SPARQL query string or file
+        query: String,
+        /// Query is a file path
+        #[arg(short, long)]
+        file: bool,
+        /// Analysis mode (explain, analyze, full)
+        #[arg(short, long, default_value = "explain")]
+        mode: String,
+    },
+
+    /// SPARQL query template management
+    Template {
+        #[command(subcommand)]
+        action: TemplateAction,
+    },
+
+    /// Query history management
+    History {
+        #[command(subcommand)]
+        action: HistoryAction,
+    },
 }
 
 /// Configuration management actions
@@ -703,6 +747,230 @@ pub enum ConfigAction {
     Show {
         /// Configuration file path
         config: Option<PathBuf>,
+    },
+}
+
+/// SPARQL query template actions
+#[derive(Subcommand)]
+pub enum TemplateAction {
+    /// List all available templates
+    List {
+        /// Filter by category (basic, advanced, analytics, graph, federation, paths, aggregation)
+        #[arg(long)]
+        category: Option<String>,
+    },
+    /// Show template details
+    Show {
+        /// Template name
+        name: String,
+    },
+    /// Render a template with parameters
+    Render {
+        /// Template name
+        name: String,
+        /// Template parameters in key=value format (repeatable)
+        #[arg(short, long)]
+        param: Vec<String>,
+    },
+}
+
+/// Query history actions
+#[derive(Subcommand)]
+pub enum HistoryAction {
+    /// List query history
+    List {
+        /// Maximum number of entries to show
+        #[arg(short, long, default_value = "20")]
+        limit: Option<usize>,
+        /// Filter by dataset
+        #[arg(short, long)]
+        dataset: Option<String>,
+    },
+    /// Show full query details
+    Show {
+        /// History entry ID
+        id: usize,
+    },
+    /// Replay a query from history
+    Replay {
+        /// History entry ID
+        id: usize,
+        /// Output format
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+    /// Search query history
+    Search {
+        /// Query text to search for
+        query: String,
+    },
+    /// Clear query history
+    Clear,
+    /// Show history statistics
+    Stats,
+}
+
+/// SAMM Aspect Model actions (Java ESMF SDK compatible)
+#[derive(Subcommand)]
+pub enum AspectAction {
+    /// Validate a SAMM Aspect model
+    Validate {
+        /// Aspect model file (Turtle format)
+        file: PathBuf,
+        /// Show detailed validation output
+        #[arg(short, long)]
+        detailed: bool,
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Pretty-print an Aspect model
+    Prettyprint {
+        /// Aspect model file (Turtle format)
+        file: PathBuf,
+        /// Output file (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Output format (turtle, rdfxml, jsonld)
+        #[arg(short, long, default_value = "turtle")]
+        format: String,
+        /// Include comments
+        #[arg(long)]
+        comments: bool,
+    },
+    /// Generate artifacts from Aspect model
+    To {
+        /// Aspect model file (Turtle format)
+        file: PathBuf,
+        /// Target format (rust, python, java, scala, typescript, graphql, markdown, html,
+        /// jsonschema, openapi, asyncapi, jsonld, payload, aas, sql, diagram)
+        format: String,
+        /// Output file or directory
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Include examples in output
+        #[arg(long)]
+        examples: bool,
+        /// Format variant (for aas: xml/json/aasx, for sql: postgresql/mysql/sqlite,
+        /// for diagram: dot/svg/png)
+        #[arg(short = 'f', long = "format")]
+        format_variant: Option<String>,
+    },
+    /// Edit Aspect model (move elements or create new version)
+    Edit {
+        #[command(subcommand)]
+        action: EditAction,
+    },
+    /// Show where model elements are used
+    Usage {
+        /// Aspect model file or URN
+        input: String,
+        /// Models root directory (required when using URN)
+        #[arg(long = "models-root")]
+        models_root: Option<PathBuf>,
+    },
+}
+
+/// Edit actions for Aspect models (Java ESMF SDK compatible)
+#[derive(Subcommand)]
+pub enum EditAction {
+    /// Move element to different namespace
+    Move {
+        /// Aspect model file (Turtle format)
+        file: PathBuf,
+        /// Element URN to move
+        element: String,
+        /// Target namespace (optional)
+        namespace: Option<String>,
+        /// Don't write changes, only show report
+        #[arg(long)]
+        dry_run: bool,
+        /// Include detailed content changes (with --dry-run)
+        #[arg(long)]
+        details: bool,
+        /// Overwrite existing files
+        #[arg(long)]
+        force: bool,
+        /// Copy file header from source
+        #[arg(long)]
+        copy_file_header: bool,
+    },
+    /// Create new version of Aspect model
+    Newversion {
+        /// Aspect model file (Turtle format)
+        file: PathBuf,
+        /// Update major version
+        #[arg(long, conflicts_with_all = ["minor", "micro"])]
+        major: bool,
+        /// Update minor version
+        #[arg(long, conflicts_with_all = ["major", "micro"])]
+        minor: bool,
+        /// Update micro version
+        #[arg(long, conflicts_with_all = ["major", "minor"])]
+        micro: bool,
+        /// Don't write changes, only show report
+        #[arg(long)]
+        dry_run: bool,
+        /// Include detailed content changes (with --dry-run)
+        #[arg(long)]
+        details: bool,
+        /// Overwrite existing files
+        #[arg(long)]
+        force: bool,
+    },
+}
+
+/// Asset Administration Shell (AAS) actions (Java ESMF SDK compatible)
+#[derive(Subcommand)]
+pub enum AasAction {
+    /// Convert AAS Submodel Templates to Aspect Models
+    ToAspect {
+        /// AAS file (XML, JSON, or AASX format)
+        file: PathBuf,
+        /// Output directory for generated Aspect Models
+        #[arg(short = 'd', long = "output-directory")]
+        output_directory: Option<PathBuf>,
+        /// Select specific submodel template(s) to convert (repeatable)
+        #[arg(short = 's', long = "submodel-template")]
+        submodel_templates: Vec<usize>,
+    },
+    /// List submodel templates in AAS file
+    List {
+        /// AAS file (XML, JSON, or AASX format)
+        file: PathBuf,
+    },
+}
+
+/// Package management actions (Java ESMF SDK compatible)
+#[derive(Subcommand)]
+pub enum PackageAction {
+    /// Import namespace package (ZIP)
+    Import {
+        /// Namespace package ZIP file
+        file: PathBuf,
+        /// Directory to import into (required)
+        #[arg(long = "models-root", required = true)]
+        models_root: PathBuf,
+        /// Don't write changes, print report only
+        #[arg(long)]
+        dry_run: bool,
+        /// Include details about model content changes (with --dry-run)
+        #[arg(long)]
+        details: bool,
+        /// Overwrite existing files
+        #[arg(long)]
+        force: bool,
+    },
+    /// Export Aspect Model or namespace as ZIP package
+    Export {
+        /// Aspect Model file or namespace URN
+        input: String,
+        /// Output ZIP file path (required)
+        #[arg(short = 'o', long = "output", required = true)]
+        output: PathBuf,
+        /// Namespace version filter (for URN exports)
+        #[arg(long)]
+        version: Option<String>,
     },
 }
 
@@ -969,6 +1237,15 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output,
             stats,
         } => tools::schemagen::run(data, schema_type, output, stats).await,
+        Commands::Aspect { action } => commands::aspect::run(action)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        Commands::Aas { action } => commands::aas::run(action)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        Commands::Package { action } => commands::package::run(action)
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
 
         // Utility Tools
         Commands::Iri {
@@ -997,7 +1274,10 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             output_format,
             output,
         } => tools::rset::run(input, input_format, output_format, output).await,
-        Commands::Interactive { dataset, history: _ } => {
+        Commands::Interactive {
+            dataset,
+            history: _,
+        } => {
             ctx.info("Starting interactive SPARQL shell...");
             commands::interactive::execute(dataset, cli.config)
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
@@ -1009,5 +1289,76 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 .await
                 .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
         }
+        Commands::Explain {
+            dataset,
+            query,
+            file,
+            mode,
+        } => {
+            let analysis_mode = match mode.to_lowercase().as_str() {
+                "explain" => commands::explain::AnalysisMode::Explain,
+                "analyze" => commands::explain::AnalysisMode::Analyze,
+                "full" => commands::explain::AnalysisMode::Full,
+                _ => {
+                    eprintln!(
+                        "Invalid mode '{}'. Valid modes: explain, analyze, full",
+                        mode
+                    );
+                    return Err("Invalid analysis mode".into());
+                }
+            };
+            commands::explain::explain_query(dataset, query, file, analysis_mode)
+                .await
+                .map_err(|e| e.into())
+        }
+        Commands::Template { action } => {
+            use std::collections::HashMap;
+            match action {
+                TemplateAction::List { category } => commands::templates::list_command(category)
+                    .await
+                    .map_err(|e| e.into()),
+                TemplateAction::Show { name } => commands::templates::show_command(name)
+                    .await
+                    .map_err(|e| e.into()),
+                TemplateAction::Render { name, param } => {
+                    let mut params = HashMap::new();
+                    for p in param {
+                        let parts: Vec<&str> = p.splitn(2, '=').collect();
+                        if parts.len() != 2 {
+                            eprintln!("Invalid parameter format: '{}'. Expected key=value", p);
+                            return Err("Invalid parameter format".into());
+                        }
+                        params.insert(parts[0].to_string(), parts[1].to_string());
+                    }
+                    commands::templates::render_command(name, params)
+                        .await
+                        .map_err(|e| e.into())
+                }
+            }
+        }
+        Commands::History { action } => match action {
+            HistoryAction::List { limit, dataset } => {
+                commands::history::commands::list_command(limit, dataset)
+                    .await
+                    .map_err(|e| e.into())
+            }
+            HistoryAction::Show { id } => commands::history::commands::show_command(id)
+                .await
+                .map_err(|e| e.into()),
+            HistoryAction::Replay { id, output } => {
+                commands::history::commands::replay_command(id, output)
+                    .await
+                    .map_err(|e| e.into())
+            }
+            HistoryAction::Search { query } => commands::history::commands::search_command(query)
+                .await
+                .map_err(|e| e.into()),
+            HistoryAction::Clear => commands::history::commands::clear_command()
+                .await
+                .map_err(|e| e.into()),
+            HistoryAction::Stats => commands::history::commands::stats_command()
+                .await
+                .map_err(|e| e.into()),
+        },
     }
 }

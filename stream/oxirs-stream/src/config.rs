@@ -580,14 +580,13 @@ impl ConfigManager {
         if let Ok(backend) = std::env::var(format!("{prefix}_BACKEND")) {
             config.backend = match backend.as_str() {
                 "kafka" => {
-                    let _brokers: Vec<String> = std::env::var(format!("{prefix}_KAFKA_BROKERS"))
-                        .unwrap_or_else(|_| "localhost:9092".to_string())
-                        .split(',')
-                        .map(|s| s.to_string())
-                        .collect();
-
                     #[cfg(feature = "kafka")]
                     {
+                        let brokers: Vec<String> = std::env::var(format!("{prefix}_KAFKA_BROKERS"))
+                            .unwrap_or_else(|_| "localhost:9092".to_string())
+                            .split(',')
+                            .map(|s| s.to_string())
+                            .collect();
                         StreamBackendType::Kafka {
                             brokers,
                             security_protocol: std::env::var(format!("{}_KAFKA_SECURITY", prefix))
@@ -597,6 +596,7 @@ impl ConfigManager {
                     }
                     #[cfg(not(feature = "kafka"))]
                     {
+                        let _ = std::env::var(format!("{prefix}_KAFKA_BROKERS"));
                         StreamBackendType::Memory {
                             max_size: Some(10000),
                             persistence: false,
@@ -640,7 +640,7 @@ impl ConfigManager {
         if let StreamBackendType::Kafka {
             brokers,
             security_protocol,
-            sasl_config,
+            sasl_config: _,
         } = &config.backend
         {
             if security_protocol.as_deref() == Some("SASL_SSL") {
@@ -651,7 +651,7 @@ impl ConfigManager {
                             config.backend = StreamBackendType::Kafka {
                                 brokers: brokers.clone(),
                                 security_protocol: security_protocol.clone(),
-                                sasl_config: Some(SaslConfig {
+                                sasl_config: Some(crate::SaslConfig {
                                     mechanism: crate::SaslMechanism::ScramSha256,
                                     username,
                                     password,

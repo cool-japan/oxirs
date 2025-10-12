@@ -1,0 +1,27 @@
+// Generated from SAMM Aspect Model: {{ aspect_name }}
+// Namespace: {{ namespace }}
+// Generated at: {{ generation_timestamp | default(value="") }}
+
+use serde::{Deserialize, Serialize};
+
+{% if properties %}
+/// {{ aspect_name }} - SAMM Aspect Model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct {{ aspect_name | pascal_case }} {
+{% for property in properties %}
+    {% if property.optional %}#[serde(skip_serializing_if = "Option::is_none")]{% endif %}
+    pub {{ property.name | snake_case }}: {% if property.optional %}Option<{% endif %}{{ property.data_type | xsd_to_type(target="rust") }}{% if property.optional %}>{% endif %},
+{% endfor %}
+}
+
+impl {{ aspect_name | pascal_case }} {
+    /// Create a new {{ aspect_name }}
+    pub fn new({% for property in properties %}{{ property.name | snake_case }}: {% if property.optional %}Option<{% endif %}{{ property.data_type | xsd_to_type(target="rust") }}{% if property.optional %}>{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}) -> Self {
+        Self {
+{% for property in properties %}
+            {{ property.name | snake_case }},
+{% endfor %}
+        }
+    }
+}
+{% endif %}

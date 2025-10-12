@@ -277,4 +277,3 @@ impl PatternCoverageAnalyzer {
         Ok(quality_score.clamp(0.1, 1.0)) // Clamp between 10% and 100%
     }
 }
-

@@ -261,9 +261,11 @@ impl GraphQLFederation {
             service_name: entity_ref.service_id.clone(),
             entity_type: entity_ref.entity_type.clone(),
             key_fields: entity_ref.key_fields.clone(),
-            query: self.build_entity_query(&[entity_ref.clone()]).await?,
+            query: self
+                .build_entity_query(std::slice::from_ref(entity_ref))
+                .await?,
             depends_on: self
-                .analyze_entity_dependencies(&[entity_ref.clone()])
+                .analyze_entity_dependencies(std::slice::from_ref(entity_ref))
                 .await?,
         })
     }

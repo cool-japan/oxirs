@@ -9,8 +9,10 @@ use crate::models::{common::*, BaseModel};
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use scirs2_autograd::rand::prelude::StdRng;
+use scirs2_autograd::rand::{seq::SliceRandom, Rng, SeedableRng};
 use scirs2_core::ndarray_ext::{Array1, Array2, Array3};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::ops::{AddAssign, SubAssign};
 use std::time::Instant;
@@ -112,11 +114,9 @@ impl TuckER {
         }
 
         let mut rng = if let Some(seed) = self.base.config.seed {
-            use scirs2_core::random::{SeedableRng, StdRng};
             StdRng::seed_from_u64(seed)
         } else {
-            use scirs2_core::random::{Random, Rng};
-            Random::default()
+            StdRng::from_entropy()
         };
 
         // Initialize entity embeddings with Xavier initialization
@@ -290,12 +290,10 @@ impl TuckER {
     /// Perform one training epoch
     async fn train_epoch(&mut self, learning_rate: f64) -> Result<f64> {
         let mut rng = if let Some(seed) = self.base.config.seed {
-            use scirs2_core::random::{Rng, SeedableRng, StdRng};
-            let mut thread_rng = Random::default();
-            StdRng::seed_from_u64(seed + thread_rng.random::<u64>())
+            let mut thread_rng = StdRng::from_entropy();
+            StdRng::seed_from_u64(seed + thread_rng.next_u64())
         } else {
-            use scirs2_core::random::{Random, Rng};
-            Random::default()
+            StdRng::from_entropy()
         };
 
         let mut total_loss = 0.0;

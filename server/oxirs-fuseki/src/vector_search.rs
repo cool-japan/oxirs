@@ -285,7 +285,7 @@ impl VectorSearchEngine {
             vector
         } else if let Some(text) = &query.query_text {
             let embeddings = self
-                .generate_embeddings(&[text.clone()], &model_name)
+                .generate_embeddings(std::slice::from_ref(text), &model_name)
                 .await?;
             embeddings
                 .into_iter()

@@ -8,8 +8,8 @@ use chrono::Utc;
 use std::collections::VecDeque;
 use tracing::{debug, info, warn};
 
-use super::super::*;
 use super::super::consciousness_types::*;
+use super::super::*;
 use super::attention::AttentionMechanism;
 use super::config::ConsciousnessModelConfig;
 use super::emotional::AdvancedEmotionalState;

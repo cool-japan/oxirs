@@ -4,7 +4,10 @@
 //! running in Kubernetes clusters by watching for services with specific
 //! labels and annotations.
 
+#[cfg(not(feature = "kubernetes"))]
 use crate::FederatedService;
+#[cfg(feature = "kubernetes")]
+use crate::{auto_discovery::DiscoveryMethod, FederatedService, ServiceType};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

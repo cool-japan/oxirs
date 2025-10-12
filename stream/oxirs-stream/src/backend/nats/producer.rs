@@ -5,10 +5,10 @@
 use super::config::*;
 use super::message::NatsEventMessage;
 use crate::error::{StreamError, StreamResult};
-use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use rand::Rng;
+use scirs2_core::random::{rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -459,7 +459,7 @@ impl NatsProducer {
     ) -> bool {
         match strategy {
             LoadBalancingStrategy::RoundRobin => message_count % 2 == 0, // Simple implementation
-            LoadBalancingStrategy::Random => rand::Random::default().random::<bool>(),
+            LoadBalancingStrategy::Random => rng().random::<bool>(),
             LoadBalancingStrategy::LeastConnections => true, // Simplified
             LoadBalancingStrategy::WeightedRoundRobin(_weights) => true, // Simplified
             LoadBalancingStrategy::Consistent => true,       // Simplified

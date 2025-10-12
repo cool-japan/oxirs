@@ -5,15 +5,18 @@
 //! - Profile management (dev, staging, prod)
 //! - Environment variable overrides
 //! - Dataset configuration loading
+//! - Configuration validation
 
 pub mod manager;
 pub mod secrets;
+pub mod validation;
 
 pub use manager::{
     AuthConfig, ConfigManager, CorsConfig, DatasetConfig, GeneralConfig, OxirsConfig, QueryConfig,
     RiotConfig, ServerConfig, TdbConfig, ToolsConfig, ValidationConfig,
 };
 pub use secrets::{SecretBackend, SecretManager};
+pub use validation::{validate_config, validate_config_strict, ConfigValidator, ValidationError};
 
 /// Alias for backward compatibility
 pub type Config = OxirsConfig;
@@ -88,6 +91,7 @@ use std::path::{Path, PathBuf};
 /// - oxirs.toml file doesn't exist
 /// - TOML parsing fails
 /// - Dataset configuration is missing or invalid
+/// - Configuration validation fails
 pub fn load_dataset_from_config<P: AsRef<Path>>(dataset_dir: P) -> CliResult<PathBuf> {
     let dataset_dir = dataset_dir.as_ref();
     let config_path = dataset_dir.join("oxirs.toml");
@@ -113,6 +117,9 @@ pub fn load_dataset_from_config<P: AsRef<Path>>(dataset_dir: P) -> CliResult<Pat
             config_path.display()
         ))
     })?;
+
+    // Validate configuration (non-strict mode for backward compatibility)
+    validate_config(&config, Some(dataset_dir))?;
 
     // Extract the default dataset configuration
     // First try "default" dataset, then first available dataset
@@ -150,6 +157,10 @@ pub fn load_dataset_from_config<P: AsRef<Path>>(dataset_dir: P) -> CliResult<Pat
 /// # Returns
 ///
 /// Tuple of (storage_path, dataset_config)
+///
+/// # Errors
+///
+/// Returns error if configuration is invalid or dataset not found
 pub fn load_named_dataset<P: AsRef<Path>>(
     dataset_dir: P,
     dataset_name: &str,
@@ -178,6 +189,9 @@ pub fn load_named_dataset<P: AsRef<Path>>(
         ))
     })?;
 
+    // Validate configuration (non-strict mode for backward compatibility)
+    validate_config(&config, Some(dataset_dir))?;
+
     let dataset_config = config
         .datasets
         .get(dataset_name)
@@ -196,6 +210,56 @@ pub fn load_named_dataset<P: AsRef<Path>>(
     };
 
     Ok((storage_path, dataset_config))
+}
+
+/// Load configuration with profile support
+///
+/// This function loads configuration with profile-specific overrides
+/// and environment variable substitution.
+///
+/// # Arguments
+///
+/// * `config_path` - Optional path to configuration file (uses default location if None)
+/// * `profile` - Optional profile name (defaults to "default")
+///
+/// # Returns
+///
+/// Loaded and validated OxirsConfig
+pub fn load_config_with_profile(
+    config_path: Option<&Path>,
+    profile: Option<&str>,
+) -> CliResult<OxirsConfig> {
+    let mut manager = ConfigManager::new()?;
+    let profile = profile.unwrap_or("default");
+
+    // If a specific config path is provided, load from there
+    if let Some(path) = config_path {
+        if !path.exists() {
+            return Err(CliError::config_error(format!(
+                "Configuration file '{}' not found",
+                path.display()
+            )));
+        }
+
+        let content = std::fs::read_to_string(path).map_err(|e| {
+            CliError::config_error(format!(
+                "Failed to read config file '{}': {e}",
+                path.display()
+            ))
+        })?;
+
+        let config: OxirsConfig = toml::from_str(&content)
+            .map_err(|e| CliError::config_error(format!("Failed to parse TOML: {e}")))?;
+
+        // Validate configuration
+        validate_config(&config, path.parent())?;
+
+        Ok(config)
+    } else {
+        // Load from default location with profile support
+        let config = manager.load_profile(profile)?;
+        Ok(config.clone())
+    }
 }
 
 #[cfg(test)]

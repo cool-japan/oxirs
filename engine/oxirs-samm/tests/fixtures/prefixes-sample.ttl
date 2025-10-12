@@ -1,0 +1,24 @@
+# Copyright (c) 2023 Robert Bosch Manufacturing Solutions GmbH
+
+# See the AUTHORS file(s) distributed with this work for additional information regarding authorship.
+
+# This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0.
+# If a copy of the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/
+# SPDX-License-Identifier: MPL-2.0
+@prefix : <urn:samm:com.mycompany.myapplication:1.0.0#> .
+@prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.2.0#> .
+@prefix samm-c: <urn:samm:org.eclipse.esmf.samm:characteristic:2.2.0#> .
+
+# tag::content[]
+:Error a samm:Aspect ;
+  samm:preferredName "Error Aspect"@en ;
+  samm:properties ( :errors ) ;
+  samm:operations ( ) .
+
+:errors a samm:Property ;
+  samm:preferredName "Errors"@en ;
+# ...
+# end::content[]
+
+# To make :errors valid
+  samm:characteristic samm-c:Text .

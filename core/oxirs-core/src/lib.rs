@@ -1,10 +1,10 @@
 //! # OxiRS Core - RDF and SPARQL Foundation
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-core/badge.svg)](https://docs.rs/oxirs-core)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Alpha Release (v0.1.0-alpha.3) - Beta.1 Features Complete
+//! ⚠️ APIs may change. Production hardening in progress.
 //!
 //! Zero-dependency, Rust-native RDF data model and SPARQL foundation for the OxiRS semantic web platform.
 //! This crate provides the core types, traits, and operations that all other OxiRS crates build upon.
@@ -23,12 +23,12 @@
 //! ### Basic Store Operations
 //!
 //! ```rust,no_run
-//! use oxirs_core::store::ConcreteStore;
+//! use oxirs_core::ConcreteStore;
 //! use oxirs_core::model::{NamedNode, Triple};
 //!
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a new RDF store
-//! let store = ConcreteStore::new();
+//! let store = ConcreteStore::new()?;
 //!
 //! // Add RDF data
 //! let subject = NamedNode::new("http://example.org/alice")?;
@@ -45,17 +45,14 @@
 //! ### Consciousness-Inspired Processing
 //!
 //! ```rust,no_run
-//! use oxirs_core::consciousness::{ConsciousnessCoordinator, ConsciousnessLevel};
+//! use oxirs_core::consciousness::{DreamProcessor, EmotionalLearningNetwork};
 //!
-//! # async fn consciousness_example() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut coordinator = ConsciousnessCoordinator::new();
+//! # fn consciousness_example() -> Result<(), Box<dyn std::error::Error>> {
+//! let dream_processor = DreamProcessor::new();
+//! let emotional_network = EmotionalLearningNetwork::new();
 //!
-//! // Configure consciousness-inspired optimization
-//! coordinator.set_consciousness_level(ConsciousnessLevel::SelfAware);
-//! coordinator.enable_dream_processing(true);
-//! coordinator.enable_emotional_learning(true);
-//!
-//! println!("Consciousness coordinator initialized");
+//! // Use consciousness-inspired components for advanced processing
+//! println!("Consciousness-inspired processing initialized");
 //! # Ok(())
 //! # }
 //! ```
@@ -74,6 +71,7 @@ pub mod model;
 pub mod molecular; // Molecular-level memory management inspired by biological systems
 pub mod optimization;
 pub mod parser;
+pub mod production; // Production hardening features (Beta.1)
 pub mod quantum; // Quantum-inspired computing for next-generation RDF processing
 pub mod query;
 pub mod rdf_store;

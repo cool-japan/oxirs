@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
@@ -35,6 +35,7 @@
 //!     peers: vec![2, 3],
 //!     discovery: None,
 //!     replication_strategy: None,
+//!     region_config: None,
 //! };
 //!
 //! let mut node = ClusterNode::new(config).await?;
@@ -55,28 +56,41 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub mod adaptive_leader_election;
+pub mod advanced_partitioning;
 pub mod advanced_storage;
 pub mod conflict_resolution;
 pub mod consensus;
+pub mod crash_recovery;
+pub mod data_rebalancing;
 pub mod discovery;
 pub mod distributed_query;
 pub mod edge_computing;
+pub mod enhanced_node_discovery;
 pub mod enhanced_snapshotting;
 pub mod error;
 pub mod failover;
 pub mod federation;
 pub mod health_monitor;
+pub mod health_monitoring;
+pub mod merkle_tree;
 pub mod mvcc;
 pub mod mvcc_storage;
 pub mod network;
 pub mod node_lifecycle;
+pub mod node_status_tracker;
+pub mod operational_transformation;
 pub mod optimization;
+pub mod partition_detection;
+pub mod performance_metrics;
 pub mod performance_monitor;
 pub mod raft;
+pub mod raft_optimization;
 pub mod raft_state;
 pub mod range_partitioning;
 pub mod region_manager;
 pub mod replication;
+pub mod replication_lag_monitor;
 // Temporarily disabled due to missing scirs2_core features
 // pub mod revolutionary_cluster_optimization;
 pub mod security;
@@ -85,7 +99,9 @@ pub mod shard;
 pub mod shard_manager;
 pub mod shard_migration;
 pub mod shard_routing;
+pub mod split_brain_prevention;
 pub mod storage;
+pub mod strong_consistency;
 pub mod tls;
 pub mod transaction;
 pub mod transaction_optimizer;
@@ -257,7 +273,6 @@ impl NodeConfig {
 }
 
 /// Cluster node implementation
-#[derive(Debug)]
 pub struct ClusterNode {
     config: NodeConfig,
     consensus: ConsensusManager,
@@ -1345,10 +1360,9 @@ mod tests {
 
         let result = ClusterNode::new(config).await;
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Data directory cannot be empty"));
+        if let Err(e) = result {
+            assert!(e.to_string().contains("Data directory cannot be empty"));
+        }
     }
 
     #[tokio::test]

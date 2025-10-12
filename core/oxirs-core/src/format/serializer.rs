@@ -347,11 +347,23 @@ impl ConfigurableSerializer {
         // Apply configuration settings and create serializer
         let mut serializer = self.serializer;
 
+        // Apply pretty formatting (negation of compact)
         if !self.config.compact {
             serializer = serializer.pretty();
         }
 
-        // TODO: Apply other configuration options
+        // Note: The following configuration options are defined in SerializeConfig
+        // but not yet fully supported by all underlying format serializers:
+        // - indent: Custom indentation strings (currently using format defaults)
+        // - line_ending: Custom line endings (currently using platform defaults)
+        // - max_line_length: Line wrapping (reserved for future implementation)
+        // - sort_output: Output ordering (reserved for future implementation)
+        // - include_comments: Comment generation (reserved for future implementation)
+        // - validate_output: Currently handled by individual serializers
+        //
+        // These options are preserved for backward compatibility and future enhancement.
+        // For now, compact/pretty formatting is the primary configurable option.
+
         serializer.for_writer(writer)
     }
 

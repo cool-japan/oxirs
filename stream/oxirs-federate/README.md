@@ -1,10 +1,10 @@
 # OxiRS Federate - Federated Query Processing
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
+✨ **Beta Features Complete!** All Beta Release Targets implemented. APIs stabilizing. Ready for beta promotion.
 
 Federated SPARQL query processing across multiple RDF endpoints. Execute queries spanning distributed knowledge graphs with intelligent optimization and result integration.
 
@@ -33,9 +33,9 @@ Federated SPARQL query processing across multiple RDF endpoints. Execute queries
 Add to your `Cargo.toml`:
 
 ```toml
-# Experimental feature
+# Beta features complete - APIs stabilizing
 [dependencies]
-oxirs-federate = "0.1.0-alpha.2"
+oxirs-federate = "0.1.0-alpha.3"
 ```
 
 ## Quick Start
@@ -401,15 +401,16 @@ println!("SPARQL endpoint: {}", description.sparql_endpoint);
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.2)
-- ✅ Federated query execution with retries, `SERVICE SILENT`, and timeout policies
-- ✅ Multiple endpoint management with health checks and backoff strategies
-- ✅ Result integration aligned with persisted datasets and CLI pipelines
-- ✅ SciRS2-backed telemetry for latency, fan-out, and cache hit ratios
-- 🚧 Intelligent source selection (ML-driven) – in progress
-- 🚧 Advanced join optimization (adaptive) – in progress
-- ⏳ Distributed transactions (planned for beta)
-- ⏳ GraphQL federation (planned for v0.2.0)
+### Alpha Release (v0.1.0-alpha.3) - Beta Features Complete!
+- ✅ **Distributed Transactions** - 2PC and Saga patterns with automatic compensation
+- ✅ **Advanced Authentication** - OAuth2, SAML, JWT, API keys, Basic, Service-to-Service
+- ✅ **ML-Driven Optimization** - Intelligent source selection and query planning
+- ✅ **Adaptive Join Strategies** - Bind join, hash join, nested loop with cost-based selection
+- ✅ **GraphQL Federation** - Schema stitching, entity resolution, query translation
+- ✅ **Production Monitoring** - OpenTelemetry, circuit breakers, auto-healing
+- ✅ **Streaming Support** - Real-time processing with NATS/Kafka and backpressure handling
+- ✅ **Load Balancing** - Adaptive algorithms with health-aware routing
+- ✅ **285 Passing Tests** - Comprehensive test coverage with zero warnings
 
 ## Contributing
 

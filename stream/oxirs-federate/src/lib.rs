@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
@@ -69,6 +69,7 @@ pub mod cdc;
 pub mod connection_pool_manager;
 pub mod discovery;
 pub mod distributed_tracing;
+pub mod distributed_transactions;
 pub mod executor;
 pub mod graphql;
 pub mod integration;
@@ -106,6 +107,11 @@ pub use adaptive_load_balancer::AdaptiveLoadBalancer;
 pub use auth::AuthManager;
 pub use connection_pool_manager::ConnectionPoolManager;
 pub use distributed_tracing::TracingConfig;
+pub use distributed_transactions::{
+    DistributedTransactionCoordinator, IsolationLevel, Operation, OperationState, OperationType,
+    Participant, ParticipantState, SagaLog, SagaStep, SagaStepState, Transaction,
+    TransactionConfig, TransactionProtocol, TransactionResult, TransactionState,
+};
 pub use executor::ExecutionStatus; // ExecutionMetrics not exported from executor
                                    // Import from graphql module - minimal types to avoid conflicts
                                    // pub use graphql::GraphQLFederation;

@@ -11,9 +11,9 @@ use super::super::*;
 pub struct AdvancedEmotionalState {
     // Core emotional dimensions (public for access)
     // Core emotional dimensions
-    pub valence: f64,   // -1.0 (negative) to 1.0 (positive)
-    arousal: f64,   // 0.0 (calm) to 1.0 (excited)
-    dominance: f64, // 0.0 (submissive) to 1.0 (dominant)
+    pub valence: f64, // -1.0 (negative) to 1.0 (positive)
+    arousal: f64,     // 0.0 (calm) to 1.0 (excited)
+    dominance: f64,   // 0.0 (submissive) to 1.0 (dominant)
 
     // Advanced emotional features
     emotional_momentum: f64,

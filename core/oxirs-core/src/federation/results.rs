@@ -140,7 +140,7 @@ impl SparqlResultsParser {
         })?;
 
         let variables: Result<Vec<Variable>, _> =
-            results.head.vars.iter().map(|v| Variable::new(v)).collect();
+            results.head.vars.iter().map(Variable::new).collect();
 
         let variables = variables
             .map_err(|e| OxirsError::Parse(format!("Invalid variable name in results: {}", e)))?;

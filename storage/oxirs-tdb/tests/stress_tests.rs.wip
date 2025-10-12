@@ -1,0 +1,476 @@
+//! Stress Testing Suite for OxiRS TDB
+//!
+//! Beta.1 Feature: Production-Ready Stress Testing
+//!
+//! This test suite validates TDB storage behavior under extreme conditions:
+//! - High-volume triple storage operations
+//! - Concurrent transaction processing
+//! - Buffer pool pressure scenarios
+//! - Dictionary encoding at scale
+//! - Long-running database operations
+//! - Edge cases and boundary conditions
+
+use oxirs_tdb::dictionary::Term;
+use oxirs_tdb::TdbStore;
+use scirs2_core::random::Random;
+use std::sync::{Arc, Barrier};
+use std::thread;
+use std::time::{Duration, Instant};
+
+#[test]
+#[ignore] // Run with --ignored flag for stress tests
+fn stress_test_large_volume_inserts() {
+    println!("🔥 Stress Test: Large Volume Inserts");
+    const TRIPLE_COUNT: usize = 100_000;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_large_volume");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let start = Instant::now();
+    let mut store = TdbStore::open(&temp_dir).unwrap();
+
+    for i in 0..TRIPLE_COUNT {
+        let s = Term::iri(format!("http://example.org/s{}", i));
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal(format!("value{}", i));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+
+        if i % 10_000 == 0 && i > 0 {
+            println!("  ✓ Inserted {} triples in {:?}", i, start.elapsed());
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!(
+        "  ✅ Successfully inserted {} triples in {:?}",
+        TRIPLE_COUNT, elapsed
+    );
+    println!(
+        "  📊 Throughput: {:.0} triples/sec",
+        TRIPLE_COUNT as f64 / elapsed.as_secs_f64()
+    );
+
+    // Verify count
+    assert_eq!(store.count(), TRIPLE_COUNT);
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_concurrent_writers() {
+    println!("🔥 Stress Test: Concurrent Writers");
+    const WRITERS: usize = 8;
+    const TRIPLES_PER_WRITER: usize = 5_000;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_concurrent");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let start = Instant::now();
+    let store = Arc::new(parking_lot::Mutex::new(TdbStore::open(&temp_dir).unwrap()));
+    let barrier = Arc::new(Barrier::new(WRITERS));
+
+    let handles: Vec<_> = (0..WRITERS)
+        .map(|writer_id| {
+            let store = Arc::clone(&store);
+            let barrier = Arc::clone(&barrier);
+
+            thread::spawn(move || {
+                barrier.wait(); // Synchronize start
+
+                for i in 0..TRIPLES_PER_WRITER {
+                    let s = Term::iri(format!("http://example.org/w{}/s{}", writer_id, i));
+                    let p = Term::iri("http://example.org/p");
+                    let o = Term::literal(format!("Writer{} Object{}", writer_id, i));
+
+                    let mut store = store.lock();
+                    store.insert_triple(&s, &p, &o).unwrap();
+                }
+
+                println!("  ✓ Writer {} completed", writer_id);
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let elapsed = start.elapsed();
+    let total_triples = WRITERS * TRIPLES_PER_WRITER;
+
+    println!("  ✅ All {} writers completed in {:?}", WRITERS, elapsed);
+    println!("  📊 Total triples: {}", total_triples);
+    println!(
+        "  📊 Throughput: {:.0} triples/sec",
+        total_triples as f64 / elapsed.as_secs_f64()
+    );
+
+    let store = store.lock();
+    assert_eq!(store.count(), total_triples);
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_transaction_load() {
+    println!("🔥 Stress Test: Transaction Load");
+    const TRANSACTION_COUNT: usize = 1_000;
+    const TRIPLES_PER_TXN: usize = 100;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_txn");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let start = Instant::now();
+    let mut store = TdbStore::open(&temp_dir).unwrap();
+
+    for txn_id in 0..TRANSACTION_COUNT {
+        let txn = store.begin_transaction().unwrap();
+
+        for i in 0..TRIPLES_PER_TXN {
+            let s = Term::iri(format!("http://example.org/txn{}/s{}", txn_id, i));
+            let p = Term::iri("http://example.org/p");
+            let o = Term::literal(format!("Txn{} Value{}", txn_id, i));
+
+            store.insert_triple(&s, &p, &o).unwrap();
+        }
+
+        store.commit_transaction(txn).unwrap();
+
+        if txn_id % 100 == 0 && txn_id > 0 {
+            println!("  ✓ Committed {} transactions", txn_id);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    let total_triples = TRANSACTION_COUNT * TRIPLES_PER_TXN;
+
+    println!(
+        "  ✅ Committed {} transactions in {:?}",
+        TRANSACTION_COUNT, elapsed
+    );
+    println!("  📊 Total triples: {}", total_triples);
+    println!(
+        "  📊 Transaction throughput: {:.0} txn/sec",
+        TRANSACTION_COUNT as f64 / elapsed.as_secs_f64()
+    );
+
+    assert_eq!(store.count(), total_triples);
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_dictionary_encoding() {
+    println!("🔥 Stress Test: Dictionary Encoding");
+    const UNIQUE_TERMS: usize = 50_000;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_dict");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let start = Instant::now();
+    let mut store = TdbStore::open(&temp_dir).unwrap();
+
+    // Insert triples with many unique terms
+    for i in 0..UNIQUE_TERMS {
+        let s = Term::iri(format!("http://example.org/subject{}", i));
+        let p = Term::iri(format!("http://example.org/predicate{}", i % 100));
+        let o = Term::literal(format!("unique_value_{}", i));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+
+        if i % 5_000 == 0 && i > 0 {
+            println!("  ✓ Encoded {} unique terms", i);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!(
+        "  ✅ Encoded {} unique terms in {:?}",
+        UNIQUE_TERMS, elapsed
+    );
+
+    let stats = store.stats();
+    println!("  📊 Dictionary size: {}", stats.dictionary_size);
+    println!("  📊 Triple count: {}", stats.triple_count);
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_buffer_pool_pressure() {
+    println!("🔥 Stress Test: Buffer Pool Pressure");
+    const TRIPLE_COUNT: usize = 50_000;
+    const SMALL_BUFFER: usize = 100; // Small buffer to cause pressure
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_buffer");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let config = oxirs_tdb::TdbConfig::new(&temp_dir).with_buffer_pool_size(SMALL_BUFFER);
+
+    let start = Instant::now();
+    let mut store = oxirs_tdb::TdbStore::open_with_config(config).unwrap();
+
+    for i in 0..TRIPLE_COUNT {
+        let s = Term::iri(format!("http://example.org/s{}", i));
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal(format!("value{}", i));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+
+        if i % 5_000 == 0 && i > 0 {
+            println!("  ✓ Inserted {} triples (buffer pressure)", i);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!(
+        "  ✅ Survived buffer pool pressure: {} triples in {:?}",
+        TRIPLE_COUNT, elapsed
+    );
+    println!(
+        "  📊 Throughput under pressure: {:.0} triples/sec",
+        TRIPLE_COUNT as f64 / elapsed.as_secs_f64()
+    );
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_memory_intensive_values() {
+    println!("🔥 Stress Test: Memory Intensive Values");
+    const LARGE_VALUE_SIZE: usize = 10_000;
+    const TRIPLE_COUNT: usize = 5_000;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_memory");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let start = Instant::now();
+    let mut store = TdbStore::open(&temp_dir).unwrap();
+
+    for i in 0..TRIPLE_COUNT {
+        let s = Term::iri(format!("http://example.org/s{}", i));
+        let p = Term::iri("http://example.org/p");
+        let large_value = "x".repeat(LARGE_VALUE_SIZE);
+        let o = Term::literal(format!("Large: {}", large_value));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+
+        if i % 500 == 0 && i > 0 {
+            println!("  ✓ Inserted {} large triples", i);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!(
+        "  ✅ Inserted {} large triples in {:?}",
+        TRIPLE_COUNT, elapsed
+    );
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_sustained_load() {
+    println!("🔥 Stress Test: Sustained Load (30 seconds)");
+    const DURATION_SECS: u64 = 30;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_sustained");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let mut store = TdbStore::open(&temp_dir).unwrap();
+    let start = Instant::now();
+    let end_time = start + Duration::from_secs(DURATION_SECS);
+
+    let mut operation_count = 0;
+    let mut i = 0;
+
+    while Instant::now() < end_time {
+        let s = Term::iri(format!("http://example.org/s{}", i % 10_000));
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal(format!("value{}", i));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+        operation_count += 1;
+        i += 1;
+
+        if operation_count % 5_000 == 0 {
+            let elapsed = start.elapsed();
+            println!("  ✓ {} operations in {:?}", operation_count, elapsed);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!(
+        "  ✅ Sustained {} operations over {:?}",
+        operation_count, elapsed
+    );
+    println!(
+        "  📊 Average throughput: {:.0} ops/sec",
+        operation_count as f64 / elapsed.as_secs_f64()
+    );
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_compression_efficiency() {
+    println!("🔥 Stress Test: Compression Efficiency");
+    const TRIPLE_COUNT: usize = 20_000;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_compression");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let config = oxirs_tdb::TdbConfig::new(&temp_dir)
+        .with_compression(true)
+        .with_bloom_filters(true);
+
+    let start = Instant::now();
+    let mut store = oxirs_tdb::TdbStore::open_with_config(config).unwrap();
+
+    // Insert with repetitive patterns (good for compression)
+    for i in 0..TRIPLE_COUNT {
+        let s = Term::iri(format!("http://example.org/subject/{}", i % 100));
+        let p = Term::iri("http://example.org/predicate");
+        let o = Term::literal(format!("repeated_value_{}", i % 50));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+    }
+
+    let elapsed = start.elapsed();
+    println!(
+        "  ✅ Inserted {} triples with compression in {:?}",
+        TRIPLE_COUNT, elapsed
+    );
+
+    let stats = store.stats();
+    if let Some(compression_stats) = stats.compression_stats {
+        println!(
+            "  📊 Number of prefixes: {}",
+            compression_stats.num_prefixes
+        );
+        println!(
+            "  📊 Total prefix bytes saved: {}",
+            compression_stats.total_prefix_bytes
+        );
+    }
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_bloom_filter_effectiveness() {
+    println!("🔥 Stress Test: Bloom Filter Effectiveness");
+    const TRIPLE_COUNT: usize = 50_000;
+    const LOOKUP_COUNT: usize = 10_000;
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_bloom");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let config = oxirs_tdb::TdbConfig::new(&temp_dir).with_bloom_filters(true);
+
+    let mut store = oxirs_tdb::TdbStore::open_with_config(config).unwrap();
+
+    // Insert triples
+    println!("  Inserting {} triples...", TRIPLE_COUNT);
+    for i in 0..TRIPLE_COUNT {
+        let s = Term::iri(format!("http://example.org/s{}", i));
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal(format!("value{}", i));
+
+        store.insert_triple(&s, &p, &o).unwrap();
+    }
+
+    // Test lookups (mix of existing and non-existing)
+    println!("  Testing {} lookups...", LOOKUP_COUNT);
+    let start = Instant::now();
+    let mut found = 0;
+    let mut not_found = 0;
+    let mut rng = Random::default();
+
+    for _ in 0..LOOKUP_COUNT {
+        let idx = rng.random_range(0, TRIPLE_COUNT * 2); // Half won't exist
+        let s_str = format!("http://example.org/s{}", idx);
+        let p_str = "http://example.org/p";
+        let o_str = format!("value{}", idx);
+
+        if store.contains(&s_str, p_str, &o_str).unwrap_or(false) {
+            found += 1;
+        } else {
+            not_found += 1;
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Completed {} lookups in {:?}", LOOKUP_COUNT, elapsed);
+    println!("  📊 Found: {}, Not found: {}", found, not_found);
+    println!(
+        "  📊 Lookup throughput: {:.0} lookups/sec",
+        LOOKUP_COUNT as f64 / elapsed.as_secs_f64()
+    );
+
+    if let Some(bloom_stats) = store.stats().bloom_filter_stats {
+        println!(
+            "  📊 Bloom filter estimated FPR: {:.4}",
+            bloom_stats.estimated_fpr
+        );
+        println!(
+            "  📊 Bloom filter load factor: {:.2}",
+            bloom_stats.load_factor
+        );
+    }
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}
+
+#[test]
+#[ignore]
+fn stress_test_edge_cases() {
+    println!("🔥 Stress Test: Edge Cases and Boundary Conditions");
+
+    let temp_dir = std::env::temp_dir().join("oxirs_tdb_stress_edge");
+    std::fs::create_dir_all(&temp_dir).unwrap();
+
+    let mut store = TdbStore::open(&temp_dir).unwrap();
+
+    // Test 1: Empty strings
+    println!("  Testing empty/minimal values...");
+    let s1 = Term::iri("http://example.org/s");
+    let p1 = Term::iri("http://example.org/p");
+    let o1 = Term::literal("");
+    assert!(store.insert_triple(&s1, &p1, &o1).is_ok());
+
+    // Test 2: Very long IRIs
+    println!("  Testing very long IRIs...");
+    let long_iri = format!("http://example.org/{}", "x".repeat(5_000));
+    let s2 = Term::iri(long_iri);
+    let o2 = Term::literal("test");
+    assert!(store.insert_triple(&s2, &p1, &o2).is_ok());
+
+    // Test 3: Special characters
+    println!("  Testing special characters...");
+    let special = "Special: üöä 日本語 🔥 \n\r\t";
+    let o3 = Term::literal(special);
+    assert!(store.insert_triple(&s1, &p1, &o3).is_ok());
+
+    // Test 4: Many predicates on same subject
+    println!("  Testing many predicates...");
+    for i in 0..1000 {
+        let p = Term::iri(format!("http://example.org/p{}", i));
+        let o = Term::literal(format!("value{}", i));
+        store.insert_triple(&s1, &p, &o).unwrap();
+    }
+
+    println!("  ✅ All edge cases handled successfully");
+    println!("  📊 Final triple count: {}", store.count());
+
+    std::fs::remove_dir_all(&temp_dir).ok();
+}

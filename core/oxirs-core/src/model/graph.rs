@@ -32,7 +32,7 @@ use std::iter::FromIterator;
 /// );
 ///
 /// // Insert triples into the graph
-/// graph.insert(triple1);
+/// graph.insert(triple1.clone());
 /// graph.insert(triple2);
 ///
 /// // Check if graph contains a triple

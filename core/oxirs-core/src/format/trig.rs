@@ -7,8 +7,7 @@
 
 use super::error::FormatError;
 use crate::model::{
-    GraphName, Literal, NamedNode, ObjectRef,
-    PredicateRef, Quad, QuadRef, SubjectRef,
+    GraphName, Literal, NamedNode, ObjectRef, PredicateRef, Quad, QuadRef, SubjectRef,
 };
 use std::collections::{BTreeMap, HashMap};
 use std::io::Write;
@@ -340,7 +339,7 @@ impl<W: Write> super::serializer::QuadSerializer<W> for TriGWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Triple, Subject, Object, Quad};
+    use crate::model::{NamedNode, Object, Quad, Subject, Triple};
 
     #[test]
     fn test_trig_serialize_default_graph() {

@@ -77,9 +77,9 @@ fn test_bulk_insert() -> Result<()> {
     let mut triples = Vec::new();
     for i in 0..10 {
         triples.push((
-            Term::iri(&format!("http://example.org/subject{}", i)),
+            Term::iri(format!("http://example.org/subject{}", i)),
             Term::iri("http://example.org/predicate"),
-            Term::literal(&format!("value{}", i)),
+            Term::literal(format!("value{}", i)),
         ));
     }
 

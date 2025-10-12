@@ -8,19 +8,19 @@
 //!
 //! Reference: https://afs.github.io/rdf-patch/
 
-pub mod parser;
-pub mod serializer;
-pub mod context;
-pub mod result;
-pub mod conflict;
-pub mod normalizer;
 pub mod compressor;
+pub mod conflict;
+pub mod context;
+pub mod normalizer;
+pub mod parser;
+pub mod result;
+pub mod serializer;
 
 // Re-export main types
-pub use parser::PatchParser;
-pub use serializer::PatchSerializer;
-pub use context::PatchContext;
-pub use result::PatchResult;
-pub use conflict::{ConflictResolver, ConflictStrategy, ConflictResolution};
-pub use normalizer::PatchNormalizer;
 pub use compressor::PatchCompressor;
+pub use conflict::{ConflictResolution, ConflictResolver, ConflictStrategy};
+pub use context::PatchContext;
+pub use normalizer::PatchNormalizer;
+pub use parser::PatchParser;
+pub use result::PatchResult;
+pub use serializer::PatchSerializer;

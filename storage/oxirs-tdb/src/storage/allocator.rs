@@ -55,7 +55,7 @@ impl Allocator {
         // Otherwise, allocate a new page
         let mut total_guard = self.total_pages.write();
         let page_id = *total_guard;
-        
+
         // Extend bitmap if needed
         let required_words = ((page_id + 1 + BITS_PER_WORD - 1) / BITS_PER_WORD) as usize;
         let mut bitmap_guard = self.bitmap.write();
@@ -138,7 +138,10 @@ impl Allocator {
     /// Get number of allocated pages
     pub fn allocated_pages(&self) -> u64 {
         let bitmap_guard = self.bitmap.read();
-        bitmap_guard.iter().map(|word| word.count_ones() as u64).sum()
+        bitmap_guard
+            .iter()
+            .map(|word| word.count_ones() as u64)
+            .sum()
     }
 
     /// Get number of free pages
@@ -150,7 +153,7 @@ impl Allocator {
     pub fn fragmentation_ratio(&self) -> f64 {
         let free_list_len = self.free_list.read().len() as u64;
         let total_free = self.free_pages();
-        
+
         if total_free == 0 {
             0.0
         } else {
@@ -198,11 +201,11 @@ mod tests {
     #[test]
     fn test_allocator_allocate() {
         let allocator = Allocator::new();
-        
+
         let page1 = allocator.allocate().unwrap();
         assert_eq!(page1, 0);
         assert_eq!(allocator.allocated_pages(), 1);
-        
+
         let page2 = allocator.allocate().unwrap();
         assert_eq!(page2, 1);
         assert_eq!(allocator.allocated_pages(), 2);
@@ -211,17 +214,17 @@ mod tests {
     #[test]
     fn test_allocator_free_reuse() {
         let allocator = Allocator::new();
-        
+
         let page1 = allocator.allocate().unwrap();
         let page2 = allocator.allocate().unwrap();
         let page3 = allocator.allocate().unwrap();
-        
+
         assert_eq!(allocator.allocated_pages(), 3);
-        
+
         // Free page 1
         allocator.free(page1).unwrap();
         assert_eq!(allocator.allocated_pages(), 2);
-        
+
         // Allocate again should reuse page 1
         let page4 = allocator.allocate().unwrap();
         assert_eq!(page4, page1);
@@ -231,10 +234,10 @@ mod tests {
     #[test]
     fn test_allocator_is_allocated() {
         let allocator = Allocator::new();
-        
+
         let page = allocator.allocate().unwrap();
         assert!(allocator.is_allocated(page));
-        
+
         allocator.free(page).unwrap();
         assert!(!allocator.is_allocated(page));
     }
@@ -249,7 +252,7 @@ mod tests {
     #[test]
     fn test_allocator_mark_allocated() {
         let allocator = Allocator::new();
-        
+
         allocator.mark_allocated(5).unwrap();
         assert!(allocator.is_allocated(5));
         assert_eq!(allocator.allocated_pages(), 1);
@@ -258,17 +261,17 @@ mod tests {
     #[test]
     fn test_allocator_fragmentation() {
         let allocator = Allocator::new();
-        
+
         // Allocate several pages
         for _ in 0..10 {
             allocator.allocate().unwrap();
         }
-        
+
         // Free some pages
         allocator.free(2).unwrap();
         allocator.free(5).unwrap();
         allocator.free(8).unwrap();
-        
+
         let frag_ratio = allocator.fragmentation_ratio();
         assert!(frag_ratio > 0.0 && frag_ratio <= 1.0);
     }
@@ -276,39 +279,39 @@ mod tests {
     #[test]
     fn test_allocator_compact_free_list() {
         let allocator = Allocator::new();
-        
+
         for _ in 0..5 {
             allocator.allocate().unwrap();
         }
-        
+
         allocator.free(1).unwrap();
         allocator.free(1).unwrap(); // Duplicate
         allocator.free(3).unwrap();
-        
+
         assert_eq!(allocator.free_list.read().len(), 3);
-        
+
         allocator.compact_free_list();
-        
+
         assert_eq!(allocator.free_list.read().len(), 2);
     }
 
     #[test]
     fn test_allocator_large_scale() {
         let allocator = Allocator::new();
-        
+
         // Allocate 10000 pages
         let mut pages = Vec::new();
         for _ in 0..10000 {
             pages.push(allocator.allocate().unwrap());
         }
-        
+
         assert_eq!(allocator.allocated_pages(), 10000);
-        
+
         // Free every other page
         for i in (0..10000).step_by(2) {
             allocator.free(pages[i]).unwrap();
         }
-        
+
         assert_eq!(allocator.allocated_pages(), 5000);
         assert_eq!(allocator.free_pages(), 5000);
     }

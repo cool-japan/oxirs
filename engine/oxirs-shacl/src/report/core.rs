@@ -28,13 +28,13 @@ use super::{ReportConfig, ReportMetadata, ValidationSummary};
 ///
 /// // Check if data conforms to all shapes
 /// if report.conforms() {
-///     println\!("✅ Data is valid\!");
+///     println!("✅ Data is valid!");
 /// } else {
-///     println\!("❌ Found {} violations", report.violation_count());
+///     println!("❌ Found {} violations", report.violation_count());
 ///
 ///     // Print violations
 ///     for violation in report.violations() {
-///         println\!("Violation at {}: {}",
+///         println!("Violation at {}: {}",
 ///             violation.focus_node,
 ///             violation.result_message.as_deref().unwrap_or("No message")
 ///         );

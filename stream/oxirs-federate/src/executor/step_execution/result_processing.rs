@@ -1,7 +1,7 @@
 //! Result aggregation and processing functions
 
-use anyhow::Result;
 use super::super::types::*;
+use anyhow::Result;
 
 pub fn aggregate_graphql_response(
     response: &GraphQLResponse,
@@ -218,7 +218,10 @@ fn extract_sort_key(query_fragment: &str) -> Option<String> {
 }
 
 /// Apply SPARQL filters to results based on FILTER expressions
-pub(crate) fn apply_sparql_filters(results: &SparqlResults, filter_expr: &str) -> Result<SparqlResults> {
+pub(crate) fn apply_sparql_filters(
+    results: &SparqlResults,
+    filter_expr: &str,
+) -> Result<SparqlResults> {
     // Parse simple FILTER expressions like "FILTER(?price > 100)"
     let filter_expr = filter_expr.trim();
 
@@ -332,7 +335,10 @@ fn evaluate_filter_condition(binding: &SparqlBinding, condition: &FilterConditio
 }
 
 /// Perform SPARQL join operation between two result sets
-pub(crate) fn perform_sparql_join(left: &SparqlResults, right: &SparqlResults) -> Result<SparqlResults> {
+pub(crate) fn perform_sparql_join(
+    left: &SparqlResults,
+    right: &SparqlResults,
+) -> Result<SparqlResults> {
     // Find common variables between the two result sets
     let left_vars: std::collections::HashSet<_> = left.head.vars.iter().collect();
     let right_vars: std::collections::HashSet<_> = right.head.vars.iter().collect();

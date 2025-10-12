@@ -197,7 +197,7 @@ async fn test_filter_by_status() {
     let logger = Arc::new(RequestLogger::new());
 
     // Log requests with different status codes
-    let statuses = vec![200, 404, 500, 200, 503];
+    let statuses = [200, 404, 500, 200, 503];
     for (i, status) in statuses.iter().enumerate() {
         let mut entry = LogEntry::new(format!("req-{}", i), "GET".to_string(), "/test".to_string());
         entry.status_code = *status;
@@ -224,7 +224,7 @@ async fn test_filter_errors_only() {
     let logger = Arc::new(RequestLogger::new());
 
     // Log mix of successful and error requests
-    let statuses = vec![200, 404, 200, 500, 503];
+    let statuses = [200, 404, 200, 500, 503];
     for (i, status) in statuses.iter().enumerate() {
         let mut entry = LogEntry::new(format!("req-{}", i), "GET".to_string(), "/test".to_string());
         entry.status_code = *status;

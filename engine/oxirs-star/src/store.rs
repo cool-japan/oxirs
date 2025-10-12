@@ -612,9 +612,8 @@ impl StarStore {
         // Insert into core store (convert triple to quad in default graph)
         let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
         eprintln!("DEBUG: Created core quad for insertion: {core_quad:?}");
-        let mut core_store = self.core_store.write().unwrap();
-        let result =
-            CoreStore::insert_quad(&mut core_store, core_quad).map_err(StarError::CoreError);
+        let core_store = self.core_store.write().unwrap();
+        let result = CoreStore::insert_quad(&core_store, core_quad).map_err(StarError::CoreError);
         eprintln!("DEBUG: Core store insert result: {result:?}");
         result?;
 
@@ -871,12 +870,12 @@ impl StarStore {
         } else {
             // Try to remove from core store for regular triples
             eprintln!("DEBUG: Attempting to remove regular triple from core store");
-            let mut core_store = self.core_store.write().unwrap();
+            let core_store = self.core_store.write().unwrap();
             if let Ok(core_triple) = self.convert_to_core_triple(triple) {
                 eprintln!("DEBUG: Successfully converted to core triple");
                 let core_quad = oxirs_core::model::Quad::from_triple(core_triple);
                 eprintln!("DEBUG: Created core quad: {core_quad:?}");
-                match CoreStore::remove_quad(&mut core_store, &core_quad) {
+                match CoreStore::remove_quad(&core_store, &core_quad) {
                     Ok(removed) => {
                         eprintln!("DEBUG: Core store remove_quad returned: {removed}");
                         if removed {

@@ -18,12 +18,31 @@
 //! - `causality`: Causality analysis and correlation
 
 pub mod aggregation;
+pub mod joins;
+pub mod operators;
+pub mod pattern;
 pub mod processor;
+pub mod simd_ops;
 pub mod window;
 
 // Re-export commonly used types
 pub use aggregation::{AggregateFunction, AggregationManager, AggregationState};
+pub use joins::{
+    JoinCondition, JoinConfig, JoinStats, JoinType, JoinWindowStrategy, JoinedEvent, StreamJoiner,
+};
+pub use operators::{
+    DebounceOperator, DistinctOperator, FilterOperator, FlatMapOperator, MapOperator,
+    OperatorPipeline, OperatorStats, PartitionOperator, PipelineBuilder, PipelineStats,
+    ReduceOperator, StreamOperator, ThrottleOperator,
+};
+pub use pattern::{
+    Pattern, PatternMatch, PatternMatchStrategy, PatternMatcher, PatternMatcherStats,
+    StatisticalPatternType,
+};
 pub use processor::{EventProcessor, ProcessorConfig, ProcessorStats};
+pub use simd_ops::{
+    SimdAggregateResult, SimdBatchConfig, SimdBatchProcessor, SimdEventFilter, SimdProcessorStats,
+};
 pub use window::{EventWindow, Watermark, WindowConfig, WindowResult, WindowTrigger, WindowType};
 
 // TODO: The following modules would be created in subsequent refactoring steps:

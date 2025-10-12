@@ -4,9 +4,9 @@
 //! Pages are the fundamental unit of storage in TDB.
 
 use crate::error::{Result, TdbError};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Page size (4KB) - standard OS page size for efficient I/O
 pub const PAGE_SIZE: usize = 4096;
@@ -105,7 +105,7 @@ impl Page {
     pub fn new(page_id: PageId, page_type: PageType) -> Self {
         let header = PageHeader::new(page_id, page_type);
         let mut data = Box::new([0u8; PAGE_SIZE]);
-        
+
         // Write header to the first bytes
         let header_bytes = header.to_bytes();
         data[..header_bytes.len()].copy_from_slice(&header_bytes);
@@ -122,7 +122,7 @@ impl Page {
     pub fn from_bytes(bytes: &[u8; PAGE_SIZE]) -> Result<Self> {
         // Parse header
         let header = PageHeader::from_bytes(&bytes[..PAGE_HEADER_SIZE])?;
-        
+
         let mut data = Box::new([0u8; PAGE_SIZE]);
         data.copy_from_slice(bytes);
 
@@ -202,7 +202,7 @@ impl Page {
         // Update checksum
         let data_slice = &self.data[PAGE_HEADER_SIZE..];
         self.header.checksum = PageHeader::calculate_checksum(data_slice);
-        
+
         // Serialize and write header
         let header_bytes = self.header.to_bytes();
         self.data[..header_bytes.len()].copy_from_slice(&header_bytes);
@@ -299,11 +299,11 @@ mod tests {
     fn test_page_write_read() {
         let mut page = Page::new(1, PageType::BTreeLeaf);
         let data = b"Hello, TDB!";
-        
+
         page.write_at(0, data).unwrap();
         assert!(page.is_dirty());
         assert_eq!(page.used_size(), data.len());
-        
+
         let read_data = page.read_at(0, data.len()).unwrap();
         assert_eq!(read_data, data);
     }
@@ -313,17 +313,17 @@ mod tests {
         let page = Page::new(1, PageType::BTreeLeaf);
         assert_eq!(page.pin_count(), 0);
         assert!(page.can_evict());
-        
+
         page.pin();
         assert_eq!(page.pin_count(), 1);
         assert!(!page.can_evict());
-        
+
         page.pin();
         assert_eq!(page.pin_count(), 2);
-        
+
         page.unpin();
         assert_eq!(page.pin_count(), 1);
-        
+
         page.unpin();
         assert_eq!(page.pin_count(), 0);
         assert!(page.can_evict());
@@ -334,9 +334,9 @@ mod tests {
         let mut page = Page::new(1, PageType::BTreeLeaf);
         page.write_at(0, b"test data").unwrap();
         page.update_header();
-        
+
         assert!(page.verify_checksum());
-        
+
         // Corrupt data
         page.data_mut()[0] = 0xFF;
         assert!(!page.verify_checksum());
@@ -347,10 +347,10 @@ mod tests {
         let mut page = Page::new(42, PageType::Dictionary);
         page.write_at(0, b"serialization test").unwrap();
         page.update_header();
-        
+
         let bytes = page.raw_data();
         let restored = Page::from_bytes(bytes).unwrap();
-        
+
         assert_eq!(restored.page_id(), 42);
         assert_eq!(restored.page_type(), PageType::Dictionary);
         assert_eq!(restored.used_size(), 18);
@@ -360,7 +360,7 @@ mod tests {
     fn test_page_boundary_check() {
         let mut page = Page::new(1, PageType::BTreeLeaf);
         let large_data = vec![0u8; PAGE_USABLE_SIZE + 1];
-        
+
         let result = page.write_at(0, &large_data);
         assert!(result.is_err());
     }
@@ -370,7 +370,7 @@ mod tests {
         let mut page = Page::new(1, PageType::BTreeLeaf);
         page.write_at(0, b"some data").unwrap();
         assert!(page.used_size() > 0);
-        
+
         page.clear();
         assert_eq!(page.used_size(), 0);
         assert_eq!(page.free_space(), PAGE_USABLE_SIZE);

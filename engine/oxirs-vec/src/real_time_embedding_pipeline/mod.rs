@@ -21,6 +21,7 @@
 //! ## Usage
 //!
 //! ```rust,no_run
+//! # use tokio::runtime::Runtime;
 //! use oxirs_vec::real_time_embedding_pipeline::{
 //!     RealTimeEmbeddingPipeline, PipelineConfig, ConsistencyLevel
 //! };
@@ -32,9 +33,13 @@
 //!     ..Default::default()
 //! };
 //!
+//! # let runtime = Runtime::new().unwrap();
+//! # runtime.block_on(async {
 //! // Create and start pipeline
-//! let mut pipeline = RealTimeEmbeddingPipeline::new(config)?;
-//! pipeline.start().await?;
+//! let mut pipeline = RealTimeEmbeddingPipeline::new(config).unwrap();
+//! pipeline.start().await.unwrap();
+//! pipeline.stop().await.unwrap();
+//! # });
 //! ```
 
 pub mod config;

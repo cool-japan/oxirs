@@ -4,14 +4,11 @@
 //! including feature extraction, metadata parsing, and embedding generation.
 
 #[cfg(feature = "content-processing")]
-use crate::{
-    content_processing::{
-        AudioEnergyMetrics, AudioFeatures, ContentExtractionConfig, ContentLocation,
-        DocumentFormat, DocumentStructure, ExtractedAudio, ExtractedContent, ExtractedImage,
-        ExtractedVideo, FormatHandler, ImageComplexityMetrics, MotionAnalysis, MusicAnalysis,
-        PitchStatistics, ProcessingStats, SpeechAnalysis, VideoAnalysis, VideoKeyframe, VideoScene,
-    },
-    Vector,
+use crate::content_processing::{
+    AudioEnergyMetrics, AudioFeatures, ContentExtractionConfig, ContentLocation, DocumentFormat,
+    DocumentStructure, ExtractedAudio, ExtractedContent, ExtractedImage, ExtractedVideo,
+    FormatHandler, MotionAnalysis, MusicAnalysis, PitchStatistics, ProcessingStats, SpeechAnalysis,
+    VideoAnalysis,
 };
 #[cfg(feature = "content-processing")]
 use anyhow::{anyhow, Result};
@@ -338,6 +335,7 @@ fn extract_image_features(data: &[u8], config: &ContentExtractionConfig) -> Resu
         visual_features: None,
         embedding: None, // Would generate using vision model if config.generate_image_embeddings
         detected_objects: Vec::new(),
+        classification_labels: Vec::new(),
     })
 }
 

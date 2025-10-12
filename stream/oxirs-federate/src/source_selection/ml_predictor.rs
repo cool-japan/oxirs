@@ -194,7 +194,7 @@ impl MLSourcePredictor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{FederatedService, service_registry::ServiceRegistry};
+    use crate::{service_registry::ServiceRegistry, FederatedService};
 
     fn create_test_pattern(subject: &str, predicate: &str, object: &str) -> TriplePattern {
         TriplePattern {

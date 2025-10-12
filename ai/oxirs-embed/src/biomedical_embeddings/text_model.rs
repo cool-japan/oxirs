@@ -576,7 +576,9 @@ mod regex {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::biomedical_embeddings::types::{BiomedicalEntityType, BiomedicalEmbeddingConfig, BiomedicalEmbedding};
+    use crate::biomedical_embeddings::types::{
+        BiomedicalEmbedding, BiomedicalEmbeddingConfig, BiomedicalEntityType,
+    };
 
     #[test]
     fn test_biomedical_entity_type_from_iri() {

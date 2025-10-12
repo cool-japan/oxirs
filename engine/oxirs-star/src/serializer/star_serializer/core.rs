@@ -1,18 +1,18 @@
 //! Core RDF-star serialization methods
 
-use std::io::{BufWriter, Write};
-use flate2::write::GzEncoder;
-use flate2::Compression;
-use lz4_flex::frame::FrameEncoder;
-use zstd::stream::write::Encoder as ZstdEncoder;
-use tracing::{debug, span, Level};
 use super::super::config::*;
-use super::super::streaming::StreamingSerializer;
 use super::super::parallel::ParallelSerializer;
+use super::super::streaming::StreamingSerializer;
+use super::StarSerializer;
 use crate::model::{StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarConfig, StarError, StarResult};
-use super::StarSerializer;
+use flate2::write::GzEncoder;
+use flate2::Compression;
+use lz4_flex::frame::FrameEncoder;
+use std::io::{BufWriter, Write};
+use tracing::{debug, span, Level};
+use zstd::stream::write::Encoder as ZstdEncoder;
 
 impl StarSerializer {
     /// Create a new serializer with default configuration
@@ -921,4 +921,3 @@ impl StarSerializer {
         }
     }
 }
-

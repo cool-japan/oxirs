@@ -153,7 +153,7 @@ fn validate_prefix(prefix: &str) -> Result<(), PrefixError> {
     }
 
     // Must start with letter
-    if !prefix.chars().next().map_or(false, |c| c.is_alphabetic()) {
+    if !prefix.chars().next().is_some_and(|c| c.is_alphabetic()) {
         return Err(PrefixError::BadRequest(format!(
             "Invalid prefix '{}': must start with letter",
             prefix

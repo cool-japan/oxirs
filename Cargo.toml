@@ -5,7 +5,9 @@ members = [
     "server/oxirs-fuseki",
     "server/oxirs-gql",
     "engine/oxirs-arq",
+    "engine/oxirs-geosparql",
     "engine/oxirs-rule",
+    "engine/oxirs-samm",
     "engine/oxirs-shacl",
     "engine/oxirs-star",
     "engine/oxirs-ttl",
@@ -21,7 +23,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -50,22 +52,24 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.1.0-alpha.2", path = "core/oxirs-core" }
-oxirs-fuseki = { version = "0.1.0-alpha.2", path = "server/oxirs-fuseki" }
-oxirs-gql = { version = "0.1.0-alpha.2", path = "server/oxirs-gql" }
-oxirs-arq = { version = "0.1.0-alpha.2", path = "engine/oxirs-arq" }
-oxirs-rule = { version = "0.1.0-alpha.2", path = "engine/oxirs-rule" }
-oxirs-shacl = { version = "0.1.0-alpha.2", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.1.0-alpha.2", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.1.0-alpha.2", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.1.0-alpha.2", path = "engine/oxirs-vec" }
-oxirs-tdb = { version = "0.1.0-alpha.2", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.1.0-alpha.2", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.1.0-alpha.2", path = "stream/oxirs-stream" }
-oxirs-federate = { version = "0.1.0-alpha.2", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.1.0-alpha.2", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.1.0-alpha.2", path = "ai/oxirs-shacl-ai" }
-oxirs-chat = { version = "0.1.0-alpha.2", path = "ai/oxirs-chat" }
+oxirs-core = { version = "0.1.0-alpha.3", path = "core/oxirs-core" }
+oxirs-fuseki = { version = "0.1.0-alpha.3", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.1.0-alpha.3", path = "server/oxirs-gql" }
+oxirs-arq = { version = "0.1.0-alpha.3", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.1.0-alpha.3", path = "engine/oxirs-geosparql" }
+oxirs-rule = { version = "0.1.0-alpha.3", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.1.0-alpha.3", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.1.0-alpha.3", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.1.0-alpha.3", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.1.0-alpha.3", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.1.0-alpha.3", path = "engine/oxirs-vec" }
+oxirs-tdb = { version = "0.1.0-alpha.3", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.1.0-alpha.3", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.1.0-alpha.3", path = "stream/oxirs-stream" }
+oxirs-federate = { version = "0.1.0-alpha.3", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.1.0-alpha.3", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.1.0-alpha.3", path = "ai/oxirs-shacl-ai" }
+oxirs-chat = { version = "0.1.0-alpha.3", path = "ai/oxirs-chat" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations

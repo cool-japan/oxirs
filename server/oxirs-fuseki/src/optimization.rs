@@ -729,6 +729,7 @@ mod tests {
                 idle_timeout_secs: 300,
                 max_lifetime_secs: 3600,
             },
+            rate_limiting: None,
         };
 
         QueryOptimizer::new(config).unwrap()

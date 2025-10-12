@@ -371,6 +371,200 @@ impl TurtleSerializer {
     }
 }
 
+/// Prometheus metrics serializer for validation reports
+/// Exports validation metrics in Prometheus text format for monitoring systems
+pub struct PrometheusSerializer {
+    config: ReportConfig,
+}
+
+impl PrometheusSerializer {
+    pub fn new(config: ReportConfig) -> Self {
+        Self { config }
+    }
+
+    pub fn serialize(&self, report: &ValidationReport) -> Result<String> {
+        let mut metrics = String::new();
+
+        // HELP and TYPE declarations for each metric
+        metrics.push_str(
+            "# HELP shacl_validation_conforms Whether the validation passed (1) or failed (0)\n",
+        );
+        metrics.push_str("# TYPE shacl_validation_conforms gauge\n");
+        metrics.push_str(&format!(
+            "shacl_validation_conforms {}\n\n",
+            if report.conforms { 1 } else { 0 }
+        ));
+
+        metrics.push_str(
+            "# HELP shacl_validation_violations_total Total number of validation violations\n",
+        );
+        metrics.push_str("# TYPE shacl_validation_violations_total counter\n");
+        metrics.push_str(&format!(
+            "shacl_validation_violations_total {}\n\n",
+            report.violation_count()
+        ));
+
+        // Violations by severity
+        metrics.push_str("# HELP shacl_validation_violations_by_severity Number of violations by severity level\n");
+        metrics.push_str("# TYPE shacl_validation_violations_by_severity gauge\n");
+        metrics.push_str(&format!(
+            "shacl_validation_violations_by_severity{{severity=\"violation\"}} {}\n",
+            report.summary.error_count()
+        ));
+        metrics.push_str(&format!(
+            "shacl_validation_violations_by_severity{{severity=\"warning\"}} {}\n",
+            report.summary.warning_count()
+        ));
+        metrics.push_str(&format!(
+            "shacl_validation_violations_by_severity{{severity=\"info\"}} {}\n\n",
+            report.summary.info_count()
+        ));
+
+        // Success rate
+        metrics.push_str("# HELP shacl_validation_success_rate Percentage of successful validations (0.0 to 1.0)\n");
+        metrics.push_str("# TYPE shacl_validation_success_rate gauge\n");
+        metrics.push_str(&format!(
+            "shacl_validation_success_rate {:.6}\n\n",
+            report.summary.success_rate
+        ));
+
+        // Quality score
+        metrics.push_str(
+            "# HELP shacl_validation_quality_score Overall validation quality score (0.0 to 1.0)\n",
+        );
+        metrics.push_str("# TYPE shacl_validation_quality_score gauge\n");
+        metrics.push_str(&format!(
+            "shacl_validation_quality_score {:.6}\n\n",
+            report.summary.quality_score()
+        ));
+
+        // Validation duration if available
+        if let Some(duration) = report.metadata.validation_duration {
+            metrics.push_str(
+                "# HELP shacl_validation_duration_seconds Duration of validation in seconds\n",
+            );
+            metrics.push_str("# TYPE shacl_validation_duration_seconds gauge\n");
+            metrics.push_str(&format!(
+                "shacl_validation_duration_seconds {:.6}\n\n",
+                duration.as_secs_f64()
+            ));
+        }
+
+        // Shape validation counts
+        metrics.push_str("# HELP shacl_validation_shapes_total Total number of shapes validated\n");
+        metrics.push_str("# TYPE shacl_validation_shapes_total counter\n");
+        metrics.push_str(&format!(
+            "shacl_validation_shapes_total {}\n\n",
+            report.summary.shapes_validated
+        ));
+
+        // Total violations across all constraint types
+        metrics.push_str("# HELP shacl_validation_constraints_total Total number of constraint violations checked\n");
+        metrics.push_str("# TYPE shacl_validation_constraints_total counter\n");
+        metrics.push_str(&format!(
+            "shacl_validation_constraints_total {}\n\n",
+            report.summary.violations_by_component.len()
+        ));
+
+        // Violations per shape (top violating shapes)
+        if self.config.include_details {
+            metrics.push_str(
+                "# HELP shacl_validation_violations_per_shape Number of violations per shape\n",
+            );
+            metrics.push_str("# TYPE shacl_validation_violations_per_shape gauge\n");
+
+            use std::collections::HashMap;
+            let mut shape_violations: HashMap<String, usize> = HashMap::new();
+
+            for violation in &report.violations {
+                *shape_violations
+                    .entry(violation.source_shape.to_string())
+                    .or_insert(0) += 1;
+            }
+
+            // Limit to top shapes if configured
+            let max_shapes = self.config.max_violations.unwrap_or(usize::MAX).min(50);
+            let mut sorted_shapes: Vec<_> = shape_violations.iter().collect();
+            sorted_shapes.sort_by(|a, b| b.1.cmp(a.1));
+
+            for (shape, count) in sorted_shapes.iter().take(max_shapes) {
+                let escaped_shape = Self::escape_label_value(shape);
+                metrics.push_str(&format!(
+                    "shacl_validation_violations_per_shape{{shape=\"{}\"}} {}\n",
+                    escaped_shape, count
+                ));
+            }
+            metrics.push('\n');
+        }
+
+        // Violations per constraint component
+        if self.config.include_details {
+            metrics.push_str("# HELP shacl_validation_violations_per_constraint Number of violations per constraint type\n");
+            metrics.push_str("# TYPE shacl_validation_violations_per_constraint gauge\n");
+
+            use std::collections::HashMap;
+            let mut constraint_violations: HashMap<String, usize> = HashMap::new();
+
+            for violation in &report.violations {
+                *constraint_violations
+                    .entry(violation.source_constraint_component.to_string())
+                    .or_insert(0) += 1;
+            }
+
+            for (constraint, count) in constraint_violations.iter() {
+                let escaped_constraint = Self::escape_label_value(constraint);
+                metrics.push_str(&format!(
+                    "shacl_validation_violations_per_constraint{{constraint=\"{}\"}} {}\n",
+                    escaped_constraint, count
+                ));
+            }
+            metrics.push('\n');
+        }
+
+        // Performance metrics if available
+        if report.metadata.has_performance_data() {
+            if let Some(nodes_validated) = report.metadata.metadata.get("nodes_validated") {
+                if let Ok(count) = nodes_validated.parse::<usize>() {
+                    metrics.push_str("# HELP shacl_validation_nodes_validated_total Total number of nodes validated\n");
+                    metrics.push_str("# TYPE shacl_validation_nodes_validated_total counter\n");
+                    metrics.push_str(&format!(
+                        "shacl_validation_nodes_validated_total {}\n\n",
+                        count
+                    ));
+                }
+            }
+
+            if let Some(cache_hit_rate) = report.metadata.metadata.get("cache_hit_rate") {
+                if let Ok(rate) = cache_hit_rate.parse::<f64>() {
+                    metrics.push_str(
+                        "# HELP shacl_validation_cache_hit_rate Cache hit rate (0.0 to 1.0)\n",
+                    );
+                    metrics.push_str("# TYPE shacl_validation_cache_hit_rate gauge\n");
+                    metrics.push_str(&format!("shacl_validation_cache_hit_rate {:.6}\n\n", rate));
+                }
+            }
+        }
+
+        // Timestamp of validation
+        metrics.push_str("# HELP shacl_validation_timestamp_seconds Unix timestamp when validation was performed\n");
+        metrics.push_str("# TYPE shacl_validation_timestamp_seconds gauge\n");
+        metrics.push_str(&format!(
+            "shacl_validation_timestamp_seconds {}\n\n",
+            report.metadata.timestamp
+        ));
+
+        Ok(metrics)
+    }
+
+    /// Escape label values for Prometheus format
+    fn escape_label_value(value: &str) -> String {
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,5 +605,38 @@ mod tests {
         let turtle = result.unwrap();
         assert!(turtle.contains("@prefix sh:"));
         assert!(turtle.contains("sh:ValidationReport"));
+    }
+
+    #[test]
+    fn test_prometheus_serializer() {
+        let report = ValidationReport::new();
+        let config = ReportConfig::default();
+        let serializer = PrometheusSerializer::new(config);
+
+        let result = serializer.serialize(&report);
+        assert!(result.is_ok());
+        let metrics = result.unwrap();
+        assert!(metrics.contains("# HELP shacl_validation_conforms"));
+        assert!(metrics.contains("# TYPE shacl_validation_conforms gauge"));
+        assert!(metrics.contains("shacl_validation_conforms 1"));
+        assert!(metrics.contains("shacl_validation_violations_total 0"));
+        assert!(metrics.contains("shacl_validation_success_rate"));
+        assert!(metrics.contains("shacl_validation_quality_score"));
+    }
+
+    #[test]
+    fn test_prometheus_escape_label_value() {
+        assert_eq!(
+            PrometheusSerializer::escape_label_value("test\\value"),
+            "test\\\\value"
+        );
+        assert_eq!(
+            PrometheusSerializer::escape_label_value("test\"value"),
+            "test\\\"value"
+        );
+        assert_eq!(
+            PrometheusSerializer::escape_label_value("test\nvalue"),
+            "test\\nvalue"
+        );
     }
 }

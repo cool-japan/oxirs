@@ -143,9 +143,130 @@ impl JoinAlgorithmSelector {
                 OptimalJoinAlgorithm::HashJoin
             };
 
-        // TODO: Validate with cost model and potentially override
-        // For now, return the rule-based selection
-        Ok(candidate_algorithm)
+        // Validate with cost model and potentially override if significant improvement
+        let final_algorithm = self.validate_with_cost_model(candidate_algorithm, join_info)?;
+
+        Ok(final_algorithm)
+    }
+
+    /// Validate candidate algorithm with cost model
+    ///
+    /// Calculates costs for all applicable algorithms and overrides the candidate
+    /// if the cost model suggests a significantly better alternative (>20% improvement).
+    fn validate_with_cost_model(
+        &self,
+        candidate: OptimalJoinAlgorithm,
+        join_info: &JoinCharacteristics,
+    ) -> Result<OptimalJoinAlgorithm> {
+        // Calculate cost for all applicable algorithms
+        let mut algorithm_costs = Vec::new();
+
+        // Hash Join cost
+        let hash_join_cost = self.estimate_hash_join_cost(join_info);
+        algorithm_costs.push((OptimalJoinAlgorithm::HashJoin, hash_join_cost));
+
+        // Sort-Merge Join cost
+        let sort_merge_cost = self.estimate_sort_merge_cost(join_info);
+        algorithm_costs.push((OptimalJoinAlgorithm::SortMergeJoin, sort_merge_cost));
+
+        // Nested Loop Join cost (only for small inputs)
+        if join_info.left_cardinality < 10000 && join_info.right_cardinality < 10000 {
+            let nested_loop_cost = self.estimate_nested_loop_cost(join_info);
+            algorithm_costs.push((OptimalJoinAlgorithm::NestedLoopJoin, nested_loop_cost));
+        }
+
+        // Find minimum cost algorithm
+        let (optimal_algorithm, optimal_cost) = algorithm_costs
+            .iter()
+            .min_by(|(_, cost1), (_, cost2)| {
+                cost1
+                    .partial_cmp(cost2)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .copied()
+            .unwrap_or((candidate, f64::MAX));
+
+        // Get candidate cost
+        let candidate_cost = algorithm_costs
+            .iter()
+            .find(|(algo, _)| *algo == candidate)
+            .map(|(_, cost)| *cost)
+            .unwrap_or(optimal_cost);
+
+        // Override if cost model suggests >20% improvement
+        let improvement_threshold = 0.20;
+        if optimal_cost < candidate_cost * (1.0 - improvement_threshold) {
+            tracing::debug!(
+                "Cost model override: {:?} -> {:?} (cost: {:.2} -> {:.2}, {:.1}% improvement)",
+                candidate,
+                optimal_algorithm,
+                candidate_cost,
+                optimal_cost,
+                (candidate_cost - optimal_cost) / candidate_cost * 100.0
+            );
+            Ok(optimal_algorithm)
+        } else {
+            // Stick with rule-based selection
+            Ok(candidate)
+        }
+    }
+
+    /// Estimate cost of hash join
+    fn estimate_hash_join_cost(&self, join_info: &JoinCharacteristics) -> f64 {
+        // Cost model: build phase + probe phase
+        // Build: scan smaller relation and build hash table
+        // Probe: scan larger relation and probe hash table
+        let build_cost = join_info.left_cardinality.min(join_info.right_cardinality) as f64;
+        let probe_cost = join_info.left_cardinality.max(join_info.right_cardinality) as f64;
+
+        // Hash table lookup cost (assume O(1) average case)
+        let lookup_cost = probe_cost;
+
+        // Output cost
+        let output_cost = (join_info.left_cardinality as f64
+            * join_info.right_cardinality as f64
+            * join_info.estimated_selectivity)
+            .max(1.0);
+
+        build_cost + lookup_cost + output_cost
+    }
+
+    /// Estimate cost of sort-merge join
+    fn estimate_sort_merge_cost(&self, join_info: &JoinCharacteristics) -> f64 {
+        // Cost model: sort both relations + merge
+        let left_sort_cost = if join_info.left_sorted {
+            0.0
+        } else {
+            join_info.left_cardinality as f64 * (join_info.left_cardinality as f64).log2()
+        };
+
+        let right_sort_cost = if join_info.right_sorted {
+            0.0
+        } else {
+            join_info.right_cardinality as f64 * (join_info.right_cardinality as f64).log2()
+        };
+
+        // Merge cost: linear scan of both sorted relations
+        let merge_cost = (join_info.left_cardinality + join_info.right_cardinality) as f64;
+
+        // Output cost
+        let output_cost = (join_info.left_cardinality as f64
+            * join_info.right_cardinality as f64
+            * join_info.estimated_selectivity)
+            .max(1.0);
+
+        left_sort_cost + right_sort_cost + merge_cost + output_cost
+    }
+
+    /// Estimate cost of nested loop join
+    fn estimate_nested_loop_cost(&self, join_info: &JoinCharacteristics) -> f64 {
+        // Cost model: for each tuple in left, scan all tuples in right
+        let scan_cost = join_info.left_cardinality as f64 * join_info.right_cardinality as f64;
+
+        // Output cost
+        let output_cost = scan_cost * join_info.estimated_selectivity;
+
+        scan_cost + output_cost
     }
 
     /// Estimate number of distinct values in join columns

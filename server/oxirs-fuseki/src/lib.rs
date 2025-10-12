@@ -1,10 +1,10 @@
 //! # OxiRS Fuseki - SPARQL HTTP Server
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-fuseki/badge.svg)](https://docs.rs/oxirs-fuseki)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Alpha Release (v0.1.0-alpha.3) - Beta.1 Features Complete
+//! ⚠️ APIs may change. Production hardening in progress.
 //!
 //! SPARQL 1.1/1.2 HTTP protocol server with Apache Fuseki compatibility.
 //! Provides a production-ready HTTP interface for RDF data with query and update operations.
@@ -59,6 +59,7 @@ pub mod metrics;
 pub mod middleware;
 pub mod optimization;
 pub mod performance;
+pub mod production; // Production hardening features (Beta.1)
 pub mod property_path_optimizer;
 pub mod server;
 pub mod store;

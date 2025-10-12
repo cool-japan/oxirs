@@ -1,0 +1,38 @@
+@prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.1.0#> .
+@prefix samm-c: <urn:samm:org.eclipse.esmf.samm:characteristic:2.1.0#> .
+@prefix samm-e: <urn:samm:org.eclipse.esmf.samm:entity:2.1.0#> .
+@prefix unit: <urn:samm:org.eclipse.esmf.samm:unit:2.1.0#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:aas:submodel:movement:1#Movement> a samm:Aspect ;
+  samm:preferredName "Movement"@en ;
+  samm:preferredName "Movement"@de ;
+  samm:description "Bewegungsverfolgung-Submodell für digitalen Zwilling"@de ;
+  samm:description "Movement tracking submodel for digital twin"@en ;
+  samm:properties (<urn:aas:property#speed> <urn:aas:property#position> <urn:aas:property#isMoving>) .
+
+<urn:aas:property#speed> a samm:Property ;
+  samm:preferredName "speed"@en ;
+  samm:description "Current speed in kilometers per hour"@en ;
+  samm:characteristic <urn:aas:characteristic#speedCharacteristic> .
+
+<urn:aas:characteristic#speedCharacteristic> a samm-c:Trait ;
+  samm:dataType <xsd:float> .
+
+<urn:aas:property#position> a samm:Property ;
+  samm:preferredName "position"@en ;
+  samm:description "Current GPS position"@en ;
+  samm:characteristic <urn:aas:characteristic#positionCharacteristic> .
+
+<urn:aas:characteristic#positionCharacteristic> a samm-c:Trait ;
+  samm:dataType <xsd:string> .
+
+<urn:aas:property#isMoving> a samm:Property ;
+  samm:preferredName "isMoving"@en ;
+  samm:description "Indicates whether the asset is currently moving"@en ;
+  samm:characteristic <urn:aas:characteristic#isMovingCharacteristic> .
+
+<urn:aas:characteristic#isMovingCharacteristic> a samm-c:Trait ;
+  samm:dataType <xsd:boolean> .

@@ -38,11 +38,7 @@ fn parse_accept_header(accept: &str) -> Vec<(String, f32)> {
             let quality = segments
                 .find_map(|seg| {
                     let seg = seg.trim();
-                    if seg.starts_with("q=") {
-                        seg[2..].parse::<f32>().ok()
-                    } else {
-                        None
-                    }
+                    seg.strip_prefix("q=").and_then(|s| s.parse::<f32>().ok())
                 })
                 .unwrap_or(1.0);
 

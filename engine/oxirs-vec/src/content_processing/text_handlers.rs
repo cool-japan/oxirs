@@ -413,7 +413,7 @@ impl MarkdownHandler {
                 .unwrap()
                 .captures(line)
             {
-                let level = captures[1].len() as u32;
+                let level = captures[1].len();
                 let text = captures[2].to_string();
 
                 headings.push(Heading {
@@ -423,7 +423,7 @@ impl MarkdownHandler {
                         page: None,
                         section: Some(i),
                         char_offset: None,
-                        line: Some(i as u32),
+                        line: Some(i),
                         column: None,
                     },
                 });

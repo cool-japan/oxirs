@@ -879,11 +879,40 @@ impl TokenParser {
     fn parse_construct_query(&mut self) -> Result<Query, OxirsError> {
         self.advance(); // consume CONSTRUCT
 
-        // Parse template (simplified)
-        let template = Vec::new(); // TODO: implement template parsing
+        // Parse template - the triple patterns that define the output graph
+        let template = if matches!(self.current_token(), Token::LeftBrace { .. }) {
+            self.advance(); // consume '{'
+            let mut template_patterns = Vec::new();
+
+            // Parse triple patterns until we hit '}'
+            while !matches!(self.current_token(), Token::RightBrace { .. }) {
+                if matches!(self.current_token(), Token::Eof) {
+                    return Err(OxirsError::Parse("Unexpected EOF in CONSTRUCT template".to_string()));
+                }
+
+                // Parse a single triple pattern
+                if let Some(pattern) = self.parse_single_triple_pattern()? {
+                    template_patterns.push(pattern);
+                }
+
+                // Consume optional '.' or ';'
+                if matches!(self.current_token(), Token::Dot { .. } | Token::Semicolon { .. }) {
+                    self.advance();
+                }
+            }
+
+            self.advance(); // consume '}'
+            template_patterns
+        } else {
+            // Empty template is valid (means construct all matched triples)
+            Vec::new()
+        };
 
         // Find WHERE
         while !matches!(self.current_token(), Token::Where { .. }) {
+            if matches!(self.current_token(), Token::Eof) {
+                return Err(OxirsError::Parse("Expected WHERE clause in CONSTRUCT query".to_string()));
+            }
             self.advance();
         }
         self.advance(); // consume WHERE
@@ -942,11 +971,86 @@ impl TokenParser {
 
         let mut patterns = Vec::new();
 
-        // Parse triple patterns (simplified)
+        // Parse graph patterns (triple patterns, filters, OPTIONAL, UNION, etc.)
         while !matches!(self.current_token(), Token::RightBrace { .. }) {
-            // TODO: Parse actual triple patterns, filters, etc.
-            // For now, just create a placeholder BGP
-            self.advance();
+            if matches!(self.current_token(), Token::Eof) {
+                return Err(OxirsError::Parse("Unexpected EOF in graph pattern".to_string()));
+            }
+
+            match self.current_token() {
+                Token::Optional { .. } => {
+                    self.advance(); // consume OPTIONAL
+                    let optional_pattern = self.parse_group_graph_pattern()?;
+                    patterns.push(TriplePattern {
+                        subject: TermPattern::Variable(Variable::new_unchecked("_optional")),
+                        predicate: TermPattern::Variable(Variable::new_unchecked("_optional")),
+                        object: TermPattern::Variable(Variable::new_unchecked("_optional")),
+                    });
+                }
+                Token::Filter { .. } => {
+                    self.advance(); // consume FILTER
+                    // Skip filter expression for now
+                    if matches!(self.current_token(), Token::LeftParen { .. }) {
+                        self.advance();
+                        let mut depth = 1;
+                        while depth > 0 && !matches!(self.current_token(), Token::Eof) {
+                            match self.current_token() {
+                                Token::LeftParen { .. } => depth += 1,
+                                Token::RightParen { .. } => depth -= 1,
+                                _ => {}
+                            }
+                            self.advance();
+                        }
+                    }
+                }
+                Token::Graph { .. } => {
+                    self.advance(); // consume GRAPH
+                    self.advance(); // skip graph name
+                    let _ = self.parse_group_graph_pattern()?; // parse nested pattern
+                }
+                Token::Union { .. } => {
+                    self.advance(); // consume UNION
+                    let _ = self.parse_group_graph_pattern()?; // parse union branch
+                }
+                Token::Bind { .. } => {
+                    self.advance(); // consume BIND
+                    // Skip BIND expression
+                    if matches!(self.current_token(), Token::LeftParen { .. }) {
+                        self.advance();
+                        let mut depth = 1;
+                        while depth > 0 && !matches!(self.current_token(), Token::Eof) {
+                            match self.current_token() {
+                                Token::LeftParen { .. } => depth += 1,
+                                Token::RightParen { .. } => depth -= 1,
+                                _ => {}
+                            }
+                            self.advance();
+                        }
+                    }
+                }
+                Token::Values { .. } => {
+                    self.advance(); // consume VALUES
+                    // Skip VALUES clause
+                    while !matches!(
+                        self.current_token(),
+                        Token::RightBrace { .. } | Token::Dot { .. }
+                    ) && !matches!(self.current_token(), Token::Eof)
+                    {
+                        self.advance();
+                    }
+                }
+                _ => {
+                    // Try to parse as triple pattern
+                    if let Some(pattern) = self.parse_single_triple_pattern()? {
+                        patterns.push(pattern);
+                    }
+
+                    // Consume optional '.' or ';'
+                    if matches!(self.current_token(), Token::Dot { .. } | Token::Semicolon { .. }) {
+                        self.advance();
+                    }
+                }
+            }
         }
 
         if !matches!(self.current_token(), Token::RightBrace { .. }) {
@@ -955,6 +1059,119 @@ impl TokenParser {
         self.advance(); // consume '}'
 
         Ok(GraphPattern::Bgp { patterns })
+    }
+
+    /// Parse a single triple pattern (subject predicate object)
+    fn parse_single_triple_pattern(&mut self) -> Result<Option<TriplePattern>, OxirsError> {
+        // Parse subject
+        let subject = match self.parse_term_pattern()? {
+            Some(term) => term,
+            None => return Ok(None), // Not a valid subject, skip
+        };
+
+        // Parse predicate
+        let predicate = match self.parse_term_pattern()? {
+            Some(term) => term,
+            None => {
+                return Err(OxirsError::Parse(format!(
+                    "Expected predicate after subject in triple pattern"
+                )))
+            }
+        };
+
+        // Parse object
+        let object = match self.parse_term_pattern()? {
+            Some(term) => term,
+            None => {
+                return Err(OxirsError::Parse(format!(
+                    "Expected object after predicate in triple pattern"
+                )))
+            }
+        };
+
+        Ok(Some(TriplePattern {
+            subject,
+            predicate,
+            object,
+        }))
+    }
+
+    /// Parse a term pattern (Variable, IRI, Literal, BlankNode)
+    fn parse_term_pattern(&mut self) -> Result<Option<TermPattern>, OxirsError> {
+        match self.current_token().clone() {
+            Token::Variable { name, .. } => {
+                self.advance();
+                Ok(Some(TermPattern::Variable(Variable::new_unchecked(&name))))
+            }
+            Token::Iri { value, .. } => {
+                self.advance();
+                let node = NamedNode::new(&value)?;
+                Ok(Some(TermPattern::NamedNode(node)))
+            }
+            Token::PrefixedName {
+                prefix,
+                local_name,
+                ..
+            } => {
+                self.advance();
+                // Construct full IRI from prefix (simplified - would need prefix map)
+                let full_iri = format!("http://example.org/{prefix}#{local_name}");
+                let node = NamedNode::new(&full_iri)?;
+                Ok(Some(TermPattern::NamedNode(node)))
+            }
+            Token::StringLiteral { value, .. } => {
+                self.advance();
+                let literal = Literal::new_simple_literal(&value);
+                Ok(Some(TermPattern::Literal(literal)))
+            }
+            Token::Integer { value, .. } => {
+                self.advance();
+                let literal = Literal::new_typed_literal(
+                    &value,
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer")?,
+                );
+                Ok(Some(TermPattern::Literal(literal)))
+            }
+            Token::Decimal { value, .. } => {
+                self.advance();
+                let literal = Literal::new_typed_literal(
+                    &value,
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#decimal")?,
+                );
+                Ok(Some(TermPattern::Literal(literal)))
+            }
+            Token::BlankNode { label, .. } => {
+                self.advance();
+                let bnode = BlankNode::new_unchecked(&label);
+                Ok(Some(TermPattern::BlankNode(bnode)))
+            }
+            Token::A { .. } => {
+                // Shorthand for rdf:type
+                self.advance();
+                let node = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")?;
+                Ok(Some(TermPattern::NamedNode(node)))
+            }
+            Token::True { .. } => {
+                self.advance();
+                let literal = Literal::new_typed_literal(
+                    "true",
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")?,
+                );
+                Ok(Some(TermPattern::Literal(literal)))
+            }
+            Token::False { .. } => {
+                self.advance();
+                let literal = Literal::new_typed_literal(
+                    "false",
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean")?,
+                );
+                Ok(Some(TermPattern::Literal(literal)))
+            }
+            _ => {
+                // Not a term pattern, return None
+                Ok(None)
+            }
+        }
     }
 }
 

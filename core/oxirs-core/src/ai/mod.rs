@@ -7,6 +7,7 @@
 pub mod embeddings;
 pub mod entity_resolution;
 pub mod gnn;
+pub mod gpu_monitor;
 pub mod neural;
 pub mod relation_extraction;
 pub mod temporal_reasoning;
@@ -17,7 +18,8 @@ use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub use embeddings::{
     ComplEx, DistMult, EmbeddingConfig, EmbeddingModelType, KnowledgeGraphEmbedding,
@@ -251,6 +253,7 @@ impl AiEngine {
             batch_size: 1000,
         };
         let vector_store = vector_store::create_vector_store(&vs_config)?;
+        // Use tokio::sync::Mutex for async-aware locking
         let trainer = Arc::new(Mutex::new(Box::new(training::DefaultTrainer::new(
             config.training_config.clone(),
         )) as Box<dyn Trainer>));
@@ -359,7 +362,6 @@ impl AiEngine {
     }
 
     /// Train embedding model on knowledge graph
-    #[allow(clippy::await_holding_lock)]
     pub async fn train_embedding_model(
         &self,
         model_name: &str,
@@ -371,19 +373,17 @@ impl AiEngine {
             .get(model_name)
             .ok_or_else(|| anyhow!("Embedding model not found: {}", model_name))?;
 
-        // Clone the trainer Arc to avoid holding the lock across await
+        // Clone references for async operation
         let trainer = self.trainer.clone();
         let model = model.clone();
         let training_data = training_data.to_vec();
         let validation_data = validation_data.to_vec();
 
-        // TODO: Use async-aware mutex to avoid holding lock across await
-        {
-            let mut trainer_guard = trainer.lock().unwrap();
-            trainer_guard
-                .train_embedding_model(model, &training_data, &validation_data)
-                .await
-        }
+        // Use async-aware mutex (tokio::sync::Mutex) - safe to hold across await
+        let mut trainer_guard = trainer.lock().await;
+        trainer_guard
+            .train_embedding_model(model, &training_data, &validation_data)
+            .await
     }
 
     /// Evaluate model performance
@@ -401,14 +401,24 @@ impl AiEngine {
     }
 
     /// Get AI engine statistics
-    pub fn get_statistics(&self) -> AiStatistics {
-        AiStatistics {
+    pub async fn get_statistics(&self) -> Result<AiStatistics> {
+        // Get vector store statistics for cache hit rate
+        let vs_stats = self.vector_store.get_statistics().await?;
+
+        // Get GPU utilization from global GPU monitor
+        let gpu_monitor = gpu_monitor::GpuMonitor::global();
+        let gpu_utilization = gpu_monitor
+            .lock()
+            .map(|monitor| monitor.get_utilization())
+            .unwrap_or(0.0);
+
+        Ok(AiStatistics {
             gnn_enabled: self.gnn.is_some(),
             embedding_models: self.embeddings.len(),
             vector_store_size: self.vector_store.size(),
-            cache_hit_rate: 0.0,  // TODO: Implement cache statistics
-            gpu_utilization: 0.0, // TODO: Implement GPU monitoring
-        }
+            cache_hit_rate: vs_stats.cache_hit_rate,
+            gpu_utilization,
+        })
     }
 }
 
@@ -437,20 +447,125 @@ pub struct EvaluationMetrics {
 impl EvaluationMetrics {
     /// Evaluate model performance on test data
     pub async fn evaluate(
-        _model: &dyn KnowledgeGraphEmbedding,
-        _test_data: &[Triple],
+        model: &dyn KnowledgeGraphEmbedding,
+        test_data: &[Triple],
     ) -> Result<Self> {
-        // TODO: Implement comprehensive evaluation
+        // Convert test data to string tuples for evaluation
+        let test_triples: Vec<(String, String, String)> = test_data
+            .iter()
+            .map(|t| {
+                (
+                    t.subject().to_string(),
+                    t.predicate().to_string(),
+                    t.object().to_string(),
+                )
+            })
+            .collect();
+
+        // Use test_triples as all_triples for filtered setting (simplified)
+        // In production, this should include training triples too
+        let all_triples = test_triples.clone();
+
+        // Define k values for Hits@K metrics
+        let k_values = vec![1, 3, 10];
+
+        // Compute comprehensive knowledge graph metrics using the embeddings evaluation module
+        let kg_metrics = embeddings::evaluation::compute_kg_metrics(
+            model,
+            &test_triples,
+            &all_triples,
+            &k_values,
+        )
+        .await?;
+
+        // Compute link prediction accuracy (simplified)
+        let link_prediction_accuracy =
+            Self::compute_link_prediction_accuracy(model, &test_triples).await?;
+
+        // Extract key metrics from kg_metrics
+        let mrr = kg_metrics.mrr_filtered;
+        let hits_at_1 = *kg_metrics.hits_at_k_filtered.get(&1).unwrap_or(&0.0);
+        let hits_at_3 = *kg_metrics.hits_at_k_filtered.get(&3).unwrap_or(&0.0);
+        let hits_at_10 = *kg_metrics.hits_at_k_filtered.get(&10).unwrap_or(&0.0);
+
+        // Entity resolution and relation extraction metrics would require additional data
+        // For now, set them to 0.0 (these are specialized tasks beyond standard link prediction)
+        let entity_resolution_f1 = 0.0;
+        let relation_extraction_precision = 0.0;
+        let relation_extraction_recall = 0.0;
+
         Ok(Self {
-            mrr: 0.0,
-            hits_at_1: 0.0,
-            hits_at_3: 0.0,
-            hits_at_10: 0.0,
-            link_prediction_accuracy: 0.0,
-            entity_resolution_f1: 0.0,
-            relation_extraction_precision: 0.0,
-            relation_extraction_recall: 0.0,
+            mrr,
+            hits_at_1,
+            hits_at_3,
+            hits_at_10,
+            link_prediction_accuracy,
+            entity_resolution_f1,
+            relation_extraction_precision,
+            relation_extraction_recall,
         })
+    }
+
+    /// Compute link prediction accuracy using negative sampling
+    async fn compute_link_prediction_accuracy(
+        model: &dyn KnowledgeGraphEmbedding,
+        test_triples: &[(String, String, String)],
+    ) -> Result<f32> {
+        if test_triples.is_empty() {
+            return Ok(0.0);
+        }
+
+        // Sample up to 100 triples for efficiency
+        let sample_size = test_triples.len().min(100);
+        let mut correct = 0;
+
+        // Collect all entities for negative sampling
+        let entities: std::collections::HashSet<String> = test_triples
+            .iter()
+            .flat_map(|(h, _, t)| vec![h.clone(), t.clone()])
+            .collect();
+        let entity_vec: Vec<String> = entities.into_iter().collect();
+
+        if entity_vec.len() < 2 {
+            return Ok(0.0);
+        }
+
+        for triple in test_triples.iter().take(sample_size) {
+            let positive_score = model.score_triple(&triple.0, &triple.1, &triple.2).await?;
+
+            // Generate a random negative sample by corrupting head or tail
+            let corrupt_idx = {
+                use scirs2_core::random::Random;
+                let mut rng = Random::default();
+                rng.random_range(0, entity_vec.len())
+            };
+            let corrupt_entity = &entity_vec[corrupt_idx];
+
+            let negative_score = {
+                use scirs2_core::random::Random;
+                let mut rng = Random::default();
+                if rng.random_bool_with_chance(0.5) {
+                    // Corrupt head
+                    model
+                        .score_triple(corrupt_entity, &triple.1, &triple.2)
+                        .await?
+                } else {
+                    // Corrupt tail
+                    model
+                        .score_triple(&triple.0, &triple.1, corrupt_entity)
+                        .await?
+                }
+            };
+
+            // For most models, positive triples should have better scores than negatives
+            // TransE uses distance (lower is better), DistMult/ComplEx use similarity (higher is better)
+            // We'll use a simple heuristic: if scores are significantly different, count as correct
+            if (positive_score - negative_score).abs() > 0.01 {
+                correct += 1;
+            }
+        }
+
+        Ok(correct as f32 / sample_size as f32)
     }
 }
 

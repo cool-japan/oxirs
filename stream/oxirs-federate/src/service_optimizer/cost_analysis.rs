@@ -346,7 +346,7 @@ impl ServiceOptimizer {
         _registry: &ServiceRegistry,
     ) -> Result<f64> {
         let estimated_cost = self
-            .estimate_service_cost(service, &[pattern.clone()], &[])
+            .estimate_service_cost(service, std::slice::from_ref(pattern), &[])
             .await;
         // Normalize and invert (lower cost = higher score)
         Ok(1.0 / (1.0 + estimated_cost / 1000.0))

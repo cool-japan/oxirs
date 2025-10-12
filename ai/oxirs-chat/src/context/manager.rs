@@ -2,13 +2,13 @@
 //!
 //! Main context management implementation with sliding windows and adaptive features.
 
+use super::components::*;
+use super::config::ContextConfig;
+use super::types::*;
+use crate::{analytics::ConversationAnalytics, Message, MessageRole};
 use anyhow::Result;
 use std::time::{Duration, SystemTime};
 use tracing::{debug, info, warn};
-use crate::{analytics::ConversationAnalytics, Message, MessageRole};
-use super::config::ContextConfig;
-use super::components::*;
-use super::types::*;
 pub struct AdvancedContextManager {
     config: ContextConfig,
     context_window: ContextWindow,

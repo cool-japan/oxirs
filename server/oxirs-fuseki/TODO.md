@@ -1,21 +1,22 @@
 # OxiRS Fuseki - TODO
 
-*Last Updated: October 4, 2025*
+*Last Updated: October 12, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.2 Production-Ready
+## ✅ Current Status: v0.1.0-alpha.3 Production-Ready - **Beta.1 Features Complete!** 🎉
 
 **oxirs-fuseki** provides a SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility.
 
-### Alpha.2 Release Status (October 4, 2025)
-- **352 tests passing** (unit + integration) with zero warnings
+### Alpha.3 Release Status (October 12, 2025) - **Beta.1 Features Complete!** 🎉
+- **352+ tests passing** (unit + integration) with zero warnings
 - **Full SPARQL 1.1/1.2 support** including `SERVICE` federation and result merging
 - **Persistent datasets** with automatic N-Quads save/load and warm start
 - **10-layer production middleware stack** ✨ hardened with HSTS & security headers
 - **OAuth2/OIDC + JWT** authentication with configurable providers
 - **Observability**: Prometheus metrics, slow-query tracing, structured logging
 - **CLI Integration** ✨ Serve command + REPL alignment for simplified ops
+- **✨ NEW: Production hardening** (HTTP circuit breakers, server performance monitoring, rate limiting, health checks)
 
-### 🎉 Alpha.2 Achievements
+### 🎉 Alpha.3 Achievements
 
 #### Production Deployment Ready ✅
 - ✅ **CLI Serve Command**: Full integration with oxirs CLI & persisted datasets
@@ -23,6 +24,16 @@
 - ✅ **Observability**: Request correlation IDs, Prometheus metrics, structured logs
 - ✅ **Federation**: Resilient remote endpoint integration with retries/backoff
 - ✅ **Standards Compliance**: W3C SPARQL 1.1/1.2 endpoints + SERVICE federation
+
+#### Beta.1 Production Features ✅ (Complete in Alpha.3)
+- ✅ **Production Hardening** (production.rs - 693 lines)
+  - HTTP-specific error handling with request context (method, path, status, client IP, user agent)
+  - HTTP request circuit breakers for fault tolerance
+  - Server performance monitoring (endpoint latencies, status codes, request/response sizes)
+  - Request rate limiting (configurable requests per second)
+  - Health checks for server components (HTTP server, SPARQL engine, storage)
+  - Global statistics tracking (uptime, total requests, timeouts, errors)
+  - **All 6 production tests passing** ✅
 
 ## 🎯 Post-Alpha Development Roadmap
 

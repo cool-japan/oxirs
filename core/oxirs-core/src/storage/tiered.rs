@@ -7,7 +7,7 @@
 
 #[cfg(feature = "rocksdb")]
 mod tiered_impl {
-
+    #[allow(unused_imports)] // Used in tests and future implementations
     use super::*;
     use crate::model::{Triple, TriplePattern};
     use crate::storage::{
@@ -103,22 +103,22 @@ mod tiered_impl {
 
     /// Warm tier implementation
     struct WarmTier {
-        path: PathBuf,
+        _path: PathBuf,
         storage: rocksdb::DB,
         access_tracker: HashMap<u64, u64>,
     }
 
     /// Cold tier implementation
     struct ColdTier {
-        path: PathBuf,
+        _path: PathBuf,
         storage: rocksdb::DB,
         compression: compression::Compressor,
     }
 
     /// Archive tier implementation
     struct ArchiveTier {
-        backend: ArchiveBackend,
-        index: HashMap<u64, ArchiveLocation>,
+        _backend: ArchiveBackend,
+        _index: HashMap<u64, ArchiveLocation>,
     }
 
     /// Archive location information
@@ -165,7 +165,7 @@ mod tiered_impl {
             warm_opts.create_if_missing(true);
             let warm_storage = rocksdb::DB::open(&warm_opts, warm_path.join("data"))?;
             let warm_tier = Arc::new(RwLock::new(WarmTier {
-                path: warm_path,
+                _path: warm_path,
                 storage: warm_storage,
                 access_tracker: HashMap::new(),
             }));
@@ -177,15 +177,15 @@ mod tiered_impl {
             cold_opts.create_if_missing(true);
             let cold_storage = rocksdb::DB::open(&cold_opts, cold_path.join("data"))?;
             let cold_tier = Arc::new(RwLock::new(ColdTier {
-                path: cold_path,
+                _path: cold_path,
                 storage: cold_storage,
                 compression: compression::Compressor::new(config.compression.clone()),
             }));
 
             // Initialize archive tier
             let archive_tier = Arc::new(RwLock::new(ArchiveTier {
-                backend: config.tiers.archive_tier.backend.clone(),
-                index: HashMap::new(),
+                _backend: config.tiers.archive_tier.backend.clone(),
+                _index: HashMap::new(),
             }));
 
             // Initialize index and statistics
@@ -305,7 +305,7 @@ mod tiered_impl {
                 }
 
                 // Demote to cold tier
-                let mut cold = cold_tier.write().await;
+                let cold = cold_tier.write().await;
                 for hash in to_demote {
                     if let Ok(Some(data)) = warm.storage.get(hash.to_be_bytes()) {
                         // Compress before storing in cold tier
@@ -323,7 +323,7 @@ mod tiered_impl {
 
             // Check cold tier for archival
             {
-                let cold = cold_tier.read().await;
+                let _cold = cold_tier.read().await;
                 let mut to_archive = Vec::new();
 
                 for entry in index.iter() {
@@ -344,7 +344,7 @@ mod tiered_impl {
 
                 // Move to archive
                 if !to_archive.is_empty() {
-                    let mut archive = archive_tier.write().await;
+                    let _archive = archive_tier.write().await;
                     // Archive implementation would batch multiple triples into archive files
                     // For now, we'll skip the actual archival process
                 }
@@ -362,7 +362,7 @@ mod tiered_impl {
         }
 
         /// Get the appropriate tier for a new triple based on hints
-        fn determine_initial_tier(&self, triple: &Triple) -> StorageTier {
+        fn determine_initial_tier(&self, _triple: &Triple) -> StorageTier {
             // For now, all new data goes to warm tier
             // In a real implementation, we might analyze the triple's predicate
             // or other characteristics to make smarter placement decisions
@@ -471,7 +471,7 @@ mod tiered_impl {
                 // Iterate through warm tier storage
                 let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
                 for item in iter {
-                    if let Ok((key, value)) = item {
+                    if let Ok((_key, value)) = item {
                         if let Ok(stored) = bincode::deserialize::<StoredTriple>(&value) {
                             if pattern.matches(&stored.triple) {
                                 results.push(stored.triple.clone());
@@ -790,12 +790,14 @@ mod tiered_impl {
         use super::*;
 
         pub struct Compressor {
-            compression_type: CompressionType,
+            _compression_type: CompressionType,
         }
 
         impl Compressor {
             pub fn new(compression_type: CompressionType) -> Self {
-                Compressor { compression_type }
+                Compressor {
+                    _compression_type: compression_type,
+                }
             }
 
             pub fn compress(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
@@ -803,6 +805,7 @@ mod tiered_impl {
                 Ok(data.to_vec())
             }
 
+            #[allow(dead_code)]
             pub fn decompress(&self, data: &[u8]) -> Result<Vec<u8>, OxirsError> {
                 // Placeholder - would use actual compression libraries
                 Ok(data.to_vec())

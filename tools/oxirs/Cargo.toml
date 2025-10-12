@@ -14,9 +14,11 @@ rust-version.workspace = true
 [dependencies]
 scirs2-core = { workspace = true }
 oxirs-core.workspace = true
+oxirs-arq.workspace = true
 oxirs-fuseki.workspace = true
 oxirs-gql.workspace = true
 oxirs-tdb.workspace = true
+oxirs-samm.workspace = true
 clap.workspace = true
 tokio.workspace = true
 serde.workspace = true
@@ -102,4 +104,8 @@ path = "src/main.rs"
 
 [[bench]]
 name = "cli_performance"
+harness = false
+
+[[bench]]
+name = "cli_enhancements"
 harness = false

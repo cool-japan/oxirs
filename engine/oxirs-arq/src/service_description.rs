@@ -119,7 +119,7 @@ impl ServiceDescription {
         // Default dataset
         if let Some(ref dataset) = self.default_dataset {
             turtle.push_str("  sd:defaultDataset [\n");
-            turtle.push_str(&format!("    a sd:Dataset ;\n"));
+            turtle.push_str("    a sd:Dataset ;\n");
             if let Some(ref name) = dataset.name {
                 turtle.push_str(&format!("    rdfs:label \"{}\" ;\n", name));
             }
@@ -129,23 +129,17 @@ impl ServiceDescription {
 
         // Features
         for feature in &self.features {
-            turtle.push_str(&format!("  sd:feature sd:{} ;\n", feature.to_string()));
+            turtle.push_str(&format!("  sd:feature sd:{} ;\n", feature.as_iri()));
         }
 
         // Language extensions
         for ext in &self.language_extensions {
-            turtle.push_str(&format!(
-                "  sd:languageExtension sd:{} ;\n",
-                ext.to_string()
-            ));
+            turtle.push_str(&format!("  sd:languageExtension sd:{} ;\n", ext.as_iri()));
         }
 
         // Result formats
         for format in &self.result_formats {
-            turtle.push_str(&format!(
-                "  sd:resultFormat <{}> ;\n",
-                format.mime_type()
-            ));
+            turtle.push_str(&format!("  sd:resultFormat <{}> ;\n", format.mime_type()));
         }
 
         // Extension functions
@@ -195,7 +189,7 @@ impl ServiceDescription {
             binding.insert(
                 Variable::new("value").unwrap(),
                 crate::algebra::Term::Literal(crate::algebra::Literal {
-                    value: feature.to_string(),
+                    value: feature.as_iri().to_string(),
                     language: None,
                     datatype: None,
                 }),
@@ -303,19 +297,19 @@ pub enum Feature {
 }
 
 impl Feature {
-    /// Convert to string representation
-    pub fn to_string(&self) -> String {
+    /// Convert to IRI local name
+    pub fn as_iri(&self) -> &'static str {
         match self {
-            Feature::BasicFederatedQuery => "BasicFederatedQuery".to_string(),
-            Feature::SPARQL11Query => "SPARQL11Query".to_string(),
-            Feature::SPARQL11Update => "SPARQL11Update".to_string(),
-            Feature::Aggregates => "Aggregates".to_string(),
-            Feature::PropertyPaths => "PropertyPaths".to_string(),
-            Feature::Subqueries => "Subqueries".to_string(),
-            Feature::Bind => "Bind".to_string(),
-            Feature::Values => "Values".to_string(),
-            Feature::Negation => "Negation".to_string(),
-            Feature::Service => "Service".to_string(),
+            Feature::BasicFederatedQuery => "BasicFederatedQuery",
+            Feature::SPARQL11Query => "SPARQL11Query",
+            Feature::SPARQL11Update => "SPARQL11Update",
+            Feature::Aggregates => "Aggregates",
+            Feature::PropertyPaths => "PropertyPaths",
+            Feature::Subqueries => "Subqueries",
+            Feature::Bind => "Bind",
+            Feature::Values => "Values",
+            Feature::Negation => "Negation",
+            Feature::Service => "Service",
         }
     }
 }
@@ -342,17 +336,17 @@ pub enum LanguageExtension {
 }
 
 impl LanguageExtension {
-    /// Convert to string representation
-    pub fn to_string(&self) -> String {
+    /// Convert to IRI local name
+    pub fn as_iri(&self) -> &'static str {
         match self {
-            LanguageExtension::RDFStar => "RDFStar".to_string(),
-            LanguageExtension::PropertyFunctions => "PropertyFunctions".to_string(),
-            LanguageExtension::StoredProcedures => "StoredProcedures".to_string(),
-            LanguageExtension::CustomAggregates => "CustomAggregates".to_string(),
-            LanguageExtension::FullTextSearch => "FullTextSearch".to_string(),
-            LanguageExtension::GeospatialQueries => "GeospatialQueries".to_string(),
-            LanguageExtension::TemporalQueries => "TemporalQueries".to_string(),
-            LanguageExtension::VectorSearch => "VectorSearch".to_string(),
+            LanguageExtension::RDFStar => "RDFStar",
+            LanguageExtension::PropertyFunctions => "PropertyFunctions",
+            LanguageExtension::StoredProcedures => "StoredProcedures",
+            LanguageExtension::CustomAggregates => "CustomAggregates",
+            LanguageExtension::FullTextSearch => "FullTextSearch",
+            LanguageExtension::GeospatialQueries => "GeospatialQueries",
+            LanguageExtension::TemporalQueries => "TemporalQueries",
+            LanguageExtension::VectorSearch => "VectorSearch",
         }
     }
 }
@@ -593,7 +587,7 @@ pub fn create_default_service_description(endpoint: String) -> ServiceDescriptio
         .add_result_format(ResultFormat::Binary)
         // Metadata
         .add_metadata("name".to_string(), "OxiRS SPARQL Endpoint".to_string())
-        .add_metadata("version".to_string(), "0.1.0-alpha.2".to_string())
+        .add_metadata("version".to_string(), "0.1.0-alpha.3".to_string())
         .add_metadata(
             "engine".to_string(),
             "OxiRS ARQ - Jena-compatible SPARQL engine".to_string(),
@@ -650,23 +644,20 @@ mod tests {
     }
 
     #[test]
-    fn test_feature_to_string() {
-        assert_eq!(Feature::SPARQL11Query.to_string(), "SPARQL11Query");
-        assert_eq!(Feature::PropertyPaths.to_string(), "PropertyPaths");
-        assert_eq!(Feature::Values.to_string(), "Values");
+    fn test_feature_as_iri() {
+        assert_eq!(Feature::SPARQL11Query.as_iri(), "SPARQL11Query");
+        assert_eq!(Feature::PropertyPaths.as_iri(), "PropertyPaths");
+        assert_eq!(Feature::Values.as_iri(), "Values");
     }
 
     #[test]
-    fn test_language_extension_to_string() {
-        assert_eq!(LanguageExtension::RDFStar.to_string(), "RDFStar");
+    fn test_language_extension_as_iri() {
+        assert_eq!(LanguageExtension::RDFStar.as_iri(), "RDFStar");
         assert_eq!(
-            LanguageExtension::PropertyFunctions.to_string(),
+            LanguageExtension::PropertyFunctions.as_iri(),
             "PropertyFunctions"
         );
-        assert_eq!(
-            LanguageExtension::VectorSearch.to_string(),
-            "VectorSearch"
-        );
+        assert_eq!(LanguageExtension::VectorSearch.as_iri(), "VectorSearch");
     }
 
     #[test]
@@ -728,10 +719,8 @@ mod tests {
     fn test_service_description_registry() {
         let registry = ServiceDescriptionRegistry::new();
 
-        let desc1 =
-            ServiceDescription::new("http://example.org/sparql1".to_string());
-        let desc2 =
-            ServiceDescription::new("http://example.org/sparql2".to_string());
+        let desc1 = ServiceDescription::new("http://example.org/sparql1".to_string());
+        let desc2 = ServiceDescription::new("http://example.org/sparql2".to_string());
 
         registry.register("endpoint1".to_string(), desc1);
         registry.register("endpoint2".to_string(), desc2);
@@ -747,8 +736,7 @@ mod tests {
 
     #[test]
     fn test_create_default_service_description() {
-        let desc =
-            create_default_service_description("http://example.org/sparql".to_string());
+        let desc = create_default_service_description("http://example.org/sparql".to_string());
 
         // Check features
         assert!(desc.features.contains(&Feature::SPARQL11Query));
@@ -775,7 +763,7 @@ mod tests {
         );
         assert_eq!(
             desc.metadata.get("version"),
-            Some(&"0.1.0-alpha.2".to_string())
+            Some(&"0.1.0-alpha.3".to_string())
         );
     }
 

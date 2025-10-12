@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
@@ -44,6 +44,10 @@ pub use backend_optimizer::{
     BackendOptimizer, BackendPerformance, BackendRecommendation, ConsistencyLevel, CostModel,
     OptimizationDecision, OptimizationStats, OptimizerConfig, PatternType, WorkloadPattern,
 };
+pub use backpressure::{
+    BackpressureConfig, BackpressureController, BackpressureStats, BackpressureStrategy,
+    FlowControlSignal, RateLimiter as BackpressureRateLimiter,
+};
 pub use bridge::{
     BridgeInfo, BridgeStatistics, BridgeType, ExternalMessage, ExternalSystemConfig,
     ExternalSystemType, MessageBridgeManager, MessageTransformer, RoutingRule,
@@ -62,6 +66,10 @@ pub use cqrs::{
     ReadModelProjection, RetryConfig as CQRSRetryConfig,
 };
 pub use delta::{BatchDeltaProcessor, DeltaComputer, DeltaProcessor, ProcessorStats};
+pub use dlq::{
+    DeadLetterQueue, DlqConfig, DlqEventProcessor, DlqStats as DlqStatsExport, FailedEvent,
+    FailureReason,
+};
 pub use event::{
     EventCategory, EventMetadata, EventPriority, IsolationLevel, QueryResult as EventQueryResult,
     SchemaChangeType, SchemaType, SparqlOperationType, StreamEvent,
@@ -71,6 +79,10 @@ pub use event_sourcing::{
     RetentionPolicy, SnapshotConfig, StoredEvent, TimeRange as EventSourcingTimeRange,
 };
 pub use failover::{ConnectionEndpoint, FailoverConfig, FailoverManager};
+pub use graphql_bridge::{
+    BridgeConfig, BridgeStats, GraphQLBridge, GraphQLSubscription, GraphQLUpdate,
+    GraphQLUpdateType, SubscriptionFilter,
+};
 pub use multi_region_replication::{
     ConflictResolution, ConflictType, GeographicLocation, MultiRegionReplicationManager,
     RegionConfig, RegionHealth, ReplicatedEvent, ReplicationConfig, ReplicationStats,
@@ -123,6 +135,10 @@ pub use quantum_streaming::{
     QuantumEvent, QuantumOperation, QuantumProcessingStats, QuantumState, QuantumStreamProcessor,
 };
 pub use reliability::{BulkReplayResult, DlqStats, ReplayStatus};
+pub use rsp::{
+    RspConfig, RspLanguage, RspProcessor, RspQuery, StreamClause, StreamDescriptor, Window,
+    WindowConfig, WindowSize, WindowStats, WindowType,
+};
 pub use security::{
     AuditConfig, AuditLogEntry, AuditLogger, AuthConfig, AuthMethod, AuthenticationProvider,
     AuthorizationProvider, AuthzConfig, Credentials, EncryptionConfig, Permission, RateLimitConfig,
@@ -147,6 +163,7 @@ pub use webhook::{
 
 pub mod backend;
 pub mod backend_optimizer;
+pub mod backpressure;
 pub mod biological_computing;
 pub mod bridge;
 pub mod circuit_breaker;
@@ -157,10 +174,12 @@ pub mod consumer;
 pub mod cqrs;
 pub mod delta;
 pub mod diagnostics;
+pub mod dlq;
 pub mod error;
 pub mod event;
 pub mod event_sourcing;
 pub mod failover;
+pub mod graphql_bridge;
 pub mod health_monitor;
 pub mod join;
 pub mod monitoring;
@@ -176,6 +195,7 @@ pub mod quantum_processing;
 pub mod quantum_streaming;
 pub mod reconnect;
 pub mod reliability;
+pub mod rsp;
 pub mod schema_registry;
 pub mod security;
 pub mod serialization;
@@ -330,6 +350,12 @@ pub enum StreamBackendType {
         service_url: String,
         auth_config: Option<PulsarAuthConfig>,
     },
+    #[cfg(feature = "rabbitmq")]
+    RabbitMQ {
+        url: String,
+        exchange: Option<String>,
+        queue: Option<String>,
+    },
     Memory {
         max_size: Option<usize>,
         persistence: bool,
@@ -393,6 +419,8 @@ enum BackendProducer {
     Kinesis(backend::kinesis::KinesisProducer),
     #[cfg(feature = "pulsar")]
     Pulsar(backend::pulsar::PulsarProducer),
+    #[cfg(feature = "rabbitmq")]
+    RabbitMQ(backend::rabbitmq::RabbitMQProducer),
     Memory(MemoryProducer),
 }
 
@@ -677,6 +705,36 @@ impl StreamProducer {
                 producer.connect().await?;
                 BackendProducer::Pulsar(producer)
             }
+            #[cfg(feature = "rabbitmq")]
+            StreamBackendType::RabbitMQ {
+                url,
+                exchange,
+                queue,
+            } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackendType::RabbitMQ {
+                        url: url.clone(),
+                        exchange: exchange.clone(),
+                        queue: queue.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+
+                let mut producer = backend::rabbitmq::RabbitMQProducer::new(stream_config)?;
+                producer.connect().await?;
+                BackendProducer::RabbitMQ(producer)
+            }
             StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
@@ -695,6 +753,8 @@ impl StreamProducer {
                 BackendProducer::Kinesis(_) => "kinesis".to_string(),
                 #[cfg(feature = "pulsar")]
                 BackendProducer::Pulsar(_) => "pulsar".to_string(),
+                #[cfg(feature = "rabbitmq")]
+                BackendProducer::RabbitMQ(_) => "rabbitmq".to_string(),
                 BackendProducer::Memory(_) => "memory".to_string(),
             },
             ..Default::default()
@@ -786,6 +846,8 @@ impl StreamProducer {
             BackendProducer::Kinesis(producer) => producer.publish(event).await,
             #[cfg(feature = "pulsar")]
             BackendProducer::Pulsar(producer) => producer.publish(event).await,
+            #[cfg(feature = "rabbitmq")]
+            BackendProducer::RabbitMQ(producer) => producer.publish(event).await,
             BackendProducer::Memory(producer) => producer.publish(event).await,
         }
     }
@@ -815,6 +877,8 @@ impl StreamProducer {
             BackendProducer::Kinesis(producer) => producer.publish_batch(events).await,
             #[cfg(feature = "pulsar")]
             BackendProducer::Pulsar(producer) => producer.publish_batch(events).await,
+            #[cfg(feature = "rabbitmq")]
+            BackendProducer::RabbitMQ(producer) => producer.publish_batch(events).await,
             BackendProducer::Memory(producer) => {
                 for event in events {
                     producer.publish(event).await?;
@@ -885,6 +949,8 @@ impl StreamProducer {
             BackendProducer::Kinesis(producer) => producer.flush().await,
             #[cfg(feature = "pulsar")]
             BackendProducer::Pulsar(producer) => producer.flush().await,
+            #[cfg(feature = "rabbitmq")]
+            BackendProducer::RabbitMQ(producer) => producer.flush().await,
             BackendProducer::Memory(producer) => producer.flush().await,
         };
 
@@ -1018,12 +1084,18 @@ pub struct StreamConsumer {
 
 /// Backend-agnostic consumer wrapper
 enum BackendConsumer {
+    #[cfg(feature = "kafka")]
+    Kafka(backend::kafka::KafkaConsumer),
+    #[cfg(feature = "nats")]
+    Nats(backend::nats::NatsConsumer),
     #[cfg(feature = "redis")]
     Redis(backend::redis::RedisConsumer),
     #[cfg(feature = "kinesis")]
     Kinesis(backend::kinesis::KinesisConsumer),
     #[cfg(feature = "pulsar")]
     Pulsar(backend::pulsar::PulsarConsumer),
+    #[cfg(feature = "rabbitmq")]
+    RabbitMQ(backend::rabbitmq::RabbitMQConsumer),
     Memory(MemoryConsumer),
 }
 
@@ -1157,6 +1229,66 @@ impl StreamConsumer {
 
         // Initialize backend-specific consumer
         let backend_consumer = match &config.backend {
+            #[cfg(feature = "kafka")]
+            StreamBackendType::Kafka {
+                brokers,
+                security_protocol,
+                sasl_config,
+            } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackendType::Kafka {
+                        brokers: brokers.clone(),
+                        security_protocol: security_protocol.clone(),
+                        sasl_config: sasl_config.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+
+                let mut consumer = backend::kafka::KafkaConsumer::new(stream_config)?;
+                consumer.connect().await?;
+                BackendConsumer::Kafka(consumer)
+            }
+            #[cfg(feature = "nats")]
+            StreamBackendType::Nats {
+                url,
+                cluster_urls,
+                jetstream_config,
+            } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackendType::Nats {
+                        url: url.clone(),
+                        cluster_urls: cluster_urls.clone(),
+                        jetstream_config: jetstream_config.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+
+                let mut consumer = backend::nats::NatsConsumer::new(stream_config)?;
+                consumer.connect().await?;
+                BackendConsumer::Nats(consumer)
+            }
             #[cfg(feature = "redis")]
             StreamBackendType::Redis {
                 url,
@@ -1245,6 +1377,36 @@ impl StreamConsumer {
                 consumer.connect().await?;
                 BackendConsumer::Pulsar(consumer)
             }
+            #[cfg(feature = "rabbitmq")]
+            StreamBackendType::RabbitMQ {
+                url,
+                exchange,
+                queue,
+            } => {
+                let stream_config = crate::StreamConfig {
+                    backend: crate::StreamBackendType::RabbitMQ {
+                        url: url.clone(),
+                        exchange: exchange.clone(),
+                        queue: queue.clone(),
+                    },
+                    topic: config.topic.clone(),
+                    batch_size: config.batch_size,
+                    flush_interval_ms: config.flush_interval_ms,
+                    max_connections: config.max_connections,
+                    connection_timeout: config.connection_timeout,
+                    enable_compression: config.enable_compression,
+                    compression_type: config.compression_type.clone(),
+                    retry_config: config.retry_config.clone(),
+                    circuit_breaker: config.circuit_breaker.clone(),
+                    security: config.security.clone(),
+                    performance: config.performance.clone(),
+                    monitoring: config.monitoring.clone(),
+                };
+
+                let mut consumer = backend::rabbitmq::RabbitMQConsumer::new(stream_config)?;
+                consumer.connect().await?;
+                BackendConsumer::RabbitMQ(consumer)
+            }
             StreamBackendType::Memory {
                 max_size: _,
                 persistence: _,
@@ -1253,12 +1415,18 @@ impl StreamConsumer {
 
         let stats = Arc::new(RwLock::new(ConsumerStats {
             backend_type: match backend_consumer {
+                #[cfg(feature = "kafka")]
+                BackendConsumer::Kafka(_) => "kafka".to_string(),
+                #[cfg(feature = "nats")]
+                BackendConsumer::Nats(_) => "nats".to_string(),
                 #[cfg(feature = "redis")]
                 BackendConsumer::Redis(_) => "redis".to_string(),
                 #[cfg(feature = "kinesis")]
                 BackendConsumer::Kinesis(_) => "kinesis".to_string(),
                 #[cfg(feature = "pulsar")]
                 BackendConsumer::Pulsar(_) => "pulsar".to_string(),
+                #[cfg(feature = "rabbitmq")]
+                BackendConsumer::RabbitMQ(_) => "rabbitmq".to_string(),
                 BackendConsumer::Memory(_) => "memory".to_string(),
             },
             _batch_size: config.batch_size,
@@ -1335,12 +1503,18 @@ impl StreamConsumer {
     /// Consume a single event from the backend
     async fn consume_single_event(&mut self) -> Result<Option<StreamEvent>> {
         match &mut self.backend_consumer {
+            #[cfg(feature = "kafka")]
+            BackendConsumer::Kafka(consumer) => consumer.consume().await,
+            #[cfg(feature = "nats")]
+            BackendConsumer::Nats(consumer) => consumer.consume().await,
             #[cfg(feature = "redis")]
             BackendConsumer::Redis(consumer) => consumer.consume().await,
             #[cfg(feature = "kinesis")]
             BackendConsumer::Kinesis(consumer) => consumer.consume().await,
             #[cfg(feature = "pulsar")]
             BackendConsumer::Pulsar(consumer) => consumer.consume().await,
+            #[cfg(feature = "rabbitmq")]
+            BackendConsumer::RabbitMQ(consumer) => consumer.consume().await,
             BackendConsumer::Memory(consumer) => consumer.consume().await,
         }
     }
@@ -1455,6 +1629,14 @@ impl StreamConsumer {
                 consumer.reset();
                 Ok(())
             }
+            #[cfg(feature = "kafka")]
+            BackendConsumer::Kafka(_) => {
+                Err(anyhow!("Reset position not supported for Kafka backend"))
+            }
+            #[cfg(feature = "nats")]
+            BackendConsumer::Nats(_) => {
+                Err(anyhow!("Reset position not supported for NATS backend"))
+            }
             #[cfg(feature = "redis")]
             BackendConsumer::Redis(_) => {
                 Err(anyhow!("Reset position not supported for Redis backend"))
@@ -1466,6 +1648,10 @@ impl StreamConsumer {
             #[cfg(feature = "pulsar")]
             BackendConsumer::Pulsar(_) => {
                 Err(anyhow!("Reset position not supported for Pulsar backend"))
+            }
+            #[cfg(feature = "rabbitmq")]
+            BackendConsumer::RabbitMQ(_) => {
+                Err(anyhow!("Reset position not supported for RabbitMQ backend"))
             }
         }
     }

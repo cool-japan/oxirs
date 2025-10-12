@@ -18,11 +18,11 @@
 // Import modular components from local modules
 use super::{KafkaEvent, KafkaProducerConfig, KafkaProducerStats};
 
-use crate::backend::{StreamBackend as StreamBackendTrait, StreamBackendConfig};
+use crate::backend::StreamBackend as StreamBackendTrait;
 use crate::consumer::ConsumerGroup;
 use crate::error::{StreamError, StreamResult};
 use crate::types::{Offset, PartitionId, StreamPosition, TopicName};
-use crate::{StreamBackend, StreamConfig, StreamEvent};
+use crate::{StreamConfig, StreamEvent};
 use anyhow::Result;
 use async_trait::async_trait;
 use rdkafka::producer::Producer;
@@ -33,7 +33,7 @@ use std::sync::{
     Arc,
 };
 use std::time::{Duration, Instant};
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::{oneshot, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -44,7 +44,6 @@ use rdkafka::{
     consumer::{BaseConsumer, Consumer, ConsumerContext, Rebalance, StreamConsumer},
     message::{BorrowedMessage, Message},
     producer::{FutureProducer, FutureRecord},
-    util::Timeout,
     ClientContext,
 };
 
@@ -55,15 +54,15 @@ pub type ConsumerId = Uuid;
 pub type MessageCallback = Arc<dyn Fn(StreamEvent) -> Result<()> + Send + Sync>;
 
 /// Consumer instance management
-#[derive(Debug)]
 struct ConsumerInstance {
     id: ConsumerId,
     group_id: String,
     #[cfg(feature = "kafka")]
-    consumer: StreamConsumer,
+    consumer: Arc<StreamConsumer>,
     is_active: Arc<AtomicBool>,
     message_count: Arc<AtomicU64>,
     error_count: Arc<AtomicU64>,
+    last_message_time: Arc<RwLock<Option<chrono::DateTime<chrono::Utc>>>>,
     stop_signal: Option<oneshot::Sender<()>>,
 }
 
@@ -100,14 +99,14 @@ impl ClientContext for ConsumerRebalanceContext {}
 
 #[cfg(feature = "kafka")]
 impl ConsumerContext for ConsumerRebalanceContext {
-    fn pre_rebalance(&self, rebalance: &Rebalance) {
+    fn pre_rebalance(&self, _consumer: &BaseConsumer<Self>, rebalance: &Rebalance) {
         info!(
             "Consumer {} pre-rebalance: {:?}",
             self.consumer_id, rebalance
         );
     }
 
-    fn post_rebalance(&self, rebalance: &Rebalance) {
+    fn post_rebalance(&self, _consumer: &BaseConsumer<Self>, rebalance: &Rebalance) {
         info!(
             "Consumer {} post-rebalance: {:?}",
             self.consumer_id, rebalance
@@ -452,9 +451,9 @@ impl KafkaBackend {
             .set("enable.auto.commit", "false")
             .set("auto.offset.reset", "earliest");
 
-        let context = ConsumerRebalanceContext { consumer_id };
+        // Create consumer without custom context (use default)
         let consumer: StreamConsumer = client_config
-            .create_with_context(context)
+            .create()
             .map_err(|e| anyhow::anyhow!("Failed to create consumer: {}", e))?;
 
         // Subscribe to topics
@@ -466,10 +465,11 @@ impl KafkaBackend {
         let consumer_instance = ConsumerInstance {
             id: consumer_id,
             group_id: group_id.to_string(),
-            consumer,
+            consumer: Arc::new(consumer),
             is_active: Arc::new(AtomicBool::new(true)),
             message_count: Arc::new(AtomicU64::new(0)),
             error_count: Arc::new(AtomicU64::new(0)),
+            last_message_time: Arc::new(RwLock::new(None)),
             stop_signal: None,
         };
 
@@ -518,6 +518,7 @@ impl KafkaBackend {
         let is_active = consumer_instance.is_active.clone();
         let message_count = consumer_instance.message_count.clone();
         let error_count = consumer_instance.error_count.clone();
+        let last_message_time = consumer_instance.last_message_time.clone();
         let (stop_tx, mut stop_rx) = oneshot::channel();
 
         // Update the consumer instance with the stop signal
@@ -539,6 +540,12 @@ impl KafkaBackend {
                     message_result = consumer.recv() => {
                         match message_result {
                             Ok(borrowed_message) => {
+                                // Update last message time
+                                {
+                                    let mut time_guard = last_message_time.write().await;
+                                    *time_guard = Some(chrono::Utc::now());
+                                }
+
                                 match Self::process_kafka_message(&borrowed_message, &callback).await {
                                     Ok(_) => {
                                         message_count.fetch_add(1, Ordering::SeqCst);
@@ -592,7 +599,7 @@ impl KafkaBackend {
             .ok_or_else(|| anyhow::anyhow!("Message has no payload"))?;
 
         let kafka_event = KafkaEvent::from_bytes(payload)?;
-        let stream_event = StreamEvent::from(kafka_event);
+        let stream_event = kafka_event.to_stream_event();
 
         callback(stream_event)?;
         Ok(())
@@ -660,13 +667,14 @@ impl KafkaBackend {
         let consumers = self.active_consumers.read().await;
         if let Some(instance) = consumers.get(&consumer_id) {
             let partition_assignments = self.get_partition_assignments(&instance.consumer).await?;
+            let last_message_time = *instance.last_message_time.read().await;
             Ok(ConsumerMetrics {
                 consumer_id,
                 group_id: instance.group_id.clone(),
                 messages_processed: instance.message_count.load(Ordering::SeqCst),
                 errors_encountered: instance.error_count.load(Ordering::SeqCst),
                 is_active: instance.is_active.load(Ordering::SeqCst),
-                last_message_time: None, // TODO: Track last message time
+                last_message_time,
                 partition_assignments,
             })
         } else {
@@ -678,7 +686,7 @@ impl KafkaBackend {
     #[cfg(feature = "kafka")]
     async fn get_partition_assignments(
         &self,
-        consumer: &StreamConsumer,
+        consumer: &Arc<StreamConsumer>,
     ) -> Result<Vec<PartitionAssignment>> {
         let assignment = consumer.assignment()?;
         let mut assignments = Vec::new();
@@ -771,6 +779,17 @@ impl KafkaBackend {
         let consumers = self.active_consumers.read().await;
         consumers.len()
     }
+
+    /// Consume a single event (not supported - Kafka uses streaming consumers)
+    ///
+    /// Note: Kafka backend uses persistent streaming consumers with callbacks.
+    /// Use create_persistent_consumer() and start_streaming_consumer() instead.
+    pub async fn consume(&mut self) -> Result<Option<StreamEvent>> {
+        Err(anyhow::anyhow!(
+            "Direct consume() not supported for Kafka backend. \
+             Use create_persistent_consumer() and start_streaming_consumer() instead."
+        ))
+    }
 }
 
 #[async_trait]
@@ -845,11 +864,15 @@ impl StreamBackendTrait for KafkaBackend {
         #[cfg(feature = "kafka")]
         {
             if let Some(ref admin_client) = self.admin_client {
-                let new_topic = NewTopic::new(topic, partitions as i32, TopicReplication::Fixed(1));
+                let new_topic = NewTopic::new(
+                    topic.as_str(),
+                    partitions as i32,
+                    TopicReplication::Fixed(1),
+                );
                 let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(30)));
 
                 admin_client
-                    .create_topics([new_topic], &opts)
+                    .create_topics(&[new_topic], &opts)
                     .await
                     .map_err(|e| {
                         StreamError::TopicCreation(format!(
@@ -887,7 +910,7 @@ impl StreamBackendTrait for KafkaBackend {
                 let opts = AdminOptions::new().operation_timeout(Some(Duration::from_secs(30)));
 
                 admin_client
-                    .delete_topics([topic.as_str()], &opts)
+                    .delete_topics(&[topic.as_str()], &opts)
                     .await
                     .map_err(|e| {
                         StreamError::TopicDeletion(format!(
@@ -920,16 +943,14 @@ impl StreamBackendTrait for KafkaBackend {
                     .inner()
                     .fetch_metadata(None, Duration::from_secs(10))
                     .map_err(|e| {
-                        StreamError::TopicListing(format!("Failed to fetch metadata: {}", e))
+                        StreamError::TopicList(format!("Failed to fetch metadata: {}", e))
                     })?;
 
-                let topics: Vec<TopicName> = metadata
+                Ok(metadata
                     .topics()
                     .iter()
-                    .map(|topic| topic.name().to_string())
-                    .collect();
-
-                Ok(topics)
+                    .map(|topic| topic.name().to_string().into())
+                    .collect())
             } else {
                 Err(StreamError::Connection(
                     "Admin client not initialized".to_string(),
@@ -951,7 +972,7 @@ impl StreamBackendTrait for KafkaBackend {
                 let serialized = serde_json::to_string(&kafka_event)
                     .map_err(|e| StreamError::Serialization(e.to_string()))?;
 
-                let record = FutureRecord::to(topic)
+                let record = FutureRecord::to(topic.as_str())
                     .key(&kafka_event.event_id)
                     .payload(&serialized);
 
@@ -959,7 +980,7 @@ impl StreamBackendTrait for KafkaBackend {
                     .send(record, Duration::from_secs(5))
                     .await
                     .map_err(|(e, _)| {
-                        StreamError::SendError(format!("Failed to send to Kafka: {}", e))
+                        StreamError::Send(format!("Failed to send to Kafka: {}", e))
                     })?;
 
                 Ok(Offset::new(result.1 as u64))
@@ -1000,8 +1021,8 @@ impl StreamBackendTrait for KafkaBackend {
         #[cfg(feature = "kafka")]
         {
             use rdkafka::config::ClientConfig;
-            use rdkafka::consumer::{BaseConsumer, CommitMode, Consumer, StreamConsumer};
-            use rdkafka::message::{BorrowedMessage, Message};
+            use rdkafka::consumer::{Consumer, StreamConsumer};
+            use rdkafka::message::Message;
             use rdkafka::TopicPartitionList;
             use tokio::time::{timeout, Duration};
 
@@ -1379,14 +1400,7 @@ impl StreamBackendTrait for KafkaBackend {
 
                     // Get consumer group's committed offset
                     let mut committed_tpl = TopicPartitionList::new();
-                    committed_tpl
-                        .add_partition(topic.as_str(), partition_metadata.id())
-                        .map_err(|e| {
-                            StreamError::TopicMetadata(format!(
-                                "Failed to add partition for committed offset: {}",
-                                e
-                            ))
-                        })?;
+                    committed_tpl.add_partition(topic.as_str(), partition_metadata.id());
 
                     let committed_offsets = consumer
                         .committed_offsets(committed_tpl, Duration::from_secs(10))
@@ -1453,7 +1467,7 @@ impl StreamBackendTrait for KafkaBackend {
         {
             let mut metadata = HashMap::new();
             metadata.insert("backend".to_string(), "kafka".to_string());
-            metadata.insert("topic".to_string(), topic.clone());
+            metadata.insert("topic".to_string(), topic.to_string());
             metadata.insert("brokers".to_string(), self.kafka_config.brokers.join(","));
             Ok(metadata)
         }
@@ -1462,7 +1476,7 @@ impl StreamBackendTrait for KafkaBackend {
         {
             let mut metadata = HashMap::new();
             metadata.insert("backend".to_string(), "kafka".to_string());
-            metadata.insert("topic".to_string(), topic.clone());
+            metadata.insert("topic".to_string(), topic.to_string());
             metadata.insert("brokers".to_string(), "mock-broker:9092".to_string());
             Ok(metadata)
         }
@@ -1475,16 +1489,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_kafka_backend_creation() {
-        let config = StreamConfig {
-            backend: crate::StreamBackendType::Kafka {
-                brokers: vec!["localhost:9092".to_string()],
-                topic: "test_topic".to_string(),
-            },
-            batch_size: 100,
-            flush_interval: Duration::from_millis(100),
-            max_retries: 3,
-            timeout: Duration::from_secs(30),
+        let mut config = StreamConfig::default();
+        config.backend = crate::StreamBackendType::Kafka {
+            brokers: vec!["localhost:9092".to_string()],
+            security_protocol: None,
+            sasl_config: None,
         };
+        config.topic = "test_topic".to_string();
+        config.batch_size = 100;
 
         let backend = KafkaBackend::new(config);
         assert!(backend.is_ok());
@@ -1522,16 +1534,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_stats_update() {
-        let config = StreamConfig {
-            backend: crate::StreamBackendType::Kafka {
-                brokers: vec!["localhost:9092".to_string()],
-                topic: "test_topic".to_string(),
-            },
-            batch_size: 100,
-            flush_interval: Duration::from_millis(100),
-            max_retries: 3,
-            timeout: Duration::from_secs(30),
+        let mut config = StreamConfig::default();
+        config.backend = crate::StreamBackendType::Kafka {
+            brokers: vec!["localhost:9092".to_string()],
+            security_protocol: None,
+            sasl_config: None,
         };
+        config.topic = "test_topic".to_string();
+        config.batch_size = 100;
 
         let backend = KafkaBackend::new(config).unwrap();
 

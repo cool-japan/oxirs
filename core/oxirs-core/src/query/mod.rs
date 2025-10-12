@@ -67,6 +67,10 @@ use std::pin::Pin;
 // Import TermPattern for internal usage
 use algebra::TermPattern;
 
+/// Type alias for federated query execution future
+type FederatedQueryFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<Vec<HashMap<String, Term>>, OxirsError>> + 'a>>;
+
 /// Simplified QueryResult for SHACL compatibility
 #[derive(Debug, Clone)]
 pub enum QueryResult {
@@ -818,33 +822,29 @@ impl QueryEngine {
 
     /// Check if a pattern contains a SERVICE clause
     fn contains_service_clause(&self, pattern: &SparqlGraphPattern) -> bool {
-        
-
-        // Convert SparqlGraphPattern to algebra::GraphPattern for checking
-        // For now, we'll do a simple string-based check
-        // TODO: Implement proper pattern traversal
+        // Check for SERVICE patterns using recursive pattern traversal
         matches!(pattern, SparqlGraphPattern::Service { .. })
-            || self.pattern_contains_service_recursive(pattern)
+            || Self::pattern_contains_service_recursive(pattern)
     }
 
     /// Recursively check for SERVICE in nested patterns
-    fn pattern_contains_service_recursive(&self, pattern: &SparqlGraphPattern) -> bool {
+    fn pattern_contains_service_recursive(pattern: &SparqlGraphPattern) -> bool {
         match pattern {
             SparqlGraphPattern::Service { .. } => true,
             SparqlGraphPattern::Join { left, right }
             | SparqlGraphPattern::Union { left, right } => {
-                self.pattern_contains_service_recursive(left)
-                    || self.pattern_contains_service_recursive(right)
+                Self::pattern_contains_service_recursive(left)
+                    || Self::pattern_contains_service_recursive(right)
             }
             SparqlGraphPattern::Filter { inner, .. }
             | SparqlGraphPattern::Distinct { inner }
             | SparqlGraphPattern::Reduced { inner }
             | SparqlGraphPattern::Project { inner, .. } => {
-                self.pattern_contains_service_recursive(inner)
+                Self::pattern_contains_service_recursive(inner)
             }
             SparqlGraphPattern::LeftJoin { left, right, .. } => {
-                self.pattern_contains_service_recursive(left)
-                    || self.pattern_contains_service_recursive(right)
+                Self::pattern_contains_service_recursive(left)
+                    || Self::pattern_contains_service_recursive(right)
             }
             _ => false,
         }
@@ -888,7 +888,7 @@ impl QueryEngine {
         current_bindings: Vec<HashMap<String, Term>>,
         federation_executor: &'a crate::federation::FederationExecutor,
         store: &'a dyn Store,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<HashMap<String, Term>>, OxirsError>> + 'a>> {
+    ) -> FederatedQueryFuture<'a> {
         Box::pin(async move {
             let current_bindings = current_bindings;
             match pattern {

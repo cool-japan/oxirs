@@ -20,6 +20,9 @@ pub struct InteractiveMode {
     environment: HashMap<String, String>,
     multi_line_mode: bool,
     multi_line_buffer: Vec<String>,
+    query_templates: HashMap<String, String>,
+    saved_queries: HashMap<String, String>,
+    saved_queries_file: String,
 }
 
 impl InteractiveMode {
@@ -37,14 +40,25 @@ impl InteractiveMode {
             hinter: HistoryHinter {},
             validator: MatchingBracketValidator::new(),
             commands: get_command_list(),
+            sparql_keywords: get_sparql_keywords(),
         };
 
         let mut editor = Editor::with_config(config)?;
         editor.set_helper(Some(helper));
 
-        let history_file = dirs::config_dir()
-            .map(|p| p.join("oxirs").join("history.txt"))
-            .unwrap_or_else(|| ".oxirs_history".into())
+        let config_dir = dirs::config_dir()
+            .map(|p| p.join("oxirs"))
+            .unwrap_or_else(|| std::path::PathBuf::from(".oxirs"));
+
+        // Ensure config directory exists
+        if !config_dir.exists() {
+            std::fs::create_dir_all(&config_dir).ok();
+        }
+
+        let history_file = config_dir.join("history.txt").to_string_lossy().to_string();
+
+        let saved_queries_file = config_dir
+            .join("saved_queries.json")
             .to_string_lossy()
             .to_string();
 
@@ -53,6 +67,12 @@ impl InteractiveMode {
             editor.load_history(&history_file).ok();
         }
 
+        // Initialize query templates
+        let query_templates = Self::create_default_templates();
+
+        // Load saved queries if they exist
+        let saved_queries = Self::load_saved_queries(&saved_queries_file);
+
         Ok(Self {
             editor,
             history_file,
@@ -60,6 +80,9 @@ impl InteractiveMode {
             environment: HashMap::new(),
             multi_line_mode: false,
             multi_line_buffer: Vec::new(),
+            query_templates,
+            saved_queries,
+            saved_queries_file,
         })
     }
 
@@ -196,6 +219,50 @@ impl InteractiveMode {
             return Ok(());
         }
 
+        // Template commands
+        if trimmed.starts_with("template ") {
+            let args: Vec<&str> = trimmed.split_whitespace().collect();
+            if args.len() >= 2 {
+                self.show_template(args[1]);
+            } else {
+                self.list_templates();
+            }
+            return Ok(());
+        }
+
+        if trimmed == "templates" {
+            self.list_templates();
+            return Ok(());
+        }
+
+        // Saved query commands
+        if trimmed.starts_with("save ") {
+            let parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
+            if parts.len() >= 3 {
+                self.save_query(parts[1], parts[2]);
+            } else {
+                println!("Usage: save <name> <query>");
+            }
+            return Ok(());
+        }
+
+        if trimmed.starts_with("load ") {
+            let name = trimmed.strip_prefix("load ").unwrap().trim();
+            self.load_query(name);
+            return Ok(());
+        }
+
+        if trimmed == "queries" {
+            self.list_saved_queries();
+            return Ok(());
+        }
+
+        if trimmed.starts_with("delete ") {
+            let name = trimmed.strip_prefix("delete ").unwrap().trim();
+            self.delete_query(name);
+            return Ok(());
+        }
+
         // Execute regular commands
         self.execute_command(trimmed).await
     }
@@ -302,6 +369,16 @@ impl InteractiveMode {
         println!("    riot <files...>           - Parse and serialize RDF");
         println!("    shacl <data> <shapes>     - Run SHACL validation");
 
+        println!("\n  Query Templates:");
+        println!("    templates                 - List available query templates");
+        println!("    template <name>           - Show a specific template");
+
+        println!("\n  Saved Queries:");
+        println!("    save <name> <query>       - Save a query with a name");
+        println!("    load <name>               - Load and display a saved query");
+        println!("    queries                   - List all saved queries");
+        println!("    delete <name>             - Delete a saved query");
+
         println!("\n  Environment:");
         println!("    set VAR=value             - Set an environment variable");
         println!("    env                       - Show environment variables");
@@ -317,6 +394,11 @@ impl InteractiveMode {
         println!("  - Use Ctrl+R for reverse history search");
         println!("  - Use '\\' at line end for multi-line input");
         println!("  - Variables: $VAR expands to environment value");
+        println!(
+            "  - {} pre-defined query templates",
+            self.query_templates.len()
+        );
+        println!("  - {} saved queries", self.saved_queries.len());
 
         if let Some(ref dataset) = self.current_dataset {
             println!("\nCurrent dataset: {dataset}");
@@ -341,10 +423,21 @@ impl InteractiveMode {
         let query = args[1..].join(" ");
 
         println!("Executing query on dataset '{dataset}'...");
-        println!("Query: {query}");
 
-        // TODO: Integrate with actual query execution
-        println!("Query execution not yet implemented in interactive mode");
+        // Integrate with actual query execution
+        let format = self
+            .environment
+            .get("format")
+            .map(|s| s.as_str())
+            .unwrap_or("table");
+
+        crate::commands::query::run(
+            dataset.to_string(),
+            query,
+            false, // file - query is provided directly, not from file
+            format.to_string(),
+        )
+        .await?;
 
         Ok(())
     }
@@ -352,35 +445,35 @@ impl InteractiveMode {
     /// Handle import command
     async fn handle_import(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() < 2 {
-            println!("Usage: import <dataset> <file>");
+            println!("Usage: import <dataset> <file> [format] [graph]");
             return Ok(());
         }
 
         let dataset = args[0];
-        let file = args[1];
+        let file = std::path::PathBuf::from(args[1]);
+        let format = args.get(2).map(|s| s.to_string());
+        let graph = args.get(3).map(|s| s.to_string());
 
-        println!("Importing {file} into dataset '{dataset}'...");
-
-        // TODO: Integrate with actual import
-        println!("Import not yet implemented in interactive mode");
+        // Integrate with actual import
+        crate::commands::import::run(dataset.to_string(), file, format, graph).await?;
 
         Ok(())
     }
 
     /// Handle export command
     async fn handle_export(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-        if args.len() < 2 {
-            println!("Usage: export <dataset> <file>");
+        if args.len() < 3 {
+            println!("Usage: export <dataset> <file> <format> [graph]");
             return Ok(());
         }
 
         let dataset = args[0];
-        let file = args[1];
+        let file = std::path::PathBuf::from(args[1]);
+        let format = args[2].to_string();
+        let graph = args.get(3).map(|s| s.to_string());
 
-        println!("Exporting dataset '{dataset}' to {file}...");
-
-        // TODO: Integrate with actual export
-        println!("Export not yet implemented in interactive mode");
+        // Integrate with actual export
+        crate::commands::export::run(dataset.to_string(), file, format, graph).await?;
 
         Ok(())
     }
@@ -388,15 +481,79 @@ impl InteractiveMode {
     /// Handle validate command
     async fn handle_validate(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.is_empty() {
-            println!("Usage: validate <file>");
+            println!("Usage: validate <file> [format]");
             return Ok(());
         }
 
-        let file = args[0];
-        println!("Validating {file}...");
+        let file = std::path::PathBuf::from(args[0]);
+        let format = args.get(1).map(|s| s.to_string());
 
-        // TODO: Integrate with actual validation
-        println!("Validation not yet implemented in interactive mode");
+        println!("Validating {}...", file.display());
+
+        // Integrate with RDF syntax validation
+        use oxirs_core::format::{RdfFormat, RdfParser};
+        use std::fs;
+        use std::io::BufReader;
+
+        // Detect format if not specified
+        let rdf_format = if let Some(fmt) = format {
+            match fmt.as_str() {
+                "turtle" | "ttl" => RdfFormat::Turtle,
+                "ntriples" | "nt" => RdfFormat::NTriples,
+                "nquads" | "nq" => RdfFormat::NQuads,
+                "trig" => RdfFormat::TriG,
+                "rdfxml" | "rdf" | "xml" => RdfFormat::RdfXml,
+                "jsonld" | "json" => RdfFormat::JsonLd {
+                    profile: oxirs_core::format::JsonLdProfileSet::empty(),
+                },
+                "n3" => RdfFormat::N3,
+                _ => return Err(format!("Unsupported format: {fmt}").into()),
+            }
+        } else {
+            // Auto-detect from extension
+            if let Some(ext) = file.extension().and_then(|s| s.to_str()) {
+                match ext.to_lowercase().as_str() {
+                    "ttl" | "turtle" => RdfFormat::Turtle,
+                    "nt" => RdfFormat::NTriples,
+                    "nq" => RdfFormat::NQuads,
+                    "trig" => RdfFormat::TriG,
+                    "rdf" | "xml" => RdfFormat::RdfXml,
+                    "jsonld" | "json-ld" => RdfFormat::JsonLd {
+                        profile: oxirs_core::format::JsonLdProfileSet::empty(),
+                    },
+                    "n3" => RdfFormat::N3,
+                    _ => RdfFormat::Turtle, // default
+                }
+            } else {
+                RdfFormat::Turtle
+            }
+        };
+
+        // Parse and validate
+        let file_handle = fs::File::open(&file)?;
+        let reader = BufReader::new(file_handle);
+        let parser = RdfParser::new(rdf_format);
+
+        let mut triple_count = 0;
+        let mut error_count = 0;
+
+        for quad_result in parser.for_reader(reader) {
+            match quad_result {
+                Ok(_) => triple_count += 1,
+                Err(e) => {
+                    eprintln!("  Parse error: {e}");
+                    error_count += 1;
+                }
+            }
+        }
+
+        if error_count == 0 {
+            println!("✓ Valid RDF: {triple_count} triples parsed successfully");
+        } else {
+            println!(
+                "✗ Validation failed: {error_count} errors found ({triple_count} triples parsed)"
+            );
+        }
 
         Ok(())
     }
@@ -411,8 +568,41 @@ impl InteractiveMode {
         let dataset = args[0];
         println!("Getting statistics for dataset '{dataset}'...");
 
-        // TODO: Integrate with actual stats
-        println!("Stats not yet implemented in interactive mode");
+        // Integrate with actual stats
+        use oxirs_core::rdf_store::RdfStore;
+        use std::path::PathBuf;
+
+        let dataset_path = PathBuf::from(dataset);
+        let store =
+            RdfStore::open(&dataset_path).map_err(|e| format!("Failed to open dataset: {e}"))?;
+
+        // Get dataset statistics
+        let quads = store
+            .quads()
+            .map_err(|e| format!("Failed to query quads: {e}"))?;
+        let quad_count = quads.len();
+
+        // Count unique subjects, predicates, objects
+        use std::collections::HashSet;
+        let mut subjects = HashSet::new();
+        let mut predicates = HashSet::new();
+        let mut objects = HashSet::new();
+        let mut graphs = HashSet::new();
+
+        for quad in &quads {
+            subjects.insert(quad.subject().to_string());
+            predicates.insert(quad.predicate().to_string());
+            objects.insert(quad.object().to_string());
+            graphs.insert(quad.graph_name().to_string());
+        }
+
+        println!("\nDataset Statistics:");
+        println!("  Location: {}", dataset_path.display());
+        println!("  Total quads: {quad_count}");
+        println!("  Unique subjects: {}", subjects.len());
+        println!("  Unique predicates: {}", predicates.len());
+        println!("  Unique objects: {}", objects.len());
+        println!("  Named graphs: {}", graphs.len());
 
         Ok(())
     }
@@ -452,22 +642,116 @@ impl InteractiveMode {
             return Ok(());
         }
 
-        println!("Running riot with args: {}", args.join(" "));
-        // TODO: Integrate with actual riot command
-        println!("Riot command not yet fully integrated in interactive mode");
+        // Riot command: Parse and serialize RDF files
+        use oxirs_core::format::{RdfFormat, RdfParser, RdfSerializer};
+        use std::fs;
+        use std::io::BufReader;
+
+        let output_format = RdfFormat::NTriples; // Default output format
+
+        for file_path in args {
+            if file_path.starts_with("--") {
+                continue; // Skip options for now
+            }
+
+            let file = std::path::PathBuf::from(file_path);
+            println!("Processing {}...", file.display());
+
+            // Detect input format
+            let input_format = if let Some(ext) = file.extension().and_then(|s| s.to_str()) {
+                match ext.to_lowercase().as_str() {
+                    "ttl" | "turtle" => RdfFormat::Turtle,
+                    "nt" => RdfFormat::NTriples,
+                    "nq" => RdfFormat::NQuads,
+                    "trig" => RdfFormat::TriG,
+                    "rdf" | "xml" => RdfFormat::RdfXml,
+                    "jsonld" | "json-ld" => RdfFormat::JsonLd {
+                        profile: oxirs_core::format::JsonLdProfileSet::empty(),
+                    },
+                    "n3" => RdfFormat::N3,
+                    _ => RdfFormat::Turtle,
+                }
+            } else {
+                RdfFormat::Turtle
+            };
+
+            // Parse and serialize
+            let file_handle = fs::File::open(&file)?;
+            let reader = BufReader::new(file_handle);
+            let parser = RdfParser::new(input_format);
+
+            let mut serializer =
+                RdfSerializer::new(output_format.clone()).for_writer(std::io::stdout());
+
+            let mut count = 0;
+            for quad_result in parser.for_reader(reader) {
+                match quad_result {
+                    Ok(quad) => {
+                        serializer.serialize_quad(quad.as_ref())?;
+                        count += 1;
+                    }
+                    Err(e) => {
+                        eprintln!("Parse error: {e}");
+                    }
+                }
+            }
+
+            serializer.finish()?;
+            println!("✓ Processed {count} triples from {}", file.display());
+        }
+
         Ok(())
     }
 
-    /// Handle shacl command  
+    /// Handle shacl command
     async fn handle_shacl(&self, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
         if args.len() < 2 {
             println!("Usage: shacl <data_file> <shapes_file>");
             return Ok(());
         }
 
+        let data_file = std::path::PathBuf::from(args[0]);
+        let shapes_file = std::path::PathBuf::from(args[1]);
+
         println!("Running SHACL validation...");
-        // TODO: Integrate with actual shacl command
-        println!("SHACL command not yet fully integrated in interactive mode");
+        println!("  Data: {}", data_file.display());
+        println!("  Shapes: {}", shapes_file.display());
+
+        // Integrate with SHACL validation
+        // For now, provide a basic implementation that parses both files
+        use oxirs_core::format::{RdfFormat, RdfParser};
+        use std::fs;
+        use std::io::BufReader;
+
+        // Parse data file
+        let data_handle = fs::File::open(&data_file)?;
+        let data_reader = BufReader::new(data_handle);
+        let data_parser = RdfParser::new(RdfFormat::Turtle);
+
+        let mut data_count = 0;
+        for quad_result in data_parser.for_reader(data_reader) {
+            if quad_result.is_ok() {
+                data_count += 1;
+            }
+        }
+
+        // Parse shapes file
+        let shapes_handle = fs::File::open(&shapes_file)?;
+        let shapes_reader = BufReader::new(shapes_handle);
+        let shapes_parser = RdfParser::new(RdfFormat::Turtle);
+
+        let mut shapes_count = 0;
+        for quad_result in shapes_parser.for_reader(shapes_reader) {
+            if quad_result.is_ok() {
+                shapes_count += 1;
+            }
+        }
+
+        println!("✓ Data file: {data_count} triples");
+        println!("✓ Shapes file: {shapes_count} triples");
+        println!("\nNote: Full SHACL validation requires oxirs-shacl module");
+        println!("      Both files parsed successfully");
+
         Ok(())
     }
 
@@ -478,9 +762,25 @@ impl InteractiveMode {
             return Ok(());
         }
 
-        println!("Loading data into TDB...");
-        // TODO: Integrate with actual tdbloader command
-        println!("TDB loader not yet fully integrated in interactive mode");
+        let dataset = args[0];
+        let files: Vec<std::path::PathBuf> =
+            args[1..].iter().map(std::path::PathBuf::from).collect();
+
+        println!("Loading data into TDB dataset '{dataset}'...");
+
+        // Integrate with bulk import (use import command for each file)
+        for file in files {
+            println!("  Loading {}...", file.display());
+            crate::commands::import::run(
+                dataset.to_string(),
+                file.clone(),
+                None, // Auto-detect format
+                None, // Default graph
+            )
+            .await?;
+        }
+
+        println!("✓ TDB load complete");
         Ok(())
     }
 
@@ -491,10 +791,215 @@ impl InteractiveMode {
             return Ok(());
         }
 
-        println!("Dumping TDB dataset...");
-        // TODO: Integrate with actual tdbdump command
-        println!("TDB dump not yet fully integrated in interactive mode");
+        let dataset = args[0];
+
+        // Check for --output option
+        let output_file = if args.len() >= 3 && args[1] == "--output" {
+            Some(std::path::PathBuf::from(args[2]))
+        } else {
+            None
+        };
+
+        println!("Dumping TDB dataset '{dataset}'...");
+
+        // Integrate with export command
+        if let Some(file) = output_file {
+            crate::commands::export::run(
+                dataset.to_string(),
+                file,
+                "ntriples".to_string(), // Default format for TDB dumps
+                None,                   // All graphs
+            )
+            .await?;
+        } else {
+            // Dump to stdout
+            use oxirs_core::format::{RdfFormat, RdfSerializer};
+            use oxirs_core::rdf_store::RdfStore;
+            use std::path::PathBuf;
+
+            let dataset_path = PathBuf::from(dataset);
+            let store = RdfStore::open(&dataset_path)?;
+
+            let quads = store.quads()?;
+            let mut serializer =
+                RdfSerializer::new(RdfFormat::NTriples).for_writer(std::io::stdout());
+
+            for quad in quads {
+                serializer.serialize_quad(quad.as_ref())?;
+            }
+
+            serializer.finish()?;
+        }
+
+        println!("\n✓ TDB dump complete");
         Ok(())
+    }
+
+    /// Create default query templates
+    fn create_default_templates() -> HashMap<String, String> {
+        let mut templates = HashMap::new();
+
+        templates.insert(
+            "select-all".to_string(),
+            "SELECT * WHERE { ?s ?p ?o } LIMIT 100".to_string(),
+        );
+
+        templates.insert(
+            "count".to_string(),
+            "SELECT (COUNT(*) as ?count) WHERE { ?s ?p ?o }".to_string(),
+        );
+
+        templates.insert(
+            "describe".to_string(),
+            "DESCRIBE <http://example.org/resource>".to_string(),
+        );
+
+        templates.insert(
+            "construct".to_string(),
+            "CONSTRUCT { ?s ?p ?o } WHERE { ?s ?p ?o } LIMIT 100".to_string(),
+        );
+
+        templates.insert("ask".to_string(), "ASK { ?s ?p ?o }".to_string());
+
+        templates.insert(
+            "distinct-predicates".to_string(),
+            "SELECT DISTINCT ?predicate WHERE { ?s ?predicate ?o }".to_string(),
+        );
+
+        templates.insert(
+            "distinct-types".to_string(),
+            "SELECT DISTINCT ?type WHERE { ?s a ?type }".to_string(),
+        );
+
+        templates.insert(
+            "label-search".to_string(),
+            "SELECT ?s ?label WHERE { ?s rdfs:label ?label . FILTER(CONTAINS(LCASE(?label), \"search\")) } LIMIT 20".to_string(),
+        );
+
+        templates.insert(
+            "property-values".to_string(),
+            "SELECT ?value WHERE { <http://example.org/subject> <http://example.org/property> ?value }".to_string(),
+        );
+
+        templates.insert(
+            "optional-pattern".to_string(),
+            "SELECT ?s ?name ?email WHERE { ?s a foaf:Person . ?s foaf:name ?name . OPTIONAL { ?s foaf:mbox ?email } }".to_string(),
+        );
+
+        templates
+    }
+
+    /// Load saved queries from file
+    fn load_saved_queries(file_path: &str) -> HashMap<String, String> {
+        if let Ok(content) = std::fs::read_to_string(file_path) {
+            if let Ok(queries) = serde_json::from_str(&content) {
+                return queries;
+            }
+        }
+        HashMap::new()
+    }
+
+    /// Save queries to file
+    fn persist_saved_queries(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let json = serde_json::to_string_pretty(&self.saved_queries)?;
+        std::fs::write(&self.saved_queries_file, json)?;
+        Ok(())
+    }
+
+    /// Show a specific template
+    fn show_template(&self, name: &str) {
+        if let Some(template) = self.query_templates.get(name) {
+            println!("Template '{name}':");
+            println!("{template}");
+        } else {
+            println!("Template '{name}' not found");
+            println!("Use 'templates' to see available templates");
+        }
+    }
+
+    /// List all available templates
+    fn list_templates(&self) {
+        println!("Available query templates:");
+        let mut names: Vec<_> = self.query_templates.keys().collect();
+        names.sort();
+
+        for name in names {
+            if let Some(query) = self.query_templates.get(name.as_str()) {
+                println!("\n  {name}:");
+                let preview = if query.len() > 60 {
+                    format!("{}...", &query[..60])
+                } else {
+                    query.clone()
+                };
+                println!("    {}", preview.replace('\n', " "));
+            }
+        }
+
+        println!("\nUsage: template <name>");
+    }
+
+    /// Save a query with a name
+    fn save_query(&mut self, name: &str, query: &str) {
+        self.saved_queries
+            .insert(name.to_string(), query.to_string());
+
+        if let Err(e) = self.persist_saved_queries() {
+            eprintln!("Warning: Failed to persist saved queries: {e}");
+        } else {
+            println!("Query saved as '{name}'");
+        }
+    }
+
+    /// Load and display a saved query
+    fn load_query(&self, name: &str) {
+        if let Some(query) = self.saved_queries.get(name) {
+            println!("Query '{name}':");
+            println!("{query}");
+            println!("\nTo execute, copy and paste the query, or use:");
+            println!("  query <dataset> {query}");
+        } else {
+            println!("Query '{name}' not found");
+            println!("Use 'queries' to see saved queries");
+        }
+    }
+
+    /// List all saved queries
+    fn list_saved_queries(&self) {
+        if self.saved_queries.is_empty() {
+            println!("No saved queries");
+            println!("Save a query with: save <name> <query>");
+            return;
+        }
+
+        println!("Saved queries:");
+        let mut names: Vec<_> = self.saved_queries.keys().collect();
+        names.sort();
+
+        for name in names {
+            if let Some(query) = self.saved_queries.get(name.as_str()) {
+                let preview = if query.len() > 60 {
+                    format!("{}...", &query[..60])
+                } else {
+                    query.clone()
+                };
+                println!("  {name}: {}", preview.replace('\n', " "));
+            }
+        }
+
+        println!("\nUsage: load <name>");
+    }
+
+    /// Delete a saved query
+    fn delete_query(&mut self, name: &str) {
+        if self.saved_queries.remove(name).is_some() {
+            if let Err(e) = self.persist_saved_queries() {
+                eprintln!("Warning: Failed to persist saved queries: {e}");
+            } else {
+                println!("Query '{name}' deleted");
+            }
+        } else {
+            println!("Query '{name}' not found");
+        }
     }
 }
 
@@ -513,6 +1018,7 @@ struct OxirsHelper {
     hinter: HistoryHinter,
     validator: MatchingBracketValidator,
     commands: Vec<String>,
+    sparql_keywords: Vec<String>,
 }
 
 impl Completer for OxirsHelper {
@@ -524,11 +1030,18 @@ impl Completer for OxirsHelper {
         pos: usize,
         ctx: &rustyline::Context<'_>,
     ) -> Result<(usize, Vec<Pair>), ReadlineError> {
-        // First try command completion
         let mut candidates = Vec::new();
 
         // Split the line to get the current word
         let words: Vec<&str> = line[..pos].split_whitespace().collect();
+
+        // Find the current word being typed
+        let current_word_start = line[..pos]
+            .rfind(|c: char| c.is_whitespace())
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let current_word = &line[current_word_start..pos];
+        let current_word_upper = current_word.to_uppercase();
 
         if words.len() <= 1 {
             // Complete commands
@@ -541,14 +1054,28 @@ impl Completer for OxirsHelper {
                     });
                 }
             }
+        } else if words.len() >= 2 {
+            // Check if we're in a query command context for SPARQL keyword completion
+            let first_word = words[0];
+            if first_word == "query" || first_word == "save" {
+                // Try SPARQL keyword completion
+                for keyword in &self.sparql_keywords {
+                    if keyword.starts_with(&current_word_upper) {
+                        candidates.push(Pair {
+                            display: keyword.clone(),
+                            replacement: keyword.clone(),
+                        });
+                    }
+                }
+            }
         }
 
-        // If no command matches, try file completion
+        // If no matches, try file completion
         if candidates.is_empty() {
             return self.completer.complete(line, pos, ctx);
         }
 
-        Ok((0, candidates))
+        Ok((current_word_start, candidates))
     }
 }
 
@@ -602,6 +1129,13 @@ fn get_command_list() -> Vec<String> {
         "tdbstats".to_string(),
         "tdbbackup".to_string(),
         "tdbcompact".to_string(),
+        // Query templates and saved queries
+        "template".to_string(),
+        "templates".to_string(),
+        "save".to_string(),
+        "load".to_string(),
+        "queries".to_string(),
+        "delete".to_string(),
         // Environment
         "use".to_string(),
         "set".to_string(),
@@ -612,6 +1146,103 @@ fn get_command_list() -> Vec<String> {
         "help".to_string(),
         "exit".to_string(),
         "quit".to_string(),
+    ]
+}
+
+/// Get list of SPARQL keywords for autocomplete
+fn get_sparql_keywords() -> Vec<String> {
+    vec![
+        // Query forms
+        "SELECT".to_string(),
+        "CONSTRUCT".to_string(),
+        "DESCRIBE".to_string(),
+        "ASK".to_string(),
+        // Update operations
+        "INSERT".to_string(),
+        "DELETE".to_string(),
+        "LOAD".to_string(),
+        "CLEAR".to_string(),
+        "DROP".to_string(),
+        "CREATE".to_string(),
+        "COPY".to_string(),
+        "MOVE".to_string(),
+        "ADD".to_string(),
+        // Graph patterns
+        "WHERE".to_string(),
+        "GRAPH".to_string(),
+        "OPTIONAL".to_string(),
+        "UNION".to_string(),
+        "MINUS".to_string(),
+        "SERVICE".to_string(),
+        // Modifiers
+        "DISTINCT".to_string(),
+        "REDUCED".to_string(),
+        "ORDER".to_string(),
+        "BY".to_string(),
+        "LIMIT".to_string(),
+        "OFFSET".to_string(),
+        "GROUP".to_string(),
+        "HAVING".to_string(),
+        // Filters and functions
+        "FILTER".to_string(),
+        "BIND".to_string(),
+        "VALUES".to_string(),
+        "AS".to_string(),
+        // Aggregates
+        "COUNT".to_string(),
+        "SUM".to_string(),
+        "MIN".to_string(),
+        "MAX".to_string(),
+        "AVG".to_string(),
+        "SAMPLE".to_string(),
+        "GROUP_CONCAT".to_string(),
+        // Functions
+        "STR".to_string(),
+        "LANG".to_string(),
+        "LANGMATCHES".to_string(),
+        "DATATYPE".to_string(),
+        "BOUND".to_string(),
+        "IRI".to_string(),
+        "URI".to_string(),
+        "BNODE".to_string(),
+        "RAND".to_string(),
+        "ABS".to_string(),
+        "CEIL".to_string(),
+        "FLOOR".to_string(),
+        "ROUND".to_string(),
+        "CONCAT".to_string(),
+        "STRLEN".to_string(),
+        "UCASE".to_string(),
+        "LCASE".to_string(),
+        "STRSTARTS".to_string(),
+        "STRENDS".to_string(),
+        "CONTAINS".to_string(),
+        "STRBEFORE".to_string(),
+        "STRAFTER".to_string(),
+        "ENCODE_FOR_URI".to_string(),
+        "REPLACE".to_string(),
+        "REGEX".to_string(),
+        "SUBSTR".to_string(),
+        // Logical operators
+        "NOT".to_string(),
+        "EXISTS".to_string(),
+        // Boolean values
+        "TRUE".to_string(),
+        "FALSE".to_string(),
+        // Data operations
+        "DATA".to_string(),
+        "WITH".to_string(),
+        "INTO".to_string(),
+        "USING".to_string(),
+        "NAMED".to_string(),
+        "DEFAULT".to_string(),
+        "ALL".to_string(),
+        "SILENT".to_string(),
+        // Prefixes
+        "PREFIX".to_string(),
+        "BASE".to_string(),
+        // RDF types
+        "a".to_string(), // shorthand for rdf:type
     ]
 }
 

@@ -50,7 +50,9 @@ where
     fn load_leaf(&mut self, leaf_id: PageId, start_key: Option<&K>) -> Result<()> {
         let guard = self.buffer_pool.fetch_page(leaf_id)?;
         let page = guard.page();
-        let page_ref = page.as_ref().ok_or(crate::error::TdbError::PageNotFound(leaf_id))?;
+        let page_ref = page
+            .as_ref()
+            .ok_or(crate::error::TdbError::PageNotFound(leaf_id))?;
 
         let node = BTreeNode::<K, V>::deserialize_from_page(page_ref)?;
 

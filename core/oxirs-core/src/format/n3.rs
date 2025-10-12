@@ -7,8 +7,7 @@
 
 use super::error::FormatError;
 use crate::model::{
-    GraphName, Literal, NamedNode, ObjectRef,
-    PredicateRef, Quad, QuadRef, SubjectRef,
+    GraphName, Literal, NamedNode, ObjectRef, PredicateRef, Quad, QuadRef, SubjectRef,
 };
 use std::collections::HashMap;
 use std::io::Write;
@@ -323,7 +322,7 @@ impl<W: Write> super::serializer::QuadSerializer<W> for N3Writer<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Triple, Subject, Object};
+    use crate::model::{NamedNode, Object, Subject, Triple};
 
     #[test]
     fn test_n3_serialize_triple() {

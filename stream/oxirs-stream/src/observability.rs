@@ -10,6 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, RwLock};
+#[cfg(feature = "opentelemetry")]
+use tracing::info;
 use tracing::{debug, error, warn};
 use uuid::Uuid;
 

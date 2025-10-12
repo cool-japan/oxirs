@@ -1,8 +1,8 @@
 //! Cache tier implementation
 
-use super::types::AccessTracker;
 use super::eviction::EvictionPolicy;
 use super::storage::CacheStorage;
+use super::types::AccessTracker;
 use super::types::{TierConfiguration, TierStatistics};
 
 /// Individual cache tier with specific characteristics

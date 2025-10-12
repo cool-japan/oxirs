@@ -774,7 +774,7 @@ impl UpdateParser {
         for (prefix, iri) in prefixes {
             turtle_doc.push_str(&format!("@prefix {}: <{}> .\n", prefix, iri.as_str()));
         }
-        turtle_doc.push_str("\n");
+        turtle_doc.push('\n');
         turtle_doc.push_str(data_block);
 
         // Parse using Turtle parser
@@ -968,7 +968,7 @@ impl UpdateParser {
         for (prefix, iri) in prefixes {
             turtle_doc.push_str(&format!("@prefix {}: <{}> .\n", prefix, iri.as_str()));
         }
-        turtle_doc.push_str("\n");
+        turtle_doc.push('\n');
         turtle_doc.push_str(pattern_block);
 
         // Parse using Turtle parser to get concrete quads
@@ -985,10 +985,10 @@ impl UpdateParser {
         let quad_patterns: Vec<QuadPattern> = quads
             .into_iter()
             .map(|quad| QuadPattern {
-                subject: self.subject_to_term_pattern(&quad.subject()),
-                predicate: self.predicate_to_term_pattern(&quad.predicate()),
-                object: self.object_to_term_pattern(&quad.object()),
-                graph: Some(self.graph_to_term_pattern(&quad.graph_name())),
+                subject: self.subject_to_term_pattern(quad.subject()),
+                predicate: self.predicate_to_term_pattern(quad.predicate()),
+                object: self.object_to_term_pattern(quad.object()),
+                graph: Some(self.graph_to_term_pattern(quad.graph_name())),
             })
             .collect();
 
@@ -1076,9 +1076,8 @@ impl UpdateParser {
     fn parse_term_pattern(&self, term_str: &str) -> Result<TermPattern> {
         let trimmed = term_str.trim();
 
-        if trimmed.starts_with('?') {
+        if let Some(var_name) = trimmed.strip_prefix('?') {
             // Variable
-            let var_name = &trimmed[1..];
             let var = crate::model::Variable::new(var_name)
                 .map_err(|e| OxirsError::Parse(format!("Invalid variable: {e}")))?;
             Ok(TermPattern::Variable(var))
@@ -1111,9 +1110,8 @@ impl UpdateParser {
     ) -> Result<TermPattern> {
         let trimmed = term_str.trim();
 
-        if trimmed.starts_with('?') {
+        if let Some(var_name) = trimmed.strip_prefix('?') {
             // Variable
-            let var_name = &trimmed[1..];
             let var = crate::model::Variable::new(var_name)
                 .map_err(|e| OxirsError::Parse(format!("Invalid variable: {e}")))?;
             Ok(TermPattern::Variable(var))

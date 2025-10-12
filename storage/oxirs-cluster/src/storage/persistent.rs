@@ -11,7 +11,6 @@ use crate::network::LogEntry;
 use crate::raft::{OxirsNodeId, RdfApp, RdfCommand};
 use crate::shard::ShardId;
 
-
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use oxirs_core::model::Triple;
@@ -24,7 +23,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::RwLock;
-
 
 /// Storage backend trait for sharding support
 #[async_trait]
@@ -216,7 +214,6 @@ pub mod mock {
 }
 
 /// StorageBackend implementation for PersistentStorage
-
 pub struct PersistentStorage {
     /// Data directory
     data_dir: PathBuf,
@@ -233,7 +230,6 @@ pub struct PersistentStorage {
     /// WAL file writer
     wal_writer: Arc<RwLock<Option<BufWriter<File>>>>,
 }
-
 
 impl PersistentStorage {
     /// Create a new persistent storage instance

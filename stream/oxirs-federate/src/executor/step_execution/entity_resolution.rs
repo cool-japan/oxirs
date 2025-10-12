@@ -1,9 +1,9 @@
 //! Entity resolution functions for federated queries
 
+use super::super::types::*;
 use anyhow::Result;
 use std::collections::{HashMap, HashSet};
 use tracing::debug;
-use super::super::types::*;
 
 pub fn perform_sparql_entity_resolution(
     results: &SparqlResults,

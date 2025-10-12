@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 pub mod function_library;
+pub mod query_optimizer;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -291,6 +292,13 @@ pub use function_library::{
     DynamicFunction, ExecutionContext, FunctionCategory, FunctionExecutionResult, FunctionLibrary,
     FunctionMetadata, FunctionSecurityPolicy, Operation, Permission, SandboxLevel, SecurityConfig,
     SparqlFunctionLibrary,
+};
+
+// Re-export query optimizer types
+pub use query_optimizer::{
+    ComplexityLevel, ExecutionStrategy, OptimizationStats, OptimizedQuery, QueryComplexity,
+    QueryComplexityAnalyzer, QueryExecutionPlan, QueryOptimizationConfig, QueryPlanGenerator,
+    SparqlQueryOptimizer,
 };
 
 /// Enhanced SPARQL constraint executor with function library integration

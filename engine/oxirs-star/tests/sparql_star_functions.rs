@@ -170,7 +170,8 @@ fn test_nested_quoted_triple_functions() {
 
     // SUBJECT of outer quoted triple should be the inner quoted triple
     let subject =
-        FunctionEvaluator::evaluate(StarFunction::Subject, &[double_quoted.clone()]).unwrap();
+        FunctionEvaluator::evaluate(StarFunction::Subject, std::slice::from_ref(&double_quoted))
+            .unwrap();
 
     assert!(subject.is_quoted_triple());
 

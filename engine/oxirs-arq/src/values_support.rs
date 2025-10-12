@@ -170,10 +170,7 @@ impl ValuesOptimizer {
         let most_selective = stats
             .selectivity
             .iter()
-            .min_by(|a, b| {
-                a.1.partial_cmp(b.1)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .min_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(var, _)| var.clone());
 
         OptimizedValues {
@@ -196,10 +193,8 @@ impl ValuesOptimizer {
             .map(|(var, sel)| (var.clone(), *sel))
             .collect();
 
-        vars_with_selectivity.sort_by(|a, b| {
-            a.1.partial_cmp(&b.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        vars_with_selectivity
+            .sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
 
         vars_with_selectivity
             .into_iter()
@@ -246,10 +241,7 @@ impl IndexedValues {
 
             for (row_idx, row) in values.data.iter().enumerate() {
                 if let Some(Some(term)) = row.get(var_idx) {
-                    var_index
-                        .entry(term.clone())
-                        .or_insert_with(Vec::new)
-                        .push(row_idx);
+                    var_index.entry(term.clone()).or_default().push(row_idx);
                 }
             }
 
@@ -345,11 +337,7 @@ impl ValuesJoinOptimizer {
         // Find shared variables
         let values_vars: HashSet<_> = values.variables.iter().collect();
         let shared_vars: Vec<_> = values_vars
-            .intersection(
-                &other_variables
-                    .iter()
-                    .collect::<HashSet<_>>(),
-            )
+            .intersection(&other_variables.iter().collect::<HashSet<_>>())
             .map(|&v| v.clone())
             .collect();
 
@@ -372,10 +360,7 @@ impl ValuesJoinOptimizer {
     }
 
     /// Push VALUES into join to reduce intermediate results
-    pub fn can_push_values(
-        values: &ValuesClause,
-        join_vars: &[Variable],
-    ) -> bool {
+    pub fn can_push_values(values: &ValuesClause, join_vars: &[Variable]) -> bool {
         // VALUES can be pushed if:
         // 1. It's small (< 100 rows)
         // 2. Has no UNDEF values in join variables
@@ -392,10 +377,7 @@ impl ValuesJoinOptimizer {
         }
 
         // Check if any VALUES variables are in the join
-        values
-            .variables
-            .iter()
-            .any(|v| join_vars.contains(v))
+        values.variables.iter().any(|v| join_vars.contains(v))
     }
 }
 
@@ -445,11 +427,7 @@ impl ValuesExecutor {
     }
 
     /// Join VALUES with solution using index
-    pub fn join_indexed(
-        &mut self,
-        values: &ValuesClause,
-        solution: Solution,
-    ) -> Result<Solution> {
+    pub fn join_indexed(&mut self, values: &ValuesClause, solution: Solution) -> Result<Solution> {
         let indexed = self.execute_indexed(values)?;
         let mut result = Solution::new();
 
@@ -504,10 +482,7 @@ impl IndexedValues {
 
 /// Check if VALUES and binding have shared variables
 fn has_shared_vars(values: &ValuesClause, binding: &Binding) -> bool {
-    values
-        .variables
-        .iter()
-        .any(|v| binding.contains_key(v))
+    values.variables.iter().any(|v| binding.contains_key(v))
 }
 
 /// VALUES clause builder for programmatic construction
@@ -748,12 +723,7 @@ mod tests {
         let other_vars = [var_x.clone()].into_iter().collect();
 
         let strategy = ValuesJoinOptimizer::optimize_join(&values, &other_vars);
-        assert_eq!(
-            strategy,
-            JoinStrategy::IndexNestedLoop {
-                index_var: var_x
-            }
-        );
+        assert_eq!(strategy, JoinStrategy::IndexNestedLoop { index_var: var_x });
     }
 
     #[test]

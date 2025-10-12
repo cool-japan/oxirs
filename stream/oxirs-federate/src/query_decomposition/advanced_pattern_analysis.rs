@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info};
 
 use crate::{
@@ -326,7 +326,7 @@ pub struct AdvancedPatternAnalyzer {
     config: AdvancedAnalysisConfig,
     pattern_statistics: HashMap<String, PatternStatistics>,
     ml_model: Option<MLOptimizationModel>,
-    quantum_optimizer: Arc<RwLock<QuantumPatternOptimizer>>,
+    quantum_optimizer: Arc<Mutex<QuantumPatternOptimizer>>,
     consciousness_engine: Arc<RwLock<ConsciousnessPatternEngine>>,
     neural_predictor: Arc<RwLock<NeuralPerformancePredictor>>,
     adaptive_cache: Arc<RwLock<AdaptivePatternCache>>,
@@ -342,7 +342,7 @@ impl AdvancedPatternAnalyzer {
             config: AdvancedAnalysisConfig::default(),
             pattern_statistics: HashMap::new(),
             ml_model: None,
-            quantum_optimizer: Arc::new(RwLock::new(QuantumPatternOptimizer::new())),
+            quantum_optimizer: Arc::new(Mutex::new(QuantumPatternOptimizer::new())),
             consciousness_engine: Arc::new(RwLock::new(ConsciousnessPatternEngine::new())),
             neural_predictor: Arc::new(RwLock::new(NeuralPerformancePredictor::new())),
             adaptive_cache: Arc::new(RwLock::new(AdaptivePatternCache::new())),
@@ -353,7 +353,7 @@ impl AdvancedPatternAnalyzer {
 
     /// Create with custom configuration and advanced AI capabilities
     pub fn with_config(config: AdvancedAnalysisConfig) -> Self {
-        let quantum_optimizer = Arc::new(RwLock::new(QuantumPatternOptimizer::with_config(
+        let quantum_optimizer = Arc::new(Mutex::new(QuantumPatternOptimizer::with_config(
             config.quantum_config.clone(),
         )));
         let consciousness_engine = Arc::new(RwLock::new(ConsciousnessPatternEngine::with_config(
@@ -428,7 +428,7 @@ impl AdvancedPatternAnalyzer {
         if self.config.enable_quantum_optimization {
             let quantum_insights = self
                 .quantum_optimizer
-                .write()
+                .lock()
                 .await
                 .optimize_pattern_selection(patterns, filters, services)
                 .await?;
@@ -1425,7 +1425,7 @@ impl AdvancedPatternAnalyzer {
             if avg_time > Duration::from_secs(5) {
                 // Analysis taking too long - reduce quantum complexity
                 self.quantum_optimizer
-                    .write()
+                    .lock()
                     .await
                     .reduce_complexity()
                     .await;
@@ -1454,7 +1454,7 @@ impl AdvancedPatternAnalyzer {
         parameters: QuantumOptimizationParameters,
     ) -> Result<()> {
         self.quantum_optimizer
-            .write()
+            .lock()
             .await
             .update_parameters(parameters)
             .await
@@ -1843,8 +1843,11 @@ impl QuantumPatternOptimizer {
 
         for (other_idx, other_pattern) in all_patterns.iter().enumerate() {
             if idx != other_idx {
-                entanglement_score +=
-                    self.calculate_pattern_entanglement(pattern, &[other_pattern.clone()], 0);
+                entanglement_score += self.calculate_pattern_entanglement(
+                    pattern,
+                    std::slice::from_ref(other_pattern),
+                    0,
+                );
             }
         }
 
@@ -1904,6 +1907,12 @@ impl QuantumPatternOptimizer {
         Ok(())
     }
 }
+
+// SAFETY: QuantumPatternOptimizer will be wrapped in Arc<Mutex<>>, which ensures exclusive access.
+// The Mutex provides the necessary synchronization for Send + Sync, even though the Random field
+// may not be Send/Sync on its own.
+unsafe impl Send for QuantumPatternOptimizer {}
+unsafe impl Sync for QuantumPatternOptimizer {}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumOptimizerConfig {

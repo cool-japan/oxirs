@@ -35,7 +35,10 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     validator.add(
         ArgumentValidator::new("output", Some(&output))
             .required()
-            .one_of(&["json", "csv", "tsv", "table", "xml"]),
+            .custom(
+                is_supported_output_format,
+                "Output format must be one of: json, csv, tsv, table, xml",
+            ),
     );
 
     // Validate query file if needed
@@ -112,10 +115,44 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
         Ok(res) => {
             let binding_count = res.len();
             query_logger.complete(binding_count);
+
+            // Record successful query in history
+            let duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
+            if let Err(e) = super::history::record_query(
+                &dataset,
+                &sparql_query,
+                Some(duration_ms),
+                Some(binding_count),
+                true,
+                None,
+            ) {
+                // Log error but don't fail the query
+                if ctx.should_show_verbose() {
+                    ctx.verbose(&format!("Failed to record query history: {}", e));
+                }
+            }
+
             res
         }
         Err(e) => {
             query_logger.error(&e.to_string());
+
+            // Record failed query in history
+            let duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
+            if let Err(hist_err) = super::history::record_query(
+                &dataset,
+                &sparql_query,
+                Some(duration_ms),
+                None,
+                false,
+                Some(e.to_string()),
+            ) {
+                // Log error but don't fail the query
+                if ctx.should_show_verbose() {
+                    ctx.verbose(&format!("Failed to record query history: {}", hist_err));
+                }
+            }
+
             return Err(format!("Query execution failed: {e}").into());
         }
     };
@@ -141,92 +178,8 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
 }
 
 /// Check if output format is supported
-#[allow(dead_code)]
 fn is_supported_output_format(format: &str) -> bool {
     matches!(format, "json" | "csv" | "tsv" | "table" | "xml")
-}
-
-/// Format and display query results
-#[allow(dead_code)]
-fn format_results(
-    results: &super::stubs::OxirsQueryResults,
-    format: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    match format {
-        "table" => {
-            format_table_results(results)?;
-        }
-        "json" => {
-            format_json_results(results)?;
-        }
-        "csv" => {
-            format_csv_results(results, ",")?;
-        }
-        "tsv" => {
-            format_csv_results(results, "\t")?;
-        }
-        "xml" => {
-            format_xml_results(results)?;
-        }
-        _ => {
-            return Err(format!("Output format '{format}' not implemented").into());
-        }
-    }
-
-    Ok(())
-}
-
-/// Format results as a table
-#[allow(dead_code)]
-fn format_table_results(
-    _results: &super::stubs::OxirsQueryResults,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement proper table formatting
-    println!("Results (table format):");
-    println!("┌─────────────────────────────────────────┐");
-    println!("│ No results - implementation pending    │");
-    println!("└─────────────────────────────────────────┘");
-    Ok(())
-}
-
-/// Format results as JSON
-#[allow(dead_code)]
-fn format_json_results(
-    _results: &super::stubs::OxirsQueryResults,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement proper JSON formatting
-    println!("Results (JSON format):");
-    println!("{{");
-    println!("  \"head\": {{ \"vars\": [] }},");
-    println!("  \"results\": {{ \"bindings\": [] }}");
-    println!("}}");
-    Ok(())
-}
-
-/// Format results as CSV/TSV
-#[allow(dead_code)]
-fn format_csv_results(
-    _results: &super::stubs::OxirsQueryResults,
-    _separator: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement proper CSV/TSV formatting
-    println!("Results (CSV/TSV format):");
-    println!("# No results - implementation pending");
-    Ok(())
-}
-
-/// Format results as XML
-fn format_xml_results(
-    _results: &super::stubs::OxirsQueryResults,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: Implement proper XML formatting
-    println!("Results (XML format):");
-    println!("<?xml version=\"1.0\"?>");
-    println!("<sparql xmlns=\"http://www.w3.org/2005/sparql-results#\">");
-    println!("  <head></head>");
-    println!("  <results></results>");
-    println!("</sparql>");
-    Ok(())
 }
 
 /// Enhanced format results using CLI context with comprehensive formatters
@@ -235,9 +188,7 @@ fn format_results_enhanced(
     output_format: &str,
     _ctx: &crate::cli::CliContext,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use crate::cli::formatters::{
-        create_formatter, Binding, QueryResults, RdfTerm,
-    };
+    use crate::cli::formatters::{create_formatter, Binding, QueryResults, RdfTerm};
     use oxirs_core::rdf_store::QueryResults as CoreQueryResults;
     use std::io;
 
@@ -254,7 +205,7 @@ fn format_results_enhanced(
                         // Get values in the order of variables
                         let values: Vec<Option<RdfTerm>> = variables
                             .iter()
-                            .map(|var| var_binding.get(var).map(|term| term_to_rdf_term(term)))
+                            .map(|var| var_binding.get(var).map(term_to_rdf_term))
                             .collect();
 
                         Binding { values }

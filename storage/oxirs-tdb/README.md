@@ -1,10 +1,10 @@
 # OxiRS TDB - High-Performance RDF Storage Engine
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -61,7 +61,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.1.0-alpha.2"
+oxirs-tdb = "0.1.0-alpha.3"
 ```
 
 ### Basic Usage

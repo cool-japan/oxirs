@@ -916,4 +916,3 @@ pub(crate) fn builtin_geo_area(args: &[SwrlArgument]) -> Result<bool> {
     // Allow some tolerance for floating point comparison
     Ok((area.abs() - expected_area).abs() < 0.1)
 }
-

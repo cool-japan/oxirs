@@ -1,21 +1,21 @@
 //! SHACL Validator implementation
 
 use crate::constraints::Constraint;
+use crate::paths::PropertyPath;
 use crate::report::ValidationReport;
-use crate::{Shape, ShapeMetadata, ShapeType};
-use crate::targets::Target;
-use crate::{ConstraintComponentId, Result, ShaclError, ShapeId, Severity, ValidationConfig};
 use crate::shape_import;
 use crate::shapes;
+use crate::targets::Target;
 use crate::validation;
-use crate::paths::PropertyPath;
+use crate::{ConstraintComponentId, Result, Severity, ShaclError, ShapeId, ValidationConfig};
+use crate::{Shape, ShapeMetadata, ShapeType};
 
+use indexmap::IndexMap;
 use oxirs_core::model::{Literal, Term};
 use oxirs_core::Store;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
-use indexmap::IndexMap;
 #[derive(Debug)]
 
 pub struct Validator {
@@ -369,7 +369,7 @@ impl Validator {
         node: &Term,
         config: Option<ValidationConfig>,
     ) -> Result<ValidationReport> {
-        self.validate_nodes(store, shape_id, &[node.clone()], config)
+        self.validate_nodes(store, shape_id, std::slice::from_ref(node), config)
     }
 
     /// Comprehensive shape validation to ensure shapes graphs are themselves valid
@@ -1456,4 +1456,3 @@ impl Default for ValidatorBuilder {
         Self::new()
     }
 }
-

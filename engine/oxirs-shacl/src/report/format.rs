@@ -25,6 +25,8 @@ pub enum ReportFormat {
     Text,
     /// YAML format
     Yaml,
+    /// Prometheus metrics format
+    Prometheus,
 }
 
 impl fmt::Display for ReportFormat {
@@ -39,6 +41,7 @@ impl fmt::Display for ReportFormat {
             ReportFormat::Csv => write!(f, "csv"),
             ReportFormat::Text => write!(f, "text"),
             ReportFormat::Yaml => write!(f, "yaml"),
+            ReportFormat::Prometheus => write!(f, "prometheus"),
         }
     }
 }
@@ -56,6 +59,7 @@ impl ReportFormat {
             ReportFormat::Csv => "csv",
             ReportFormat::Text => "txt",
             ReportFormat::Yaml => "yaml",
+            ReportFormat::Prometheus => "prom",
         }
     }
 
@@ -71,6 +75,7 @@ impl ReportFormat {
             ReportFormat::Csv => "text/csv",
             ReportFormat::Text => "text/plain",
             ReportFormat::Yaml => "application/yaml",
+            ReportFormat::Prometheus => "text/plain; version=0.0.4",
         }
     }
 
@@ -86,6 +91,7 @@ impl ReportFormat {
             "csv" => Some(ReportFormat::Csv),
             "text" | "txt" => Some(ReportFormat::Text),
             "yaml" | "yml" => Some(ReportFormat::Yaml),
+            "prometheus" | "prom" => Some(ReportFormat::Prometheus),
             _ => None,
         }
     }
@@ -102,6 +108,7 @@ impl ReportFormat {
             ReportFormat::Csv,
             ReportFormat::Text,
             ReportFormat::Yaml,
+            ReportFormat::Prometheus,
         ]
     }
 

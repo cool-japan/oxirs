@@ -286,6 +286,92 @@ pub fn register_standard_functions(registry: &PropertyFunctionRegistry) -> Resul
     Ok(())
 }
 
+/// Traverse an RDF list and collect all members
+///
+/// RDF lists are represented as chains of rdf:first/rdf:rest statements,
+/// terminated by rdf:nil.
+///
+/// # RDF List Structure
+/// ```turtle
+/// ex:list rdf:first ex:element1 ;
+///         rdf:rest _:b1 .
+/// _:b1 rdf:first ex:element2 ;
+///      rdf:rest _:b2 .
+/// _:b2 rdf:first ex:element3 ;
+///      rdf:rest rdf:nil .
+/// ```
+fn traverse_rdf_list(
+    list_node: &AlgebraTerm,
+    context: &PropertyFunctionContext,
+) -> Result<Vec<AlgebraTerm>> {
+    use crate::algebra::{Iri, TriplePattern};
+
+    // RDF vocabulary URIs
+    let rdf_first_iri = Iri::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#first")
+        .map_err(|e| anyhow!("Invalid RDF first URI: {}", e))?;
+    let rdf_rest_iri = Iri::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#rest")
+        .map_err(|e| anyhow!("Invalid RDF rest URI: {}", e))?;
+    let rdf_nil_iri = Iri::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#nil")
+        .map_err(|e| anyhow!("Invalid RDF nil URI: {}", e))?;
+
+    let rdf_first = AlgebraTerm::Iri(rdf_first_iri);
+    let rdf_rest = AlgebraTerm::Iri(rdf_rest_iri);
+    let rdf_nil = AlgebraTerm::Iri(rdf_nil_iri);
+
+    let mut members = Vec::new();
+    let mut current_node = list_node.clone();
+
+    // Maximum depth to prevent infinite loops
+    const MAX_DEPTH: usize = 10000;
+    let mut depth = 0;
+
+    loop {
+        depth += 1;
+        if depth > MAX_DEPTH {
+            bail!("RDF list traversal exceeded maximum depth (possible cycle)");
+        }
+
+        // Check if we've reached rdf:nil (end of list)
+        if current_node == rdf_nil {
+            break;
+        }
+
+        // Get rdf:first value (the list member)
+        let first_var = Variable::new("_first")?;
+        let first_pattern = TriplePattern::new(
+            current_node.clone(),
+            rdf_first.clone(),
+            AlgebraTerm::Variable(first_var.clone()),
+        );
+
+        let first_triples = context.dataset.find_triples(&first_pattern)?;
+        if let Some((_, _, first_value)) = first_triples.first() {
+            members.push(first_value.clone());
+        } else {
+            // No rdf:first found - invalid list or end of list
+            break;
+        }
+
+        // Get rdf:rest value (the next list node)
+        let rest_var = Variable::new("_rest")?;
+        let rest_pattern = TriplePattern::new(
+            current_node.clone(),
+            rdf_rest.clone(),
+            AlgebraTerm::Variable(rest_var.clone()),
+        );
+
+        let rest_triples = context.dataset.find_triples(&rest_pattern)?;
+        if let Some((_, _, rest_value)) = rest_triples.first() {
+            current_node = rest_value.clone();
+        } else {
+            // No rdf:rest found - end of list
+            break;
+        }
+    }
+
+    Ok(members)
+}
+
 // ============================================================================
 // Standard Property Functions
 // ============================================================================
@@ -366,16 +452,13 @@ impl PropertyFunction for ListMemberFunction {
 impl ListMemberFunction {
     /// Get members from an RDF list
     ///
-    /// This is a simplified implementation. A full implementation would
-    /// traverse rdf:first/rdf:rest chains in the graph.
+    /// Traverses rdf:first/rdf:rest chains in the graph to collect all list members.
     fn get_list_members(
         &self,
-        _list_node: &AlgebraTerm,
-        _context: &PropertyFunctionContext,
+        list_node: &AlgebraTerm,
+        context: &PropertyFunctionContext,
     ) -> Result<Vec<AlgebraTerm>> {
-        // TODO: Implement full RDF list traversal
-        // For now, return empty list
-        Ok(Vec::new())
+        traverse_rdf_list(list_node, context)
     }
 }
 
@@ -488,13 +571,15 @@ impl PropertyFunction for ListIndexFunction {
 }
 
 impl ListIndexFunction {
+    /// Get members from an RDF list
+    ///
+    /// Traverses rdf:first/rdf:rest chains in the graph to collect all list members.
     fn get_list_members(
         &self,
-        _list_node: &AlgebraTerm,
-        _context: &PropertyFunctionContext,
+        list_node: &AlgebraTerm,
+        context: &PropertyFunctionContext,
     ) -> Result<Vec<AlgebraTerm>> {
-        // TODO: Implement full RDF list traversal
-        Ok(Vec::new())
+        traverse_rdf_list(list_node, context)
     }
 }
 
@@ -562,13 +647,15 @@ impl PropertyFunction for ListLengthFunction {
 }
 
 impl ListLengthFunction {
+    /// Get members from an RDF list
+    ///
+    /// Traverses rdf:first/rdf:rest chains in the graph to collect all list members.
     fn get_list_members(
         &self,
-        _list_node: &AlgebraTerm,
-        _context: &PropertyFunctionContext,
+        list_node: &AlgebraTerm,
+        context: &PropertyFunctionContext,
     ) -> Result<Vec<AlgebraTerm>> {
-        // TODO: Implement full RDF list traversal
-        Ok(Vec::new())
+        traverse_rdf_list(list_node, context)
     }
 }
 

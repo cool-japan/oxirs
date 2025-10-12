@@ -360,7 +360,7 @@ impl Default for RequestLogger {
 }
 
 /// Logging statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct LogStatistics {
     pub total_requests: u64,
     pub successful_requests: u64,
@@ -370,21 +370,6 @@ pub struct LogStatistics {
     pub max_duration_ms: u64,
     pub total_request_bytes: usize,
     pub total_response_bytes: usize,
-}
-
-impl Default for LogStatistics {
-    fn default() -> Self {
-        Self {
-            total_requests: 0,
-            successful_requests: 0,
-            failed_requests: 0,
-            total_duration_ms: 0,
-            min_duration_ms: 0,
-            max_duration_ms: 0,
-            total_request_bytes: 0,
-            total_response_bytes: 0,
-        }
-    }
 }
 
 impl LogStatistics {

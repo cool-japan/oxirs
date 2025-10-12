@@ -6,10 +6,7 @@
 //! W3C Specification: https://www.w3.org/TR/n-quads/
 
 use super::error::FormatError;
-use crate::model::{
-    GraphNameRef, Literal, ObjectRef,
-    PredicateRef, QuadRef, SubjectRef,
-};
+use crate::model::{GraphNameRef, Literal, ObjectRef, PredicateRef, QuadRef, SubjectRef};
 use std::io::Write;
 
 /// N-Quads serializer for writing RDF quads in line-based format
@@ -221,7 +218,7 @@ impl<W: Write> super::serializer::QuadSerializer<W> for NQuadsWriter<W> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{NamedNode, Triple, Subject, Object, Quad};
+    use crate::model::{NamedNode, Object, Quad, Subject, Triple};
 
     #[test]
     fn test_nquads_serialize_triple() {

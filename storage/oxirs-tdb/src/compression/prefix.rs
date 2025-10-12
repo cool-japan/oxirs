@@ -88,10 +88,9 @@ impl PrefixCompressor {
         if compressed.prefix_id == 0 {
             Ok(compressed.suffix.clone())
         } else {
-            let prefix = self
-                .prefixes
-                .get(&compressed.prefix_id)
-                .ok_or_else(|| TdbError::Other(format!("Prefix {} not found", compressed.prefix_id)))?;
+            let prefix = self.prefixes.get(&compressed.prefix_id).ok_or_else(|| {
+                TdbError::Other(format!("Prefix {} not found", compressed.prefix_id))
+            })?;
 
             Ok(format!("{}{}", prefix, compressed.suffix))
         }

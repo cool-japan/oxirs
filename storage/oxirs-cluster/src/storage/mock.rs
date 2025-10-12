@@ -80,8 +80,7 @@ impl StorageBackend for MockStorageBackend {
                 .filter(|triple| {
                     // Extract IRI from NamedNode without angle brackets for comparison
                     let subject_match = subject.map_or(true, |s| {
-                        if let oxirs_core::model::Subject::NamedNode(named_node) =
-                            triple.subject()
+                        if let oxirs_core::model::Subject::NamedNode(named_node) = triple.subject()
                         {
                             named_node.as_str() == s
                         } else {
@@ -139,11 +138,7 @@ impl StorageBackend for MockStorageBackend {
         Ok(shards.get(&shard_id).cloned().unwrap_or_default())
     }
 
-    async fn insert_triples_to_shard(
-        &self,
-        shard_id: ShardId,
-        triples: Vec<Triple>,
-    ) -> Result<()> {
+    async fn insert_triples_to_shard(&self, shard_id: ShardId, triples: Vec<Triple>) -> Result<()> {
         let mut shards = self.shards.write().await;
         if let Some(shard) = shards.get_mut(&shard_id) {
             shard.extend(triples);

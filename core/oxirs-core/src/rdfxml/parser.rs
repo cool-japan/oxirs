@@ -37,6 +37,7 @@ impl From<NamedOrBlankNode> for Term {
 /// Count the number of people:
 /// ```
 /// use oxirs_core::model::NamedNode;
+/// use oxirs_core::{Predicate, Object};
 /// use oxirs_core::rdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -53,7 +54,7 @@ impl From<NamedOrBlankNode> for Term {
 /// let mut count = 0;
 /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple.unwrap();
-///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
 /// }
@@ -101,6 +102,7 @@ impl RdfXmlParser {
     /// Count the number of people:
     /// ```
     /// use oxirs_core::model::NamedNode;
+    /// use oxirs_core::{Predicate, Object};
     /// use oxirs_core::rdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -117,7 +119,7 @@ impl RdfXmlParser {
     /// let mut count = 0;
     /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
     ///     let triple = triple.unwrap();
-    ///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+    ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
     ///         count += 1;
     ///     }
     /// }
@@ -138,6 +140,7 @@ impl RdfXmlParser {
     /// # #[tokio::main(flavor = "current_thread")]
     /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
     /// use oxirs_core::model::NamedNode;
+    /// use oxirs_core::{Predicate, Object};
     /// use oxirs_core::rdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -155,7 +158,7 @@ impl RdfXmlParser {
     /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
     /// while let Some(triple) = parser.next().await {
     ///     let triple = triple.unwrap();
-    ///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+    ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
     ///         count += 1;
     ///     }
     /// }
@@ -180,6 +183,7 @@ impl RdfXmlParser {
     /// Count the number of people:
     /// ```
     /// use oxirs_core::model::NamedNode;
+    /// use oxirs_core::{Predicate, Object};
     /// use oxirs_core::rdfxml::RdfXmlParser;
     ///
     /// let file = br#"<?xml version="1.0"?>
@@ -196,7 +200,7 @@ impl RdfXmlParser {
     /// let mut count = 0;
     /// for triple in RdfXmlParser::new().for_slice(file) {
     ///     let triple = triple.unwrap();
-    ///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+    ///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
     ///         count += 1;
     ///     }
     /// }
@@ -234,6 +238,7 @@ impl RdfXmlParser {
 /// Count the number of people:
 /// ```
 /// use oxirs_core::model::NamedNode;
+/// use oxirs_core::{Predicate, Object};
 /// use oxirs_core::rdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -250,7 +255,7 @@ impl RdfXmlParser {
 /// let mut count = 0;
 /// for triple in RdfXmlParser::new().for_reader(file.as_ref()) {
 ///     let triple = triple.unwrap();
-///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
 /// }
@@ -365,6 +370,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 /// # #[tokio::main(flavor = "current_thread")]
 /// # async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// use oxirs_core::model::NamedNode;
+/// use oxirs_core::{Predicate, Object};
 /// use oxirs_core::rdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -382,7 +388,7 @@ impl<R: Read> ReaderRdfXmlParser<R> {
 /// let mut parser = RdfXmlParser::new().for_tokio_async_reader(file.as_ref());
 /// while let Some(triple) = parser.next().await {
 ///     let triple = triple.unwrap();
-///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
 /// }
@@ -506,6 +512,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 /// Count the number of people:
 /// ```
 /// use oxirs_core::model::NamedNode;
+/// use oxirs_core::{Predicate, Object};
 /// use oxirs_core::rdfxml::RdfXmlParser;
 ///
 /// let file = br#"<?xml version="1.0"?>
@@ -522,7 +529,7 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderRdfXmlParser<R> {
 /// let mut count = 0;
 /// for triple in RdfXmlParser::new().for_slice(file) {
 ///     let triple = triple.unwrap();
-///     if triple.predicate == Term::NamedNode(rdf_type.clone()) && triple.object == Term::NamedNode(schema_person.clone()) {
+///     if matches!(triple.predicate(), oxirs_core::Predicate::NamedNode(n) if n == &rdf_type) && matches!(triple.object(), oxirs_core::Object::NamedNode(n) if n == &schema_person) {
 ///         count += 1;
 ///     }
 /// }

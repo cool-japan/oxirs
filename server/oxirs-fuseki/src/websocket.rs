@@ -108,6 +108,8 @@ pub struct Subscription {
     pub filter: Option<NotificationFilter>,
     /// Last query result hash for change detection
     pub last_result_hash: Option<u64>,
+    /// Last query result for change calculation
+    pub last_result: Option<QueryResult>,
     /// Creation timestamp
     pub created_at: Instant,
     /// Last evaluation timestamp
@@ -502,6 +504,7 @@ impl SubscriptionManager {
             parameters,
             filter,
             last_result_hash: None,
+            last_result: None,
             created_at: Instant::now(),
             last_evaluated: Instant::now(),
             notification_count: 0,
@@ -719,12 +722,10 @@ impl SubscriptionManager {
         }
 
         // Calculate changes
-        let changes = if subscription.last_result_hash.is_some() {
-            // TODO: Calculate actual changes between results
-            None
-        } else {
-            None
-        };
+        let changes = subscription
+            .last_result
+            .as_ref()
+            .map(|old_result| Self::calculate_result_changes(old_result, &result));
 
         // Send update
         self.send_ws_message(
@@ -740,6 +741,7 @@ impl SubscriptionManager {
         // Update subscription
         if let Some(mut sub) = self.subscriptions.get_mut(subscription_id) {
             sub.last_result_hash = Some(result_hash);
+            sub.last_result = Some(result.clone());
             sub.last_evaluated = Instant::now();
             sub.notification_count += 1;
         }
@@ -755,13 +757,20 @@ impl SubscriptionManager {
     async fn apply_notification_filter(
         &self,
         subscription: &Subscription,
-        _result: &QueryResult,
+        result: &QueryResult,
         filter: &NotificationFilter,
     ) -> FusekiResult<bool> {
         // Check minimum change threshold
         if let Some(threshold) = filter.min_change_threshold {
-            // TODO: Calculate actual change percentage
-            let change_percentage = 10.0; // Placeholder
+            // Calculate actual change percentage if we have a previous result
+            let change_percentage = if let Some(ref old_result) = subscription.last_result {
+                let changes = Self::calculate_result_changes(old_result, result);
+                let total = old_result.bindings.len().max(result.bindings.len());
+                Self::calculate_change_percentage(&changes, total)
+            } else {
+                100.0 // First result, treat as 100% change
+            };
+
             if change_percentage < threshold {
                 return Ok(false);
             }
@@ -895,6 +904,106 @@ impl SubscriptionManager {
         }
 
         hasher.finish()
+    }
+
+    /// Calculate changes between two query results
+    ///
+    /// Compares old and new query results to identify added, removed, and modified bindings.
+    fn calculate_result_changes(
+        old_result: &QueryResult,
+        new_result: &QueryResult,
+    ) -> ResultChanges {
+        let mut added = Vec::new();
+        let mut removed = Vec::new();
+        let mut modified = Vec::new();
+
+        // Convert old bindings to set for efficient lookup
+        let old_bindings_set: std::collections::HashSet<String> = old_result
+            .bindings
+            .iter()
+            .map(|b| serde_json::to_string(b).unwrap_or_default())
+            .collect();
+
+        let new_bindings_set: std::collections::HashSet<String> = new_result
+            .bindings
+            .iter()
+            .map(|b| serde_json::to_string(b).unwrap_or_default())
+            .collect();
+
+        // Find added bindings (in new but not in old)
+        for binding in &new_result.bindings {
+            let binding_str = serde_json::to_string(binding).unwrap_or_default();
+            if !old_bindings_set.contains(&binding_str) {
+                // Check if this is a modification (same keys, different values)
+                if let Some(old_binding) =
+                    Self::find_matching_binding(binding, &old_result.bindings)
+                {
+                    modified.push((old_binding.clone(), binding.clone()));
+                } else {
+                    added.push(binding.clone());
+                }
+            }
+        }
+
+        // Find removed bindings (in old but not in new)
+        for binding in &old_result.bindings {
+            let binding_str = serde_json::to_string(binding).unwrap_or_default();
+            if !new_bindings_set.contains(&binding_str) {
+                // Only mark as removed if not already marked as modified
+                if !modified.iter().any(|(old, _)| {
+                    old.keys().collect::<Vec<_>>() == binding.keys().collect::<Vec<_>>()
+                }) {
+                    removed.push(binding.clone());
+                }
+            }
+        }
+
+        ResultChanges {
+            added,
+            removed,
+            modified,
+        }
+    }
+
+    /// Find a binding with matching variable names
+    ///
+    /// Used to detect modifications where variable names match but values differ.
+    fn find_matching_binding<'a>(
+        binding: &HashMap<String, serde_json::Value>,
+        bindings: &'a [HashMap<String, serde_json::Value>],
+    ) -> Option<&'a HashMap<String, serde_json::Value>> {
+        let binding_keys: std::collections::HashSet<&String> = binding.keys().collect();
+
+        for candidate in bindings {
+            let candidate_keys: std::collections::HashSet<&String> = candidate.keys().collect();
+
+            // If keys match but values differ, it's a modification
+            if binding_keys == candidate_keys {
+                // Check if at least one value differs
+                let values_differ = binding
+                    .iter()
+                    .any(|(k, v)| !candidate.get(k).is_some_and(|cv| cv == v));
+
+                if values_differ {
+                    return Some(candidate);
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Calculate change percentage between two results
+    ///
+    /// Returns percentage of bindings that were added, removed, or modified.
+    fn calculate_change_percentage(changes: &ResultChanges, total_bindings: usize) -> f64 {
+        if total_bindings == 0 {
+            return 100.0; // All changes if previously empty
+        }
+
+        let changed_count = changes.added.len() + changes.removed.len() + changes.modified.len();
+
+        (changed_count as f64 / total_bindings as f64) * 100.0
     }
 
     /// Decompress message

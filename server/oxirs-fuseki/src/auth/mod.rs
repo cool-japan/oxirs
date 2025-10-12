@@ -74,6 +74,63 @@ impl AuthService {
             None
         };
 
+        // Initialize SAML provider if configured
+        #[cfg(feature = "saml")]
+        let saml_provider = if let Some(saml_config) = config_arc.saml.as_ref() {
+            if saml_config.enabled {
+                use url::Url;
+                let saml_internal_config = saml::SamlConfig {
+                    sp: saml::ServiceProviderConfig {
+                        entity_id: saml_config.sp_entity_id.clone(),
+                        acs_url: Url::parse(&saml_config.acs_url).map_err(|e| {
+                            FusekiError::configuration(format!("Invalid SAML ACS URL: {}", e))
+                        })?,
+                        sls_url: saml_config
+                            .slo_url
+                            .as_ref()
+                            .and_then(|url| Url::parse(url).ok()),
+                        certificate: None, // Load from file path if needed
+                        private_key: None, // Load from file path if needed
+                    },
+                    idp: saml::IdentityProviderConfig {
+                        entity_id: saml_config.idp.entity_id.clone(),
+                        sso_url: Url::parse(&saml_config.idp.sso_url).map_err(|e| {
+                            FusekiError::configuration(format!("Invalid SAML SSO URL: {}", e))
+                        })?,
+                        slo_url: saml_config
+                            .idp
+                            .slo_url
+                            .as_ref()
+                            .and_then(|url| Url::parse(url).ok()),
+                        certificate: String::new(), // Load from cert_path if needed
+                        metadata_url: saml_config
+                            .idp
+                            .metadata_url
+                            .as_ref()
+                            .and_then(|url| Url::parse(url).ok()),
+                    },
+                    attribute_mapping: saml::AttributeMapping {
+                        username: saml_config.attribute_mappings.username_attribute.clone(),
+                        email: saml_config.attribute_mappings.email_attribute.clone(),
+                        display_name: saml_config.attribute_mappings.name_attribute.clone(),
+                        groups: saml_config.attribute_mappings.groups_attribute.clone(),
+                        custom: std::collections::HashMap::new(),
+                    },
+                    session: saml::SessionConfig {
+                        timeout: std::time::Duration::from_secs(saml_config.session_timeout_secs),
+                        allow_idp_initiated: false,
+                        force_authn: false,
+                        track_session_index: true,
+                    },
+                };
+                Some(Arc::new(saml::SamlProvider::new(saml_internal_config)))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             config: config_arc,
             users: Arc::new(RwLock::new(users)),
@@ -82,7 +139,7 @@ impl AuthService {
             oauth2_service,
             ldap_service,
             #[cfg(feature = "saml")]
-            saml_provider: None, // TODO: Initialize from config when SAML config is added
+            saml_provider,
             mfa_challenges: Arc::new(RwLock::new(HashMap::new())),
         })
     }
@@ -294,17 +351,107 @@ impl AuthService {
     #[cfg(feature = "saml")]
     pub async fn generate_saml_auth_request(
         &self,
-        target_url: &str,
-        force_authn: bool,
-        relay_state: Option<&str>,
+        relay_state: Option<String>,
     ) -> FusekiResult<String> {
         if let Some(saml_provider) = &self.saml_provider {
-            saml_provider
-                .generate_auth_request(target_url, force_authn, relay_state)
-                .await
+            let url = saml_provider.generate_login_url(relay_state).await?;
+            Ok(url.to_string())
         } else {
             Err(FusekiError::configuration("SAML not configured"))
         }
+    }
+
+    /// Check if SAML authentication is enabled
+    #[cfg(feature = "saml")]
+    pub fn is_saml_enabled(&self) -> bool {
+        self.saml_provider.is_some()
+    }
+
+    /// Complete SAML authentication after receiving response from IdP
+    #[cfg(feature = "saml")]
+    pub async fn complete_saml_authentication(
+        &self,
+        saml_response: &str,
+        relay_state: Option<&str>,
+    ) -> FusekiResult<AuthResult> {
+        let saml_provider = self
+            .saml_provider
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))?;
+
+        // Process SAML response and extract user information
+        let user = saml_provider
+            .process_response(saml_response, relay_state)
+            .await?;
+
+        debug!("Successful SAML authentication for user: {}", user.username);
+        Ok(AuthResult::Authenticated(user))
+    }
+
+    /// Logout user by SAML session index
+    #[cfg(feature = "saml")]
+    pub async fn logout_by_session_index(&self, session_index: &str) -> FusekiResult<bool> {
+        let saml_provider = self
+            .saml_provider
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))?;
+
+        // Find session by SAML session index
+        if let Some(session_id) = saml_provider.get_session_by_index(session_index).await? {
+            // Invalidate the session
+            self.session_manager.invalidate_session(&session_id).await?;
+            debug!("Logged out session with SAML index: {}", session_index);
+            Ok(true)
+        } else {
+            debug!("No session found for SAML index: {}", session_index);
+            Ok(false)
+        }
+    }
+
+    /// Get SAML Service Provider configuration
+    #[cfg(feature = "saml")]
+    pub fn get_saml_sp_config(&self) -> FusekiResult<saml::ServiceProviderConfig> {
+        self.saml_provider
+            .as_ref()
+            .map(|provider| provider.config.sp.clone())
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))
+    }
+
+    /// Get SAML attribute mapping configuration
+    #[cfg(feature = "saml")]
+    pub fn get_saml_attribute_mapping(&self) -> FusekiResult<saml::AttributeMapping> {
+        self.saml_provider
+            .as_ref()
+            .map(|provider| provider.config.attribute_mapping.clone())
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))
+    }
+
+    /// Generate SAML logout request
+    #[cfg(feature = "saml")]
+    pub async fn generate_saml_logout_request(
+        &self,
+        session_index: &str,
+        name_id: &str,
+    ) -> FusekiResult<String> {
+        let saml_provider = self
+            .saml_provider
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))?;
+
+        saml_provider
+            .generate_logout_request(session_index, name_id)
+            .await
+    }
+
+    /// Get SAML metadata
+    #[cfg(feature = "saml")]
+    pub fn get_saml_metadata(&self) -> FusekiResult<String> {
+        let saml_provider = self
+            .saml_provider
+            .as_ref()
+            .ok_or_else(|| FusekiError::configuration("SAML not configured"))?;
+
+        Ok(saml_provider.get_metadata())
     }
 
     /// Get configuration reference

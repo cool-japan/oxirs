@@ -63,7 +63,7 @@ impl SciRS2GraphValidator {
         let _graph = DiGraph::<String, String>::new();
 
         // Add some nodes and edges to demonstrate graph creation
-        if self.triples.len() > 0 {
+        if !self.triples.is_empty() {
             println!("Creating graph from triples...");
 
             // For demonstration, we'll just add the first few triples

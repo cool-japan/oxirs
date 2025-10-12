@@ -165,7 +165,7 @@ async fn test_storage_size_estimation() {
         let s = Subject::NamedNode(NamedNode::new(format!("http://example.org/s{}", i)).unwrap());
         let p = NamedNode::new("http://example.org/p").unwrap();
         let o = oxirs_core::model::Object::Literal(oxirs_core::model::Literal::new_simple_literal(
-            &format!("value{}", i),
+            format!("value{}", i),
         ));
         store
             .insert_quad(Quad::new(s, p, o, GraphName::DefaultGraph))
@@ -310,7 +310,7 @@ async fn test_large_dataset_statistics() {
         let s = Subject::NamedNode(NamedNode::new(format!("http://example.org/s{}", i)).unwrap());
         let p = NamedNode::new("http://example.org/p").unwrap();
         let o = oxirs_core::model::Object::Literal(oxirs_core::model::Literal::new_simple_literal(
-            &format!("value{}", i),
+            format!("value{}", i),
         ));
         store
             .insert_quad(Quad::new(s, p, o, GraphName::DefaultGraph))

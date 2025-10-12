@@ -153,7 +153,7 @@ impl PdfHandler {
                             page: None,
                             section: None,
                             char_offset: None,
-                            line: Some(i as u32 + 1),
+                            line: Some(i + 1),
                             column: None,
                         },
                     });
@@ -206,7 +206,7 @@ impl PdfHandler {
                             page: None,
                             section: None,
                             char_offset: None,
-                            line: Some(i as u32 + 1),
+                            line: Some(i + 1),
                             column: None,
                         },
                     });
@@ -229,7 +229,7 @@ impl PdfHandler {
                             page: None,
                             section: None,
                             char_offset: None,
-                            line: Some(i as u32 + 1),
+                            line: Some(i + 1),
                             column: None,
                         },
                     });
@@ -254,7 +254,7 @@ impl PdfHandler {
                     page: None,
                     section: None,
                     char_offset: None,
-                    line: Some(lines.len() as u32),
+                    line: Some(lines.len()),
                     column: None,
                 },
             });

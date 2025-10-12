@@ -627,7 +627,8 @@ impl VectorStoreTrait for VectorStoreWrapper {
 
     fn remove_vector(&mut self, id: &VectorId) -> Result<bool> {
         let mut store = self.store.write();
-        store.remove_vector(id)
+        store.remove_vector(id)?;
+        Ok(true)
     }
 
     fn len(&self) -> usize {

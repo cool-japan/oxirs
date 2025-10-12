@@ -11,7 +11,7 @@ use tracing::{debug, info, warn};
 #[cfg(feature = "compression")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
 #[cfg(feature = "compression")]
-use lz4::{Decoder as Lz4Decoder, EncoderBuilder as Lz4EncoderBuilder};
+use lz4_flex::{compress_prepend_size, decompress_size_prepended};
 #[cfg(feature = "compression")]
 use snap::{read::FrameDecoder as SnapDecoder, write::FrameEncoder as SnapEncoder};
 #[cfg(feature = "compression")]
@@ -314,11 +314,7 @@ impl CompressionManager {
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Lz4 => {
-                let mut encoder = Lz4EncoderBuilder::new()
-                    .level(self.config.level as u32)
-                    .build(Vec::new())?;
-                encoder.write_all(data)?;
-                let (compressed, _) = encoder.finish();
+                let compressed = compress_prepend_size(data);
                 Ok(compressed)
             }
 
@@ -369,9 +365,8 @@ impl CompressionManager {
 
             #[cfg(feature = "compression")]
             CompressionAlgorithm::Lz4 => {
-                let mut decoder = Lz4Decoder::new(data)?;
-                let mut decompressed = Vec::new();
-                decoder.read_to_end(&mut decompressed)?;
+                let decompressed = decompress_size_prepended(data)
+                    .map_err(|e| anyhow!("Lz4 decompression failed: {}", e))?;
                 Ok(decompressed)
             }
 

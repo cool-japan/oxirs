@@ -3,9 +3,11 @@
 //! This benchmark suite validates the performance improvements of SIMD operations
 //! across different architectures (x86 AVX2, ARM NEON) compared to scalar fallbacks.
 
+#![cfg(feature = "simd")]
+
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_core::simd::SimdOps;
-use scirs2_core::random::{DistributionExt, Random, Rng};
+use scirs2_core::random::Random;
 
 /// Generate random f32 vector of given size
 fn generate_f32_vector(size: usize) -> Vec<f32> {

@@ -13,6 +13,9 @@ pub mod memory;
 pub mod negation_optimizer;
 pub mod parallel;
 pub mod quantum_analytics;
+pub mod scirs2_memory;
+pub mod scirs2_parallel;
+pub mod scirs2_simd;
 
 // Re-export key types from core
 pub use core::{
@@ -73,4 +76,21 @@ pub use negation_optimizer::{
     CacheWorthiness, NegationOptimizationConfig, NegationOptimizationResult,
     NegationOptimizationStats, NegationOptimizer, OptimizationStrategy, ShapeComplexity,
     ShapeComplexityAnalysis, StrategyStats,
+};
+
+// Re-export SciRS2 parallel validation types
+pub use scirs2_parallel::{
+    ParallelValidationResult as SciRS2ParallelValidationResult, SciRS2ParallelConfig,
+    SciRS2ParallelValidator,
+};
+
+// Re-export SciRS2 memory-efficient validation types
+pub use scirs2_memory::{
+    AdaptiveChunking, LazyEvaluationCache, MemoryEfficientValidationResult, MemoryMetrics,
+    SciRS2MemoryConfig, SciRS2MemoryValidator,
+};
+
+// Re-export SciRS2 SIMD-accelerated validation types
+pub use scirs2_simd::{
+    SimdAccelerationConfig, SimdConstraintValidator, SimdPerformanceMetrics, SimdValidationResult,
 };

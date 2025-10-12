@@ -346,7 +346,7 @@ mod saml_integration_tests {
 
     #[test]
     fn test_enterprise_saml_configuration() {
-        use oxirs_fuseki::handlers::saml::{EndpointCapabilities, SamlIdpConfig, SamlSpConfig};
+        use oxirs_fuseki::handlers::saml::{SamlIdpConfig, SamlSpConfig};
 
         // Create a comprehensive enterprise SAML configuration
         let sp_config = SamlSpConfig {

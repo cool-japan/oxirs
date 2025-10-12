@@ -1,0 +1,33 @@
+@prefix samm: <urn:samm:org.eclipse.esmf.samm:meta-model:2.1.0#> .
+@prefix samm-c: <urn:samm:org.eclipse.esmf.samm:characteristic:2.1.0#> .
+@prefix samm-e: <urn:samm:org.eclipse.esmf.samm:entity:2.1.0#> .
+@prefix unit: <urn:samm:org.eclipse.esmf.samm:unit:2.1.0#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:aas:submodel:maintenance:1#Maintenance> a samm:Aspect ;
+  samm:preferredName "Maintenance"@en ;
+  samm:description "Maintenance information and scheduling"@en ;
+  samm:properties (<urn:aas:property#lastMaintenance> <urn:aas:property#nextMaintenance>) ;
+  samm:operations (<urn:aas:operation#scheduleMaintenance>) .
+
+<urn:aas:property#lastMaintenance> a samm:Property ;
+  samm:preferredName "lastMaintenance"@en ;
+  samm:description "Date of last maintenance"@en ;
+  samm:characteristic <urn:aas:characteristic#lastMaintenanceCharacteristic> .
+
+<urn:aas:characteristic#lastMaintenanceCharacteristic> a samm-c:Trait ;
+  samm:dataType <xsd:dateTime> .
+
+<urn:aas:property#nextMaintenance> a samm:Property ;
+  samm:preferredName "nextMaintenance"@en ;
+  samm:description "Date of next scheduled maintenance"@en ;
+  samm:characteristic <urn:aas:characteristic#nextMaintenanceCharacteristic> .
+
+<urn:aas:characteristic#nextMaintenanceCharacteristic> a samm-c:Trait ;
+  samm:dataType <xsd:dateTime> .
+
+<urn:aas:operation#scheduleMaintenance> a samm:Operation ;
+  samm:preferredName "scheduleMaintenance"@en ;
+  samm:description "Schedule a new maintenance appointment"@en .

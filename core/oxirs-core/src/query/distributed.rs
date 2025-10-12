@@ -14,6 +14,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 #[cfg(feature = "async")]
+#[allow(unused_imports)] // Used in CollaborativeFilter when async feature is enabled
 use tokio::sync::mpsc;
 
 /// Distributed query coordinator

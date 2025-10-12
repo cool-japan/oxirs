@@ -119,8 +119,8 @@ impl ConsciousnessStateMachine {
 
         // Get and clone rules before the mutable borrow in the loop
         let rules_option = self.transition_rules.get(&current_state).cloned();
-        let current_rules = rules_option
-            .ok_or_else(|| anyhow::anyhow!("No transition rules for current state"))?;
+        let current_rules =
+            rules_option.ok_or_else(|| anyhow::anyhow!("No transition rules for current state"))?;
 
         for rule in current_rules {
             if self.evaluate_condition(&rule.condition, query, context)? {

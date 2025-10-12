@@ -17,22 +17,18 @@ use crate::{
 };
 
 use super::super::types::*;
-use super::result_processing::{
-    perform_sparql_join,
-    aggregate_graphql_response,
-    aggregate_service_result,
-    sort_service_result,
-    apply_sparql_filters,
+use super::aggregation::apply_service_result_filters;
+use super::entity_resolution::{
+    perform_graphql_entity_resolution, perform_service_entity_resolution,
+    perform_sparql_entity_resolution,
 };
 use super::joins::perform_graphql_join;
-use super::aggregation::apply_service_result_filters;
-use super::stitching::perform_intelligent_result_stitching;
-use super::entity_resolution::{
-    perform_sparql_entity_resolution,
-    perform_graphql_entity_resolution,
-    perform_service_entity_resolution,
+use super::result_processing::{
+    aggregate_graphql_response, aggregate_service_result, apply_sparql_filters,
+    perform_sparql_join, sort_service_result,
 };
-use super::sorting::{sort_sparql_results, aggregate_sparql_results};
+use super::sorting::{aggregate_sparql_results, sort_sparql_results};
+use super::stitching::perform_intelligent_result_stitching;
 
 pub async fn execute_parallel_group(
     step_ids: &[String],

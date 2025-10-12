@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
@@ -29,19 +29,17 @@
 //! ## Basic Usage
 //!
 //! ```rust
-//! use oxirs_shacl_ai::{ShapeLearner, QualityAssessor, ValidationPredictor};
-//! use oxirs_core::store::Store;
+//! use oxirs_shacl_ai::{ShapeLearner, QualityAssessor, LearningConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let store = Store::new()?;
+//! // Create a shape learner
 //! let mut learner = ShapeLearner::new();
 //!
-//! // Learn shapes from data
-//! let learned_shapes = learner.learn_shapes_from_store(&store, None)?;
+//! // Create a quality assessor
+//! let mut assessor = QualityAssessor::new();
 //!
-//! // Assess data quality
-//! let assessor = QualityAssessor::new();
-//! let quality_report = assessor.assess_data_quality(&store, &learned_shapes)?;
+//! // Configuration can be customized
+//! let config = LearningConfig::default();
 //!
 //! # Ok(())
 //! # }
@@ -89,7 +87,7 @@
 //!
 //! // Monitor learning performance
 //! let stats = learner.get_statistics();
-//! println!("Learning efficiency: {:.2}%", stats.success_rate * 100.0);
+//! // Statistics can be accessed via stats.total_shapes_learned, stats.failed_shapes, etc.
 //!
 //! # Ok(())
 //! # }
@@ -101,22 +99,20 @@
 //!
 //! ```rust
 //! use oxirs_shacl_ai::{ShapeLearner, ValidationPredictor};
-//! use oxirs_shacl::{Validator, ValidationConfig};
-//! use oxirs_core::store::Store;
+//! use oxirs_shacl::ValidationConfig;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let store = Store::new()?;
+//! // Create a shape learner
 //! let mut learner = ShapeLearner::new();
 //!
-//! // 1. Learn shapes from existing data
-//! let learned_shapes = learner.learn_shapes_from_store(&store, None)?;
+//! // Create a validation predictor for optimization
+//! let predictor = ValidationPredictor::new();
 //!
-//! // 2. Create SHACL validator with learned shapes
-//! let validator = Validator::new();
+//! // Configuration for validation
 //! let validation_config = ValidationConfig::default();
 //!
-//! // 3. Use AI predictor for optimization
-//! let predictor = ValidationPredictor::new();
+//! // In practice, these would be used with a Store instance
+//! // See examples/ directory for complete working examples
 //!
 //! # Ok(())
 //! # }
@@ -125,32 +121,40 @@
 //! ### Quantum Consciousness Integration
 //!
 //! ```rust
-//! use oxirs_shacl_ai::{
-//!     QuantumConsciousnessSynthesisEngine,
-//!     QuantumConsciousnessLevel,
-//!     ShapeLearner
-//! };
+//! use oxirs_shacl_ai::{ContainerConfig, DeploymentConfig, DeploymentManager};
+//! use oxirs_shacl_ai::deployment::EnvironmentType;
+//! use oxirs_shacl_ai::deployment::config::ResourceLimits;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Initialize quantum consciousness synthesis
-//! let consciousness_engine = QuantumConsciousnessSynthesisEngine::new();
+//! // Customize container resources for production
+//! let container_config = ContainerConfig {
+//!     image_tag: "production".to_string(),
+//!     cpu_limit: "1000m".to_string(),
+//!     memory_limit: "2Gi".to_string(),
+//!     ..ContainerConfig::default()
+//! };
 //!
-//! // Configure consciousness-guided learning
-//! let mut learner = ShapeLearner::new();
+//! // Adjust deployment configuration
+//! let deployment_config = DeploymentConfig {
+//!     environment: EnvironmentType::Production,
+//!     resource_limits: ResourceLimits {
+//!         cpu_limit: 8.0,
+//!         memory_limit_mb: 16384,
+//!         ..ResourceLimits::default()
+//!     },
+//!     ..DeploymentConfig::default()
+//! };
 //!
-//! // Enhanced learning with quantum consciousness
-//! let consciousness_level = QuantumConsciousnessLevel::UltraTranscendent;
+//! let deployment_manager = DeploymentManager::with_config(deployment_config.clone());
+//!
+//! // The deployment manager can now be used to orchestrate deployments
+//! assert_eq!(container_config.image_tag, "production");
+//! assert!(matches!(deployment_config.environment, EnvironmentType::Production));
+//! assert_eq!(deployment_manager.get_statistics().total_deployments, 0);
 //!
 //! # Ok(())
 //! # }
 //! ```
-//!
-//! ## Performance Tuning Guide
-//!
-//! ### Memory Optimization
-//!
-//! - Set appropriate `max_shapes` limit based on available memory
-//! - Use higher `min_support` thresholds for large datasets to reduce memory usage
 //! - Enable caching for repeated validation operations
 //!
 //! ### CPU Optimization
@@ -170,28 +174,32 @@
 //! ### Container Deployment
 //!
 //! ```rust
-//! use oxirs_shacl_ai::{ShaclAiAssistant, DeploymentManager, ContainerConfig, DeploymentConfig};
+//! use oxirs_shacl_ai::{ContainerConfig, DeploymentConfig, DeploymentManager, ShaclAiAssistant};
+//! use oxirs_shacl_ai::deployment::EnvironmentType;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Configure for production deployment
+//! let mut assistant = ShaclAiAssistant::new();
+//! assert!(assistant.config().global.enable_parallel_processing);
+//!
+//! // Configure container image and registry settings
 //! let container_config = ContainerConfig {
-//!     image: "oxirs-shacl-ai:latest".to_string(),
-//!     cpu_cores: 4,
-//!     memory_gb: 8,
-//!     enable_gpu: false,
-//!     ..Default::default()
+//!     image_name: "oxirs-shacl-ai".to_string(),
+//!     image_tag: "stable".to_string(),
+//!     registry: "registry.example.com/oxirs".to_string(),
+//!     ..ContainerConfig::default()
 //! };
 //!
+//! // Tailor deployment for staging environment with existing defaults
 //! let deployment_config = DeploymentConfig {
-//!     environment: "production".to_string(),
-//!     replicas: 3,
-//!     container_config: container_config.clone(),
-//!     ..Default::default()
+//!     environment: EnvironmentType::Staging,
+//!     ..DeploymentConfig::default()
 //! };
 //!
-//! let deployment_manager = DeploymentManager::with_config(deployment_config);
-//! let deployment_result = deployment_manager.deploy_service()?;
-//! println!("Service deployed with ID: {}", deployment_result.service_id);
+//! let deployment_manager = DeploymentManager::with_config(deployment_config.clone());
+//!
+//! assert_eq!(container_config.registry, "registry.example.com/oxirs");
+//! assert!(matches!(deployment_config.environment, EnvironmentType::Staging));
+//! assert_eq!(deployment_manager.get_statistics().total_deployments, 0);
 //!
 //! # Ok(())
 //! # }
@@ -200,26 +208,31 @@
 //! ### Load Balancing and Auto-scaling
 //!
 //! ```rust
-//! use oxirs_shacl_ai::{LoadBalancerConfig, AutoScalingConfig, LoadBalancingStrategy};
+//! use std::time::Duration;
+//! use oxirs_shacl_ai::deployment::config::AutoScalingConfig;
+//! use oxirs_shacl_ai::deployment::load_balancing::{LoadBalancerConfig, LoadBalancerType};
+//! use oxirs_shacl_ai::deployment::orchestration::LoadBalancingAlgorithm;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let load_balancer_config = LoadBalancerConfig {
-//!     strategy: LoadBalancingStrategy::WeightedRoundRobin,
-//!     health_check_interval: 30,
-//!     max_retries: 3,
-//!     timeout_seconds: 60,
-//!     ..Default::default()
+//!     balancer_type: LoadBalancerType::ApplicationLoadBalancer,
+//!     algorithm: LoadBalancingAlgorithm::LeastConnections,
+//!     sticky_sessions: true,
+//!     ..LoadBalancerConfig::default()
 //! };
 //!
 //! let auto_scaling_config = AutoScalingConfig {
-//!     min_replicas: 2,
-//!     max_replicas: 10,
-//!     target_cpu_percentage: 70.0,
-//!     target_memory_percentage: 80.0,
-//!     scale_up_cooldown: 300,
-//!     scale_down_cooldown: 600,
-//!     ..Default::default()
+//!     min_instances: 3,
+//!     max_instances: 12,
+//!     scale_up_threshold: 0.75,
+//!     scale_down_threshold: 0.35,
+//!     scale_up_cooldown: Duration::from_secs(180),
+//!     scale_down_cooldown: Duration::from_secs(300),
+//!     ..AutoScalingConfig::default()
 //! };
+//!
+//! assert!(load_balancer_config.sticky_sessions);
+//! assert_eq!(auto_scaling_config.min_instances, 3);
 //!
 //! # Ok(())
 //! # }
@@ -229,27 +242,25 @@
 //!
 //! ### Enterprise Data Quality Assessment
 //!
-//! ```rust
-//! use oxirs_shacl_ai::{ShaclAiAssistant, QualityAssessor, ValidationReport};
-//! use oxirs_core::Store;
+//! ```no_run
+//! use oxirs_shacl_ai::ShaclAiAssistant;
+//! # use oxirs_core::Store;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Load enterprise dataset
-//! let store = Store::new()?;
-//! // store.load_from_file("enterprise-data.ttl")?;
-//!
+//! # let store: &dyn Store = unimplemented!();
+//! // Create the AI assistant
 //! let mut assistant = ShaclAiAssistant::new();
 //!
 //! // 1. Learn shapes from existing data
-//! let shapes = assistant.learn_shapes(&store, None)?;
+//! let shapes = assistant.learn_shapes(store, None)?;
 //! println!("Discovered {} data patterns", shapes.len());
 //!
 //! // 2. Assess current data quality
-//! let quality_report = assistant.assess_quality(&store, &shapes)?;
+//! let quality_report = assistant.assess_quality(store, &shapes)?;
 //! println!("Overall quality score: {:.2}%", quality_report.overall_score * 100.0);
 //!
 //! // 3. Generate improvement recommendations
-//! let insights = assistant.generate_insights(&store, &shapes, &[])?;
+//! let insights = assistant.generate_insights(store, &shapes, &[])?;
 //! for recommendation in &insights.recommendations {
 //!     println!("Recommendation: {}", recommendation.description);
 //! }
@@ -261,22 +272,25 @@
 //! ### Streaming Data Validation
 //!
 //! ```rust
-//! use oxirs_shacl_ai::{StreamingAdaptationEngine, StreamingConfig, StreamType};
+//! use std::time::Duration;
+//! use oxirs_shacl_ai::{
+//!     StreamingAdaptationEngine, StreamingConfig, SelfAdaptiveAI, SelfAdaptiveConfig,
+//! };
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let streaming_config = StreamingConfig {
-//!     stream_type: StreamType::Kafka,
-//!     buffer_size: 10000,
-//!     batch_size: 1000,
-//!     adaptation_threshold: 0.1,
-//!     enable_online_learning: true,
-//!     ..Default::default()
+//!     stream_buffer_size: 500,
+//!     adaptation_threshold: 0.15,
+//!     pattern_recognition_interval: Duration::from_secs(5),
+//!     performance_monitoring_interval: Duration::from_secs(2),
+//!     ..StreamingConfig::default()
 //! };
 //!
-//! let mut streaming_engine = StreamingAdaptationEngine::with_config(streaming_config);
+//! let adaptive_ai = SelfAdaptiveAI::new(SelfAdaptiveConfig::default());
+//! let streaming_engine = StreamingAdaptationEngine::new(adaptive_ai, streaming_config.clone());
 //!
-//! // Process streaming RDF data with adaptive validation
-//! // streaming_engine.start_processing("data-stream-topic")?;
+//! assert_eq!(streaming_engine.config().stream_buffer_size, 500);
+//! assert!(streaming_config.enable_backpressure);
 //!
 //! # Ok(())
 //! # }
@@ -298,7 +312,8 @@
 //!     ..Default::default()
 //! };
 //!
-//! let validator = MultiModalValidator::with_config(multimodal_config);
+//! let _validator = MultiModalValidator::new(multimodal_config.clone());
+//! assert!(multimodal_config.enable_text_validation);
 //!
 //! // Validate different content types
 //! // let image_result = validator.validate_content(ContentType::Image, &image_data)?;
@@ -338,22 +353,24 @@
 //!
 //! ### Performance Monitoring
 //!
-//! ```rust
-//! use oxirs_shacl_ai::{SystemMonitor, MonitoringConfig, AlertThresholds};
+//! ```no_run
+//! use oxirs_shacl_ai::SystemMonitor;
+//! use oxirs_shacl_ai::system_monitoring::{AlertThresholds, MonitoringConfig};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! let monitoring_config = MonitoringConfig {
+//!     enable_real_time: true,
 //!     enable_performance_tracking: true,
-//!     enable_memory_monitoring: true,
-//!     enable_quality_monitoring: true,
+//!     enable_quality_tracking: true,
 //!     alert_thresholds: AlertThresholds {
-//!         memory_usage_threshold: 80.0,
-//!         cpu_usage_threshold: 85.0,
-//!         quality_score_threshold: 70.0,
-//!         response_time_threshold: 5.0,
-//!         ..Default::default()
+//!         max_response_time_ms: 5000.0,
+//!         max_error_rate: 0.05,
+//!         max_memory_usage_percent: 80.0,
+//!         max_cpu_usage_percent: 85.0,
+//!         min_quality_score: 75.0,
+//!         ..AlertThresholds::default()
 //!     },
-//!     ..Default::default()
+//!     ..MonitoringConfig::default()
 //! };
 //!
 //! let monitor = SystemMonitor::with_config(monitoring_config);

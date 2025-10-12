@@ -95,14 +95,14 @@ impl FederationExecutor {
     /// Extract variables from a graph pattern
     fn extract_variables(&self, pattern: &GraphPattern) -> Vec<String> {
         let mut vars = Vec::new();
-        self.collect_variables(pattern, &mut vars);
+        Self::collect_variables(pattern, &mut vars);
         vars.sort();
         vars.dedup();
         vars.into_iter().map(|v| format!("?{}", v)).collect()
     }
 
     /// Recursively collect variables from pattern
-    fn collect_variables(&self, pattern: &GraphPattern, vars: &mut Vec<String>) {
+    fn collect_variables(pattern: &GraphPattern, vars: &mut Vec<String>) {
         match pattern {
             GraphPattern::Bgp { patterns } => {
                 for tp in patterns {
@@ -119,8 +119,8 @@ impl FederationExecutor {
                 }
             }
             GraphPattern::Join { left, right } | GraphPattern::Union { left, right } => {
-                self.collect_variables(left, vars);
-                self.collect_variables(right, vars);
+                Self::collect_variables(left, vars);
+                Self::collect_variables(right, vars);
             }
             GraphPattern::Filter { inner, .. }
             | GraphPattern::Distinct { inner }
@@ -128,14 +128,14 @@ impl FederationExecutor {
             | GraphPattern::Extend { inner, .. }
             | GraphPattern::Group { inner, .. }
             | GraphPattern::Project { inner, .. } => {
-                self.collect_variables(inner, vars);
+                Self::collect_variables(inner, vars);
             }
             GraphPattern::LeftJoin { left, right, .. } => {
-                self.collect_variables(left, vars);
-                self.collect_variables(right, vars);
+                Self::collect_variables(left, vars);
+                Self::collect_variables(right, vars);
             }
             GraphPattern::Service { inner, .. } => {
-                self.collect_variables(inner, vars);
+                Self::collect_variables(inner, vars);
             }
             _ => {}
         }
@@ -147,9 +147,9 @@ impl FederationExecutor {
             GraphPattern::Bgp { patterns } => {
                 let mut clauses = Vec::new();
                 for tp in patterns {
-                    let s = self.term_pattern_to_string(&tp.subject);
-                    let p = self.term_pattern_to_string(&tp.predicate);
-                    let o = self.term_pattern_to_string(&tp.object);
+                    let s = Self::term_pattern_to_string(&tp.subject);
+                    let p = Self::term_pattern_to_string(&tp.predicate);
+                    let o = Self::term_pattern_to_string(&tp.object);
                     clauses.push(format!("{} {} {}", s, p, o));
                 }
                 Ok(clauses.join(" . "))
@@ -177,7 +177,7 @@ impl FederationExecutor {
     }
 
     /// Convert a term pattern to SPARQL string
-    fn term_pattern_to_string(&self, term: &TermPattern) -> String {
+    fn term_pattern_to_string(term: &TermPattern) -> String {
         match term {
             TermPattern::Variable(v) => format!("?{}", v.name()),
             TermPattern::NamedNode(n) => format!("<{}>", n.as_str()),
@@ -193,10 +193,12 @@ impl FederationExecutor {
             }
             #[cfg(feature = "sparql-12")]
             TermPattern::Triple(triple) => {
-                format!("<< {} {} {} >>",
-                    self.term_pattern_to_string(&triple.subject),
-                    self.term_pattern_to_string(&triple.predicate),
-                    self.term_pattern_to_string(&triple.object))
+                format!(
+                    "<< {} {} {} >>",
+                    Self::term_pattern_to_string(&triple.subject),
+                    Self::term_pattern_to_string(&triple.predicate),
+                    Self::term_pattern_to_string(&triple.object)
+                )
             }
         }
     }

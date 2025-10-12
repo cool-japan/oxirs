@@ -581,7 +581,7 @@ fn format_and_display_results(
                         // Get values in the order of variables
                         let values: Vec<Option<RdfTerm>> = variables
                             .iter()
-                            .map(|var| var_binding.get(var).map(|term| term_to_rdf_term(term)))
+                            .map(|var| var_binding.get(var).map(term_to_rdf_term))
                             .collect();
 
                         Binding { values }
@@ -921,8 +921,10 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                                 } else {
                                     let query = current_session.queries[n - 1].clone();
                                     println!("\n╔═══════════════════════════════════════════════════════════╗");
-                                    println!("║ Replaying Query #{}                                     ║",
-                                             format!("{:<37}", n));
+                                    println!(
+                                        "║ Replaying Query #{:<37}                              ║",
+                                        n
+                                    );
                                     println!("╚═══════════════════════════════════════════════════════════╝");
 
                                     // Show query
@@ -1164,8 +1166,8 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                                 } else {
                                     println!("╔═══════════════════════════════════════════════════════════╗");
                                     println!(
-                                        "║         Search Results for: {}                        ║",
-                                        format!("{:<29}", keyword)
+                                        "║         Search Results for: {:<29}                  ║",
+                                        keyword
                                     );
                                     println!("╚═══════════════════════════════════════════════════════════╝");
                                     println!("Found {} matches:\n", matches.len());
@@ -1286,8 +1288,8 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                         // Display query header
                         println!("\n╔═══════════════════════════════════════════════════════════╗");
                         println!(
-                            "║ Query #{}                                               ║",
-                            format!("{:<49}", current_session.queries.len())
+                            "║ Query #{:<49}                                       ║",
+                            current_session.queries.len()
                         );
                         println!("╚═══════════════════════════════════════════════════════════╝");
 

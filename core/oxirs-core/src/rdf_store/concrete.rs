@@ -26,7 +26,7 @@ impl ConcreteStore {
         let mut inner = self.inner.write().map_err(|e| {
             crate::OxirsError::Store(format!("Failed to acquire write lock: {}", e))
         })?;
-        RdfStore::insert_quad(&mut *inner, quad)
+        RdfStore::insert_quad(&mut inner, quad)
     }
 
     /// Remove a quad from the store
@@ -34,7 +34,7 @@ impl ConcreteStore {
         let mut inner = self.inner.write().map_err(|e| {
             crate::OxirsError::Store(format!("Failed to acquire write lock: {}", e))
         })?;
-        RdfStore::remove_quad(&mut *inner, quad)
+        RdfStore::remove_quad(&mut inner, quad)
     }
 
     /// Insert a triple into the default graph
@@ -42,7 +42,7 @@ impl ConcreteStore {
         let mut inner = self.inner.write().map_err(|e| {
             crate::OxirsError::Store(format!("Failed to acquire write lock: {}", e))
         })?;
-        RdfStore::insert_triple(&mut *inner, triple)
+        RdfStore::insert_triple(&mut inner, triple)
     }
 }
 
@@ -70,41 +70,49 @@ impl Store for ConcreteStore {
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
     ) -> Result<Vec<Quad>> {
-        let inner = self.inner.read().map_err(|e| {
-            crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         inner.find_quads(subject, predicate, object, graph_name)
     }
 
     fn is_ready(&self) -> bool {
-        self.inner.read().map(|inner| inner.is_ready()).unwrap_or(false)
+        self.inner
+            .read()
+            .map(|inner| inner.is_ready())
+            .unwrap_or(false)
     }
 
     fn len(&self) -> Result<usize> {
-        let inner = self.inner.read().map_err(|e| {
-            crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         inner.len()
     }
 
     fn is_empty(&self) -> Result<bool> {
-        let inner = self.inner.read().map_err(|e| {
-            crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         inner.is_empty()
     }
 
     fn query(&self, sparql: &str) -> Result<OxirsQueryResults> {
-        let inner = self.inner.read().map_err(|e| {
-            crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         inner.query(sparql)
     }
 
     fn prepare_query(&self, sparql: &str) -> Result<PreparedQuery> {
-        let inner = self.inner.read().map_err(|e| {
-            crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e))
-        })?;
+        let inner = self
+            .inner
+            .read()
+            .map_err(|e| crate::OxirsError::Store(format!("Failed to acquire read lock: {}", e)))?;
         inner.prepare_query(sparql)
     }
 }

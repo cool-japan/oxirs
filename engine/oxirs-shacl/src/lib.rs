@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl/badge.svg)](https://docs.rs/oxirs-shacl)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! SHACL (Shapes Constraint Language) validation engine for RDF data.
@@ -26,499 +26,33 @@
 //! ## Basic Usage
 //!
 //! ```rust
-//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy};
+//! use oxirs_shacl::{ValidationConfig, ValidationStrategy};
 //! use oxirs_core::{Store, model::*};
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Create a new SHACL validator
-//! let mut validator = ShaclValidator::new();
-//!
-//! // Load SHACL shapes from Turtle
-//! let shapes_ttl = r#"
-//! @prefix sh: <http://www.w3.org/ns/shacl#> .
-//! @prefix ex: <http://example.org/> .
-//! @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
-//!
-//! ex:PersonShape
-//!     a sh:NodeShape ;
-//!     sh:targetClass ex:Person ;
-//!     sh:property [
-//!         sh:path ex:name ;
-//!         sh:datatype xsd:string ;
-//!         sh:maxCount 1 ;
-//!         sh:minCount 1 ;
-//!     ] ;
-//!     sh:property [
-//!         sh:path ex:age ;
-//!         sh:datatype xsd:integer ;
-//!         sh:minInclusive 0 ;
-//!         sh:maxInclusive 150 ;
-//!     ] .
-//! "#;
-//!
-//! validator.load_shapes_from_turtle(shapes_ttl)?;
-//!
-//! // Create test data
-//! let data_ttl = r#"
-//! @prefix ex: <http://example.org/> .
-//!
-//! ex:john a ex:Person ;
-//!     ex:name "John Doe" ;
-//!     ex:age 30 .
-//!
-//! ex:jane a ex:Person ;
-//!     ex:name "Jane Smith" ;
-//!     ex:age 200 .  # This violates the age constraint
-//! "#;
-//!
-//! // Validate the data
+//! // Create a validation configuration
 //! let config = ValidationConfig::default()
 //!     .with_strategy(ValidationStrategy::Optimized)
 //!     .with_inference_enabled(true);
 //!
-//! let report = validator.validate_turtle(data_ttl, config)?;
-//!
-//! // Check results
-//! println!("Validation conforms: {}", report.conforms());
-//! for violation in report.violations() {
-//!     println!("Violation: {} at {}",
-//!         violation.result_message.as_deref().unwrap_or("No message"),
-//!         violation.focus_node
-//!     );
-//! }
+//! // Validation is typically performed using ValidationEngine
+//! // See examples/ directory for complete working examples
 //!
 //! # Ok(())
 //! # }
 //! ```
 //!
-//! ## Advanced Usage
-//!
-//! ### Custom Constraint Components
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, CustomConstraintComponent, ValidationConfig};
-//! use oxirs_core::model::*;
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut validator = ShaclValidator::new();
-//!
-//! // Register a custom constraint component
-//! let email_constraint = CustomConstraintComponent::new(
-//!     "http://example.org/EmailConstraint",
-//!     vec!["http://example.org/emailPattern"],
-//!     |focus_node, params, data_graph| {
-//!         // Custom validation logic for email format
-//!         if let Term::Literal(lit) = focus_node {
-//!             let email_regex = regex::Regex::new(r"^[^@]+@[^@]+\.[^@]+$").unwrap();
-//!             if email_regex.is_match(&lit.value) {
-//!                 Ok(vec![]) // No violations
-//!             } else {
-//!                 Ok(vec![
-//!                     // Return validation violation
-//!                 ])
-//!             }
-//!         } else {
-//!             Ok(vec![]) // Non-literals are ignored
-//!         }
-//!     }
-//! );
-//!
-//! validator.register_custom_component(email_constraint)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Parallel Validation
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut validator = ShaclValidator::new();
-//!
-//! // Configure for parallel validation of large datasets
-//! let config = ValidationConfig::default()
-//!     .with_strategy(ValidationStrategy::Parallel)
-//!     .with_batch_size(1000)
-//!     .with_thread_count(8)
-//!     .with_memory_limit_mb(2048);
-//!
-//! // Validate large RDF dataset
-//! // let report = validator.validate_large_dataset(&large_store, config)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Incremental Validation
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy};
-//! use oxirs_core::model::*;
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut validator = ShaclValidator::new();
-//!
-//! // Enable incremental validation for real-time updates
-//! let config = ValidationConfig::default()
-//!     .with_strategy(ValidationStrategy::Incremental)
-//!     .with_change_tracking(true);
-//!
-//! // Initial validation
-//! // let initial_report = validator.validate_store(&store, config)?;
-//!
-//! // Add new data and validate only affected parts
-//! let new_triple = Triple::new(
-//!     NamedNode::new("http://example.org/newPerson")?,
-//!     NamedNode::new("http://example.org/name")?,
-//!     Literal::new_simple_literal("New Person")
-//! );
-//!
-//! // Incremental validation of just the new data
-//! // let incremental_report = validator.validate_incremental_change(
-//! //     &store,
-//! //     vec![new_triple],
-//! //     vec![], // no deletions
-//! //     config
-//! // )?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Advanced Enterprise Features
-//!
-//! #### Streaming Validation for Large Datasets
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ValidationConfig, ValidationStrategy, ReportFormat};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut validator = ShaclValidator::new();
-//!
-//! // Configure for large dataset processing
-//! let config = ValidationConfig::default()
-//!     .with_strategy(ValidationStrategy::Streaming)
-//!     .with_batch_size(10000)
-//!     .with_memory_limit_mb(4096)
-//!     .with_progress_reporting(true);
-//!
-//! // Process large RDF dataset with progress tracking
-//! // let report = validator.validate_large_dataset(&large_store, config)?;
-//!
-//! // Export results in different formats
-//! // let json_report = report.export_as(ReportFormat::Json)?;
-//! // let html_report = report.export_as(ReportFormat::Html)?;
-//! // let csv_report = report.export_as(ReportFormat::Csv)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! #### Performance Analytics and Monitoring
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ValidationConfig, PerformanceAnalytics};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut validator = ShaclValidator::new();
-//! let config = ValidationConfig::default()
-//!     .with_performance_monitoring(true)
-//!     .with_analytics_enabled(true);
-//!
-//! // Validate with performance tracking
-//! // let report = validator.validate_store(&store, config)?;
-//!
-//! // Get detailed performance analytics
-//! // let analytics = validator.get_performance_analytics()?;
-//! // println!("Average validation time: {}ms", analytics.average_validation_time());
-//! // println!("Memory usage: {}MB", analytics.peak_memory_usage_mb());
-//! // println!("Bottlenecks: {:?}", analytics.identify_bottlenecks());
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! #### Builder Pattern for Complex Configurations
-//!
-//! ```rust
-//! use oxirs_shacl::{ValidatorBuilder, EnhancedValidatorBuilder, ValidationStrategy};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! // Enhanced validator with all enterprise features
-//! let validator = EnhancedValidatorBuilder::new()
-//!     .with_strategy(ValidationStrategy::Parallel)
-//!     .with_batch_size(5000)
-//!     .with_thread_count(8)
-//!     .with_memory_limit_mb(8192)
-//!     .with_caching_enabled(true)
-//!     .with_cache_size_mb(1024)
-//!     .with_performance_monitoring(true)
-//!     .with_error_recovery(true)
-//!     .with_timeout_seconds(300)
-//!     .build()?;
-//!
-//! // Configure shape loading with advanced options
-//! let shape_config = ShapeLoaderBuilder::new()
-//!     .with_format_detection(true)
-//!     .with_async_loading(true)
-//!     .with_validation_on_load(true)
-//!     .build();
-//!
-//! // Load shapes from multiple sources
-//! // validator.load_shapes_with_config(&shape_config).await?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! #### Advanced Report Generation
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ReportBuilder, ReportFormat, FilterCriteria};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let validator = ShaclValidator::new();
-//! // let report = validator.validate_store(&store, config)?;
-//!
-//! // Generate customized reports with filtering
-//! let filtered_report = ReportBuilder::new()
-//!     .filter_by_severity(&[Severity::Violation, Severity::Warning])
-//!     .filter_by_shape_pattern("http://example.org/shapes/*")
-//!     .include_metadata(true)
-//!     .include_statistics(true)
-//!     .format(ReportFormat::Html)
-//!     .build();
-//!
-//! // Export with custom formatting
-//! // let html_output = filtered_report.generate(&report)?;
-//! // let json_export = report.export_as(ReportFormat::Json)?;
-//! // let prometheus_metrics = report.export_as(ReportFormat::Prometheus)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Enterprise Integration Patterns
-//!
-//! #### External System Integration
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ValidationConfig, IntegrationBuilder};
-//! use std::time::Duration;
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let mut validator = ShaclValidator::new();
-//!
-//! // Configure integration with external validation services
-//! let integration_config = IntegrationBuilder::new()
-//!     .with_external_validator("http://validation-service.example.org/api")
-//!     .with_timeout(Duration::from_secs(30))
-//!     .with_fallback_strategy(FallbackStrategy::LocalValidation)
-//!     .with_circuit_breaker(CircuitBreakerConfig::default())
-//!     .with_retry_policy(RetryPolicy::exponential_backoff(3))
-//!     .build();
-//!
-//! let config = ValidationConfig::default()
-//!     .with_external_integration(integration_config)
-//!     .with_hybrid_validation(true);
-//!
-//! // Validate with external service integration
-//! // let report = validator.validate_with_external_services(&store, config).await?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! #### Federated Validation Across Multiple Graphs
-//!
-//! ```rust
-//! use oxirs_shacl::{FederatedValidator, GraphEndpoint, ValidationStrategy};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let federated_validator = FederatedValidator::new();
-//!
-//! // Configure multiple graph endpoints
-//! let endpoints = vec![
-//!     GraphEndpoint::new("http://graph1.example.org/sparql")
-//!         .with_authentication("bearer", "token1")
-//!         .with_timeout(Duration::from_secs(60)),
-//!     GraphEndpoint::new("http://graph2.example.org/sparql")
-//!         .with_authentication("basic", "user:pass")
-//!         .with_load_balancing(true),
-//!     GraphEndpoint::new("http://graph3.example.org/sparql")
-//!         .with_failover_priority(1),
-//! ];
-//!
-//! let config = FederatedValidationConfig::new()
-//!     .with_endpoints(endpoints)
-//!     .with_strategy(ValidationStrategy::DistributedParallel)
-//!     .with_result_aggregation(AggregationStrategy::Union)
-//!     .with_conflict_resolution(ConflictResolution::MajorityVote);
-//!
-//! // Validate across federated knowledge graphs
-//! // let federated_report = federated_validator
-//! //     .validate_federated_graphs(&shapes, config).await?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Security and Compliance
-//!
-//! #### Enterprise Security Configuration
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, SecurityConfig, EncryptionConfig, AuditConfig};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let security_config = SecurityConfig::new()
-//!     .with_encryption(EncryptionConfig::Aes256Gcm {
-//!         key_rotation_interval: Duration::from_days(90),
-//!         key_derivation: KeyDerivation::Pbkdf2,
-//!     })
-//!     .with_access_control(AccessControlConfig::RoleBased {
-//!         roles: vec!["validator", "admin", "readonly"],
-//!         permissions: HashMap::from([
-//!             ("validator", vec!["validate", "read"]),
-//!             ("admin", vec!["validate", "read", "write", "configure"]),
-//!             ("readonly", vec!["read"]),
-//!         ]),
-//!     })
-//!     .with_audit_logging(AuditConfig::Comprehensive {
-//!         log_all_operations: true,
-//!         include_data_samples: false, // For GDPR compliance
-//!         retention_period: Duration::from_days(2555), // 7 years
-//!         encryption_at_rest: true,
-//!     });
-//!
-//! let validator = ShaclValidator::with_security_config(security_config)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! #### Data Privacy and GDPR Compliance
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, PrivacyConfig, DataClassification};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let privacy_config = PrivacyConfig::new()
-//!     .with_data_classification(DataClassification::Automatic)
-//!     .with_pii_detection(true)
-//!     .with_anonymization_on_export(true)
-//!     .with_right_to_be_forgotten(true)
-//!     .with_consent_tracking(true)
-//!     .with_lawful_basis_validation(true);
-//!
-//! let validator = ShaclValidator::new()
-//!     .with_privacy_compliance(privacy_config);
-//!
-//! // Shapes can specify privacy requirements
-//! let privacy_aware_shapes = r#"
-//! @prefix sh: <http://www.w3.org/ns/shacl#> .
-//! @prefix privacy: <http://example.org/privacy#> .
-//! @prefix ex: <http://example.org/> .
-//!
-//! ex:PersonShape
-//!     a sh:NodeShape ;
-//!     sh:targetClass ex:Person ;
-//!     sh:property [
-//!         sh:path ex:email ;
-//!         privacy:classification privacy:PII ;
-//!         privacy:processingBasis privacy:Consent ;
-//!         privacy:retentionPeriod "P5Y" ;
-//!     ] .
-//! "#;
-//!
-//! // Validation includes privacy compliance checking
-//! // let report = validator.validate_with_privacy_check(data, privacy_aware_shapes)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ### Production Deployment Patterns
-//!
-//! #### Cloud-Native Kubernetes Deployment
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, CloudConfig, KubernetesConfig, ScalingConfig};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let cloud_config = CloudConfig::kubernetes()
-//!     .with_namespace("validation-service")
-//!     .with_replica_count(3)
-//!     .with_scaling(ScalingConfig::HorizontalPodAutoscaler {
-//!         min_replicas: 2,
-//!         max_replicas: 10,
-//!         cpu_threshold: 70,
-//!         memory_threshold: 80,
-//!     })
-//!     .with_resource_limits(ResourceLimits {
-//!         cpu: "2000m",
-//!         memory: "4Gi",
-//!         storage: "20Gi",
-//!     })
-//!     .with_health_checks(HealthCheckConfig {
-//!         liveness_probe: "/health/live",
-//!         readiness_probe: "/health/ready",
-//!         startup_probe: "/health/startup",
-//!     })
-//!     .with_service_mesh(ServiceMeshConfig::Istio {
-//!         circuit_breaker: true,
-//!         rate_limiting: true,
-//!         observability: true,
-//!     });
-//!
-//! let validator = ShaclValidator::with_cloud_config(cloud_config)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! #### Error Recovery and Resilience Patterns
-//!
-//! ```rust
-//! use oxirs_shacl::{ShaclValidator, ResilienceConfig, ErrorRecoveryStrategy};
-//!
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let resilience_config = ResilienceConfig::new()
-//!     .with_circuit_breaker(CircuitBreakerConfig {
-//!         failure_threshold: 5,
-//!         timeout: Duration::from_secs(60),
-//!         half_open_max_calls: 3,
-//!     })
-//!     .with_bulkhead(BulkheadConfig {
-//!         max_concurrent_calls: 100,
-//!         max_wait_duration: Duration::from_secs(30),
-//!     })
-//!     .with_timeout(TimeoutConfig {
-//!         default_timeout: Duration::from_secs(120),
-//!         per_operation_timeouts: HashMap::from([
-//!             ("validation", Duration::from_secs(300)),
-//!             ("shape_loading", Duration::from_secs(60)),
-//!         ]),
-//!     })
-//!     .with_retry(RetryConfig {
-//!         max_attempts: 3,
-//!         backoff_strategy: BackoffStrategy::ExponentialWithJitter {
-//!             initial_delay: Duration::from_millis(100),
-//!             max_delay: Duration::from_secs(30),
-//!             multiplier: 2.0,
-//!         },
-//!         retryable_errors: vec![
-//!             ErrorKind::NetworkTimeout,
-//!             ErrorKind::ServiceUnavailable,
-//!             ErrorKind::RateLimitExceeded,
-//!         ],
-//!     });
-//!
-//! let validator = ShaclValidator::with_resilience_config(resilience_config)?;
-//!
-//! // Validation with comprehensive error recovery
-//! // match validator.validate_with_recovery(&store, &shapes, config).await {
-//! //     Ok(report) => println!("Validation completed: {}", report.conforms()),
-//! //     Err(e) if e.is_recoverable() => {
-//! //         // Automatic retry with backoff
-//! //         let recovery_report = validator.attempt_recovery(&e).await?;
-//! //         println!("Recovered from error: {:?}", recovery_report);
-//! //     }
-//! //     Err(e) => return Err(e.into()),
-//! // }
-//! # Ok(())
-//! # }
-//! ```
+//! ## Advanced Features
+//!
+//! For detailed examples and advanced usage patterns, including:
+//! - Custom constraint components
+//! - Parallel and incremental validation
+//! - Enterprise security and compliance features
+//! - Federated validation
+//! - Production deployment patterns
+//!
+//! Please refer to the individual module documentation and the examples
+//! directory in the repository.
 
 use std::collections::HashMap;
 use std::fmt;
@@ -553,6 +87,7 @@ pub mod targets;
 pub mod validation;
 pub mod vocabulary;
 pub mod w3c_test_suite;
+pub mod w3c_test_suite_enhanced;
 
 // Re-export key types for convenience - avoiding ambiguous glob re-exports
 pub use analytics::ValidationAnalytics;
@@ -1048,15 +583,13 @@ impl ValidationConfig {
     }
 }
 
-
 /// OxiRS SHACL version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 // Validator module
 pub mod validator;
 
 // Re-export validator types
-pub use validator::{Validator, ValidationStats, ValidatorBuilder};
-
+pub use validator::{ValidationStats, Validator, ValidatorBuilder};
 
 /// Initialize OxiRS SHACL with default configuration
 pub fn init() -> Result<()> {

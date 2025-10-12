@@ -38,9 +38,10 @@ pub async fn get_production_model_version(state: &ApiState) -> Result<Uuid> {
         }
 
         // Higher accuracy is better (if available)
-        if let Some(accuracy) = stats.accuracy {
-            score += accuracy * 100.0;
-        }
+        // TODO: ModelStats doesn't have an accuracy field yet
+        // if let Some(accuracy) = stats.accuracy {
+        //     score += accuracy * 100.0;
+        // }
 
         // More entities/relations indicate a more complete model
         score += (stats.num_entities as f64).ln() * 10.0;
@@ -97,4 +98,10 @@ pub fn calculate_cache_hit_rate(hits: usize, total: usize) -> f64 {
     } else {
         (hits as f64 / total as f64) * 100.0
     }
+}
+
+/// Get the production model (not just the version)
+/// This is a stub that needs to be properly implemented based on the registry type
+pub async fn get_production_model<T>(registry: &T) -> Result<Box<dyn crate::EmbeddingModel>> {
+    Err(anyhow!("get_production_model not yet implemented"))
 }

@@ -1,8 +1,8 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
 
@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.1.0-alpha.2"
+oxirs-embed = "0.1.0-alpha.3"
 
 # Enable specific providers
-oxirs-embed = { version = "0.1.0-alpha.2", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.1.0-alpha.3", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start
@@ -312,7 +312,7 @@ let model = EmbeddingModel::builder()
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.2)
+### Alpha Release (v0.1.0-alpha.3)
 - ✅ Sentence Transformers integration with batch streaming + persistence
 - ✅ OpenAI embeddings support with provider failover and caching
 - ✅ Entity/graph embeddings wired into CLI ingest/export pipelines

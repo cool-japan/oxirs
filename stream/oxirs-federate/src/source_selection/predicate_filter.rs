@@ -110,4 +110,3 @@ impl PredicateBasedFilter {
         Ok(())
     }
 }
-

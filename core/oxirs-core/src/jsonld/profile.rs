@@ -247,7 +247,7 @@ impl JsonLdProcessingMode {
     /// The string identifier.
     ///
     /// ```
-    /// use oxjsonld::JsonLdProcessingMode;
+    /// use oxirs_core::jsonld::JsonLdProcessingMode;
     ///
     /// assert_eq!(JsonLdProcessingMode::JsonLd1_0.as_str(), "json-ld-1.0");
     /// ```
@@ -262,7 +262,7 @@ impl JsonLdProcessingMode {
     /// From a string identifier.
     ///
     /// ```
-    /// use oxjsonld::JsonLdProcessingMode;
+    /// use oxirs_core::jsonld::JsonLdProcessingMode;
     ///
     /// assert_eq!(
     ///     JsonLdProcessingMode::from_id("json-ld-1.1"),

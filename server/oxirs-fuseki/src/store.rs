@@ -307,7 +307,7 @@ impl Store {
             .map_err(|e| FusekiError::store(format!("Failed to acquire store write lock: {e}")))?;
 
         // Parse and execute the update operation
-        let (operation_type, quads_inserted, quads_deleted) =
+        let (operation_type, quads_inserted, quads_deleted, affected_graphs) =
             self.execute_sparql_update(&mut *store_guard, sparql)?;
 
         let execution_time = start_time.elapsed();
@@ -339,7 +339,7 @@ impl Store {
                 id: metadata.last_change_id,
                 timestamp: chrono::Utc::now(),
                 operation_type: operation_type.to_string(),
-                affected_graphs: vec!["default".to_string()], // TODO: extract actual graphs
+                affected_graphs,
                 triple_count: quads_inserted + quads_deleted,
                 dataset_name: dataset_name.map(|s| s.to_string()),
             };
@@ -359,11 +359,12 @@ impl Store {
     }
 
     /// Execute a SPARQL update operation using basic parsing and low-level Store API
+    /// Returns: (operation_type, quads_inserted, quads_deleted, affected_graphs)
     fn execute_sparql_update(
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         let sparql_upper = sparql.to_uppercase();
 
         if sparql_upper.contains("CLEAR") {
@@ -385,8 +386,25 @@ impl Store {
                 "SPARQL update operation not recognized or supported: {}",
                 sparql.trim()
             );
-            Ok(("UNKNOWN", 0, 0))
+            Ok(("UNKNOWN", 0, 0, vec!["default".to_string()]))
         }
+    }
+
+    /// Extract unique graph names from quads
+    fn extract_graph_names(&self, quads: &[Quad]) -> Vec<String> {
+        let mut graphs = std::collections::HashSet::new();
+        for quad in quads {
+            let graph_name = match quad.graph_name() {
+                oxirs_core::model::GraphName::DefaultGraph => "default".to_string(),
+                oxirs_core::model::GraphName::NamedNode(node) => node.as_str().to_string(),
+                oxirs_core::model::GraphName::BlankNode(node) => format!("_:{}", node.as_str()),
+                oxirs_core::model::GraphName::Variable(var) => format!("?{}", var.as_str()),
+            };
+            graphs.insert(graph_name);
+        }
+        let mut graph_vec: Vec<String> = graphs.into_iter().collect();
+        graph_vec.sort();
+        graph_vec
     }
 
     /// Execute CLEAR operation
@@ -394,7 +412,7 @@ impl Store {
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         let sparql_upper = sparql.to_uppercase();
 
         // Check if clearing all graphs
@@ -408,7 +426,7 @@ impl Store {
             })?;
 
             info!("Cleared all graphs: {} quads removed", quad_count);
-            return Ok(("CLEAR ALL", 0, quad_count));
+            return Ok(("CLEAR ALL", 0, quad_count, vec!["*all*".to_string()]));
         }
 
         // Check if clearing default graph
@@ -429,7 +447,7 @@ impl Store {
     fn clear_default_graph(
         &self,
         store: &mut dyn CoreStore,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         // Get all quads in the default graph
         let default_quads = store
             .find_quads(
@@ -454,7 +472,12 @@ impl Store {
         }
 
         info!("Cleared default graph: {} quads removed", deleted_count);
-        Ok(("CLEAR DEFAULT", 0, deleted_count))
+        Ok((
+            "CLEAR DEFAULT",
+            0,
+            deleted_count,
+            vec!["default".to_string()],
+        ))
     }
 
     /// Clear a specific named graph
@@ -462,7 +485,7 @@ impl Store {
         &self,
         store: &mut dyn CoreStore,
         graph_iri: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         // Create the named graph reference
         let named_node = oxirs_core::model::NamedNode::new(graph_iri).map_err(|e| {
             FusekiError::update_execution(format!("Invalid graph IRI '{graph_iri}': {e}"))
@@ -493,7 +516,7 @@ impl Store {
             "Cleared named graph '{}': {} quads removed",
             graph_iri, deleted_count
         );
-        Ok(("CLEAR GRAPH", 0, deleted_count))
+        Ok(("CLEAR GRAPH", 0, deleted_count, vec![graph_iri.to_string()]))
     }
 
     /// Extract graph IRI from CLEAR GRAPH statement
@@ -533,10 +556,12 @@ impl Store {
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         // Extract the data block between { and }
         let data_block = self.extract_data_block(sparql, "INSERT DATA")?;
         let quads = self.parse_data_block(&data_block)?;
+
+        let affected_graphs = self.extract_graph_names(&quads);
 
         let mut inserted_count = 0;
         for quad in quads {
@@ -548,18 +573,20 @@ impl Store {
             }
         }
 
-        Ok(("INSERT DATA", inserted_count, 0))
+        Ok(("INSERT DATA", inserted_count, 0, affected_graphs))
     }
 
-    /// Execute DELETE DATA operation  
+    /// Execute DELETE DATA operation
     fn execute_delete_data_operation(
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         // Extract the data block between { and }
         let data_block = self.extract_data_block(sparql, "DELETE DATA")?;
         let quads = self.parse_data_block(&data_block)?;
+
+        let affected_graphs = self.extract_graph_names(&quads);
 
         let mut deleted_count = 0;
         for quad in quads {
@@ -571,7 +598,7 @@ impl Store {
             }
         }
 
-        Ok(("DELETE DATA", 0, deleted_count))
+        Ok(("DELETE DATA", 0, deleted_count, affected_graphs))
     }
 
     /// Execute DELETE/INSERT operation (simplified implementation)
@@ -579,16 +606,18 @@ impl Store {
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         // This is a simplified implementation - just parse both blocks and execute them
         warn!("DELETE/INSERT operation using simplified implementation");
 
         let mut inserted_count = 0;
         let mut deleted_count = 0;
+        let mut all_quads = Vec::new();
 
         // Try to extract DELETE block
         if let Ok(delete_block) = self.extract_data_block(sparql, "DELETE") {
             let delete_quads = self.parse_data_block(&delete_block)?;
+            all_quads.extend(delete_quads.iter().cloned());
             for quad in delete_quads {
                 if store.remove_quad(&quad).map_err(|e| {
                     FusekiError::update_execution(format!("Failed to remove quad: {e}"))
@@ -601,6 +630,7 @@ impl Store {
         // Try to extract INSERT block
         if let Ok(insert_block) = self.extract_data_block(sparql, "INSERT") {
             let insert_quads = self.parse_data_block(&insert_block)?;
+            all_quads.extend(insert_quads.iter().cloned());
             for quad in insert_quads {
                 if store.insert_quad(quad).map_err(|e| {
                     FusekiError::update_execution(format!("Failed to insert quad: {e}"))
@@ -610,7 +640,13 @@ impl Store {
             }
         }
 
-        Ok(("DELETE/INSERT", inserted_count, deleted_count))
+        let affected_graphs = self.extract_graph_names(&all_quads);
+        Ok((
+            "DELETE/INSERT",
+            inserted_count,
+            deleted_count,
+            affected_graphs,
+        ))
     }
 
     /// Execute DELETE WHERE operation (simplified implementation)
@@ -618,13 +654,14 @@ impl Store {
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         warn!("DELETE WHERE operation using simplified implementation - deleting all matching patterns");
 
         // For now, just extract the WHERE block and delete matching quads
         if let Ok(where_block) = self.extract_data_block(sparql, "WHERE") {
             let pattern_quads = self.parse_data_block(&where_block)?;
             let mut deleted_count = 0;
+            let mut all_deleted_quads = Vec::new();
 
             for pattern_quad in pattern_quads {
                 // Find all matching quads and delete them
@@ -642,6 +679,7 @@ impl Store {
                     })?;
 
                 for quad in matching_quads {
+                    all_deleted_quads.push(quad.clone());
                     if store.remove_quad(&quad).map_err(|e| {
                         FusekiError::update_execution(format!("Failed to remove quad: {e}"))
                     })? {
@@ -650,7 +688,8 @@ impl Store {
                 }
             }
 
-            Ok(("DELETE WHERE", 0, deleted_count))
+            let affected_graphs = self.extract_graph_names(&all_deleted_quads);
+            Ok(("DELETE WHERE", 0, deleted_count, affected_graphs))
         } else {
             Err(FusekiError::update_execution(
                 "Failed to extract WHERE block from DELETE WHERE operation".to_string(),
@@ -663,10 +702,12 @@ impl Store {
         &self,
         store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         // Extract the data block and insert
         let data_block = self.extract_data_block(sparql, "INSERT")?;
         let quads = self.parse_data_block(&data_block)?;
+
+        let affected_graphs = self.extract_graph_names(&quads);
 
         let mut inserted_count = 0;
         for quad in quads {
@@ -678,18 +719,220 @@ impl Store {
             }
         }
 
-        Ok(("INSERT", inserted_count, 0))
+        Ok(("INSERT", inserted_count, 0, affected_graphs))
     }
 
-    /// Execute LOAD operation (simplified implementation)
+    /// Execute LOAD operation (SPARQL 1.1)
+    /// Syntax: LOAD <sourceIRI> [INTO GRAPH <targetIRI>]
     fn execute_load_operation(
         &self,
-        _store: &mut dyn CoreStore,
+        store: &mut dyn CoreStore,
         sparql: &str,
-    ) -> FusekiResult<(&'static str, usize, usize)> {
-        warn!("LOAD operation not fully implemented: {}", sparql.trim());
-        // TODO: Implement LOAD operation to fetch RDF from URL and insert into store
-        Ok(("LOAD", 0, 0))
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        info!("Executing LOAD operation: {}", sparql.trim());
+
+        // Extract source IRI and optional target graph
+        let (source_iri, target_graph) = self.parse_load_statement(sparql)?;
+
+        // Fetch RDF data from source URL
+        let runtime = tokio::runtime::Runtime::new()
+            .map_err(|e| FusekiError::update_execution(format!("Failed to create runtime: {e}")))?;
+
+        let (data, content_type) =
+            runtime.block_on(async { self.fetch_rdf_from_url(&source_iri).await })?;
+
+        // Detect RDF format from content-type or file extension
+        let format = self.detect_rdf_format(&source_iri, content_type.as_deref())?;
+
+        // Parse the fetched RDF data
+        let parser = Parser::new(format);
+        let quads = parser.parse_str_to_quads(&data).map_err(|e| {
+            FusekiError::parse(format!("Failed to parse RDF from '{}': {e}", source_iri))
+        })?;
+
+        // Insert quads into the target graph
+        let mut inserted_count = 0;
+        let target_graph_name = if let Some(graph_iri) = target_graph {
+            let named_node = oxirs_core::model::NamedNode::new(&graph_iri).map_err(|e| {
+                FusekiError::update_execution(format!(
+                    "Invalid target graph IRI '{graph_iri}': {e}"
+                ))
+            })?;
+            Some(oxirs_core::model::GraphName::NamedNode(named_node))
+        } else {
+            None
+        };
+
+        for quad in quads {
+            // Override graph name if target graph is specified
+            let final_quad = if let Some(ref target) = target_graph_name {
+                oxirs_core::model::Quad::new(
+                    quad.subject().clone(),
+                    quad.predicate().clone(),
+                    quad.object().clone(),
+                    target.clone(),
+                )
+            } else {
+                quad
+            };
+
+            if store
+                .insert_quad(final_quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
+            {
+                inserted_count += 1;
+            }
+        }
+
+        info!(
+            "LOAD operation completed: loaded {} triples from '{}'",
+            inserted_count, source_iri
+        );
+
+        // Determine affected graph(s)
+        let affected_graphs = if let Some(ref target_graph_name) = target_graph_name {
+            match target_graph_name {
+                oxirs_core::model::GraphName::DefaultGraph => vec!["default".to_string()],
+                oxirs_core::model::GraphName::NamedNode(node) => vec![node.as_str().to_string()],
+                oxirs_core::model::GraphName::BlankNode(node) => {
+                    vec![format!("_:{}", node.as_str())]
+                }
+                oxirs_core::model::GraphName::Variable(var) => vec![format!("?{}", var.as_str())],
+            }
+        } else {
+            vec!["default".to_string()]
+        };
+
+        Ok(("LOAD", inserted_count, 0, affected_graphs))
+    }
+
+    /// Parse LOAD statement to extract source IRI and optional target graph
+    /// Syntax: LOAD <sourceIRI> [INTO GRAPH <targetIRI>]
+    fn parse_load_statement(&self, sparql: &str) -> FusekiResult<(String, Option<String>)> {
+        let sparql_upper = sparql.to_uppercase();
+
+        // Find LOAD keyword
+        let load_pos = sparql_upper
+            .find("LOAD")
+            .ok_or_else(|| FusekiError::update_execution("LOAD keyword not found".to_string()))?;
+
+        let remaining = &sparql[load_pos + 4..]; // Skip "LOAD"
+
+        // Extract source IRI (between < and >)
+        let source_start = remaining.find('<').ok_or_else(|| {
+            FusekiError::update_execution("Source IRI not found (expected <IRI>)".to_string())
+        })?;
+        let source_end = remaining[source_start + 1..].find('>').ok_or_else(|| {
+            FusekiError::update_execution("Source IRI closing '>' not found".to_string())
+        })?;
+        let source_iri = remaining[source_start + 1..source_start + 1 + source_end]
+            .trim()
+            .to_string();
+
+        // Check for optional INTO GRAPH clause
+        let after_source = &remaining[source_start + 1 + source_end + 1..];
+        let after_source_upper = after_source.to_uppercase();
+
+        let target_graph = if let Some(into_pos) = after_source_upper.find("INTO GRAPH") {
+            let graph_part = &after_source[into_pos + 10..]; // Skip "INTO GRAPH"
+            let graph_start = graph_part.find('<').ok_or_else(|| {
+                FusekiError::update_execution(
+                    "Target graph IRI not found after INTO GRAPH".to_string(),
+                )
+            })?;
+            let graph_end = graph_part[graph_start + 1..].find('>').ok_or_else(|| {
+                FusekiError::update_execution("Target graph IRI closing '>' not found".to_string())
+            })?;
+            let graph_iri = graph_part[graph_start + 1..graph_start + 1 + graph_end]
+                .trim()
+                .to_string();
+            Some(graph_iri)
+        } else {
+            None
+        };
+
+        Ok((source_iri, target_graph))
+    }
+
+    /// Fetch RDF data from URL using HTTP
+    async fn fetch_rdf_from_url(&self, url: &str) -> FusekiResult<(String, Option<String>)> {
+        let response = reqwest::get(url).await.map_err(|e| {
+            FusekiError::update_execution(format!("Failed to fetch '{}': {e}", url))
+        })?;
+
+        if !response.status().is_success() {
+            return Err(FusekiError::update_execution(format!(
+                "HTTP error fetching '{}': {}",
+                url,
+                response.status()
+            )));
+        }
+
+        // Extract content-type header
+        let content_type = response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let body = response.text().await.map_err(|e| {
+            FusekiError::update_execution(format!("Failed to read response body: {e}"))
+        })?;
+
+        Ok((body, content_type))
+    }
+
+    /// Detect RDF format from URL and content-type
+    fn detect_rdf_format(
+        &self,
+        url: &str,
+        content_type: Option<&str>,
+    ) -> FusekiResult<CoreRdfFormat> {
+        // Try content-type first
+        if let Some(ct) = content_type {
+            let ct_lower = ct.to_lowercase();
+            if ct_lower.contains("turtle") || ct_lower.contains("text/turtle") {
+                return Ok(CoreRdfFormat::Turtle);
+            } else if ct_lower.contains("rdf+xml") || ct_lower.contains("application/rdf+xml") {
+                return Ok(CoreRdfFormat::RdfXml);
+            } else if ct_lower.contains("n-triples") || ct_lower.contains("application/n-triples") {
+                return Ok(CoreRdfFormat::NTriples);
+            } else if ct_lower.contains("n-quads") || ct_lower.contains("application/n-quads") {
+                return Ok(CoreRdfFormat::NQuads);
+            } else if ct_lower.contains("trig") || ct_lower.contains("application/trig") {
+                return Ok(CoreRdfFormat::TriG);
+            } else if ct_lower.contains("n3") || ct_lower.contains("text/n3") {
+                // N3 is a superset of Turtle, use Turtle parser
+                return Ok(CoreRdfFormat::Turtle);
+            }
+        }
+
+        // Fallback to file extension
+        let url_lower = url.to_lowercase();
+        if url_lower.ends_with(".ttl") || url_lower.ends_with(".turtle") {
+            Ok(CoreRdfFormat::Turtle)
+        } else if url_lower.ends_with(".rdf")
+            || url_lower.ends_with(".xml")
+            || url_lower.ends_with(".owl")
+        {
+            Ok(CoreRdfFormat::RdfXml)
+        } else if url_lower.ends_with(".nt") || url_lower.ends_with(".ntriples") {
+            Ok(CoreRdfFormat::NTriples)
+        } else if url_lower.ends_with(".nq") || url_lower.ends_with(".nquads") {
+            Ok(CoreRdfFormat::NQuads)
+        } else if url_lower.ends_with(".trig") {
+            Ok(CoreRdfFormat::TriG)
+        } else if url_lower.ends_with(".n3") {
+            // N3 is a superset of Turtle, use Turtle parser
+            Ok(CoreRdfFormat::Turtle)
+        } else {
+            // Default to Turtle as it's the most common
+            warn!(
+                "Could not detect RDF format for '{}', defaulting to Turtle",
+                url
+            );
+            Ok(CoreRdfFormat::Turtle)
+        }
     }
 
     /// Extract data block from SPARQL update (between { and })

@@ -579,6 +579,7 @@ impl InnerRdfXmlWriter {
 }
 
 #[cfg(feature = "async-tokio")]
+#[allow(dead_code)]
 fn map_err(error: quick_xml::Error) -> io::Error {
     if let quick_xml::Error::Io(error) = error {
         Arc::try_unwrap(error).unwrap_or_else(|error| io::Error::new(error.kind(), error))

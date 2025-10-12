@@ -143,7 +143,7 @@ impl HuggingFaceEmbedder {
 
     /// Generate a single embedding
     pub async fn embed(&mut self, content: &EmbeddableContent) -> Result<Vector> {
-        let embeddings = self.embed_batch(&[content.clone()]).await?;
+        let embeddings = self.embed_batch(std::slice::from_ref(content)).await?;
         embeddings
             .into_iter()
             .next()

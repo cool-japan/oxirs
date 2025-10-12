@@ -229,7 +229,7 @@ fn test_deep_inheritance_chain() {
 fn test_inheritance_with_validation() {
     // Test that inheritance works during actual validation
     let mut validator = Validator::new();
-    let mut store = ConcreteStore::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
 
     // Add test data
     let subject = NamedNode::new("http://example.org/testNode").unwrap();

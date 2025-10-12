@@ -1,8 +1,8 @@
 //! Aggregation functions for SPARQL results
 
+use super::super::types::*;
 use anyhow::Result;
 use std::collections::HashMap;
-use super::super::types::*;
 
 pub fn perform_group_by_aggregation(results: &SparqlResults, _expr: &str) -> Result<SparqlResults> {
     // Simplified implementation - would need proper GROUP BY logic

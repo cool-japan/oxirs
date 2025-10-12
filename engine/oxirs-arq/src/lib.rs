@@ -1,10 +1,10 @@
 //! # OxiRS ARQ - SPARQL Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-arq/badge.svg)](https://docs.rs/oxirs-arq)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Alpha Release (v0.1.0-alpha.3) - Beta.1 Features Complete
+//! ⚠️ APIs may change. Production hardening in progress.
 //!
 //! Advanced SPARQL 1.1/1.2 query engine with optimization, federation support, and custom functions.
 //! Provides Jena ARQ-style SPARQL algebra with modern Rust performance.
@@ -21,15 +21,15 @@
 //! ## Quick Start
 //!
 //! ```rust
-//! use oxirs_arq::QueryEngine;
-//! # use oxirs_core::Dataset;
+//! use oxirs_core::query::QueryEngine;
+//! use oxirs_core::RdfStore;
 //!
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let engine = QueryEngine::new();
-//! let dataset = Dataset::new();
+//! let store = RdfStore::new()?;
 //!
 //! let sparql = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10";
-//! let results = engine.execute(sparql, &dataset)?;
+//! let results = engine.query(sparql, &store)?;
 //! # Ok(())
 //! # }
 //! ```
@@ -62,6 +62,7 @@ pub mod parallel;
 pub mod path;
 pub mod path_extensions;
 pub mod procedures;
+pub mod production; // Production hardening features (Beta.1)
 pub mod property_functions;
 pub mod query;
 pub mod query_analysis;
@@ -78,6 +79,10 @@ pub mod triple_functions;
 pub mod update;
 pub mod values_support;
 pub mod vector_query_optimizer;
+
+// RDF-star / SPARQL-star integration
+#[cfg(feature = "star")]
+pub mod star_integration;
 
 // Advanced modules
 pub mod advanced_optimizer;
@@ -123,6 +128,12 @@ pub use scirs_optimize_integration::{
     OptimizationResult, PerformanceAnalysis, QueryInfo, QueryOptimizationConfig,
     SciRS2QueryOptimizer,
 };
+pub use service_description::{
+    create_default_service_description, AggregateInfo, DatasetDescription, ExtensionFunction,
+    Feature, LanguageExtension, NamedGraphDescription, ParameterInfo, ProcedureInfo,
+    PropertyFunctionInfo, ServiceDescription, ServiceDescriptionBuilder,
+    ServiceDescriptionRegistry, ServiceLimitations,
+};
 pub use string_functions_ext::{
     StrAfterFunction, StrBeforeFunction, StrDtFunction, StrLangDirFunction, StrLangFunction,
 };
@@ -133,12 +144,6 @@ pub use values_support::{
     IndexedValues, JoinStrategy, OptimizedValues, ValuesBuilder, ValuesClause,
     ValuesExecutionStrategy, ValuesExecutor, ValuesJoinOptimizer, ValuesOptimizer,
     ValuesStatistics,
-};
-pub use service_description::{
-    AggregateInfo, DatasetDescription, ExtensionFunction, Feature, LanguageExtension,
-    NamedGraphDescription, ParameterInfo, ProcedureInfo, PropertyFunctionInfo,
-    ServiceDescription, ServiceDescriptionBuilder, ServiceDescriptionRegistry,
-    ServiceLimitations, create_default_service_description,
 };
 // Temporarily disabled - require scirs2-core beta.4 APIs
 /*
@@ -166,6 +171,19 @@ pub use distributed_consensus::{
     ConsensusState, ConsensusStatistics, ConsensusAlgorithm, ByzantineConfig,
 };
 */
+
+pub use production::{
+    ErrorSeverity, GlobalStatistics, HealthStatus, QueryCircuitBreaker, QueryEngineHealth,
+    QueryErrorContext, QueryResourceQuota, QueryStatistics, SparqlPerformanceMonitor,
+    SparqlProductionError,
+};
+
+// RDF-star / SPARQL-star exports (when feature is enabled)
+#[cfg(feature = "star")]
+pub use star_integration::{
+    pattern_matching, sparql_star_functions, star_statistics::SparqlStarStatistics,
+    SparqlStarExecutor,
+};
 
 // Common Result type for the crate
 pub type Result<T> = anyhow::Result<T>;

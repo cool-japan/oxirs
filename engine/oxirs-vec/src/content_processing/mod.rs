@@ -6,15 +6,9 @@
 //! This module is only available when the `content-processing` feature is enabled.
 
 #[cfg(feature = "content-processing")]
-use crate::{embeddings::EmbeddableContent, Vector};
-#[cfg(feature = "content-processing")]
-use anyhow::{anyhow, Result};
-#[cfg(feature = "content-processing")]
-use serde::{Deserialize, Serialize};
+use anyhow::Result;
 #[cfg(feature = "content-processing")]
 use std::collections::HashMap;
-#[cfg(feature = "content-processing")]
-use std::path::Path;
 
 // Re-export handlers
 mod data_handlers;

@@ -413,6 +413,13 @@ fn output_report(report: &ValidationReport, args: &Args) -> Result<()> {
         ReportFormat::NTriples => report.to_rdf("application/n-triples")?,
         ReportFormat::Text => report.to_text()?,
         ReportFormat::Yaml => report.to_yaml()?,
+        ReportFormat::Prometheus => {
+            use oxirs_shacl::report::format::ReportConfig;
+            use oxirs_shacl::report::serializers::PrometheusSerializer;
+            let config = ReportConfig::default();
+            let serializer = PrometheusSerializer::new(config);
+            serializer.serialize(report)?
+        }
     };
 
     match &args.output_file {

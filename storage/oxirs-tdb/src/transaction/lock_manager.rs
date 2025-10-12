@@ -17,10 +17,7 @@ pub enum LockMode {
 impl LockMode {
     /// Check if two lock modes are compatible
     pub fn is_compatible(&self, other: &LockMode) -> bool {
-        match (self, other) {
-            (LockMode::Shared, LockMode::Shared) => true,
-            _ => false,
-        }
+        matches!((self, other), (LockMode::Shared, LockMode::Shared))
     }
 }
 
@@ -125,7 +122,9 @@ impl LockManager {
         // Add to wait queue
         {
             let mut lock_table = self.lock_table.write().unwrap();
-            let entry = lock_table.entry(page_id).or_insert_with(LockTableEntry::new);
+            let entry = lock_table
+                .entry(page_id)
+                .or_insert_with(LockTableEntry::new);
             entry.add_waiting(txn_id, mode);
         }
 
@@ -138,10 +137,7 @@ impl LockManager {
             if entry.holds_lock(txn_id) {
                 // Lock was granted
                 let mut txn_locks = self.txn_locks.write().unwrap();
-                txn_locks
-                    .entry(txn_id)
-                    .or_insert_with(HashSet::new)
-                    .insert((page_id, mode));
+                txn_locks.entry(txn_id).or_default().insert((page_id, mode));
                 return Ok(());
             }
         }
@@ -155,7 +151,9 @@ impl LockManager {
     /// Try to acquire lock without blocking
     pub fn try_lock(&self, txn_id: TxnId, page_id: PageId, mode: LockMode) -> Result<bool> {
         let mut lock_table = self.lock_table.write().unwrap();
-        let entry = lock_table.entry(page_id).or_insert_with(LockTableEntry::new);
+        let entry = lock_table
+            .entry(page_id)
+            .or_insert_with(LockTableEntry::new);
 
         // Check if already holds lock
         if entry.holds_lock(txn_id) {
@@ -167,10 +165,7 @@ impl LockManager {
             entry.grant(txn_id, mode);
 
             let mut txn_locks = self.txn_locks.write().unwrap();
-            txn_locks
-                .entry(txn_id)
-                .or_insert_with(HashSet::new)
-                .insert((page_id, mode));
+            txn_locks.entry(txn_id).or_default().insert((page_id, mode));
 
             Ok(true)
         } else {
@@ -190,7 +185,7 @@ impl LockManager {
             for (promoted_txn, promoted_mode) in promoted {
                 txn_locks
                     .entry(promoted_txn)
-                    .or_insert_with(HashSet::new)
+                    .or_default()
                     .insert((page_id, promoted_mode));
             }
 
@@ -214,7 +209,7 @@ impl LockManager {
         let locks_to_release: Vec<_> = txn_locks
             .get(&txn_id)
             .map(|locks| locks.iter().map(|(page_id, _)| *page_id).collect())
-            .unwrap_or_else(Vec::new);
+            .unwrap_or_default();
 
         drop(txn_locks); // Release read lock
 
@@ -244,7 +239,7 @@ impl LockManager {
         txn_locks
             .get(&txn_id)
             .map(|locks| locks.iter().cloned().collect())
-            .unwrap_or_else(Vec::new)
+            .unwrap_or_default()
     }
 }
 

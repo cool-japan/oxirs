@@ -41,5 +41,26 @@ pub mod config;
 /// Interactive REPL mode
 pub mod interactive;
 
+/// SAMM Aspect Model commands (Java ESMF SDK compatible)
+pub mod aspect;
+
+/// AAS (Asset Administration Shell) commands (Java ESMF SDK compatible)
+pub mod aas;
+
+/// Package management commands (Java ESMF SDK compatible)
+pub mod package;
+
+/// Query EXPLAIN/ANALYZE commands
+pub mod explain;
+
+/// Query template management
+pub mod templates;
+
+/// Query result caching
+pub mod cache;
+
+/// Query history management
+pub mod history;
+
 /// Command stubs and utilities
 pub mod stubs;

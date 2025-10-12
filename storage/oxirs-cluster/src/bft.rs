@@ -4,7 +4,7 @@
 //! protecting against malicious nodes in the cluster.
 
 use crate::{ClusterError, Result};
-use ed25519_dalek::{SigningKey, VerifyingKey, Signature, Signer, Verifier};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -152,6 +152,7 @@ pub struct BftConsensus {
     /// Current view number
     view: Arc<RwLock<u64>>,
     /// Node state
+    #[allow(dead_code)]
     state: Arc<RwLock<BftNodeState>>,
     /// BFT configuration
     config: BftConfig,
@@ -178,6 +179,7 @@ struct MessageLog {
     /// Completed requests by sequence
     completed: HashMap<u64, Vec<u8>>,
     /// Last stable checkpoint
+    #[allow(dead_code)]
     last_checkpoint: u64,
 }
 
@@ -259,8 +261,12 @@ impl ByzantineTracker {
 impl BftConsensus {
     /// Create a new BFT consensus instance
     pub fn new(node_id: String, config: BftConfig) -> Result<Self> {
-        let mut csprng = OsRng {};
-        let keypair = SigningKey::generate(&mut csprng);
+        // Generate a random SigningKey using OsRng
+        let mut csprng = OsRng;
+        let mut seed_bytes = [0u8; 32];
+        use rand::RngCore;
+        csprng.fill_bytes(&mut seed_bytes);
+        let keypair = SigningKey::from_bytes(&seed_bytes);
 
         Ok(BftConsensus {
             node_id,
@@ -344,8 +350,14 @@ impl BftConsensus {
             .get(node_id)
             .ok_or_else(|| ClusterError::Config(format!("Unknown node: {}", node_id)))?;
 
-        let sig = Signature::from_bytes(signature)
-            .map_err(|e| ClusterError::Network(format!("Invalid signature: {}", e)))?;
+        // ed25519-dalek 2.x requires exactly 64 bytes
+        if signature.len() != 64 {
+            return Ok(false);
+        }
+
+        let mut signature_bytes = [0u8; 64];
+        signature_bytes.copy_from_slice(signature);
+        let sig = Signature::from_bytes(&signature_bytes);
 
         Ok(public_key.verify(message, &sig).is_ok())
     }
@@ -581,8 +593,9 @@ impl BftConsensus {
 
         // Check if committed (2f + 1 commits)
         if log.is_committed(view, sequence, self.config.required_votes()) {
-            // Execute the request
-            if let Some(pre_prepare) = log.pre_prepares.get(&(view, sequence)) {
+            // Clone data we need before mutable borrow
+            let operation_data = if let Some(pre_prepare) = log.pre_prepares.get(&(view, sequence))
+            {
                 if let BftMessage::PrePrepare { request, .. } = pre_prepare {
                     if let BftMessage::Request {
                         operation,
@@ -591,23 +604,33 @@ impl BftConsensus {
                         ..
                     } = &**request
                     {
-                        // Mark as completed
-                        log.completed.insert(sequence, operation.clone());
-
-                        // Send reply to client
-                        let reply = BftMessage::Reply {
-                            view,
-                            timestamp: *timestamp,
-                            client_id: client_id.clone(),
-                            node_id: self.node_id.clone(),
-                            result: vec![], // TODO: Actual execution result
-                            signature: self.sign_message(&digest),
-                        };
-
-                        drop(log);
-                        self.send_reply(reply)?;
+                        Some((operation.clone(), client_id.clone(), *timestamp))
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
+            } else {
+                None
+            };
+
+            // Now we can mutably borrow log
+            if let Some((operation, client_id, timestamp)) = operation_data {
+                log.completed.insert(sequence, operation.clone());
+
+                // Send reply to client
+                let reply = BftMessage::Reply {
+                    view,
+                    timestamp,
+                    client_id,
+                    node_id: self.node_id.clone(),
+                    result: vec![], // TODO: Actual execution result
+                    signature: self.sign_message(&digest),
+                };
+
+                drop(log);
+                self.send_reply(reply)?;
             }
         }
 
@@ -617,10 +640,10 @@ impl BftConsensus {
     /// Handle view change request
     fn handle_view_change(
         &self,
-        new_view: u64,
-        node_id: String,
-        prepared_messages: Vec<PreparedMessage>,
-        signature: Vec<u8>,
+        _new_view: u64,
+        _node_id: String,
+        _prepared_messages: Vec<PreparedMessage>,
+        _signature: Vec<u8>,
     ) -> Result<()> {
         // TODO: Implement view change protocol
         Ok(())
@@ -656,13 +679,13 @@ impl BftConsensus {
     }
 
     /// Broadcast message to all nodes
-    fn broadcast_message(&self, message: BftMessage) -> Result<()> {
+    fn broadcast_message(&self, _message: BftMessage) -> Result<()> {
         // TODO: Integrate with network layer
         Ok(())
     }
 
     /// Send reply to client
-    fn send_reply(&self, reply: BftMessage) -> Result<()> {
+    fn send_reply(&self, _reply: BftMessage) -> Result<()> {
         // TODO: Integrate with network layer
         Ok(())
     }

@@ -442,6 +442,135 @@ impl GraphAnalyticsEngine {
         Ok(betweenness)
     }
 
+    /// Compute closeness centrality
+    ///
+    /// Closeness centrality measures how close a node is to all other nodes.
+    /// It's defined as (n-1) / sum_of_distances, where n is the number of nodes.
+    #[instrument(skip(self, graph))]
+    pub async fn compute_closeness_centrality(
+        &self,
+        graph: &AnalysisGraph,
+    ) -> FusekiResult<HashMap<String, f64>> {
+        info!("Computing closeness centrality");
+
+        let nodes: Vec<&String> = graph.nodes.keys().collect();
+        let mut closeness = HashMap::new();
+
+        // For each node, compute sum of shortest path distances to all other nodes
+        for node_id in &nodes {
+            let paths = self.compute_shortest_paths(graph, node_id).await?;
+
+            let mut total_distance = 0.0;
+            let mut reachable_count = 0;
+
+            // Sum up distances to all reachable nodes
+            for target in &nodes {
+                if node_id == target {
+                    continue;
+                }
+
+                if let Some(target_paths) = paths.get(*target) {
+                    if !target_paths.is_empty() {
+                        // Distance is path length - 1 (number of edges)
+                        let distance = target_paths[0].len() - 1;
+                        total_distance += distance as f64;
+                        reachable_count += 1;
+                    }
+                }
+            }
+
+            // Calculate closeness
+            // If node is isolated or can't reach any other nodes, closeness is 0
+            let closeness_value = if reachable_count > 0 {
+                reachable_count as f64 / total_distance
+            } else {
+                0.0
+            };
+
+            closeness.insert((*node_id).clone(), closeness_value);
+        }
+
+        Ok(closeness)
+    }
+
+    /// Compute eigenvector centrality
+    ///
+    /// Eigenvector centrality assigns scores to nodes based on the principle that
+    /// connections to high-scoring nodes contribute more to the score than connections
+    /// to low-scoring nodes. Uses power iteration to compute the principal eigenvector.
+    #[instrument(skip(self, graph))]
+    pub async fn compute_eigenvector_centrality(
+        &self,
+        graph: &AnalysisGraph,
+    ) -> FusekiResult<HashMap<String, f64>> {
+        info!("Computing eigenvector centrality");
+
+        let nodes: Vec<&String> = graph.nodes.keys().collect();
+        let node_count = nodes.len();
+
+        if node_count == 0 {
+            return Ok(HashMap::new());
+        }
+
+        // Initialize eigenvector with uniform values
+        let mut eigenvector = HashMap::new();
+        let initial_value = 1.0 / (node_count as f64).sqrt();
+        for node_id in &nodes {
+            eigenvector.insert((*node_id).clone(), initial_value);
+        }
+
+        // Power iteration to find principal eigenvector
+        for iteration in 0..self.config.max_iterations {
+            let mut new_eigenvector = HashMap::new();
+            let mut max_change: f64 = 0.0;
+
+            // For each node, sum the eigenvector values of incoming neighbors
+            for node_id in &nodes {
+                let mut sum = 0.0;
+
+                // Sum contributions from incoming edges (who points to me)
+                for neighbor in graph.get_incoming_neighbors(node_id) {
+                    let neighbor_value = eigenvector.get(neighbor).copied().unwrap_or(0.0);
+                    sum += neighbor_value;
+                }
+
+                // Also consider outgoing edges for undirected-like behavior in RDF
+                for neighbor in graph.get_neighbors(node_id) {
+                    let neighbor_value = eigenvector.get(neighbor).copied().unwrap_or(0.0);
+                    sum += neighbor_value;
+                }
+
+                new_eigenvector.insert((*node_id).clone(), sum);
+
+                let old_value = eigenvector.get(*node_id).copied().unwrap_or(0.0);
+                let change = (sum - old_value).abs();
+                max_change = max_change.max(change);
+            }
+
+            // Normalize the eigenvector
+            let norm: f64 = new_eigenvector.values().map(|v| v * v).sum::<f64>().sqrt();
+
+            if norm > 0.0 {
+                for value in new_eigenvector.values_mut() {
+                    *value /= norm;
+                }
+            }
+
+            eigenvector = new_eigenvector;
+
+            // Check convergence
+            if max_change < self.config.convergence_threshold {
+                info!(
+                    "Eigenvector centrality converged after {} iterations",
+                    iteration + 1
+                );
+                break;
+            }
+        }
+
+        Ok(eigenvector)
+    }
+
     /// Compute shortest paths from a source node
     async fn compute_shortest_paths(
         &self,
@@ -654,6 +783,12 @@ impl GraphAnalyticsEngine {
         // Compute betweenness centrality
         let betweenness = self.compute_betweenness_centrality(graph).await?;
 
+        // Compute closeness centrality
+        let closeness = self.compute_closeness_centrality(graph).await?;
+
+        // Compute eigenvector centrality
+        let eigenvector = self.compute_eigenvector_centrality(graph).await?;
+
         // Compute degree centralities
         let mut results = Vec::new();
 
@@ -665,8 +800,8 @@ impl GraphAnalyticsEngine {
                 node_id: node_id.clone(),
                 pagerank: pagerank.get(node_id).copied().unwrap_or(0.0),
                 betweenness: betweenness.get(node_id).copied().unwrap_or(0.0),
-                closeness: 0.0,   // TODO: Implement closeness centrality
-                eigenvector: 0.0, // TODO: Implement eigenvector centrality
+                closeness: closeness.get(node_id).copied().unwrap_or(0.0),
+                eigenvector: eigenvector.get(node_id).copied().unwrap_or(0.0),
                 in_degree,
                 out_degree,
             };

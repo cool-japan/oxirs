@@ -7,9 +7,37 @@ use crate::models::common::*;
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::Random;
+#[cfg(feature = "gpu")]
+use std::collections::VecDeque;
+#[cfg(feature = "gpu")]
+use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(feature = "gpu")]
+use std::sync::{Arc, Mutex, RwLock};
+#[cfg(feature = "gpu")]
+use std::time::{Duration, Instant};
 
 #[cfg(feature = "gpu")]
-use scirs2_linalg::gpu::{GpuArray, GpuContext, GpuError};
+// TODO: scirs2_linalg::gpu module is not yet available
+// Enable this when the GPU module is implemented in scirs2_linalg
+// use scirs2_linalg::gpu::{GpuArray, GpuContext, GpuError};
+#[cfg(feature = "gpu")]
+// Placeholder types until scirs2_linalg::gpu is available
+pub type GpuArray<T> = Vec<T>;
+#[cfg(feature = "gpu")]
+pub type GpuContext = ();
+#[cfg(feature = "gpu")]
+#[derive(Debug)]
+pub struct GpuError(String);
+
+#[cfg(feature = "gpu")]
+impl std::fmt::Display for GpuError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[cfg(feature = "gpu")]
+impl std::error::Error for GpuError {}
 
 /// Memory pool for GPU buffers
 #[cfg(feature = "gpu")]
@@ -517,7 +545,7 @@ pub struct AdaptiveEmbeddingAccelerator {
 impl AdaptiveEmbeddingAccelerator {
     /// Create adaptive accelerator with optional GPU support
     pub fn new(device_id: Option<u32>, gpu_threshold: usize) -> Result<Self> {
-    #[allow(unused_variables)]
+        #[allow(unused_variables)]
         let gpu_accelerator = if let Some(id) = device_id {
             #[cfg(feature = "gpu")]
             {

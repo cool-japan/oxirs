@@ -4,7 +4,6 @@
 #[allow(clippy::assertions_on_constants)]
 mod bft_tests {
     use oxirs_cluster::bft::{BftConfig, BftConsensus, BftMessage};
-    use oxirs_cluster::ClusterError;
 
     #[test]
     fn test_bft_config_creation() {
@@ -56,22 +55,27 @@ mod bft_tests {
 
     #[test]
     fn test_node_registration() {
-        use ed25519_dalek::{Keypair, PublicKey};
+        use ed25519_dalek::SigningKey;
         use rand::rngs::OsRng;
+        use rand::RngCore;
 
         let config = BftConfig::new(4);
         let consensus = BftConsensus::new("node1".to_string(), config).unwrap();
 
-        // Generate keypairs for nodes
-        let mut csprng = OsRng {};
-        let keypair2 = Keypair::generate(&mut csprng);
-        let keypair3 = Keypair::generate(&mut csprng);
+        // Generate keypairs for nodes (ed25519-dalek 2.x)
+        let mut csprng = OsRng;
+        let mut seed_bytes2 = [0u8; 32];
+        let mut seed_bytes3 = [0u8; 32];
+        csprng.fill_bytes(&mut seed_bytes2);
+        csprng.fill_bytes(&mut seed_bytes3);
+        let keypair2 = SigningKey::from_bytes(&seed_bytes2);
+        let keypair3 = SigningKey::from_bytes(&seed_bytes3);
 
         // Register nodes
-        let result = consensus.register_node("node2".to_string(), keypair2.public);
+        let result = consensus.register_node("node2".to_string(), keypair2.verifying_key());
         assert!(result.is_ok());
 
-        let result = consensus.register_node("node3".to_string(), keypair3.public);
+        let result = consensus.register_node("node3".to_string(), keypair3.verifying_key());
         assert!(result.is_ok());
     }
 
@@ -90,15 +94,18 @@ mod bft_tests {
 
         let bft_network = BftNetworkService::new("node1".to_string(), consensus, network_service);
 
-        // Generate a test keypair
-        use ed25519_dalek::Keypair;
+        // Generate a test keypair (ed25519-dalek 2.x)
+        use ed25519_dalek::SigningKey;
         use rand::rngs::OsRng;
-        let mut csprng = OsRng {};
-        let keypair = Keypair::generate(&mut csprng);
+        use rand::RngCore;
+        let mut csprng = OsRng;
+        let mut seed_bytes = [0u8; 32];
+        csprng.fill_bytes(&mut seed_bytes);
+        let keypair = SigningKey::from_bytes(&seed_bytes);
 
         // Test peer registration
         let result = bft_network
-            .register_peer("node2".to_string(), keypair.public)
+            .register_peer("node2".to_string(), keypair.verifying_key())
             .await;
         assert!(result.is_ok());
     }

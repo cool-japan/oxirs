@@ -1,0 +1,62 @@
+/**
+ * Generated from SAMM Aspect Model: {{ aspect_name }}
+ * Namespace: {{ namespace }}
+ * Generated at: {{ generation_timestamp | default(value="") }}
+ */
+
+package {{ package_name | default(value="com.example") }};
+
+import com.fasterxml.jackson.annotation.JsonProperty;
+import java.util.Objects;
+
+{% if properties %}
+public class {{ aspect_name | pascal_case }} {
+{% for property in properties %}
+    @JsonProperty("{{ property.name | camel_case }}")
+    private {{ property.data_type | xsd_to_type(target="java") }} {{ property.name | camel_case }};
+{% endfor %}
+
+    public {{ aspect_name | pascal_case }}() {
+    }
+
+    public {{ aspect_name | pascal_case }}({% for property in properties %}{{ property.data_type | xsd_to_type(target="java") }} {{ property.name | camel_case }}{% if not loop.last %}, {% endif %}{% endfor %}) {
+{% for property in properties %}
+        this.{{ property.name | camel_case }} = {{ property.name | camel_case }};
+{% endfor %}
+    }
+
+{% for property in properties %}
+    public {{ property.data_type | xsd_to_type(target="java") }} get{{ property.name | pascal_case }}() {
+        return {{ property.name | camel_case }};
+    }
+
+    public void set{{ property.name | pascal_case }}({{ property.data_type | xsd_to_type(target="java") }} {{ property.name | camel_case }}) {
+        this.{{ property.name | camel_case }} = {{ property.name | camel_case }};
+    }
+
+{% endfor %}
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        {{ aspect_name | pascal_case }} that = ({{ aspect_name | pascal_case }}) o;
+        return {% for property in properties %}Objects.equals({{ property.name | camel_case }}, that.{{ property.name | camel_case }}){% if not loop.last %} &&
+               {% endif %}{% endfor %};
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash({% for property in properties %}{{ property.name | camel_case }}{% if not loop.last %}, {% endif %}{% endfor %});
+    }
+
+    @Override
+    public String toString() {
+        return "{{ aspect_name | pascal_case }}{" +
+{% for property in properties %}
+                "{{ property.name | camel_case }}=" + {{ property.name | camel_case }}{% if not loop.last %} +{% endif %}
+                {% if not loop.last %}", " +{% else %} +{% endif %}
+{% endfor %}
+                '}';
+    }
+}
+{% endif %}

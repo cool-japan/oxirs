@@ -1,10 +1,10 @@
 # OxiRS Core
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **Zero-dependency, Rust-native RDF data model and SPARQL engine for the OxiRS semantic web platform**
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -55,17 +55,17 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0-alpha.2"
+oxirs-core = "0.1.0-alpha.3"
 
 # Optional: Enable async streaming support
-oxirs-core = { version = "0.1.0-alpha.2", features = ["async"] }
+oxirs-core = { version = "0.1.0-alpha.3", features = ["async"] }
 ```
 
 For maximum performance in production:
 
 ```toml
 [dependencies]
-oxirs-core = { version = "0.1.0", features = ["async"] }
+oxirs-core = { version = "0.1.0-alpha.3"", features = ["async"] }
 
 [profile.release]
 lto = "fat"                    # Maximum link-time optimization
@@ -539,7 +539,7 @@ at your option.
 
 ## Status
 
-� **Alpha Release (v0.1.0-alpha.2)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
+� **Alpha Release (v0.1.0-alpha.3)** - Durable RDF core with streaming persistence, SciRS2 telemetry, and federation-ready SPARQL execution
 
 ### 🎉 Current Status (October 2025)
 - **Disk Persistence**: ✅ **Delivered** – Native N-Quads save/load powering the CLI and server workflows

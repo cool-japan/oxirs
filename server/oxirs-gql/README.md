@@ -1,10 +1,10 @@
 # OxiRS GraphQL
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
 
 **High-performance GraphQL server for RDF data with automatic schema generation**
 
-**Status**: Alpha Release (v0.1.0-alpha.2) - Released October 4, 2025
+**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
 
@@ -31,7 +31,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-gql = "0.1.0-alpha.2"
+oxirs-gql = "0.1.0-alpha.3"
 ```
 
 ## Quick Start
@@ -483,7 +483,7 @@ at your option.
 
 ## Status
 
-� **Alpha Release (v0.1.0-alpha.2)** - October 4, 2025
+� **Alpha Release (v0.1.0-alpha.3)** - October 12, 2025
 
 Current alpha features:
 - ✅ GraphQL server with persisted dataset introspection and hot-reload

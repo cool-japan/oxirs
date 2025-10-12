@@ -28,6 +28,9 @@ pub enum ReificationStrategy {
     UniqueIris,
     /// Use blank nodes for quoted triples
     BlankNodes,
+    /// Singleton properties - each statement gets a unique property
+    /// This avoids the need for rdf:Statement and reduces triple count
+    SingletonProperties,
 }
 
 /// Reification context for managing identifiers and mappings
@@ -73,6 +76,10 @@ impl ReificationContext {
             ReificationStrategy::BlankNodes => {
                 self.counter += 1;
                 format!("_:stmt{}", self.counter)
+            }
+            ReificationStrategy::SingletonProperties => {
+                self.counter += 1;
+                format!("{}property/{}", self.base_iri, self.counter)
             }
         };
 
@@ -173,6 +180,10 @@ impl Reificator {
                         let blank_id = &stmt_id[2..]; // Remove "_:" prefix
                         Ok(StarTerm::blank_node(blank_id)?)
                     }
+                    ReificationStrategy::SingletonProperties => {
+                        // For singleton properties, return the property IRI itself
+                        Ok(StarTerm::iri(&stmt_id)?)
+                    }
                 }
             }
             _ => Ok(term.clone()),
@@ -187,7 +198,41 @@ impl Reificator {
     ) -> StarResult<Vec<StarTriple>> {
         let mut triples = Vec::new();
 
-        // Create statement identifier term
+        // Singleton properties strategy - more efficient representation
+        if matches!(
+            self.context.strategy,
+            ReificationStrategy::SingletonProperties
+        ) {
+            // Create a unique property IRI for this statement
+            let property_term = StarTerm::iri(stmt_id)?;
+
+            // Recursively reify subject and object (predicate stays as-is)
+            let mut subject_additional = Vec::new();
+            let reified_subject = self.reify_term(&triple.subject, &mut subject_additional)?;
+            triples.extend(subject_additional);
+
+            let mut object_additional = Vec::new();
+            let reified_object = self.reify_term(&triple.object, &mut object_additional)?;
+            triples.extend(object_additional);
+
+            // subject <singleton-property> object
+            triples.push(StarTriple::new(
+                reified_subject,
+                property_term.clone(),
+                reified_object,
+            ));
+
+            // <singleton-property> rdf:singletonPropertyOf original-predicate
+            triples.push(StarTriple::new(
+                property_term,
+                StarTerm::iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#singletonPropertyOf")?,
+                triple.predicate.clone(),
+            ));
+
+            return Ok(triples);
+        }
+
+        // Create statement identifier term for other strategies
         let stmt_term = match self.context.strategy {
             ReificationStrategy::StandardReification | ReificationStrategy::UniqueIris => {
                 StarTerm::iri(stmt_id)?
@@ -195,6 +240,9 @@ impl Reificator {
             ReificationStrategy::BlankNodes => {
                 let blank_id = &stmt_id[2..]; // Remove "_:" prefix
                 StarTerm::blank_node(blank_id)?
+            }
+            ReificationStrategy::SingletonProperties => {
+                unreachable!("Handled above")
             }
         };
 

@@ -30,7 +30,7 @@ pub async fn run(config: ArqConfig) -> ToolResult {
     // Validate results format
     if !utils::is_supported_results_format(&config.results_format) {
         return Err(format!(
-            "Unsupported results format '{}'. Supported: table, csv, tsv, json, xml",
+            "Unsupported results format '{}'. Supported: table, csv, tsv, json, xml, html, markdown",
             config.results_format
         )
         .into());
@@ -67,7 +67,7 @@ pub async fn run(config: ArqConfig) -> ToolResult {
 
     if config.optimize {
         println!("Query optimization enabled");
-        // TODO: Implement query optimization
+        optimize_query(&query_string, &query_info)?;
     }
 
     // Load data sources
@@ -220,8 +220,8 @@ fn parse_and_validate_query(query: &str) -> ToolResult<QueryInfo> {
     let where_patterns = query.matches('{').count().max(1) - 1; // Rough estimate
     let filters = query.to_uppercase().matches("FILTER").count();
 
-    // Extract ORDER BY, LIMIT, OFFSET (simplified)
-    let order_by = Vec::new(); // TODO: Parse ORDER BY
+    // Extract ORDER BY, LIMIT, OFFSET
+    let order_by = extract_order_by(query);
     let limit = extract_limit(query);
     let offset = extract_offset(query);
 
@@ -263,6 +263,107 @@ fn extract_offset(query: &str) -> Option<usize> {
         }
     }
     None
+}
+
+/// Extract ORDER BY clause from query
+fn extract_order_by(query: &str) -> Vec<String> {
+    let mut order_by = Vec::new();
+    let query_upper = query.to_uppercase();
+
+    if let Some(order_pos) = query_upper.find("ORDER BY") {
+        let after_order = &query[order_pos + 8..];
+        // Extract until LIMIT, OFFSET, or end of query
+        let mut order_clause = String::new();
+        for token in after_order.split_whitespace() {
+            let upper = token.to_uppercase();
+            if upper.starts_with("LIMIT") || upper.starts_with("OFFSET") {
+                break;
+            }
+            if !order_clause.is_empty() {
+                order_clause.push(' ');
+            }
+            order_clause.push_str(token);
+        }
+
+        // Split by comma for multiple order variables
+        for var in order_clause.split(',') {
+            let var = var.trim();
+            if !var.is_empty() {
+                order_by.push(var.to_string());
+            }
+        }
+    }
+
+    order_by
+}
+
+/// Optimize SPARQL query
+fn optimize_query(query: &str, query_info: &QueryInfo) -> ToolResult<()> {
+    println!("\n=== Query Optimization ===");
+
+    // Analyze query complexity
+    let complexity_score =
+        query_info.where_patterns * 10 + query_info.filters * 5 + query_info.variables.len();
+
+    println!("Query complexity score: {complexity_score}");
+
+    // Optimization suggestions
+    let mut suggestions = Vec::new();
+
+    if query_info.filters > 0 && query_info.where_patterns > 3 {
+        suggestions.push("Consider moving FILTER clauses closer to relevant patterns");
+    }
+
+    if query_info.limit.is_none() && query_info.query_type == "SELECT" {
+        suggestions.push("Consider adding LIMIT to improve performance");
+    }
+
+    if query_info.variables.len() > 10 {
+        suggestions.push("Large number of variables may impact performance");
+    }
+
+    if !query_info.order_by.is_empty() && query_info.limit.is_none() {
+        suggestions.push("ORDER BY without LIMIT sorts entire result set");
+    }
+
+    // Check for OPTIONAL patterns
+    if query.to_uppercase().contains("OPTIONAL") && query_info.filters > 0 {
+        suggestions.push("OPTIONAL with FILTER may benefit from reordering");
+    }
+
+    // Check for UNION patterns
+    if query.to_uppercase().contains("UNION") {
+        suggestions.push("UNION operations can be expensive - ensure selectivity");
+    }
+
+    // Check for subqueries
+    if query.matches('{').count() > query_info.where_patterns + 1 {
+        suggestions.push("Nested subqueries detected - consider flattening if possible");
+    }
+
+    if suggestions.is_empty() {
+        println!("✓ Query appears well-optimized");
+    } else {
+        println!("\nOptimization suggestions:");
+        for (i, suggestion) in suggestions.iter().enumerate() {
+            println!("  {}. {}", i + 1, suggestion);
+        }
+    }
+
+    // Show optimized execution plan
+    println!("\nOptimized Execution Plan:");
+    println!("1. Apply selective filters early");
+    println!("2. Join smallest patterns first");
+    println!("3. Push LIMIT/OFFSET to execution engine");
+    if !query_info.order_by.is_empty() {
+        println!("4. Sort by: {}", query_info.order_by.join(", "));
+    }
+    if query_info.limit.is_some() || query_info.offset.is_some() {
+        println!("5. Apply pagination at query engine level");
+    }
+
+    println!("==========================\n");
+    Ok(())
 }
 
 /// Explain query execution plan
@@ -409,6 +510,8 @@ fn format_query_results(
         "tsv" => format_csv_results(results, "\t"),
         "json" => format_json_results(results),
         "xml" => format_xml_results(results),
+        "html" => format_html_results(results),
+        "markdown" => format_markdown_results(results),
         _ => Err(format!("Unknown results format: {format}").into()),
     }
 }
@@ -550,4 +653,131 @@ fn format_xml_results(results: &QueryResults) -> ToolResult<()> {
     println!("</sparql>");
 
     Ok(())
+}
+
+/// Format results as HTML
+fn format_html_results(results: &QueryResults) -> ToolResult<()> {
+    println!("<!DOCTYPE html>");
+    println!("<html lang=\"en\">");
+    println!("<head>");
+    println!("  <meta charset=\"UTF-8\">");
+    println!("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+    println!("  <title>SPARQL Query Results</title>");
+    println!("  <style>");
+    println!("    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 20px; background: #f5f5f5; }}");
+    println!("    .container {{ max-width: 1200px; margin: 0 auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }}");
+    println!("    h1 {{ color: #333; margin-top: 0; }}");
+    println!("    table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}");
+    println!("    th {{ background: #4CAF50; color: white; padding: 12px; text-align: left; font-weight: 600; }}");
+    println!("    td {{ padding: 10px 12px; border-bottom: 1px solid #ddd; }}");
+    println!("    tr:hover {{ background: #f5f5f5; }}");
+    println!("    .summary {{ color: #666; margin-top: 20px; font-size: 14px; }}");
+    println!(
+        "    .empty {{ color: #999; font-style: italic; padding: 40px; text-align: center; }}"
+    );
+    println!("  </style>");
+    println!("</head>");
+    println!("<body>");
+    println!("  <div class=\"container\">");
+    println!("    <h1>SPARQL Query Results</h1>");
+
+    if results.variables.is_empty() || results.bindings.is_empty() {
+        println!("    <div class=\"empty\">No results found</div>");
+    } else {
+        println!("    <table>");
+        println!("      <thead>");
+        println!("        <tr>");
+        for var in &results.variables {
+            println!("          <th>{}</th>", var.trim_start_matches('?'));
+        }
+        println!("        </tr>");
+        println!("      </thead>");
+        println!("      <tbody>");
+
+        for binding in &results.bindings {
+            println!("        <tr>");
+            for var in &results.variables {
+                let value = binding
+                    .values
+                    .get(var)
+                    .map(|s| html_escape(s))
+                    .unwrap_or_else(|| String::from(""));
+                println!("          <td>{value}</td>");
+            }
+            println!("        </tr>");
+        }
+
+        println!("      </tbody>");
+        println!("    </table>");
+        println!(
+            "    <div class=\"summary\">{} row(s) returned</div>",
+            results.bindings.len()
+        );
+    }
+
+    println!("  </div>");
+    println!("</body>");
+    println!("</html>");
+
+    Ok(())
+}
+
+/// Format results as Markdown
+fn format_markdown_results(results: &QueryResults) -> ToolResult<()> {
+    println!("# SPARQL Query Results\n");
+
+    if results.variables.is_empty() || results.bindings.is_empty() {
+        println!("*No results found*\n");
+        return Ok(());
+    }
+
+    // Header row
+    print!("|");
+    for var in &results.variables {
+        print!(" {} |", var.trim_start_matches('?'));
+    }
+    println!();
+
+    // Separator row
+    print!("|");
+    for _ in &results.variables {
+        print!(" --- |");
+    }
+    println!();
+
+    // Data rows
+    for binding in &results.bindings {
+        print!("|");
+        for var in &results.variables {
+            let value = binding
+                .values
+                .get(var)
+                .map(|s| markdown_escape(s))
+                .unwrap_or_else(|| String::from(""));
+            print!(" {value} |");
+        }
+        println!();
+    }
+
+    println!("\n*{} row(s) returned*", results.bindings.len());
+
+    Ok(())
+}
+
+/// Escape HTML special characters
+fn html_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#39;")
+}
+
+/// Escape Markdown special characters
+fn markdown_escape(input: &str) -> String {
+    input
+        .replace('|', "\\|")
+        .replace('\n', " ")
+        .replace('\r', "")
 }

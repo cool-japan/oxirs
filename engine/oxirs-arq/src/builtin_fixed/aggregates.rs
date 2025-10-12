@@ -3,11 +3,8 @@
 //! This module implements SPARQL 1.1 built-in functions
 //! as specified in the W3C recommendation.
 
-use crate::extensions::{
-    AggregateState, CustomAggregate, Value,
-};
+use crate::extensions::{AggregateState, CustomAggregate, Value};
 use anyhow::{anyhow, bail, Result};
-
 
 // Aggregate Functions
 

@@ -1554,10 +1554,13 @@ impl StreamingSelection {
                 // Variable exists and is bound
                 Ok(binding.contains_key(var))
             }
-            Expression::Literal(_literal) => {
-                // For simplicity, treat all literals as truthy
-                // TODO: Implement proper boolean literal evaluation
-                Ok(true)
+            Expression::Literal(literal) => {
+                // Proper SPARQL boolean literal evaluation
+                // According to SPARQL spec, effective boolean value (EBV) is:
+                // - true for xsd:boolean "true"
+                // - false for xsd:boolean "false"
+                // - error for other literals (but we return false for safety)
+                evaluate_literal_as_boolean(literal)
             }
             Expression::Binary { op, left, right } => {
                 match op {
@@ -1637,6 +1640,39 @@ impl StreamingSelection {
                 Ok(None)
             }
         }
+    }
+}
+
+/// Evaluate a literal as a boolean according to SPARQL Effective Boolean Value (EBV) semantics
+///
+/// According to SPARQL 1.1 specification:
+/// - xsd:boolean "true" → true
+/// - xsd:boolean "false" → false
+/// - Other datatypes → error (but we return false for safety)
+fn evaluate_literal_as_boolean(literal: &crate::algebra::Literal) -> Result<bool> {
+    // Check if this is an xsd:boolean literal
+    if literal.is_boolean() {
+        // Parse the lexical form
+        match literal.value.as_str() {
+            "true" | "1" => Ok(true),
+            "false" | "0" => Ok(false),
+            _ => {
+                // Invalid boolean value - return false for safety
+                warn!(
+                    "Invalid boolean literal value: '{}', treating as false",
+                    literal.value
+                );
+                Ok(false)
+            }
+        }
+    } else {
+        // Not a boolean literal - according to SPARQL spec this is a type error,
+        // but we return false for defensive programming
+        debug!(
+            "Non-boolean literal in boolean context (datatype: {:?}), treating as false",
+            literal.datatype
+        );
+        Ok(false)
     }
 }
 

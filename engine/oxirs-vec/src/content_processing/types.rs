@@ -3,7 +3,7 @@
 //! This module contains all the core data types, enums, and structures
 //! used throughout the content processing system.
 
-use crate::{embeddings::EmbeddableContent, Vector};
+use crate::Vector;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

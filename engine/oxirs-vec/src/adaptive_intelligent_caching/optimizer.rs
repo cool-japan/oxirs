@@ -8,8 +8,8 @@ use super::config::CacheConfiguration;
 use super::metrics::CachePerformanceMetrics;
 use super::tier::CacheTier;
 use super::types::{
-    ImprovementTracker, OptimizationEvent, OptimizationResult,
-    OptimizationState, OptimizationStatistics, RegressionDetector,
+    ImprovementTracker, OptimizationEvent, OptimizationResult, OptimizationState,
+    OptimizationStatistics, RegressionDetector,
 };
 
 /// Cache optimization engine with adaptive algorithms

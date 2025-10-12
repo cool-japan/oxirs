@@ -598,22 +598,34 @@ pub struct QueryResults {
 impl QueryResults {
     /// Returns true if the results are a boolean
     pub fn is_boolean(&self) -> bool {
-        false // TODO: Implement when SPARQL query engine is ready
+        matches!(
+            self.inner.results(),
+            crate::rdf_store::types::QueryResults::Boolean(_)
+        )
     }
 
     /// Returns the boolean value if the results are a boolean
     pub fn boolean(&self) -> Option<bool> {
-        None // TODO: Implement when SPARQL query engine is ready
+        match self.inner.results() {
+            crate::rdf_store::types::QueryResults::Boolean(b) => Some(*b),
+            _ => None,
+        }
     }
 
     /// Returns true if the results are solutions
     pub fn is_solutions(&self) -> bool {
-        false // TODO: Implement when SPARQL query engine is ready
+        matches!(
+            self.inner.results(),
+            crate::rdf_store::types::QueryResults::Bindings(_)
+        )
     }
 
     /// Returns true if the results are a graph
     pub fn is_graph(&self) -> bool {
-        false // TODO: Implement when SPARQL query engine is ready
+        matches!(
+            self.inner.results(),
+            crate::rdf_store::types::QueryResults::Graph(_)
+        )
     }
 }
 

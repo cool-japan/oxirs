@@ -3,10 +3,7 @@
 //! This module implements SPARQL 1.1 built-in functions
 //! as specified in the W3C recommendation.
 
-use crate::extensions::{
-    CustomFunction, ExecutionContext, Value,
-    ValueType,
-};
+use crate::extensions::{CustomFunction, ExecutionContext, Value, ValueType};
 use anyhow::{bail, Result};
 
 use md5;

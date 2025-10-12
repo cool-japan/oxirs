@@ -1,10 +1,10 @@
 //! Context Management Types and Structures
 
+use super::config::ContextConfig;
+use crate::Message;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};
-use crate::Message;
-use super::config::ContextConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PinReason {

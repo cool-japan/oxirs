@@ -1521,9 +1521,9 @@ impl OpenAIEmbeddingGenerator {
             }
         }
 
-        let embeddings = match self.make_request(&[text.clone()]).await {
+        let embeddings = match self.make_request(std::slice::from_ref(&text)).await {
             Ok(embeddings) => {
-                self.update_metrics_success(&[text.clone()]);
+                self.update_metrics_success(std::slice::from_ref(&text));
                 embeddings
             }
             Err(e) => {
@@ -1542,7 +1542,7 @@ impl OpenAIEmbeddingGenerator {
         // Cache the result
         if self.openai_config.enable_cache {
             let hash = content.content_hash();
-            let cost = self.calculate_cost(&[text.clone()]);
+            let cost = self.calculate_cost(std::slice::from_ref(&text));
             let cached_embedding = CachedEmbedding {
                 vector: vector.clone(),
                 cached_at: std::time::SystemTime::now(),

@@ -62,9 +62,9 @@ impl TriGParser {
         let content = {
             let mut buffer = String::new();
             let mut reader = reader;
-            reader
-                .read_to_string(&mut buffer)
-                .map_err(|e| TurtleParseError::Io(std::io::Error::other(e)))?;
+            reader.read_to_string(&mut buffer).map_err(|e| {
+                TurtleParseError::Io(std::io::Error::new(std::io::ErrorKind::Other, e))
+            })?;
             buffer
         };
 

@@ -3,8 +3,8 @@
 //! This test suite validates that all scirs2 integrations work correctly
 //! together and provide the expected performance improvements.
 
-use oxirs_embed::{
-    models::{common::*, scirs_neural::SciRS2NeuralConfig, scirs_neural::SciRS2NeuralEmbedding},
+use oxirs_embed::models::{
+    common::*, scirs_neural::SciRS2NeuralConfig, scirs_neural::SciRS2NeuralEmbedding,
 };
 use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::Random;

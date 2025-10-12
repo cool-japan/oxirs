@@ -1,16 +1,12 @@
 //! Sorting and comparison functions for SPARQL results
 
-use anyhow::Result;
-use tracing::warn;
 use super::super::types::*;
 use super::aggregation::{
-    perform_avg_aggregation,
-    perform_count_aggregation,
-    perform_group_by_aggregation,
-    perform_sum_aggregation,
-    perform_min_aggregation,
-    perform_max_aggregation,
+    perform_avg_aggregation, perform_count_aggregation, perform_group_by_aggregation,
+    perform_max_aggregation, perform_min_aggregation, perform_sum_aggregation,
 };
+use anyhow::Result;
+use tracing::warn;
 
 pub fn aggregate_sparql_results(
     results: &SparqlResults,

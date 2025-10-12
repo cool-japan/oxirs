@@ -267,7 +267,76 @@ impl StarTriple {
             )));
         }
 
+        // Check for self-containment (W3C RDF-star specification requirement)
+        if self.is_self_contained() {
+            return Err(StarError::invalid_quoted_triple(
+                "Triple cannot contain itself (self-containment is not allowed in RDF-star)"
+                    .to_string(),
+            ));
+        }
+
         Ok(())
+    }
+
+    /// Check if this triple contains a specific triple (recursively)
+    ///
+    /// This method traverses the quoted triple structure to determine if
+    /// the target triple appears anywhere within this triple's quoted triples.
+    pub fn contains_triple(&self, target: &StarTriple) -> bool {
+        self.check_contains_triple(target, 0, 100)
+    }
+
+    /// Internal recursive helper for contains_triple with depth limiting
+    fn check_contains_triple(&self, target: &StarTriple, depth: usize, max_depth: usize) -> bool {
+        // Prevent stack overflow on pathological deeply nested structures
+        if depth > max_depth {
+            return false;
+        }
+
+        // Check subject position
+        if let StarTerm::QuotedTriple(qt) = &self.subject {
+            // Direct equality check
+            if **qt == *target {
+                return true;
+            }
+            // Recursive check
+            if qt.check_contains_triple(target, depth + 1, max_depth) {
+                return true;
+            }
+        }
+
+        // Check predicate position (rare but allowed in RDF-star)
+        if let StarTerm::QuotedTriple(qt) = &self.predicate {
+            if **qt == *target || qt.check_contains_triple(target, depth + 1, max_depth) {
+                return true;
+            }
+        }
+
+        // Check object position
+        if let StarTerm::QuotedTriple(qt) = &self.object {
+            if **qt == *target || qt.check_contains_triple(target, depth + 1, max_depth) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Check if this triple is self-contained (contains itself)
+    ///
+    /// A self-contained triple is one that appears within its own quoted triple
+    /// structure, either directly or transitively. This is explicitly disallowed
+    /// by the W3C RDF-star specification.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use oxirs_star::model::{StarTerm, StarTriple};
+    /// // This would create a cycle (if it were possible):
+    /// // << A >> p o, where A contains << A >>
+    /// ```
+    pub fn is_self_contained(&self) -> bool {
+        self.contains_triple(self)
     }
 
     /// Get the maximum nesting depth in this triple

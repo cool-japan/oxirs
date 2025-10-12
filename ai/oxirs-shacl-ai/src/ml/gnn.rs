@@ -455,8 +455,9 @@ impl GraphNeuralNetwork {
         let context_encoder =
             Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
-        let completion_head =
-            Array2::from_shape_fn((output_dim, output_dim), |_| rng.random_range(-scale, scale));
+        let completion_head = Array2::from_shape_fn((output_dim, output_dim), |_| {
+            rng.random_range(-scale, scale)
+        });
 
         EntityCompletionLayerState {
             entity_embedding,
@@ -481,8 +482,9 @@ impl GraphNeuralNetwork {
         let pattern_encoder =
             Array2::from_shape_fn((input_dim, output_dim), |_| rng.random_range(-scale, scale));
 
-        let completion_head =
-            Array2::from_shape_fn((output_dim, output_dim), |_| rng.random_range(-scale, scale));
+        let completion_head = Array2::from_shape_fn((output_dim, output_dim), |_| {
+            rng.random_range(-scale, scale)
+        });
 
         RelationCompletionLayerState {
             relation_embedding,

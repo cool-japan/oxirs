@@ -119,10 +119,9 @@ impl WriteAheadLog {
         let wal_file = OpenOptions::new()
             .create(true)
             .read(true)
-            .write(true)
             .append(true)
             .open(&wal_path)
-            .map_err(|e| TdbError::Io(e))?;
+            .map_err(TdbError::Io)?;
 
         Ok(Self {
             wal_path,
@@ -153,18 +152,14 @@ impl WriteAheadLog {
         log_buffer.insert(lsn, entry.clone());
 
         // Write to disk (WAL protocol: log before data)
-        let serialized = bincode::serialize(&entry)
-            .map_err(|e| TdbError::Serialization(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&entry).map_err(|e| TdbError::Serialization(e.to_string()))?;
 
         let len = (serialized.len() as u32).to_le_bytes();
 
         let mut wal_file = self.wal_file.write().unwrap();
-        wal_file
-            .write_all(&len)
-            .map_err(|e| TdbError::Io(e))?;
-        wal_file
-            .write_all(&serialized)
-            .map_err(|e| TdbError::Io(e))?;
+        wal_file.write_all(&len).map_err(TdbError::Io)?;
+        wal_file.write_all(&serialized).map_err(TdbError::Io)?;
 
         Ok(lsn)
     }
@@ -172,8 +167,8 @@ impl WriteAheadLog {
     /// Flush WAL to disk (force sync)
     pub fn flush(&self) -> Result<()> {
         let mut wal_file = self.wal_file.write().unwrap();
-        wal_file.flush().map_err(|e| TdbError::Io(e))?;
-        wal_file.sync_all().map_err(|e| TdbError::Io(e))?;
+        wal_file.flush().map_err(TdbError::Io)?;
+        wal_file.sync_all().map_err(TdbError::Io)?;
 
         let next_lsn = *self.next_lsn.read().unwrap();
         let mut last_flushed = self.last_flushed_lsn.write().unwrap();
@@ -198,26 +193,20 @@ impl WriteAheadLog {
         let remaining_entries: Vec<_> = log_buffer.values().cloned().collect();
 
         let mut wal_file = self.wal_file.write().unwrap();
-        wal_file
-            .set_len(0)
-            .map_err(|e| TdbError::Io(e))?;
-        wal_file
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| TdbError::Io(e))?;
+        wal_file.set_len(0).map_err(TdbError::Io)?;
+        wal_file.seek(SeekFrom::Start(0)).map_err(TdbError::Io)?;
 
         for entry in remaining_entries {
-            let serialized = bincode::serialize(&entry)
-                .map_err(|e| TdbError::Serialization(e.to_string()))?;
+            let serialized =
+                bincode::serialize(&entry).map_err(|e| TdbError::Serialization(e.to_string()))?;
             let len = (serialized.len() as u32).to_le_bytes();
 
-            wal_file.write_all(&len).map_err(|e| TdbError::Io(e))?;
-            wal_file
-                .write_all(&serialized)
-                .map_err(|e| TdbError::Io(e))?;
+            wal_file.write_all(&len).map_err(TdbError::Io)?;
+            wal_file.write_all(&serialized).map_err(TdbError::Io)?;
         }
 
-        wal_file.flush().map_err(|e| TdbError::Io(e))?;
-        wal_file.sync_all().map_err(|e| TdbError::Io(e))?;
+        wal_file.flush().map_err(TdbError::Io)?;
+        wal_file.sync_all().map_err(TdbError::Io)?;
 
         Ok(())
     }
@@ -225,9 +214,7 @@ impl WriteAheadLog {
     /// Recover from WAL (replay logs)
     pub fn recover(&self) -> Result<Vec<LogEntry>> {
         let mut wal_file = self.wal_file.write().unwrap();
-        wal_file
-            .seek(SeekFrom::Start(0))
-            .map_err(|e| TdbError::Io(e))?;
+        wal_file.seek(SeekFrom::Start(0)).map_err(TdbError::Io)?;
 
         let mut entries = Vec::new();
         let mut next_lsn = Lsn::ZERO;
@@ -247,9 +234,7 @@ impl WriteAheadLog {
 
             // Read entry
             let mut entry_buf = vec![0u8; len];
-            wal_file
-                .read_exact(&mut entry_buf)
-                .map_err(|e| TdbError::Io(e))?;
+            wal_file.read_exact(&mut entry_buf).map_err(TdbError::Io)?;
 
             let entry: LogEntry = bincode::deserialize(&entry_buf)
                 .map_err(|e| TdbError::Serialization(e.to_string()))?;

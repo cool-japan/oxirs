@@ -50,7 +50,8 @@ pub trait OfficeDocumentHandler {
                     _ => {}
                 },
                 Ok(quick_xml::events::Event::Text(e)) if in_text => {
-                    let text = e.unescape().unwrap_or_default();
+                    let inner = e.into_inner();
+                    let text = String::from_utf8_lossy(inner.as_ref());
                     text_content.push(text.to_string());
                 }
                 Ok(quick_xml::events::Event::Eof) => break,
@@ -83,7 +84,8 @@ pub trait OfficeDocumentHandler {
                                     String::from_utf8_lossy(e.name().as_ref()).to_string();
                             }
                             Ok(quick_xml::events::Event::Text(e)) => {
-                                let text = e.unescape().unwrap_or_default();
+                                let inner = e.into_inner();
+                                let text = String::from_utf8_lossy(inner.as_ref());
                                 match current_element.as_str() {
                                     "dc:title" => {
                                         metadata.insert("title".to_string(), text.to_string());
@@ -419,7 +421,8 @@ impl XlsxHandler {
                         }
                     }
                     Ok(quick_xml::events::Event::Text(e)) if in_text => {
-                        let text = e.unescape().unwrap_or_default();
+                        let inner = e.into_inner();
+                        let text = String::from_utf8_lossy(inner.as_ref());
                         current_string.push_str(&text);
                     }
                     Ok(quick_xml::events::Event::Eof) => break,
@@ -537,7 +540,8 @@ impl XlsxHandler {
                     }
                 }
                 Ok(quick_xml::events::Event::Text(e)) if in_value => {
-                    let text = e.unescape().unwrap_or_default();
+                    let inner = e.into_inner();
+                    let text = String::from_utf8_lossy(inner.as_ref());
                     if cell_type_owned == "s" {
                         // Shared string reference
                         if let Ok(index) = text.parse::<usize>() {

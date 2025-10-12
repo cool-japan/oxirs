@@ -368,4 +368,3 @@ impl AdvancedSourceSelector {
         Ok((base_size as f64 * selectivity) as usize)
     }
 }
-

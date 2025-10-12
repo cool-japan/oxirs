@@ -177,7 +177,7 @@ impl AsyncStreamingParser {
     }
 
     /// Parse from bytes asynchronously
-    pub async fn parse_bytes<F, Fut>(&self, data: &[u8], mut handler: F) -> Result<()>
+    pub async fn parse_bytes<F, Fut>(&self, data: &[u8], handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Fut,
         Fut: Future<Output = Result<()>>,
@@ -188,7 +188,7 @@ impl AsyncStreamingParser {
     }
 
     /// Parse from string asynchronously
-    pub async fn parse_str_async<F, Fut>(&self, data: &str, mut handler: F) -> Result<()>
+    pub async fn parse_str_async<F, Fut>(&self, data: &str, handler: F) -> Result<()>
     where
         F: FnMut(Quad) -> Fut,
         Fut: Future<Output = Result<()>>,
@@ -268,6 +268,13 @@ impl MemoryAsyncSink {
 
     pub fn into_quads(self) -> Vec<Quad> {
         self.quads
+    }
+}
+
+#[cfg(feature = "async")]
+impl Default for MemoryAsyncSink {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

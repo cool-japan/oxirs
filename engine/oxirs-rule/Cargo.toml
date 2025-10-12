@@ -23,12 +23,13 @@ tracing.workspace = true
 regex = "1.11"
 tokio = { version = "1.47", features = ["fs", "io-util"] }
 lazy_static = "1.5"
-rand = "0.9"
+num_cpus = "1.16"
 
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.23"
 tokio = { version = "1.47", features = ["full"] }
+tracing-subscriber = "0.3"
 
 [features]
 default = ["rdfs"]

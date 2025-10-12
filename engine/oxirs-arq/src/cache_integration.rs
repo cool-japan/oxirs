@@ -379,10 +379,9 @@ impl ArqCacheManager {
 
         {
             let mut stats = self.cache_stats.write().unwrap();
-            if result.is_some() {
+            if let Some(ref cached_result) = result {
                 stats.result_cache_hits += 1;
-                stats.time_saved_ms +=
-                    result.as_ref().unwrap().metadata.execution_time.as_millis() as u64;
+                stats.time_saved_ms += cached_result.metadata.execution_time.as_millis() as u64;
             } else {
                 stats.result_cache_misses += 1;
             }

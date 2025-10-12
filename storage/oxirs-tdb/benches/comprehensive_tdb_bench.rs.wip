@@ -1,0 +1,712 @@
+//! Comprehensive Benchmarking Suite for OxiRS TDB
+//!
+//! Beta.1 Feature: Production-Ready Performance Benchmarking
+//!
+//! This benchmark suite provides comprehensive performance testing across all major
+//! TDB storage operations, including:
+//! - B+Tree operations (insert, search, delete, range queries)
+//! - Dictionary encoding and decoding
+//! - Triple indexing (SPO, POS, OSP)
+//! - Buffer pool operations (cache efficiency)
+//! - Transaction management (MVCC, WAL)
+//! - Compression algorithms
+//! - Concurrent access patterns
+//! - Scalability and recovery
+
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use oxirs_tdb::dictionary::Term;
+use oxirs_tdb::{TdbConfig, TdbStore};
+use scirs2_core::random::{Random, Rng};
+use std::sync::Arc;
+use std::time::Duration;
+use tempfile::TempDir;
+
+// ============================================================================
+// Benchmark Group 1: B+Tree Operations
+// ============================================================================
+
+/// Benchmark B+Tree insertions with different data sizes
+fn bench_btree_insert(c: &mut Criterion) {
+    let mut group = c.benchmark_group("btree_insert");
+    group.measurement_time(Duration::from_secs(10));
+
+    let sizes = vec![100, 1_000, 10_000, 100_000];
+
+    for size in sizes {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &size| {
+            b.iter_batched(
+                || {
+                    let temp_dir = TempDir::new().unwrap();
+                    let store = TdbStore::open(temp_dir.path()).unwrap();
+                    let mut rng = Random::default();
+                    let triples: Vec<(Term, Term, Term)> = (0..size)
+                        .map(|i| {
+                            let s = Term::iri(format!("http://example.org/s{}", i));
+                            let p = Term::iri(format!("http://example.org/p{}", rng.random::<u8>()));
+                            let o = Term::literal(format!("value{}", i));
+                            (s, p, o)
+                        })
+                        .collect();
+                    (temp_dir, store, triples)
+                },
+                |(temp_dir, store, triples)| {
+                    for (s, p, o) in triples {
+                        black_box(store.insert_triple(&s, &p, &o).unwrap());
+                    }
+                    drop(store);
+                    drop(temp_dir);
+                },
+                criterion::BatchSize::LargeInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark B+Tree search operations (using contains for now)
+fn bench_btree_search(c: &mut Criterion) {
+    let mut group = c.benchmark_group("btree_search");
+    group.measurement_time(Duration::from_secs(10));
+
+    let sizes = vec![1_000, 10_000, 50_000];
+
+    for size in sizes {
+        let temp_dir = TempDir::new().unwrap();
+        let mut store = TdbStore::open(temp_dir.path()).unwrap();
+
+        // Pre-populate with data
+        for i in 0..size {
+            let s = Term::iri(format!("http://example.org/s{}", i));
+            let p = Term::iri("http://example.org/p");
+            let o = Term::literal(format!("value{}", i));
+            store.insert_triple(&s, &p, &o).unwrap();
+        }
+
+        group.throughput(Throughput::Elements(100));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(size),
+            &(size),
+            |b, size| {
+                let mut rng = Random::default();
+                b.iter(|| {
+                    for _ in 0..100 {
+                        let idx = rng.random_range(0, *size);
+                        let s_str = format!("http://example.org/s{}", idx);
+                        let p_str = "http://example.org/p";
+                        let o_str = format!("value{}", idx);
+                        black_box(store.contains(&s_str, p_str, &o_str).unwrap());
+                    }
+                });
+            },
+        );
+
+        drop(store);
+        drop(temp_dir);
+    }
+
+    group.finish();
+}
+
+/// Benchmark B+Tree range queries
+fn bench_btree_range(c: &mut Criterion) {
+    let mut group = c.benchmark_group("btree_range");
+    group.measurement_time(Duration::from_secs(10));
+
+    let temp_dir = TempDir::new().unwrap();
+    let store = TdbStore::open(temp_dir.path()).unwrap();
+
+    // Pre-populate with sequential data
+    let total = 100_000;
+    for i in 0..total {
+        let s = Term::iri(format!("http://example.org/s{:08}", i));
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal(format!("value{}", i));
+        store.insert_triple(&s, &p, &o).unwrap();
+    }
+
+    let range_sizes = vec![10, 100, 1_000, 10_000];
+
+    for range_size in range_sizes {
+        group.throughput(Throughput::Elements(range_size as u64));
+        group.bench_with_input(
+            BenchmarkId::from_parameter(range_size),
+            &range_size,
+            |b, &range_size| {
+                b.iter(|| {
+                    // Query a range of subjects
+                    for i in (0..range_size).step_by(1000) {
+                        let s = Term::iri(format!("http://example.org/s{:08}", i));
+                        black_box(store.query_triples(Some(&s), None, None).unwrap());
+                    }
+                });
+            },
+        );
+    }
+
+    drop(store);
+    drop(temp_dir);
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 2: Dictionary Operations
+// ============================================================================
+
+/// Benchmark dictionary encoding performance
+fn bench_dictionary_encode(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dictionary_encode");
+    group.measurement_time(Duration::from_secs(10));
+
+    let sizes = vec![100, 1_000, 10_000];
+
+    for size in sizes {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &size| {
+            b.iter_batched(
+                || {
+                    let temp_dir = TempDir::new().unwrap();
+                    let store = TdbStore::open(temp_dir.path()).unwrap();
+                    let terms: Vec<Term> = (0..size)
+                        .map(|i| Term::iri(format!("http://example.org/term{}", i)))
+                        .collect();
+                    (temp_dir, store, terms)
+                },
+                |(temp_dir, store, terms)| {
+                    for term in terms {
+                        black_box(store.triple_store().store_term(&term).unwrap());
+                    }
+                    drop(store);
+                    drop(temp_dir);
+                },
+                criterion::BatchSize::LargeInput,
+            );
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark dictionary decoding performance
+fn bench_dictionary_decode(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dictionary_decode");
+    group.measurement_time(Duration::from_secs(10));
+
+    let temp_dir = TempDir::new().unwrap();
+    let store = TdbStore::open(temp_dir.path()).unwrap();
+
+    // Pre-populate dictionary
+    let size = 10_000;
+    let node_ids: Vec<_> = (0..size)
+        .map(|i| {
+            let term = Term::iri(format!("http://example.org/term{}", i));
+            store.triple_store().store_term(&term).unwrap()
+        })
+        .collect();
+
+    group.throughput(Throughput::Elements(size as u64));
+    group.bench_function("decode_10k", |b| {
+        b.iter(|| {
+            for &node_id in &node_ids {
+                black_box(store.triple_store().retrieve_term(node_id).unwrap());
+            }
+        });
+    });
+
+    drop(store);
+    drop(temp_dir);
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 3: Triple Indexing
+// ============================================================================
+
+/// Benchmark triple index operations across SPO, POS, OSP
+fn bench_triple_indexing(c: &mut Criterion) {
+    let mut group = c.benchmark_group("triple_indexing");
+    group.measurement_time(Duration::from_secs(10));
+
+    let temp_dir = TempDir::new().unwrap();
+    let store = TdbStore::open(temp_dir.path()).unwrap();
+
+    // Pre-populate with diverse data
+    let size = 50_000;
+    let mut rng = Random::default();
+    for i in 0..size {
+        let s = Term::iri(format!("http://example.org/s{}", i % 1000));
+        let p = Term::iri(format!("http://example.org/p{}", rng.random::<u8>() % 50));
+        let o = Term::literal(format!("value{}", i % 500));
+        store.insert_triple(&s, &p, &o).unwrap();
+    }
+
+    // Benchmark SPO pattern (subject lookup)
+    group.bench_function("spo_lookup", |b| {
+        b.iter(|| {
+            let s = Term::iri("http://example.org/s500");
+            black_box(store.query_triples(Some(&s), None, None).unwrap());
+        });
+    });
+
+    // Benchmark POS pattern (predicate lookup)
+    group.bench_function("pos_lookup", |b| {
+        b.iter(|| {
+            let p = Term::iri("http://example.org/p25");
+            black_box(store.query_triples(None, Some(&p), None).unwrap());
+        });
+    });
+
+    // Benchmark OSP pattern (object lookup)
+    group.bench_function("osp_lookup", |b| {
+        b.iter(|| {
+            let o = Term::literal("value250");
+            black_box(store.query_triples(None, None, Some(&o)).unwrap());
+        });
+    });
+
+    // Benchmark SP pattern
+    group.bench_function("sp_lookup", |b| {
+        b.iter(|| {
+            let s = Term::iri("http://example.org/s500");
+            let p = Term::iri("http://example.org/p25");
+            black_box(store.query_triples(Some(&s), Some(&p), None).unwrap());
+        });
+    });
+
+    drop(store);
+    drop(temp_dir);
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 4: Buffer Pool Operations
+// ============================================================================
+
+/// Benchmark buffer pool cache hit/miss patterns
+fn bench_buffer_pool(c: &mut Criterion) {
+    let mut group = c.benchmark_group("buffer_pool");
+    group.measurement_time(Duration::from_secs(10));
+
+    let pool_sizes = vec![100, 500, 2000]; // In pages
+
+    for pool_size in pool_sizes {
+        group.bench_with_input(
+            BenchmarkId::new("cache_efficiency", pool_size),
+            &pool_size,
+            |b, &pool_size| {
+                b.iter_batched(
+                    || {
+                        let temp_dir = TempDir::new().unwrap();
+                        let config = TdbConfig::new(temp_dir.path()).with_buffer_pool_size(pool_size);
+                        let store = TdbStore::open_with_config(config).unwrap();
+
+                        // Insert data larger than cache
+                        for i in 0..pool_size * 2 {
+                            let s = Term::iri(format!("http://example.org/s{}", i));
+                            let p = Term::iri("http://example.org/p");
+                            let o = Term::literal(format!("value{}", i));
+                            store.insert_triple(&s, &p, &o).unwrap();
+                        }
+
+                        (temp_dir, store, pool_size)
+                    },
+                    |(temp_dir, store, pool_size)| {
+                        // Access pattern that tests cache
+                        for i in 0..(pool_size / 2) {
+                            let s = Term::iri(format!("http://example.org/s{}", i));
+                            black_box(store.query_triples(Some(&s), None, None).unwrap());
+                        }
+                        drop(store);
+                        drop(temp_dir);
+                    },
+                    criterion::BatchSize::LargeInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 5: Transaction Operations
+// ============================================================================
+
+/// Benchmark transaction overhead (begin, commit, rollback)
+fn bench_transactions(c: &mut Criterion) {
+    let mut group = c.benchmark_group("transactions");
+    group.measurement_time(Duration::from_secs(10));
+
+    let temp_dir = TempDir::new().unwrap();
+    let store = TdbStore::open(temp_dir.path()).unwrap();
+
+    // Benchmark empty transaction
+    group.bench_function("empty_transaction", |b| {
+        b.iter(|| {
+            let tx = store.begin_transaction().unwrap();
+            black_box(store.commit_transaction(tx).unwrap());
+        });
+    });
+
+    // Benchmark transaction with single insert
+    group.bench_function("single_insert_tx", |b| {
+        let mut counter = 0;
+        b.iter(|| {
+            let tx = store.begin_transaction().unwrap();
+            let s = Term::iri(format!("http://example.org/s{}", counter));
+            let p = Term::iri("http://example.org/p");
+            let o = Term::literal(format!("value{}", counter));
+            store.insert_triple(&s, &p, &o).unwrap();
+            black_box(store.commit_transaction(tx).unwrap());
+            counter += 1;
+        });
+    });
+
+    // Benchmark batch transaction (100 inserts)
+    group.throughput(Throughput::Elements(100));
+    group.bench_function("batch_insert_tx", |b| {
+        let mut counter = 0;
+        b.iter(|| {
+            let tx = store.begin_transaction().unwrap();
+            for i in 0..100 {
+                let s = Term::iri(format!("http://example.org/batch{}/s{}", counter, i));
+                let p = Term::iri("http://example.org/p");
+                let o = Term::literal(format!("value{}", i));
+                store.insert_triple(&s, &p, &o).unwrap();
+            }
+            black_box(store.commit_transaction(tx).unwrap());
+            counter += 1;
+        });
+    });
+
+    // Benchmark read transaction
+    group.bench_function("read_transaction", |b| {
+        b.iter(|| {
+            let _tx = store.begin_read_transaction().unwrap();
+            let s = Term::iri("http://example.org/s0");
+            black_box(store.query_triples(Some(&s), None, None).unwrap());
+            // tx dropped automatically
+        });
+    });
+
+    drop(store);
+    drop(temp_dir);
+    group.finish();
+}
+
+/// Benchmark MVCC (multi-version concurrency control)
+fn bench_mvcc(c: &mut Criterion) {
+    let mut group = c.benchmark_group("mvcc");
+    group.measurement_time(Duration::from_secs(10));
+
+    let temp_dir = TempDir::new().unwrap();
+    let store = Arc::new(TdbStore::open(temp_dir.path()).unwrap());
+
+    // Pre-populate
+    for i in 0..1000 {
+        let s = Term::iri(format!("http://example.org/s{}", i));
+        let p = Term::iri("http://example.org/p");
+        let o = Term::literal(format!("value{}", i));
+        store.insert_triple(&s, &p, &o).unwrap();
+    }
+
+    // Benchmark concurrent readers
+    group.bench_function("concurrent_readers", |b| {
+        b.iter(|| {
+            let handles: Vec<_> = (0..4)
+                .map(|i| {
+                    let store = Arc::clone(&store);
+                    std::thread::spawn(move || {
+                        let s = Term::iri(format!("http://example.org/s{}", i * 100));
+                        black_box(store.query_triples(Some(&s), None, None).unwrap());
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+    });
+
+    drop(store);
+    drop(temp_dir);
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 6: Compression Operations
+// ============================================================================
+
+/// Benchmark compression algorithms
+fn bench_compression(c: &mut Criterion) {
+    let mut group = c.benchmark_group("compression");
+    group.measurement_time(Duration::from_secs(10));
+
+    let configs = vec![
+        ("no_compression", false),
+        ("with_compression", true),
+    ];
+
+    for (name, enable_compression) in configs {
+        group.bench_with_input(
+            BenchmarkId::from_parameter(name),
+            &enable_compression,
+            |b, &enable_compression| {
+                b.iter_batched(
+                    || {
+                        let temp_dir = TempDir::new().unwrap();
+                        let config = TdbConfig::new(temp_dir.path())
+                            .with_compression(enable_compression);
+                        let store = TdbStore::open_with_config(config).unwrap();
+                        (temp_dir, store)
+                    },
+                    |(temp_dir, store)| {
+                        // Insert 1000 triples
+                        for i in 0..1000 {
+                            let s = Term::iri(format!("http://example.org/s{}", i));
+                            let p = Term::iri("http://example.org/p");
+                            let o = Term::literal(format!("value{}", i));
+                            black_box(store.insert_triple(&s, &p, &o).unwrap());
+                        }
+                        drop(store);
+                        drop(temp_dir);
+                    },
+                    criterion::BatchSize::LargeInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 7: Concurrent Operations
+// ============================================================================
+
+/// Benchmark concurrent insertions and queries
+fn bench_concurrent_operations(c: &mut Criterion) {
+    let mut group = c.benchmark_group("concurrent_operations");
+    group.measurement_time(Duration::from_secs(15));
+
+    let thread_counts = vec![2, 4, 8];
+
+    for threads in thread_counts {
+        group.bench_with_input(
+            BenchmarkId::new("concurrent_inserts", threads),
+            &threads,
+            |b, &threads| {
+                let temp_dir = TempDir::new().unwrap();
+                let store = Arc::new(TdbStore::open(temp_dir.path()).unwrap());
+
+                b.iter(|| {
+                    let handles: Vec<_> = (0..threads)
+                        .map(|t| {
+                            let store = Arc::clone(&store);
+                            std::thread::spawn(move || {
+                                for i in 0..100 {
+                                    let s = Term::iri(format!("http://example.org/t{}/s{}", t, i));
+                                    let p = Term::iri("http://example.org/p");
+                                    let o = Term::literal(format!("value{}", i));
+                                    black_box(store.insert_triple(&s, &p, &o).unwrap());
+                                }
+                            })
+                        })
+                        .collect();
+
+                    for handle in handles {
+                        handle.join().unwrap();
+                    }
+                });
+
+                drop(store);
+                drop(temp_dir);
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 8: Scalability Tests
+// ============================================================================
+
+/// Benchmark scalability with increasing dataset sizes
+fn bench_scalability(c: &mut Criterion) {
+    let mut group = c.benchmark_group("scalability");
+    group.measurement_time(Duration::from_secs(20));
+    group.sample_size(10);
+
+    let sizes = vec![1_000, 10_000, 100_000, 500_000];
+
+    for size in sizes {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(
+            BenchmarkId::new("full_pipeline", size),
+            &size,
+            |b, &size| {
+                b.iter_batched(
+                    || {
+                        let temp_dir = TempDir::new().unwrap();
+                        let config = TdbConfig::new(temp_dir.path())
+                            .with_buffer_pool_size(10000); // 40MB cache
+                        let store = TdbStore::open_with_config(config).unwrap();
+                        (temp_dir, store)
+                    },
+                    |(temp_dir, store)| {
+                        // Full pipeline: insert -> query -> update
+                        for i in 0..size {
+                            let s = Term::iri(format!("http://example.org/s{}", i));
+                            let p = Term::iri("http://example.org/p");
+                            let o = Term::literal(format!("value{}", i));
+                            store.insert_triple(&s, &p, &o).unwrap();
+                        }
+
+                        // Perform sample queries
+                        for i in (0..size).step_by(size / 10) {
+                            let s = Term::iri(format!("http://example.org/s{}", i));
+                            black_box(store.query_triples(Some(&s), None, None).unwrap());
+                        }
+
+                        drop(store);
+                        drop(temp_dir);
+                    },
+                    criterion::BatchSize::LargeInput,
+                );
+            },
+        );
+    }
+
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 9: Recovery Operations
+// ============================================================================
+
+/// Benchmark checkpoint and recovery operations
+fn bench_recovery(c: &mut Criterion) {
+    let mut group = c.benchmark_group("recovery");
+    group.measurement_time(Duration::from_secs(10));
+
+    // Benchmark compaction (checkpoint-like operation)
+    group.bench_function("compaction", |b| {
+        b.iter_batched(
+            || {
+                let temp_dir = TempDir::new().unwrap();
+                let store = TdbStore::open(temp_dir.path()).unwrap();
+
+                // Insert and delete to create fragmentation
+                for i in 0..5000 {
+                    let s = Term::iri(format!("http://example.org/s{}", i));
+                    let p = Term::iri("http://example.org/p");
+                    let o = Term::literal(format!("value{}", i));
+                    store.insert_triple(&s, &p, &o).unwrap();
+                }
+
+                // Delete half
+                for i in 0..2500 {
+                    let s = Term::iri(format!("http://example.org/s{}", i));
+                    let p = Term::iri("http://example.org/p");
+                    let o = Term::literal(format!("value{}", i));
+                    store.delete(&s.to_string(), &p.to_string(), &o.to_string()).unwrap();
+                }
+
+                (temp_dir, store)
+            },
+            |(temp_dir, store)| {
+                black_box(store.compact().unwrap());
+                drop(store);
+                drop(temp_dir);
+            },
+            criterion::BatchSize::LargeInput,
+        );
+    });
+
+    group.finish();
+}
+
+// ============================================================================
+// Benchmark Group 10: Real-World Patterns
+// ============================================================================
+
+/// Benchmark realistic RDF workload patterns
+fn bench_real_world_patterns(c: &mut Criterion) {
+    let mut group = c.benchmark_group("real_world_patterns");
+    group.measurement_time(Duration::from_secs(20));
+
+    let temp_dir = TempDir::new().unwrap();
+    let store = TdbStore::open(temp_dir.path()).unwrap();
+
+    // Load realistic knowledge graph data
+    let mut rng = Random::default();
+
+    // FOAF-like data: people with properties
+    for person_id in 0..10_000 {
+        let person = Term::iri(format!("http://example.org/person/{}", person_id));
+        let name_pred = Term::iri("http://xmlns.com/foaf/0.1/name");
+        let name_val = Term::literal(format!("Person {}", person_id));
+        store.insert_triple(&person, &name_pred, &name_val).unwrap();
+
+        let age_pred = Term::iri("http://xmlns.com/foaf/0.1/age");
+        let age_val = Term::literal(format!("{}", rng.random_range(18, 80)));
+        store.insert_triple(&person, &age_pred, &age_val).unwrap();
+
+        // Social connections
+        if rng.random_range(0, 100) < 30 {
+            let knows_pred = Term::iri("http://xmlns.com/foaf/0.1/knows");
+            let friend_id = rng.random_range(0, 10_000);
+            let friend = Term::iri(format!("http://example.org/person/{}", friend_id));
+            store.insert_triple(&person, &knows_pred, &friend).unwrap();
+        }
+    }
+
+    // Benchmark typical query patterns
+    group.bench_function("person_lookup", |b| {
+        b.iter(|| {
+            let person = Term::iri("http://example.org/person/5000");
+            black_box(store.query_triples(Some(&person), None, None).unwrap());
+        });
+    });
+
+    group.bench_function("property_scan", |b| {
+        b.iter(|| {
+            let name_pred = Term::iri("http://xmlns.com/foaf/0.1/name");
+            black_box(store.query_triples(None, Some(&name_pred), None).unwrap());
+        });
+    });
+
+    group.bench_function("social_graph_query", |b| {
+        b.iter(|| {
+            let knows_pred = Term::iri("http://xmlns.com/foaf/0.1/knows");
+            let person = Term::iri("http://example.org/person/5000");
+            black_box(store.query_triples(Some(&person), Some(&knows_pred), None).unwrap());
+        });
+    });
+
+    drop(store);
+    drop(temp_dir);
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_btree_insert,
+    bench_btree_search,
+    bench_btree_range,
+    bench_dictionary_encode,
+    bench_dictionary_decode,
+    bench_triple_indexing,
+    bench_buffer_pool,
+    bench_transactions,
+    bench_mvcc,
+    bench_compression,
+    bench_concurrent_operations,
+    bench_scalability,
+    bench_recovery,
+    bench_real_world_patterns
+);
+criterion_main!(benches);

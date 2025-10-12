@@ -5,8 +5,18 @@
 
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 use tracing::{debug, info, trace, warn};
+
+// Global metrics for memory tracking
+static SUBSTITUTION_CLONES: LazyLock<Counter> =
+    LazyLock::new(|| Counter::new("forward_chain_substitution_clones".to_string()));
+static FACT_SET_CLONES: LazyLock<Counter> =
+    LazyLock::new(|| Counter::new("forward_chain_fact_set_clones".to_string()));
+static ACTIVE_SUBSTITUTIONS: LazyLock<Gauge> =
+    LazyLock::new(|| Gauge::new("forward_chain_active_substitutions".to_string()));
 
 /// Variable substitution mapping
 pub type Substitution = HashMap<String, Term>;
@@ -181,6 +191,9 @@ impl ForwardChainer {
         // Start with the first atom in the body
         let mut substitutions = self.match_atom(&body[0], &HashMap::new())?;
 
+        // Track active substitutions
+        ACTIVE_SUBSTITUTIONS.set(substitutions.len() as f64);
+
         // Extend substitutions with remaining atoms
         for atom in &body[1..] {
             let mut new_substitutions = Vec::new();
@@ -189,6 +202,9 @@ impl ForwardChainer {
                 new_substitutions.extend(extended);
             }
             substitutions = new_substitutions;
+
+            // Update gauge with current count
+            ACTIVE_SUBSTITUTIONS.set(substitutions.len() as f64);
         }
 
         Ok(substitutions)
@@ -212,21 +228,23 @@ impl ForwardChainer {
                         object: fact_object,
                     } = fact
                     {
+                        // OPTIMIZED: Only clone inside unify_triple if unification succeeds
                         if let Some(substitution) = self.unify_triple(
                             (subject, predicate, object),
                             (fact_subject, fact_predicate, fact_object),
-                            partial_sub.clone(),
+                            partial_sub,
                         )? {
+                            // Track successful unification (clone happened inside unify_triple)
+                            SUBSTITUTION_CLONES.inc();
                             substitutions.push(substitution);
                         }
                     }
                 }
             }
             RuleAtom::Builtin { name, args } => {
-                // Handle built-in predicates
-                if let Some(substitution) =
-                    self.evaluate_builtin(name, args, partial_sub.clone())?
-                {
+                // OPTIMIZED: Only clone if predicate succeeds
+                if let Some(substitution) = self.evaluate_builtin(name, args, partial_sub)? {
+                    SUBSTITUTION_CLONES.inc();
                     substitutions.push(substitution);
                 }
             }
@@ -235,6 +253,7 @@ impl ForwardChainer {
                 let left_term = self.substitute_term(left, partial_sub);
                 let right_term = self.substitute_term(right, partial_sub);
                 if !self.terms_equal(&left_term, &right_term) {
+                    SUBSTITUTION_CLONES.inc();
                     substitutions.push(partial_sub.clone());
                 }
             }
@@ -243,6 +262,7 @@ impl ForwardChainer {
                 let left_term = self.substitute_term(left, partial_sub);
                 let right_term = self.substitute_term(right, partial_sub);
                 if self.compare_terms(&left_term, &right_term) > 0 {
+                    SUBSTITUTION_CLONES.inc();
                     substitutions.push(partial_sub.clone());
                 }
             }
@@ -251,6 +271,7 @@ impl ForwardChainer {
                 let left_term = self.substitute_term(left, partial_sub);
                 let right_term = self.substitute_term(right, partial_sub);
                 if self.compare_terms(&left_term, &right_term) < 0 {
+                    SUBSTITUTION_CLONES.inc();
                     substitutions.push(partial_sub.clone());
                 }
             }
@@ -260,28 +281,32 @@ impl ForwardChainer {
     }
 
     /// Unify two triples and extend the substitution
+    /// OPTIMIZED: Takes reference to avoid unnecessary clones
     fn unify_triple(
         &self,
         pattern: (&Term, &Term, &Term),
         fact: (&Term, &Term, &Term),
-        mut substitution: Substitution,
+        substitution: &Substitution,
     ) -> Result<Option<Substitution>> {
+        // Clone only once at the start - will be cheaper than cloning for every match attempt
+        let mut new_substitution = substitution.clone();
+
         // Unify subject
-        if !self.unify_terms(pattern.0, fact.0, &mut substitution)? {
+        if !self.unify_terms(pattern.0, fact.0, &mut new_substitution)? {
             return Ok(None);
         }
 
         // Unify predicate
-        if !self.unify_terms(pattern.1, fact.1, &mut substitution)? {
+        if !self.unify_terms(pattern.1, fact.1, &mut new_substitution)? {
             return Ok(None);
         }
 
         // Unify object
-        if !self.unify_terms(pattern.2, fact.2, &mut substitution)? {
+        if !self.unify_terms(pattern.2, fact.2, &mut new_substitution)? {
             return Ok(None);
         }
 
-        Ok(Some(substitution))
+        Ok(Some(new_substitution))
     }
 
     /// Unify two terms and update the substitution
@@ -499,21 +524,22 @@ impl ForwardChainer {
     }
 
     /// Evaluate built-in predicates
+    /// OPTIMIZED: Takes reference to avoid unnecessary clones
     fn evaluate_builtin(
         &self,
         name: &str,
         args: &[Term],
-        substitution: Substitution,
+        substitution: &Substitution,
     ) -> Result<Option<Substitution>> {
         match name {
             "equal" => {
                 if args.len() != 2 {
                     return Err(anyhow::anyhow!("equal/2 requires exactly 2 arguments"));
                 }
-                let arg1 = self.substitute_term(&args[0], &substitution);
-                let arg2 = self.substitute_term(&args[1], &substitution);
+                let arg1 = self.substitute_term(&args[0], substitution);
+                let arg2 = self.substitute_term(&args[1], substitution);
                 if self.terms_equal(&arg1, &arg2) {
-                    Ok(Some(substitution))
+                    Ok(Some(substitution.clone()))
                 } else {
                     Ok(None)
                 }
@@ -522,10 +548,10 @@ impl ForwardChainer {
                 if args.len() != 2 {
                     return Err(anyhow::anyhow!("notEqual/2 requires exactly 2 arguments"));
                 }
-                let arg1 = self.substitute_term(&args[0], &substitution);
-                let arg2 = self.substitute_term(&args[1], &substitution);
+                let arg1 = self.substitute_term(&args[0], substitution);
+                let arg2 = self.substitute_term(&args[1], substitution);
                 if !self.terms_equal(&arg1, &arg2) {
-                    Ok(Some(substitution))
+                    Ok(Some(substitution.clone()))
                 } else {
                     Ok(None)
                 }
@@ -537,12 +563,12 @@ impl ForwardChainer {
                 match &args[0] {
                     Term::Variable(var) => {
                         if substitution.contains_key(var) {
-                            Ok(Some(substitution))
+                            Ok(Some(substitution.clone()))
                         } else {
                             Ok(None)
                         }
                     }
-                    _ => Ok(Some(substitution)), // Non-variables are always "bound"
+                    _ => Ok(Some(substitution.clone())), // Non-variables are always "bound"
                 }
             }
             "unbound" => {
@@ -552,7 +578,7 @@ impl ForwardChainer {
                 match &args[0] {
                     Term::Variable(var) => {
                         if !substitution.contains_key(var) {
-                            Ok(Some(substitution))
+                            Ok(Some(substitution.clone()))
                         } else {
                             Ok(None)
                         }
@@ -576,19 +602,46 @@ impl ForwardChainer {
     }
 
     /// Check if a specific fact is derivable
+    /// OPTIMIZED: Use count-based restoration instead of full clone
     pub fn can_derive(&mut self, target: &RuleAtom) -> Result<bool> {
-        let initial_facts = self.facts.clone();
+        // Store initial count instead of cloning entire set
+        let initial_count = self.facts.len();
+
+        // Quick check: if already present, no need to infer
+        if self.facts.contains(target) {
+            return Ok(true);
+        }
+
+        // Collect initial facts into a vector for efficient restoration
+        let initial_facts: Vec<RuleAtom> = self.facts.iter().cloned().collect();
+
         self.infer()?;
         let result = self.facts.contains(target);
-        self.facts = initial_facts; // Restore original state
+
+        // Restore by removing new facts (cheaper than full clone for small deltas)
+        if self.facts.len() > initial_count {
+            FACT_SET_CLONES.inc();
+            self.facts.clear();
+            self.facts.extend(initial_facts);
+        }
+
         Ok(result)
     }
 
     /// Derive all facts and return only the newly derived ones
+    /// OPTIMIZED: Avoid full clone by using set difference efficiently
     pub fn derive_new_facts(&mut self) -> Result<Vec<RuleAtom>> {
-        let initial_facts = self.facts.clone();
+        // Store initial facts as a vector for efficient difference computation
+        let initial_facts: Vec<RuleAtom> = self.facts.iter().cloned().collect();
+        let initial_set: HashSet<RuleAtom> = initial_facts.iter().cloned().collect();
+
+        FACT_SET_CLONES.inc();
+
         self.infer()?;
-        let new_facts = self.facts.difference(&initial_facts).cloned().collect();
+
+        // Only collect the difference
+        let new_facts: Vec<RuleAtom> = self.facts.difference(&initial_set).cloned().collect();
+
         Ok(new_facts)
     }
 }

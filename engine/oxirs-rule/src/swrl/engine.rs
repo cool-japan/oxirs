@@ -7,10 +7,10 @@ use anyhow::Result;
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
 
-use super::types::*;
 use super::builtins::*;
 use super::stats::SwrlStats;
-use super::vocabulary::*;
+use super::types::*;
+use super::vocabulary;
 
 pub struct SwrlEngine {
     /// SWRL rules

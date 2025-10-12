@@ -418,6 +418,22 @@ impl TemporalSimilarity {
 
 // Individual similarity function implementations
 
+/// Compute similarity between two vectors using the specified metric
+pub fn compute_similarity(a: &[f32], b: &[f32], metric: SimilarityMetric) -> Result<f32> {
+    metric.similarity(a, b)
+}
+
+/// Normalize a vector to unit length (in-place)
+pub fn normalize_vector(vector: &mut [f32]) -> Result<()> {
+    let magnitude: f32 = vector.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if magnitude > 0.0 {
+        for value in vector.iter_mut() {
+            *value /= magnitude;
+        }
+    }
+    Ok(())
+}
+
 pub fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     // Use oxirs-core SIMD operations
     1.0 - f32::cosine_distance(a, b)

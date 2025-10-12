@@ -3,13 +3,13 @@
 //! This module implements a disk-based B+Tree for efficient range queries
 //! and sequential scans. The tree uses the buffer pool for page management.
 
-pub mod node;
 pub mod iterator;
+pub mod node;
 
 use crate::error::{Result, TdbError};
 use crate::storage::{BufferPool, PageGuard, PageId, PageType};
-use node::{BTreeNode, InternalNode, LeafNode, ORDER};
 use iterator::BTreeIterator;
+use node::{BTreeNode, InternalNode, LeafNode, ORDER};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -78,9 +78,7 @@ where
                 let child_id = internal.children[child_idx];
                 self.search_recursive(child_id, key)
             }
-            BTreeNode::Leaf(leaf) => {
-                Ok(leaf.search(key).cloned())
-            }
+            BTreeNode::Leaf(leaf) => Ok(leaf.search(key).cloned()),
         }
     }
 
@@ -212,7 +210,11 @@ where
     }
 
     /// Split a leaf node
-    fn split_leaf(&mut self, page_id: PageId, mut leaf: LeafNode<K, V>) -> Result<InsertResult<K, V>> {
+    fn split_leaf(
+        &mut self,
+        page_id: PageId,
+        mut leaf: LeafNode<K, V>,
+    ) -> Result<InsertResult<K, V>> {
         let (split_key, mut right_leaf) = leaf.split();
 
         // Create new page for right sibling
@@ -245,7 +247,11 @@ where
     }
 
     /// Split an internal node
-    fn split_internal(&mut self, page_id: PageId, mut internal: InternalNode<K>) -> Result<InsertResult<K, V>> {
+    fn split_internal(
+        &mut self,
+        page_id: PageId,
+        mut internal: InternalNode<K>,
+    ) -> Result<InsertResult<K, V>> {
         let (split_key, right_internal) = internal.split();
 
         // Create new page for right sibling
@@ -306,7 +312,7 @@ where
                     let guard = self.buffer_pool.fetch_page(page_id)?;
                     {
                         let mut page = guard.page_mut();
-                let page = page.as_mut().unwrap();
+                        let page = page.as_mut().unwrap();
                         node.serialize_to_page(page)?;
                     }
                     drop(guard);
@@ -422,7 +428,10 @@ mod tests {
         let (_temp_dir, mut btree) = create_test_btree();
 
         btree.insert(5, "five".to_string())?;
-        assert_eq!(btree.insert(5, "FIVE".to_string())?, Some("five".to_string()));
+        assert_eq!(
+            btree.insert(5, "FIVE".to_string())?,
+            Some("five".to_string())
+        );
         assert_eq!(btree.search(&5)?, Some("FIVE".to_string()));
 
         Ok(())

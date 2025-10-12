@@ -8,6 +8,10 @@
 use std::arch::aarch64::*;
 
 /// Add two f32 slices using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn add_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -34,6 +38,10 @@ pub unsafe fn add_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Subtract two f32 slices using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn sub_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -59,6 +67,10 @@ pub unsafe fn sub_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Multiply two f32 slices using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn mul_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -84,6 +96,10 @@ pub unsafe fn mul_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Compute dot product using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -113,6 +129,11 @@ pub unsafe fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute cosine distance using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
+/// - Returns 1.0 if either vector has zero norm
 #[inline]
 pub unsafe fn cosine_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -160,6 +181,10 @@ pub unsafe fn cosine_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute Euclidean distance using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn euclidean_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -189,6 +214,10 @@ pub unsafe fn euclidean_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute Manhattan distance using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn manhattan_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -218,6 +247,9 @@ pub unsafe fn manhattan_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute L2 norm using ARM NEON
+///
+/// # Safety
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn norm_f32(a: &[f32]) -> f32 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -235,14 +267,17 @@ pub unsafe fn norm_f32(a: &[f32]) -> f32 {
 
     let mut result = vaddvq_f32(sum);
 
-    for i in simd_len..len {
-        result += a[i] * a[i];
+    for &val in a.iter().skip(simd_len) {
+        result += val * val;
     }
 
     result.sqrt()
 }
 
 /// Sum all elements using ARM NEON
+///
+/// # Safety
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn sum_f32(a: &[f32]) -> f32 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -260,8 +295,8 @@ pub unsafe fn sum_f32(a: &[f32]) -> f32 {
 
     let mut result = vaddvq_f32(sum);
 
-    for i in simd_len..len {
-        result += a[i];
+    for &val in a.iter().skip(simd_len) {
+        result += val;
     }
 
     result
@@ -270,6 +305,10 @@ pub unsafe fn sum_f32(a: &[f32]) -> f32 {
 // f64 implementations using ARM NEON (2 elements at a time)
 
 /// Add two f64 slices using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn add_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -295,6 +334,10 @@ pub unsafe fn add_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
 }
 
 /// Subtract two f64 slices using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn sub_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -320,6 +363,10 @@ pub unsafe fn sub_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
 }
 
 /// Multiply two f64 slices using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn mul_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -345,6 +392,10 @@ pub unsafe fn mul_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
 }
 
 /// Compute dot product for f64 using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -371,6 +422,11 @@ pub unsafe fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute cosine distance for f64 using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
+/// - Returns 1.0 if either vector has zero norm
 #[inline]
 pub unsafe fn cosine_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -389,6 +445,10 @@ pub unsafe fn cosine_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute Euclidean distance for f64 using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn euclidean_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -418,6 +478,10 @@ pub unsafe fn euclidean_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute Manhattan distance for f64 using ARM NEON
+///
+/// # Safety
+/// - Both slices `a` and `b` must have the same length
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn manhattan_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -447,6 +511,9 @@ pub unsafe fn manhattan_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute L2 norm for f64 using ARM NEON
+///
+/// # Safety
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn norm_f64(a: &[f64]) -> f64 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -464,14 +531,17 @@ pub unsafe fn norm_f64(a: &[f64]) -> f64 {
 
     let mut result = vaddvq_f64(sum);
 
-    for i in simd_len..len {
-        result += a[i] * a[i];
+    for &val in a.iter().skip(simd_len) {
+        result += val * val;
     }
 
     result.sqrt()
 }
 
 /// Sum all elements for f64 using ARM NEON
+///
+/// # Safety
+/// - Uses SIMD intrinsics that require proper memory alignment
 #[inline]
 pub unsafe fn sum_f64(a: &[f64]) -> f64 {
     if !std::arch::is_aarch64_feature_detected!("neon") {
@@ -489,8 +559,8 @@ pub unsafe fn sum_f64(a: &[f64]) -> f64 {
 
     let mut result = vaddvq_f64(sum);
 
-    for i in simd_len..len {
-        result += a[i];
+    for &val in a.iter().skip(simd_len) {
+        result += val;
     }
 
     result

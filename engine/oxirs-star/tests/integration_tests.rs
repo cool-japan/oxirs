@@ -194,6 +194,7 @@ ex:grace ex:knows ex:henry .
     assert!(result.is_ok());
 
     let graph = result.unwrap();
+
     // Should have parsed at least the valid triples
     assert!(graph.len() >= 3);
 }

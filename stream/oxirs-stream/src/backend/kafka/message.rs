@@ -35,6 +35,12 @@ impl KafkaEvent {
         serde_json::to_vec(self).map_err(|e| anyhow!("Failed to serialize KafkaEvent: {}", e))
     }
 
+    /// Parse from bytes (Kafka payload deserialization)
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        serde_json::from_slice(bytes)
+            .map_err(|e| anyhow!("Failed to deserialize KafkaEvent: {}", e))
+    }
+
     /// Create from StreamEvent for publishing
     pub fn from_stream_event(event: StreamEvent) -> Self {
         event.into()
@@ -218,7 +224,7 @@ impl From<StreamEvent> for KafkaEvent {
             StreamEvent::Heartbeat {
                 timestamp,
                 source,
-                metadata,
+                metadata: _,
             } => (
                 "heartbeat".to_string(),
                 serde_json::json!({

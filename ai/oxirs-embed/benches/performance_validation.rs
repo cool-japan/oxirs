@@ -6,7 +6,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use oxirs_embed::models::common::*;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Random;
 
 /// Benchmark vectorized vs non-vectorized distance computations
 fn bench_distance_computations(c: &mut Criterion) {
@@ -72,10 +72,9 @@ fn bench_gradient_updates(c: &mut Criterion) {
     let sizes = vec![100, 500, 1000];
 
     for size in sizes {
-        let mut embeddings: Vec<Array2<f64>> =
-            (0..10).map(|_| Array2::zeros((size, 128))).collect();
+        let _embeddings: Vec<Array2<f64>> = (0..10).map(|_| Array2::zeros((size, 128))).collect();
 
-        let gradients: Vec<Array2<f64>> = (0..10).map(|_| Array2::ones((size, 128))).collect();
+        let _gradients: Vec<Array2<f64>> = (0..10).map(|_| Array2::ones((size, 128))).collect();
 
         // Benchmark batch gradient update
         group.bench_with_input(
@@ -90,12 +89,8 @@ fn bench_gradient_updates(c: &mut Criterion) {
                     .collect();
 
                 b.iter(|| {
-                    black_box(batch_gradient_update(
-                        &mut embeddings,
-                        &gradients,
-                        0.01,
-                        0.001,
-                    ));
+                    batch_gradient_update(&mut embeddings, &gradients, 0.01, 0.001);
+                    black_box(());
                 });
             },
         );
@@ -114,7 +109,8 @@ fn bench_gradient_updates(c: &mut Criterion) {
 
                 b.iter(|| {
                     for (embedding, gradient) in embeddings.iter_mut().zip(gradients.iter()) {
-                        black_box(gradient_update(embedding, gradient, 0.01, 0.001));
+                        gradient_update(embedding, gradient, 0.01, 0.001);
+                        black_box(());
                     }
                 });
             },
@@ -156,7 +152,8 @@ fn bench_sampling_optimizations(c: &mut Criterion) {
             |b, data| {
                 b.iter(|| {
                     let mut batch = data.clone();
-                    black_box(shuffle_batch(&mut batch, &mut rng));
+                    shuffle_batch(&mut batch, &mut rng);
+                    black_box(());
                 });
             },
         );

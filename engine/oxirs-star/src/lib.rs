@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! RDF-star and SPARQL-star implementation providing comprehensive support for quoted triples.
@@ -123,7 +123,8 @@
 //! );
 //!
 //! store.insert(&meta_meta)?;
-//! println!("Max nesting depth: {}", store.max_nesting_depth());
+//! let stats = store.statistics();
+//! println!("Max nesting depth: {}", stats.max_nesting_encountered);
 //! # Ok(())
 //! # }
 //! ```
@@ -199,16 +200,23 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, info, span, Level};
 
+pub mod annotations;
 pub mod cli;
+pub mod compatibility;
 pub mod docs;
 pub mod enhanced_errors;
 pub mod functions;
+pub mod index;
+pub mod memory_efficient_store;
 pub mod model;
+pub mod parallel_query;
 pub mod parser;
 pub mod profiling;
 pub mod query;
 pub mod reification;
+pub mod semantics;
 pub mod serializer;
+pub mod sparql_enhanced;
 pub mod store;
 pub mod troubleshooting;
 

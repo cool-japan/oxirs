@@ -190,7 +190,7 @@ pub async fn health_check_bypass(request: Request, next: Next) -> Response {
     // List of health check endpoints
     let health_endpoints = ["/health", "/health/live", "/health/ready", "/metrics"];
 
-    if health_endpoints.iter().any(|&endpoint| path == endpoint) {
+    if health_endpoints.contains(&path) {
         // Fast path for health checks - minimal processing
         return next.run(request).await;
     }

@@ -3,10 +3,8 @@
 use std::collections::{HashMap, VecDeque};
 use std::time::Duration;
 
-
 use super::types::{
-    AccessEvent, QueryClusteringEngine,
-    SeasonalPatternDetector, TemporalAccessPredictor,
+    AccessEvent, QueryClusteringEngine, SeasonalPatternDetector, TemporalAccessPredictor,
 };
 
 /// Access pattern analysis for intelligent caching decisions

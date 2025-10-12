@@ -1,7 +1,5 @@
 //! Advanced server configuration management with validation and hot-reload
 
-#[cfg(feature = "saml")]
-use crate::auth::saml::SamlConfig;
 use crate::error::{FusekiError, FusekiResult};
 use figment::{
     providers::{Env, Format, Toml, Yaml},
@@ -12,7 +10,7 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, warn};
 use validator::{Validate, ValidationError};
 
 #[cfg(feature = "hot-reload")]
@@ -693,6 +691,8 @@ pub struct PerformanceConfig {
     pub caching: CacheConfig,
     pub connection_pool: ConnectionPoolConfig,
     pub query_optimization: QueryOptimizationConfig,
+    #[validate(nested)]
+    pub rate_limiting: Option<RateLimitConfig>,
 }
 
 /// Cache configuration
@@ -891,6 +891,7 @@ impl Default for ServerConfig {
                     parallel_execution: true,
                     thread_pool_size: get_cpu_count(),
                 },
+                rate_limiting: None,
             },
             logging: LoggingConfig {
                 level: "info".to_string(),
@@ -1446,6 +1447,7 @@ mod tests {
                 parallel_execution: true,
                 thread_pool_size: 4,
             },
+            rate_limiting: None,
         };
 
         assert!(performance.validate().is_ok());

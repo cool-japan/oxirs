@@ -1,8 +1,8 @@
 //! Join operations for federated queries
 
+use super::super::types::*;
 use anyhow::Result;
 use tracing::{debug, warn};
-use super::super::types::*;
 
 pub fn perform_graphql_join(
     left: &GraphQLResponse,

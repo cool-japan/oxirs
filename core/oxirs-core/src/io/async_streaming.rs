@@ -72,7 +72,7 @@ use crate::{
 use futures::future::BoxFuture;
 use std::pin::Pin;
 use std::sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
+    atomic::{AtomicBool, Ordering},
     Arc,
 };
 use std::task::{Context, Poll};
@@ -114,6 +114,12 @@ impl StreamingProgress {
                 (self.bytes_processed as f64 / total as f64) * 100.0
             }
         })
+    }
+}
+
+impl Default for StreamingProgress {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -570,6 +576,7 @@ impl AsyncStreamingSerializer {
     }
 
     /// Serialize a single triple to a string
+    #[allow(dead_code)]
     fn serialize_triple(&self, triple: &Triple) -> Result<String> {
         let quad = Quad::from_triple(triple.clone());
         self.serialize_quad(&quad)
@@ -741,7 +748,7 @@ impl<R: AsyncRead + Unpin> AsyncRead for BackpressureReader<R> {
 mod tests {
     use super::*;
     use crate::model::*;
-    use tokio::io::AsyncWriteExt;
+    use std::sync::atomic::AtomicUsize;
 
     #[tokio::test]
     async fn test_async_ntriples_parsing() {

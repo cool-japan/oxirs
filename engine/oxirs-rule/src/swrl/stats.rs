@@ -2,7 +2,6 @@
 //!
 //! This module implements SWRL rule components.
 
-
 pub struct SwrlStats {
     pub total_rules: usize,
     pub total_builtins: usize,

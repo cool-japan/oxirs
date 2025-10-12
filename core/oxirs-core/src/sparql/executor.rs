@@ -234,10 +234,7 @@ impl<'a> QueryExecutor<'a> {
             // Apply FILTER if present
             let filter_expressions = self.extract_filter_expressions(sparql)?;
             if !filter_expressions.is_empty() {
-                results = results
-                    .into_iter()
-                    .filter(|binding| self.evaluate_filters(binding, &filter_expressions))
-                    .collect();
+                results.retain(|binding| self.evaluate_filters(binding, &filter_expressions));
             }
 
             // Check for aggregate expressions
@@ -392,10 +389,7 @@ impl<'a> QueryExecutor<'a> {
         // Apply FILTER if present
         let filter_expressions = self.extract_filter_expressions(sparql)?;
         if !filter_expressions.is_empty() {
-            all_results = all_results
-                .into_iter()
-                .filter(|binding| self.evaluate_filters(binding, &filter_expressions))
-                .collect();
+            all_results.retain(|binding| self.evaluate_filters(binding, &filter_expressions));
         }
 
         // Apply DISTINCT if present
@@ -812,8 +806,6 @@ impl<'a> QueryExecutor<'a> {
                                                     || (v.starts_with('\'') && v.ends_with('\''))
                                                 {
                                                     v[1..v.len() - 1].to_string()
-                                                } else if v.starts_with('<') && v.ends_with('>') {
-                                                    v.to_string()
                                                 } else {
                                                     v.to_string()
                                                 }
@@ -1371,8 +1363,6 @@ impl<'a> QueryExecutor<'a> {
             }
         }
     }
-
-    /// Insert a quad (compatibility alias for insert_quad)
 
     /// Extract and expand PREFIX declarations
     #[allow(dead_code)]

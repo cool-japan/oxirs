@@ -155,7 +155,7 @@ fn read_rdf_file(file_path: &PathBuf) -> Result<Vec<RdfTriple>, Box<dyn std::err
 }
 
 /// Write concatenated RDF data
-fn write_concatenated_output<W: Write>(
+fn write_concatenated_output<W: Write + 'static>(
     triples: &[RdfTriple],
     output_format: ExportFormat,
     mut writer: W,
@@ -297,11 +297,18 @@ mod tests {
             },
         ];
 
-        let mut output = Vec::new();
-        write_concatenated_output(&triples, ExportFormat::NTriples, &mut output).unwrap();
+        // Create a temporary file for testing
+        use std::env::temp_dir;
+        let temp_file = temp_dir().join("test_rdfcat_output.nt");
+        let file = File::create(&temp_file).unwrap();
+        write_concatenated_output(&triples, ExportFormat::NTriples, file).unwrap();
 
-        let output_str = String::from_utf8(output).unwrap();
+        // Read back the output
+        let output_str = std::fs::read_to_string(&temp_file).unwrap();
         assert!(output_str.contains("<http://example.org/s1>"));
         assert!(output_str.contains("<http://example.org/s2>"));
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_file);
     }
 }

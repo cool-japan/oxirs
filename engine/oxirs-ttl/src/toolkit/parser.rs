@@ -124,10 +124,10 @@ pub trait Parser<Output> {
 #[cfg(feature = "async-tokio")]
 pub trait AsyncParser<Output> {
     /// Parse from an async reader
-    async fn parse_async<R: tokio::io::AsyncRead + Unpin>(
+    fn parse_async<R: tokio::io::AsyncRead + Unpin>(
         &self,
         reader: R,
-    ) -> TurtleResult<Vec<Output>>;
+    ) -> impl std::future::Future<Output = TurtleResult<Vec<Output>>> + Send;
 
     /// Create an async stream for streaming parsing
     fn for_async_reader<R: tokio::io::AsyncBufRead + Unpin>(

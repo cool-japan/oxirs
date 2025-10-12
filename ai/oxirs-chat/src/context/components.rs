@@ -2,11 +2,11 @@
 //!
 //! Topic tracking, importance scoring, summarization, and memory optimization.
 
-use anyhow::Result;
-use std::time::SystemTime;
-use crate::Message;
 use super::config::ContextConfig;
 use super::types::*;
+use crate::Message;
+use anyhow::Result;
+use std::time::SystemTime;
 
 pub struct TopicTracker {
     _config: ContextConfig,

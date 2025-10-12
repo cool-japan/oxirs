@@ -634,10 +634,10 @@ impl EnzymaticNetwork {
 
         let reaction_probability = enzyme_efficiency * substrate_concentration * self.reaction_rate;
 
-        if {
-            let mut random = Random::default();
-            random.random::<f64>() < reaction_probability
-        } {
+        let mut random = Random::default();
+        let should_react = random.random::<f64>() < reaction_probability;
+
+        if should_react {
             // Modify substrate
             if let Some(substrate) = self
                 .substrates
@@ -979,7 +979,7 @@ impl MolecularAssembly {
         // Disassembly due to thermal energy
         self.assembled_structures.retain(|structure| {
             let disassembly_probability = (self.temperature / 1000.0) / structure.stability;
-            !(random.random::<f64>() < disassembly_probability)
+            random.random::<f64>() >= disassembly_probability
         });
     }
 

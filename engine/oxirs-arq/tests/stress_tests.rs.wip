@@ -1,0 +1,586 @@
+//! Stress Testing Suite for OxiRS ARQ (SPARQL Query Engine)
+//!
+//! Beta.1 Feature: Production-Ready Stress Testing
+//!
+//! This test suite validates SPARQL engine behavior under extreme conditions:
+//! - High-volume query execution
+//! - Complex query patterns
+//! - Concurrent query processing
+//! - Memory-intensive operations
+//! - Long-running queries
+//! - Edge cases and boundary conditions
+
+use oxirs_arq::{QueryEngine, QueryExecutor};
+use oxirs_core::{
+    model::{GraphName, Literal, NamedNode, Quad},
+    rdf_store::ConcreteStore,
+};
+use std::sync::{Arc, Barrier};
+use std::thread;
+use std::time::{Duration, Instant};
+
+#[test]
+#[ignore] // Run with --ignored flag for stress tests
+fn stress_test_high_volume_queries() {
+    println!("🔥 Stress Test: High Volume Query Execution");
+    const QUERY_COUNT: usize = 10_000;
+    const STORE_SIZE: usize = 1_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let query = "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name } LIMIT 10";
+
+    let start = Instant::now();
+    let mut successful = 0;
+
+    for i in 0..QUERY_COUNT {
+        match executor.execute_query(query) {
+            Ok(_) => successful += 1,
+            Err(e) => eprintln!("Query {i} failed: {e}"),
+        }
+
+        if i % 1_000 == 0 && i > 0 {
+            println!("  ✓ Executed {i} queries in {:?}", start.elapsed());
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Successfully executed {successful}/{QUERY_COUNT} queries in {elapsed:?}");
+    println!(
+        "  📊 Throughput: {:.0} queries/sec",
+        successful as f64 / elapsed.as_secs_f64()
+    );
+
+    assert!(successful >= QUERY_COUNT * 99 / 100); // Allow 1% failure rate
+}
+
+#[test]
+#[ignore]
+fn stress_test_complex_join_queries() {
+    println!("🔥 Stress Test: Complex Multi-Way Join Queries");
+    const STORE_SIZE: usize = 10_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let queries = vec![
+        (
+            "two_way_join",
+            r#"
+            SELECT ?s ?name ?email WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> ?name .
+                ?s <http://xmlns.com/foaf/0.1/mbox> ?email
+            }
+        "#,
+        ),
+        (
+            "three_way_join",
+            r#"
+            SELECT ?s ?name ?email ?age WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> ?name .
+                ?s <http://xmlns.com/foaf/0.1/mbox> ?email .
+                ?s <http://xmlns.com/foaf/0.1/age> ?age
+            }
+        "#,
+        ),
+        (
+            "four_way_join",
+            r#"
+            SELECT ?s ?name ?email ?age ?phone WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> ?name .
+                ?s <http://xmlns.com/foaf/0.1/mbox> ?email .
+                ?s <http://xmlns.com/foaf/0.1/age> ?age .
+                ?s <http://xmlns.com/foaf/0.1/phone> ?phone
+            }
+        "#,
+        ),
+    ];
+
+    for (name, query) in queries {
+        println!("  Testing {name}...");
+        let start = Instant::now();
+
+        match executor.execute_query(query) {
+            Ok(results) => {
+                let elapsed = start.elapsed();
+                println!("  ✓ {name}: {} results in {:?}", results.len(), elapsed);
+            }
+            Err(e) => {
+                println!("  ✗ {name} failed: {e}");
+            }
+        }
+    }
+
+    println!("  ✅ All complex join queries completed");
+}
+
+#[test]
+#[ignore]
+fn stress_test_concurrent_query_execution() {
+    println!("🔥 Stress Test: Concurrent Query Execution");
+    const THREADS: usize = 16;
+    const QUERIES_PER_THREAD: usize = 500;
+    const STORE_SIZE: usize = 5_000;
+
+    let store = Arc::new(setup_test_store(STORE_SIZE));
+    let barrier = Arc::new(Barrier::new(THREADS));
+    let start = Instant::now();
+
+    let handles: Vec<_> = (0..THREADS)
+        .map(|thread_id| {
+            let store = Arc::clone(&store);
+            let barrier = Arc::clone(&barrier);
+
+            thread::spawn(move || {
+                barrier.wait(); // Synchronize start
+
+                let executor = QueryExecutor::new((*store).clone());
+                let mut successful = 0;
+
+                let queries = vec![
+                    "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name } LIMIT 10",
+                    "SELECT ?s ?email WHERE { ?s <http://xmlns.com/foaf/0.1/mbox> ?email } LIMIT 10",
+                    "SELECT ?s ?age WHERE { ?s <http://xmlns.com/foaf/0.1/age> ?age . FILTER(?age > 25) } LIMIT 10",
+                ];
+
+                for i in 0..QUERIES_PER_THREAD {
+                    let query = queries[i % queries.len()];
+                    if executor.execute_query(query).is_ok() {
+                        successful += 1;
+                    }
+                }
+
+                println!("  ✓ Thread {thread_id} completed {successful}/{QUERIES_PER_THREAD} queries");
+                successful
+            })
+        })
+        .collect();
+
+    let total_successful: usize = handles.into_iter().map(|h| h.join().unwrap()).sum();
+    let elapsed = start.elapsed();
+    let total_queries = THREADS * QUERIES_PER_THREAD;
+
+    println!("  ✅ All {THREADS} threads completed in {elapsed:?}");
+    println!("  📊 Total queries: {total_successful}/{total_queries}");
+    println!(
+        "  📊 Throughput: {:.0} queries/sec",
+        total_successful as f64 / elapsed.as_secs_f64()
+    );
+
+    assert!(total_successful >= total_queries * 95 / 100); // Allow 5% failure rate
+}
+
+#[test]
+#[ignore]
+fn stress_test_memory_intensive_queries() {
+    println!("🔥 Stress Test: Memory Intensive Queries");
+    const STORE_SIZE: usize = 100_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let queries = vec![
+        ("full_scan", "SELECT ?s ?p ?o WHERE { ?s ?p ?o }"),
+        (
+            "large_result_set",
+            "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }",
+        ),
+        (
+            "cartesian_product",
+            r#"
+            SELECT ?s1 ?s2 WHERE {
+                ?s1 a <http://xmlns.com/foaf/0.1/Person> .
+                ?s2 a <http://xmlns.com/foaf/0.1/Person>
+            } LIMIT 1000
+        "#,
+        ),
+    ];
+
+    for (name, query) in queries {
+        println!("  Testing {name}...");
+        let start = Instant::now();
+
+        match executor.execute_query(query) {
+            Ok(results) => {
+                let elapsed = start.elapsed();
+                println!("  ✓ {name}: {} results in {:?}", results.len(), elapsed);
+            }
+            Err(e) => {
+                println!("  ✗ {name} failed: {e}");
+            }
+        }
+    }
+
+    println!("  ✅ All memory-intensive queries completed");
+}
+
+#[test]
+#[ignore]
+fn stress_test_filter_performance() {
+    println!("🔥 Stress Test: Filter Operation Performance");
+    const STORE_SIZE: usize = 50_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let filters = vec![
+        (
+            "string_equality",
+            r#"SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . FILTER(?name = "Alice0") }"#,
+        ),
+        (
+            "string_regex",
+            r#"SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . FILTER(REGEX(?name, "^Alice[0-9]{3}$")) }"#,
+        ),
+        (
+            "numeric_range",
+            r#"SELECT ?s ?age WHERE { ?s <http://xmlns.com/foaf/0.1/age> ?age . FILTER(?age >= 25 && ?age <= 35) }"#,
+        ),
+        (
+            "complex_filter",
+            r#"SELECT ?s ?name ?age WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . ?s <http://xmlns.com/foaf/0.1/age> ?age . FILTER((STRLEN(?name) > 6) && (?age > 30)) }"#,
+        ),
+    ];
+
+    for (name, query) in filters {
+        println!("  Testing {name}...");
+        let start = Instant::now();
+
+        match executor.execute_query(query) {
+            Ok(results) => {
+                let elapsed = start.elapsed();
+                println!("  ✓ {name}: {} results in {:?}", results.len(), elapsed);
+            }
+            Err(e) => {
+                println!("  ✗ {name} failed: {e}");
+            }
+        }
+    }
+
+    println!("  ✅ All filter operations completed");
+}
+
+#[test]
+#[ignore]
+fn stress_test_aggregation_performance() {
+    println!("🔥 Stress Test: Aggregation Performance");
+    const STORE_SIZE: usize = 100_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let aggregations = vec![
+        ("count_all", "SELECT (COUNT(*) AS ?count) WHERE { ?s ?p ?o }"),
+        ("count_distinct", "SELECT (COUNT(DISTINCT ?p) AS ?count) WHERE { ?s ?p ?o }"),
+        ("group_by_predicate", "SELECT ?p (COUNT(?s) AS ?count) WHERE { ?s ?p ?o } GROUP BY ?p"),
+        ("group_with_having", "SELECT ?p (COUNT(?s) AS ?count) WHERE { ?s ?p ?o } GROUP BY ?p HAVING(COUNT(?s) > 1000)"),
+    ];
+
+    for (name, query) in aggregations {
+        println!("  Testing {name}...");
+        let start = Instant::now();
+
+        match executor.execute_query(query) {
+            Ok(results) => {
+                let elapsed = start.elapsed();
+                println!("  ✓ {name}: {} results in {:?}", results.len(), elapsed);
+            }
+            Err(e) => {
+                println!("  ✗ {name} failed: {e}");
+            }
+        }
+    }
+
+    println!("  ✅ All aggregation operations completed");
+}
+
+#[test]
+#[ignore]
+fn stress_test_union_operations() {
+    println!("🔥 Stress Test: UNION Operations");
+    const STORE_SIZE: usize = 50_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let unions = vec![
+        (
+            "simple_union",
+            r#"
+            SELECT ?entity WHERE {
+                { ?entity a <http://xmlns.com/foaf/0.1/Person> }
+                UNION
+                { ?entity a <http://schema.org/Person> }
+            }
+        "#,
+        ),
+        (
+            "complex_union",
+            r#"
+            SELECT ?entity ?name WHERE {
+                { ?entity a <http://xmlns.com/foaf/0.1/Person> . ?entity <http://xmlns.com/foaf/0.1/name> ?name }
+                UNION
+                { ?entity a <http://schema.org/Person> . ?entity <http://schema.org/name> ?name }
+            }
+        "#,
+        ),
+        (
+            "multiple_union",
+            r#"
+            SELECT ?entity WHERE {
+                { ?entity a <http://xmlns.com/foaf/0.1/Person> }
+                UNION
+                { ?entity a <http://xmlns.com/foaf/0.1/Organization> }
+                UNION
+                { ?entity a <http://schema.org/Thing> }
+                UNION
+                { ?entity a <http://schema.org/CreativeWork> }
+            }
+        "#,
+        ),
+    ];
+
+    for (name, query) in unions {
+        println!("  Testing {name}...");
+        let start = Instant::now();
+
+        match executor.execute_query(query) {
+            Ok(results) => {
+                let elapsed = start.elapsed();
+                println!("  ✓ {name}: {} results in {:?}", results.len(), elapsed);
+            }
+            Err(e) => {
+                println!("  ✗ {name} failed: {e}");
+            }
+        }
+    }
+
+    println!("  ✅ All UNION operations completed");
+}
+
+#[test]
+#[ignore]
+fn stress_test_optional_patterns() {
+    println!("🔥 Stress Test: OPTIONAL Pattern Performance");
+    const STORE_SIZE: usize = 50_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let optionals = vec![
+        (
+            "simple_optional",
+            r#"
+            SELECT ?s ?name ?email WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> ?name .
+                OPTIONAL { ?s <http://xmlns.com/foaf/0.1/mbox> ?email }
+            }
+        "#,
+        ),
+        (
+            "nested_optional",
+            r#"
+            SELECT ?s ?name ?email ?phone WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> ?name .
+                OPTIONAL {
+                    ?s <http://xmlns.com/foaf/0.1/mbox> ?email .
+                    OPTIONAL { ?s <http://xmlns.com/foaf/0.1/phone> ?phone }
+                }
+            }
+        "#,
+        ),
+        (
+            "multiple_optional",
+            r#"
+            SELECT ?s ?name ?email ?age ?phone WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> ?name .
+                OPTIONAL { ?s <http://xmlns.com/foaf/0.1/mbox> ?email } .
+                OPTIONAL { ?s <http://xmlns.com/foaf/0.1/age> ?age } .
+                OPTIONAL { ?s <http://xmlns.com/foaf/0.1/phone> ?phone }
+            }
+        "#,
+        ),
+    ];
+
+    for (name, query) in optionals {
+        println!("  Testing {name}...");
+        let start = Instant::now();
+
+        match executor.execute_query(query) {
+            Ok(results) => {
+                let elapsed = start.elapsed();
+                println!("  ✓ {name}: {} results in {:?}", results.len(), elapsed);
+            }
+            Err(e) => {
+                println!("  ✗ {name} failed: {e}");
+            }
+        }
+    }
+
+    println!("  ✅ All OPTIONAL pattern queries completed");
+}
+
+#[test]
+#[ignore]
+fn stress_test_sustained_query_load() {
+    println!("🔥 Stress Test: Sustained Query Load (30 seconds)");
+    const DURATION_SECS: u64 = 30;
+    const STORE_SIZE: usize = 10_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let queries = vec![
+        "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name } LIMIT 10",
+        "SELECT ?s ?email WHERE { ?s <http://xmlns.com/foaf/0.1/mbox> ?email } LIMIT 10",
+        "SELECT ?s ?age WHERE { ?s <http://xmlns.com/foaf/0.1/age> ?age . FILTER(?age > 25) } LIMIT 10",
+    ];
+
+    let start = Instant::now();
+    let end_time = start + Duration::from_secs(DURATION_SECS);
+    let mut query_count = 0;
+    let mut success_count = 0;
+
+    while Instant::now() < end_time {
+        let query = queries[query_count % queries.len()];
+
+        if executor.execute_query(query).is_ok() {
+            success_count += 1;
+        }
+        query_count += 1;
+
+        if query_count % 1_000 == 0 {
+            let elapsed = start.elapsed();
+            println!("  ✓ {query_count} queries in {:?}", elapsed);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Sustained {query_count} queries over {elapsed:?}");
+    println!(
+        "  📊 Success rate: {:.1}%",
+        (success_count as f64 / query_count as f64) * 100.0
+    );
+    println!(
+        "  📊 Average throughput: {:.0} queries/sec",
+        query_count as f64 / elapsed.as_secs_f64()
+    );
+}
+
+#[test]
+#[ignore]
+fn stress_test_query_edge_cases() {
+    println!("🔥 Stress Test: Query Edge Cases");
+    const STORE_SIZE: usize = 1_000;
+
+    let store = setup_test_store(STORE_SIZE);
+    let executor = QueryExecutor::new(store);
+
+    let edge_cases = vec![
+        (
+            "empty_result",
+            "SELECT ?s ?name WHERE { ?s <http://nonexistent.org/prop> ?name }",
+        ),
+        (
+            "no_matches",
+            r#"SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . FILTER(?name = "NonExistentName") }"#,
+        ),
+        (
+            "complex_optional_no_match",
+            r#"
+            SELECT ?s ?prop WHERE {
+                ?s <http://xmlns.com/foaf/0.1/name> "Alice0" .
+                OPTIONAL { ?s <http://nonexistent.org/prop> ?prop }
+            }
+        "#,
+        ),
+        (
+            "union_with_empty",
+            r#"
+            SELECT ?s WHERE {
+                { ?s a <http://nonexistent.org/Type> }
+                UNION
+                { ?s a <http://xmlns.com/foaf/0.1/Person> }
+            } LIMIT 10
+        "#,
+        ),
+    ];
+
+    for (name, query) in edge_cases {
+        println!("  Testing {name}...");
+        match executor.execute_query(query) {
+            Ok(results) => println!("  ✓ {name}: {} results (expected)", results.len()),
+            Err(e) => println!("  ⚠ {name} error (may be expected): {e}"),
+        }
+    }
+
+    println!("  ✅ All edge case queries handled");
+}
+
+/// Helper: Setup test store with data
+fn setup_test_store(size: usize) -> ConcreteStore {
+    let store = ConcreteStore::new().expect("Failed to create store");
+
+    for i in 0..size {
+        let subject = NamedNode::new(format!("http://example.org/person{i}")).unwrap();
+
+        // Add name (100%)
+        let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
+        let name_obj = Literal::new(format!("Alice{i}"));
+        store
+            .insert_quad(Quad::new(
+                subject.clone(),
+                name_pred,
+                name_obj,
+                GraphName::DefaultGraph,
+            ))
+            .unwrap();
+
+        // Add email (50%)
+        if i % 2 == 0 {
+            let email_pred = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").unwrap();
+            let email_obj = Literal::new(format!("alice{i}@example.org"));
+            store
+                .insert_quad(Quad::new(
+                    subject.clone(),
+                    email_pred,
+                    email_obj,
+                    GraphName::DefaultGraph,
+                ))
+                .unwrap();
+        }
+
+        // Add age (70%)
+        if i % 10 < 7 {
+            let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
+            let age_obj = Literal::new(format!("{}", 20 + (i % 50)));
+            store
+                .insert_quad(Quad::new(
+                    subject.clone(),
+                    age_pred,
+                    age_obj,
+                    GraphName::DefaultGraph,
+                ))
+                .unwrap();
+        }
+
+        // Add type (100%)
+        let type_pred = NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").unwrap();
+        let type_obj = if i % 10 < 8 {
+            NamedNode::new("http://xmlns.com/foaf/0.1/Person").unwrap()
+        } else {
+            NamedNode::new("http://schema.org/Person").unwrap()
+        };
+        store
+            .insert_quad(Quad::new(
+                subject,
+                type_pred,
+                type_obj,
+                GraphName::DefaultGraph,
+            ))
+            .unwrap();
+    }
+
+    store
+}

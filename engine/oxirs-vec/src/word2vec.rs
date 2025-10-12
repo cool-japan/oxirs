@@ -411,7 +411,6 @@ impl Word2VecEmbeddingGenerator {
                 let hash = std::hash::Hasher::finish(&hasher);
 
                 let mut rng = Random::seed(hash);
-                
 
                 Some(
                     (0..self.config.dimensions)

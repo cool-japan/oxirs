@@ -19,6 +19,9 @@ pub mod types;
 pub use config::StorageConfig;
 pub use error::StorageError;
 pub use persistent::{PersistentStorage, StorageBackend};
-pub use recovery::{CorruptionReport, LogConsistencyReport, LogInconsistency, RecoveryReport, StateConsistencyReport};
+pub use recovery::{
+    CorruptionReport, LogConsistencyReport, LogInconsistency, RecoveryReport,
+    StateConsistencyReport,
+};
 pub use stats::StorageStats;
 pub use types::{ChecksummedData, RaftState, SnapshotMetadata, WalEntry, WalOperation};

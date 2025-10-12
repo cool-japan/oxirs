@@ -192,13 +192,13 @@ pub async fn handle_shacl_validation<S: Store + Send + Sync + 'static>(
         StatusCode::BAD_REQUEST
     };
 
-    Ok(Response::builder()
+    Response::builder()
         .status(status)
         .header(header::CONTENT_TYPE, "text/turtle")
         .header("X-SHACL-Conforms", conforms.to_string())
         .header("X-Duration-Ms", duration.as_millis().to_string())
         .body(axum::body::Body::from(report_turtle))
-        .map_err(|e| ShaclError::Internal(format!("Response build error: {}", e)))?)
+        .map_err(|e| ShaclError::Internal(format!("Response build error: {}", e)))
 }
 
 /// Get triples from specified graph
@@ -319,6 +319,26 @@ fn serialize_validation_report(report: &ValidationSummary) -> Result<String, Sha
     Ok(turtle)
 }
 
+/// Server-specific handler that works with AppState
+pub async fn handle_shacl_validation_server(
+    Query(params): Query<ShaclParams>,
+    State(state): State<std::sync::Arc<crate::server::AppState>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    match handle_shacl_validation(
+        Query(params),
+        State(std::sync::Arc::new(state.store.clone())),
+        headers,
+        body,
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(err) => err.into_response(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -334,7 +354,9 @@ ex:Alice ex:name "Alice" .
 ex:Alice ex:age "30" .
 "#;
 
-        let triples = oxirs_core::format::turtle::TurtleParser::new().parse_str(turtle_data).unwrap();
+        let triples = oxirs_core::format::turtle::TurtleParser::new()
+            .parse_str(turtle_data)
+            .unwrap();
         for triple in triples {
             store.insert_triple(triple).unwrap();
         }
@@ -396,25 +418,5 @@ ex:Alice ex:age "30" .
         let turtle = serialize_validation_report(&report).unwrap();
         assert!(turtle.contains("sh:ValidationReport"));
         assert!(turtle.contains("sh:conforms true"));
-    }
-}
-
-/// Server-specific handler that works with AppState
-pub async fn handle_shacl_validation_server(
-    Query(params): Query<ShaclParams>,
-    State(state): State<std::sync::Arc<crate::server::AppState>>,
-    headers: HeaderMap,
-    body: Bytes,
-) -> Response {
-    match handle_shacl_validation(
-        Query(params),
-        State(std::sync::Arc::new(state.store.clone())),
-        headers,
-        body,
-    )
-    .await
-    {
-        Ok(response) => response,
-        Err(err) => err.into_response(),
     }
 }

@@ -20,18 +20,18 @@ pub trait Serializer<Input> {
 #[cfg(feature = "async-tokio")]
 pub trait AsyncSerializer<Input> {
     /// Serialize to an async writer
-    async fn serialize_async<W: tokio::io::AsyncWrite + Unpin>(
+    fn serialize_async<W: tokio::io::AsyncWrite + Unpin>(
         &self,
         input: &[Input],
         writer: W,
-    ) -> TurtleResult<()>;
+    ) -> impl std::future::Future<Output = TurtleResult<()>> + Send;
 
     /// Serialize a single item async
-    async fn serialize_item_async<W: tokio::io::AsyncWrite + Unpin>(
+    fn serialize_item_async<W: tokio::io::AsyncWrite + Unpin>(
         &self,
         input: &Input,
         writer: W,
-    ) -> TurtleResult<()>;
+    ) -> impl std::future::Future<Output = TurtleResult<()>> + Send;
 }
 
 /// Configuration for serialization

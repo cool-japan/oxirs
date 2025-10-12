@@ -685,7 +685,8 @@ impl DynamicArchitectureOptimizer {
         // Mutate dropout rates
         for dropout_rate in &mut config.dropout_rates {
             if random.random::<f32>() < 0.2 {
-                *dropout_rate = (*dropout_rate + (random.random::<f32>() - 0.5) * 0.1).clamp(0.0, 0.5);
+                *dropout_rate =
+                    (*dropout_rate + (random.random::<f32>() - 0.5) * 0.1).clamp(0.0, 0.5);
             }
         }
 

@@ -206,7 +206,7 @@ impl AdvancedVectorIndex {
         &self,
         query: &Vector,
         k: usize,
-        _ef: Option<usize>,
+        ef: Option<usize>,
         filter: Option<FilterFunction>,
     ) -> Result<Vec<SearchResult>> {
         match self.config.index_type {
@@ -217,6 +217,7 @@ impl AdvancedVectorIndex {
                 }
                 #[cfg(not(feature = "hnsw"))]
                 {
+                    let _ = ef;
                     self.search_flat(query, k, filter)
                 }
             }

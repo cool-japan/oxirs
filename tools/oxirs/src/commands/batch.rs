@@ -290,7 +290,7 @@ async fn process_single_file(
 }
 
 /// Detect RDF format from file extension
-fn detect_format(file: &PathBuf) -> String {
+fn detect_format(file: &std::path::Path) -> String {
     if let Some(ext) = file.extension().and_then(|s| s.to_str()) {
         match ext.to_lowercase().as_str() {
             "ttl" | "turtle" => "turtle".to_string(),

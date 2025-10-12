@@ -175,11 +175,11 @@ impl BufferPool {
                     let old_page_id = old_page.page_id();
                     self.page_table.remove(&old_page_id);
                     drop(page_guard); // Release lock before I/O
-                    
+
                     let mut write_page = old_page;
                     self.file_manager.write_page(&mut write_page)?;
                     self.stats.writes.fetch_add(1, Ordering::Relaxed);
-                    
+
                     page_guard = frame.page.write();
                 } else {
                     let old_page_id = old_page.page_id();
@@ -222,11 +222,11 @@ impl BufferPool {
                     let old_page_id = old_page.page_id();
                     self.page_table.remove(&old_page_id);
                     drop(page_guard);
-                    
+
                     let mut write_page = old_page;
                     self.file_manager.write_page(&mut write_page)?;
                     self.stats.writes.fetch_add(1, Ordering::Relaxed);
-                    
+
                     page_guard = frame.page.write();
                 } else {
                     let old_page_id = old_page.page_id();
@@ -257,7 +257,7 @@ impl BufferPool {
             let frame_id = *frame_entry;
             let frame = &self.frames[frame_id];
             let mut page_guard = frame.page.write();
-            
+
             if let Some(page) = page_guard.as_mut() {
                 if page.is_dirty() {
                     self.file_manager.write_page(page)?;
@@ -274,7 +274,7 @@ impl BufferPool {
             let frame_id = *entry.value();
             let frame = &self.frames[frame_id];
             let mut page_guard = frame.page.write();
-            
+
             if let Some(page) = page_guard.as_mut() {
                 if page.is_dirty() {
                     self.file_manager.write_page(page)?;
@@ -387,7 +387,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(10, fm);
-        
+
         assert_eq!(bp.pool_size(), 10);
         assert_eq!(bp.cached_pages(), 0);
     }
@@ -397,7 +397,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(10, fm);
-        
+
         let guard = bp.new_page(PageType::BTreeLeaf).unwrap();
         assert_eq!(guard.page_id(), 0);
         assert_eq!(bp.cached_pages(), 1);
@@ -408,7 +408,7 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(10, fm.clone());
-        
+
         // Create and write a page
         let page_id = {
             let guard = bp.new_page(PageType::BTreeLeaf).unwrap();
@@ -416,10 +416,10 @@ mod tests {
             page.as_mut().unwrap().write_at(0, b"test data").unwrap();
             guard.page_id()
         };
-        
+
         // Flush to disk
         bp.flush_page(page_id).unwrap();
-        
+
         // Fetch the page
         let guard = bp.fetch_page(page_id).unwrap();
         let page = guard.page();
@@ -432,14 +432,14 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(10, fm);
-        
+
         let guard1 = bp.new_page(PageType::BTreeLeaf).unwrap();
         let page_id = guard1.page_id();
         drop(guard1);
-        
+
         // Fetch same page - should be cache hit
         let _guard2 = bp.fetch_page(page_id).unwrap();
-        
+
         let stats = bp.stats();
         assert!(stats.cache_hits.load(Ordering::Relaxed) > 0);
     }
@@ -449,22 +449,22 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(3, fm); // Small pool
-        
+
         // Fill the pool
         let _g1 = bp.new_page(PageType::BTreeLeaf).unwrap();
         let _g2 = bp.new_page(PageType::BTreeLeaf).unwrap();
         let _g3 = bp.new_page(PageType::BTreeLeaf).unwrap();
-        
+
         assert_eq!(bp.cached_pages(), 3);
-        
+
         // Drop guards to allow eviction
         drop(_g1);
         drop(_g2);
         drop(_g3);
-        
+
         // Allocate one more - should trigger eviction
         let _g4 = bp.new_page(PageType::BTreeLeaf).unwrap();
-        
+
         let stats = bp.stats();
         assert!(stats.evictions.load(Ordering::Relaxed) > 0);
     }
@@ -498,16 +498,16 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(10, fm);
-        
+
         let guard = bp.new_page(PageType::BTreeLeaf).unwrap();
         let page_id = guard.page_id();
         drop(guard);
-        
+
         // Multiple fetches of same page
         for _ in 0..5 {
             let _g = bp.fetch_page(page_id).unwrap();
         }
-        
+
         let stats = bp.stats();
         assert!(stats.hit_rate() > 0.8); // Should be high
     }
@@ -517,20 +517,20 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let fm = Arc::new(FileManager::open(temp_file.path(), false).unwrap());
         let bp = BufferPool::new(2, fm); // Very small pool
-        
+
         let g1 = bp.new_page(PageType::BTreeLeaf).unwrap();
         let page_id1 = g1.page_id();
         // Keep g1 pinned
-        
+
         let g2 = bp.new_page(PageType::BTreeLeaf).unwrap();
         drop(g2);
-        
+
         // Try to allocate one more - should not evict pinned page
         let result = bp.new_page(PageType::BTreeLeaf);
-        
+
         // Should succeed (evicts g2, not g1)
         assert!(result.is_ok());
-        
+
         // g1 should still be cached
         assert!(bp.page_table.contains_key(&page_id1));
     }

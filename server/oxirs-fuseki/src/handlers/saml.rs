@@ -220,23 +220,21 @@ pub async fn initiate_saml_sso(
     }
 
     let target_url = params.target.unwrap_or_else(|| "/".to_string());
-    let force_authn = params.force_authn.unwrap_or(false);
-    let relay_state = params.relay_state.unwrap_or_else(|| {
-        general_purpose::STANDARD.encode(
-            serde_json::json!({
-                "target": target_url,
-                "timestamp": Utc::now().timestamp()
-            })
-            .to_string(),
+    let relay_state = params.relay_state.or_else(|| {
+        Some(
+            general_purpose::STANDARD.encode(
+                serde_json::json!({
+                    "target": target_url,
+                    "timestamp": Utc::now().timestamp()
+                })
+                .to_string(),
+            ),
         )
     });
 
-    match auth_service
-        .generate_saml_auth_request(&target_url, force_authn, &relay_state)
-        .await
-    {
-        Ok((sso_url, request_id)) => {
-            info!("Generated SAML SSO request with ID: {}", request_id);
+    match auth_service.generate_saml_auth_request(relay_state).await {
+        Ok(sso_url) => {
+            info!("Generated SAML SSO request, redirecting to IdP");
 
             // For HTTP-Redirect binding, redirect directly to IdP
             Ok(Redirect::temporary(&sso_url).into_response())
@@ -263,20 +261,9 @@ pub async fn handle_saml_acs(
 
     debug!("Processing SAML ACS response");
 
-    // Decode and validate SAML response
-    let saml_response = decode_saml_response(&form_data.saml_response)?;
-    let validated_assertion = validate_saml_assertion(&saml_response, auth_service).await?;
-
-    if !validated_assertion.signature_valid || !validated_assertion.conditions_valid {
-        warn!("SAML assertion validation failed");
-        return Err(FusekiError::authentication("Invalid SAML assertion"));
-    }
-
-    // Map SAML attributes to user
-    let user = map_saml_attributes_to_user(&validated_assertion, auth_service).await?;
-
+    // Process SAML response and authenticate user
     match auth_service
-        .complete_saml_authentication(user.clone())
+        .complete_saml_authentication(&form_data.saml_response, form_data.relay_state.as_deref())
         .await
     {
         Ok(AuthResult::Authenticated(authenticated_user)) => {
@@ -308,7 +295,7 @@ pub async fn handle_saml_acs(
             Ok(response)
         }
         Ok(_) => {
-            warn!("SAML authentication failed for user: {}", user.username);
+            warn!("SAML authentication failed");
             Err(FusekiError::authentication("SAML authentication failed"))
         }
         Err(e) => {
@@ -386,13 +373,13 @@ pub async fn get_saml_metadata(State(state): State<AppState>) -> Result<Response
         ));
     }
 
-    // Note: get_saml_sp_config() returns Result when SAML feature is disabled
+    // Get SAML SP configuration
     let saml_config = match auth_service.get_saml_sp_config() {
         Ok(config) => config,
         Err(_) => return Err(FusekiError::internal("SAML SP configuration not available")),
     };
 
-    let metadata_xml = generate_saml_metadata(&saml_config.sp)?;
+    let metadata_xml = generate_saml_metadata(&saml_config)?;
 
     Ok((
         StatusCode::OK,
@@ -417,12 +404,10 @@ pub async fn initiate_saml_logout(
 
     // Extract current session
     let session_id = extract_session_id_from_headers(&headers)?;
-    let session = auth_service.validate_session(&session_id).await?;
-
-    let user = match session {
-        crate::auth::AuthResult::Authenticated(user) => user,
-        _ => return Err(FusekiError::authentication("Invalid session")),
-    };
+    let user = auth_service
+        .validate_session(&session_id)
+        .await?
+        .ok_or_else(|| FusekiError::authentication("Invalid session"))?;
 
     // Generate SAML logout request
     let slo_request = generate_saml_slo_request(&user, &session_id)?;
@@ -528,14 +513,29 @@ async fn map_saml_attributes_to_user(
     assertion: &ValidatedSamlAssertion,
     auth_service: &AuthService,
 ) -> FusekiResult<User> {
-    let attribute_mapping = auth_service.get_saml_attribute_mapping();
+    let attribute_mapping = auth_service.get_saml_attribute_mapping()?;
 
     let username = assertion.subject.clone();
-    let email = get_saml_mapped_attribute(&assertion.attributes, &attribute_mapping, "email");
-    let full_name = get_saml_mapped_attribute(&assertion.attributes, &attribute_mapping, "name");
+    let email = attribute_mapping
+        .email
+        .as_ref()
+        .and_then(|attr_name| assertion.attributes.get(attr_name))
+        .and_then(|values| values.first())
+        .cloned();
+
+    let full_name = attribute_mapping
+        .display_name
+        .as_ref()
+        .and_then(|attr_name| assertion.attributes.get(attr_name))
+        .and_then(|values| values.first())
+        .cloned();
 
     // Map roles from SAML attributes
-    let roles = get_saml_mapped_attribute_list(&assertion.attributes, &attribute_mapping, "groups")
+    let roles = attribute_mapping
+        .groups
+        .as_ref()
+        .and_then(|attr_name| assertion.attributes.get(attr_name))
+        .cloned()
         .unwrap_or_else(|| vec!["user".to_string()]);
 
     // Generate permissions based on roles
@@ -567,32 +567,43 @@ fn extract_redirect_from_relay_state(relay_state: &Option<String>) -> Option<Str
 fn generate_saml_metadata(
     sp_config: &crate::auth::saml::ServiceProviderConfig,
 ) -> FusekiResult<String> {
-    let metadata = format!(
-        r#"<?xml version="1.0" encoding="UTF-8"?>
-<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" 
-                     entityID="{}">
-  <md:SPSSODescriptor AuthnRequestsSigned="{}" WantAssertionsSigned="{}" 
-                      protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
-    <md:KeyDescriptor use="signing">
+    let certificate_section = sp_config
+        .certificate
+        .as_ref()
+        .map(|cert| {
+            format!(
+                r#"    <md:KeyDescriptor use="signing">
       <ds:KeyInfo xmlns:ds="http://www.w3.org/2000/09/xmldsig#">
         <ds:X509Data>
           <ds:X509Certificate>{}</ds:X509Certificate>
         </ds:X509Data>
       </ds:KeyInfo>
-    </md:KeyDescriptor>
+    </md:KeyDescriptor>"#,
+                cert
+            )
+        })
+        .unwrap_or_default();
+
+    let slo_section = sp_config.sls_url.as_ref()
+        .map(|url| format!(
+            r#"    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect"
+                           Location="{}"/>"#, url))
+        .unwrap_or_default();
+
+    let metadata = format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata"
+                     entityID="{}">
+  <md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true"
+                      protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+{}
     <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
-    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" 
+    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST"
                                  Location="{}" index="1" isDefault="true"/>
-    <md:SingleLogoutService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" 
-                           Location="{}"/>
+{}
   </md:SPSSODescriptor>
 </md:EntityDescriptor>"#,
-        sp_config.entity_id,
-        sp_config.want_authn_requests_signed,
-        sp_config.want_assertions_signed,
-        sp_config.certificate.as_ref().unwrap_or(&"".to_string()),
-        sp_config.acs_url,
-        sp_config.slo_url
+        sp_config.entity_id, certificate_section, sp_config.acs_url, slo_section
     );
 
     Ok(metadata)
@@ -627,33 +638,6 @@ fn extract_name_id(subject: &str) -> FusekiResult<String> {
 
 fn generate_assertion_id() -> String {
     uuid::Uuid::new_v4().to_string()
-}
-
-fn get_saml_mapped_attribute(
-    attributes: &HashMap<String, Vec<String>>,
-    mapping: &Option<&crate::config::SamlAttributeMappings>,
-    field: &str,
-) -> Option<String> {
-    let mapping = mapping?;
-    let attr_name = match field {
-        "email" => mapping.email_attribute.as_ref()?,
-        "name" => mapping.name_attribute.as_ref()?,
-        _ => return None,
-    };
-    attributes.get(attr_name)?.first().cloned()
-}
-
-fn get_saml_mapped_attribute_list(
-    attributes: &HashMap<String, Vec<String>>,
-    mapping: &Option<&crate::config::SamlAttributeMappings>,
-    field: &str,
-) -> Option<Vec<String>> {
-    let mapping = mapping?;
-    let attr_name = match field {
-        "groups" => mapping.groups_attribute.as_ref()?,
-        _ => return None,
-    };
-    attributes.get(attr_name).cloned()
 }
 
 fn generate_permissions_from_roles(roles: &[String]) -> Vec<Permission> {
@@ -723,7 +707,7 @@ pub async fn validate_enhanced_saml_assertion(
     compliance_config: &SamlComplianceConfig,
 ) -> FusekiResult<ValidatedSamlAssertion> {
     // Standard validation
-    let mut assertion = validate_saml_assertion(response_xml, auth_service).await?;
+    let assertion = validate_saml_assertion(response_xml, auth_service).await?;
 
     // Additional compliance checks
     if compliance_config.require_encryption && !assertion.encryption_valid {
@@ -824,7 +808,7 @@ fn meets_minimum_signature_strength(algorithm: &str, minimum: &str) -> FusekiRes
     Ok(alg_pos >= min_pos)
 }
 
-fn determine_authn_strength(context_class: &str) -> AuthnStrength {
+pub fn determine_authn_strength(context_class: &str) -> AuthnStrength {
     match context_class {
         "urn:oasis:names:tc:SAML:2.0:ac:classes:Password" => AuthnStrength::Low,
         "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport" => AuthnStrength::Low,
@@ -838,7 +822,7 @@ fn determine_authn_strength(context_class: &str) -> AuthnStrength {
     }
 }
 
-fn meets_minimum_strength(actual: &AuthnStrength, required: &AuthnStrength) -> bool {
+pub fn meets_minimum_strength(actual: &AuthnStrength, required: &AuthnStrength) -> bool {
     let strength_values = |s: &AuthnStrength| match s {
         AuthnStrength::Low => 1,
         AuthnStrength::Medium => 2,
@@ -869,14 +853,18 @@ mod tests {
     }
 
     #[test]
-    fn test_attribute_mapping() {
-        let mut attributes = HashMap::new();
-        attributes.insert("mail".to_string(), vec!["user@example.com".to_string()]);
-
-        let mut mapping = HashMap::new();
-        mapping.insert("email".to_string(), "mail".to_string());
-
-        let email = get_mapped_attribute(&attributes, &mapping, "email");
-        assert_eq!(email, Some("user@example.com".to_string()));
+    fn test_authn_strength_comparison() {
+        assert!(meets_minimum_strength(
+            &AuthnStrength::High,
+            &AuthnStrength::Medium
+        ));
+        assert!(!meets_minimum_strength(
+            &AuthnStrength::Low,
+            &AuthnStrength::High
+        ));
+        assert!(meets_minimum_strength(
+            &AuthnStrength::Highest,
+            &AuthnStrength::Highest
+        ));
     }
 }

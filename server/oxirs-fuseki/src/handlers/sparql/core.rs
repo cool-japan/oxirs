@@ -609,10 +609,12 @@ pub async fn execute_sparql_update(
     let store_result = state.store.update(update)?;
 
     // Convert store::UpdateResult to sparql::core::UpdateResult
+    let operations_count = count_update_operations(update);
+
     let result = UpdateResult {
         success: store_result.stats.success,
         execution_time_ms: store_result.stats.execution_time.as_millis() as u64,
-        operations_count: 1, // TODO: Calculate actual operations count
+        operations_count,
         affected_triples: Some(
             store_result.stats.quads_inserted + store_result.stats.quads_deleted,
         ),
@@ -620,6 +622,65 @@ pub async fn execute_sparql_update(
     };
 
     Ok(result)
+}
+
+/// Count the number of update operations in a SPARQL UPDATE query
+///
+/// Counts distinct operations like INSERT DATA, DELETE DATA, DELETE/INSERT, CLEAR, LOAD, etc.
+fn count_update_operations(update: &str) -> usize {
+    let update_upper = update.to_uppercase();
+    let mut count = 0;
+
+    // Count INSERT DATA operations
+    count += update_upper.matches("INSERT DATA").count();
+
+    // Count DELETE DATA operations
+    count += update_upper.matches("DELETE DATA").count();
+
+    // Count DELETE/INSERT (or DELETE WHERE/INSERT) patterns
+    // This is trickier as DELETE and INSERT might be separate or combined
+    let delete_insert_pattern =
+        regex::Regex::new(r"DELETE\s+(?:WHERE\s+)?\{[^}]*\}\s*INSERT\s+\{").unwrap();
+    count += delete_insert_pattern.find_iter(&update_upper).count();
+
+    // Count standalone DELETE WHERE operations (not part of DELETE/INSERT)
+    let standalone_delete = update_upper.matches("DELETE WHERE").count();
+    let combined_delete_insert = delete_insert_pattern.find_iter(&update_upper).count();
+    count += standalone_delete.saturating_sub(combined_delete_insert);
+
+    // Count standalone INSERT operations (not INSERT DATA or part of DELETE/INSERT)
+    let insert_count = update_upper.matches("INSERT").count();
+    let insert_data_count = update_upper.matches("INSERT DATA").count();
+    let standalone_insert = insert_count.saturating_sub(insert_data_count + combined_delete_insert);
+    count += standalone_insert;
+
+    // Count CLEAR operations
+    count += update_upper.matches("CLEAR").count();
+
+    // Count LOAD operations
+    count += update_upper.matches("LOAD").count();
+
+    // Count DROP operations
+    count += update_upper.matches("DROP").count();
+
+    // Count CREATE operations
+    count += update_upper.matches("CREATE").count();
+
+    // Count COPY operations
+    count += update_upper.matches("COPY").count();
+
+    // Count MOVE operations
+    count += update_upper.matches("MOVE").count();
+
+    // Count ADD operations
+    count += update_upper.matches("ADD").count();
+
+    // If no operations found, return 1 as a fallback (likely a simple operation we didn't recognize)
+    if count == 0 {
+        1
+    } else {
+        count
+    }
 }
 
 /// Apply various query optimizations

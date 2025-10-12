@@ -261,10 +261,11 @@ impl TransE {
             };
             let (h, r, t) = &positive_triples[positive_idx];
 
-            if {
+            let should_corrupt_head = {
                 let mut rng = Random::default();
                 rng.random_bool_with_chance(0.5)
-            } {
+            };
+            if should_corrupt_head {
                 // Corrupt head
                 let new_head_idx = {
                     let mut rng = Random::default();
@@ -311,10 +312,11 @@ impl TransE {
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
-                let negative_score = if {
+                let should_corrupt_head = {
                     let mut rng = Random::default();
                     rng.random_bool_with_chance(0.5)
-                } {
+                };
+                let negative_score = if should_corrupt_head {
                     self.compute_score(corrupt_entity, &triple.1, &triple.2)
                         .await?
                 } else {
@@ -669,10 +671,11 @@ impl DistMult {
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
-                let negative_score = if {
+                let should_corrupt_head = {
                     let mut rng = Random::default();
                     rng.random_bool_with_chance(0.5)
-                } {
+                };
+                let negative_score = if should_corrupt_head {
                     self.compute_score(corrupt_entity, &triple.1, &triple.2)
                         .await?
                 } else {
@@ -942,10 +945,11 @@ impl ComplEx {
                 };
                 let corrupt_entity = &entities[corrupt_idx];
 
-                let negative_score = if {
+                let should_corrupt_head = {
                     let mut rng = Random::default();
                     rng.random_bool_with_chance(0.5)
-                } {
+                };
+                let negative_score = if should_corrupt_head {
                     self.compute_score(corrupt_entity, &triple.1, &triple.2)
                         .await?
                 } else {

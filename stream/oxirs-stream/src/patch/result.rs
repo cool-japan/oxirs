@@ -265,4 +265,3 @@ pub fn validate_patch(patch: &RdfPatch) -> Result<Vec<String>> {
 
     Ok(warnings)
 }
-

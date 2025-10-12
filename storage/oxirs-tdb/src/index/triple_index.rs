@@ -149,11 +149,7 @@ mod tests {
     fn test_triple_index_insert_contains() -> Result<()> {
         let (_temp_dir, mut indexes) = create_test_indexes();
 
-        let triple = Triple::new(
-            NodeId::new(1),
-            NodeId::new(2),
-            NodeId::new(3),
-        );
+        let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
         assert!(!indexes.contains(&triple)?);
 
@@ -168,11 +164,7 @@ mod tests {
     fn test_triple_index_delete() -> Result<()> {
         let (_temp_dir, mut indexes) = create_test_indexes();
 
-        let triple = Triple::new(
-            NodeId::new(10),
-            NodeId::new(20),
-            NodeId::new(30),
-        );
+        let triple = Triple::new(NodeId::new(10), NodeId::new(20), NodeId::new(30));
 
         indexes.insert(triple)?;
         assert!(indexes.contains(&triple)?);
@@ -218,11 +210,7 @@ mod tests {
     fn test_all_three_indexes_updated() -> Result<()> {
         let (_temp_dir, mut indexes) = create_test_indexes();
 
-        let triple = Triple::new(
-            NodeId::new(100),
-            NodeId::new(200),
-            NodeId::new(300),
-        );
+        let triple = Triple::new(NodeId::new(100), NodeId::new(200), NodeId::new(300));
 
         indexes.insert(triple)?;
 

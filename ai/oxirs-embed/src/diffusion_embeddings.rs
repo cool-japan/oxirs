@@ -1050,7 +1050,7 @@ impl EmbeddingModel for DiffusionEmbeddingModel {
 
         for text in texts {
             // Create conditioning from text
-            let condition = self.create_type_conditioning(&[text.clone()])?;
+            let condition = self.create_type_conditioning(std::slice::from_ref(text))?;
 
             // Generate embedding
             let embedding =

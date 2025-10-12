@@ -1,10 +1,10 @@
 //! Utility functions for RDF-star serialization
 
+use super::super::config::SerializationOptions;
+use super::StarSerializer;
 use crate::model::{StarGraph, StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarError, StarResult};
-use super::super::config::SerializationOptions;
-use super::StarSerializer;
 
 impl StarSerializer {
     /// Check if a graph is suitable for pretty printing
@@ -308,8 +308,8 @@ mod tests {
     use super::*;
     use crate::model::StarTerm;
     use crate::parser::StarParser;
-    use crate::StarQuad;
     use crate::serializer::CompressionType;
+    use crate::StarQuad;
 
     #[test]
     fn test_simple_triple_serialization() {

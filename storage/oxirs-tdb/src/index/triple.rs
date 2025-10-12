@@ -21,7 +21,11 @@ pub struct Triple {
 impl Triple {
     /// Create a new triple
     pub const fn new(subject: NodeId, predicate: NodeId, object: NodeId) -> Self {
-        Triple { subject, predicate, object }
+        Triple {
+            subject,
+            predicate,
+            object,
+        }
     }
 
     /// Get SPO ordering (Subject, Predicate, Object)
@@ -102,24 +106,25 @@ mod tests {
 
     #[test]
     fn test_triple_orderings() {
-        let triple = Triple::new(
-            NodeId::new(10),
-            NodeId::new(20),
-            NodeId::new(30),
-        );
+        let triple = Triple::new(NodeId::new(10), NodeId::new(20), NodeId::new(30));
 
-        assert_eq!(triple.spo(), (NodeId::new(10), NodeId::new(20), NodeId::new(30)));
-        assert_eq!(triple.pos(), (NodeId::new(20), NodeId::new(30), NodeId::new(10)));
-        assert_eq!(triple.osp(), (NodeId::new(30), NodeId::new(10), NodeId::new(20)));
+        assert_eq!(
+            triple.spo(),
+            (NodeId::new(10), NodeId::new(20), NodeId::new(30))
+        );
+        assert_eq!(
+            triple.pos(),
+            (NodeId::new(20), NodeId::new(30), NodeId::new(10))
+        );
+        assert_eq!(
+            triple.osp(),
+            (NodeId::new(30), NodeId::new(10), NodeId::new(20))
+        );
     }
 
     #[test]
     fn test_spo_key() {
-        let triple = Triple::new(
-            NodeId::new(1),
-            NodeId::new(2),
-            NodeId::new(3),
-        );
+        let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
         let key: SpoKey = triple.into();
         assert_eq!(key, SpoKey(NodeId::new(1), NodeId::new(2), NodeId::new(3)));
@@ -127,11 +132,7 @@ mod tests {
 
     #[test]
     fn test_pos_key() {
-        let triple = Triple::new(
-            NodeId::new(1),
-            NodeId::new(2),
-            NodeId::new(3),
-        );
+        let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
         let key: PosKey = triple.into();
         assert_eq!(key, PosKey(NodeId::new(2), NodeId::new(3), NodeId::new(1)));
@@ -139,11 +140,7 @@ mod tests {
 
     #[test]
     fn test_osp_key() {
-        let triple = Triple::new(
-            NodeId::new(1),
-            NodeId::new(2),
-            NodeId::new(3),
-        );
+        let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
         let key: OspKey = triple.into();
         assert_eq!(key, OspKey(NodeId::new(3), NodeId::new(1), NodeId::new(2)));
@@ -161,11 +158,7 @@ mod tests {
 
     #[test]
     fn test_triple_serialization() {
-        let triple = Triple::new(
-            NodeId::new(1),
-            NodeId::new(2),
-            NodeId::new(3),
-        );
+        let triple = Triple::new(NodeId::new(1), NodeId::new(2), NodeId::new(3));
 
         let serialized = bincode::serialize(&triple).unwrap();
         let deserialized: Triple = bincode::deserialize(&serialized).unwrap();

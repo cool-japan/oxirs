@@ -24,14 +24,14 @@ impl HnswIndex {
         query: &Vector,
         candidates: &[usize],
     ) -> Result<Vec<f32>> {
-        if candidates.len() < self.config.gpu_batch_threshold {
+        if candidates.len() < self.config().gpu_batch_threshold {
             // Fall back to CPU for small batches
             return self.cpu_batch_distance_calculation(query, candidates);
         }
 
-        if let Some(ref accelerator) = self.gpu_accelerator {
+        if let Some(accelerator) = self.gpu_accelerator() {
             self.single_gpu_distance_calculation(accelerator, query, candidates)
-        } else if !self.multi_gpu_accelerators.is_empty() {
+        } else if !self.multi_gpu_accelerators().is_empty() {
             self.multi_gpu_distance_calculation(query, candidates)
         } else {
             // Fallback to CPU
@@ -63,7 +63,7 @@ impl HnswIndex {
         query: &Vector,
         candidates: &[usize],
     ) -> Result<Vec<f32>> {
-        if self.multi_gpu_accelerators.is_empty() {
+        if self.multi_gpu_accelerators().is_empty() {
             return self.cpu_batch_distance_calculation(query, candidates);
         }
 
@@ -135,12 +135,12 @@ impl HnswIndex {
 
     /// Check if GPU acceleration is enabled and available
     pub fn is_gpu_enabled(&self) -> bool {
-        self.gpu_accelerator.is_some() || !self.multi_gpu_accelerators.is_empty()
+        self.gpu_accelerator().is_some() || !self.multi_gpu_accelerators().is_empty()
     }
 
     /// Get GPU performance statistics
     pub fn gpu_performance_stats(&self) -> Option<GpuPerformanceStats> {
-        if let Some(ref accelerator) = self.gpu_accelerator {
+        if let Some(accelerator) = self.gpu_accelerator() {
             Some(GpuPerformanceStats {
                 gpu_memory_used: accelerator.get_memory_usage().unwrap_or(0),
                 kernel_execution_time: 0.0, // Would be tracked in real implementation

@@ -449,7 +449,7 @@ impl ExpressionEvaluator {
         let mut result = String::new();
 
         for arg in args {
-            let str_term = self.builtin_str(&[arg.clone()])?;
+            let str_term = self.builtin_str(std::slice::from_ref(arg))?;
             if let Term::Literal(lit) = str_term {
                 result.push_str(&lit.lexical_form);
             }

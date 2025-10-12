@@ -26,6 +26,7 @@ pub fn generate_report(report: &ValidationReport, format: &ReportFormat) -> Resu
         ReportFormat::Csv => generate_csv_report(report),
         ReportFormat::Text => generate_text_report(report),
         ReportFormat::Yaml => generate_yaml_report(report),
+        ReportFormat::Prometheus => generate_prometheus_report(report),
     }
 }
 
@@ -1008,4 +1009,14 @@ fn escape_ntriples_string(s: &str) -> String {
 
 fn escape_csv_field(s: &str) -> String {
     s.replace("\"", "\"\"")
+}
+
+/// Generate Prometheus metrics format validation report
+pub fn generate_prometheus_report(report: &ValidationReport) -> Result<String> {
+    use super::format::ReportConfig;
+    use super::serializers::PrometheusSerializer;
+
+    let config = ReportConfig::default();
+    let serializer = PrometheusSerializer::new(config);
+    serializer.serialize(report)
 }

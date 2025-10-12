@@ -83,23 +83,19 @@ fn bench_hash_join_sizes(c: &mut Criterion) {
         let right_solutions = generate_solutions(*size, 4);
         let join_variables = vec![create_variable("var0"), create_variable("var1")];
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(size),
-            size,
-            |b, _| {
-                let mut hash_join = CacheFriendlyHashJoin::new(16);
-                b.iter(|| {
-                    let result = hash_join
-                        .join_parallel(
-                            left_solutions.clone(),
-                            right_solutions.clone(),
-                            &join_variables,
-                        )
-                        .expect("Join failed");
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
+            let mut hash_join = CacheFriendlyHashJoin::new(16);
+            b.iter(|| {
+                let result = hash_join
+                    .join_parallel(
+                        left_solutions.clone(),
+                        right_solutions.clone(),
+                        &join_variables,
+                    )
+                    .expect("Join failed");
+                black_box(result);
+            });
+        });
     }
     group.finish();
 }
@@ -116,23 +112,19 @@ fn bench_sort_merge_join_sizes(c: &mut Criterion) {
         let right_solutions = generate_solutions(*size, 4);
         let join_variables = vec![create_variable("var0"), create_variable("var1")];
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(size),
-            size,
-            |b, _| {
-                let mut sort_merge = SortMergeJoin::new(1024 * 1024 * 1024); // 1GB
-                b.iter(|| {
-                    let result = sort_merge
-                        .join(
-                            left_solutions.clone(),
-                            right_solutions.clone(),
-                            &join_variables,
-                        )
-                        .expect("Join failed");
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
+            let mut sort_merge = SortMergeJoin::new(1024 * 1024 * 1024); // 1GB
+            b.iter(|| {
+                let result = sort_merge
+                    .join(
+                        left_solutions.clone(),
+                        right_solutions.clone(),
+                        &join_variables,
+                    )
+                    .expect("Join failed");
+                black_box(result);
+            });
+        });
     }
     group.finish();
 }
@@ -149,58 +141,43 @@ fn bench_optimized_vs_naive(c: &mut Criterion) {
         let join_variables = vec![create_variable("var0"), create_variable("var1")];
 
         // Benchmark naive implementation
-        group.bench_with_input(
-            BenchmarkId::new("naive", size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    let result = naive_nested_loop_join(
-                        &left_solutions,
-                        &right_solutions,
-                        &join_variables,
-                    );
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("naive", size), size, |b, _| {
+            b.iter(|| {
+                let result =
+                    naive_nested_loop_join(&left_solutions, &right_solutions, &join_variables);
+                black_box(result);
+            });
+        });
 
         // Benchmark optimized hash join
-        group.bench_with_input(
-            BenchmarkId::new("hash_join", size),
-            size,
-            |b, _| {
-                let mut hash_join = CacheFriendlyHashJoin::new(16);
-                b.iter(|| {
-                    let result = hash_join
-                        .join_parallel(
-                            left_solutions.clone(),
-                            right_solutions.clone(),
-                            &join_variables,
-                        )
-                        .expect("Join failed");
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("hash_join", size), size, |b, _| {
+            let mut hash_join = CacheFriendlyHashJoin::new(16);
+            b.iter(|| {
+                let result = hash_join
+                    .join_parallel(
+                        left_solutions.clone(),
+                        right_solutions.clone(),
+                        &join_variables,
+                    )
+                    .expect("Join failed");
+                black_box(result);
+            });
+        });
 
         // Benchmark sort-merge join
-        group.bench_with_input(
-            BenchmarkId::new("sort_merge", size),
-            size,
-            |b, _| {
-                let mut sort_merge = SortMergeJoin::new(1024 * 1024 * 1024);
-                b.iter(|| {
-                    let result = sort_merge
-                        .join(
-                            left_solutions.clone(),
-                            right_solutions.clone(),
-                            &join_variables,
-                        )
-                        .expect("Join failed");
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("sort_merge", size), size, |b, _| {
+            let mut sort_merge = SortMergeJoin::new(1024 * 1024 * 1024);
+            b.iter(|| {
+                let result = sort_merge
+                    .join(
+                        left_solutions.clone(),
+                        right_solutions.clone(),
+                        &join_variables,
+                    )
+                    .expect("Join failed");
+                black_box(result);
+            });
+        });
     }
     group.finish();
 }
@@ -250,23 +227,19 @@ fn bench_join_selectivity(c: &mut Criterion) {
         let left_solutions = generate_solutions(left_size, 4);
         let right_solutions = generate_solutions(*right_size, 4);
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(label),
-            label,
-            |b, _| {
-                let mut hash_join = CacheFriendlyHashJoin::new(16);
-                b.iter(|| {
-                    let result = hash_join
-                        .join_parallel(
-                            left_solutions.clone(),
-                            right_solutions.clone(),
-                            &join_variables,
-                        )
-                        .expect("Join failed");
-                    black_box(result);
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(label), label, |b, _| {
+            let mut hash_join = CacheFriendlyHashJoin::new(16);
+            b.iter(|| {
+                let result = hash_join
+                    .join_parallel(
+                        left_solutions.clone(),
+                        right_solutions.clone(),
+                        &join_variables,
+                    )
+                    .expect("Join failed");
+                black_box(result);
+            });
+        });
     }
     group.finish();
 }
@@ -315,26 +288,22 @@ fn bench_memory_efficiency(c: &mut Criterion) {
         let right_solutions = generate_solutions(*size, 4);
         let join_variables = vec![create_variable("var0"), create_variable("var1")];
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(size),
-            size,
-            |b, _| {
-                b.iter(|| {
-                    let mut hash_join = CacheFriendlyHashJoin::new(16);
-                    let result = hash_join
-                        .join_parallel(
-                            left_solutions.clone(),
-                            right_solutions.clone(),
-                            &join_variables,
-                        )
-                        .expect("Join failed");
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
+            b.iter(|| {
+                let mut hash_join = CacheFriendlyHashJoin::new(16);
+                let result = hash_join
+                    .join_parallel(
+                        left_solutions.clone(),
+                        right_solutions.clone(),
+                        &join_variables,
+                    )
+                    .expect("Join failed");
 
-                    // Measure approximate memory usage
-                    let memory_estimate = result.len() * std::mem::size_of::<Binding>();
-                    black_box((result, memory_estimate));
-                });
-            },
-        );
+                // Measure approximate memory usage
+                let memory_estimate = result.len() * std::mem::size_of::<Binding>();
+                black_box((result, memory_estimate));
+            });
+        });
     }
     group.finish();
 }

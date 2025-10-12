@@ -248,12 +248,12 @@ fn large_dataset_example() -> Result<(), Box<dyn std::error::Error>> {
 
         for i in 0..num_triples {
             let triple = Triple::new(
-                NamedNode::new(&format!("http://example.org/entity/{}", i))?,
-                NamedNode::new(&format!("http://example.org/property/{}", i % 100))?,
+                NamedNode::new(format!("http://example.org/entity/{}", i))?,
+                NamedNode::new(format!("http://example.org/property/{}", i % 100))?,
                 match i % 3 {
-                    0 => Term::Literal(Literal::new(&format!("Value {}", i))),
-                    1 => Term::NamedNode(NamedNode::new(&format!("http://example.org/ref/{}", i))?),
-                    _ => Term::BlankNode(BlankNode::new(&format!("b{}", i))?),
+                    0 => Term::Literal(Literal::new(format!("Value {}", i))),
+                    1 => Term::NamedNode(NamedNode::new(format!("http://example.org/ref/{}", i))?),
+                    _ => Term::BlankNode(BlankNode::new(format!("b{}", i))?),
                 },
             );
             writer.write_triple(&triple)?;

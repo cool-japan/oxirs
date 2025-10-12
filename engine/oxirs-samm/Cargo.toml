@@ -1,0 +1,75 @@
+[package]
+name = "oxirs-samm"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Semantic Aspect Meta Model (SAMM) implementation for OxiRS"
+keywords = ["samm", "aspect-model", "semantic-web", "rdf", "digital-twin"]
+categories = ["data-structures", "parser-implementations", "web-programming"]
+rust-version.workspace = true
+
+[dependencies]
+# OxiRS dependencies
+oxirs-core.workspace = true
+oxirs-shacl.workspace = true
+oxirs-ttl.workspace = true
+
+# RDF parsing
+oxttl.workspace = true
+oxrdf.workspace = true
+oxiri.workspace = true
+oxilangtag.workspace = true
+oxsdatatypes.workspace = true
+
+# SciRS2 for scientific computing
+scirs2-core = { workspace = true }
+scirs2-graph = { workspace = true }
+scirs2-stats = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
+async-trait.workspace = true
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+quick-xml = { version = "0.36", features = ["serialize"] }
+zip = { version = "2.2", default-features = false, features = ["deflate"] }
+base64 = "0.22"
+
+# Error handling and logging
+anyhow.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+
+# Utilities
+url.workspace = true
+once_cell.workspace = true
+regex = "1.11"
+
+# Template engine for custom code generation
+tera = "1.20"
+
+# Image processing (optional, for AASX custom thumbnails)
+image = { version = "0.25", optional = true }
+
+# Graphviz rendering (optional, for SVG/PNG diagram generation)
+graphviz-rust = { version = "0.9", optional = true }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio-test = "0.4"
+
+[features]
+default = []
+codegen = []  # Code generation support (GraphQL, TypeScript)
+aas = []      # Asset Administration Shell support
+aasx-thumbnails = ["image"]  # Custom thumbnail support for AASX packages
+graphviz = ["graphviz-rust"]  # SVG/PNG diagram rendering via Graphviz
+
+[lints]
+workspace = true

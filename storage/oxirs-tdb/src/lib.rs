@@ -2,7 +2,7 @@
 //!
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! High-performance RDF triple store with B+Tree indexes, ACID transactions,
@@ -20,10 +20,10 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use oxirs_tdb::TDBStore;
+//! use oxirs_tdb::TdbStore;
 //! # fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a new TDB store
-//! let store = TDBStore::open("/path/to/data")?;
+//! let mut store = TdbStore::open("/path/to/data")?;
 //!
 //! // Insert triples
 //! // store.insert(...)?;
@@ -39,7 +39,7 @@
 //!
 //! ```text
 //! ┌─────────────────────────────────────────┐
-//! │         TDBStore (High-level API)       │
+//! │         TdbStore (High-level API)       │
 //! └─────────────────┬───────────────────────┘
 //!                   │
 //!       ┌───────────┴───────────┐
@@ -76,7 +76,7 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-arq`](https://docs.rs/oxirs-arq) - SPARQL query engine
 
-#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-alpha.2")]
+#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-alpha.3")]
 #![warn(missing_docs)]
 #![allow(dead_code)] // Allow during development
 #![allow(unused_imports)] // Allow during development
@@ -105,6 +105,12 @@ pub mod compression;
 
 // High-level store API
 pub mod store;
+
+// Production hardening features
+pub mod production;
+
+// Backup and restore utilities
+pub mod backup;
 
 // Re-export commonly used types
 pub use error::{Result, TdbError};

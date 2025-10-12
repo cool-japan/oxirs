@@ -587,13 +587,10 @@ impl ReachabilityIndex {
 
         self.forward
             .entry(from_key.clone())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(to_key.clone());
 
-        self.backward
-            .entry(to_key)
-            .or_insert_with(HashSet::new)
-            .insert(from_key);
+        self.backward.entry(to_key).or_default().insert(from_key);
 
         // Mark as needing recomputation
         self.computed

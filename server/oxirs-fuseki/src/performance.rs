@@ -1079,6 +1079,7 @@ mod tests {
                 idle_timeout_secs: 300,
                 max_lifetime_secs: 3600,
             },
+            rate_limiting: None,
         };
 
         PerformanceService::new(config).unwrap()

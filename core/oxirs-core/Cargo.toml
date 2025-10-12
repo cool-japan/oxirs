@@ -94,6 +94,9 @@ bytes = "1.10"
 # SciRS2 scientific computing dependencies (replaces direct ndarray/rand usage)
 scirs2-core = { workspace = true }
 
+# GPU monitoring (optional)
+nvml-wrapper = { version = "0.10", optional = true }
+
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri.workspace = true         # Fast IRI validation and parsing
 oxilangtag.workspace = true    # Fast language tag validation
@@ -118,7 +121,7 @@ async = []
 async-tokio = ["async"]
 parallel = ["rayon"]
 simd = ["wide"]
-gpu = []
+gpu = ["nvml-wrapper"]
 cuda = []
 opencl = []
 metal = []

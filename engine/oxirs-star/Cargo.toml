@@ -20,11 +20,19 @@ thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber = "0.3"
 
+# SciRS2 dependencies for high-performance RDF-star processing (SCIRS2 POLICY)
+scirs2-core = { workspace = true, features = ["simd", "parallel", "memory_efficient", "profiling", "benchmarking", "random"] }
+scirs2-graph.workspace = true  # For RDF graph algorithms
+scirs2-stats.workspace = true   # For statistical analysis
+scirs2-metrics.workspace = true # For performance metrics
+
 # CLI and tooling dependencies
 clap = { version = "4.4", features = ["derive"] }
 num_cpus = "1.17"
 chrono = { version = "0.4", features = ["serde"] }
 lru = "0.16"
+rayon.workspace = true  # For parallel operations
+bincode = "2.0.1"  # For efficient serialization
 
 # Compression dependencies
 flate2.workspace = true

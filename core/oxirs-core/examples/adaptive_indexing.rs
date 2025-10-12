@@ -2,7 +2,7 @@
 
 use oxirs_core::model::*;
 use oxirs_core::store::{AdaptiveConfig, AdaptiveIndexManager, IndexedGraph};
-use scirs2_core::random::{Random, Rng};
+use scirs2_core::random::Random;
 use std::time::{Duration, Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

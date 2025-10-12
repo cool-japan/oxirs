@@ -1,18 +1,18 @@
 # OxiRS Chat - TODO
 
-*Last Updated: October 4, 2025*
+*Last Updated: October 12, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.2 Released (Experimental)
+## ✅ Current Status: v0.1.0-alpha.3 Released (Experimental)
 
 **oxirs-chat** provides AI-powered conversational interface for RDF data (experimental feature).
 
-### Alpha.2 Release Status (October 4, 2025)
+### Alpha.3 Release Status (October 12, 2025)
 - **Comprehensive test suite** with CLI + Fuseki end-to-end coverage
 - **LLM integration** (OpenAI, Anthropic, Ollama) with provider failover
 - **RAG pipeline** aligned with persisted datasets and vector indices
 - **Natural language to SPARQL** incorporating federation + persistence hints
 - **Telemetry & analytics** powered by SciRS2 metrics and dashboards
-- **Released on crates.io**: `oxirs-chat = "0.1.0-alpha.2"` (experimental)
+- **Released on crates.io**: `oxirs-chat = "0.1.0-alpha.3"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

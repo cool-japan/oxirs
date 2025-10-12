@@ -4,12 +4,12 @@
 //! IRIs and literals to 8-byte NodeIDs.
 
 pub mod node_id;
-pub mod term;
 pub mod node_table;
+pub mod term;
 
 pub use node_id::NodeId;
-pub use term::Term;
 pub use node_table::NodeTable;
+pub use term::Term;
 
 use crate::error::Result;
 use crate::storage::BufferPool;
@@ -143,7 +143,8 @@ mod tests {
         let iri = Term::iri("http://example.org");
         let literal = Term::literal("value");
         let literal_lang = Term::literal_with_lang("valeur", "fr");
-        let literal_dt = Term::literal_with_datatype("42", "http://www.w3.org/2001/XMLSchema#integer");
+        let literal_dt =
+            Term::literal_with_datatype("42", "http://www.w3.org/2001/XMLSchema#integer");
         let blank = Term::blank_node("b1");
 
         let id1 = dict.encode(&iri)?;

@@ -150,21 +150,71 @@ impl Serializer {
         Ok(result)
     }
 
-    fn serialize_rdfxml(&self, _graph: &Graph) -> Result<String> {
-        // TODO: Implement RDF/XML serialization when API is stable
-        Err(crate::OxirsError::Serialize(
-            "RDF/XML serialization not yet implemented".to_string(),
-        ))
+    fn serialize_rdfxml(&self, graph: &Graph) -> Result<String> {
+        use oxrdfxml::RdfXmlSerializer;
+
+        let mut output = Vec::new();
+        let mut serializer = RdfXmlSerializer::new().for_writer(&mut output);
+
+        // Convert OxiRS triples to oxrdf triples and serialize
+        for triple in graph.iter() {
+            // Convert to oxrdf::Triple
+            let oxrdf_triple = self.convert_triple_to_oxrdf(triple)?;
+            serializer.serialize_triple(&oxrdf_triple).map_err(|e| {
+                crate::OxirsError::Serialize(format!("RDF/XML serialization error: {e}"))
+            })?;
+        }
+
+        serializer
+            .finish()
+            .map_err(|e| crate::OxirsError::Serialize(format!("RDF/XML finish error: {e}")))?;
+
+        String::from_utf8(output)
+            .map_err(|e| crate::OxirsError::Serialize(format!("UTF-8 conversion error: {e}")))
     }
 
-    fn serialize_trig_graph(&self, _graph: &Graph) -> Result<String> {
-        // TODO: Implement TriG serialization
-        Ok(String::new())
+    fn serialize_trig_graph(&self, graph: &Graph) -> Result<String> {
+        use oxttl::TriGSerializer;
+
+        let mut output = Vec::new();
+        let mut serializer = TriGSerializer::new().for_writer(&mut output);
+
+        // Serialize all triples as quads in the default graph
+        for triple in graph.iter() {
+            let oxrdf_quad = self.convert_triple_to_oxrdf_quad(triple, None)?;
+            serializer.serialize_quad(&oxrdf_quad).map_err(|e| {
+                crate::OxirsError::Serialize(format!("TriG serialization error: {e}"))
+            })?;
+        }
+
+        serializer
+            .finish()
+            .map_err(|e| crate::OxirsError::Serialize(format!("TriG finish error: {e}")))?;
+
+        String::from_utf8(output)
+            .map_err(|e| crate::OxirsError::Serialize(format!("UTF-8 conversion error: {e}")))
     }
 
-    fn serialize_trig_dataset(&self, _dataset: &Dataset) -> Result<String> {
-        // TODO: Implement TriG dataset serialization
-        Ok(String::new())
+    fn serialize_trig_dataset(&self, dataset: &Dataset) -> Result<String> {
+        use oxttl::TriGSerializer;
+
+        let mut output = Vec::new();
+        let mut serializer = TriGSerializer::new().for_writer(&mut output);
+
+        // Serialize all quads
+        for quad in dataset.iter() {
+            let oxrdf_quad = self.convert_quad_to_oxrdf(&quad)?;
+            serializer.serialize_quad(&oxrdf_quad).map_err(|e| {
+                crate::OxirsError::Serialize(format!("TriG serialization error: {e}"))
+            })?;
+        }
+
+        serializer
+            .finish()
+            .map_err(|e| crate::OxirsError::Serialize(format!("TriG finish error: {e}")))?;
+
+        String::from_utf8(output)
+            .map_err(|e| crate::OxirsError::Serialize(format!("UTF-8 conversion error: {e}")))
     }
 
     fn serialize_nquads_graph(&self, graph: &Graph) -> Result<String> {
@@ -301,11 +351,170 @@ impl Serializer {
         Ok(result)
     }
 
-    fn serialize_jsonld(&self, _graph: &Graph) -> Result<String> {
-        // TODO: Implement JSON-LD serialization using oxjsonld
-        Err(crate::OxirsError::Serialize(
-            "JSON-LD serialization not yet implemented".to_string(),
+    fn serialize_jsonld(&self, graph: &Graph) -> Result<String> {
+        use oxjsonld::JsonLdSerializer;
+
+        let mut output = Vec::new();
+        let mut serializer = JsonLdSerializer::new().for_writer(&mut output);
+
+        // Convert OxiRS triples to oxrdf triples and serialize
+        for triple in graph.iter() {
+            let oxrdf_quad = self.convert_triple_to_oxrdf_quad(triple, None)?;
+            serializer.serialize_quad(&oxrdf_quad).map_err(|e| {
+                crate::OxirsError::Serialize(format!("JSON-LD serialization error: {e}"))
+            })?;
+        }
+
+        serializer
+            .finish()
+            .map_err(|e| crate::OxirsError::Serialize(format!("JSON-LD finish error: {e}")))?;
+
+        String::from_utf8(output)
+            .map_err(|e| crate::OxirsError::Serialize(format!("UTF-8 conversion error: {e}")))
+    }
+
+    /// Convert OxiRS Triple to oxrdf::Triple for use with external serializers
+    fn convert_triple_to_oxrdf(&self, triple: &crate::model::Triple) -> Result<oxrdf::Triple> {
+        // Convert subject
+        let subject = match triple.subject() {
+            crate::model::Subject::NamedNode(n) => {
+                oxrdf::Subject::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+            }
+            crate::model::Subject::BlankNode(b) => {
+                oxrdf::Subject::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+            }
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variables and quoted triples not supported in serialization".to_string(),
+                ))
+            }
+        };
+
+        // Convert predicate
+        let predicate = match triple.predicate() {
+            crate::model::Predicate::NamedNode(n) => oxrdf::NamedNode::new_unchecked(n.as_str()),
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variable predicates not supported in serialization".to_string(),
+                ))
+            }
+        };
+
+        // Convert object
+        let object = match triple.object() {
+            crate::model::Object::NamedNode(n) => {
+                oxrdf::Term::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+            }
+            crate::model::Object::BlankNode(b) => {
+                oxrdf::Term::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+            }
+            crate::model::Object::Literal(l) => {
+                let literal = if let Some(lang) = l.language() {
+                    oxrdf::Literal::new_language_tagged_literal_unchecked(l.value(), lang)
+                } else {
+                    let datatype = oxrdf::NamedNode::new_unchecked(l.datatype().as_str());
+                    oxrdf::Literal::new_typed_literal(l.value(), datatype)
+                };
+                oxrdf::Term::Literal(literal)
+            }
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variable objects and quoted triples not supported in serialization"
+                        .to_string(),
+                ))
+            }
+        };
+
+        Ok(oxrdf::Triple::new(subject, predicate, object))
+    }
+
+    /// Convert OxiRS Triple to oxrdf::Quad (with optional graph name)
+    fn convert_triple_to_oxrdf_quad(
+        &self,
+        triple: &crate::model::Triple,
+        graph_name: Option<&oxrdf::GraphName>,
+    ) -> Result<oxrdf::Quad> {
+        let oxrdf_triple = self.convert_triple_to_oxrdf(triple)?;
+        let graph = graph_name
+            .cloned()
+            .unwrap_or(oxrdf::GraphName::DefaultGraph);
+        Ok(oxrdf::Quad::new(
+            oxrdf_triple.subject,
+            oxrdf_triple.predicate,
+            oxrdf_triple.object,
+            graph,
         ))
+    }
+
+    /// Convert OxiRS Quad to oxrdf::Quad
+    fn convert_quad_to_oxrdf(&self, quad: &Quad) -> Result<oxrdf::Quad> {
+        // Convert subject
+        let subject = match quad.subject() {
+            crate::model::Subject::NamedNode(n) => {
+                oxrdf::Subject::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+            }
+            crate::model::Subject::BlankNode(b) => {
+                oxrdf::Subject::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+            }
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variables and quoted triples not supported in serialization".to_string(),
+                ))
+            }
+        };
+
+        // Convert predicate
+        let predicate = match quad.predicate() {
+            crate::model::Predicate::NamedNode(n) => oxrdf::NamedNode::new_unchecked(n.as_str()),
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variable predicates not supported in serialization".to_string(),
+                ))
+            }
+        };
+
+        // Convert object
+        let object = match quad.object() {
+            crate::model::Object::NamedNode(n) => {
+                oxrdf::Term::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+            }
+            crate::model::Object::BlankNode(b) => {
+                oxrdf::Term::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+            }
+            crate::model::Object::Literal(l) => {
+                let literal = if let Some(lang) = l.language() {
+                    oxrdf::Literal::new_language_tagged_literal_unchecked(l.value(), lang)
+                } else {
+                    let datatype = oxrdf::NamedNode::new_unchecked(l.datatype().as_str());
+                    oxrdf::Literal::new_typed_literal(l.value(), datatype)
+                };
+                oxrdf::Term::Literal(literal)
+            }
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variable objects and quoted triples not supported in serialization"
+                        .to_string(),
+                ))
+            }
+        };
+
+        // Convert graph name
+        let graph_name = match quad.graph_name() {
+            GraphName::NamedNode(n) => {
+                oxrdf::GraphName::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+            }
+            GraphName::BlankNode(b) => {
+                oxrdf::GraphName::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+            }
+            GraphName::DefaultGraph => oxrdf::GraphName::DefaultGraph,
+            _ => {
+                return Err(crate::OxirsError::Serialize(
+                    "Variable graph names not supported in serialization".to_string(),
+                ))
+            }
+        };
+
+        Ok(oxrdf::Quad::new(subject, predicate, object, graph_name))
     }
 }
 

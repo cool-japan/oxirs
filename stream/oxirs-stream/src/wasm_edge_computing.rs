@@ -150,7 +150,6 @@ pub enum SecurityLevel {
 }
 
 /// WASM execution context
-#[derive(Debug)]
 pub struct WasmExecutionContext {
     #[cfg(feature = "wasm")]
     pub engine: Engine,
@@ -163,6 +162,18 @@ pub struct WasmExecutionContext {
     pub total_execution_time_us: u64,
     pub last_execution: DateTime<Utc>,
     pub resource_usage: ResourceMetrics,
+}
+
+impl std::fmt::Debug for WasmExecutionContext {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WasmExecutionContext")
+            .field("plugin_id", &self.plugin_id)
+            .field("execution_count", &self.execution_count)
+            .field("total_execution_time_us", &self.total_execution_time_us)
+            .field("last_execution", &self.last_execution)
+            .field("resource_usage", &self.resource_usage)
+            .finish_non_exhaustive()
+    }
 }
 
 /// WASM execution state
@@ -425,11 +436,14 @@ impl WasmEdgeProcessor {
     /// Internal plugin execution
     async fn execute_plugin_internal(
         &self,
-        _plugin: &WasmPlugin,
+        plugin: &WasmPlugin,
         events: Vec<StreamEvent>,
         _edge_id: &str,
         _execution_id: &str,
     ) -> Result<Vec<StreamEvent>> {
+        #[cfg(not(feature = "wasm"))]
+        let _ = plugin;
+
         #[cfg(feature = "wasm")]
         {
             let context_arc = {
@@ -449,10 +463,13 @@ impl WasmEdgeProcessor {
             context.store.data_mut().event_count = 0;
 
             // Get the processing function from WASM
-            let process_events: TypedFunc<(i32, i32), i32> = context
-                .instance
-                .get_typed_func(&mut context.store, "process_events")
-                .map_err(|e| anyhow!("Failed to get process_events function: {}", e))?;
+            let process_events: TypedFunc<(i32, i32), i32> = {
+                let instance = &context.instance;
+                let store = &mut context.store;
+                instance
+                    .get_typed_func(store, "process_events")
+                    .map_err(|e| anyhow!("Failed to get process_events function: {}", e))?
+            };
 
             // Serialize input events
             let input_json = serde_json::to_string(&events)?;
@@ -531,21 +548,27 @@ impl WasmEdgeProcessor {
     /// Allocate memory in WASM instance
     #[cfg(feature = "wasm")]
     fn allocate_memory(&self, context: &mut WasmExecutionContext, data: &[u8]) -> Result<i32> {
-        // Get memory allocation function
-        let allocate: TypedFunc<i32, i32> = context
-            .instance
-            .get_typed_func(&mut context.store, "allocate")
-            .map_err(|e| anyhow!("Failed to get allocate function: {}", e))?;
+        // Get memory allocation function - split borrows to avoid conflicts
+        let allocate: TypedFunc<i32, i32> = {
+            let instance = &context.instance;
+            let store = &mut context.store;
+            instance
+                .get_typed_func(store, "allocate")
+                .map_err(|e| anyhow!("Failed to get allocate function: {}", e))?
+        };
 
         let ptr = allocate
             .call(&mut context.store, data.len() as i32)
             .map_err(|e| anyhow!("Memory allocation failed: {}", e))?;
 
-        // Write data to allocated memory
-        let memory = context
-            .instance
-            .get_memory(&mut context.store, "memory")
-            .ok_or_else(|| anyhow!("Failed to get WASM memory"))?;
+        // Write data to allocated memory - split borrows again
+        let memory = {
+            let instance = &context.instance;
+            let store = &mut context.store;
+            instance
+                .get_memory(store, "memory")
+                .ok_or_else(|| anyhow!("Failed to get WASM memory"))?
+        };
 
         memory
             .write(&mut context.store, ptr as usize, data)
@@ -557,10 +580,14 @@ impl WasmEdgeProcessor {
     /// Read memory from WASM instance
     #[cfg(feature = "wasm")]
     fn read_memory(&self, context: &mut WasmExecutionContext, ptr: i32) -> Result<Vec<u8>> {
-        let memory = context
-            .instance
-            .get_memory(&mut context.store, "memory")
-            .ok_or_else(|| anyhow!("Failed to get WASM memory"))?;
+        // Get memory - split borrows to avoid conflicts
+        let memory = {
+            let instance = &context.instance;
+            let store = &mut context.store;
+            instance
+                .get_memory(store, "memory")
+                .ok_or_else(|| anyhow!("Failed to get WASM memory"))?
+        };
 
         // Read length first (assuming it's stored at ptr)
         let mut len_bytes = [0u8; 4];

@@ -9,6 +9,7 @@ pub mod circuit_breaker;
 pub mod compression;
 pub mod config;
 pub mod connection_pool;
+pub mod consumer;
 pub mod health_monitor;
 pub mod message;
 pub mod producer;
@@ -21,6 +22,7 @@ pub use compression::{
 };
 pub use config::{NatsConfig, NatsConsumerConfig};
 pub use connection_pool::{ConnectionPool, ConnectionWrapper};
+pub use consumer::NatsConsumer;
 pub use health_monitor::{HealthMonitor, HealthMonitorConfig, HealthStatus};
 pub use producer::NatsProducer;
 pub use types::*;

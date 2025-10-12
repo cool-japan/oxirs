@@ -7,7 +7,7 @@ use oxirs_shacl::*;
 fn debug_qualified_cardinality_min_violation() {
     // Debug version of qualified min count violation test
     let mut validator = Validator::new();
-    let mut store = ConcreteStore::new().unwrap();
+    let store = ConcreteStore::new().unwrap();
 
     let alice = NamedNode::new("http://example.org/alice").unwrap();
     let charlie = NamedNode::new("http://example.org/charlie").unwrap();

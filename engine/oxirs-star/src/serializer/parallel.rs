@@ -1,13 +1,13 @@
 //! Parallel serialization for multi-threaded processing
 
-use std::io::Write;
-use std::sync::{Arc, Mutex};
-use std::thread;
 use super::config::SerializationOptions;
 use super::star_serializer::StarSerializer;
 use crate::model::{StarGraph, StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarError, StarResult};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
+use std::thread;
 
 /// Parallel serializer for multi-threaded processing
 pub struct ParallelSerializer {

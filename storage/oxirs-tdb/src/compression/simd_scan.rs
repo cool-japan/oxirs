@@ -187,7 +187,8 @@ mod tests {
     #[test]
     fn test_scan_subject_predicate() {
         let triples = create_test_triples();
-        let matches = SimdScanner::scan_subject_predicate(&triples, NodeId::new(1), NodeId::new(10));
+        let matches =
+            SimdScanner::scan_subject_predicate(&triples, NodeId::new(1), NodeId::new(10));
 
         assert_eq!(matches, vec![0]);
     }
@@ -195,7 +196,8 @@ mod tests {
     #[test]
     fn test_scan_predicate_object() {
         let triples = create_test_triples();
-        let matches = SimdScanner::scan_predicate_object(&triples, NodeId::new(10), NodeId::new(100));
+        let matches =
+            SimdScanner::scan_predicate_object(&triples, NodeId::new(10), NodeId::new(100));
 
         assert_eq!(matches, vec![0]);
     }
@@ -236,11 +238,7 @@ mod tests {
     fn test_scan_large_array() {
         let mut triples = Vec::new();
         for i in 0..1000 {
-            triples.push((
-                NodeId::new(i % 10),
-                NodeId::new(i % 5),
-                NodeId::new(i),
-            ));
+            triples.push((NodeId::new(i % 10), NodeId::new(i % 5), NodeId::new(i)));
         }
 
         let matches = SimdScanner::scan_subject(&triples, NodeId::new(5));

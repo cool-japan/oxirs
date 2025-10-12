@@ -4,7 +4,6 @@
 //! including gene-disease associations, drug-target interactions, pathways,
 //! protein structures, and medical concept hierarchies.
 
-
 pub mod embedding;
 pub mod network_analysis;
 pub mod text_model;

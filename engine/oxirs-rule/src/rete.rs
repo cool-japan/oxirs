@@ -7,9 +7,17 @@ use crate::forward::Substitution;
 use crate::rete_enhanced::{BetaJoinNode, ConflictResolution, EnhancedToken, MemoryStrategy};
 use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
+use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
+use std::sync::LazyLock;
 use tracing::{debug, info, warn};
+
+// Global metrics for memory tracking
+static TOKEN_CLONES: LazyLock<Counter> =
+    LazyLock::new(|| Counter::new("rete_token_clones".to_string()));
+static ACTIVE_TOKENS: LazyLock<Gauge> =
+    LazyLock::new(|| Gauge::new("rete_active_tokens".to_string()));
 
 /// Unique identifier for RETE nodes
 pub type NodeId = usize;
@@ -659,6 +667,7 @@ impl ReteNetwork {
     }
 
     /// Add a fact to the network
+    /// OPTIMIZED: Collect matching alpha nodes to avoid cloning entire map
     pub fn add_fact(&mut self, fact: RuleAtom) -> Result<Vec<RuleAtom>> {
         if self.debug_mode {
             debug!("Adding fact to RETE network: {:?}", fact);
@@ -666,22 +675,34 @@ impl ReteNetwork {
 
         let mut derived_facts = Vec::new();
 
-        // Find matching alpha nodes by checking all alpha nodes, not just exact pattern matches
-        for (&node_id, node) in &self.nodes.clone() {
+        // CRITICAL OPTIMIZATION: Collect (node_id, pattern, substitution) tuples
+        // This avoids cloning the entire HashMap
+        let mut matching_alphas = Vec::new();
+
+        for (&node_id, node) in &self.nodes {
             if let ReteNode::Alpha { pattern, .. } = node {
                 if let Some(substitution) = self.unify_atoms(pattern, &fact, &HashMap::new())? {
-                    // Add to alpha memory
-                    if let Some(memory) = self.alpha_memory.get_mut(&node_id) {
-                        memory.insert(fact.clone());
-                    }
-
-                    // Propagate through network with proper bindings
-                    let mut token = Token::with_fact(fact.clone());
-                    token.bindings = substitution; // Use the bindings from unification
-                    let new_facts = self.propagate_token(node_id, token)?;
-                    derived_facts.extend(new_facts);
+                    matching_alphas.push((node_id, substitution));
                 }
             }
+        }
+
+        // Now we can process matches and call mutable methods
+        for (node_id, substitution) in matching_alphas {
+            // Add to alpha memory
+            if let Some(memory) = self.alpha_memory.get_mut(&node_id) {
+                memory.insert(fact.clone());
+            }
+
+            // Propagate through network with proper bindings
+            TOKEN_CLONES.inc();
+            let mut token = Token::with_fact(fact.clone());
+            token.bindings = substitution; // Use the bindings from unification
+
+            ACTIVE_TOKENS.set(self.token_memory.values().map(|v| v.len()).sum::<usize>() as f64);
+
+            let new_facts = self.propagate_token(node_id, token)?;
+            derived_facts.extend(new_facts);
         }
 
         Ok(derived_facts)
@@ -698,39 +719,61 @@ impl ReteNetwork {
     }
 
     /// Propagate a token through the network
+    /// OPTIMIZED: Extract necessary data to avoid node clones
     fn propagate_token(&mut self, node_id: NodeId, token: Token) -> Result<Vec<RuleAtom>> {
         let mut derived_facts = Vec::new();
 
-        match self.nodes.get(&node_id).cloned() {
-            Some(ReteNode::Alpha { children, .. }) => {
-                // Propagate to all children
+        // OPTIMIZED: Extract only what we need instead of cloning entire node
+        let node_type = self.nodes.get(&node_id).map(|node| match node {
+            ReteNode::Alpha { children, .. } => (0, children.clone(), None, None, None),
+            ReteNode::Beta {
+                join_condition,
+                children,
+                ..
+            } => (
+                1,
+                children.clone(),
+                Some(join_condition.clone()),
+                None,
+                None,
+            ),
+            ReteNode::Production {
+                rule_name,
+                rule_head,
+                ..
+            } => (
+                2,
+                Vec::new(),
+                None,
+                Some(rule_name.clone()),
+                Some(rule_head.clone()),
+            ),
+            _ => (3, Vec::new(), None, None, None),
+        });
+
+        match node_type {
+            Some((0, children, _, _, _)) => {
+                // Alpha node: Propagate to all children
                 for &child_id in &children {
+                    TOKEN_CLONES.inc();
                     let new_facts = self.propagate_token(child_id, token.clone())?;
                     derived_facts.extend(new_facts);
                 }
             }
-            Some(ReteNode::Beta {
-                left_parent: _,
-                right_parent: _,
-                ref join_condition,
-                children,
-            }) => {
-                // Handle beta join
-                let joined_tokens = self.perform_beta_join(node_id, token, join_condition)?;
+            Some((1, children, Some(join_condition), _, _)) => {
+                // Beta node: Handle beta join
+                let joined_tokens = self.perform_beta_join(node_id, token, &join_condition)?;
                 for joined_token in joined_tokens {
                     for &child_id in &children {
+                        TOKEN_CLONES.inc();
                         let new_facts = self.propagate_token(child_id, joined_token.clone())?;
                         derived_facts.extend(new_facts);
                     }
                 }
             }
-            Some(ReteNode::Production {
-                ref rule_name,
-                ref rule_head,
-                ..
-            }) => {
-                // Execute production
-                let new_facts = self.execute_production(rule_name, rule_head, &token)?;
+            Some((2, _, _, Some(rule_name), Some(rule_head))) => {
+                // Production node: Execute production
+                let new_facts = self.execute_production(&rule_name, &rule_head, &token)?;
                 derived_facts.extend(new_facts);
             }
             _ => {}

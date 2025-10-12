@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.
@@ -58,21 +58,36 @@
 
 use anyhow::Result;
 
+pub mod advanced_integration_example;
 pub mod backward;
 pub mod cache;
+pub mod composition;
 pub mod comprehensive_tutorial;
+pub mod conflict;
 pub mod debug;
+pub mod distributed;
+pub mod explanation;
 pub mod forward;
 pub mod getting_started;
+pub mod incremental;
 pub mod integration;
+pub mod integration_benchmarks;
+pub mod language;
+pub mod materialization;
+pub mod optimization;
 pub mod owl;
+pub mod parallel;
 pub mod performance;
 pub mod rdf_integration;
 pub mod rdf_processing_simple;
 pub mod rdfs;
 pub mod rete;
 pub mod rete_enhanced;
+pub mod shacl_integration;
+pub mod simd_ops;
+pub mod sparql_integration;
 pub mod swrl;
+pub mod transaction;
 
 /// Rule representation
 #[derive(Debug, Clone)]

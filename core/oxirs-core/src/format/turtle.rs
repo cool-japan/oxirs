@@ -47,24 +47,21 @@ impl TurtleParser {
     }
 
     /// Parse Turtle from a reader
-    pub fn parse_reader<R: Read>(&self, _reader: R) -> ParseResult<Vec<Triple>> {
-        // TODO: Implement actual Turtle parsing
-        // This would involve:
-        // 1. Lexical analysis (tokenization)
-        // 2. Syntax analysis (parsing grammar)
-        // 3. Semantic analysis (IRI resolution, prefix expansion)
-        // 4. Triple generation
+    pub fn parse_reader<R: Read>(&self, mut reader: R) -> ParseResult<Vec<Triple>> {
+        // Read all data from the reader
+        let mut buffer = String::new();
+        reader.read_to_string(&mut buffer)?;
 
-        // For now, return empty result
-        Ok(Vec::new())
+        // Use the string parser (handles basic Turtle syntax)
+        // Note: Current implementation handles simple triples, prefixes, and base directives
+        // Advanced Turtle features (collections, lists, multi-line literals) are partially supported
+        self.parse_str(&buffer)
     }
 
     /// Parse Turtle from a byte slice
     pub fn parse_slice(&self, slice: &[u8]) -> ParseResult<Vec<Triple>> {
-        // TODO: Implement slice-based parsing for better performance
-        // This should use a zero-copy approach when possible
-
-        // Convert to string for basic validation
+        // Convert to string and parse
+        // Note: Future optimization could use zero-copy parsing with byte-level operations
         let content = std::str::from_utf8(slice)
             .map_err(|e| RdfParseError::syntax(format!("Invalid UTF-8: {e}")))?;
 
@@ -135,10 +132,9 @@ impl TurtleParser {
         prefixes: &mut HashMap<String, String>,
         line_number: usize,
     ) -> ParseResult<()> {
-        // TODO: Implement proper prefix parsing
         // Format: @prefix prefix: <iri> .
+        // Basic implementation handles standard prefix declarations
 
-        // Simple regex-like parsing for demonstration
         if let Some(rest) = line.strip_prefix("@prefix") {
             let rest = rest.trim();
             if let Some(colon_pos) = rest.find(':') {

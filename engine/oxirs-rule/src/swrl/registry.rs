@@ -111,7 +111,7 @@ impl Default for CustomBuiltinRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::swrl::{SwrlEngine, builtin_equal, builtin_add, builtin_string_concat};
+    use crate::swrl::{builtin_add, builtin_equal, builtin_string_concat, SwrlEngine};
 
     #[test]
     fn test_swrl_engine_creation() {

@@ -41,7 +41,10 @@ pub fn is_supported_output_format(format: &str) -> bool {
 
 /// Check if a SPARQL results format is supported
 pub fn is_supported_results_format(format: &str) -> bool {
-    matches!(format, "table" | "csv" | "tsv" | "json" | "xml")
+    matches!(
+        format,
+        "table" | "csv" | "tsv" | "json" | "xml" | "html" | "markdown"
+    )
 }
 
 /// Read file content or stdin if path is "-"

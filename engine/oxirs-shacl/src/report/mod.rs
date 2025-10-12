@@ -26,8 +26,8 @@ pub use summary::ValidationSummary;
 // Re-export enhanced generation functions
 pub use generation::{
     generate_csv_report, generate_html_report, generate_json_report, generate_jsonld_report,
-    generate_ntriples_report, generate_rdfxml_report, generate_text_report, generate_turtle_report,
-    generate_yaml_report,
+    generate_ntriples_report, generate_prometheus_report, generate_rdfxml_report,
+    generate_text_report, generate_turtle_report, generate_yaml_report,
 };
 
 // Re-export analytics types

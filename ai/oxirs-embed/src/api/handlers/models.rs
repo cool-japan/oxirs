@@ -5,8 +5,9 @@
 #[cfg(feature = "api-server")]
 use super::super::{
     ApiState, HealthMetrics, HealthStatus, ModelHealth, ModelInfoRequest, ModelInfoResponse,
-    ModelStats, TrainingStats,
 };
+#[cfg(feature = "api-server")]
+use crate::{ModelStats, TrainingStats};
 #[cfg(feature = "api-server")]
 use axum::{
     extract::{Path, Query, State},

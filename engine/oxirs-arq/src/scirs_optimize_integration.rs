@@ -231,6 +231,12 @@ impl CostModel {
     }
 }
 
+impl Default for CostModel {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Information about a SPARQL query for optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryInfo {

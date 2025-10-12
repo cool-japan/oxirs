@@ -2,13 +2,13 @@
 //!
 //! Sliding window implementation with message pinning and adaptive sizing.
 
-use anyhow::{anyhow, Result};
-use tracing::{debug, info, warn};
-use std::collections::{HashMap, VecDeque};
-use std::time::SystemTime;
-use crate::Message;
 use super::config::ContextConfig;
 use super::types::*;
+use crate::Message;
+use anyhow::{anyhow, Result};
+use std::collections::{HashMap, VecDeque};
+use std::time::SystemTime;
+use tracing::{debug, info, warn};
 
 impl ContextWindow {
     pub fn new(config: &ContextConfig) -> Self {
@@ -216,7 +216,10 @@ impl ContextWindow {
         }
     }
 
-    pub async fn get_state_snapshot_with_topic(&self, current_topic: Option<String>) -> ContextState {
+    pub async fn get_state_snapshot_with_topic(
+        &self,
+        current_topic: Option<String>,
+    ) -> ContextState {
         ContextState {
             message_count: self.messages.len(),
             pinned_count: self.pinned_messages.len(),
@@ -226,7 +229,10 @@ impl ContextWindow {
         }
     }
 
-    pub async fn adjust_for_topic(&mut self, transition: &TopicTransition) -> Result<WindowAdjustment> {
+    pub async fn adjust_for_topic(
+        &mut self,
+        transition: &TopicTransition,
+    ) -> Result<WindowAdjustment> {
         let mut messages_reordered = false;
         let mut importance_rescored = false;
         let mut window_size_adjusted = false;

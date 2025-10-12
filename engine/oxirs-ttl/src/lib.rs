@@ -3,7 +3,7 @@
 //! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-ttl/badge.svg)](https://docs.rs/oxirs-ttl)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.2)
+//! **Status**: Alpha Release (v0.1.0-alpha.3)
 //! ⚠️ APIs may change. Not recommended for production use.
 //!
 //! High-performance parsing and serialization for RDF formats in the Turtle family.
@@ -22,7 +22,7 @@
 //! # Quick Start
 //!
 //! ```rust
-//! use oxirs_ttl::turtle::TurtleParser;
+//! use oxirs_ttl::{turtle::TurtleParser, Parser};
 //! use std::io::Cursor;
 //!
 //! let turtle_data = r#"

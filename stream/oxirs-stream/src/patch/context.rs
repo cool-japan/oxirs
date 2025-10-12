@@ -1,7 +1,7 @@
 //! Patch context and application
 
-use crate::{PatchOperation, RdfPatch};
 use super::PatchResult;
+use crate::{PatchOperation, RdfPatch};
 use anyhow::{anyhow, Result};
 use tracing::{debug, info, warn};
 
@@ -339,4 +339,3 @@ fn validate_rdf_term(term: &str, term_type: &str) -> Result<()> {
 
     Ok(())
 }
-

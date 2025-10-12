@@ -123,47 +123,74 @@ impl Exporter {
     }
 
     /// Export RDF data to a writer
-    pub fn export_to_writer<W: Write>(
+    /// The data parameter should be RDF data in N-Triples or N-Quads format
+    /// which will be parsed and then serialized to the target format
+    pub fn export_to_writer<W: Write + 'static>(
         &self,
-        _data: &str,
-        mut writer: W,
+        data: &str,
+        writer: W,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // For now, write a placeholder implementation
-        match self.config.format {
-            ExportFormat::Turtle => {
-                if let Some(base) = &self.config.base_uri {
-                    writeln!(writer, "@base <{base}> .")?;
-                }
-                writeln!(writer, "# Exported in Turtle format")?;
-                writeln!(writer, "# TODO: Implement actual RDF serialization")?;
-            }
-            ExportFormat::NTriples => {
-                writeln!(writer, "# Exported in N-Triples format")?;
-                writeln!(writer, "# TODO: Implement actual RDF serialization")?;
-            }
-            ExportFormat::RdfXml => {
-                writeln!(writer, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>")?;
-                writeln!(writer, "<!-- Exported in RDF/XML format -->")?;
-                writeln!(writer, "<!-- TODO: Implement actual RDF serialization -->")?;
-            }
-            ExportFormat::JsonLd => {
-                writeln!(writer, "{{")?;
-                writeln!(writer, "  \"@context\": {{}}")?;
-                writeln!(writer, "  // TODO: Implement actual RDF serialization")?;
-                writeln!(writer, "}}")?;
-            }
-            ExportFormat::TriG => {
-                if let Some(base) = &self.config.base_uri {
-                    writeln!(writer, "@base <{base}> .")?;
-                }
-                writeln!(writer, "# Exported in TriG format")?;
-                writeln!(writer, "# TODO: Implement actual RDF serialization")?;
-            }
-            ExportFormat::NQuads => {
-                writeln!(writer, "# Exported in N-Quads format")?;
-                writeln!(writer, "# TODO: Implement actual RDF serialization")?;
-            }
+        use oxirs_core::format::{JsonLdProfileSet, RdfFormat as CoreFormat, RdfSerializer};
+        use oxirs_core::parser::{Parser, RdfFormat as ParserFormat};
+
+        // Parse input data (assume N-Triples/N-Quads format)
+        let input_format = if data.lines().any(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            parts.len() == 5 && parts[4] == "."
+        }) {
+            ParserFormat::NQuads
+        } else {
+            ParserFormat::NTriples
+        };
+
+        let parser = Parser::new(input_format);
+        let quads = parser.parse_str_to_quads(data)?;
+
+        // Convert our ExportFormat to oxirs_core::format::RdfFormat
+        let output_format = match self.config.format {
+            ExportFormat::Turtle => CoreFormat::Turtle,
+            ExportFormat::NTriples => CoreFormat::NTriples,
+            ExportFormat::RdfXml => CoreFormat::RdfXml,
+            ExportFormat::JsonLd => CoreFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
+            },
+            ExportFormat::TriG => CoreFormat::TriG,
+            ExportFormat::NQuads => CoreFormat::NQuads,
+        };
+
+        // Create serializer with configuration (before for_writer)
+        let mut serializer = RdfSerializer::new(output_format);
+
+        // Add common prefixes if requested
+        if self.config.use_prefixes {
+            serializer = serializer
+                .with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+                .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+                .with_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+                .with_prefix("owl", "http://www.w3.org/2002/07/owl#");
         }
+
+        // Set base URI if provided
+        if let Some(base) = &self.config.base_uri {
+            serializer = serializer.with_base_iri(base);
+        }
+
+        // Enable pretty printing if requested
+        if self.config.pretty {
+            serializer = serializer.pretty();
+        }
+
+        // Now create the writer serializer
+        let mut writer_serializer = serializer.for_writer(writer);
+
+        // Serialize all quads
+        for quad in &quads {
+            writer_serializer.serialize_quad(quad.as_ref())?;
+        }
+
+        // Finalize serialization
+        writer_serializer.finish()?;
+
         Ok(())
     }
 
@@ -179,8 +206,61 @@ impl Exporter {
 
     /// Export RDF data to a string
     pub fn export_to_string(&self, data: &str) -> Result<String, Box<dyn std::error::Error>> {
-        let mut buffer = Vec::new();
-        self.export_to_writer(data, &mut buffer)?;
+        use oxirs_core::format::{JsonLdProfileSet, RdfFormat as CoreFormat, RdfSerializer};
+        use oxirs_core::parser::{Parser, RdfFormat as ParserFormat};
+        use std::io::Cursor;
+
+        // Parse input data
+        let input_format = if data.lines().any(|line| {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            parts.len() == 5 && parts[4] == "."
+        }) {
+            ParserFormat::NQuads
+        } else {
+            ParserFormat::NTriples
+        };
+
+        let parser = Parser::new(input_format);
+        let quads = parser.parse_str_to_quads(data)?;
+
+        // Convert format
+        let output_format = match self.config.format {
+            ExportFormat::Turtle => CoreFormat::Turtle,
+            ExportFormat::NTriples => CoreFormat::NTriples,
+            ExportFormat::RdfXml => CoreFormat::RdfXml,
+            ExportFormat::JsonLd => CoreFormat::JsonLd {
+                profile: JsonLdProfileSet::empty(),
+            },
+            ExportFormat::TriG => CoreFormat::TriG,
+            ExportFormat::NQuads => CoreFormat::NQuads,
+        };
+
+        // Create serializer
+        let mut serializer = RdfSerializer::new(output_format);
+        if self.config.use_prefixes {
+            serializer = serializer
+                .with_prefix("rdf", "http://www.w3.org/1999/02/22-rdf-syntax-ns#")
+                .with_prefix("rdfs", "http://www.w3.org/2000/01/rdf-schema#")
+                .with_prefix("xsd", "http://www.w3.org/2001/XMLSchema#")
+                .with_prefix("owl", "http://www.w3.org/2002/07/owl#");
+        }
+        if let Some(base) = &self.config.base_uri {
+            serializer = serializer.with_base_iri(base);
+        }
+        if self.config.pretty {
+            serializer = serializer.pretty();
+        }
+
+        // Serialize to Cursor<Vec<u8>> which owns the buffer
+        let cursor = Cursor::new(Vec::new());
+        let mut writer_serializer = serializer.for_writer(cursor);
+        for quad in &quads {
+            writer_serializer.serialize_quad(quad.as_ref())?;
+        }
+        let cursor = writer_serializer.finish()?;
+
+        // Extract the buffer from the cursor
+        let buffer = cursor.into_inner();
         Ok(String::from_utf8(buffer)?)
     }
 
@@ -233,9 +313,11 @@ mod tests {
 
     #[test]
     fn test_export_to_string() {
-        let exporter = Exporter::new().with_format(ExportFormat::Turtle);
-        let result = exporter.export_to_string("test data").unwrap();
-        assert!(result.contains("Turtle format"));
-        assert!(result.contains("TODO"));
+        let exporter = Exporter::new().with_format(ExportFormat::NTriples);
+        // Provide valid N-Triples data
+        let test_data = "<http://example.org/subject> <http://example.org/predicate> \"object\" .";
+        let result = exporter.export_to_string(test_data).unwrap();
+        // Should contain the triple data (serialized)
+        assert!(result.contains("http://example.org/subject"));
     }
 }

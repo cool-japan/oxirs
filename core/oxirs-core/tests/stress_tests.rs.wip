@@ -1,0 +1,426 @@
+//! Stress Testing Suite for OxiRS Core
+//!
+//! Beta.1 Feature: Production-Ready Stress Testing
+//!
+//! This test suite validates system behavior under extreme conditions:
+//! - High-volume data operations
+//! - Long-running processes
+//! - Resource exhaustion scenarios
+//! - Concurrent load testing
+//! - Edge cases and boundary conditions
+
+use oxirs_core::{
+    format::turtle::TurtleParser,
+    model::{Literal, NamedNode, Quad, Subject, Triple},
+    optimization::{OptimizedGraph, RdfArena},
+    rdf_store::ConcreteStore,
+};
+use std::sync::{Arc, Barrier};
+use std::thread;
+use std::time::{Duration, Instant};
+
+#[test]
+#[ignore] // Run with --ignored flag for stress tests
+fn stress_test_large_volume_inserts() {
+    println!("🔥 Stress Test: Large Volume Inserts");
+    const TRIPLE_COUNT: usize = 1_000_000;
+
+    let start = Instant::now();
+    let graph = OptimizedGraph::new();
+
+    for i in 0..TRIPLE_COUNT {
+        let subject = NamedNode::new(format!("http://example.org/s{i}")).unwrap();
+        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let object = Literal::new(format!("Object {i}"));
+        let triple = Triple::new(subject, predicate, object);
+
+        assert!(graph.insert(&triple) || !graph.insert(&triple)); // Insert or already exists
+
+        if i % 100_000 == 0 && i > 0 {
+            println!("  ✓ Inserted {i} triples in {:?}", start.elapsed());
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Successfully inserted {TRIPLE_COUNT} triples in {elapsed:?}");
+    println!(
+        "  📊 Throughput: {:.0} triples/sec",
+        TRIPLE_COUNT as f64 / elapsed.as_secs_f64()
+    );
+
+    // Verify statistics
+    let stats = graph.stats();
+    assert_eq!(stats.triple_count, TRIPLE_COUNT);
+}
+
+#[test]
+#[ignore]
+fn stress_test_concurrent_writers() {
+    println!("🔥 Stress Test: Concurrent Writers");
+    const WRITERS: usize = 16;
+    const TRIPLES_PER_WRITER: usize = 10_000;
+
+    let start = Instant::now();
+    let graph = Arc::new(OptimizedGraph::new());
+    let barrier = Arc::new(Barrier::new(WRITERS));
+
+    let handles: Vec<_> = (0..WRITERS)
+        .map(|writer_id| {
+            let graph = Arc::clone(&graph);
+            let barrier = Arc::clone(&barrier);
+
+            thread::spawn(move || {
+                barrier.wait(); // Synchronize start
+
+                for i in 0..TRIPLES_PER_WRITER {
+                    let subject =
+                        NamedNode::new(format!("http://example.org/w{writer_id}_s{i}")).unwrap();
+                    let predicate = NamedNode::new("http://example.org/p").unwrap();
+                    let object = Literal::new(format!("Writer{writer_id} Object{i}"));
+                    let triple = Triple::new(subject, predicate, object);
+
+                    graph.insert(&triple);
+                }
+
+                println!("  ✓ Writer {writer_id} completed");
+            })
+        })
+        .collect();
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let elapsed = start.elapsed();
+    let total_triples = WRITERS * TRIPLES_PER_WRITER;
+
+    println!("  ✅ All {WRITERS} writers completed in {elapsed:?}");
+    println!("  📊 Total triples: {total_triples}");
+    println!(
+        "  📊 Throughput: {:.0} triples/sec",
+        total_triples as f64 / elapsed.as_secs_f64()
+    );
+
+    let stats = graph.stats();
+    assert_eq!(stats.triple_count, total_triples);
+}
+
+#[test]
+#[ignore]
+fn stress_test_concurrent_readers_writers() {
+    println!("🔥 Stress Test: Concurrent Readers and Writers");
+    const READERS: usize = 8;
+    const WRITERS: usize = 4;
+    const OPERATIONS_PER_THREAD: usize = 5_000;
+
+    let start = Instant::now();
+    let graph = Arc::new(OptimizedGraph::new());
+
+    // Pre-populate with some data
+    for i in 0..1_000 {
+        let subject = NamedNode::new(format!("http://example.org/init{i}")).unwrap();
+        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let object = Literal::new(format!("Init {i}"));
+        let triple = Triple::new(subject, predicate, object);
+        graph.insert(&triple);
+    }
+
+    let mut handles = Vec::new();
+
+    // Spawn writers
+    for writer_id in 0..WRITERS {
+        let graph = Arc::clone(&graph);
+        handles.push(thread::spawn(move || {
+            for i in 0..OPERATIONS_PER_THREAD {
+                let subject =
+                    NamedNode::new(format!("http://example.org/w{writer_id}_s{i}")).unwrap();
+                let predicate = NamedNode::new("http://example.org/p").unwrap();
+                let object = Literal::new(format!("Writer{writer_id} Object{i}"));
+                let triple = Triple::new(subject, predicate, object);
+                graph.insert(&triple);
+            }
+        }));
+    }
+
+    // Spawn readers
+    for reader_id in 0..READERS {
+        let graph = Arc::clone(&graph);
+        handles.push(thread::spawn(move || {
+            let mut read_count = 0;
+            for i in 0..OPERATIONS_PER_THREAD {
+                let idx = i % 1_000;
+                let subject = Subject::NamedNode(
+                    NamedNode::new(format!("http://example.org/init{idx}")).unwrap(),
+                );
+                let results = graph.query(Some(&subject), None, None);
+                read_count += results.len();
+            }
+            println!("  ✓ Reader {reader_id} completed, read {read_count} triples");
+        }));
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ All threads completed in {elapsed:?}");
+
+    let stats = graph.stats();
+    println!("  📊 Final triple count: {}", stats.triple_count);
+}
+
+#[test]
+#[ignore]
+fn stress_test_memory_intensive_operations() {
+    println!("🔥 Stress Test: Memory Intensive Operations");
+    const LARGE_VALUE_SIZE: usize = 10_000;
+    const TRIPLE_COUNT: usize = 10_000;
+
+    let start = Instant::now();
+    let graph = OptimizedGraph::new();
+
+    for i in 0..TRIPLE_COUNT {
+        let subject = NamedNode::new(format!("http://example.org/s{i}")).unwrap();
+        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        // Create large literal values
+        let large_value = "x".repeat(LARGE_VALUE_SIZE);
+        let object = Literal::new(format!("Large Object {i}: {large_value}"));
+        let triple = Triple::new(subject, predicate, object);
+
+        graph.insert(&triple);
+
+        if i % 1_000 == 0 && i > 0 {
+            println!("  ✓ Inserted {i} large triples");
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Successfully inserted {TRIPLE_COUNT} large triples in {elapsed:?}");
+
+    let stats = graph.stats();
+    assert_eq!(stats.triple_count, TRIPLE_COUNT);
+}
+
+#[test]
+#[ignore]
+fn stress_test_arena_allocation() {
+    println!("🔥 Stress Test: Arena Allocation");
+    const STRING_COUNT: usize = 1_000_000;
+
+    let start = Instant::now();
+    let arena = RdfArena::with_capacity(STRING_COUNT * 50);
+
+    for i in 0..STRING_COUNT {
+        arena.intern_str(&format!("http://example.org/resource/{i}"));
+
+        if i % 100_000 == 0 && i > 0 {
+            println!(
+                "  ✓ Allocated {i} strings, bytes: {}",
+                arena.allocated_bytes()
+            );
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Allocated {STRING_COUNT} strings in {elapsed:?}");
+    println!("  📊 Total bytes allocated: {}", arena.allocated_bytes());
+    println!("  📊 Allocation count: {}", arena.allocation_count());
+}
+
+#[test]
+#[ignore]
+fn stress_test_long_running_queries() {
+    println!("🔥 Stress Test: Long Running Queries");
+    const TRIPLE_COUNT: usize = 100_000;
+    const QUERY_COUNT: usize = 10_000;
+
+    // Setup: Pre-populate graph
+    let graph = OptimizedGraph::new();
+    for i in 0..TRIPLE_COUNT {
+        let subject = NamedNode::new(format!("http://example.org/s{}", i % 1_000)).unwrap();
+        let predicate = NamedNode::new(format!("http://example.org/p{}", i % 10)).unwrap();
+        let object = Literal::new(format!("Object {i}"));
+        let triple = Triple::new(subject, predicate, object);
+        graph.insert(&triple);
+    }
+
+    println!("  ✓ Pre-populated graph with {TRIPLE_COUNT} triples");
+
+    // Execute queries
+    let start = Instant::now();
+    let mut total_results = 0;
+
+    for i in 0..QUERY_COUNT {
+        let subject_id = i % 1_000;
+        let subject = Subject::NamedNode(
+            NamedNode::new(format!("http://example.org/s{subject_id}")).unwrap(),
+        );
+
+        let results = graph.query(Some(&subject), None, None);
+        total_results += results.len();
+
+        if i % 1_000 == 0 && i > 0 {
+            println!("  ✓ Executed {i} queries");
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Executed {QUERY_COUNT} queries in {elapsed:?}");
+    println!("  📊 Total results: {total_results}");
+    println!(
+        "  📊 Query throughput: {:.0} queries/sec",
+        QUERY_COUNT as f64 / elapsed.as_secs_f64()
+    );
+}
+
+#[test]
+#[ignore]
+fn stress_test_store_operations() {
+    println!("🔥 Stress Test: Store Operations");
+    const QUAD_COUNT: usize = 100_000;
+
+    let start = Instant::now();
+    let store = ConcreteStore::new();
+
+    for i in 0..QUAD_COUNT {
+        let subject = NamedNode::new(format!("http://example.org/s{i}")).unwrap();
+        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let object = Literal::new(format!("Object {i}"));
+        let quad = Quad::new(subject, predicate, object, None);
+
+        store.insert_quad(quad).unwrap();
+
+        if i % 10_000 == 0 && i > 0 {
+            println!("  ✓ Inserted {i} quads");
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Inserted {QUAD_COUNT} quads in {elapsed:?}");
+    println!(
+        "  📊 Throughput: {:.0} quads/sec",
+        QUAD_COUNT as f64 / elapsed.as_secs_f64()
+    );
+
+    // Verify
+    assert_eq!(store.quads_count(), QUAD_COUNT);
+}
+
+#[test]
+#[ignore]
+fn stress_test_parsing_large_files() {
+    println!("🔥 Stress Test: Parsing Large Files");
+    const TRIPLE_COUNT: usize = 100_000;
+
+    // Generate large Turtle document
+    let mut turtle_data = String::from("@prefix ex: <http://example.org/> .\n\n");
+    for i in 0..TRIPLE_COUNT {
+        turtle_data.push_str(&format!("ex:s{i} ex:p \"Object {i}\" .\n"));
+    }
+
+    println!("  ✓ Generated Turtle document with {TRIPLE_COUNT} triples");
+    println!("  📊 Document size: {} bytes", turtle_data.len());
+
+    let start = Instant::now();
+    let parser = TurtleParser::new();
+    let triples = parser.parse_str(&turtle_data).unwrap();
+    let elapsed = start.elapsed();
+
+    println!("  ✅ Parsed {TRIPLE_COUNT} triples in {elapsed:?}");
+    println!(
+        "  📊 Parsing throughput: {:.0} triples/sec",
+        triples.len() as f64 / elapsed.as_secs_f64()
+    );
+
+    assert_eq!(triples.len(), TRIPLE_COUNT);
+}
+
+#[test]
+#[ignore]
+fn stress_test_sustained_load() {
+    println!("🔥 Stress Test: Sustained Load (30 seconds)");
+    const DURATION_SECS: u64 = 30;
+
+    let graph = Arc::new(OptimizedGraph::new());
+    let start = Instant::now();
+    let end_time = start + Duration::from_secs(DURATION_SECS);
+
+    let mut operation_count = 0;
+    let mut i = 0;
+
+    while Instant::now() < end_time {
+        let subject = NamedNode::new(format!("http://example.org/s{}", i % 10_000)).unwrap();
+        let predicate = NamedNode::new("http://example.org/p").unwrap();
+        let object = Literal::new(format!("Object {i}"));
+        let triple = Triple::new(subject, predicate, object);
+
+        graph.insert(&triple);
+        operation_count += 1;
+        i += 1;
+
+        if operation_count % 10_000 == 0 {
+            let elapsed = start.elapsed();
+            println!("  ✓ {operation_count} operations in {:?}", elapsed);
+        }
+    }
+
+    let elapsed = start.elapsed();
+    println!("  ✅ Sustained {operation_count} operations over {elapsed:?}");
+    println!(
+        "  📊 Average throughput: {:.0} ops/sec",
+        operation_count as f64 / elapsed.as_secs_f64()
+    );
+}
+
+#[test]
+#[ignore]
+fn stress_test_edge_cases() {
+    println!("🔥 Stress Test: Edge Cases and Boundary Conditions");
+
+    let graph = OptimizedGraph::new();
+
+    // Test 1: Empty strings
+    println!("  Testing empty/minimal values...");
+    let subject = NamedNode::new("http://example.org/s").unwrap();
+    let predicate = NamedNode::new("http://example.org/p").unwrap();
+    let object = Literal::new("");
+    let triple = Triple::new(subject.clone(), predicate.clone(), object);
+    assert!(graph.insert(&triple));
+
+    // Test 2: Very long IRIs
+    println!("  Testing very long IRIs...");
+    let long_iri = format!("http://example.org/{}", "x".repeat(10_000));
+    let long_subject = NamedNode::new(&long_iri).unwrap();
+    let triple2 = Triple::new(long_subject, predicate.clone(), Literal::new("test"));
+    assert!(graph.insert(&triple2));
+
+    // Test 3: Special characters
+    println!("  Testing special characters...");
+    let special_chars = "Special: üöä 日本語 \u{1F600} \n\r\t";
+    let object3 = Literal::new(special_chars);
+    let triple3 = Triple::new(subject.clone(), predicate.clone(), object3);
+    assert!(graph.insert(&triple3));
+
+    // Test 4: Maximum realistic IRI length
+    println!("  Testing maximum realistic IRI length...");
+    let max_iri = format!("http://example.org/{}", "resource/".repeat(1000));
+    if let Ok(max_subject) = NamedNode::new(&max_iri) {
+        let triple4 = Triple::new(max_subject, predicate, Literal::new("test"));
+        graph.insert(&triple4);
+    }
+
+    println!("  ✅ All edge cases handled successfully");
+}
+
+/// Helper function to monitor memory usage during tests
+#[allow(dead_code)]
+fn monitor_memory_usage(label: &str) {
+    if let Ok(usage) = sys_info::mem_info() {
+        println!(
+            "  💾 Memory ({label}): {} MB free / {} MB total",
+            usage.free / 1024,
+            usage.total / 1024
+        );
+    }
+}

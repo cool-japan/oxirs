@@ -34,6 +34,7 @@ impl ReportGenerator {
             ReportFormat::JsonLd => self.generate_jsonld(report),
             ReportFormat::RdfXml => self.generate_rdfxml(report),
             ReportFormat::NTriples => self.generate_ntriples(report),
+            ReportFormat::Prometheus => self.generate_prometheus(report),
         }
     }
 
@@ -158,6 +159,12 @@ impl ReportGenerator {
         }
 
         Ok(ntriples.join("\n"))
+    }
+
+    fn generate_prometheus(&self, report: &ValidationReport) -> Result<String> {
+        use super::serializers::PrometheusSerializer;
+        let serializer = PrometheusSerializer::new(self.config.clone());
+        serializer.serialize(report)
     }
 }
 

@@ -1,13 +1,13 @@
 //! Streaming serialization for memory-efficient processing
 
-use std::io::Write;
-use std::sync::{Arc, Mutex};
 use super::config::{SerializationContext, StreamingConfig};
 use super::parallel::ChunkedIterator;
 use super::star_serializer::StarSerializer;
 use crate::model::{StarTerm, StarTriple};
 use crate::parser::StarFormat;
 use crate::{StarError, StarResult};
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 
 /// Streaming serializer for memory-efficient processing of large graphs
 pub struct StreamingSerializer<W: Write> {
@@ -196,4 +196,3 @@ impl<W: Write> StreamingSerializer<W> {
         }
     }
 }
-

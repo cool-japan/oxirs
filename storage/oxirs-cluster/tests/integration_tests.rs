@@ -85,6 +85,8 @@ impl TestCluster {
                     .collect(),
                 discovery: None,
                 replication_strategy: None,
+                #[cfg(feature = "bft")]
+                use_bft: false,
                 region_config: None,
             };
 
@@ -576,6 +578,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_performance_benchmark() {
+        // Acquire global test lock to prevent concurrent test execution
+        let _lock = TEST_MUTEX.lock().await;
+
+        // Initialize and reset global shared storage for testing isolation
+        oxirs_cluster::raft::init_global_shared_storage();
+        oxirs_cluster::raft::reset_global_shared_storage().await;
+
         let config = IntegrationTestConfig {
             num_nodes: 5,
             test_duration: Duration::from_secs(30),
