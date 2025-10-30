@@ -38,7 +38,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.1.0-alpha.3"
+oxirs-ttl = "0.1.0-alpha.4"
 ```
 
 ## Quick Start

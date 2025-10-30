@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Beta features complete - APIs stabilizing
 [dependencies]
-oxirs-federate = "0.1.0-alpha.3"
+oxirs-federate = "0.1.0-alpha.4"
 ```
 
 ## Quick Start

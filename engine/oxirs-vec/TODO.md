@@ -12,7 +12,7 @@
 - **Similarity search** exposed via SPARQL `vec:` SERVICE bindings and GraphQL filters
 - **Embedding integrations** expanded with CLI batch tooling & SciRS2 telemetry
 - **Observability** hooks for index health and slow-query tracing
-- **Released on crates.io**: `oxirs-vec = "0.1.0-alpha.3"` (experimental)
+- **Released on crates.io**: `oxirs-vec = "0.1.0-alpha.4"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

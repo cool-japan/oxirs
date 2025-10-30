@@ -30,7 +30,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-geosparql = "0.1.0-alpha.3"
+oxirs-geosparql = "0.1.0-alpha.4"
 ```
 
 ## Usage
@@ -235,7 +235,7 @@ oxirs-geosparql provides **two buffer implementations**:
 **1. Pure Rust Buffer** (`rust-buffer` feature):
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0-alpha.3"", features = ["rust-buffer"] }
+oxirs-geosparql = { version = "0.1.0-alpha.4"", features = ["rust-buffer"] }
 ```
 
 ```rust
@@ -257,7 +257,7 @@ let buffered = buffer(&poly, 2.0).unwrap(); // Pure Rust!
 **2. GEOS Backend** (`geos-backend` feature):
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0-alpha.3"", features = ["geos-backend"] }
+oxirs-geosparql = { version = "0.1.0-alpha.4"", features = ["geos-backend"] }
 ```
 
 **Advantages:**

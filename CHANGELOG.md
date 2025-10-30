@@ -751,10 +751,10 @@ Available on crates.io:
 
 ```toml
 [dependencies]
-oxirs-core = "0.1.0-alpha.3"
-oxirs-fuseki = "0.1.0-alpha.3"
-oxirs-arq = "0.1.0-alpha.3"
-oxirs-gql = "0.1.0-alpha.3"
+oxirs-core = "0.1.0-alpha.4"
+oxirs-fuseki = "0.1.0-alpha.4"
+oxirs-arq = "0.1.0-alpha.4"
+oxirs-gql = "0.1.0-alpha.4"
 # ... other crates as needed
 ```
 

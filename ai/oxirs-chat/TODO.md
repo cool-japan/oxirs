@@ -12,7 +12,7 @@
 - **RAG pipeline** aligned with persisted datasets and vector indices
 - **Natural language to SPARQL** incorporating federation + persistence hints
 - **Telemetry & analytics** powered by SciRS2 metrics and dashboards
-- **Released on crates.io**: `oxirs-chat = "0.1.0-alpha.3"` (experimental)
+- **Released on crates.io**: `oxirs-chat = "0.1.0-alpha.4"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

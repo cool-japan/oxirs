@@ -18,7 +18,7 @@
 - **Memory-efficient storage** - Support for datasets larger than RAM via memory-mapping
 - **Performance validated** - 122-257% throughput improvements (benchmarked)
 - **Interoperability testing** - 17 comprehensive tests for Apache Jena, RDF4J, Virtuoso compatibility
-- **Released on crates.io**: `oxirs-star = "0.1.0-alpha.3"` (experimental)
+- **Released on crates.io**: `oxirs-star = "0.1.0-alpha.4"` (experimental)
 
 ## ✅ Recently Completed (October 12, 2025 - Session 2)
 

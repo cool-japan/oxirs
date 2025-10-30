@@ -32,10 +32,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-chat = "0.1.0-alpha.3"
+oxirs-chat = "0.1.0-alpha.4"
 
 # Enable specific LLM providers
-oxirs-chat = { version = "0.1.0-alpha.3", features = ["openai", "anthropic", "ollama"] }
+oxirs-chat = { version = "0.1.0-alpha.4", features = ["openai", "anthropic", "ollama"] }
 ```
 
 ## Quick Start

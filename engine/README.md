@@ -198,13 +198,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Individual modules (stable features)
-oxirs-arq = "0.1.0-alpha.3"
-oxirs-shacl = "0.1.0-alpha.3"
+oxirs-arq = "0.1.0-alpha.4"
+oxirs-shacl = "0.1.0-alpha.4"
 
 # Individual modules (experimental features)
-oxirs-vec = "0.1.0-alpha.3"
-oxirs-rule = "0.1.0-alpha.3"
-oxirs-star = "0.1.0-alpha.3"
+oxirs-vec = "0.1.0-alpha.4"
+oxirs-rule = "0.1.0-alpha.4"
+oxirs-star = "0.1.0-alpha.4"
 ```
 
 Note: There is no single `oxirs-engine` crate. Use individual modules as needed.

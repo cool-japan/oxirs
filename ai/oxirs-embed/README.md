@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.1.0-alpha.3"
+oxirs-embed = "0.1.0-alpha.4"
 
 # Enable specific providers
-oxirs-embed = { version = "0.1.0-alpha.3", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.1.0-alpha.4", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start

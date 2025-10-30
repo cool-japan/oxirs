@@ -61,7 +61,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-tdb = "0.1.0-alpha.3"
+oxirs-tdb = "0.1.0-alpha.4"
 ```
 
 ### Basic Usage
