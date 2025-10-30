@@ -418,12 +418,14 @@ pub mod advanced_validation_strategies;
 pub mod advanced_visualization;
 pub mod ai_orchestrator;
 pub mod analytics;
+pub mod anomaly_detection;
 pub mod biological_neural_integration;
 pub mod blockchain_validation;
 pub mod collaborative_development;
 pub mod collective_consciousness;
 pub mod consciousness_guided_neuroplasticity;
 pub mod consciousness_validation;
+pub mod constraint_generation;
 pub mod cosmic_scale_processing;
 pub mod deployment;
 pub mod error_handling;
@@ -515,7 +517,21 @@ pub use ai_orchestrator::{
 };
 #[allow(ambiguous_glob_reexports)]
 pub use analytics::*;
+pub use anomaly_detection::{
+    Anomaly, AnomalyConfig, AnomalyDetector, AnomalyExplainer, AnomalyScore, AnomalyType,
+    DataDistribution as AnomalyDataDistribution, DetectionMetrics, DetectorResult, DetectorType,
+    DriftDetector, DriftResult, DriftType, EnsembleConfig, EnsembleDetector, EnsembleResult,
+    ExplanationReport, NoveltyDetector, NoveltyResult, OutlierDetector, OutlierMethod,
+    OutlierResult, RdfAnomaly,
+};
 pub use collaborative_development::*;
+pub use constraint_generation::{
+    CardinalityAnalyzer, CardinalityConstraint, ConstraintGenerationConfig, ConstraintGenerator,
+    ConstraintRanker, ConstraintSuggestion, ConstraintValidator, DatatypeAnalyzer,
+    DatatypeConstraint, GeneratedConstraint, GenerationResult, PatternBasedGenerator,
+    PatternConstraint, RankedConstraint, RankingCriteria, SuggestionConfidence, SuggestionEngine,
+    ValidationResult as ConstraintValidationResult, ValueRangeAnalyzer, ValueRangeConstraint,
+};
 pub use deployment::*;
 pub use error_handling::{
     ErrorClassificationResult, ErrorHandlingConfig, ErrorSeverity, ErrorType,

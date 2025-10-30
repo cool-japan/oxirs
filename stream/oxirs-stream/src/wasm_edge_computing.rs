@@ -463,9 +463,14 @@ impl WasmEdgeProcessor {
             context.store.data_mut().event_count = 0;
 
             // Get the processing function from WASM
+            // TypedFunc is Copy, so we can get it and immediately drop borrows
             let process_events: TypedFunc<(i32, i32), i32> = {
-                let instance = &context.instance;
-                let store = &mut context.store;
+                // Temporarily split mutable and immutable borrows
+                let WasmExecutionContext {
+                    ref instance,
+                    ref mut store,
+                    ..
+                } = *context;
                 instance
                     .get_typed_func(store, "process_events")
                     .map_err(|e| anyhow!("Failed to get process_events function: {}", e))?

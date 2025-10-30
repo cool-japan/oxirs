@@ -117,7 +117,7 @@ pub async fn run(action: ConfigAction) -> CommandResult {
                 Err(e) => {
                     println!("✗ Configuration validation failed");
                     println!();
-                    return Err(e.into());
+                    return Err(e);
                 }
             }
         }

@@ -1,4 +1,12 @@
-//! Interactive mode support for CLI
+//! Interactive mode support for CLI (DEPRECATED)
+//!
+//! **DEPRECATED**: This module is obsolete and no longer used by the main application.
+//! Use `commands::interactive::execute()` instead for the modern interactive mode with:
+//! - Real SPARQL query execution
+//! - Advanced session management
+//! - Query history and templates
+//!
+//! This module is kept for backwards compatibility only and will be removed in v0.2.0.
 //!
 //! Provides REPL-like interactive command execution with history and completion.
 
@@ -12,7 +20,16 @@ use rustyline_derive::{Helper, Hinter};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-/// Interactive mode handler
+/// Interactive mode handler (DEPRECATED)
+///
+/// # Deprecation Notice
+///
+/// This struct is deprecated and will be removed in v0.2.0.
+/// Use `commands::interactive::execute()` instead.
+#[deprecated(
+    since = "0.1.0-beta.1",
+    note = "Use commands::interactive::execute() instead"
+)]
 pub struct InteractiveMode {
     editor: Editor<OxirsHelper, rustyline::history::DefaultHistory>,
     history_file: String,

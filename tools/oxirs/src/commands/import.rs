@@ -143,22 +143,40 @@ pub async fn run(
     perf_logger.add_metadata("error_count", error_count);
     perf_logger.complete(Some(5000)); // Log if import takes more than 5 seconds
 
-    // Report statistics with formatted output
+    // Report statistics with enhanced formatting
+    use crate::cli::{format_bytes, format_duration, format_number};
+
     ctx.info("Import Statistics");
     ctx.success(&format!(
-        "Import completed in {:.2} seconds",
-        duration.as_secs_f64()
+        "✓ Import completed in {}",
+        format_duration(duration)
     ));
-    ctx.info(&format!("Triples imported: {triple_count}"));
+    ctx.info(&format!(
+        "  Triples imported: {}",
+        format_number(triple_count as u64)
+    ));
+    ctx.info(&format!("  File size: {}", format_bytes(file_size)));
 
     if error_count > 0 {
-        ctx.warn(&format!("Errors encountered: {error_count}"));
+        ctx.warn(&format!(
+            "  Errors encountered: {}",
+            format_number(error_count as u64)
+        ));
     }
 
-    ctx.info(&format!(
-        "Average rate: {:.0} triples/second",
-        triple_count as f64 / duration.as_secs_f64()
-    ));
+    if duration.as_secs_f64() > 0.0 {
+        let rate = triple_count as f64 / duration.as_secs_f64();
+        ctx.info(&format!(
+            "  Import rate: {} triples/second",
+            format_number(rate as u64)
+        ));
+
+        let throughput = file_size as f64 / duration.as_secs_f64();
+        ctx.info(&format!(
+            "  Throughput: {}/second",
+            format_bytes(throughput as u64)
+        ));
+    }
 
     Ok(())
 }

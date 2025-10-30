@@ -394,48 +394,86 @@ Before 1.0 release, consider:
 - Keep benchmarks updated for all new features
 - Document breaking changes clearly
 
-## Version Roadmap
+## 🎯 v0.1.0 Complete Feature Roadmap
 
-- **v0.1.0-beta.1** (Current) ✅
-  - ✅ GML support (completed - 20 comprehensive tests)
-  - ✅ Union/Intersection/Difference/SymDifference operations (completed)
-  - ✅ Buffer operation with dual backends (completed)
-  - ✅ CRS transformation (completed - 11 transformation tests)
-  - ✅ Egenhofer & RCC8 relations (completed)
-  - ✅ Additional geometric properties (completed - 28 property tests)
-  - ✅ Comprehensive stress tests (completed - 12 stress tests)
-  - ✅ **SIMD-accelerated distance calculations** (completed - 17 performance tests) - **NEW**
-  - ✅ **Parallel batch processing** (completed) - **NEW**
-  - ✅ **Automatic optimization selection** (BatchProcessor) - **NEW**
-  - ✅ **GPU-accelerated spatial operations** (completed - 6 GPU tests) - **NEWLY COMPLETED**
-  - ✅ **GeoJSON import/export** (completed - 7 tests) - **NEWLY COMPLETED**
-  - ✅ **Geometry validation and quality checks** (completed - 6 tests) - **NEWLY COMPLETED**
-  - ✅ **Property-based testing** (completed - 17 property tests) - **NEWLY COMPLETED**
-  - ✅ **CRS transformation caching** (completed - 2 tests) - **NEWLY COMPLETED**
-  - ✅ Zero warnings policy maintained (zero clippy warnings)
-  - **217 total tests**, all passing
+### v0.1.0 Final Release Targets (Q4 2025) - ALL FEATURES
 
-- **v0.2.0** (Next minor release)
-  - Add GML usage examples
-  - Add performance benchmarks comparing SIMD vs standard implementations
-  - Property-based testing (proptest)
-  - Code coverage >90%
+#### 3D Geometry Support (Target: v0.1.0)
+- [ ] Parse WKT with Z coordinates (e.g., "POINT Z (1 2 3)")
+- [ ] Parse WKT with M coordinates (e.g., "POINT M (1 2 3)")
+- [ ] Parse WKT with ZM coordinates (e.g., "POINT ZM (1 2 3 4)")
+- [ ] 3D spatial index (R-tree for 3D)
+- [ ] 3D distance calculations
+- [ ] 3D topological relations
+- [ ] 3D buffer operations
+- [ ] Volume calculations
 
-- **v0.3.0**
-  - 3D geometry support (Z coordinates)
-  - Measured coordinates (M values)
-  - Advanced spatial index features
-  - Geometry simplification algorithms
+#### Advanced Spatial Analysis (Target: v0.1.0)
+- [ ] Voronoi diagrams
+- [ ] Delaunay triangulation
+- [ ] Spatial clustering (DBSCAN, K-means, hierarchical)
+- [ ] Heatmap generation
+- [ ] Spatial interpolation (IDW, kriging, splines)
+- [ ] Network analysis (shortest path, traveling salesman)
+- [ ] Spatial statistics (Moran's I, Getis-Ord, spatial autocorrelation)
+- [ ] Spatial regression models
 
-- **v0.4.0**
-  - Network analysis (shortest path, etc.)
-  - Spatial clustering (DBSCAN, K-means)
-  - Spatial interpolation
-  - GPU acceleration for large-scale queries
+#### Additional Serialization Formats (Target: v0.1.0)
+- [ ] KML (Keyhole Markup Language)
+- [ ] GPX (GPS Exchange Format)
+- [ ] Shapefile reading and writing
+- [ ] GeoPackage support (SQLite-based)
+- [ ] PostGIS EWKB/EWKT
+- [ ] FlatGeobuf
+- [ ] MVT (Mapbox Vector Tiles)
+- [ ] TopoJSON
 
-- **v1.0.0**
-  - API stabilization
-  - Full OGC GeoSPARQL compliance
-  - Production-ready performance
-  - Comprehensive documentation
-  - Real-world dataset testing
+#### Performance Optimization (Target: v0.1.0)
+- [ ] Zero-copy WKT parsing
+- [ ] Profile and optimize hot paths
+- [ ] Memory pool for geometry allocations
+- [ ] SIMD-accelerated coordinate transformations
+- [ ] GPU-accelerated spatial joins
+- [ ] Parallel spatial indexing
+- [ ] Query result caching
+- [ ] Lazy geometry loading
+
+#### Advanced Indexing (Target: v0.1.0)
+- [ ] R*-tree implementation
+- [ ] Hilbert R-tree
+- [ ] Priority R-tree
+- [ ] Spatial hash indexing
+- [ ] Grid-based spatial index
+- [ ] Quadtree/Octree indexing
+- [ ] K-d tree for point clouds
+- [ ] Compressed geometry indexes
+
+#### Integration & Interoperability (Target: v0.1.0)
+- [ ] SPARQL function registration for oxirs-arq
+- [ ] RDF serialization of geometries
+- [ ] Integration with oxirs-fuseki endpoints
+- [ ] GraphQL schema generation for oxirs-gql
+- [ ] Streaming spatial data via oxirs-stream
+- [ ] Distributed spatial queries via oxirs-cluster
+- [ ] PostGIS compatibility layer
+- [ ] Oracle Spatial compatibility
+
+#### Production Features (Target: v0.1.0)
+- [ ] Automated CI/CD pipeline
+- [ ] Automated benchmark tracking
+- [ ] Code coverage >95%
+- [ ] Automated dependency updates
+- [ ] Release automation
+- [ ] Performance regression detection
+- [ ] Fuzzing tests for parser
+- [ ] Real-world dataset testing (OpenStreetMap, etc.)
+
+#### Developer Experience (Target: v0.1.0)
+- [ ] Architecture diagrams
+- [ ] Migration guide from Apache Jena GeoSPARQL
+- [ ] Cookbook with common recipes
+- [ ] Video tutorials
+- [ ] Jupyter notebook examples
+- [ ] Performance tuning guide
+- [ ] Contribution guide
+- [ ] API stability guarantees

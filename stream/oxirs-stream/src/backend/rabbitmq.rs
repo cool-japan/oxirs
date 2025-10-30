@@ -136,7 +136,7 @@ pub struct RabbitMQProducer {
 }
 
 #[derive(Debug, Default, Clone)]
-struct ProducerStats {
+pub struct ProducerStats {
     events_published: u64,
     events_failed: u64,
     bytes_sent: u64,
@@ -707,7 +707,7 @@ pub struct RabbitMQConsumer {
 }
 
 #[derive(Debug, Default, Clone)]
-struct ConsumerStats {
+pub struct ConsumerStats {
     events_consumed: u64,
     events_failed: u64,
     bytes_received: u64,

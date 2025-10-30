@@ -310,6 +310,7 @@ pub mod parallel;
 pub mod platform;
 #[cfg(feature = "simd")]
 pub mod simd;
+pub mod simd_triple_matching; // SIMD-optimized triple pattern matching using SciRS2
 
 // Re-export core types for convenience
 pub use model::*;

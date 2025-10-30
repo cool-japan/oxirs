@@ -279,15 +279,15 @@ impl ConfigValidator {
         }
 
         // For remote datasets, validate URL
-        if dataset.dataset_type == "remote" {
-            if !dataset.location.starts_with("http://") && !dataset.location.starts_with("https://")
-            {
-                self.errors.push(ValidationError::InvalidValue {
-                    field: format!("datasets.{name}.location"),
-                    value: dataset.location.clone(),
-                    reason: "Remote dataset location must be a valid HTTP(S) URL".to_string(),
-                });
-            }
+        if dataset.dataset_type == "remote"
+            && !dataset.location.starts_with("http://")
+            && !dataset.location.starts_with("https://")
+        {
+            self.errors.push(ValidationError::InvalidValue {
+                field: format!("datasets.{name}.location"),
+                value: dataset.location.clone(),
+                reason: "Remote dataset location must be a valid HTTP(S) URL".to_string(),
+            });
         }
     }
 

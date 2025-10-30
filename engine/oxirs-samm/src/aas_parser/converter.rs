@@ -6,7 +6,8 @@
 use super::models::{AasEnvironment, LangString, Submodel, SubmodelElement};
 use crate::error::{Result, SammError};
 use crate::metamodel::{
-    Aspect, Characteristic, CharacteristicKind, ElementMetadata, Entity, Operation, Property,
+    Aspect, Characteristic, CharacteristicKind, ElementMetadata, Entity, ModelElement, Operation,
+    Property,
 };
 
 /// Convert AAS environment to SAMM Aspect models
@@ -108,8 +109,12 @@ fn convert_submodel_to_aspect(submodel: &Submodel) -> Result<Aspect> {
             SubmodelElement::SubmodelElementCollection(collection) => {
                 // Convert collection to an Entity
                 let entity = convert_collection_to_entity(collection)?;
-                // TODO: Add entity to aspect (requires entity support in metamodel)
-                // For now, we skip collections
+
+                // Create a property that references this entity
+                let entity_property = create_entity_property(&entity);
+                aspect.add_property(entity_property);
+
+                tracing::debug!("Converted collection '{}' to entity", entity.name());
             }
             SubmodelElement::Operation(op) => {
                 let operation = convert_aas_operation_to_samm(op)?;
@@ -196,13 +201,34 @@ fn convert_aas_operation_to_samm(aas_op: &super::models::Operation) -> Result<Op
         }
     }
 
-    // Create operation
-    // TODO: Convert input/output variables to SAMM properties
-    let operation = Operation {
+    // Create operation with input/output parameters
+    let mut operation = Operation {
         metadata,
         input: Vec::new(),
         output: None,
     };
+
+    // Convert input variables to SAMM properties
+    for input_var in &aas_op.input_variables {
+        match convert_aas_property_to_samm(&input_var.value) {
+            Ok(property) => operation.add_input(property),
+            Err(e) => {
+                tracing::warn!("Failed to convert input variable: {}", e);
+            }
+        }
+    }
+
+    // Convert output variables to SAMM properties (take first one if available)
+    if let Some(output_var) = aas_op.output_variables.first() {
+        match convert_aas_property_to_samm(&output_var.value) {
+            Ok(property) => {
+                operation.output = Some(property);
+            }
+            Err(e) => {
+                tracing::warn!("Failed to convert output variable: {}", e);
+            }
+        }
+    }
 
     Ok(operation)
 }
@@ -247,6 +273,33 @@ fn convert_collection_to_entity(
     };
 
     Ok(entity)
+}
+
+/// Create a property that references an entity
+fn create_entity_property(entity: &Entity) -> Property {
+    let entity_name = entity.name();
+    let urn = format!("urn:aas:property#{}", entity_name);
+
+    let mut metadata = ElementMetadata::new(urn);
+    metadata.add_preferred_name("en".to_string(), entity_name.to_string());
+
+    // Create a characteristic that references the entity type
+    let characteristic = Characteristic::new(
+        format!("urn:aas:characteristic#{}Characteristic", entity_name),
+        CharacteristicKind::Trait,
+    )
+    .with_data_type(entity.urn().to_string());
+
+    Property {
+        metadata,
+        characteristic: Some(characteristic),
+        example_values: Vec::new(),
+        optional: false,
+        is_collection: false,
+        payload_name: None,
+        is_abstract: false,
+        extends: None,
+    }
 }
 
 /// Map AAS data types to XSD data types

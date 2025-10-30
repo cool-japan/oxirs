@@ -327,7 +327,7 @@ pub fn detect_rdf_format_compressed(path: &Path) -> Option<String> {
         .trim_end_matches(".lzma");
 
     // Detect RDF format from remaining extension
-    if let Some(ext) = path_without_compression.split('.').last() {
+    if let Some(ext) = path_without_compression.split('.').next_back() {
         let format = match ext {
             "ttl" | "turtle" => "turtle",
             "nt" | "ntriples" => "ntriples",

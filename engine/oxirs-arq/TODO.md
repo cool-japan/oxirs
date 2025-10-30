@@ -74,36 +74,43 @@
     - Scalability testing with increasing nesting depth (1-4 levels)
     - Benchmark coverage: 100-10K triples, nesting depths 1-4
 
-## 🎯 Post-Alpha Development Roadmap
+## 🎯 v0.1.0 Complete Feature Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - December 2025)
+### v0.1.0-beta.1 Target (December 2025) - ALL FEATURES
 
-#### Query Optimization
-- [ ] Cost-based optimization
-- [ ] Advanced join ordering
-- [ ] Filter pushdown improvements
+#### Query Optimization (Target: v0.1.0)
+- [x] Cost-based optimization ✅ (Implemented)
+- [x] Advanced join ordering ✅ (Implemented)
+- [x] Filter pushdown improvements ✅ (Implemented)
 - [ ] Statistics-based cardinality estimation
+- [ ] Advanced query rewriting
+- [ ] Adaptive query execution
+- [ ] Query result materialization strategies
 
-#### SPARQL Compliance
-- [x] Complete SPARQL 1.2 / SPARQL-star support ✨ (Alpha.3)
+#### SPARQL Compliance (Target: v0.1.0)
+- [x] Complete SPARQL 1.2 / SPARQL-star support ✅
 - [ ] Additional aggregate functions
 - [ ] Property path optimization
 - [ ] Federated query improvements
+- [ ] Full SPARQL 1.2 Update conformance
 
-#### Performance
+#### Performance (Target: v0.1.0)
 - [ ] Parallel query execution
 - [ ] Query result streaming
 - [ ] Memory-efficient processing
 - [ ] Query plan caching
+- [ ] JIT compilation for queries
+- [ ] SIMD-accelerated operations
 
-#### Developer Experience
-- [x] Query explain and profiling ✨ (Alpha.3)
+#### Developer Experience (Target: v0.1.0)
+- [x] Query explain and profiling ✅
 - [ ] Better error messages
 - [ ] Query validation tools
 - [ ] Debugging utilities
+- [ ] Interactive query builder
 
-### v0.2.0 Targets (Q1 2026)
-- [ ] Advanced query rewriting
-- [ ] Adaptive query execution
-- [ ] Query result materialization strategies
+#### Integration (Target: v0.1.0)
 - [ ] Integration with distributed storage
+- [ ] GraphQL query translation
+- [ ] REST API endpoints
+- [ ] WebSocket streaming support

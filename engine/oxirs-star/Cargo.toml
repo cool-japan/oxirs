@@ -39,6 +39,9 @@ flate2.workspace = true
 zstd.workspace = true
 lz4_flex.workspace = true
 
+# Async runtime for production features
+tokio = { version = "1.43", features = ["sync"] }
+
 [dev-dependencies]
 criterion.workspace = true
 proptest.workspace = true

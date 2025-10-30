@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use tracing::{debug, span, Level};
 
 /// Annotation metadata for a quoted triple
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct TripleAnnotation {
     /// Confidence/certainty score (0.0 to 1.0)
     pub confidence: Option<f64>,
@@ -78,23 +78,6 @@ pub struct ProvenanceRecord {
 
     /// Generation method (e.g., "manual", "automatic", "inferred")
     pub method: Option<String>,
-}
-
-impl Default for TripleAnnotation {
-    fn default() -> Self {
-        Self {
-            confidence: None,
-            source: None,
-            timestamp: None,
-            validity_period: None,
-            evidence: Vec::new(),
-            custom_metadata: HashMap::new(),
-            provenance: Vec::new(),
-            quality_score: None,
-            locale: None,
-            version: None,
-        }
-    }
 }
 
 impl TripleAnnotation {
@@ -365,6 +348,7 @@ impl AnnotationStore {
     }
 
     /// Get statistics about annotations
+    #[allow(clippy::field_reassign_with_default)]
     pub fn statistics(&self) -> AnnotationStatistics {
         let mut stats = AnnotationStatistics::default();
 

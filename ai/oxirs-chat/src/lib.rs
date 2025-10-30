@@ -190,16 +190,22 @@ pub mod llm;
 pub mod message_analytics;
 pub mod messages;
 pub mod nl2sparql;
+pub mod nlp; // Natural Language Processing (NEW: intent, sentiment, entities, coreference)
 pub mod performance;
 pub mod persistence;
+pub mod query_refinement; // NEW: Query refinement system
 pub mod rag;
 // pub mod revolutionary_chat_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
+pub mod export; // Multi-format export (NEW)
+pub mod plugins; // Plugin system (NEW)
 pub mod rich_content;
 pub mod server;
 pub mod session;
 pub mod session_manager;
 pub mod sparql_optimizer;
+pub mod suggestions; // Query suggestions (NEW)
 pub mod types;
+pub mod webhooks; // Webhook support (NEW)
 pub mod workflow;
 
 // Re-export commonly used types

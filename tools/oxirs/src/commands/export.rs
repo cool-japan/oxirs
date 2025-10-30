@@ -70,14 +70,24 @@ pub async fn run(
 
     let duration = start_time.elapsed();
 
-    // Report statistics
-    println!("Export completed in {:.2} seconds", duration.as_secs_f64());
-    println!("Triples exported: {triple_count}");
-    println!("Output file: {}", file.display());
-    println!(
-        "Average rate: {:.0} triples/second",
-        triple_count as f64 / duration.as_secs_f64()
-    );
+    // Report statistics with enhanced formatting
+    use crate::cli::{file_size, format_bytes, format_duration, format_number};
+
+    let file_size_bytes = file_size(&file).unwrap_or(0);
+
+    println!("\n✓ Export completed successfully!");
+    println!("  Duration: {}", format_duration(duration));
+    println!("  Triples exported: {}", format_number(triple_count as u64));
+    println!("  Output file: {}", file.display());
+    println!("  File size: {}", format_bytes(file_size_bytes));
+
+    if duration.as_secs_f64() > 0.0 {
+        let rate = triple_count as f64 / duration.as_secs_f64();
+        println!(
+            "  Export rate: {} triples/second",
+            format_number(rate as u64)
+        );
+    }
 
     Ok(())
 }

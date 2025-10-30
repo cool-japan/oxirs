@@ -3,12 +3,12 @@
 //! Advanced health monitoring system for NATS backend with predictive analytics,
 //! automatic recovery, and intelligent alerting capabilities.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tokio::sync::RwLock;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 /// Health monitoring configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -265,8 +265,8 @@ impl HealthMonitor {
         let sum_x2: f64 = (0..values.len()).map(|i| (i as f64).powi(2)).sum();
 
         // Calculate slope (trend)
-        let slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x.powi(2));
-        slope
+
+        (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x.powi(2))
     }
 
     /// Get current health status

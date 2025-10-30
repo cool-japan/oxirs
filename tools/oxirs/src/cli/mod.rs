@@ -15,6 +15,7 @@ pub mod interactive;
 pub mod logging;
 pub mod output;
 pub mod progress;
+pub mod utils;
 pub mod validation;
 
 pub use completion::{CommandCompletionProvider, CompletionContext, CompletionProvider};
@@ -30,6 +31,7 @@ pub use logging::{
 };
 pub use output::{ColorScheme, OutputFormatter};
 pub use progress::{ProgressTracker, ProgressType};
+pub use utils::*;
 pub use validation::ArgumentValidator;
 
 /// CLI Context for managing global state

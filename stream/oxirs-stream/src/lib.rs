@@ -171,7 +171,9 @@ pub mod config;
 pub mod connection_pool;
 pub mod consciousness_streaming;
 pub mod consumer;
+pub mod cqels;
 pub mod cqrs;
+pub mod csparql;
 pub mod delta;
 pub mod diagnostics;
 pub mod dlq;
@@ -180,6 +182,7 @@ pub mod event;
 pub mod event_sourcing;
 pub mod failover;
 pub mod graphql_bridge;
+pub mod graphql_subscriptions;
 pub mod health_monitor;
 pub mod join;
 pub mod monitoring;
@@ -412,15 +415,15 @@ enum BackendProducer {
     #[cfg(feature = "kafka")]
     Kafka(backend::kafka::KafkaProducer),
     #[cfg(feature = "nats")]
-    Nats(backend::nats::NatsProducer),
+    Nats(Box<backend::nats::NatsProducer>),
     #[cfg(feature = "redis")]
     Redis(backend::redis::RedisProducer),
     #[cfg(feature = "kinesis")]
     Kinesis(backend::kinesis::KinesisProducer),
     #[cfg(feature = "pulsar")]
-    Pulsar(backend::pulsar::PulsarProducer),
+    Pulsar(Box<backend::pulsar::PulsarProducer>),
     #[cfg(feature = "rabbitmq")]
-    RabbitMQ(backend::rabbitmq::RabbitMQProducer),
+    RabbitMQ(Box<backend::rabbitmq::RabbitMQProducer>),
     Memory(MemoryProducer),
 }
 
@@ -615,7 +618,7 @@ impl StreamProducer {
 
                 let mut producer = backend::nats::NatsProducer::new(stream_config)?;
                 producer.connect().await?;
-                BackendProducer::Nats(producer)
+                BackendProducer::Nats(Box::new(producer))
             }
             #[cfg(feature = "redis")]
             StreamBackendType::Redis {
@@ -703,7 +706,7 @@ impl StreamProducer {
 
                 let mut producer = backend::pulsar::PulsarProducer::new(stream_config)?;
                 producer.connect().await?;
-                BackendProducer::Pulsar(producer)
+                BackendProducer::Pulsar(Box::new(producer))
             }
             #[cfg(feature = "rabbitmq")]
             StreamBackendType::RabbitMQ {
@@ -733,7 +736,7 @@ impl StreamProducer {
 
                 let mut producer = backend::rabbitmq::RabbitMQProducer::new(stream_config)?;
                 producer.connect().await?;
-                BackendProducer::RabbitMQ(producer)
+                BackendProducer::RabbitMQ(Box::new(producer))
             }
             StreamBackendType::Memory {
                 max_size: _,
@@ -1087,15 +1090,15 @@ enum BackendConsumer {
     #[cfg(feature = "kafka")]
     Kafka(backend::kafka::KafkaConsumer),
     #[cfg(feature = "nats")]
-    Nats(backend::nats::NatsConsumer),
+    Nats(Box<backend::nats::NatsConsumer>),
     #[cfg(feature = "redis")]
     Redis(backend::redis::RedisConsumer),
     #[cfg(feature = "kinesis")]
     Kinesis(backend::kinesis::KinesisConsumer),
     #[cfg(feature = "pulsar")]
-    Pulsar(backend::pulsar::PulsarConsumer),
+    Pulsar(Box<backend::pulsar::PulsarConsumer>),
     #[cfg(feature = "rabbitmq")]
-    RabbitMQ(backend::rabbitmq::RabbitMQConsumer),
+    RabbitMQ(Box<backend::rabbitmq::RabbitMQConsumer>),
     Memory(MemoryConsumer),
 }
 
@@ -1287,7 +1290,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::nats::NatsConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Nats(consumer)
+                BackendConsumer::Nats(Box::new(consumer))
             }
             #[cfg(feature = "redis")]
             StreamBackendType::Redis {
@@ -1375,7 +1378,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::pulsar::PulsarConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Pulsar(consumer)
+                BackendConsumer::Pulsar(Box::new(consumer))
             }
             #[cfg(feature = "rabbitmq")]
             StreamBackendType::RabbitMQ {
@@ -1405,7 +1408,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::rabbitmq::RabbitMQConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::RabbitMQ(consumer)
+                BackendConsumer::RabbitMQ(Box::new(consumer))
             }
             StreamBackendType::Memory {
                 max_size: _,

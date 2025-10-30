@@ -191,7 +191,7 @@ impl AdvancedPartitioning {
         let mut hash_ring = self.hash_ring.write().await;
 
         for i in 0..self.config.virtual_nodes_per_node {
-            let vnode_id = ((node_id as u64) << 32) | (i as u64);
+            let vnode_id = (node_id << 32) | (i as u64);
             let hash_position = Self::hash_virtual_node(vnode_id);
 
             let vnode = VirtualNode {

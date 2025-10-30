@@ -1,7 +1,13 @@
 //! Advanced Caching System for OxiRS Chat
 //!
 //! Implements multi-level caching for responses, contexts, embeddings, and query results
-//! with LRU eviction, TTL support, and intelligent cache warming strategies.
+//! with LRU eviction, TTL support, semantic caching, and intelligent cache warming strategies.
+
+pub mod semantic; // NEW: Semantic caching
+
+pub use semantic::{
+    CacheStatistics as SemanticCacheStatistics, SemanticCache, SemanticCacheConfig,
+};
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};

@@ -197,10 +197,8 @@ impl EntityLinker {
                 let entity_embedding = self.embedding_matrix.row(*idx);
 
                 // Compute context similarity
-                let context_sim = self.compute_context_similarity(
-                    &entity_embedding.to_owned(),
-                    context_embeddings,
-                );
+                let context_sim = self
+                    .compute_context_similarity(&entity_embedding.to_owned(), context_embeddings);
 
                 // Combine base similarity and context similarity
                 let confidence = 0.7 * base_sim + 0.3 * context_sim;
@@ -400,12 +398,7 @@ impl RelationPredictor {
     }
 
     /// Score a triple using TransE-style scoring
-    fn score_triple(
-        &self,
-        head: &Array1<f32>,
-        relation: &Array1<f32>,
-        tail: &Array1<f32>,
-    ) -> f32 {
+    fn score_triple(&self, head: &Array1<f32>, relation: &Array1<f32>, tail: &Array1<f32>) -> f32 {
         // TransE: score = -||h + r - t||
         let expected_tail = head + relation;
         let distance = Self::euclidean_distance(&expected_tail, tail);
@@ -481,8 +474,7 @@ mod tests {
         relation_embeddings.insert("rel1".to_string(), array![0.1, 0.1, 0.1]);
 
         let config = RelationPredictorConfig::default();
-        let predictor =
-            RelationPredictor::new(config, relation_embeddings, entity_embeddings);
+        let predictor = RelationPredictor::new(config, relation_embeddings, entity_embeddings);
 
         // Just verify creation succeeds
         assert_eq!(predictor.relation_embeddings.len(), 1);

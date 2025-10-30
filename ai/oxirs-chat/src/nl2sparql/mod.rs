@@ -3,7 +3,8 @@
 //! Provides advanced NL2SPARQL capabilities with template-based generation,
 //! semantic parsing, query optimization, and comprehensive validation.
 
-pub mod types;
+pub mod context_aware;
+pub mod types; // NEW: Context-aware query generation
 
 pub use types::*;
 

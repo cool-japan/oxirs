@@ -14,36 +14,50 @@
 - **Federation awareness** enabling cross-cluster SPARQL `SERVICE` routing
 - **Released on crates.io**: `oxirs-cluster = "0.1.0-beta.1"` (experimental)
 
-## 🎯 Post-Alpha Development Roadmap
+## 🎯 v0.1.0 Complete Feature Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - December 2025)
+### v0.1.0-beta.1 Target (December 2025) - ALL FEATURES
 
-#### Core Clustering
+#### Core Clustering (Target: v0.1.0)
 - [ ] Raft consensus optimization
 - [ ] Node discovery improvements
 - [ ] Leader election tuning
 - [ ] Log replication optimization
+- [ ] Byzantine fault tolerance
+- [ ] Quorum-based operations
+- [ ] Dynamic membership changes
 
-#### Data Distribution
-- [ ] Partitioning strategies
+#### Data Distribution (Target: v0.1.0)
+- [ ] Partitioning strategies (hash, range, consistent hashing)
 - [ ] Data rebalancing
-- [ ] Consistency guarantees
-- [ ] Conflict resolution
+- [ ] Consistency guarantees (strong, eventual, causal)
+- [ ] Conflict resolution (CRDTs, vector clocks)
+- [ ] Multi-datacenter support
+- [ ] Geographic replication
+- [ ] Sharding strategies
 
-#### Stability
+#### Stability (Target: v0.1.0)
 - [ ] Network partition handling
 - [ ] Crash recovery
 - [ ] Data integrity verification
 - [ ] Split-brain prevention
+- [ ] Automatic failover
+- [ ] Graceful degradation
+- [ ] Circuit breakers
 
-#### Monitoring
+#### Monitoring (Target: v0.1.0)
 - [ ] Cluster health monitoring
 - [ ] Performance metrics
 - [ ] Node status tracking
 - [ ] Replication lag monitoring
+- [ ] Distributed tracing
+- [ ] Alerting system
+- [ ] Visualization dashboard
 
-### v0.2.0 Targets (Q1 2026)
-- [ ] Multi-datacenter support
+#### Operations (Target: v0.1.0)
 - [ ] Read replicas
 - [ ] Backup and restore
 - [ ] Rolling upgrades
+- [ ] Zero-downtime migrations
+- [ ] Disaster recovery
+- [ ] Automated scaling

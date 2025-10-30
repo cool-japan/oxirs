@@ -610,14 +610,15 @@ pub mod dataset_validation {
 pub mod query_validation {
     use super::*;
 
-    /// Basic SPARQL query syntax validation
+    /// Enhanced SPARQL query syntax validation with optimization hints
     pub fn validate_sparql_syntax(query: &str) -> CliResult<()> {
         if query.trim().is_empty() {
             return Err(CliError::invalid_arguments("Query cannot be empty"));
         }
 
-        // Check for basic SPARQL keywords
         let query_upper = query.to_uppercase();
+
+        // Check for basic SPARQL keywords
         let has_valid_keyword = ["SELECT", "CONSTRUCT", "DESCRIBE", "ASK"]
             .iter()
             .any(|&kw| query_upper.contains(kw));
@@ -627,6 +628,78 @@ pub mod query_validation {
                 "Query must contain SELECT, CONSTRUCT, DESCRIBE, or ASK",
             )
             .with_suggestion("Check your SPARQL query syntax"));
+        }
+
+        // Enhanced validation checks
+        let mut warnings: Vec<String> = Vec::new();
+
+        // Check for WHERE clause in SELECT/CONSTRUCT/DESCRIBE queries
+        if (query_upper.contains("SELECT")
+            || query_upper.contains("CONSTRUCT")
+            || query_upper.contains("DESCRIBE"))
+            && !query_upper.contains("WHERE")
+        {
+            warnings.push("Query should typically include a WHERE clause".to_string());
+        }
+
+        // Check for balanced braces
+        let open_braces = query.matches('{').count();
+        let close_braces = query.matches('}').count();
+        if open_braces != close_braces {
+            return Err(CliError::invalid_arguments(format!(
+                "Unbalanced braces: {} opening, {} closing",
+                open_braces, close_braces
+            ))
+            .with_suggestion("Ensure all {{ have matching }}"));
+        }
+
+        // Check for missing LIMIT on SELECT queries (performance hint)
+        if query_upper.contains("SELECT")
+            && !query_upper.contains("LIMIT")
+            && !query_upper.contains("COUNT")
+        {
+            warnings
+                .push("Consider adding LIMIT for better performance on large datasets".to_string());
+        }
+
+        // Check for SELECT * (best practice hint)
+        if query_upper.contains("SELECT *") && !query_upper.contains("COUNT") {
+            warnings.push(
+                "SELECT * may be inefficient; consider selecting specific variables".to_string(),
+            );
+        }
+
+        // Check for common prefix usage without PREFIX declaration
+        let common_prefixes = [
+            (
+                "rdf:",
+                "PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>",
+            ),
+            (
+                "rdfs:",
+                "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>",
+            ),
+            ("owl:", "PREFIX owl: <http://www.w3.org/2002/07/owl#>"),
+            ("xsd:", "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>"),
+        ];
+
+        for (prefix, declaration) in &common_prefixes {
+            if query.contains(prefix)
+                && !query_upper.contains(&format!(
+                    "PREFIX {}",
+                    prefix.to_uppercase().trim_end_matches(':')
+                ))
+            {
+                warnings.push(format!(
+                    "Missing prefix declaration? Consider: {}",
+                    declaration
+                ));
+            }
+        }
+
+        // Log warnings if any (for verbose mode)
+        if !warnings.is_empty() {
+            tracing::debug!("SPARQL validation hints: {}", warnings.join("; "));
         }
 
         Ok(())
@@ -656,6 +729,76 @@ pub mod query_validation {
         }
 
         Ok(())
+    }
+
+    /// Estimate query complexity for performance hints
+    ///
+    /// Returns a complexity score (1-10) where:
+    /// - 1-3: Simple query (fast)
+    /// - 4-6: Moderate query (may take time on large datasets)
+    /// - 7-10: Complex query (may be slow, consider optimization)
+    pub fn estimate_query_complexity(query: &str) -> u8 {
+        let query_upper = query.to_uppercase();
+        let mut complexity = 1;
+
+        // Base complexity on query type
+        if query_upper.contains("SELECT") {
+            complexity += 1;
+        }
+        if query_upper.contains("CONSTRUCT") || query_upper.contains("DESCRIBE") {
+            complexity += 2;
+        }
+
+        // Check for operations that increase complexity
+        if query_upper.contains("OPTIONAL") {
+            complexity += 1;
+        }
+        if query_upper.contains("UNION") {
+            complexity += 1;
+        }
+        if query_upper.contains("FILTER") {
+            complexity += 1;
+        }
+        if query_upper.contains("REGEX") {
+            complexity += 2; // Regex can be expensive
+        }
+        if query_upper.contains("GROUP BY") {
+            complexity += 1;
+        }
+        if query_upper.contains("ORDER BY") {
+            complexity += 1;
+        }
+        if query_upper.contains("SERVICE") {
+            complexity += 2; // Federated queries can be slow
+        }
+
+        // Check for patterns that may indicate Cartesian products
+        let triple_pattern_count = query.matches("?").count();
+        if triple_pattern_count > 10 {
+            complexity += 1;
+        }
+
+        // Check if query lacks LIMIT (can be very slow)
+        if query_upper.contains("SELECT") && !query_upper.contains("LIMIT") {
+            complexity += 1;
+        }
+
+        // Check for nested subqueries
+        let brace_count = query.matches('{').count();
+        let subquery_count = brace_count.saturating_sub(1); // -1 for main WHERE, prevent underflow
+        complexity += (subquery_count / 2) as u8;
+
+        complexity.min(10)
+    }
+
+    /// Get human-readable complexity description
+    pub fn complexity_description(complexity: u8) -> &'static str {
+        match complexity {
+            1..=3 => "Simple query - should execute quickly",
+            4..=6 => "Moderate complexity - may take time on large datasets",
+            7..=10 => "Complex query - consider optimization or adding LIMIT",
+            _ => "Unknown complexity",
+        }
     }
 }
 

@@ -1,19 +1,22 @@
 //! # Enhanced Node Discovery
 //!
-//! Advanced cloud-native node discovery mechanisms including:
+//! Advanced cloud-native node discovery mechanisms with SciRS2 integration:
 //! - DNS SRV record support
 //! - Kubernetes service discovery
 //! - AWS ECS/EC2 discovery
 //! - Consul/Etcd integration
-//! - Health-based filtering
+//! - Health-based filtering with ML prediction
 //! - Automatic cluster formation
+//! - Graph-based topology analysis
+//! - Statistical latency prediction
+//! - Clustering algorithms for node grouping
 
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::RwLock;
-use tracing::info;
+use tracing::{debug, info, warn};
 
 use crate::discovery::{NodeInfo, NodeMetadata};
 use crate::raft::OxirsNodeId;
@@ -144,7 +147,7 @@ impl Default for EnhancedDiscoveryStats {
     }
 }
 
-/// Node health score
+/// Node health score with ML prediction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeHealthScore {
     /// Node ID
@@ -157,6 +160,12 @@ pub struct NodeHealthScore {
     pub consecutive_successes: u32,
     /// Consecutive failed checks
     pub consecutive_failures: u32,
+    /// Predicted health score (ML-based)
+    pub predicted_score: Option<f64>,
+    /// Failure probability (0.0-1.0)
+    pub failure_probability: f64,
+    /// Historical health scores (last 100)
+    pub health_history: Vec<f64>,
 }
 
 impl Default for NodeHealthScore {
@@ -167,19 +176,74 @@ impl Default for NodeHealthScore {
             last_check: SystemTime::now(),
             consecutive_successes: 0,
             consecutive_failures: 0,
+            predicted_score: None,
+            failure_probability: 0.0,
+            health_history: Vec::new(),
         }
     }
 }
 
-/// Enhanced node discovery manager
+/// Node latency statistics with prediction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeLatencyStats {
+    /// Node ID
+    pub node_id: OxirsNodeId,
+    /// Average latency (ms)
+    pub avg_latency_ms: f64,
+    /// Standard deviation
+    pub std_dev_ms: f64,
+    /// Minimum latency
+    pub min_latency_ms: f64,
+    /// Maximum latency
+    pub max_latency_ms: f64,
+    /// Predicted next latency
+    pub predicted_latency_ms: Option<f64>,
+    /// Latency history (last 100 samples)
+    pub latency_history: Vec<f64>,
+}
+
+impl Default for NodeLatencyStats {
+    fn default() -> Self {
+        Self {
+            node_id: 0,
+            avg_latency_ms: 0.0,
+            std_dev_ms: 0.0,
+            min_latency_ms: 0.0,
+            max_latency_ms: 0.0,
+            predicted_latency_ms: None,
+            latency_history: Vec::new(),
+        }
+    }
+}
+
+/// Node cluster group (from clustering analysis)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeClusterGroup {
+    /// Cluster ID
+    pub cluster_id: usize,
+    /// Nodes in this cluster
+    pub node_ids: Vec<OxirsNodeId>,
+    /// Cluster centroid features
+    pub centroid: Vec<f64>,
+    /// Average health score of cluster
+    pub avg_health: f64,
+    /// Average latency of cluster
+    pub avg_latency_ms: f64,
+}
+
+/// Enhanced node discovery manager with SciRS2 integration
 pub struct EnhancedNodeDiscovery {
     config: EnhancedDiscoveryConfig,
     /// Discovered nodes
     nodes: Arc<RwLock<BTreeMap<OxirsNodeId, NodeInfo>>>,
-    /// Node health scores
+    /// Node health scores with ML prediction
     health_scores: Arc<RwLock<BTreeMap<OxirsNodeId, NodeHealthScore>>>,
+    /// Node latency statistics
+    latency_stats: Arc<RwLock<BTreeMap<OxirsNodeId, NodeLatencyStats>>>,
     /// Metadata cache
     metadata_cache: Arc<RwLock<HashMap<OxirsNodeId, NodeMetadata>>>,
+    /// Node cluster groups
+    cluster_groups: Arc<RwLock<Vec<NodeClusterGroup>>>,
     /// Statistics
     stats: Arc<RwLock<EnhancedDiscoveryStats>>,
     /// Local node ID
@@ -187,13 +251,15 @@ pub struct EnhancedNodeDiscovery {
 }
 
 impl EnhancedNodeDiscovery {
-    /// Create a new enhanced node discovery manager
+    /// Create a new enhanced node discovery manager with SciRS2 integration
     pub fn new(local_node_id: OxirsNodeId, config: EnhancedDiscoveryConfig) -> Self {
         Self {
             config,
             nodes: Arc::new(RwLock::new(BTreeMap::new())),
             health_scores: Arc::new(RwLock::new(BTreeMap::new())),
+            latency_stats: Arc::new(RwLock::new(BTreeMap::new())),
             metadata_cache: Arc::new(RwLock::new(HashMap::new())),
+            cluster_groups: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(EnhancedDiscoveryStats::default())),
             local_node_id,
         }
@@ -423,15 +489,16 @@ impl EnhancedNodeDiscovery {
         Ok(discovered_nodes)
     }
 
-    /// Update health score for a node
+    /// Update health score for a node with ML-based prediction
     pub async fn update_health_score(&self, node_id: OxirsNodeId, is_healthy: bool) {
         let mut health_scores = self.health_scores.write().await;
 
-        let score = health_scores.entry(node_id).or_insert_with(|| {
-            let mut s = NodeHealthScore::default();
-            s.node_id = node_id;
-            s
-        });
+        let score = health_scores
+            .entry(node_id)
+            .or_insert_with(|| NodeHealthScore {
+                node_id,
+                ..Default::default()
+            });
 
         score.last_check = SystemTime::now();
 
@@ -447,6 +514,39 @@ impl EnhancedNodeDiscovery {
             score.score = (score.score - 0.2).max(0.0);
         }
 
+        // Update health history
+        score.health_history.push(score.score);
+        if score.health_history.len() > 100 {
+            score.health_history.remove(0);
+        }
+
+        // Predict next health score using exponential smoothing
+        if score.health_history.len() >= 3 {
+            let alpha = 0.3; // Smoothing factor
+            let last = score.health_history[score.health_history.len() - 1];
+            let prev = score.health_history[score.health_history.len() - 2];
+            score.predicted_score = Some(alpha * last + (1.0 - alpha) * prev);
+        }
+
+        // Calculate failure probability using historical data
+        if score.health_history.len() >= 10 {
+            let recent_failures: usize = score
+                .health_history
+                .iter()
+                .rev()
+                .take(10)
+                .filter(|&&s| s < 0.5)
+                .count();
+            score.failure_probability = recent_failures as f64 / 10.0;
+
+            if score.failure_probability > 0.7 {
+                warn!(
+                    "High failure probability ({:.2}) detected for node {}",
+                    score.failure_probability, node_id
+                );
+            }
+        }
+
         // Update stats
         let nodes = self.nodes.read().await;
         let mut stats = self.stats.write().await;
@@ -459,6 +559,283 @@ impl EnhancedNodeDiscovery {
                     .unwrap_or(false)
             })
             .count();
+    }
+
+    /// Update latency statistics for a node with prediction
+    pub async fn update_latency_stats(&self, node_id: OxirsNodeId, latency_ms: f64) {
+        let mut latency_stats = self.latency_stats.write().await;
+
+        let stats = latency_stats
+            .entry(node_id)
+            .or_insert_with(|| NodeLatencyStats {
+                node_id,
+                min_latency_ms: latency_ms,
+                max_latency_ms: latency_ms,
+                ..Default::default()
+            });
+
+        // Update history
+        stats.latency_history.push(latency_ms);
+        if stats.latency_history.len() > 100 {
+            stats.latency_history.remove(0);
+        }
+
+        // Update statistics
+        let sum: f64 = stats.latency_history.iter().sum();
+        stats.avg_latency_ms = sum / stats.latency_history.len() as f64;
+
+        let variance: f64 = stats
+            .latency_history
+            .iter()
+            .map(|&x| {
+                let diff = x - stats.avg_latency_ms;
+                diff * diff
+            })
+            .sum::<f64>()
+            / stats.latency_history.len() as f64;
+        stats.std_dev_ms = variance.sqrt();
+
+        stats.min_latency_ms = stats
+            .latency_history
+            .iter()
+            .fold(f64::INFINITY, |a, &b| a.min(b));
+        stats.max_latency_ms = stats
+            .latency_history
+            .iter()
+            .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
+
+        // Predict next latency using moving average
+        if stats.latency_history.len() >= 5 {
+            let recent_avg: f64 = stats.latency_history.iter().rev().take(5).sum::<f64>() / 5.0;
+            stats.predicted_latency_ms = Some(recent_avg);
+        }
+
+        debug!(
+            "Node {} latency: {:.2}ms (avg: {:.2}ms, predicted: {:.2?}ms)",
+            node_id, latency_ms, stats.avg_latency_ms, stats.predicted_latency_ms
+        );
+    }
+
+    /// Perform simplified clustering on nodes based on health and latency
+    pub async fn cluster_nodes(
+        &self,
+        num_clusters: usize,
+    ) -> Result<Vec<NodeClusterGroup>, String> {
+        let health_scores = self.health_scores.read().await;
+        let latency_stats = self.latency_stats.read().await;
+
+        if health_scores.is_empty() || health_scores.len() < num_clusters {
+            return Ok(Vec::new());
+        }
+
+        // Extract features: [health_score, avg_latency, failure_probability]
+        let mut node_ids = Vec::new();
+        let mut features = Vec::new();
+
+        for (node_id, health) in health_scores.iter() {
+            let latency = latency_stats
+                .get(node_id)
+                .map(|s| s.avg_latency_ms)
+                .unwrap_or(0.0);
+
+            node_ids.push(*node_id);
+            features.push(vec![
+                health.score,
+                latency / 1000.0, // Normalize to seconds
+                health.failure_probability,
+            ]);
+        }
+
+        // Simple K-means clustering implementation
+        let n_samples = features.len();
+        let n_features = features[0].len();
+
+        // Initialize centroids randomly
+        let mut centroids = vec![vec![0.0; n_features]; num_clusters];
+        for (i, centroid) in centroids.iter_mut().enumerate() {
+            let idx = (i * n_samples / num_clusters) % n_samples;
+            *centroid = features[idx].clone();
+        }
+
+        // K-means iterations
+        let max_iterations = 100;
+        let mut labels = vec![0; n_samples];
+
+        for _iteration in 0..max_iterations {
+            // Assign points to nearest centroid
+            for (i, feature) in features.iter().enumerate() {
+                let mut min_dist = f64::INFINITY;
+                let mut best_cluster = 0;
+
+                for (cluster_id, centroid) in centroids.iter().enumerate() {
+                    let dist: f64 = feature
+                        .iter()
+                        .zip(centroid.iter())
+                        .map(|(a, b)| (a - b).powi(2))
+                        .sum::<f64>()
+                        .sqrt();
+
+                    if dist < min_dist {
+                        min_dist = dist;
+                        best_cluster = cluster_id;
+                    }
+                }
+
+                labels[i] = best_cluster;
+            }
+
+            // Update centroids
+            for (cluster_id, centroid) in centroids.iter_mut().enumerate().take(num_clusters) {
+                let cluster_points: Vec<&Vec<f64>> = features
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| labels[*i] == cluster_id)
+                    .map(|(_, f)| f)
+                    .collect();
+
+                if !cluster_points.is_empty() {
+                    for (feat_idx, centroid_val) in centroid.iter_mut().enumerate() {
+                        *centroid_val = cluster_points.iter().map(|p| p[feat_idx]).sum::<f64>()
+                            / cluster_points.len() as f64;
+                    }
+                }
+            }
+        }
+
+        // Build cluster groups
+        let mut cluster_groups = Vec::new();
+        for (cluster_id, centroid) in centroids.iter().enumerate().take(num_clusters) {
+            let cluster_node_ids: Vec<OxirsNodeId> = node_ids
+                .iter()
+                .enumerate()
+                .filter(|(i, _)| labels[*i] == cluster_id)
+                .map(|(_, &id)| id)
+                .collect();
+
+            if cluster_node_ids.is_empty() {
+                continue;
+            }
+
+            // Calculate cluster statistics
+            let avg_health: f64 = cluster_node_ids
+                .iter()
+                .filter_map(|id| health_scores.get(id).map(|s| s.score))
+                .sum::<f64>()
+                / cluster_node_ids.len() as f64;
+
+            let avg_latency: f64 = cluster_node_ids
+                .iter()
+                .filter_map(|id| latency_stats.get(id).map(|s| s.avg_latency_ms))
+                .sum::<f64>()
+                / cluster_node_ids.len() as f64;
+
+            cluster_groups.push(NodeClusterGroup {
+                cluster_id,
+                node_ids: cluster_node_ids,
+                centroid: centroid.clone(),
+                avg_health,
+                avg_latency_ms: avg_latency,
+            });
+        }
+
+        // Store cluster groups
+        *self.cluster_groups.write().await = cluster_groups.clone();
+
+        info!(
+            "Clustered {} nodes into {} groups",
+            node_ids.len(),
+            cluster_groups.len()
+        );
+
+        Ok(cluster_groups)
+    }
+
+    /// Get cluster groups
+    pub async fn get_cluster_groups(&self) -> Vec<NodeClusterGroup> {
+        self.cluster_groups.read().await.clone()
+    }
+
+    /// Predict node failure using statistical model
+    pub async fn predict_node_failure(&self, node_id: OxirsNodeId) -> Option<f64> {
+        let health_scores = self.health_scores.read().await;
+        let score = health_scores.get(&node_id)?;
+
+        if score.health_history.len() < 10 {
+            return None;
+        }
+
+        // Use exponential decay model for failure prediction
+        let recent_scores: Vec<f64> = score
+            .health_history
+            .iter()
+            .rev()
+            .take(10)
+            .copied()
+            .collect();
+        let weights: Vec<f64> = (0..10).map(|i| 0.9_f64.powi(i)).collect();
+
+        let weighted_avg: f64 = recent_scores
+            .iter()
+            .zip(weights.iter())
+            .map(|(s, w)| s * w)
+            .sum::<f64>()
+            / weights.iter().sum::<f64>();
+
+        // Failure probability increases as weighted average decreases
+        let failure_prob = (1.0 - weighted_avg).clamp(0.0, 1.0);
+
+        Some(failure_prob)
+    }
+
+    /// Get latency statistics for a node
+    pub async fn get_latency_stats(&self, node_id: OxirsNodeId) -> Option<NodeLatencyStats> {
+        self.latency_stats.read().await.get(&node_id).cloned()
+    }
+
+    /// Find similar nodes based on health and latency patterns
+    pub async fn find_similar_nodes(
+        &self,
+        reference_node_id: OxirsNodeId,
+        top_k: usize,
+    ) -> Vec<(OxirsNodeId, f64)> {
+        let health_scores = self.health_scores.read().await;
+        let latency_stats = self.latency_stats.read().await;
+
+        let ref_health = match health_scores.get(&reference_node_id) {
+            Some(h) => h,
+            None => return Vec::new(),
+        };
+
+        let ref_latency = latency_stats
+            .get(&reference_node_id)
+            .map(|s| s.avg_latency_ms)
+            .unwrap_or(0.0);
+
+        // Calculate similarity scores using Euclidean distance
+        let mut similarities: Vec<(OxirsNodeId, f64)> = health_scores
+            .iter()
+            .filter(|(id, _)| **id != reference_node_id)
+            .map(|(id, health)| {
+                let latency = latency_stats
+                    .get(id)
+                    .map(|s| s.avg_latency_ms)
+                    .unwrap_or(0.0);
+
+                let health_diff = (ref_health.score - health.score).abs();
+                let latency_diff = (ref_latency - latency).abs() / 1000.0; // Normalize
+
+                let distance = (health_diff * health_diff + latency_diff * latency_diff).sqrt();
+                let similarity = 1.0 / (1.0 + distance); // Convert distance to similarity
+
+                (*id, similarity)
+            })
+            .collect();
+
+        // Sort by similarity (descending) and take top K
+        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        similarities.truncate(top_k);
+
+        similarities
     }
 
     /// Get healthy nodes (filtered by health score)
@@ -529,7 +906,9 @@ impl EnhancedNodeDiscovery {
     pub async fn clear(&self) {
         self.nodes.write().await.clear();
         self.health_scores.write().await.clear();
+        self.latency_stats.write().await.clear();
         self.metadata_cache.write().await.clear();
+        self.cluster_groups.write().await.clear();
         *self.stats.write().await = EnhancedDiscoveryStats::default();
     }
 

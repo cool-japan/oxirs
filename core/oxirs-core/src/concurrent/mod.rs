@@ -7,11 +7,15 @@
 pub mod batch_builder;
 pub mod epoch;
 pub mod lock_free_graph;
+pub mod lock_free_reads;
+pub mod mrsw;
 pub mod parallel_batch;
 
 pub use batch_builder::{BatchBuilder, BatchBuilderConfig, BatchBuilderStats, CoalescingStrategy};
 pub use epoch::{EpochManager, HazardPointer, VersionedPointer};
 pub use lock_free_graph::{ConcurrentGraph, GraphStats};
+pub use lock_free_reads::{OptimizedReader, ReadStats, StreamingReader};
+pub use mrsw::{MrswReadGuard, MrswStats, MrswStore, MrswWriteGuard, TripleStore};
 pub use parallel_batch::{
     BatchConfig, BatchOperation, BatchStats, BatchStatsSummary, ParallelBatchProcessor,
     ProgressCallback,

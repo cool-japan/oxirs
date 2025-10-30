@@ -2,6 +2,7 @@
 
 pub mod algebra;
 pub mod binding_optimizer;
+pub mod cost_based_optimizer;
 pub mod distributed;
 pub mod exec;
 pub mod functions;
@@ -37,6 +38,9 @@ pub use algebra::{
     PropertyPath, Query as AlgebraQuery, TermPattern as AlgebraTermPattern,
 };
 pub use binding_optimizer::{BindingIterator, BindingOptimizer, BindingSet, Constraint, TermType};
+pub use cost_based_optimizer::{
+    CostBasedOptimizer, CostConfiguration, Optimization, OptimizedPlan, OptimizerStats,
+};
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
 pub use gpu::{GpuBackend, GpuQueryExecutor};
 pub use jit::{JitCompiler, JitConfig};

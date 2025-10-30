@@ -380,9 +380,9 @@ impl SammTurtleParser {
 
     /// Determine the kind of characteristic from its type
     fn determine_characteristic_kind(
-        &self,
+        &mut self,
         type_str: &str,
-        _subject: &NamedNode,
+        subject: &NamedNode,
     ) -> Result<CharacteristicKind> {
         // Extract the local name from the type URI
         let local_name = type_str
@@ -394,20 +394,24 @@ impl SammTurtleParser {
         match local_name.as_str() {
             "Trait" | "Characteristic" => Ok(CharacteristicKind::Trait),
             "Measurement" => {
-                // TODO: Parse unit from the graph
+                // Parse unit from the graph
+                let unit = self.parse_unit_from_characteristic(subject)?;
                 Ok(CharacteristicKind::Measurement {
-                    unit: "unit:one".to_string(),
+                    unit: unit.unwrap_or_else(|| "unit:one".to_string()),
                 })
             }
             "Enumeration" => {
-                // TODO: Parse values from the graph
-                Ok(CharacteristicKind::Enumeration { values: vec![] })
+                // Parse enumeration values from the graph
+                let values = self.parse_enumeration_values(subject)?;
+                Ok(CharacteristicKind::Enumeration { values })
             }
             "State" => {
-                // TODO: Parse values and default from the graph
+                // Parse state values and default value from the graph
+                let values = self.parse_enumeration_values(subject)?;
+                let default_value = self.parse_default_value(subject)?;
                 Ok(CharacteristicKind::State {
-                    values: vec![],
-                    default_value: None,
+                    values,
+                    default_value,
                 })
             }
             "List" => Ok(CharacteristicKind::List {
@@ -429,6 +433,54 @@ impl SammTurtleParser {
         }
     }
 
+    /// Parse unit from a Measurement characteristic
+    fn parse_unit_from_characteristic(&self, subject: &NamedNode) -> Result<Option<String>> {
+        // Try both samm-c:unit and samm:unit predicates
+        let unit_pred_c = NamedNode::new(format!("{}unit", self.samm_c_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let unit_pred = NamedNode::new(format!("{}unit", self.samm_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        // Try samm-c:unit first
+        if let Some(unit_term) = self.get_object(subject, &unit_pred_c) {
+            return Ok(Some(self.term_to_string(&unit_term)?));
+        }
+
+        // Try samm:unit
+        if let Some(unit_term) = self.get_object(subject, &unit_pred) {
+            return Ok(Some(self.term_to_string(&unit_term)?));
+        }
+
+        Ok(None)
+    }
+
+    /// Parse enumeration values from the graph
+    fn parse_enumeration_values(&self, subject: &NamedNode) -> Result<Vec<String>> {
+        // Parse samm-c:values predicate (RDF list of values)
+        let values_pred = NamedNode::new(format!("{}values", self.samm_c_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(values_term) = self.get_object(subject, &values_pred) {
+            // Parse the RDF list
+            return self.parse_rdf_list(&values_term);
+        }
+
+        Ok(vec![])
+    }
+
+    /// Parse default value from a State characteristic
+    fn parse_default_value(&self, subject: &NamedNode) -> Result<Option<String>> {
+        let default_pred =
+            NamedNode::new(format!("{}defaultValue", self.samm_c_ns.as_ref().unwrap()))
+                .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(default_term) = self.get_object(subject, &default_pred) {
+            return Ok(Some(self.term_to_string(&default_term)?));
+        }
+
+        Ok(None)
+    }
+
     /// Parse an Operation from the graph
     fn parse_operation(&mut self, urn: &str) -> Result<Operation> {
         let subject = NamedNode::new(urn)
@@ -439,7 +491,37 @@ impl SammTurtleParser {
         // Parse metadata
         self.parse_element_metadata(&subject, &mut operation.metadata)?;
 
-        // TODO: Parse input and output
+        // Parse input parameters (RDF list)
+        let input_pred = NamedNode::new(format!("{}input", self.samm_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(input_term) = self.get_object(&subject, &input_pred) {
+            let input_urns = self.parse_rdf_list(&input_term)?;
+            for input_urn in input_urns {
+                match self.parse_property(&input_urn) {
+                    Ok(property) => operation.add_input(property),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse input property '{}': {}", input_urn, e);
+                    }
+                }
+            }
+        }
+
+        // Parse output (single property)
+        let output_pred = NamedNode::new(format!("{}output", self.samm_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(output_term) = self.get_object(&subject, &output_pred) {
+            let output_urn = self.term_to_string(&output_term)?;
+            match self.parse_property(&output_urn) {
+                Ok(property) => {
+                    operation.output = Some(property);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse output property '{}': {}", output_urn, e);
+                }
+            }
+        }
 
         Ok(operation)
     }
@@ -454,7 +536,22 @@ impl SammTurtleParser {
         // Parse metadata
         self.parse_element_metadata(&subject, &mut event.metadata)?;
 
-        // TODO: Parse parameters
+        // Parse parameters (RDF list)
+        let parameters_pred =
+            NamedNode::new(format!("{}parameters", self.samm_ns.as_ref().unwrap()))
+                .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(parameters_term) = self.get_object(&subject, &parameters_pred) {
+            let parameter_urns = self.parse_rdf_list(&parameters_term)?;
+            for param_urn in parameter_urns {
+                match self.parse_property(&param_urn) {
+                    Ok(property) => event.add_parameter(property),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse event parameter '{}': {}", param_urn, e);
+                    }
+                }
+            }
+        }
 
         Ok(event)
     }

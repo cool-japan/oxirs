@@ -6,15 +6,12 @@
 //! enhanced fan-out, cross-region replication, and serverless processing capabilities.
 //! Optimized for massive scale and global distribution scenarios.
 
-use crate::{
-    AwsCredentials, EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig,
-    StreamEvent,
-};
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 use tokio::time;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
@@ -23,14 +20,13 @@ use uuid::Uuid;
 use aws_sdk_kinesis::{
     config::{Credentials, Region},
     error::SdkError,
-    operation::get_records::GetRecordsError,
     operation::put_record::PutRecordError,
-    types::{Record, ShardIteratorType, StreamDescription, StreamStatus},
+    types::{Record, ShardIteratorType, StreamStatus},
     Client as KinesisClient, Config as KinesisConfig,
 };
 
 #[cfg(feature = "kinesis")]
-use aws_config::{default_provider::credentials::DefaultCredentialsChain, BehaviorVersion};
+use aws_config::BehaviorVersion;
 
 #[cfg(feature = "kinesis")]
 use aws_smithy_types::Blob;
@@ -315,7 +311,7 @@ impl From<StreamEvent> for KinesisStreamEvent {
             StreamEvent::Heartbeat {
                 timestamp,
                 source,
-                metadata,
+                metadata: _,
             } => {
                 let partition_key = format!("{}:heartbeat", source);
                 (
@@ -390,7 +386,7 @@ pub struct KinesisProducer {
 }
 
 #[derive(Debug, Default)]
-struct ProducerStats {
+pub struct ProducerStats {
     events_published: u64,
     events_failed: u64,
     bytes_sent: u64,
@@ -408,7 +404,7 @@ impl KinesisProducer {
         let kinesis_config = if let crate::StreamBackendType::Kinesis {
             region,
             stream_name,
-            credentials,
+            credentials: _,
         } = &config.backend
         {
             KinesisStreamConfig {
@@ -982,7 +978,7 @@ pub struct KinesisConsumer {
 }
 
 #[derive(Debug, Default)]
-struct ConsumerStats {
+pub struct ConsumerStats {
     events_consumed: u64,
     events_failed: u64,
     bytes_received: u64,
@@ -997,7 +993,7 @@ impl KinesisConsumer {
         let kinesis_config = if let crate::StreamBackendType::Kinesis {
             region,
             stream_name,
-            credentials,
+            credentials: _,
         } = &config.backend
         {
             KinesisStreamConfig {
@@ -1138,7 +1134,7 @@ impl KinesisConsumer {
                             }
 
                             // Process records
-                            for record in response.records {
+                            if let Some(record) = response.records.into_iter().next() {
                                 return self.parse_kinesis_record(record).await;
                             }
 

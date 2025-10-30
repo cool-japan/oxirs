@@ -81,11 +81,21 @@ impl<W: Write> StreamingSerializer<W> {
         Ok(())
     }
 
-    /// Compress a chunk of data (placeholder implementation)
+    /// Compress a chunk of data using zstd compression
     fn compress_chunk(&self, data: &[u8]) -> StarResult<Vec<u8>> {
-        // For now, return data as-is
-        // In a full implementation, this would use actual compression libraries
-        Ok(data.to_vec())
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        // Use gzip compression for compatibility
+        let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
+        encoder
+            .write_all(data)
+            .map_err(|e| StarError::serialization_error(format!("Compression failed: {}", e)))?;
+
+        encoder.finish().map_err(|e| {
+            StarError::serialization_error(format!("Compression finish failed: {}", e))
+        })
     }
 
     /// Serialize triples in streaming fashion

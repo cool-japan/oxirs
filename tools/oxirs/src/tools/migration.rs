@@ -286,7 +286,7 @@ async fn migrate_from_virtuoso(config: &MigrationConfig) -> ToolResult<Migration
         println!("  [{}/{}] Exporting graph: {}", i + 1, graphs.len(), graph);
         let quads = export_virtuoso_graph(host, port, graph, config.batch_size)?;
         total_quads += quads;
-        print!("    {} quads\n", quads);
+        println!("    {} quads", quads);
     }
 
     stats.quads_migrated = total_quads;

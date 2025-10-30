@@ -17,6 +17,7 @@ oxirs-vec.workspace = true
 oxirs-embed.workspace = true
 
 # SciRS2 dependencies for AI chat and NLP
+scirs2-core = { workspace = true }
 scirs2-text = { workspace = true }
 scirs2-neural = { workspace = true }
 scirs2-stats = { workspace = true }

@@ -1,8 +1,8 @@
 # OxiRS CLI - TODO
 
-*Last Updated: October 12, 2025*
+*Last Updated: October 31, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.3 Ready for Release
+## ✅ Current Status: v0.1.0-beta.1 Ready for Release (~95% Complete)
 
 **oxirs** provides a comprehensive command-line interface for OxiRS operations with production-ready features.
 
@@ -325,24 +325,31 @@
 
 ---
 
-## 📊 Alpha.3 Summary - UPDATED
+## 📊 Beta.1 Summary - UPDATED (October 31, 2025)
 
-**Total Effort**: 
+**Total Effort**:
 
 | Task | Priority | Effort | Status |
 |------|----------|--------|--------|
 | RDF Serialization | P1 | ~~5-7 days~~ | ✅ **COMPLETE** |
 | Configuration Management | P1 | ~~1 day~~ | ✅ **COMPLETE** |
 | Core Commands | P1 | ~~5-7 days~~ | ✅ **COMPLETE** (serve, query, update, import, export, migrate, batch) |
-| Interactive Mode | P1 | 3-4 days | 📋 Planned |
-| Code Cleanup | P1 | 2 days | 📋 Planned |
-| **Total** | - | **3-4 days** | **~90% Complete** |
+| Interactive Mode | P1 | ~~3-4 days~~ | ✅ **COMPLETE** (commands/interactive.rs fully functional) |
+| Code Cleanup | P1 | ~~2 days~~ | ✅ **COMPLETE** (removed obsolete stubs, deprecated old code) |
+| Enhanced Validation | P1 | ~~1 day~~ | ✅ **COMPLETE** (query complexity, SPARQL hints) |
+| CLI Utilities | P1 | ~~0.5 days~~ | ✅ **COMPLETE** (formatting, progress, stats) |
+| **Total** | - | **~17 days** | **~95% Complete** |
 
-**Major Updates**:
-- ✅ All core commands functional (serve, query, update, import, export)
-- ✅ Configuration management with 21/21 tests passing
-- ✅ RDF serialization for all 7 formats complete
-- 📋 Interactive mode enhancement is primary remaining P1 task
+**Major Updates (October 31, 2025)**:
+- ✅ All core commands functional with enhanced formatting
+- ✅ Interactive mode fully implemented (commands/interactive.rs)
+- ✅ Code cleanup: removed 3 obsolete stub files, deprecated old interactive mode
+- ✅ Enhanced SPARQL validation with complexity estimation
+- ✅ New CLI utilities module with 15+ helper functions
+- ✅ Query command shows complexity warnings for complex queries
+- ✅ Import/export commands with formatted statistics (throughput, file size, duration)
+- ✅ **118 tests passing** (up from 112)
+- 📋 Documentation updates remaining for final beta.1 release
 
 ---
 
@@ -396,33 +403,99 @@
 
 ---
 
-### v0.2.0 Targets (Q1 2026)
+## 🎯 v0.1.0 Complete Feature Roadmap
 
-#### Professional CLI Suite (P2-P3)
+### v0.1.0 Final Release Targets (Q4 2025) - ALL FEATURES
 
-##### Benchmarking Tools
+#### Benchmarking Tools (Target: v0.1.0)
 - [ ] SP2Bench suite integration
 - [ ] WatDiv benchmark support
 - [ ] LDBC benchmark support
+- [ ] BSBM (Berlin SPARQL Benchmark)
 - [ ] Custom benchmark generation
+- [ ] Query workload analyzer
+- [ ] Performance comparison reports
+- [ ] Automated regression testing
 
-##### Migration & Conversion
+#### Migration & Conversion (Target: v0.1.0)
 - [ ] Jena TDB1 → OxiRS migration
+- [ ] Jena TDB2 → OxiRS migration
 - [ ] Virtuoso → OxiRS migration
 - [ ] RDF4J → OxiRS migration
+- [ ] Blazegraph → OxiRS migration
+- [ ] GraphDB → OxiRS migration
 - [ ] Format conversion utilities
+- [ ] Schema migration tools
 
-##### Dataset Generation
+#### Dataset Generation (Target: v0.1.0)
 - [ ] Synthetic dataset generation
 - [ ] Schema-based data generation
-- [ ] Test data creation
+- [ ] Test data creation with constraints
 - [ ] Bulk data loading tools
+- [ ] Random RDF graph generator
+- [ ] Domain-specific data generators
+- [ ] Stress test dataset creator
+- [ ] Privacy-preserving synthetic data
 
-##### CI/CD Integration
-- [ ] Test result reporting
+#### CI/CD Integration (Target: v0.1.0)
+- [ ] Test result reporting (JUnit XML, TAP)
 - [ ] Performance regression detection
-- [ ] Automated validation
+- [ ] Automated validation pipelines
 - [ ] Docker integration helpers
+- [ ] GitHub Actions workflows
+- [ ] GitLab CI templates
+- [ ] Jenkins plugins
+- [ ] Kubernetes deployment manifests
+
+#### Advanced Query Features (Target: v0.1.0)
+- [ ] Query profiler with flame graphs
+- [ ] Query plan visualizer
+- [ ] Cost estimation display
+- [ ] Index usage analysis
+- [ ] Execution statistics
+- [ ] Query optimization suggestions
+- [ ] Historical query analysis
+- [ ] Query similarity detection
+
+#### Database Administration (Target: v0.1.0)
+- [ ] Database statistics command
+- [ ] Index management (create, drop, rebuild)
+- [ ] Vacuum and optimization tools
+- [ ] Backup/restore with encryption
+- [ ] Point-in-time recovery
+- [ ] Replication management
+- [ ] User and permission management
+- [ ] Resource quota enforcement
+
+#### Interactive REPL Enhancements (Target: v0.1.0)
+- [ ] Autocomplete for SPARQL keywords
+- [ ] Schema-aware autocomplete
+- [ ] Query history search with fuzzy matching
+- [ ] Multi-dataset connections
+- [ ] Transaction support in REPL
+- [ ] Visual query builder
+- [ ] Result set pagination
+- [ ] Export results to multiple formats
+
+#### Output Formatting (Target: v0.1.0)
+- [ ] HTML output format with styling
+- [ ] Markdown table format
+- [ ] Custom output templates (Handlebars/Jinja)
+- [ ] Syntax highlighting for SPARQL
+- [ ] Excel spreadsheet export
+- [ ] PDF report generation
+- [ ] Graphviz diagram export
+- [ ] ASCII art diagrams
+
+#### Developer Experience (Target: v0.1.0)
+- [ ] Shell integration (bash, zsh, fish)
+- [ ] Command aliases and shortcuts
+- [ ] Custom keybindings
+- [ ] Plugin system for extensions
+- [ ] Scripting API (Python, JavaScript)
+- [ ] IDE integration (VSCode extension)
+- [ ] Documentation generator
+- [ ] Tutorial mode for beginners
 
 ---
 

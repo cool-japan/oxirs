@@ -51,6 +51,20 @@
 //! # }
 //! ```
 
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::single_match)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::collapsible_match)]
+#![allow(clippy::manual_clamp)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::or_fun_call)]
+#![allow(clippy::if_same_then_else)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::useless_conversion)]
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;

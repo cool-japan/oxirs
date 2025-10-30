@@ -87,13 +87,10 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-pub mod benchmark;
 pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod export;
-pub mod import;
-pub mod server;
 pub mod tools;
 
 /// OxiRS CLI application

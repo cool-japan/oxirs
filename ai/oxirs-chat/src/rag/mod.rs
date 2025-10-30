@@ -42,6 +42,7 @@ pub mod knowledge_extraction;
 pub mod quantum;
 pub mod quantum_rag;
 pub mod query_processing;
+pub mod ranking; // NEW: Result ranking system
 pub mod retrieval;
 pub mod types;
 pub mod vector_search;

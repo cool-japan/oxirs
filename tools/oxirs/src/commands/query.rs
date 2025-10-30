@@ -72,9 +72,24 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     // Validate SPARQL syntax
     query_validation::validate_sparql_syntax(&sparql_query)?;
 
+    // Estimate query complexity and show warnings
+    let complexity = query_validation::estimate_query_complexity(&sparql_query);
+    if complexity >= 7 {
+        ctx.warn(&format!(
+            "Complex query detected (complexity: {}/10) - {}",
+            complexity,
+            query_validation::complexity_description(complexity)
+        ));
+    }
+
     if ctx.should_show_verbose() {
         ctx.info("Query:");
         ctx.verbose(&sparql_query);
+        ctx.verbose(&format!(
+            "Query complexity: {}/10 - {}",
+            complexity,
+            query_validation::complexity_description(complexity)
+        ));
     }
 
     // Load dataset configuration or use dataset path directly

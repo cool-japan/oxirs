@@ -3,7 +3,8 @@
 //! This module tests the enhanced SPARQL integration, intelligent caching system,
 //! and advanced pattern mining algorithms.
 
-#![cfg(feature = "disabled")]
+// Disabled due to API changes - to be updated
+#![cfg(all(test, feature = "integration-tests-disabled"))]
 
 use oxirs_core::rdf_store::{OxirsQueryResults, PreparedQuery};
 use oxirs_shacl_ai::{

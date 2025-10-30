@@ -143,6 +143,7 @@ impl SemanticValidator {
     }
 
     /// Recursively collect all quoted triples from a triple
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_quoted_triples(&self, triple: &StarTriple, collector: &mut Vec<StarTriple>) {
         // Check subject
         if let StarTerm::QuotedTriple(qt) = &triple.subject {

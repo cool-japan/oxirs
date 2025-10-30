@@ -61,6 +61,8 @@ use crate::{
 };
 
 pub mod adaptive_load_balancer;
+pub mod advanced_query_optimizer;
+pub mod anomaly_detection;
 pub mod auth;
 pub mod auto_discovery;
 pub mod cache;
@@ -68,9 +70,11 @@ pub mod capability_assessment;
 pub mod cdc;
 pub mod connection_pool_manager;
 pub mod discovery;
+pub mod distributed_consensus;
 pub mod distributed_tracing;
 pub mod distributed_transactions;
 pub mod executor;
+pub mod graph_algorithms;
 pub mod graphql;
 pub mod integration;
 pub mod join_optimizer;
@@ -79,16 +83,21 @@ pub mod materialized_views;
 pub mod metadata;
 pub mod ml_optimizer;
 pub mod monitoring;
+pub mod multi_level_federation;
 pub mod nats_federation;
 pub mod network_optimizer;
 pub mod optimization_cache;
 pub mod performance_analyzer;
+pub mod performance_benchmarks;
 pub mod planner;
 pub mod privacy;
+pub mod production_hardening;
 pub mod query_decomposition;
 pub mod request_batcher;
 pub mod result_streaming;
+pub mod schema_alignment;
 pub mod semantic_enhancer;
+pub mod semantic_reasoner;
 pub mod service;
 pub mod service_client;
 pub mod service_executor;
@@ -104,6 +113,13 @@ pub mod vector_similarity_federation;
 // Re-enabled specific non-duplicate exports after fixing ServiceRegistry conflicts
 // AutoDiscovery and CacheConfig already imported above, skipping duplicates
 pub use adaptive_load_balancer::AdaptiveLoadBalancer;
+pub use advanced_query_optimizer::{
+    AdvancedOptimizerConfig, AdvancedQueryOptimizer, HardwareProfile, OptimizedPlan, QueryPlan,
+    TrainingExample,
+};
+pub use anomaly_detection::{
+    AnomalyAlert, AnomalyDetector, AnomalyDetectorConfig, DataPoint, Severity, Trend, TrendAnalysis,
+};
 pub use auth::AuthManager;
 pub use connection_pool_manager::ConnectionPoolManager;
 pub use distributed_tracing::TracingConfig;
@@ -113,15 +129,34 @@ pub use distributed_transactions::{
     TransactionConfig, TransactionProtocol, TransactionResult, TransactionState,
 };
 pub use executor::ExecutionStatus; // ExecutionMetrics not exported from executor
-                                   // Import from graphql module - minimal types to avoid conflicts
-                                   // pub use graphql::GraphQLFederation;
+pub use graph_algorithms::{
+    AStar, BellmanFord, CentralityAnalyzer, ConnectivityAnalyzer, Dijkstra, Edge, FederationGraph,
+    FloydWarshall, PrimMST, ShortestPathResult,
+};
+// Import from graphql module - minimal types to avoid conflicts
+// pub use graphql::GraphQLFederation;
 
 // More specific imports to avoid conflicts - conservative approach
 // Re-enabled after fixing module exports - only exports that actually exist
 // pub use integration::ResultIntegratorConfig; // Already imported above
 pub use ml_optimizer::MLOptimizer;
+pub use multi_level_federation::{
+    FederationCapability, FederationMetrics, FederationNode, MultiLevelConfig,
+    MultiLevelFederation, TopologyOptimizationResult, TopologyStats,
+};
 pub use network_optimizer::NetworkOptimizer;
 pub use optimization_cache::OptimizationCache;
+pub use production_hardening::{
+    CircuitBreakerState, ComplexityResult, HardeningConfig, HardeningStatistics,
+    ProductionHardening, QueryRequest as HardeningQueryRequest, ValidationResult,
+};
+pub use schema_alignment::{
+    Alignment, AlignmentConfig, AlignmentResult, AlignmentType, ClassMetadata, MappingExample,
+    PropertyMetadata, SchemaAligner, VocabularyMetadata,
+};
+pub use semantic_reasoner::{
+    InconsistencyReport, InconsistencyType, ReasonerConfig, SemanticReasoner, Triple,
+};
 // Re-enabled: JoinOptimizer now properly implemented
 pub use join_optimizer::JoinOptimizer;
 // pub use k8s_discovery::KubernetesDiscovery;

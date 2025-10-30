@@ -4,7 +4,6 @@
 
 use super::config::*;
 use super::message::NatsEventMessage;
-use crate::error::{StreamError, StreamResult};
 use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::Utc;
@@ -14,11 +13,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{RwLock, Semaphore};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 #[cfg(feature = "nats")]
 use async_nats::{
-    jetstream::{self, consumer::PullConsumer, stream::Stream},
+    jetstream::{self},
     Client, ConnectOptions,
 };
 

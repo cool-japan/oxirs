@@ -6,7 +6,7 @@
 //! consumer groups, persistence, and real-time message processing capabilities.
 //! Optimized for ultra-low latency and high throughput scenarios.
 
-use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,7 +24,7 @@ use redis::{
     cluster::ClusterClient,
     cluster_async::ClusterConnection,
     streams::{StreamReadOptions, StreamReadReply},
-    AsyncCommands, Client, FromRedisValue, RedisResult, Value as RedisValue,
+    AsyncCommands, Client, RedisResult, Value as RedisValue,
 };
 
 /// Redis Streams configuration with clustering and performance tuning
@@ -72,6 +72,7 @@ impl Default for RedisStreamConfig {
 }
 
 /// Redis connection manager supporting both standalone and cluster modes
+#[allow(clippy::large_enum_variant)]
 pub enum RedisConnectionManager {
     #[cfg(feature = "redis")]
     Standalone(ConnectionManager),
@@ -94,7 +95,7 @@ pub struct RedisProducer {
 }
 
 #[derive(Debug, Default, Clone)]
-struct ProducerStats {
+pub struct ProducerStats {
     events_published: u64,
     events_failed: u64,
     bytes_sent: u64,
@@ -267,7 +268,7 @@ impl From<StreamEvent> for RedisStreamEvent {
             StreamEvent::Heartbeat {
                 timestamp,
                 source,
-                metadata,
+                metadata: _,
             } => (
                 "heartbeat".to_string(),
                 serde_json::json!({
@@ -716,7 +717,7 @@ pub struct RedisConsumer {
 }
 
 #[derive(Debug, Default, Clone)]
-struct ConsumerStats {
+pub struct ConsumerStats {
     events_consumed: u64,
     events_failed: u64,
     bytes_received: u64,
@@ -885,7 +886,7 @@ impl RedisConsumer {
                         .await;
 
                 if let Ok(messages) = result {
-                    for (id, fields) in messages {
+                    for (_id, fields) in messages {
                         // Convert HashMap<String, String> to HashMap<String, redis::Value>
                         let fields_values: HashMap<String, RedisValue> = fields
                             .into_iter()
@@ -899,7 +900,7 @@ impl RedisConsumer {
                     }
                 }
             }
-            Some(RedisConnectionManager::Cluster(connection)) => {
+            Some(RedisConnectionManager::Cluster(_connection)) => {
                 // Similar implementation for cluster mode
             }
             _ => {}
@@ -1254,7 +1255,7 @@ impl RedisConsumer {
                     }
                 }
             }
-            Some(RedisConnectionManager::Cluster(connection)) => {
+            Some(RedisConnectionManager::Cluster(_connection)) => {
                 // Similar implementation for cluster mode
             }
             _ => return Err(anyhow!("No Redis connection available")),
@@ -1282,7 +1283,7 @@ impl RedisConsumer {
             Some(RedisConnectionManager::Standalone(manager)) => {
                 let failed_at_time = Utc::now().to_rfc3339();
                 let event_data = serde_json::to_string(event)?;
-                let fields = vec![
+                let fields = [
                     ("original_message_id", message_id),
                     ("failure_reason", reason),
                     ("failed_at", &failed_at_time),
@@ -1299,7 +1300,7 @@ impl RedisConsumer {
                 let mut stats = self.stats.write().await;
                 stats.dead_letters += 1;
             }
-            Some(RedisConnectionManager::Cluster(connection)) => {
+            Some(RedisConnectionManager::Cluster(_connection)) => {
                 // Similar implementation for cluster mode
             }
             _ => {}
@@ -1394,7 +1395,7 @@ impl RedisAdmin {
     pub async fn get_stream_info(&mut self, stream_name: &str) -> Result<HashMap<String, String>> {
         match &mut self.connection {
             Some(RedisConnectionManager::Standalone(manager)) => {
-                let info: redis::Value = redis::cmd("XINFO")
+                let _info: redis::Value = redis::cmd("XINFO")
                     .arg("STREAM")
                     .arg(stream_name)
                     .query_async(manager)
@@ -1405,7 +1406,7 @@ impl RedisAdmin {
                 Ok(HashMap::new()) // Simplified for now
             }
             Some(RedisConnectionManager::Cluster(connection)) => {
-                let info: redis::Value = redis::cmd("XINFO")
+                let _info: redis::Value = redis::cmd("XINFO")
                     .arg("STREAM")
                     .arg(stream_name)
                     .query_async(connection)
