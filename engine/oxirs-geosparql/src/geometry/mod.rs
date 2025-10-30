@@ -8,6 +8,9 @@ pub mod wkt_parser;
 #[cfg(feature = "gml-support")]
 pub mod gml_parser;
 
+#[cfg(feature = "geojson-support")]
+pub mod geojson_parser;
+
 use crate::error::{GeoSparqlError, Result};
 use geo_types::Geometry as GeoGeometry;
 use serde::{Deserialize, Serialize};
@@ -125,6 +128,76 @@ impl Geometry {
     #[cfg(feature = "gml-support")]
     pub fn to_gml(&self) -> Result<String> {
         gml_parser::geometry_to_gml(self)
+    }
+
+    /// Parse from GeoJSON format
+    ///
+    /// Requires the `geojson-support` feature to be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "geojson-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    ///
+    /// let geojson = r#"{"type":"Point","coordinates":[1.0,2.0]}"#;
+    /// let geom = Geometry::from_geojson(geojson).unwrap();
+    /// # }
+    /// ```
+    #[cfg(feature = "geojson-support")]
+    pub fn from_geojson(geojson: &str) -> Result<Self> {
+        geojson_parser::parse_geojson(geojson)
+    }
+
+    /// Convert to GeoJSON format
+    ///
+    /// Requires the `geojson-support` feature to be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "geojson-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    /// use geo_types::{Point, Geometry as GeoGeometry};
+    ///
+    /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
+    /// let geojson = geom.to_geojson().unwrap();
+    /// assert!(geojson.contains("\"type\":\"Point\""));
+    /// # }
+    /// ```
+    #[cfg(feature = "geojson-support")]
+    pub fn to_geojson(&self) -> Result<String> {
+        geojson_parser::geometry_to_geojson(self)
+    }
+
+    /// Convert to GeoJSON Feature format
+    ///
+    /// Requires the `geojson-support` feature to be enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `properties` - Optional properties to include in the feature
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "geojson-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    /// use geo_types::{Point, Geometry as GeoGeometry};
+    /// use serde_json::json;
+    ///
+    /// let geom = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
+    /// let props = json!({"name": "Test"});
+    /// let feature = geom.to_geojson_feature(Some(&props)).unwrap();
+    /// assert!(feature.contains("\"type\":\"Feature\""));
+    /// # }
+    /// ```
+    #[cfg(feature = "geojson-support")]
+    pub fn to_geojson_feature(&self, properties: Option<&serde_json::Value>) -> Result<String> {
+        geojson_parser::geometry_to_geojson_feature(self, properties)
     }
 
     /// Get the dimension of the geometry (2 or 3)

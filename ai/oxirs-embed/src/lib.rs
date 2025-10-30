@@ -141,6 +141,7 @@ pub mod cross_module_performance;
 pub mod delta;
 pub mod diffusion_embeddings;
 pub mod enterprise_knowledge;
+pub mod entity_linking;
 pub mod evaluation;
 pub mod federated_learning;
 pub mod gpu_acceleration;

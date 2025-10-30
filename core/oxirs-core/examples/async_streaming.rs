@@ -19,10 +19,11 @@ use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     Arc,
 };
-#[cfg(feature = "async-tokio")]
-use tokio::fs::File;
-#[cfg(feature = "async-tokio")]
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+// Async file I/O imports (currently unused in this example)
+// #[cfg(feature = "async-tokio")]
+// use tokio::fs::File;
+// #[cfg(feature = "async-tokio")]
+// use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[cfg(feature = "async-tokio")]
 #[tokio::main]
@@ -147,7 +148,7 @@ async fn serialize_with_streaming() -> Result<(), Box<dyn std::error::Error>> {
     // Create some test data
     let mut quads = Vec::new();
     for i in 0..10 {
-        let subject = NamedNode::new(&format!("http://example.org/item{}", i))?;
+        let subject = NamedNode::new(format!("http://example.org/item{}", i))?;
         let predicate = NamedNode::new("http://example.org/value")?;
         let object = Literal::new(format!("Value {}", i));
         let triple = Triple::new(subject, predicate, object);
@@ -193,10 +194,12 @@ ANOTHER INVALID LINE
     let reader = std::io::Cursor::new(invalid_ntriples.as_bytes());
 
     // Configure to ignore errors
-    let mut config = AsyncStreamingConfig::default();
-    config.ignore_errors = true;
-    config.chunk_size = 1024; // Small chunks for demonstration
-    config.buffer_size = 4096;
+    let config = AsyncStreamingConfig {
+        ignore_errors: true,
+        chunk_size: 1024, // Small chunks for demonstration
+        buffer_size: 4096,
+        ..Default::default()
+    };
 
     let progress_callback: ProgressCallback = Box::new(|progress: &StreamingProgress| {
         if progress.errors_encountered > 0 {

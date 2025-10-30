@@ -51,6 +51,7 @@ pub mod functions;
 pub mod geometry;
 pub mod index;
 pub mod performance;
+pub mod validation;
 pub mod vocabulary;
 
 // Re-export commonly used types

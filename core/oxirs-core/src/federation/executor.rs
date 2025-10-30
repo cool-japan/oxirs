@@ -87,7 +87,7 @@ impl FederationExecutor {
         };
 
         // Convert pattern to WHERE clause
-        let where_clause = self.pattern_to_where_clause(pattern)?;
+        let where_clause = Self::pattern_to_where_clause(pattern)?;
 
         Ok(format!("{} WHERE {{ {} }}", select_clause, where_clause))
     }
@@ -142,7 +142,7 @@ impl FederationExecutor {
     }
 
     /// Convert graph pattern to WHERE clause string
-    fn pattern_to_where_clause(&self, pattern: &GraphPattern) -> Result<String, OxirsError> {
+    fn pattern_to_where_clause(pattern: &GraphPattern) -> Result<String, OxirsError> {
         match pattern {
             GraphPattern::Bgp { patterns } => {
                 let mut clauses = Vec::new();
@@ -155,17 +155,17 @@ impl FederationExecutor {
                 Ok(clauses.join(" . "))
             }
             GraphPattern::Join { left, right } => {
-                let left_str = self.pattern_to_where_clause(left)?;
-                let right_str = self.pattern_to_where_clause(right)?;
+                let left_str = Self::pattern_to_where_clause(left)?;
+                let right_str = Self::pattern_to_where_clause(right)?;
                 Ok(format!("{} . {}", left_str, right_str))
             }
             GraphPattern::Union { left, right } => {
-                let left_str = self.pattern_to_where_clause(left)?;
-                let right_str = self.pattern_to_where_clause(right)?;
+                let left_str = Self::pattern_to_where_clause(left)?;
+                let right_str = Self::pattern_to_where_clause(right)?;
                 Ok(format!("{{ {} }} UNION {{ {} }}", left_str, right_str))
             }
             GraphPattern::Filter { expr: _, inner } => {
-                let inner_str = self.pattern_to_where_clause(inner)?;
+                let inner_str = Self::pattern_to_where_clause(inner)?;
                 // Simplified filter expression (full implementation would handle all expression types)
                 Ok(format!("{} FILTER(?var)", inner_str))
             }

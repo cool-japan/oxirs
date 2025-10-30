@@ -884,7 +884,7 @@ mod tests {
         let mut triples = Vec::new();
 
         for i in 0..10 {
-            let subject = NamedNode::new(&format!("http://example.org/item{i}")).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/item{i}")).unwrap();
             let pred = NamedNode::new("http://example.org/value").unwrap();
             let obj = Literal::new(i.to_string());
             triples.push(Triple::new(subject, pred, obj));
@@ -931,8 +931,10 @@ INVALID LINE HERE
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(invalid_ntriples.as_bytes());
 
-        let mut config = AsyncStreamingConfig::default();
-        config.ignore_errors = true;
+        let config = AsyncStreamingConfig {
+            ignore_errors: true,
+            ..Default::default()
+        };
 
         let quads = parser
             .parse_async(reader, config, None, None)
@@ -988,8 +990,10 @@ INVALID LINE HERE
         let parser = AsyncStreamingParser::new(RdfFormat::NTriples);
         let reader = std::io::Cursor::new(ntriples_data.as_bytes());
 
-        let mut config = AsyncStreamingConfig::default();
-        config.chunk_size = 1024; // Small chunks to test buffering
+        let config = AsyncStreamingConfig {
+            chunk_size: 1024, // Small chunks to test buffering
+            ..Default::default()
+        };
 
         let quads = parser
             .parse_async(reader, config, None, None)
@@ -1007,8 +1011,10 @@ ex:alice ex:knows ex:bob ."#;
         let parser = AsyncStreamingParser::new(RdfFormat::Turtle);
         let reader = std::io::Cursor::new(turtle_data.as_bytes());
 
-        let mut config = AsyncStreamingConfig::default();
-        config.base_iri = Some("http://example.org/".to_string());
+        let config = AsyncStreamingConfig {
+            base_iri: Some("http://example.org/".to_string()),
+            ..Default::default()
+        };
 
         let quads = parser
             .parse_async(reader, config, None, None)

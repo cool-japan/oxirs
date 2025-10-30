@@ -54,6 +54,7 @@ rayon = { workspace = true, optional = true }
 criterion.workspace = true
 tempfile = "3.23"
 approx = "0.5"
+proptest = "1.6"
 
 [features]
 default = ["wkt-support"]
@@ -64,7 +65,11 @@ geos-backend = ["geos"]
 rust-buffer = ["geo-buffer"]
 proj-support = ["proj"]
 parallel = ["rayon", "dashmap"]
-performance = ["parallel", "dashmap"]
+gpu = []
+cuda = ["gpu", "scirs2-core/cuda"]
+metal = ["gpu", "scirs2-core/metal"]
+wgpu_backend = ["gpu", "scirs2-core/wgpu_backend"]
+performance = ["parallel", "dashmap", "gpu"]
 
 [[bench]]
 name = "spatial_operations"
@@ -81,3 +86,12 @@ harness = false
 [[bench]]
 name = "performance_comparison"
 harness = false
+
+# Examples with feature requirements
+[[example]]
+name = "geojson_support"
+required-features = ["geojson-support"]
+
+[[example]]
+name = "gpu_operations"
+required-features = ["gpu"]

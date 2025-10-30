@@ -11,6 +11,9 @@ pub mod geometric_properties;
 pub mod rcc8;
 pub mod simple_features;
 
+#[cfg(feature = "proj-support")]
+pub mod transformation_cache;
+
 use crate::error::Result;
 use crate::geometry::Geometry;
 

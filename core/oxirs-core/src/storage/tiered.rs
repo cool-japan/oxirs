@@ -150,7 +150,7 @@ mod tiered_impl {
 
     impl TieredStorageEngine {
         /// Create a new tiered storage engine
-        pub async fn new(config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
+        pub async fn create(config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
             // Initialize hot tier
             let hot_capacity = config.tiers.hot_tier.max_size_mb * 1024 * 1024 / 1000; // Approximate
             let hot_tier = Arc::new(Mutex::new(LruCache::new(
@@ -470,13 +470,11 @@ mod tiered_impl {
                 let warm = self.warm_tier.read().await;
                 // Iterate through warm tier storage
                 let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
-                for item in iter {
-                    if let Ok((_key, value)) = item {
-                        if let Ok(stored) = bincode::deserialize::<StoredTriple>(&value) {
-                            if pattern.matches(&stored.triple) {
-                                results.push(stored.triple.clone());
-                                self.stats.warm_hits.fetch_add(1, Ordering::Relaxed);
-                            }
+                for (_key, value) in iter.flatten() {
+                    if let Ok(stored) = bincode::deserialize::<StoredTriple>(&value) {
+                        if pattern.matches(&stored.triple) {
+                            results.push(stored.triple.clone());
+                            self.stats.warm_hits.fetch_add(1, Ordering::Relaxed);
                         }
                     }
                 }
@@ -674,10 +672,8 @@ mod tiered_impl {
                 let warm = self.warm_tier.read().await;
                 let mut data = Vec::new();
                 let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
-                for item in iter {
-                    if let Ok((key, value)) = item {
-                        data.push((key.to_vec(), value.to_vec()));
-                    }
+                for (key, value) in iter.flatten() {
+                    data.push((key.to_vec(), value.to_vec()));
                 }
                 data
             };
@@ -689,10 +685,8 @@ mod tiered_impl {
                 let cold = self.cold_tier.read().await;
                 let mut data = Vec::new();
                 let iter = cold.storage.iterator(rocksdb::IteratorMode::Start);
-                for item in iter {
-                    if let Ok((key, value)) = item {
-                        data.push((key.to_vec(), value.to_vec()));
-                    }
+                for (key, value) in iter.flatten() {
+                    data.push((key.to_vec(), value.to_vec()));
                 }
                 data
             };
@@ -835,7 +829,7 @@ mod tiered_impl {
             config.tiers.archive_tier.backend =
                 ArchiveBackend::Local(format!("{}/archive", test_dir));
 
-            let engine = TieredStorageEngine::new(config).await.unwrap();
+            let engine = TieredStorageEngine::create(config).await.unwrap();
 
             // Create test triple
             let subject = NamedNode::new("http://example.org/subject").unwrap();

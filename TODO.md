@@ -426,7 +426,7 @@ This is a **production-ready alpha** release. Core features are stable and secur
 - Security hardening complete
 - Performance benchmarks published
 
-### **v0.2.0 Target (Q1 2026)**
+### **v0.1.0 Target (Q4 2025)**
 - Advanced query optimization (validated 10x improvement)
 - Enhanced AI capabilities (production-ready)
 - Distributed clustering (multi-region)
