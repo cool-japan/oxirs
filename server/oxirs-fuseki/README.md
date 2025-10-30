@@ -31,7 +31,7 @@
 
 ```toml
 [dependencies]
-oxirs-fuseki = "0.1.0-alpha.4"
+oxirs-fuseki = "0.1.0-beta.1"
 ```
 
 ### As a Binary

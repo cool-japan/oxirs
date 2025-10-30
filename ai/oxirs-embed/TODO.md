@@ -12,7 +12,7 @@
 - **Multiple embedding models** with provider failover and batch streaming
 - **Semantic similarity** surfaced via `vec:` SPARQL SERVICE bindings
 - **Telemetry & caching** via SciRS2 metrics and embedding cache
-- **Released on crates.io**: `oxirs-embed = "0.1.0-alpha.4"` (experimental)
+- **Released on crates.io**: `oxirs-embed = "0.1.0-beta.1"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

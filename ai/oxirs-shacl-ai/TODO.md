@@ -12,7 +12,7 @@
 - **Shape learning** leveraging CLI pipelines and vector embeddings
 - **AI-powered constraint generation** with remediation hints and confidence scoring
 - **Observability**: SciRS2 metrics tracking model drift and inference latency
-- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-alpha.4"` (experimental)
+- **Released on crates.io**: `oxirs-shacl-ai = "0.1.0-beta.1"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

@@ -12,7 +12,7 @@
 - **Distributed RDF storage** synchronized with CLI persistence pipeline
 - **High availability** plus Prometheus/SciRS2 metrics for cluster health
 - **Federation awareness** enabling cross-cluster SPARQL `SERVICE` routing
-- **Released on crates.io**: `oxirs-cluster = "0.1.0-alpha.4"` (experimental)
+- **Released on crates.io**: `oxirs-cluster = "0.1.0-beta.1"` (experimental)
 
 ## 🎯 Post-Alpha Development Roadmap
 

@@ -12,7 +12,7 @@
 - **Schema generation** with hot-reload and prefix-aware mapping
 - **GraphQL ⇄ SPARQL translation** covering vector/federation resolvers
 - **Subscription bridge** to streaming SPARQL updates (experimental)
-- **Released on crates.io**: `oxirs-gql = "0.1.0-alpha.4"`
+- **Released on crates.io**: `oxirs-gql = "0.1.0-beta.1"`
 
 ## 🎯 Post-Alpha Development Roadmap
 

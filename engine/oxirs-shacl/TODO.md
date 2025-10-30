@@ -25,7 +25,7 @@
 - **Property path support** with streaming validation enhancements
 - **Validation engine** integrated with CLI import/export workflows
 - **Metrics & tracing** surfaced through SciRS2 for slow-shape analysis
-- **Released on crates.io**: `oxirs-shacl = "0.1.0-alpha.4"`
+- **Released on crates.io**: `oxirs-shacl = "0.1.0-beta.1"`
 
 ## 🚀 Alpha.3 Achievements
 

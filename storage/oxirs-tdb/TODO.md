@@ -12,7 +12,7 @@
 - **B+ Tree indexing** optimized for streaming import/export pipelines
 - **Federation-aware storage** cooperating with `SERVICE` queries and shards
 - **Telemetry hooks** for Prometheus metrics and cache diagnostics
-- **Released on crates.io**: `oxirs-tdb = "0.1.0-alpha.4"`
+- **Released on crates.io**: `oxirs-tdb = "0.1.0-beta.1"`
 
 ### ✨ NEW: Beta.1 Features Implemented (October 12, 2025)
 - **Stress Testing Suite** - 10 comprehensive stress tests for high-load scenarios
