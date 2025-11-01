@@ -728,7 +728,7 @@ mod tests {
 
     #[test]
     fn test_graphql_quoted_triples_query() -> StarResult<()> {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         // Add some test data
         for i in 0..5 {
@@ -764,7 +764,7 @@ mod tests {
 
     #[test]
     fn test_graphql_triple_count() -> StarResult<()> {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         for i in 0..10 {
             let subject = format!("http://example.org/s{}", i);

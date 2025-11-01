@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Distributed Consensus for Multi-Level Federations
 //!
 //! This module implements a Raft-based consensus protocol for coordinating

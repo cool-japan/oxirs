@@ -285,9 +285,13 @@ impl MockStore {
 }
 
 // Individual modules
+pub mod aggregation;
 pub mod ast;
+pub mod custom_type_mappings;
+pub mod enhanced_errors;
 pub mod execution;
 pub mod federation;
+pub mod graphiql_integration;
 pub mod hybrid_optimizer;
 pub mod intelligent_federation_gateway;
 pub mod intelligent_query_cache;
@@ -295,11 +299,15 @@ pub mod introspection;
 pub mod mapping;
 pub mod ml_optimizer;
 pub mod optimizer;
+pub mod owl_enhanced_schema;
+pub mod pagination_filtering;
 pub mod parser;
 pub mod quantum_optimizer;
+pub mod query_debugger;
 pub mod rdf_scalars;
 pub mod resolvers;
 pub mod schema;
+pub mod schema_cache;
 pub mod server;
 pub mod subscriptions;
 pub mod types;

@@ -3,6 +3,7 @@
 //! This module provides the core geometry types and operations for GeoSPARQL,
 //! wrapping the `geo` crate and providing WKT/GML serialization support.
 
+pub mod coord3d;
 pub mod wkt_parser;
 
 #[cfg(feature = "gml-support")]
@@ -11,7 +12,20 @@ pub mod gml_parser;
 #[cfg(feature = "geojson-support")]
 pub mod geojson_parser;
 
+#[cfg(feature = "kml-support")]
+pub mod kml_parser;
+
+#[cfg(feature = "gpx-support")]
+pub mod gpx_parser;
+
+#[cfg(feature = "shapefile-support")]
+pub mod shapefile_parser;
+
+pub mod ewkb_parser;
+pub mod ewkt_parser;
+
 use crate::error::{GeoSparqlError, Result};
+use coord3d::Coord3D;
 use geo_types::Geometry as GeoGeometry;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -37,6 +51,13 @@ impl Crs {
     /// Create an EPSG CRS
     pub fn epsg(code: u32) -> Self {
         Self::new(format!("{}{}", crate::vocabulary::EPSG_PREFIX, code))
+    }
+
+    /// Create a WGS84 CRS (EPSG:4326)
+    ///
+    /// WGS84 is the most common coordinate system used by GPS and web mapping.
+    pub fn wgs84() -> Self {
+        Self::epsg(4326)
     }
 
     /// Check if this is the default CRS
@@ -84,10 +105,12 @@ impl fmt::Display for Crs {
 /// A geometry with an associated Coordinate Reference System
 #[derive(Debug, Clone, PartialEq)]
 pub struct Geometry {
-    /// The underlying geometry
+    /// The underlying geometry (X, Y coordinates)
     pub geom: GeoGeometry<f64>,
     /// The Coordinate Reference System
     pub crs: Crs,
+    /// 3D coordinate metadata (Z and M values)
+    pub coord3d: Coord3D,
 }
 
 impl Geometry {
@@ -96,12 +119,22 @@ impl Geometry {
         Self {
             geom,
             crs: Crs::default(),
+            coord3d: Coord3D::default(),
         }
     }
 
     /// Create a new geometry with a specific CRS
     pub fn with_crs(geom: GeoGeometry<f64>, crs: Crs) -> Self {
-        Self { geom, crs }
+        Self {
+            geom,
+            crs,
+            coord3d: Coord3D::default(),
+        }
+    }
+
+    /// Create a new geometry with CRS and 3D coordinates
+    pub fn with_crs_and_coord3d(geom: GeoGeometry<f64>, crs: Crs, coord3d: Coord3D) -> Self {
+        Self { geom, crs, coord3d }
     }
 
     /// Parse from WKT (Well-Known Text) format
@@ -110,6 +143,9 @@ impl Geometry {
     }
 
     /// Convert to WKT format
+    ///
+    /// Note: Z/M coordinates are not yet included in the output.
+    /// This will be enhanced in a future version.
     pub fn to_wkt(&self) -> String {
         wkt_parser::geometry_to_wkt(&self.geom)
     }
@@ -198,6 +234,197 @@ impl Geometry {
     #[cfg(feature = "geojson-support")]
     pub fn to_geojson_feature(&self, properties: Option<&serde_json::Value>) -> Result<String> {
         geojson_parser::geometry_to_geojson_feature(self, properties)
+    }
+
+    /// Parse from KML (Keyhole Markup Language) format
+    ///
+    /// Requires the `kml-support` feature to be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "kml-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    ///
+    /// let kml = r#"<Point><coordinates>-122.08,37.42,0</coordinates></Point>"#;
+    /// let geom = Geometry::from_kml(kml).unwrap();
+    /// # }
+    /// ```
+    #[cfg(feature = "kml-support")]
+    pub fn from_kml(kml: &str) -> Result<Self> {
+        kml_parser::parse_kml(kml)
+    }
+
+    /// Convert to KML format
+    ///
+    /// Requires the `kml-support` feature to be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "gpx-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    /// use geo_types::{Point, Geometry as GeoGeometry};
+    ///
+    /// let geom = Geometry::new(GeoGeometry::Point(Point::new(-122.08, 37.42)));
+    /// let kml = geom.to_kml().unwrap();
+    /// assert!(kml.contains("<Point>"));
+    /// # }
+    /// ```
+    #[cfg(feature = "kml-support")]
+    pub fn to_kml(&self) -> Result<String> {
+        kml_parser::geometry_to_kml(self)
+    }
+
+    /// Parse from GPX (GPS Exchange Format) format
+    ///
+    /// Requires the `gpx-support` feature to be enabled.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "gpx-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    ///
+    /// let gpx = r#"<wpt lat="37.422" lon="-122.084"/>"#;
+    /// let geom = Geometry::from_gpx(gpx).unwrap();
+    /// # }
+    /// ```
+    #[cfg(feature = "gpx-support")]
+    pub fn from_gpx(gpx: &str) -> Result<Self> {
+        gpx_parser::parse_gpx(gpx)
+    }
+
+    /// Convert to GPX format
+    ///
+    /// Requires the `gpx-support` feature to be enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - Optional name for the waypoint/track
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # #[cfg(feature = "gpx-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    /// use geo_types::{Point, Geometry as GeoGeometry};
+    ///
+    /// let geom = Geometry::new(GeoGeometry::Point(Point::new(-122.084, 37.422)));
+    /// let gpx = geom.to_gpx(Some("My Location")).unwrap();
+    /// assert!(gpx.contains("<wpt"));
+    /// # }
+    /// ```
+    #[cfg(feature = "gpx-support")]
+    pub fn to_gpx(&self, name: Option<&str>) -> Result<String> {
+        gpx_parser::geometry_to_gpx(self, name)
+    }
+
+    /// Read geometries from a shapefile
+    ///
+    /// Requires the `shapefile-support` feature to be enabled.
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - Path to the .shp file
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// # #[cfg(feature = "shapefile-support")]
+    /// # {
+    /// use oxirs_geosparql::geometry::Geometry;
+    ///
+    /// let geometries = Geometry::from_shapefile("data/cities.shp").unwrap();
+    /// println!("Read {} geometries", geometries.len());
+    /// # }
+    /// ```
+    #[cfg(feature = "shapefile-support")]
+    pub fn from_shapefile<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<Self>> {
+        shapefile_parser::read_shapefile(path)
+    }
+
+    /// Parse from EWKB (Extended Well-Known Binary) format
+    ///
+    /// EWKB is PostGIS's extended binary format that includes SRID information.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxirs_geosparql::geometry::Geometry;
+    ///
+    /// // EWKB for SRID=4326;POINT(1 2)
+    /// let ewkb = vec![0x01, 0x01, 0x00, 0x00, 0x20, 0xe6, 0x10, 0x00, 0x00,
+    ///                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xf0, 0x3f,
+    ///                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x40];
+    /// let geom = Geometry::from_ewkb(&ewkb).unwrap();
+    /// assert_eq!(geom.crs.epsg_code(), Some(4326));
+    /// ```
+    pub fn from_ewkb(ewkb: &[u8]) -> Result<Self> {
+        ewkb_parser::parse_ewkb(ewkb)
+    }
+
+    /// Convert to EWKB (Extended Well-Known Binary) format
+    ///
+    /// EWKB is PostGIS's extended binary format that includes SRID information.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxirs_geosparql::geometry::{Geometry, Crs};
+    /// use geo_types::{Point, Geometry as GeoGeometry};
+    ///
+    /// let geom = Geometry::with_crs(
+    ///     GeoGeometry::Point(Point::new(1.0, 2.0)),
+    ///     Crs::epsg(4326)
+    /// );
+    /// let ewkb = geom.to_ewkb().unwrap();
+    /// assert!(!ewkb.is_empty());
+    /// ```
+    pub fn to_ewkb(&self) -> Result<Vec<u8>> {
+        ewkb_parser::geometry_to_ewkb(self)
+    }
+
+    /// Parse from EWKT (Extended Well-Known Text) format
+    ///
+    /// EWKT is PostGIS's extended text format that includes SRID information.
+    /// Format: `SRID=4326;POINT(1 2)`
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxirs_geosparql::geometry::Geometry;
+    ///
+    /// let geom = Geometry::from_ewkt("SRID=4326;POINT(1 2)").unwrap();
+    /// assert_eq!(geom.crs.epsg_code(), Some(4326));
+    /// ```
+    pub fn from_ewkt(ewkt: &str) -> Result<Self> {
+        ewkt_parser::parse_ewkt(ewkt)
+    }
+
+    /// Convert to EWKT (Extended Well-Known Text) format
+    ///
+    /// EWKT is PostGIS's extended text format that includes SRID information.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxirs_geosparql::geometry::{Geometry, Crs};
+    /// use geo_types::{Point, Geometry as GeoGeometry};
+    ///
+    /// let geom = Geometry::with_crs(
+    ///     GeoGeometry::Point(Point::new(1.0, 2.0)),
+    ///     Crs::epsg(4326)
+    /// );
+    /// let ewkt = geom.to_ewkt();
+    /// assert_eq!(ewkt, "SRID=4326;POINT(1 2)");
+    /// ```
+    pub fn to_ewkt(&self) -> String {
+        ewkt_parser::geometry_to_ewkt(self)
     }
 
     /// Get the dimension of the geometry (2 or 3)
@@ -377,14 +604,12 @@ impl Geometry {
 
     /// Check if coordinates are 3D (has Z coordinate)
     pub fn is_3d(&self) -> bool {
-        // Currently only supporting 2D
-        false
+        self.coord3d.has_z()
     }
 
     /// Check if coordinates are measured (has M coordinate)
     pub fn is_measured(&self) -> bool {
-        // Currently not supporting measured coordinates
-        false
+        self.coord3d.has_m()
     }
 
     /// Get the geometry type name

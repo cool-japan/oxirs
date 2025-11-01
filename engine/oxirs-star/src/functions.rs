@@ -561,7 +561,8 @@ mod tests {
 
         // Test SUBJECT(SUBJECT(<<...>>))
         let inner_subject =
-            FunctionEvaluator::evaluate(StarFunction::Subject, &[quoted2.clone()]).unwrap();
+            FunctionEvaluator::evaluate(StarFunction::Subject, std::slice::from_ref(&quoted2))
+                .unwrap();
 
         let outer_subject =
             FunctionEvaluator::evaluate(StarFunction::Subject, &[inner_subject]).unwrap();

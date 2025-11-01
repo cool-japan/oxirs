@@ -13,9 +13,11 @@ pub mod parser;
 pub mod pattern_optimizer;
 pub mod pattern_unification;
 pub mod plan;
+pub mod plan_cache;
 pub mod property_paths;
 pub mod sparql_algebra;
 pub mod sparql_query;
+pub mod statistics;
 pub mod streaming_results;
 pub mod update;
 pub mod wasm;
@@ -50,6 +52,10 @@ pub use pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternExecutor, Pa
 pub use pattern_unification::{
     PatternConverter, PatternOptimizer as UnifiedPatternOptimizer, UnifiedTermPattern,
     UnifiedTriplePattern,
+};
+pub use plan_cache::{CacheConfig, CacheStatistics, CachedPlan, QueryPlanCache, SerializablePlan};
+pub use statistics::{
+    GraphStatistics, PredicateStatistics, QueryExecutionStats, SelectivityInfo, StatisticsSummary,
 };
 pub use streaming_results::{
     ConstructResults, SelectResults, Solution as StreamingSolution, SolutionMetadata,

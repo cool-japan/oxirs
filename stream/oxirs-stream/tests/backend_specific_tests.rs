@@ -888,16 +888,16 @@ mod pulsar_specific_tests {
         tokio::time::sleep(Duration::from_millis(300)).await;
 
         // Each stream should only receive its own namespace events
-        if let Ok(Ok(Some(received1))) = timeout(Duration::from_secs(5), stream1.consume()).await {
-            if let StreamEvent::TripleAdded { object, .. } = received1 {
-                assert!(object.contains("namespace1_data"));
-            }
+        if let Ok(Ok(Some(StreamEvent::TripleAdded { object, .. }))) =
+            timeout(Duration::from_secs(5), stream1.consume()).await
+        {
+            assert!(object.contains("namespace1_data"));
         }
 
-        if let Ok(Ok(Some(received2))) = timeout(Duration::from_secs(5), stream2.consume()).await {
-            if let StreamEvent::TripleAdded { object, .. } = received2 {
-                assert!(object.contains("namespace2_data"));
-            }
+        if let Ok(Ok(Some(StreamEvent::TripleAdded { object, .. }))) =
+            timeout(Duration::from_secs(5), stream2.consume()).await
+        {
+            assert!(object.contains("namespace2_data"));
         }
 
         stream1.close().await?;

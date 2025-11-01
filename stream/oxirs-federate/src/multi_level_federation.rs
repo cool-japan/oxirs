@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Multi-Level (Hierarchical) Federation Support
 //!
 //! This module enables hierarchical federation architectures where federation engines

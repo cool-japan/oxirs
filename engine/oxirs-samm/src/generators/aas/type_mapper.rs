@@ -1,37 +1,70 @@
 //! Type mapping between XSD and AAS data types
 
 /// AAS DataTypeDefXsd enum (AAS V3.0 XML Schema types)
+///
+/// This enum represents the data types defined in the Asset Administration Shell (AAS) V3.0 specification,
+/// which are based on XML Schema Definition (XSD) types.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataTypeDefXsd {
+    /// XSD anyURI type - Represents a URI reference
     AnyUri,
+    /// XSD base64Binary type - Base64-encoded binary data
     Base64Binary,
+    /// XSD boolean type - True or false values
     Boolean,
+    /// XSD byte type - 8-bit signed integer (-128 to 127)
     Byte,
+    /// XSD date type - Calendar date (YYYY-MM-DD)
     Date,
+    /// XSD dateTime type - Date and time with timezone
     DateTime,
+    /// XSD decimal type - Arbitrary precision decimal number
     Decimal,
+    /// XSD double type - 64-bit floating point number
     Double,
+    /// XSD duration type - Duration of time
     Duration,
+    /// XSD float type - 32-bit floating point number
     Float,
+    /// XSD gDay type - Recurring day of the month (---DD)
     GDay,
+    /// XSD gMonth type - Recurring month (--MM)
     GMonth,
+    /// XSD gMonthDay type - Recurring date (--MM-DD)
     GMonthDay,
+    /// XSD gYear type - Gregorian year (YYYY)
     GYear,
+    /// XSD gYearMonth type - Gregorian year and month (YYYY-MM)
     GYearMonth,
+    /// XSD hexBinary type - Hex-encoded binary data
     HexBinary,
+    /// XSD int type - 32-bit signed integer
     Int,
+    /// XSD integer type - Arbitrary size integer
     Integer,
+    /// XSD long type - 64-bit signed integer
     Long,
+    /// XSD negativeInteger type - Integer less than zero
     NegativeInteger,
+    /// XSD nonNegativeInteger type - Integer greater than or equal to zero
     NonNegativeInteger,
+    /// XSD nonPositiveInteger type - Integer less than or equal to zero
     NonPositiveInteger,
+    /// XSD positiveInteger type - Integer greater than zero
     PositiveInteger,
+    /// XSD short type - 16-bit signed integer
     Short,
+    /// XSD string type - Character string
     String,
+    /// XSD time type - Time of day (HH:MM:SS)
     Time,
+    /// XSD unsignedByte type - 8-bit unsigned integer (0 to 255)
     UnsignedByte,
+    /// XSD unsignedInt type - 32-bit unsigned integer
     UnsignedInt,
+    /// XSD unsignedLong type - 64-bit unsigned integer
     UnsignedLong,
+    /// XSD unsignedShort type - 16-bit unsigned integer
     UnsignedShort,
 }
 
@@ -74,26 +107,48 @@ impl DataTypeDefXsd {
 }
 
 /// AAS DataTypeIec61360 enum (IEC 61360 data types)
+///
+/// This enum represents data types defined in the IEC 61360 standard for property dictionaries.
+/// IEC 61360 is an international standard for the definition and exchange of product data.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DataTypeIec61360 {
+    /// Binary large object - Unstructured binary data
     Blob,
+    /// Boolean value - True or false
     Boolean,
+    /// Calendar date without time
     Date,
+    /// File reference or attachment
     File,
+    /// HTML formatted text
     Html,
+    /// Integer used for counting (dimensionless)
     IntegerCount,
+    /// Integer representing a currency amount
     IntegerCurrency,
+    /// Integer with associated unit of measurement
     IntegerMeasure,
+    /// International Registration Data Identifier
     Irdi,
+    /// Internationalized Resource Identifier
     Iri,
+    /// Rational number (fraction)
     Rational,
+    /// Rational number with associated unit of measurement
     RationalMeasure,
+    /// Real number used for counting (dimensionless)
     RealCount,
+    /// Real number representing a currency amount
     RealCurrency,
+    /// Real number with associated unit of measurement
     RealMeasure,
+    /// Character string
     String,
+    /// Translatable string with language tags
     StringTranslatable,
+    /// Time of day without date
     Time,
+    /// Date and time combination
     Timestamp,
 }
 

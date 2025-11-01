@@ -277,8 +277,10 @@ mod tests {
 
     #[test]
     fn test_detection_disabled() {
-        let mut config = AnomalyConfig::default();
-        config.enabled = false;
+        let config = AnomalyConfig {
+            enabled: false,
+            ..Default::default()
+        };
 
         let detector = AnomalyDetector::new(config);
         let data = Array1::from_vec(vec![1.0, 2.0, 3.0, 100.0]);
@@ -305,8 +307,10 @@ mod tests {
 
     #[test]
     fn test_outlier_detection() {
-        let mut config = AnomalyConfig::default();
-        config.detector_type = DetectorType::StatisticalOutlier;
+        let config = AnomalyConfig {
+            detector_type: DetectorType::StatisticalOutlier,
+            ..Default::default()
+        };
 
         let detector = AnomalyDetector::new(config);
         let data = Array1::from_vec(vec![
@@ -321,8 +325,10 @@ mod tests {
 
     #[test]
     fn test_explainability() {
-        let mut config = AnomalyConfig::default();
-        config.enable_explainability = true;
+        let config = AnomalyConfig {
+            enable_explainability: true,
+            ..Default::default()
+        };
 
         let detector = AnomalyDetector::new(config);
         let data = Array1::from_vec(vec![

@@ -11,7 +11,7 @@ use oxirs_embed::{
     mixed_precision::{MixedPrecisionConfig, MixedPrecisionTrainer},
     quantization::{BitWidth, ModelQuantizer, QuantizationConfig, QuantizationScheme},
     visualization::{EmbeddingVisualizer, ReductionMethod, VisualizationConfig},
-    EmbeddingModel, ModelConfig, TransE, TransEConfig, Triple,
+    EmbeddingModel, ModelConfig, NamedNode, TransE, Triple,
 };
 use scirs2_autograd::ndarray::array;
 use std::collections::HashMap;
@@ -41,13 +41,10 @@ fn create_sample_embeddings() -> HashMap<String, scirs2_core::ndarray_ext::Array
 #[tokio::test]
 async fn test_link_prediction_integration() {
     // Create and train a simple model
-    let config = TransEConfig {
-        base: ModelConfig {
-            dimensions: 50,
-            learning_rate: 0.01,
-            epochs: 30,
-            ..Default::default()
-        },
+    let config = ModelConfig {
+        dimensions: 50,
+        learning_rate: 0.01,
+        max_epochs: 30,
         ..Default::default()
     };
 
@@ -55,27 +52,27 @@ async fn test_link_prediction_integration() {
 
     // Add training data
     model
-        .add_triple(Triple {
-            head: "alice".to_string(),
-            relation: "knows".to_string(),
-            tail: "bob".to_string(),
-        })
+        .add_triple(Triple::new(
+            NamedNode::new("alice").unwrap(),
+            NamedNode::new("knows").unwrap(),
+            NamedNode::new("bob").unwrap(),
+        ))
         .unwrap();
 
     model
-        .add_triple(Triple {
-            head: "bob".to_string(),
-            relation: "knows".to_string(),
-            tail: "charlie".to_string(),
-        })
+        .add_triple(Triple::new(
+            NamedNode::new("bob").unwrap(),
+            NamedNode::new("knows").unwrap(),
+            NamedNode::new("charlie").unwrap(),
+        ))
         .unwrap();
 
     model
-        .add_triple(Triple {
-            head: "alice".to_string(),
-            relation: "likes".to_string(),
-            tail: "dave".to_string(),
-        })
+        .add_triple(Triple::new(
+            NamedNode::new("alice").unwrap(),
+            NamedNode::new("likes").unwrap(),
+            NamedNode::new("dave").unwrap(),
+        ))
         .unwrap();
 
     // Train
@@ -165,38 +162,38 @@ fn test_dbscan_clustering() {
     let mut clustering = EntityClustering::new(config);
     let result = clustering.cluster(&embeddings).unwrap();
 
-    assert!(result.num_communities > 0);
+    assert!(!result.centroids.is_empty());
 }
 
 #[test]
 fn test_community_detection_integration() {
     // Create triples representing a graph
     let triples = vec![
-        Triple {
-            head: "a".to_string(),
-            relation: "r".to_string(),
-            tail: "b".to_string(),
-        },
-        Triple {
-            head: "b".to_string(),
-            relation: "r".to_string(),
-            tail: "c".to_string(),
-        },
-        Triple {
-            head: "a".to_string(),
-            relation: "r".to_string(),
-            tail: "c".to_string(),
-        },
-        Triple {
-            head: "d".to_string(),
-            relation: "r".to_string(),
-            tail: "e".to_string(),
-        },
-        Triple {
-            head: "e".to_string(),
-            relation: "r".to_string(),
-            tail: "f".to_string(),
-        },
+        Triple::new(
+            NamedNode::new("a").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("b").unwrap(),
+        ),
+        Triple::new(
+            NamedNode::new("b").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("c").unwrap(),
+        ),
+        Triple::new(
+            NamedNode::new("a").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("c").unwrap(),
+        ),
+        Triple::new(
+            NamedNode::new("d").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("e").unwrap(),
+        ),
+        Triple::new(
+            NamedNode::new("e").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("f").unwrap(),
+        ),
     ];
 
     // Test Louvain algorithm
@@ -217,16 +214,16 @@ fn test_community_detection_integration() {
 #[test]
 fn test_label_propagation() {
     let triples = vec![
-        Triple {
-            head: "a".to_string(),
-            relation: "r".to_string(),
-            tail: "b".to_string(),
-        },
-        Triple {
-            head: "b".to_string(),
-            relation: "r".to_string(),
-            tail: "c".to_string(),
-        },
+        Triple::new(
+            NamedNode::new("a").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("b").unwrap(),
+        ),
+        Triple::new(
+            NamedNode::new("b").unwrap(),
+            NamedNode::new("r").unwrap(),
+            NamedNode::new("c").unwrap(),
+        ),
     ];
 
     let config = CommunityConfig {
@@ -536,7 +533,7 @@ fn test_end_to_end_pipeline() {
     let mut clustering = EntityClustering::new(cluster_config);
     let cluster_result = clustering.cluster(&embeddings).unwrap();
 
-    assert!(cluster_result.num_clusters == 3);
+    assert!(cluster_result.centroids.len() == 3);
 
     // 2. Visualize embeddings
     let vis_config = VisualizationConfig {
@@ -559,7 +556,7 @@ fn test_end_to_end_pipeline() {
     // 4. Quantize embeddings
     let quant_config = QuantizationConfig::default();
     let mut quantizer = ModelQuantizer::new(quant_config);
-    let quantized = quantizer.quantize_embeddings(&embeddings).unwrap();
+    let _quantized = quantizer.quantize_embeddings(&embeddings).unwrap();
 
     assert!(quantizer.get_stats().compression_ratio > 1.0);
 

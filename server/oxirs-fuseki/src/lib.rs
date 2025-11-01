@@ -55,6 +55,7 @@ pub mod federated_query_optimizer;
 pub mod federation;
 pub mod graph_analytics;
 pub mod handlers;
+pub mod health; // Enhanced health checks
 pub mod metrics;
 pub mod middleware;
 pub mod optimization;
@@ -66,6 +67,7 @@ pub mod store;
 pub mod store_impl;
 pub mod streaming;
 pub mod subquery_optimizer;
+pub mod tls; // TLS/SSL support
 pub mod vector_search;
 pub mod websocket;
 

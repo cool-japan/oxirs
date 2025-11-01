@@ -356,7 +356,7 @@ mod tests {
             },
         ];
 
-        let results = processor.process_batches(&facts, |batch| batch.iter().cloned().collect());
+        let results = processor.process_batches(&facts, |batch| batch.to_vec());
 
         assert_eq!(results.len(), 2);
     }
@@ -374,12 +374,15 @@ mod tests {
             .collect();
 
         let filtered = matcher.parallel_filter(facts, |fact| {
-            if let RuleAtom::Triple { subject, .. } = fact {
-                if let Term::Constant(s) = subject {
-                    return s.contains("entity_1");
-                }
+            if let RuleAtom::Triple {
+                subject: Term::Constant(s),
+                ..
+            } = fact
+            {
+                s.contains("entity_1")
+            } else {
+                false
             }
-            false
         });
 
         assert!(!filtered.is_empty());

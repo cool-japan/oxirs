@@ -2,7 +2,7 @@
 
 use crate::{
     auth::AuthService,
-    config::ServerConfig,
+    config::{ServerConfig, TlsConfig},
     error::{FusekiError, FusekiResult},
     federation::{FederationConfig, FederationManager},
     handlers,
@@ -11,6 +11,7 @@ use crate::{
     performance::PerformanceService,
     store::Store,
     streaming::{StreamingConfig, StreamingManager},
+    tls::TlsManager,
     websocket::{SubscriptionManager, WebSocketConfig},
 };
 use axum::{
@@ -208,18 +209,27 @@ impl Runtime {
         info!("Starting OxiRS Fuseki server on {}", addr);
         info!("Server configuration: {:#?}", config.server);
 
-        // Start the server
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .map_err(|e| FusekiError::internal(format!("Failed to bind to {addr}: {e}")))?;
-
         let graceful_shutdown =
             Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
 
-        axum::serve(listener, app)
-            .with_graceful_shutdown(graceful_shutdown)
-            .await
-            .map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
+        // Start the server with TLS if configured
+        #[cfg(feature = "tls")]
+        if let Some(tls_config) = &config.server.tls {
+            info!("TLS enabled - starting HTTPS server");
+            self.run_tls_server(addr, app, tls_config.clone(), graceful_shutdown)
+                .await?;
+        } else {
+            info!("TLS disabled - starting HTTP server");
+            self.run_http_server(addr, app, graceful_shutdown).await?;
+        }
+
+        #[cfg(not(feature = "tls"))]
+        {
+            if config.server.tls.is_some() {
+                warn!("TLS configured but TLS feature not enabled. Starting HTTP server.");
+            }
+            self.run_http_server(addr, app, graceful_shutdown).await?;
+        }
 
         info!("Server shutdown complete");
         Ok(())
@@ -293,19 +303,35 @@ impl Runtime {
             .route("/$/stats", get(stats_server_handler))
             .route("/$/stats/:dataset", get(stats_dataset_handler));
 
-        // TODO: Re-enable update route after fixing handler signatures
-        // .route("/update", post(handlers::sparql::update_handler))
+        // API Key Management endpoints
+        app = app
+            .route(
+                "/$/api-keys",
+                get(handlers::api_keys::list_api_keys).post(handlers::api_keys::create_api_key),
+            )
+            .route(
+                "/$/api-keys/:key_id",
+                get(handlers::api_keys::get_api_key)
+                    .put(handlers::api_keys::update_api_key)
+                    .delete(handlers::api_keys::revoke_api_key),
+            )
+            .route(
+                "/$/api-keys/:key_id/usage",
+                get(handlers::api_keys::get_api_key_usage),
+            );
 
-        // TODO: Re-enable these routes after fixing handler signatures
-        // Dataset management routes
-        // app = app
-        //     .route("/$/datasets", get(handlers::admin::list_datasets))
-        //     .route(
-        //         "/$/datasets/:name",
-        //         get(handlers::admin::get_dataset)
-        //             .post(handlers::admin::create_dataset)
-        //             .delete(handlers::admin::delete_dataset),
-        //     );
+        // SPARQL Update endpoint
+        app = app.route("/update", post(handlers::sparql::update_handler));
+
+        // Dataset management API
+        app = app
+            .route("/$/datasets", get(handlers::admin::list_datasets))
+            .route(
+                "/$/datasets/:name",
+                get(handlers::admin::get_dataset)
+                    .post(handlers::admin::create_dataset)
+                    .delete(handlers::admin::delete_dataset),
+            );
 
         // Server management routes
         app = app.route("/$/ping", get(ping_handler));
@@ -409,12 +435,11 @@ impl Runtime {
         //         );
         // }
 
-        // TODO: Re-enable health and monitoring routes after fixing handler signatures
         // Health check routes
-        // app = app
-        //     .route("/health", get(health_handler))
-        //     .route("/health/live", get(liveness_handler))
-        //     .route("/health/ready", get(readiness_handler));
+        app = app
+            .route("/health", get(crate::health::health_handler))
+            .route("/health/live", get(crate::health::liveness_handler))
+            .route("/health/ready", get(crate::health::readiness_handler));
 
         // Metrics routes (if enabled)
         // if state.metrics_service.is_some() {
@@ -445,15 +470,16 @@ impl Runtime {
         //         );
         // }
 
-        // TODO: Re-enable WebSocket and admin UI routes after fixing handler signatures
         // WebSocket routes for live query subscriptions
-        // app = app.route("/ws", get(crate::websocket::websocket_handler));
-        // app = app.route("/subscribe", get(crate::websocket::websocket_handler));
+        app = app
+            .route("/$/ws", get(handlers::websocket_handler))
+            .route("/$/subscribe", get(handlers::websocket_handler));
 
         // Admin UI route (if enabled)
-        // if self.config.server.admin_ui {
-        //     app = app.route("/", get(handlers::admin::ui_handler));
-        // }
+        #[cfg(feature = "admin-ui")]
+        if self.config.server.admin_ui {
+            app = app.route("/", get(handlers::ui_handler));
+        }
 
         // Apply middleware stack in correct order
         app = self.apply_middleware_stack(app, state.clone()).await?;
@@ -470,7 +496,7 @@ impl Runtime {
     ) -> FusekiResult<Router<Arc<AppState>>> {
         use crate::middleware::{
             api_version, health_check_bypass, https_security_headers, request_correlation_id,
-            request_timing, security_headers,
+            request_timing, route_based_rbac, security_headers,
         };
         use tower_http::{
             cors::CorsLayer, request_id::SetRequestIdLayer, timeout::TimeoutLayer,
@@ -497,18 +523,26 @@ impl Runtime {
         // Layer 6: API version header
         app = app.layer(axum::middleware::from_fn(api_version));
 
-        // Layer 7: Request ID generation (tower-http)
+        // Layer 7: RBAC (Role-Based Access Control) - only if auth is enabled
+        if self.config.security.auth_required {
+            info!("RBAC middleware enabled - enforcing role-based access control");
+            app = app.layer(axum::middleware::from_fn(route_based_rbac));
+        } else {
+            debug!("RBAC middleware disabled - authentication not required");
+        }
+
+        // Layer 8: Request ID generation (tower-http)
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
 
-        // Layer 8: Request tracing and logging
+        // Layer 9: Request tracing and logging
         app = app.layer(TraceLayer::new_for_http());
 
-        // Layer 9: Timeout middleware
+        // Layer 10: Timeout middleware
         app = app.layer(TimeoutLayer::new(Duration::from_secs(
             self.config.server.request_timeout_secs,
         )));
 
-        // Layer 10: CORS configuration if enabled
+        // Layer 11: CORS configuration if enabled
         if self.config.server.cors {
             let cors = CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
@@ -531,6 +565,75 @@ impl Runtime {
         info!("Middleware stack configured: security, tracing, timing, CORS");
 
         Ok(app)
+    }
+
+    /// Run HTTP server (without TLS)
+    async fn run_http_server<F>(
+        &self,
+        addr: SocketAddr,
+        app: Router,
+        graceful_shutdown: F,
+    ) -> FusekiResult<()>
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .map_err(|e| FusekiError::internal(format!("Failed to bind to {addr}: {e}")))?;
+
+        axum::serve(listener, app)
+            .with_graceful_shutdown(graceful_shutdown)
+            .await
+            .map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Run HTTPS server with TLS
+    #[cfg(feature = "tls")]
+    async fn run_tls_server<F>(
+        &self,
+        addr: SocketAddr,
+        app: Router,
+        tls_config: TlsConfig,
+        graceful_shutdown: F,
+    ) -> FusekiResult<()>
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        use axum_server::tls_rustls::RustlsConfig;
+
+        // Create TLS manager and build rustls config
+        let tls_manager = TlsManager::new(tls_config.clone());
+        tls_manager.validate()?;
+
+        let rustls_config = tls_manager.build_server_config()?;
+
+        // Create axum-server TLS config from rustls ServerConfig
+        let axum_tls_config = RustlsConfig::from_config(rustls_config);
+
+        info!("TLS certificates loaded successfully");
+        info!("Starting HTTPS server on https://{}", addr);
+
+        // Use axum-server for TLS support with HTTP/2 and graceful shutdown
+        let handle = axum_server::Handle::new();
+
+        // Spawn graceful shutdown task
+        tokio::spawn({
+            let handle = handle.clone();
+            async move {
+                graceful_shutdown.await;
+                handle.graceful_shutdown(Some(Duration::from_secs(30)));
+            }
+        });
+
+        axum_server::bind_rustls(addr, axum_tls_config)
+            .handle(handle)
+            .serve(app.into_make_service())
+            .await
+            .map_err(|e| FusekiError::internal(format!("TLS server error: {e}")))?;
+
+        Ok(())
     }
 
     /// Graceful shutdown with configurable timeout

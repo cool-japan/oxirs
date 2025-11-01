@@ -692,7 +692,7 @@ mod tests {
         shape.add_constraint(ConstraintType::MaxNestingDepth(2));
         validator.add_shape(shape);
 
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         // Create a deeply nested triple (depth = 3)
         let inner = StarTriple::new(
@@ -738,7 +738,7 @@ mod tests {
         ));
         validator.add_shape(shape);
 
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         // Triple without the required predicate
         let triple = StarTriple::new(
@@ -767,7 +767,7 @@ mod tests {
         });
         validator.add_shape(shape);
 
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         // Matching triple
         let triple = StarTriple::new(

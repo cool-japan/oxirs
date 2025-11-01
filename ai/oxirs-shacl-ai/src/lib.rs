@@ -412,6 +412,7 @@ use oxirs_core::{model::Term, OxirsError, Store};
 
 use oxirs_shacl::{ShapeId, ValidationConfig, ValidationReport};
 
+pub mod advanced_features;
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
 pub mod advanced_validation_strategies;
@@ -480,6 +481,52 @@ pub mod validation_performance;
 pub mod version_control;
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
+// Advanced Features (v0.1.0-beta.1 - NEW)
+pub use advanced_features::{
+    // Active Learning
+    ActiveLearner,
+    ActiveLearningConfig,
+    // Advanced Anomaly Detection
+    AdvancedAnomalyDetector,
+    AnomalyDetectionConfig,
+    CollectiveAnomalyDetector,
+    ContextualAnomalyDetector,
+    // Continual Learning
+    ContinualLearner,
+    ContinualLearningConfig,
+    // Transfer Learning
+    DomainAdapter,
+    // Ensemble Methods
+    EnsembleLearner,
+    EnsembleStrategy,
+    GanModel,
+    // Generative Models
+    GenerativeModel,
+    GnnLayer,
+    GnnLayerType,
+    GraphConvolution,
+    // Graph Neural Networks
+    GraphNeuralNetwork,
+    GraphNeuralNetworkConfig,
+    MemoryBuffer,
+    MessagePassingConfig,
+    ModelEnsemble,
+    NoveltyDetector,
+    PlasticityPreservation,
+    PretrainedModel,
+    QueryStrategy,
+    SamplingStrategy,
+    ShapeEmbedding,
+    TestDataGenerator,
+    TransferLearner,
+    TransferLearningConfig,
+    TransferStrategy,
+    UncertaintySampling,
+    VariationalAutoencoder,
+    VotingStrategy,
+    WeightedEnsemble,
+};
+
 pub use advanced_neural::{
     AdvancedNeuralArchitecture, AdvancedNeuralManager, ArchitectureConfig, ArchitectureType,
     EarlyStoppingConfig, ManagerConfig, ODESolverType, OptimizerType,
@@ -521,8 +568,8 @@ pub use anomaly_detection::{
     Anomaly, AnomalyConfig, AnomalyDetector, AnomalyExplainer, AnomalyScore, AnomalyType,
     DataDistribution as AnomalyDataDistribution, DetectionMetrics, DetectorResult, DetectorType,
     DriftDetector, DriftResult, DriftType, EnsembleConfig, EnsembleDetector, EnsembleResult,
-    ExplanationReport, NoveltyDetector, NoveltyResult, OutlierDetector, OutlierMethod,
-    OutlierResult, RdfAnomaly,
+    ExplanationReport, NoveltyDetector as ExistingNoveltyDetector, NoveltyResult, OutlierDetector,
+    OutlierMethod, OutlierResult, RdfAnomaly,
 };
 pub use collaborative_development::*;
 pub use constraint_generation::{

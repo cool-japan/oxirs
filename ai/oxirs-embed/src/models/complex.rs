@@ -376,7 +376,7 @@ impl ComplEx {
     }
 
     /// Get relation embedding as a concatenated real/imaginary vector
-    fn getrelation_embedding_vector(&self, relation_id: usize) -> Vector {
+    fn get_relation_embedding_vector(&self, relation_id: usize) -> Vector {
         let real_part = self.relation_embeddings_real.row(relation_id);
         let imag_part = self.relation_embeddings_imag.row(relation_id);
 
@@ -467,7 +467,7 @@ impl EmbeddingModel for ComplEx {
         Ok(self.get_entity_embedding_vector(entity_id))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.embeddings_initialized {
             return Err(anyhow!("Model not trained"));
         }
@@ -477,7 +477,7 @@ impl EmbeddingModel for ComplEx {
             .get_relation_id(relation)
             .ok_or_else(|| anyhow!("Relation not found: {}", relation))?;
 
-        Ok(self.getrelation_embedding_vector(relation_id))
+        Ok(self.get_relation_embedding_vector(relation_id))
     }
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {

@@ -5,9 +5,8 @@
 //! structure in knowledge graphs and can improve downstream tasks.
 
 use anyhow::{anyhow, Result};
-use rayon::prelude::*;
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::random::{rng, Random};
+use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use tracing::{debug, info};
@@ -84,11 +83,7 @@ pub struct EntityClustering {
 impl EntityClustering {
     /// Create new entity clustering
     pub fn new(config: ClusteringConfig) -> Self {
-        let rng = if let Some(seed) = config.random_seed {
-            Random::seed(seed)
-        } else {
-            rng()
-        };
+        let rng = Random::default();
 
         Self { config, rng }
     }
@@ -134,7 +129,7 @@ impl EntityClustering {
         let mut centroids: Vec<Array1<f32>> = Vec::new();
 
         // K-Means++ initialization for better convergence
-        let first_idx = self.rng.range(0, n);
+        let first_idx = self.rng.random_range(0, n);
         centroids.push(entity_embeddings[&entity_list[first_idx]].clone());
 
         for _ in 1..k {
@@ -153,7 +148,7 @@ impl EntityClustering {
 
             // Sample proportional to distance squared
             let sum: f32 = distances.iter().sum();
-            let mut prob = self.rng.uniform(0.0, sum);
+            let mut prob = self.rng.random_range(0.0, sum);
             let mut next_idx = 0;
 
             for (i, &dist) in distances.iter().enumerate() {
@@ -419,7 +414,7 @@ impl EntityClustering {
         centroids: &[Array1<f32>],
     ) -> f32 {
         entity_list
-            .par_iter()
+            .iter()
             .filter_map(|entity| {
                 assignments.get(entity).and_then(|&cluster| {
                     if cluster < centroids.len() {
@@ -462,7 +457,7 @@ impl EntityClustering {
         }
 
         let scores: Vec<f32> = entity_list
-            .par_iter()
+            .iter()
             .filter_map(|entity| {
                 assignments.get(entity).map(|&cluster| {
                     let emb = &embeddings[entity];
@@ -591,6 +586,7 @@ impl EntityClustering {
     }
 
     /// Expand cluster for DBSCAN
+    #[allow(clippy::too_many_arguments)]
     fn expand_cluster(
         &self,
         idx: usize,

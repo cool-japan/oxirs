@@ -29,6 +29,12 @@ axum-extra = { version = "0.9", features = ["typed-header"] }
 tower = { version = "0.5", features = ["timeout", "load-shed", "buffer"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "timeout", "compression-gzip", "compression-br", "request-id", "sensitive-headers"] }
 
+# TLS/SSL support
+rustls = { version = "0.23", optional = true }
+tokio-rustls = { version = "0.26", optional = true }
+rustls-pemfile = { version = "2.2", optional = true }
+axum-server = { version = "0.7", features = ["tls-rustls"], optional = true }
+
 # CLI and configuration
 clap = { version = "4.4", features = ["derive", "env"] }
 serde = { version = "1.0", features = ["derive"] }
@@ -170,6 +176,7 @@ auth = ["jsonwebtoken", "bcrypt"]
 admin-ui = ["askama"]
 tracing = ["tracing-opentelemetry"]
 rate-limit = []
+tls = ["rustls", "tokio-rustls", "rustls-pemfile", "axum-server"]
 kafka = ["rdkafka"]
 nats = ["async-nats"]
 hot-reload = ["notify"]
@@ -177,7 +184,7 @@ ldap = ["ldap3"]
 saml = []  # SAML authentication support (implementation in progress)
 # saml = [] # Disabled until xmlsec compatibility issues are resolved
 development = ["admin-ui", "tracing"]
-production = ["metrics", "auth", "rate-limit", "ldap"]
+production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
 
 [[bin]]
 name = "oxirs-fuseki"

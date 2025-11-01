@@ -8,16 +8,14 @@ use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
 use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
 use tracing::{debug, info, trace, warn};
 
 // Global metrics for memory tracking
-static SUBSTITUTION_CLONES: LazyLock<Counter> =
-    LazyLock::new(|| Counter::new("backward_chain_substitution_clones".to_string()));
-static CONTEXT_CLONES: LazyLock<Counter> =
-    LazyLock::new(|| Counter::new("backward_chain_context_clones".to_string()));
-static ACTIVE_PROOF_DEPTH: LazyLock<Gauge> =
-    LazyLock::new(|| Gauge::new("backward_chain_active_proof_depth".to_string()));
+lazy_static::lazy_static! {
+    static ref SUBSTITUTION_CLONES: Counter = Counter::new("backward_chain_substitution_clones".to_string());
+    static ref CONTEXT_CLONES: Counter = Counter::new("backward_chain_context_clones".to_string());
+    static ref ACTIVE_PROOF_DEPTH: Gauge = Gauge::new("backward_chain_active_proof_depth".to_string());
+}
 
 /// Proof context for tracking derivation paths
 #[derive(Debug, Clone, Default)]

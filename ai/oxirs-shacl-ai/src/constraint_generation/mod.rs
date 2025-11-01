@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn test_constraint_types() {
-        let types = vec![
+        let types = [
             ConfigConstraintType::Cardinality,
             ConfigConstraintType::Datatype,
             ConfigConstraintType::ValueRange,

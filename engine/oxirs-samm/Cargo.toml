@@ -25,13 +25,14 @@ oxilangtag.workspace = true
 oxsdatatypes.workspace = true
 
 # SciRS2 for scientific computing
-scirs2-core = { workspace = true }
+scirs2-core = { workspace = true, features = ["profiling", "leak_detection"] }
 scirs2-graph = { workspace = true }
 scirs2-stats = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
 async-trait.workspace = true
+rayon = "1.10"
 
 # Serialization
 serde = { workspace = true, features = ["derive"] }
@@ -50,6 +51,9 @@ tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
 url.workspace = true
 once_cell.workspace = true
 regex = "1.11"
+num_cpus = "1.16"
+bytecount = "0.6"
+reqwest.workspace = true
 
 # Template engine for custom code generation
 tera = "1.20"
@@ -63,6 +67,20 @@ graphviz-rust = { version = "0.9", optional = true }
 [dev-dependencies]
 tempfile.workspace = true
 tokio-test = "0.4"
+criterion = { version = "0.5", features = ["async_tokio", "html_reports"] }
+proptest = "1.5"
+
+[[bench]]
+name = "parser_benchmarks"
+harness = false
+
+[[bench]]
+name = "generator_benchmarks"
+harness = false
+
+[[bench]]
+name = "validation_benchmarks"
+harness = false
 
 [features]
 default = []

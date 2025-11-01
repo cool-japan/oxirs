@@ -202,13 +202,16 @@ use tracing::{debug, info, span, Level};
 
 pub mod advanced_query;
 pub mod annotations;
+pub mod bloom_filter;
 pub mod cli;
+pub mod compact_annotation_storage;
 pub mod compatibility;
 pub mod docs;
 pub mod enhanced_errors;
 pub mod functions;
 pub mod graphql_star;
 pub mod index;
+pub mod materialized_views;
 pub mod memory_efficient_store;
 pub mod model;
 pub mod parallel_query;
@@ -216,6 +219,7 @@ pub mod parser;
 pub mod production;
 pub mod profiling;
 pub mod query;
+pub mod query_optimizer;
 pub mod reasoning;
 pub mod reification;
 pub mod semantics;
@@ -224,6 +228,7 @@ pub mod shacl_star;
 pub mod sparql_enhanced;
 pub mod storage_integration;
 pub mod store;
+pub mod temporal_versioning;
 pub mod troubleshooting;
 
 // Re-export main types

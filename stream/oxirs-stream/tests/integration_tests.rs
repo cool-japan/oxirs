@@ -589,7 +589,7 @@ mod kinesis_backend_tests {
             }
         }
 
-        assert!(received_events.len() > 0); // Should receive at least some events
+        assert!(!received_events.is_empty()); // Should receive at least some events
 
         stream.close().await?;
         Ok(())

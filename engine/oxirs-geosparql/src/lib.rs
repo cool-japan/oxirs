@@ -46,11 +46,13 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+pub mod analysis;
 pub mod error;
 pub mod functions;
 pub mod geometry;
 pub mod index;
 pub mod performance;
+pub mod sparql_integration;
 pub mod validation;
 pub mod vocabulary;
 

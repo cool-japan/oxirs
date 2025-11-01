@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Advanced Query Optimization for Federated SPARQL/GraphQL
 //!
 //! This module provides advanced query optimization techniques including:

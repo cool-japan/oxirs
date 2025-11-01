@@ -68,6 +68,7 @@ pub mod debug;
 pub mod distributed;
 pub mod explanation;
 pub mod forward;
+pub mod fuzzy;
 pub mod getting_started;
 pub mod incremental;
 pub mod integration;
@@ -78,15 +79,18 @@ pub mod optimization;
 pub mod owl;
 pub mod parallel;
 pub mod performance;
+pub mod probabilistic;
 pub mod rdf_integration;
 pub mod rdf_processing_simple;
 pub mod rdfs;
 pub mod rete;
 pub mod rete_enhanced;
+pub mod rule_learning;
 pub mod shacl_integration;
 pub mod simd_ops;
 pub mod sparql_integration;
 pub mod swrl;
+pub mod temporal;
 pub mod transaction;
 
 /// Rule representation

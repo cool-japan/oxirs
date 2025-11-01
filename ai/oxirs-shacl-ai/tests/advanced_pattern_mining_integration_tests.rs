@@ -4,7 +4,7 @@
 //! and advanced pattern mining algorithms.
 
 // Disabled due to API changes - to be updated
-#![cfg(all(test, feature = "integration-tests-disabled"))]
+#![cfg(all(test, feature = "disabled"))]
 
 use oxirs_core::rdf_store::{OxirsQueryResults, PreparedQuery};
 use oxirs_shacl_ai::{

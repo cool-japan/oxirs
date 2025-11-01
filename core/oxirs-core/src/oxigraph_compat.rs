@@ -411,13 +411,21 @@ impl Store {
     }
 
     /// Creates a transaction for the store
+    ///
+    /// **Note**: This method is temporarily disabled pending integration with the new
+    /// ACID transaction system. Use TransactionManager::begin() for full ACID transactions.
+    #[allow(dead_code)]
     pub fn transaction<T, E>(
         &self,
-        f: impl FnOnce(&mut crate::Transaction) -> std::result::Result<T, E>,
+        _f: impl FnOnce(&mut crate::AcidTransaction) -> std::result::Result<T, E>,
     ) -> std::result::Result<T, E>
     where
         E: From<OxirsError>,
     {
+        // TODO: Integrate with new TransactionManager
+        unimplemented!("Transaction support is being migrated to the new ACID transaction system. Use TransactionManager::begin() instead.")
+
+        /*
         // Get write access to the store
         let mut store = self.inner.write().map_err(|e| {
             E::from(OxirsError::Store(format!(
@@ -425,8 +433,8 @@ impl Store {
             )))
         })?;
 
-        // Create a transaction
-        let mut transaction = crate::Transaction::new(&mut store);
+        // Create a transaction through TransactionManager
+        // TODO: Need to integrate TransactionManager here
 
         // Execute the user function
         let result = f(&mut transaction);
@@ -442,6 +450,7 @@ impl Store {
                 Err(error)
             }
         }
+        */
     }
 
     /// Validates the store integrity

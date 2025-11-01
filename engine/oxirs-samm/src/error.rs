@@ -5,6 +5,47 @@ use std::fmt;
 /// Result type for SAMM operations
 pub type Result<T> = std::result::Result<T, SammError>;
 
+/// Source location information for error reporting
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceLocation {
+    /// Line number (1-indexed)
+    pub line: usize,
+    /// Column number (1-indexed)
+    pub column: usize,
+    /// File path or URI
+    pub source: Option<String>,
+}
+
+impl SourceLocation {
+    /// Create a new source location
+    pub fn new(line: usize, column: usize) -> Self {
+        Self {
+            line,
+            column,
+            source: None,
+        }
+    }
+
+    /// Create a source location with file path
+    pub fn with_source(line: usize, column: usize, source: String) -> Self {
+        Self {
+            line,
+            column,
+            source: Some(source),
+        }
+    }
+}
+
+impl fmt::Display for SourceLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(source) = &self.source {
+            write!(f, "{}:{}:{}", source, self.line, self.column)
+        } else {
+            write!(f, "line {}:{}", self.line, self.column)
+        }
+    }
+}
+
 /// Error types for SAMM operations
 #[derive(Debug, thiserror::Error)]
 pub enum SammError {
@@ -12,9 +53,27 @@ pub enum SammError {
     #[error("Parse error: {0}")]
     ParseError(String),
 
+    /// Parse error with source location
+    #[error("Parse error at {location}: {message}")]
+    ParseErrorWithLocation {
+        /// Error message
+        message: String,
+        /// Source location
+        location: SourceLocation,
+    },
+
     /// Error validating a SAMM model
     #[error("Validation error: {0}")]
     ValidationError(String),
+
+    /// Validation error with source location
+    #[error("Validation error at {location}: {message}")]
+    ValidationErrorWithLocation {
+        /// Error message
+        message: String,
+        /// Source location
+        location: SourceLocation,
+    },
 
     /// Error resolving a model element
     #[error("Resolution error: {0}")]
@@ -51,6 +110,10 @@ pub enum SammError {
     /// Code generation error
     #[error("Code generation error: {0}")]
     Generation(String),
+
+    /// Network error (for HTTP/HTTPS resolution)
+    #[error("Network error: {0}")]
+    Network(String),
 
     /// Generic error
     #[error("SAMM error: {0}")]

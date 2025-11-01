@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Advanced Anomaly Detection for Failure Prediction
 //!
 //! This module provides sophisticated anomaly detection algorithms for predicting

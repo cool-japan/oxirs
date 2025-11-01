@@ -29,16 +29,14 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
 use scirs2_core::metrics::Timer;
 use std::collections::{HashMap, HashSet};
-use std::sync::LazyLock;
 use tracing::{debug, info};
 
 // Global metrics for query performance
-static QUERY_DIRECT_TIMER: LazyLock<Timer> =
-    LazyLock::new(|| Timer::new("sparql_query_direct".to_string()));
-static QUERY_FORWARD_TIMER: LazyLock<Timer> =
-    LazyLock::new(|| Timer::new("sparql_query_forward".to_string()));
-static QUERY_BACKWARD_TIMER: LazyLock<Timer> =
-    LazyLock::new(|| Timer::new("sparql_query_backward".to_string()));
+lazy_static::lazy_static! {
+    static ref QUERY_DIRECT_TIMER: Timer = Timer::new("sparql_query_direct".to_string());
+    static ref QUERY_FORWARD_TIMER: Timer = Timer::new("sparql_query_forward".to_string());
+    static ref QUERY_BACKWARD_TIMER: Timer = Timer::new("sparql_query_backward".to_string());
+}
 
 /// Query execution mode
 #[derive(Debug, Clone, PartialEq)]

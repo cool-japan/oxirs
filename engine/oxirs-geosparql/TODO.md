@@ -6,12 +6,18 @@
 
 `oxirs-geosparql` delivers full GeoSPARQL 1.1 compliance with production-ready performance profiling.
 
-### Alpha.3 Release Status (October 12, 2025)
-- **233 tests passing** (160 unit + 11 integration + 12 stress + 50 doc) with zero warnings
+### Alpha.4 Development Status (November 1, 2025)
+- **320 tests passing** with zero warnings in oxirs-geosparql
+  - 10 new coord3d tests (3D infrastructure)
+  - 7 new sparql_integration tests
 - **OGC GeoSPARQL 1.1 coverage** including Simple Features, Egenhofer, and RCC8 relations
+- **SPARQL integration** with 32 functions ready for oxirs-arq (Filter, Property, Distance)
 - **Dual-backend buffering** (GEOS + pure Rust) with automatic selection
 - **CRS transformation pipeline** powered by PROJ with batch + parallel execution
 - **SIMD + parallel acceleration** using SciRS2 for distance, batch, and streaming workloads
+- **Advanced spatial analysis** with clustering, interpolation, statistics, Voronoi, Delaunay
+- **PostGIS compatibility** with EWKB/EWKT support for database integration
+- **3D geometry infrastructure** with Coord3D module for Z/M coordinate storage
 - **Comprehensive benchmarking** capturing distance, boolean ops, CRS transforms, and indexing
 - **Prometheus-ready metrics** and stress validation up to 50K geometry datasets
 
@@ -27,20 +33,32 @@
 
 - [x] Core WKT parsing and serialization
 - [x] Simple Features topological relations (8 functions)
-- [x] Egenhofer topological relations (8 functions) - **NEWLY COMPLETED**
-- [x] RCC8 topological relations (8 relations) - **NEWLY COMPLETED**
+- [x] Egenhofer topological relations (8 functions)
+- [x] RCC8 topological relations (8 relations)
 - [x] Basic geometric operations (distance, envelope, convex hull)
-- [x] Advanced geometric set operations (union, intersection, difference, sym_difference) - **NEWLY COMPLETED**
-- [x] Buffer operation (both GEOS and pure Rust backends) - **NEWLY COMPLETED**
-- [x] Geometric properties (area, length, centroid, etc.) - **NEWLY COMPLETED**
-- [x] GML (Geography Markup Language) parser and serializer - **NEWLY COMPLETED**
-- [x] CRS transformation (via PROJ library) - **NEWLY COMPLETED**
+- [x] Advanced geometric set operations (union, intersection, difference, sym_difference)
+- [x] Buffer operation (both GEOS and pure Rust backends)
+- [x] Geometric properties (area, length, centroid, etc.)
+- [x] GML (Geography Markup Language) parser and serializer
+- [x] GeoJSON, KML, GPX parsers and serializers
+- [x] Shapefile reading support
+- [x] PostGIS EWKB/EWKT support (16 tests)
+- [x] CRS transformation (via PROJ library)
 - [x] Spatial indexing with R-tree
 - [x] CRS handling and validation
-- [x] Comprehensive test suite (233 tests: 160 unit + 11 integration + 12 stress + 50 doc)
-- [x] Stress tests for spatial index with large datasets - **NEWLY COMPLETED**
+- [x] Advanced spatial analysis:
+  - [x] Voronoi diagrams
+  - [x] Delaunay triangulation
+  - [x] Spatial clustering (DBSCAN, K-means)
+  - [x] Spatial interpolation (IDW, Kriging)
+  - [x] Spatial statistics (Moran's I, Getis-Ord)
+- [x] Performance optimization (SIMD, parallel, GPU, caching)
+- [x] Validation and geometry repair
+- [x] Comprehensive test suite (303 tests total)
+- [x] Stress tests for spatial index with large datasets
+- [x] Property-based testing (17 tests)
 - [x] Performance benchmarks
-- [x] Usage examples (15 examples)
+- [x] Usage examples (18+ examples)
 - [x] Full documentation
 
 ## High Priority 🔴
@@ -176,23 +194,31 @@
 - All functions properly handle all geometry types and error cases
 
 ### 7. 3D Geometry Support
-**Status**: Not started
+**Status**: 🚧 **PARTIAL - Infrastructure Complete**
 **Complexity**: High
-**Dependencies**: Requires geo-types 3D support or custom implementation
+**Dependencies**: Requires full Z/M coordinate extraction from wkt crate
 
-- [ ] Parse WKT with Z coordinates (e.g., "POINT Z (1 2 3)")
-- [ ] Parse WKT with M coordinates (e.g., "POINT M (1 2 3)")
-- [ ] Parse WKT with ZM coordinates (e.g., "POINT ZM (1 2 3 4)")
-- [ ] Update `is_3d()` and `is_measured()` to detect actual dimensions
+- [x] **3D Coordinate Infrastructure** - **COMPLETED**
+  - Implemented in `src/geometry/coord3d.rs` (294 lines)
+  - `Coord3D` struct for storing Z and M coordinates separately
+  - `CoordDim` enum (XY, XYZ, XYM, XYZM) for dimension tracking
+  - `ZCoords` and `MCoords` structures for Z/M value storage
+  - Validation methods for coordinate count consistency
+  - 10 comprehensive tests for coord3d module (all passing)
+- [x] **Geometry struct updated** to include `coord3d: Coord3D` field
+- [x] **`is_3d()` and `is_measured()` methods** now check coord3d field
+- [ ] **WKT Z/M parsing** - Extract Z/M from wkt crate's Coord type (TODO)
+- [ ] **WKT Z/M serialization** - Output "POINT Z (1 2 3)" format (TODO)
 - [ ] Extend spatial index to support 3D queries
 - [ ] 3D distance calculations
 - [ ] 3D topological relations
 
 **Implementation notes**:
-- Current implementation assumes 2D (XY)
-- geo-types has limited 3D support
-- May need custom Coordinate type
-- Consider performance impact
+- Infrastructure in place for storing Z/M coordinates separately from geo_types
+- geo_types only supports 2D (X, Y), so we store Z/M separately in Geometry struct
+- Current version creates default Coord3D (2D) for all geometries
+- Full Z/M parsing from WKT will be implemented in future version
+- Performance impact minimal as Z/M storage is optional
 
 ## Low Priority / Nice to Have 🟢
 
@@ -234,48 +260,127 @@
 - Zero-copy optimizations where possible
 
 ### 9. Additional Serialization Formats
-**Status**: ✅ **PARTIAL - GeoJSON Completed**
+**Status**: ✅ **PARTIAL - GeoJSON, KML, GPX, Shapefile & PostGIS Completed**
 **Complexity**: Low to Medium
 
-- [x] **GeoJSON import/export** - **NEWLY COMPLETED**
+- [x] **GeoJSON import/export** - **COMPLETED**
   - Implemented in `src/geometry/geojson_parser.rs` (575 lines)
   - Full RFC 7946 compliant parsing and serialization
   - `parse_geojson()`, `parse_geojson_feature_collection()`, `geometry_to_geojson()`
   - Added `to_geojson()` and `from_geojson()` methods to Geometry
   - Feature flag: `geojson-support`
   - 6 comprehensive tests + 1 property test
-- [ ] KML (Keyhole Markup Language)
-- [ ] GPX (GPS Exchange Format)
-- [ ] Shapefile reading (via shapefile crate)
+- [x] **KML (Keyhole Markup Language)** - **COMPLETED**
+  - Implemented in `src/geometry/kml_parser.rs` (776 lines)
+  - Full KML 2.2/2.3 compliant parsing and serialization (Google Earth format)
+  - `parse_kml()`, `geometry_to_kml()`
+  - Added `to_kml()` and `from_kml()` methods to Geometry
+  - Feature flag: `kml-support`
+  - 13 comprehensive tests covering all geometry types
+  - Example: `examples/kml_support.rs` (163 lines, 10 sections)
+  - Supports: Point, LineString, Polygon (with holes), MultiGeometry
+  - Always uses WGS84 coordinate system (EPSG:4326)
+  - lon,lat,altitude coordinate order (Google Earth standard)
+- [x] **GPX (GPS Exchange Format)** - **COMPLETED**
+  - Implemented in `src/geometry/gpx_parser.rs` (538 lines)
+  - Full GPX 1.0/1.1 compliant parsing and serialization
+  - `parse_gpx()`, `geometry_to_gpx()`
+  - Added `to_gpx()` and `from_gpx()` methods to Geometry
+  - Feature flag: `gpx-support`
+  - 9 comprehensive tests covering waypoints, tracks, and routes
+  - Example: `examples/gpx_support.rs` (241 lines, 9 sections)
+  - Supports: Waypoints (Point), Tracks (LineString), Routes (LineString)
+  - Always uses WGS84 coordinate system (EPSG:4326)
+  - lat/lon attribute format (GPS standard)
+- [x] **Shapefile reading** - **COMPLETED**
+  - Implemented in `src/geometry/shapefile_parser.rs` (458 lines)
+  - Full support for reading ESRI Shapefiles (read-only in v0.1.0)
+  - `read_shapefile()` function for geometry extraction
+  - Added `from_shapefile()` method to Geometry
+  - Feature flag: `shapefile-support`
+  - 2 comprehensive tests for CRS parsing
+  - Example: `examples/shapefile_support.rs` (228 lines, 10 sections)
+  - Supports: Point/PointM/PointZ, MultiPoint, PolyLine (LineString), Polygon (with holes)
+  - CRS information read from .prj file (WKT format)
+  - Defaults to WGS84 (EPSG:4326) if no .prj file
+  - Writing support planned for future release
+- [x] **PostGIS EWKB/EWKT** - **COMPLETED**
+  - EWKB: Implemented in `src/geometry/ewkb_parser.rs` (552 lines)
+  - EWKT: Implemented in `src/geometry/ewkt_parser.rs` (221 lines)
+  - Full PostGIS Extended Well-Known Binary/Text support
+  - `parse_ewkb()`, `geometry_to_ewkb()`, `parse_ewkt()`, `geometry_to_ewkt()`
+  - Added `from_ewkb()`, `to_ewkb()`, `from_ewkt()`, `to_ewkt()` methods to Geometry
+  - Supports SRID information in both formats
+  - 5 EWKB tests + 11 EWKT tests (all passing)
+  - EWKB handles byte order (little/big endian)
+  - EWKT format: `SRID=4326;POINT(1 2)`
+- [ ] Shapefile writing (planned for future release)
 - [ ] GeoPackage support
-- [ ] PostGIS EWKB/EWKT
 
 **Implementation notes**:
 - Each format should be behind feature flag
 - Maintain zero-copy where possible
 
 ### 10. Advanced Spatial Analysis
-**Status**: Not started
+**Status**: ✅ **MOSTLY COMPLETED**
 **Complexity**: High
 
-- [ ] Voronoi diagrams
-- [ ] Delaunay triangulation
-- [ ] Spatial clustering (DBSCAN, K-means)
+- [x] **Voronoi diagrams** - **COMPLETED**
+  - Implemented in `src/analysis/voronoi.rs` (516 lines)
+  - `voronoi_diagram()` function
+  - Uses spade library for Delaunay-based Voronoi computation
+  - 5 comprehensive tests covering edge cases
+  - Returns VoronoiCell structures with vertices and neighbors
+- [x] **Delaunay triangulation** - **COMPLETED**
+  - Implemented in `src/analysis/triangulation.rs` (502 lines)
+  - `delaunay_triangulation()` function
+  - Uses spade library for robust triangulation
+  - 6 comprehensive tests including grid and edge cases
+  - Returns Triangle structures with circumcircle properties
+- [x] **Spatial clustering (DBSCAN, K-means)** - **COMPLETED**
+  - Implemented in `src/analysis/clustering.rs` (653 lines)
+  - `dbscan_clustering()` and `kmeans_clustering()` functions
+  - Uses SciRS2 for numerical operations
+  - Parallel processing via rayon for large datasets
+  - 8 comprehensive tests covering convergence, noise points, edge cases
+  - Returns ClusteringResult with cluster assignments and statistics
+- [x] **Spatial interpolation** - **COMPLETED**
+  - Implemented in `src/analysis/interpolation.rs` (603 lines)
+  - `idw_interpolation()` (Inverse Distance Weighting)
+  - `kriging_interpolation()` with variogram models (spherical, exponential, gaussian)
+  - Uses SciRS2 for matrix operations
+  - 10 comprehensive tests including cross-validation
+  - Supports both simple and universal kriging
+- [x] **Spatial statistics (Moran's I, Getis-Ord)** - **COMPLETED**
+  - Implemented in `src/analysis/statistics.rs` (676 lines)
+  - `morans_i()` for spatial autocorrelation
+  - `getis_ord_gi_star()` for hot spot analysis
+  - Multiple spatial weights matrix methods (k-nearest, inverse distance, threshold)
+  - Uses SciRS2 for statistical computations
+  - 10 comprehensive tests covering various scenarios
+  - Returns SpatialAutocorrelation structures with z-scores and p-values
 - [ ] Heatmap generation
-- [ ] Spatial interpolation
 - [ ] Network analysis (shortest path, etc.)
-- [ ] Spatial statistics (Moran's I, Getis-Ord)
 
 **Implementation notes**:
-- These are advanced features beyond core GeoSPARQL
-- Could be separate crate: oxirs-geospatial-analysis
-- Leverage SciRS2 for statistical operations
+- All algorithms leverage SciRS2 for high-performance numerical operations
+- Parallel processing enabled via rayon where applicable
+- Well-tested with comprehensive edge case coverage
+- Could extend with heatmap and network analysis in future versions
 
 ### 11. Integration with OxiRS Ecosystem
-**Status**: Partial
+**Status**: 🚧 **PARTIAL - SPARQL Integration Complete**
 **Complexity**: Medium
 
-- [ ] SPARQL function registration for oxirs-arq
+- [x] **SPARQL function registration for oxirs-arq** - **COMPLETED**
+  - Implemented in `src/sparql_integration.rs` (378 lines)
+  - `GeoSparqlFunction` metadata structure with URI, name, description, arity, category
+  - `get_all_geosparql_functions()` returns all 32 functions
+  - Functions organized by category: Filter (24), Property (7), Distance (1)
+  - 7 comprehensive tests (all passing)
+  - Example: `examples/sparql_integration.rs` (177 lines) with SPARQL query examples
+  - Provides registration template for oxirs-arq integration
+  - Includes Simple Features, Egenhofer, and RCC8 topological functions
 - [ ] RDF serialization of geometries
 - [ ] Integration with oxirs-fuseki endpoints
 - [ ] GraphQL schema generation for oxirs-gql
@@ -283,28 +388,37 @@
 - [ ] Distributed spatial queries via oxirs-cluster
 
 **Implementation notes**:
-- Will require coordination with other OxiRS modules
-- Define common traits/interfaces
+- SPARQL integration provides metadata and registration helpers
+- Will require coordination with other OxiRS modules for full integration
+- Define common traits/interfaces for geometry serialization
 - Consider performance of cross-module calls
 
 ### 12. Validation and Quality Checks
-**Status**: ✅ **MOSTLY COMPLETED**
+**Status**: ✅ **COMPLETED**
 **Complexity**: Medium
 
-- [x] **Geometry validity checking** (self-intersections, coordinate validation) - **NEWLY COMPLETED**
-  - Implemented in `src/validation.rs` (574 lines)
+- [x] **Geometry validity checking** (self-intersections, coordinate validation) - **COMPLETED**
+  - Implemented in `src/validation.rs` (720 lines)
   - `validate_geometry()` with comprehensive ValidationResult
   - Checks for NaN, infinity, empty geometries, self-intersections
   - 6 comprehensive validation tests
-- [x] **Simplification algorithms** (Douglas-Peucker, Visvalingam-Whyatt) - **NEWLY COMPLETED**
+- [x] **Simplification algorithms** (Douglas-Peucker, Visvalingam-Whyatt) - **COMPLETED**
   - `simplify_geometry()` - Douglas-Peucker algorithm
   - `simplify_geometry_vw()` - Visvalingam-Whyatt algorithm
   - Tests verify complexity reduction
-- [x] **Precision model handling** - **NEWLY COMPLETED**
+- [x] **Precision model handling** - **COMPLETED**
   - `snap_to_precision()` function
   - Snaps coordinates to specified decimal precision
   - Idempotent operation (tested via property tests)
-- [ ] Automatic geometry repair
+- [x] **Automatic geometry repair** - **NEWLY COMPLETED**
+  - `repair_geometry()` - Main repair function
+  - `repair_linestring()` - Fixes LineString issues (duplicates, invalid coords)
+  - `repair_polygon()` - Fixes Polygon issues (unclosed rings, invalid coords)
+  - `remove_consecutive_duplicates()` - Removes duplicate points
+  - `close_ring()` - Ensures polygon rings are closed
+  - 10 comprehensive repair tests covering all geometry types
+  - Handles: NaN/Infinity removal, duplicate removal, ring closure
+  - Preserves CRS information during repair
 - [ ] Topology validation (more advanced checks)
 - [ ] Error tolerance configuration
 
@@ -349,11 +463,19 @@
 - [ ] Test with real-world datasets (OpenStreetMap, etc.)
 
 **Current Test Coverage**:
-- **217 total tests** (178 unit + 17 property + 11 integration + 12 stress + multiple doc tests)
-- All tests passing with zero warnings
+- **320 total tests** (including unit, property, integration, stress, and doc tests)
+  - Unit tests: ~240+ tests across all modules
+  - Property-based tests: 17 tests for mathematical correctness
+  - Integration tests: 11 spatial query scenarios
+  - Stress tests: 12 large-scale performance tests
+  - EWKB/EWKT: 16 tests (5 EWKB + 11 EWKT)
+  - Advanced analysis: 36 tests (clustering, interpolation, statistics, triangulation, voronoi)
+  - Coord3D (3D infrastructure): 10 tests for Z/M coordinate handling
+  - SPARQL integration: 7 tests for function registration
+- All tests passing with zero warnings (1 test skipped conditionally)
 - Zero clippy warnings with all features enabled
-- Test execution time: ~2.4 seconds total
-- **17 performance tests** covering SIMD, parallel, and batch operations
+- Test execution time: ~2.6 seconds total
+- **23 performance tests** covering SIMD, parallel, batch operations, and GPU
 - **17 property-based tests** for mathematical correctness
 - **6 GPU operation tests** with CPU fallback validation
 

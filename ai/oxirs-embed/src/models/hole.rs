@@ -10,8 +10,8 @@
 
 use anyhow::{anyhow, Result};
 use rayon::prelude::*;
-use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1};
-use scirs2_core::random::{rng, Random};
+use scirs2_core::ndarray_ext::{Array1, ArrayView1};
+use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -139,10 +139,10 @@ impl HoLE {
 
             // Initialize with uniform distribution scaled by 1/sqrt(d)
             let scale = 1.0 / (self.config.base.dimensions as f32).sqrt();
-            let mut local_rng = rng();
+            let mut local_rng = Random::default();
             let embedding = Array1::from_vec(
                 (0..self.config.base.dimensions)
-                    .map(|_| local_rng.uniform(-scale, scale))
+                    .map(|_| local_rng.gen_range(-scale..scale))
                     .collect(),
             );
             self.entity_embeddings.insert(entity.to_string(), embedding);
@@ -158,10 +158,10 @@ impl HoLE {
 
             // Initialize with uniform distribution scaled by 1/sqrt(d)
             let scale = 1.0 / (self.config.base.dimensions as f32).sqrt();
-            let mut local_rng = rng();
+            let mut local_rng = Random::default();
             let embedding = Array1::from_vec(
                 (0..self.config.base.dimensions)
-                    .map(|_| local_rng.uniform(-scale, scale))
+                    .map(|_| local_rng.gen_range(-scale..scale))
                     .collect(),
             );
             self.relation_embeddings
@@ -173,13 +173,14 @@ impl HoLE {
     fn generate_negative_samples(&mut self, triple: &Triple) -> Vec<Triple> {
         let mut negatives = Vec::new();
         let entity_list: Vec<String> = self.entity_embeddings.keys().cloned().collect();
-        let mut local_rng = rng();
+        let mut local_rng = Random::default();
 
         for _ in 0..self.config.num_negatives {
             // Randomly corrupt subject or object
-            if local_rng.uniform(0.0, 1.0) < 0.5 {
+            if local_rng.gen_range(0.0..1.0) < 0.5 {
                 // Corrupt subject
-                let random_subject = entity_list[local_rng.range(0, entity_list.len())].clone();
+                let random_subject =
+                    entity_list[local_rng.random_range(0, entity_list.len())].clone();
                 negatives.push(Triple {
                     subject: NamedNode::new(&random_subject).unwrap(),
                     predicate: triple.predicate.clone(),
@@ -187,7 +188,8 @@ impl HoLE {
                 });
             } else {
                 // Corrupt object
-                let random_object = entity_list[local_rng.gen_range(0..entity_list.len())].clone();
+                let random_object =
+                    entity_list[local_rng.random_range(0, entity_list.len())].clone();
                 negatives.push(Triple {
                     subject: triple.subject.clone(),
                     predicate: triple.predicate.clone(),
@@ -202,12 +204,12 @@ impl HoLE {
     /// Perform one training step with margin-based ranking loss
     fn train_step(&mut self) -> f32 {
         let mut total_loss = 0.0;
-        let mut local_rng = rng();
+        let mut local_rng = Random::default();
 
         // Shuffle triples for stochastic gradient descent
         let mut indices: Vec<usize> = (0..self.triples.len()).collect();
         for i in (1..indices.len()).rev() {
-            let j = local_rng.gen_range(0..=i);
+            let j = local_rng.random_range(0, i + 1);
             indices.swap(i, j);
         }
 
@@ -355,14 +357,14 @@ impl EmbeddingModel for HoLE {
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector> {
         self.entity_embeddings
             .get(entity)
-            .map(|arr| Vector::from_array1(arr))
+            .map(Vector::from_array1)
             .ok_or_else(|| anyhow!("Unknown entity: {}", entity))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         self.relation_embeddings
             .get(relation)
-            .map(|arr| Vector::from_array1(arr))
+            .map(Vector::from_array1)
             .ok_or_else(|| anyhow!("Unknown relation: {}", relation))
     }
 
@@ -617,7 +619,7 @@ mod tests {
 
         // Test prediction
         let score = model.score_triple("alice", "knows", "bob").unwrap();
-        assert!(score >= 0.0 && score <= 1.0); // Sigmoid bounded
+        assert!((0.0..=1.0).contains(&score)); // Sigmoid bounded
     }
 
     #[tokio::test]

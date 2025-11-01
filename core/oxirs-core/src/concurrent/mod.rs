@@ -10,6 +10,7 @@ pub mod lock_free_graph;
 pub mod lock_free_reads;
 pub mod mrsw;
 pub mod parallel_batch;
+pub mod thread_per_core;
 
 pub use batch_builder::{BatchBuilder, BatchBuilderConfig, BatchBuilderStats, CoalescingStrategy};
 pub use epoch::{EpochManager, HazardPointer, VersionedPointer};
@@ -20,6 +21,7 @@ pub use parallel_batch::{
     BatchConfig, BatchOperation, BatchStats, BatchStatsSummary, ParallelBatchProcessor,
     ProgressCallback,
 };
+pub use thread_per_core::{Task, ThreadPerCore, ThreadPerCoreConfig, ThreadPerCoreStats};
 
 /// Re-export crossbeam epoch types for convenience
 pub use crossbeam_epoch::{pin, Guard};

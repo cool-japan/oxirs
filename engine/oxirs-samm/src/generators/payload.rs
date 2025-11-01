@@ -1,11 +1,14 @@
 //! SAMM to JSON Payload Generator
 //!
 //! Generates sample JSON payload data from SAMM Aspect models.
-//! Uses type-aware random data generation for testing and examples.
+//! Uses type-aware random data generation for testing and examples with SciRS2.
 
 use crate::error::SammError;
 use crate::metamodel::{Aspect, CharacteristicKind, ModelElement};
 use std::time::{SystemTime, UNIX_EPOCH};
+
+// SciRS2 imports for constraint-aware random generation
+use scirs2_core::random::{rng, Random, Rng};
 
 /// Generate sample JSON payload from SAMM Aspect
 pub fn generate_payload(aspect: &Aspect, _examples: bool) -> Result<String, SammError> {
@@ -157,17 +160,117 @@ fn generate_value_for_xsd_type(xsd_type: &str) -> String {
     }
 }
 
-/// Advanced payload generation with constraints (future enhancement)
-#[allow(dead_code)]
-fn generate_value_with_constraints(
+/// Advanced payload generation with constraints using SciRS2
+pub fn generate_value_with_constraints(
     xsd_type: &str,
-    _min: Option<f64>,
-    _max: Option<f64>,
-    _pattern: Option<&str>,
+    min: Option<f64>,
+    max: Option<f64>,
+    pattern: Option<&str>,
 ) -> String {
-    // TODO: Implement constraint-aware generation
-    // For alpha.3, use basic generation
+    let mut rng = rng();
+
+    // Handle pattern-based constraints first
+    if let Some(pat) = pattern {
+        if let Some(value) = generate_from_pattern(pat) {
+            return value;
+        }
+    }
+
+    // Handle numeric types with min/max constraints using scirs2-core random API
+    if let (Some(min_val), Some(max_val)) = (min, max) {
+        return match xsd_type {
+            t if t.ends_with("int") | t.ends_with("integer") => {
+                let value = rng.random_range(min_val as i32..max_val as i32);
+                format!("{}", value)
+            }
+            t if t.ends_with("long") => {
+                let value = rng.random_range(min_val as i64..max_val as i64);
+                format!("{}", value)
+            }
+            t if t.ends_with("short") | t.ends_with("byte") => {
+                let value = rng.random_range(min_val as i16..max_val as i16);
+                format!("{}", value)
+            }
+            t if t.ends_with("decimal") | t.ends_with("float") | t.ends_with("double") => {
+                let value = rng.random_range(min_val..max_val);
+                format!("{:.2}", value)
+            }
+            _ => generate_value_for_xsd_type(xsd_type),
+        };
+    }
+
+    // Handle min-only constraint
+    if let Some(min_val) = min {
+        return match xsd_type {
+            t if t.ends_with("int") | t.ends_with("integer") => {
+                let max_range = (min_val as i32).saturating_add(1000);
+                let value = rng.random_range(min_val as i32..max_range);
+                format!("{}", value)
+            }
+            t if t.ends_with("long") => {
+                let max_range = (min_val as i64).saturating_add(10000);
+                let value = rng.random_range(min_val as i64..max_range);
+                format!("{}", value)
+            }
+            t if t.ends_with("decimal") | t.ends_with("float") | t.ends_with("double") => {
+                let value = rng.random_range(min_val..(min_val + 1000.0));
+                format!("{:.2}", value)
+            }
+            _ => generate_value_for_xsd_type(xsd_type),
+        };
+    }
+
+    // Handle max-only constraint
+    if let Some(max_val) = max {
+        return match xsd_type {
+            t if t.ends_with("int") | t.ends_with("integer") => {
+                let value = rng.random_range(0..(max_val as i32));
+                format!("{}", value)
+            }
+            t if t.ends_with("long") => {
+                let value = rng.random_range(0..(max_val as i64));
+                format!("{}", value)
+            }
+            t if t.ends_with("decimal") | t.ends_with("float") | t.ends_with("double") => {
+                let value = rng.random_range(0.0..max_val);
+                format!("{:.2}", value)
+            }
+            _ => generate_value_for_xsd_type(xsd_type),
+        };
+    }
+
+    // Fallback to basic generation
     generate_value_for_xsd_type(xsd_type)
+}
+
+/// Generate value from regex pattern (simplified pattern matching)
+fn generate_from_pattern(pattern: &str) -> Option<String> {
+    // Handle common SAMM patterns
+    match pattern {
+        // Email pattern
+        p if p.contains("@") || p.contains("email") => Some("\"example@domain.com\"".to_string()),
+        // URL pattern
+        p if p.contains("http") || p.contains("url") => Some("\"https://example.com\"".to_string()),
+        // Phone number pattern
+        p if p.contains("\\d{3}-\\d{4}") || p.contains("phone") => Some("\"123-4567\"".to_string()),
+        // UUID pattern
+        p if p.contains("[0-9a-f]{8}-[0-9a-f]{4}") || p.contains("uuid") => {
+            Some("\"550e8400-e29b-41d4-a716-446655440000\"".to_string())
+        }
+        // ISBN pattern
+        p if p.contains("isbn") => Some("\"978-0-13-468599-1\"".to_string()),
+        // Date pattern (YYYY-MM-DD)
+        p if p.contains("\\d{4}-\\d{2}-\\d{2}") => Some("\"2025-10-31\"".to_string()),
+        // Time pattern (HH:MM:SS)
+        p if p.contains("\\d{2}:\\d{2}:\\d{2}") => Some("\"12:00:00\"".to_string()),
+        // Hex color pattern
+        p if p.contains("#[0-9a-fA-F]{6}") => Some("\"#FF5733\"".to_string()),
+        // IP address pattern
+        p if p.contains("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}") => {
+            Some("\"192.168.1.1\"".to_string())
+        }
+        _ => None,
+    }
 }
 
 /// Generate multiple example payloads (future enhancement)
@@ -222,5 +325,122 @@ mod tests {
     fn test_snake_case_conversion() {
         assert_eq!(to_snake_case("MovementAspect"), "movement_aspect");
         assert_eq!(to_snake_case("currentSpeed"), "current_speed");
+    }
+
+    #[test]
+    fn test_constraint_aware_generation_with_min_max() {
+        let xsd_type = "http://www.w3.org/2001/XMLSchema#int";
+
+        // Test with min and max constraints
+        let value = generate_value_with_constraints(xsd_type, Some(10.0), Some(20.0), None);
+        let num: i32 = value.parse().expect("Should be valid integer");
+        assert!(
+            (10..=20).contains(&num),
+            "Value {} should be in range [10, 20]",
+            num
+        );
+    }
+
+    #[test]
+    fn test_constraint_aware_generation_with_min_only() {
+        let xsd_type = "http://www.w3.org/2001/XMLSchema#long";
+
+        // Test with min constraint only
+        let value = generate_value_with_constraints(xsd_type, Some(1000.0), None, None);
+        let num: i64 = value.parse().expect("Should be valid long");
+        assert!(num >= 1000, "Value {} should be >= 1000", num);
+    }
+
+    #[test]
+    fn test_constraint_aware_generation_with_max_only() {
+        let xsd_type = "http://www.w3.org/2001/XMLSchema#int";
+
+        // Test with max constraint only
+        let value = generate_value_with_constraints(xsd_type, None, Some(100.0), None);
+        let num: i32 = value.parse().expect("Should be valid integer");
+        assert!(num <= 100, "Value {} should be <= 100", num);
+    }
+
+    #[test]
+    fn test_constraint_aware_generation_with_decimal() {
+        let xsd_type = "http://www.w3.org/2001/XMLSchema#decimal";
+
+        // Test decimal with range
+        let value = generate_value_with_constraints(xsd_type, Some(0.0), Some(1.0), None);
+        let num: f64 = value.parse().expect("Should be valid decimal");
+        assert!(
+            (0.0..=1.0).contains(&num),
+            "Value {} should be in range [0.0, 1.0]",
+            num
+        );
+    }
+
+    #[test]
+    fn test_pattern_generation_email() {
+        let pattern = "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        assert!(value.unwrap().contains("@"));
+    }
+
+    #[test]
+    fn test_pattern_generation_url() {
+        let pattern = "^https?://.*";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        assert!(value.unwrap().contains("https://"));
+    }
+
+    #[test]
+    fn test_pattern_generation_phone() {
+        let pattern = "\\d{3}-\\d{4}";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        assert!(value.unwrap().contains("-"));
+    }
+
+    #[test]
+    fn test_pattern_generation_uuid() {
+        let pattern = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        // UUID format: 8-4-4-4-12 hex digits
+        let uuid = value.unwrap();
+        assert!(uuid.contains("550e8400"));
+    }
+
+    #[test]
+    fn test_pattern_generation_date() {
+        let pattern = "\\d{4}-\\d{2}-\\d{2}";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        assert!(value.unwrap().contains("2025"));
+    }
+
+    #[test]
+    fn test_pattern_generation_ip_address() {
+        let pattern = "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        assert!(value.unwrap().contains("192.168"));
+    }
+
+    #[test]
+    fn test_pattern_generation_hex_color() {
+        let pattern = "#[0-9a-fA-F]{6}";
+        let value = generate_from_pattern(pattern);
+        assert!(value.is_some());
+        let color = value.unwrap();
+        assert!(color.starts_with("\"#"));
+    }
+
+    #[test]
+    fn test_constraint_with_pattern_priority() {
+        let xsd_type = "http://www.w3.org/2001/XMLSchema#string";
+
+        // Pattern should take priority over min/max for strings
+        let value =
+            generate_value_with_constraints(xsd_type, Some(10.0), Some(20.0), Some("email"));
+        assert!(value.contains("@"));
     }
 }

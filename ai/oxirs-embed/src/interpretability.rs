@@ -9,7 +9,7 @@ use rayon::prelude::*;
 use scirs2_core::ndarray_ext::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, info};
+use tracing::info;
 
 /// Interpretation method
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -524,7 +524,7 @@ impl InterpretabilityAnalyzer {
                     score
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // Feature importance
@@ -541,7 +541,7 @@ impl InterpretabilityAnalyzer {
                     importance
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         // Nearest neighbors
@@ -555,7 +555,7 @@ impl InterpretabilityAnalyzer {
                     distance
                 ));
             }
-            report.push_str("\n");
+            report.push('\n');
         }
 
         Ok(report)

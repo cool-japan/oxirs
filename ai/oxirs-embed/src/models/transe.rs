@@ -473,7 +473,7 @@ impl EmbeddingModel for TransE {
         Ok(ndarray_to_vector(&embedding))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.embeddings_initialized {
             return Err(anyhow!("Model not trained"));
         }

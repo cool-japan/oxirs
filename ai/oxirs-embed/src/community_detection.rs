@@ -5,9 +5,8 @@
 //! semantic groups that can improve understanding and navigation of large graphs.
 
 use anyhow::{anyhow, Result};
-use rayon::prelude::*;
 use scirs2_core::ndarray_ext::Array1;
-use scirs2_core::random::{rng, Random};
+use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use tracing::{debug, info};
@@ -96,12 +95,12 @@ impl Graph {
     fn add_edge(&mut self, from: &str, to: &str, weight: f32) {
         self.edges
             .entry(from.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(to.to_string());
 
         self.edges
             .entry(to.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(from.to_string());
 
         self.weights
@@ -141,11 +140,7 @@ pub struct CommunityDetector {
 impl CommunityDetector {
     /// Create new community detector
     pub fn new(config: CommunityConfig) -> Self {
-        let rng = if let Some(seed) = config.random_seed {
-            Random::seed(seed)
-        } else {
-            rng()
-        };
+        let rng = Random::default();
 
         Self { config, rng }
     }
@@ -156,8 +151,8 @@ impl CommunityDetector {
         let mut graph = Graph::new();
 
         for triple in triples {
-            // Add edge from head to tail (undirected)
-            graph.add_edge(&triple.head, &triple.tail, 1.0);
+            // Add edge from subject to object (undirected)
+            graph.add_edge(&triple.subject.to_string(), &triple.object.to_string(), 1.0);
         }
 
         info!(
@@ -329,7 +324,7 @@ impl CommunityDetector {
             // Randomize node order
             let mut node_order = nodes.clone();
             for i in (1..node_order.len()).rev() {
-                let j = self.rng.range(0, i + 1);
+                let j = self.rng.random_range(0, i + 1);
                 node_order.swap(i, j);
             }
 
@@ -571,10 +566,7 @@ impl CommunityDetector {
         for (entity, &comm) in assignments {
             if comm != usize::MAX {
                 *community_sizes.entry(comm).or_insert(0) += 1;
-                communities
-                    .entry(comm)
-                    .or_insert_with(HashSet::new)
-                    .insert(entity.clone());
+                communities.entry(comm).or_default().insert(entity.clone());
             }
         }
 
@@ -669,26 +661,27 @@ impl CommunityDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::NamedNode;
     use scirs2_autograd::ndarray::array;
 
     #[test]
     fn test_community_detection_from_triples() {
         let triples = vec![
-            Triple {
-                head: "a".to_string(),
-                relation: "r".to_string(),
-                tail: "b".to_string(),
-            },
-            Triple {
-                head: "b".to_string(),
-                relation: "r".to_string(),
-                tail: "c".to_string(),
-            },
-            Triple {
-                head: "d".to_string(),
-                relation: "r".to_string(),
-                tail: "e".to_string(),
-            },
+            Triple::new(
+                NamedNode::new("a").unwrap(),
+                NamedNode::new("r").unwrap(),
+                NamedNode::new("b").unwrap(),
+            ),
+            Triple::new(
+                NamedNode::new("b").unwrap(),
+                NamedNode::new("r").unwrap(),
+                NamedNode::new("c").unwrap(),
+            ),
+            Triple::new(
+                NamedNode::new("d").unwrap(),
+                NamedNode::new("r").unwrap(),
+                NamedNode::new("e").unwrap(),
+            ),
         ];
 
         let config = CommunityConfig::default();

@@ -40,6 +40,7 @@
 //! - [`oxirs-fuseki`](https://docs.rs/oxirs-fuseki) - SPARQL HTTP server
 
 // Core modules
+pub mod adaptive_execution; // Adaptive query execution (v0.1.0)
 pub mod aggregates_ext;
 pub mod algebra;
 pub mod algebra_generation;
@@ -49,6 +50,7 @@ pub mod buffer_management;
 pub mod builtin;
 pub mod builtin_fixed;
 pub mod cache_integration;
+pub mod cardinality_estimator; // Advanced cardinality estimation (v0.1.0)
 pub mod cost_model;
 pub mod distributed;
 pub mod executor;
@@ -67,10 +69,12 @@ pub mod property_functions;
 pub mod query;
 pub mod query_analysis;
 pub mod query_builder;
+pub mod query_rewriter; // Advanced query rewriting (v0.1.0)
 pub mod result_formats;
 pub mod results;
 pub mod scirs_optimize_integration;
 pub mod service_description;
+pub mod simd_query_ops; // SIMD-accelerated query operations (v0.1.0)
 pub mod statistics_collector;
 pub mod streaming;
 pub mod string_functions_ext;

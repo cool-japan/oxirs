@@ -3,6 +3,7 @@
 //! Converts between WKT strings and geometry objects.
 
 use crate::error::{GeoSparqlError, Result};
+use crate::geometry::coord3d::Coord3D;
 use crate::geometry::{Crs, Geometry};
 use geo_types::Geometry as GeoGeometry;
 use regex::Regex;
@@ -22,7 +23,11 @@ pub fn parse_wkt(wkt_str: &str) -> Result<Geometry> {
         .try_into()
         .map_err(|_| GeoSparqlError::InvalidWkt("Failed to convert WKT to geometry".to_string()))?;
 
-    Ok(Geometry::with_crs(geo_geom, crs))
+    // For now, create default 2D coordinates
+    // TODO: Full 3D support (extract Z/M from wkt_parsed) will be added in future version
+    let coord3d = Coord3D::default();
+
+    Ok(Geometry::with_crs_and_coord3d(geo_geom, crs, coord3d))
 }
 
 /// Extract CRS from WKT string if present

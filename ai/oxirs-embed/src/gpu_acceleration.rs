@@ -1261,8 +1261,8 @@ mod tests {
         // Skip test if no GPU available
         if let Ok(accelerator) = SciRS2GpuAccelerator::new(config) {
             // Test matrix dimensions
-            let matrix_a = Array2::<f32>::ones((256, 512));
-            let matrix_b = Array2::<f32>::ones((512, 256));
+            let _matrix_a = Array2::<f32>::ones((256, 512));
+            let _matrix_b = Array2::<f32>::ones((512, 256));
 
             // This would use tensor cores in production
             let stats = accelerator.get_stats();
@@ -1338,12 +1338,10 @@ impl SciRS2GpuAccelerator {
         let result = if use_mixed_precision && self.config.mixed_precision {
             // Simulate mixed precision computation
             // In production, this would use actual GPU tensor cores
-            let result = a.dot(b);
-            result
+            a.dot(b)
         } else {
             // Standard FP32 matrix multiplication
-            let result = a.dot(b);
-            result
+            a.dot(b)
         };
 
         // Update statistics

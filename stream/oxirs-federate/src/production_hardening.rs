@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Production Hardening - Resilience, Security, and Operational Excellence
 //!
 //! This module provides production-ready features for federated query systems:

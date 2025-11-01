@@ -580,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_property_path_predicate() -> StarResult<()> {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         let triple = StarTriple::new(
             StarTerm::iri("http://example.org/alice")?,
@@ -606,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_property_path_alternative() -> StarResult<()> {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         store.insert(&StarTriple::new(
             StarTerm::iri("http://example.org/alice")?,
@@ -635,7 +635,7 @@ mod tests {
 
     #[test]
     fn test_full_text_search() -> StarResult<()> {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         store.insert(&StarTriple::new(
             StarTerm::iri("http://example.org/doc1")?,
@@ -663,7 +663,7 @@ mod tests {
 
     #[test]
     fn test_wildcard_search() -> StarResult<()> {
-        let mut store = StarStore::new();
+        let store = StarStore::new();
 
         store.insert(&StarTriple::new(
             StarTerm::iri("http://example.org/doc1")?,

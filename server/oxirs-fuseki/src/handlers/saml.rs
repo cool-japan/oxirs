@@ -11,8 +11,6 @@
 //! - Digital signature verification
 //! - Metadata exchange
 
-#![cfg(feature = "saml")]
-
 use crate::{
     auth::{AuthResult, AuthService, Permission, SamlResponse, User},
     error::{FusekiError, FusekiResult},
@@ -479,8 +477,8 @@ async fn validate_saml_assertion(
     let subject = extract_xml_value(response_xml, "saml:Subject")?;
     let issuer = extract_xml_value(response_xml, "saml:Issuer")?;
     let session_index = extract_xml_value(response_xml, "saml:AuthnStatement")
-        .and_then(|stmt| Ok(extract_attribute(&stmt, "SessionIndex")))
-        .unwrap_or_else(|_| None)
+        .map(|stmt| extract_attribute(&stmt, "SessionIndex"))
+        .unwrap_or(None)
         .unwrap_or_else(|| "unknown".to_string());
 
     // Extract attributes
@@ -716,12 +714,12 @@ pub async fn validate_enhanced_saml_assertion(
         ));
     }
 
-    if compliance_config.require_destination_validation {
-        if !validate_assertion_destination(response_xml)? {
-            return Err(FusekiError::authentication(
-                "SAML assertion destination validation failed",
-            ));
-        }
+    if compliance_config.require_destination_validation
+        && !validate_assertion_destination(response_xml)?
+    {
+        return Err(FusekiError::authentication(
+            "SAML assertion destination validation failed",
+        ));
     }
 
     // Check signature algorithm compliance
@@ -789,7 +787,7 @@ fn extract_signature_algorithm(_xml: &str) -> FusekiResult<String> {
 
 fn meets_minimum_signature_strength(algorithm: &str, minimum: &str) -> FusekiResult<bool> {
     // Simplified strength comparison
-    let strength_order = vec![
+    let strength_order = [
         "http://www.w3.org/2000/09/xmldsig#rsa-sha1", // Weak
         "http://www.w3.org/2001/04/xmldsig-more#rsa-sha256", // Medium
         "http://www.w3.org/2001/04/xmldsig-more#rsa-sha384", // Strong

@@ -1482,14 +1482,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_kafka_backend_creation() {
-        let mut config = StreamConfig::default();
-        config.backend = crate::StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
+        let config = StreamConfig {
+            backend: crate::StreamBackendType::Kafka {
+                brokers: vec!["localhost:9092".to_string()],
+                security_protocol: None,
+                sasl_config: None,
+            },
+            topic: "test_topic".to_string(),
+            batch_size: 100,
+            ..Default::default()
         };
-        config.topic = "test_topic".to_string();
-        config.batch_size = 100;
 
         let backend = KafkaBackend::new(config);
         assert!(backend.is_ok());
@@ -1527,14 +1529,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_stats_update() {
-        let mut config = StreamConfig::default();
-        config.backend = crate::StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
+        let config = StreamConfig {
+            backend: crate::StreamBackendType::Kafka {
+                brokers: vec!["localhost:9092".to_string()],
+                security_protocol: None,
+                sasl_config: None,
+            },
+            topic: "test_topic".to_string(),
+            batch_size: 100,
+            ..Default::default()
         };
-        config.topic = "test_topic".to_string();
-        config.batch_size = 100;
 
         let backend = KafkaBackend::new(config).unwrap();
 

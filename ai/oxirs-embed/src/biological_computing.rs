@@ -1373,7 +1373,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
         }
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }
@@ -1404,7 +1404,7 @@ impl EmbeddingModel for BiologicalEmbeddingModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let s_emb = self.get_entity_embedding(subject)?;
-        let p_emb = self.getrelation_embedding(predicate)?;
+        let p_emb = self.get_relation_embedding(predicate)?;
         let o_emb = self.get_entity_embedding(object)?;
 
         // Biological scoring using DNA hybridization

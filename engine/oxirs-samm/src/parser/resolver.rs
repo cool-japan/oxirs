@@ -6,17 +6,27 @@ use crate::error::{Result, SammError};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use tokio::fs;
+use url::Url;
 
 /// Resolves SAMM model element references
 pub struct ModelResolver {
     /// Models root directories for resolution
     models_roots: Vec<PathBuf>,
 
+    /// HTTP/HTTPS base URLs for remote resolution
+    remote_bases: Vec<String>,
+
     /// Cached resolved elements (URN -> content)
     cache: HashMap<String, String>,
 
     /// Cached URN to file path mappings
     path_cache: HashMap<String, PathBuf>,
+
+    /// HTTP client for remote resolution (lazy initialized)
+    http_client: Option<reqwest::Client>,
+
+    /// HTTP request timeout in seconds
+    http_timeout_secs: u64,
 }
 
 impl ModelResolver {
@@ -24,14 +34,51 @@ impl ModelResolver {
     pub fn new() -> Self {
         Self {
             models_roots: Vec::new(),
+            remote_bases: Vec::new(),
             cache: HashMap::new(),
             path_cache: HashMap::new(),
+            http_client: None,
+            http_timeout_secs: 30,
         }
     }
 
     /// Add a models root directory
     pub fn add_models_root(&mut self, path: PathBuf) {
         self.models_roots.push(path);
+    }
+
+    /// Add a remote base URL for HTTP/HTTPS resolution
+    ///
+    /// Example: `https://models.example.com/samm/`
+    ///
+    /// The URN will be resolved to:
+    /// `{base_url}/{namespace}/{version}/{element}.ttl`
+    pub fn add_remote_base(&mut self, base_url: String) {
+        let normalized = if base_url.ends_with('/') {
+            base_url
+        } else {
+            format!("{}/", base_url)
+        };
+        self.remote_bases.push(normalized);
+    }
+
+    /// Set HTTP timeout in seconds (default: 30)
+    pub fn set_http_timeout(&mut self, timeout_secs: u64) {
+        self.http_timeout_secs = timeout_secs;
+        // Reset HTTP client to apply new timeout
+        self.http_client = None;
+    }
+
+    /// Get or create HTTP client
+    fn get_http_client(&mut self) -> Result<&reqwest::Client> {
+        if self.http_client.is_none() {
+            let client = reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(self.http_timeout_secs))
+                .build()
+                .map_err(|e| SammError::Network(format!("Failed to create HTTP client: {}", e)))?;
+            self.http_client = Some(client);
+        }
+        Ok(self.http_client.as_ref().unwrap())
     }
 
     /// Resolve a model element URN to a file path
@@ -71,6 +118,11 @@ impl ModelResolver {
     }
 
     /// Load and cache a model element from a URN
+    ///
+    /// Tries resolution in this order:
+    /// 1. Check cache
+    /// 2. Try file-based resolution (local models roots)
+    /// 3. Try HTTP/HTTPS resolution (remote bases)
     pub async fn load_element(&mut self, urn: &str) -> Result<String> {
         // Check cache
         if let Some(cached_content) = self.cache.get(urn) {
@@ -78,24 +130,86 @@ impl ModelResolver {
             return Ok(cached_content.clone());
         }
 
-        // Resolve URN to file path
-        let file_path = self.resolve_urn(urn)?;
+        // Try file-based resolution first
+        if let Ok(file_path) = self.resolve_urn(urn) {
+            let content = fs::read_to_string(&file_path).await.map_err(|e| {
+                SammError::ResolutionError(format!(
+                    "Failed to read file '{}': {}",
+                    file_path.display(),
+                    e
+                ))
+            })?;
 
-        // Load file content
-        let content = fs::read_to_string(&file_path).await.map_err(|e| {
-            SammError::ResolutionError(format!(
-                "Failed to read file '{}': {}",
-                file_path.display(),
-                e
-            ))
-        })?;
+            // Cache content
+            self.cache.insert(urn.to_string(), content.clone());
+            tracing::debug!("Loaded and cached URN: {} from {:?}", urn, file_path);
 
-        // Cache content
-        self.cache.insert(urn.to_string(), content.clone());
+            return Ok(content);
+        }
 
-        tracing::debug!("Loaded and cached URN: {} from {:?}", urn, file_path);
+        // Try HTTP/HTTPS resolution
+        if !self.remote_bases.is_empty() {
+            return self.load_element_http(urn).await;
+        }
 
-        Ok(content)
+        Err(SammError::ResolutionError(format!(
+            "Could not resolve URN '{}' in any configured location (file or HTTP)",
+            urn
+        )))
+    }
+
+    /// Load a model element from HTTP/HTTPS
+    async fn load_element_http(&mut self, urn: &str) -> Result<String> {
+        let parts = self.parse_urn(urn)?;
+
+        // Build relative URL path: namespace/version/element.ttl
+        let relative_path = format!(
+            "{}/{}/{}.ttl",
+            parts.namespace, parts.version, parts.element
+        );
+
+        // Try each remote base
+        let client = self.get_http_client()?.clone();
+
+        for base_url in &self.remote_bases {
+            let url = format!("{}{}", base_url, relative_path);
+
+            tracing::debug!("Attempting HTTP resolution: {}", url);
+
+            match client.get(&url).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.text().await {
+                            Ok(content) => {
+                                // Cache content
+                                self.cache.insert(urn.to_string(), content.clone());
+                                tracing::debug!("Loaded and cached URN: {} from {}", urn, url);
+                                return Ok(content);
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to read response body from {}: {}", url, e);
+                                continue;
+                            }
+                        }
+                    } else {
+                        tracing::debug!(
+                            "HTTP resolution failed for {}: status {}",
+                            url,
+                            response.status()
+                        );
+                    }
+                }
+                Err(e) => {
+                    tracing::debug!("HTTP request failed for {}: {}", url, e);
+                    continue;
+                }
+            }
+        }
+
+        Err(SammError::Network(format!(
+            "Could not resolve URN '{}' from any remote base URL",
+            urn
+        )))
     }
 
     /// Parse a URN into its components
@@ -311,5 +425,49 @@ mod tests {
         let stats = resolver.cache_stats();
         assert_eq!(stats.content_cache_size, 0);
         assert_eq!(stats.path_cache_size, 0);
+    }
+
+    #[test]
+    fn test_add_remote_base() {
+        let mut resolver = ModelResolver::new();
+
+        // Add base URL without trailing slash
+        resolver.add_remote_base("https://models.example.com".to_string());
+        assert_eq!(resolver.remote_bases.len(), 1);
+        assert_eq!(resolver.remote_bases[0], "https://models.example.com/");
+
+        // Add base URL with trailing slash
+        resolver.add_remote_base("https://other.example.com/samm/".to_string());
+        assert_eq!(resolver.remote_bases.len(), 2);
+        assert_eq!(resolver.remote_bases[1], "https://other.example.com/samm/");
+    }
+
+    #[test]
+    fn test_set_http_timeout() {
+        let mut resolver = ModelResolver::new();
+        assert_eq!(resolver.http_timeout_secs, 30); // Default
+
+        resolver.set_http_timeout(60);
+        assert_eq!(resolver.http_timeout_secs, 60);
+    }
+
+    #[tokio::test]
+    async fn test_load_element_fallback_to_http() {
+        let mut resolver = ModelResolver::new();
+
+        // No local models roots configured
+        // Add a mock remote base (will fail in this test, but tests the code path)
+        resolver.add_remote_base("https://nonexistent.example.com/models/".to_string());
+
+        let urn = "urn:samm:org.example:1.0.0#TestAspect";
+        let result = resolver.load_element(urn).await;
+
+        // Should fail with Network error since the URL doesn't exist
+        assert!(result.is_err());
+        if let Err(SammError::Network(msg)) = result {
+            assert!(msg.contains("Could not resolve URN"));
+        } else {
+            panic!("Expected Network error");
+        }
     }
 }

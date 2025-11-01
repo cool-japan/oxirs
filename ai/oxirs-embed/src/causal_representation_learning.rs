@@ -1403,7 +1403,7 @@ impl EmbeddingModel for CausalRepresentationModel {
         }
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(embedding) = self.variable_embeddings.get(relation) {
             Ok(Vector::new(embedding.to_vec()))
         } else {

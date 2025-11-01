@@ -77,6 +77,18 @@ pub enum GeoSparqlError {
     #[error("Invalid parameter: {0}")]
     InvalidParameter(String),
 
+    /// Validation error
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    /// Invalid input
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    /// Computation error
+    #[error("Computation error: {0}")]
+    ComputationError(String),
+
     /// Other error
     #[error("GeoSPARQL error: {0}")]
     Other(String),

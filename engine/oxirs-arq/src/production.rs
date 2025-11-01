@@ -222,6 +222,12 @@ pub struct SparqlPerformanceMonitor {
     start_time: Instant,
 }
 
+impl Default for SparqlPerformanceMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SparqlPerformanceMonitor {
     pub fn new() -> Self {
         Self {

@@ -118,6 +118,40 @@ pub use consciousness_streaming::{
     ConsciousnessLevel, ConsciousnessStats, ConsciousnessStreamProcessor, DreamSequence,
     EmotionalContext, IntuitiveEngine, MeditationState,
 };
+pub use disaster_recovery::{
+    BackupCompression, BackupConfig, BackupEncryption, BackupFrequency, BackupJob,
+    BackupRetentionPolicy, BackupSchedule, BackupStatus, BackupStorage, BackupType,
+    BackupVerification, BackupVerificationResult, BackupWindow, BusinessContinuityConfig,
+    ChecksumAlgorithm, CompressionAlgorithm, DRMetrics, DisasterRecoveryConfig,
+    DisasterRecoveryManager, DisasterScenario, EncryptionAlgorithm as BackupEncryptionAlgorithm,
+    FailoverConfig as DRFailoverConfig, ImpactLevel, KeyDerivationFunction, RecoveryConfig,
+    RecoveryOperation, RecoveryPriority, RecoveryRunbook, RecoveryStatus, RecoveryType,
+    ReplicationConfig as DRReplicationConfig, ReplicationMode as DRReplicationMode,
+    ReplicationTarget as DRReplicationTarget, RunbookExecution, RunbookExecutionStatus,
+    RunbookStep, StorageLocation,
+};
+pub use enterprise_audit::{
+    ActionResult, AuditEncryptionConfig, AuditEventType, AuditFilterConfig, AuditMetrics,
+    AuditRetentionConfig, AuditSeverity, AuditStorageBackend, AuditStorageConfig,
+    AuditStreamingConfig, AuthType, ComplianceConfig, ComplianceFinding, ComplianceReport,
+    ComplianceStandard, CompressionType as AuditCompressionType, DestinationAuth, DestinationType,
+    EncryptionAlgorithm, EnterpriseAuditConfig, EnterpriseAuditEvent, EnterpriseAuditLogger,
+    FindingType, KeyManagementConfig, KmsType, S3AuditConfig, StreamingDestination,
+};
+pub use enterprise_monitoring::{
+    Alert, AlertCondition, AlertManager, AlertRule, AlertSeverity as MonitoringAlertSeverity,
+    AlertingConfig, BreachNotificationConfig, ComparisonOperator, EnterpriseMonitoringConfig,
+    EnterpriseMonitoringSystem, EscalationLevel, EscalationPolicy, HealthCheckConfig,
+    HealthCheckEndpoint, HealthCheckType, MeasurementWindow, MetricDefinition, MetricType,
+    MetricValue, MetricsCollector, MetricsConfig, MetricsEndpoint, MetricsEndpointType,
+    MetricsExportConfig, MetricsFormat, NotificationChannel, ProfilingConfig, SlaBreach, SlaConfig,
+    SlaMeasurement, SlaMetricType, SlaObjective, SlaSeverity, SlaStatus, SlaTracker,
+};
+pub use multi_tenancy::{
+    IsolationMode, MultiTenancyConfig, MultiTenancyManager, MultiTenancyMetrics,
+    NamespaceResources, ResourceAllocationStrategy, ResourceType, ResourceUsage, Tenant,
+    TenantLifecycleConfig, TenantNamespace, TenantQuota, TenantStatus, TenantTier,
+};
 pub use observability::{
     AlertConfig, AlertEvent, AlertSeverity, AlertType, BusinessMetrics, SpanLog, SpanStatus,
     StreamObservability, StreamingMetrics, TelemetryConfig, TraceSpan,
@@ -145,11 +179,21 @@ pub use security::{
     RateLimiter, SecurityConfig as StreamSecurityConfig, SecurityContext, SecurityManager,
     SecurityMetrics, SessionConfig, ThreatAlert, ThreatDetectionConfig, ThreatDetector,
 };
+pub use temporal_join::{
+    IntervalJoin, JoinResult, LateDataConfig, LateDataStrategy, TemporalJoin, TemporalJoinConfig,
+    TemporalJoinMetrics, TemporalJoinType, TemporalWindow, TimeSemantics, WatermarkConfig,
+    WatermarkStrategy,
+};
 pub use time_travel::{
     AggregationType, TemporalAggregations, TemporalFilter, TemporalOrdering, TemporalProjection,
     TemporalQuery, TemporalQueryResult, TemporalResultMetadata, TemporalStatistics, TimePoint,
     TimeRange as TimeTravelTimeRange, TimeTravelConfig, TimeTravelEngine, TimeTravelMetrics,
     TimelinePoint,
+};
+pub use tls_security::{
+    CertRotationConfig, CertificateConfig, CertificateFormat, CertificateInfo, CipherSuite,
+    ExpiryWarning, MutualTlsConfig, OcspConfig, RevocationCheckConfig, SessionResumptionConfig,
+    TlsConfig, TlsManager, TlsMetrics, TlsSessionInfo, TlsVersion,
 };
 pub use wasm_edge_computing::{
     EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, WasmEdgeConfig,
@@ -176,7 +220,10 @@ pub mod cqrs;
 pub mod csparql;
 pub mod delta;
 pub mod diagnostics;
+pub mod disaster_recovery;
 pub mod dlq;
+pub mod enterprise_audit;
+pub mod enterprise_monitoring;
 pub mod error;
 pub mod event;
 pub mod event_sourcing;
@@ -187,6 +234,7 @@ pub mod health_monitor;
 pub mod join;
 pub mod monitoring;
 pub mod multi_region_replication;
+pub mod multi_tenancy;
 pub mod observability;
 pub mod patch;
 pub mod performance_optimizer;
@@ -205,7 +253,9 @@ pub mod serialization;
 pub mod sparql_streaming;
 pub mod state;
 pub mod store_integration;
+pub mod temporal_join;
 pub mod time_travel;
+pub mod tls_security;
 pub mod types;
 pub mod wasm_edge_computing;
 pub mod webhook;

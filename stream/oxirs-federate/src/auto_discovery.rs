@@ -10,7 +10,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::interval;
-use tracing::{debug, error, info, warn};
+use tracing::{error, info, warn};
+#[cfg(feature = "service-discovery")]
+use tracing::debug;
 
 #[cfg(feature = "service-discovery")]
 use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Performance Benchmarking Suite for Federation Operations
 //!
 //! This module provides comprehensive benchmarking capabilities for measuring

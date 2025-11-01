@@ -319,8 +319,10 @@ mod tests {
 
     #[test]
     fn test_disabled_generation() {
-        let mut config = ConstraintGenerationConfig::default();
-        config.enabled = false;
+        let config = ConstraintGenerationConfig {
+            enabled: false,
+            ..Default::default()
+        };
 
         let generator = ConstraintGenerator::new(config);
         let property = NamedNode::new_unchecked("http://example.org/prop");

@@ -3,6 +3,7 @@
 //! This module provides a complete HTTP server implementation using Juniper
 //! for GraphQL processing and Hyper for HTTP handling.
 
+use crate::graphiql_integration::{generate_graphiql_html, GraphiQLConfig};
 use crate::juniper_schema::{create_schema, GraphQLContext, Schema};
 use crate::RdfStore;
 use anyhow::Result;
@@ -11,8 +12,7 @@ use hyper::service::service_fn;
 use hyper::{body::Incoming, Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
-use juniper_hyper::playground;
-use juniper_hyper::{graphiql, graphql};
+use juniper_hyper::{graphql, playground};
 use serde_json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -218,11 +218,30 @@ impl JuniperGraphQLServer {
                 }
             }
 
-            // GraphiQL interface
+            // GraphiQL interface (enhanced)
             (&Method::GET, "/graphiql") if config.enable_graphiql => {
-                debug!("Serving GraphiQL interface");
-                let response = graphiql("/graphql", None).await;
-                Ok(response)
+                debug!("Serving enhanced GraphiQL interface");
+                let graphiql_config = GraphiQLConfig {
+                    endpoint: "/graphql".to_string(),
+                    enable_history: true,
+                    enable_templates: true,
+                    enable_custom_headers: true,
+                    enable_metrics: true,
+                    default_dark_theme: false,
+                    enable_sharing: true,
+                    enable_export: true,
+                    custom_css: None,
+                    title: "OxiRS GraphQL Explorer".to_string(),
+                    subscription_endpoint: None,
+                    ..Default::default()
+                };
+
+                let html = generate_graphiql_html(&graphiql_config);
+
+                Ok(response_builder
+                    .status(StatusCode::OK)
+                    .header("content-type", "text/html; charset=utf-8")
+                    .body(html)?)
             }
 
             // GraphQL Playground

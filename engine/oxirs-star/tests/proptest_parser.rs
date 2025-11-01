@@ -402,8 +402,7 @@ mod tests {
         let input = "<< << <http://example.org/alice> <http://example.org/believes> <http://example.org/bob> >> <http://example.org/certainty> \"0.8\" >> <http://example.org/meta> \"nested\" .";
         let result = parser.parse_str(input, StarFormat::NTriplesStar);
 
-        if result.is_ok() {
-            let graph = result.unwrap();
+        if let Ok(graph) = result {
             assert_eq!(graph.len(), 1);
             assert!(graph.max_nesting_depth() >= 2);
         }

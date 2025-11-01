@@ -338,8 +338,10 @@ mod tests {
 
     #[test]
     fn test_voting_strategies() {
-        let mut config = EnsembleConfig::default();
-        config.voting_strategy = VotingStrategy::Unanimous;
+        let config = EnsembleConfig {
+            voting_strategy: VotingStrategy::Unanimous,
+            ..Default::default()
+        };
 
         let detector = EnsembleDetector::new(config);
         let data = Array1::from_vec(vec![

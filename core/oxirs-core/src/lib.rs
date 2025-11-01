@@ -311,11 +311,14 @@ pub mod platform;
 #[cfg(feature = "simd")]
 pub mod simd;
 pub mod simd_triple_matching; // SIMD-optimized triple pattern matching using SciRS2
+pub mod zero_copy_rdf; // Zero-copy RDF operations using SciRS2-core memory management
 
 // Re-export core types for convenience
 pub use model::*;
 pub use rdf_store::{ConcreteStore, RdfStore, Store};
-pub use transaction::Transaction;
+pub use transaction::{
+    AcidTransaction, IsolationLevel, TransactionId, TransactionManager, TransactionState,
+};
 
 /// Core error type for OxiRS operations
 #[derive(Debug, Clone, thiserror::Error)]

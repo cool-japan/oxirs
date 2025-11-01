@@ -4,10 +4,8 @@
 //! using dimensionality reduction techniques like t-SNE, UMAP, and PCA.
 
 use anyhow::{anyhow, Result};
-use rayon::prelude::*;
-use scirs2_core::ndarray_ext::{Array1, Array2, Axis};
+use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::prelude::{Normal, Random};
-use scirs2_core::random::StdRng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info};
@@ -79,19 +77,13 @@ pub struct VisualizationResult {
 /// Embedding visualizer
 pub struct EmbeddingVisualizer {
     config: VisualizationConfig,
-    rng: Random<StdRng>,
+    rng: Random,
 }
 
 impl EmbeddingVisualizer {
     /// Create new embedding visualizer
     pub fn new(config: VisualizationConfig) -> Self {
-        let rng = if let Some(seed) = config.random_seed {
-            Random::seed(seed)
-        } else {
-            // Use a random seed from system entropy
-            use scirs2_core::random::prelude::SeedableRng;
-            Random::seed(rand::random::<u64>())
-        };
+        let rng = Random::default();
 
         info!(
             "Initialized embedding visualizer: method={:?}, target_dims={}",
@@ -191,7 +183,6 @@ impl EmbeddingVisualizer {
     fn tsne(&mut self, embeddings: &HashMap<String, Array1<f32>>) -> Result<VisualizationResult> {
         let entity_list: Vec<String> = embeddings.keys().cloned().collect();
         let n = entity_list.len();
-        let d = embeddings.values().next().unwrap().len();
 
         // Initialize low-dimensional representation randomly
         let dist = Normal::new(0.0, 0.01).unwrap();
@@ -266,7 +257,7 @@ impl EmbeddingVisualizer {
             self.build_knn_graph(embeddings, &entity_list, self.config.umap_n_neighbors);
 
         // Refine positions using force-directed layout
-        for iteration in 0..100 {
+        for _iteration in 0..100 {
             for i in 0..n {
                 let entity = &entity_list[i];
                 let pos = &result.coordinates[entity].clone();
@@ -387,13 +378,13 @@ impl EmbeddingVisualizer {
 
         for component in 0..k {
             // Initialize random vector
-            let dist = Normal::new(0.0, 1.0).unwrap();
+            let dist = Normal::new(0.0f32, 1.0f32).unwrap();
             let mut v = Array1::from_shape_fn(d, |_| self.rng.sample(dist));
 
             // Power iteration
             for _ in 0..100 {
                 // Multiply by matrix
-                let mut new_v = Array1::zeros(d);
+                let mut new_v = Array1::<f32>::zeros(d);
                 for i in 0..d {
                     for j in 0..d {
                         new_v[i] += working_matrix[[i, j]] * v[j];
@@ -408,7 +399,7 @@ impl EmbeddingVisualizer {
             }
 
             // Compute eigenvalue
-            let mut av = Array1::zeros(d);
+            let mut av = Array1::<f32>::zeros(d);
             for i in 0..d {
                 for j in 0..d {
                     av[i] += working_matrix[[i, j]] * v[j];
@@ -495,7 +486,7 @@ impl EmbeddingVisualizer {
         // Normalize
         let sum: f32 = q.iter().sum();
         if sum > 0.0 {
-            q = q / sum;
+            q /= sum;
         }
 
         q

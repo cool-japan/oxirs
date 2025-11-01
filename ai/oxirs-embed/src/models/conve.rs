@@ -74,7 +74,7 @@ impl ConvLayer {
 
         for _ in 0..num_filters {
             let filter =
-                Array2::from_shape_fn((kernel_size, kernel_size), |_| rng.uniform(-scale, scale));
+                Array2::from_shape_fn((kernel_size, kernel_size), |_| rng.gen_range(-scale..scale));
             filters.push(filter);
         }
 
@@ -129,7 +129,7 @@ impl FCLayer {
     fn new(input_size: usize, output_size: usize, rng: &mut Random) -> Self {
         let scale = (2.0 / input_size as f32).sqrt();
         let weights =
-            Array2::from_shape_fn((input_size, output_size), |_| rng.uniform(-scale, scale));
+            Array2::from_shape_fn((input_size, output_size), |_| rng.gen_range(-scale..scale));
         let bias = Array1::zeros(output_size);
 
         Self { weights, bias }
@@ -256,7 +256,7 @@ impl ConvE {
         let conv_out = self.conv_layer.forward(&concat);
 
         // Apply ReLU activation
-        let mut conv_out_relu = conv_out.mapv(|x| self.relu(x));
+        let conv_out_relu = conv_out.mapv(|x| self.relu(x));
 
         // Flatten the feature maps
         let flattened_size = conv_out_relu.len();
@@ -453,7 +453,7 @@ impl EmbeddingModel for ConvE {
             .ok_or_else(|| anyhow!("Unknown entity: {}", entity))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         self.relation_embeddings
             .get(relation)
             .map(|arr| Vector::from_array1(arr))

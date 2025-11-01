@@ -5,7 +5,7 @@
 //! for forward/backward passes and float32 for parameter updates.
 
 use anyhow::{anyhow, Result};
-use scirs2_core::ndarray_ext::{Array1, Array2};
+use scirs2_core::ndarray_ext::Array1;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
@@ -430,7 +430,7 @@ mod tests {
             ..Default::default()
         };
 
-        let trainer = MixedPrecisionTrainer::new(config);
+        let trainer = MixedPrecisionTrainer::new(config.clone());
 
         // Large gradients that exceed threshold
         let grads = array![10.0, 10.0, 10.0];

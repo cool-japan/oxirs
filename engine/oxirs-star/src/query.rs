@@ -1463,7 +1463,7 @@ mod tests {
             // Test SUBJECT function evaluation
             let subject_result = crate::functions::FunctionEvaluator::evaluate(
                 crate::functions::StarFunction::Subject,
-                &[statement.clone()],
+                std::slice::from_ref(statement),
             )
             .unwrap();
 

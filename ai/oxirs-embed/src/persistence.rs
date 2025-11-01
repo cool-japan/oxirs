@@ -325,7 +325,7 @@ impl ModelExporter {
 
         // Export relation embeddings
         for relation in model.get_relations() {
-            if let Ok(embedding) = model.getrelation_embedding(&relation) {
+            if let Ok(embedding) = model.get_relation_embedding(&relation) {
                 let values: Vec<String> = embedding.values.iter().map(|x| x.to_string()).collect();
                 writeln!(
                     file,

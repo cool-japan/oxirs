@@ -711,7 +711,7 @@ impl EmbeddingModel for GNNEmbedding {
             })
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.is_trained {
             return Err(EmbeddingError::ModelNotTrained.into());
         }

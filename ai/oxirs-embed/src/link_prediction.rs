@@ -6,12 +6,11 @@
 //! Link prediction is a fundamental task in knowledge graph completion where
 //! we predict missing links (triples) based on learned embeddings.
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use rayon::prelude::*;
-use scirs2_core::ndarray_ext::Array1;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use tracing::{debug, info};
+use std::collections::HashSet;
+use tracing::info;
 
 use crate::{EmbeddingModel, Triple};
 
@@ -62,7 +61,7 @@ pub enum PredictionType {
     TailEntity,
     /// Predict head entity: (?, relation, tail)
     HeadEntity,
-    /// Predict relation: (head, ?, tail)
+    /// Predict predicate: (head, ?, tail)
     Relation,
 }
 
@@ -165,9 +164,9 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
     pub fn add_known_triples(&mut self, triples: &[Triple]) {
         for triple in triples {
             self.known_triples.insert((
-                triple.head.clone(),
-                triple.relation.clone(),
-                triple.tail.clone(),
+                triple.subject.to_string(),
+                triple.predicate.to_string(),
+                triple.object.to_string(),
             ));
         }
     }
@@ -175,22 +174,19 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
     /// Predict tail entities given head and relation
     pub fn predict_tail(
         &self,
-        head: &str,
-        relation: &str,
+        subject: &str,
+        predicate: &str,
         candidate_entities: &[String],
     ) -> Result<Vec<LinkPrediction>> {
-        let head_emb = self.model.get_entity_embedding(head)?;
-        let rel_emb = self.model.get_relation_embedding(relation)?;
-
         // Score all candidates
-        let scored: Vec<(String, f32)> = if self.config.parallel {
+        let scored: Vec<(String, f64)> = if self.config.parallel {
             candidate_entities
                 .par_iter()
                 .filter_map(|tail| {
                     if self.config.filter_known_triples
                         && self.known_triples.contains(&(
-                            head.to_string(),
-                            relation.to_string(),
+                            subject.to_string(),
+                            predicate.to_string(),
                             tail.clone(),
                         ))
                     {
@@ -198,7 +194,7 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
                     }
 
                     self.model
-                        .predict(head, relation, tail)
+                        .score_triple(subject, predicate, tail)
                         .ok()
                         .map(|score| (tail.clone(), score))
                 })
@@ -209,8 +205,8 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
                 .filter_map(|tail| {
                     if self.config.filter_known_triples
                         && self.known_triples.contains(&(
-                            head.to_string(),
-                            relation.to_string(),
+                            subject.to_string(),
+                            predicate.to_string(),
                             tail.clone(),
                         ))
                     {
@@ -218,7 +214,7 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
                     }
 
                     self.model
-                        .predict(head, relation, tail)
+                        .score_triple(subject, predicate, tail)
                         .ok()
                         .map(|score| (tail.clone(), score))
                 })
@@ -231,30 +227,27 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
     /// Predict head entities given relation and tail
     pub fn predict_head(
         &self,
-        relation: &str,
-        tail: &str,
+        predicate: &str,
+        object: &str,
         candidate_entities: &[String],
     ) -> Result<Vec<LinkPrediction>> {
-        let rel_emb = self.model.get_relation_embedding(relation)?;
-        let tail_emb = self.model.get_entity_embedding(tail)?;
-
         // Score all candidates
-        let scored: Vec<(String, f32)> = if self.config.parallel {
+        let scored: Vec<(String, f64)> = if self.config.parallel {
             candidate_entities
                 .par_iter()
                 .filter_map(|head| {
                     if self.config.filter_known_triples
                         && self.known_triples.contains(&(
                             head.clone(),
-                            relation.to_string(),
-                            tail.to_string(),
+                            predicate.to_string(),
+                            object.to_string(),
                         ))
                     {
                         return None;
                     }
 
                     self.model
-                        .predict(head, relation, tail)
+                        .score_triple(head, predicate, object)
                         .ok()
                         .map(|score| (head.clone(), score))
                 })
@@ -266,15 +259,15 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
                     if self.config.filter_known_triples
                         && self.known_triples.contains(&(
                             head.clone(),
-                            relation.to_string(),
-                            tail.to_string(),
+                            predicate.to_string(),
+                            object.to_string(),
                         ))
                     {
                         return None;
                     }
 
                     self.model
-                        .predict(head, relation, tail)
+                        .score_triple(head, predicate, object)
                         .ok()
                         .map(|score| (head.clone(), score))
                 })
@@ -287,30 +280,27 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
     /// Predict relations given head and tail
     pub fn predict_relation(
         &self,
-        head: &str,
-        tail: &str,
+        subject: &str,
+        object: &str,
         candidate_relations: &[String],
     ) -> Result<Vec<LinkPrediction>> {
-        let head_emb = self.model.get_entity_embedding(head)?;
-        let tail_emb = self.model.get_entity_embedding(tail)?;
-
         // Score all candidate relations
-        let scored: Vec<(String, f32)> = if self.config.parallel {
+        let scored: Vec<(String, f64)> = if self.config.parallel {
             candidate_relations
                 .par_iter()
                 .filter_map(|relation| {
                     if self.config.filter_known_triples
                         && self.known_triples.contains(&(
-                            head.to_string(),
+                            subject.to_string(),
                             relation.clone(),
-                            tail.to_string(),
+                            object.to_string(),
                         ))
                     {
                         return None;
                     }
 
                     self.model
-                        .predict(head, relation, tail)
+                        .score_triple(subject, relation, object)
                         .ok()
                         .map(|score| (relation.clone(), score))
                 })
@@ -321,16 +311,16 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
                 .filter_map(|relation| {
                     if self.config.filter_known_triples
                         && self.known_triples.contains(&(
-                            head.to_string(),
+                            subject.to_string(),
                             relation.clone(),
-                            tail.to_string(),
+                            object.to_string(),
                         ))
                     {
                         return None;
                     }
 
                     self.model
-                        .predict(head, relation, tail)
+                        .score_triple(subject, relation, object)
                         .ok()
                         .map(|score| (relation.clone(), score))
                 })
@@ -373,13 +363,15 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
 
         for triple in test_triples {
             // Predict tail
-            if let Ok(predictions) =
-                self.predict_tail(&triple.head, &triple.relation, candidate_entities)
-            {
+            if let Ok(predictions) = self.predict_tail(
+                &triple.subject.to_string(),
+                &triple.predicate.to_string(),
+                candidate_entities,
+            ) {
                 // Find rank of correct tail
                 if let Some(rank) = predictions
                     .iter()
-                    .position(|pred| pred.predicted_id == triple.tail)
+                    .position(|pred| pred.predicted_id == triple.object.to_string())
                 {
                     metrics.update(rank + 1); // 1-indexed rank
                 }
@@ -395,7 +387,7 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
     }
 
     /// Rank and filter predictions
-    fn rank_and_filter(&self, mut scored: Vec<(String, f32)>) -> Result<Vec<LinkPrediction>> {
+    fn rank_and_filter(&self, mut scored: Vec<(String, f64)>) -> Result<Vec<LinkPrediction>> {
         // Sort by score descending
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
@@ -413,11 +405,11 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
             .filter_map(|(rank, (id, score))| {
                 let confidence = (score - min_score) / score_range;
 
-                if confidence >= self.config.min_confidence {
+                if confidence >= self.config.min_confidence as f64 {
                     Some(LinkPrediction {
                         predicted_id: id,
-                        score,
-                        confidence,
+                        score: score as f32,
+                        confidence: confidence as f32,
                         rank: rank + 1, // 1-indexed
                     })
                 } else {
@@ -443,18 +435,15 @@ impl<M: EmbeddingModel> LinkPredictor<M> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::transe::{TransE, TransEConfig};
-    use crate::ModelConfig;
+    use crate::models::transe::TransE;
+    use crate::{ModelConfig, NamedNode};
 
     #[tokio::test]
     async fn test_link_prediction_tail() {
-        let config = TransEConfig {
-            base: ModelConfig {
-                dimensions: 50,
-                learning_rate: 0.01,
-                epochs: 50,
-                ..Default::default()
-            },
+        let config = ModelConfig {
+            dimensions: 50,
+            learning_rate: 0.01,
+            max_epochs: 50,
             ..Default::default()
         };
 
@@ -462,27 +451,27 @@ mod tests {
 
         // Add training data
         model
-            .add_triple(Triple {
-                head: "alice".to_string(),
-                relation: "knows".to_string(),
-                tail: "bob".to_string(),
-            })
+            .add_triple(Triple::new(
+                NamedNode::new("alice").unwrap(),
+                NamedNode::new("knows").unwrap(),
+                NamedNode::new("bob").unwrap(),
+            ))
             .unwrap();
 
         model
-            .add_triple(Triple {
-                head: "alice".to_string(),
-                relation: "knows".to_string(),
-                tail: "charlie".to_string(),
-            })
+            .add_triple(Triple::new(
+                NamedNode::new("alice").unwrap(),
+                NamedNode::new("knows").unwrap(),
+                NamedNode::new("charlie").unwrap(),
+            ))
             .unwrap();
 
         model
-            .add_triple(Triple {
-                head: "bob".to_string(),
-                relation: "likes".to_string(),
-                tail: "dave".to_string(),
-            })
+            .add_triple(Triple::new(
+                NamedNode::new("bob").unwrap(),
+                NamedNode::new("likes").unwrap(),
+                NamedNode::new("dave").unwrap(),
+            ))
             .unwrap();
 
         // Train model
@@ -530,23 +519,20 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_prediction() {
-        let config = TransEConfig {
-            base: ModelConfig {
-                dimensions: 50,
-                epochs: 30,
-                ..Default::default()
-            },
+        let config = ModelConfig {
+            dimensions: 50,
+            max_epochs: 30,
             ..Default::default()
         };
 
         let mut model = TransE::new(config);
 
         model
-            .add_triple(Triple {
-                head: "a".to_string(),
-                relation: "r1".to_string(),
-                tail: "b".to_string(),
-            })
+            .add_triple(Triple::new(
+                NamedNode::new("a").unwrap(),
+                NamedNode::new("r1").unwrap(),
+                NamedNode::new("b").unwrap(),
+            ))
             .unwrap();
 
         model.train(Some(30)).await.unwrap();

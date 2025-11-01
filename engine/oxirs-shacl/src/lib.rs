@@ -67,6 +67,7 @@ use oxirs_core::OxirsError;
 
 pub use crate::optimization::integration::ValidationStrategy;
 
+pub mod advanced_features;
 pub mod analytics;
 pub mod builders;
 pub mod constraints;
@@ -90,6 +91,13 @@ pub mod w3c_test_suite;
 pub mod w3c_test_suite_enhanced;
 
 // Re-export key types for convenience - avoiding ambiguous glob re-exports
+pub use advanced_features::{
+    AdvancedTarget, AdvancedTargetSelector, ConditionalConstraint, ConditionalEvaluator,
+    ConditionalResult, FunctionInvocation, FunctionParameter, FunctionRegistry, FunctionResult,
+    InferenceStrategy, InferredShape, ParameterType, ReturnType, RuleEngine, RuleEngineStats,
+    RuleExecutionResult, ShaclFunction, ShaclRule, ShapeInferenceConfig, ShapeInferenceEngine,
+    ShapeRegistry,
+};
 pub use analytics::ValidationAnalytics;
 pub use builders::*;
 pub use constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult};
