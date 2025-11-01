@@ -190,6 +190,51 @@ fn serialize_element_to_xml(element: &SubmodelElement) -> Result<String, SammErr
             xml.push_str("        </operation>\n");
             Ok(xml)
         }
+        SubmodelElement::Entity(entity) => {
+            let mut xml = String::from("        <entity>\n");
+            if let Some(id_short) = &entity.id_short {
+                xml.push_str(&format!(
+                    "          <idShort>{}</idShort>\n",
+                    escape_xml(id_short)
+                ));
+            }
+            xml.push_str(&format!(
+                "          <modelType>{}</modelType>\n",
+                escape_xml(&entity.model_type)
+            ));
+            xml.push_str("        </entity>\n");
+            Ok(xml)
+        }
+        SubmodelElement::SubmodelElementCollection(collection) => {
+            let mut xml = String::from("        <submodelElementCollection>\n");
+            if let Some(id_short) = &collection.id_short {
+                xml.push_str(&format!(
+                    "          <idShort>{}</idShort>\n",
+                    escape_xml(id_short)
+                ));
+            }
+            xml.push_str(&format!(
+                "          <modelType>{}</modelType>\n",
+                escape_xml(&collection.model_type)
+            ));
+            xml.push_str("        </submodelElementCollection>\n");
+            Ok(xml)
+        }
+        SubmodelElement::SubmodelElementList(list) => {
+            let mut xml = String::from("        <submodelElementList>\n");
+            if let Some(id_short) = &list.id_short {
+                xml.push_str(&format!(
+                    "          <idShort>{}</idShort>\n",
+                    escape_xml(id_short)
+                ));
+            }
+            xml.push_str(&format!(
+                "          <modelType>{}</modelType>\n",
+                escape_xml(&list.model_type)
+            ));
+            xml.push_str("        </submodelElementList>\n");
+            Ok(xml)
+        }
     }
 }
 

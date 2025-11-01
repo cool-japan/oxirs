@@ -144,10 +144,9 @@ impl Geometry {
 
     /// Convert to WKT format
     ///
-    /// Note: Z/M coordinates are not yet included in the output.
-    /// This will be enhanced in a future version.
+    /// Includes Z/M coordinates if present.
     pub fn to_wkt(&self) -> String {
-        wkt_parser::geometry_to_wkt(&self.geom)
+        wkt_parser::geometry_to_wkt_with_3d(self)
     }
 
     /// Parse from GML (Geography Markup Language) format

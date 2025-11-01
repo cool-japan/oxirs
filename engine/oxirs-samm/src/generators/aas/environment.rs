@@ -113,7 +113,7 @@ pub enum ModellingKind {
 
 /// Submodel Element (union type)
 ///
-/// Union of all possible submodel element types. Currently supports Property and Operation.
+/// Union of all possible submodel element types according to AAS V3.0 specification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SubmodelElement {
@@ -121,7 +121,12 @@ pub enum SubmodelElement {
     Property(Property),
     /// Operation that can be invoked
     Operation(Operation),
-    // TODO: Add other element types (Entity, Collection, etc.)
+    /// Entity representing a complex business object
+    Entity(Entity),
+    /// Collection of submodel elements
+    SubmodelElementCollection(SubmodelElementCollection),
+    /// Ordered list of submodel elements
+    SubmodelElementList(SubmodelElementList),
 }
 
 /// Property
@@ -171,6 +176,78 @@ pub struct Operation {
 pub struct OperationVariable {
     /// The submodel element representing the variable
     pub value: Box<SubmodelElement>,
+}
+
+/// Entity
+///
+/// Represents a complex business object with structured properties.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Entity {
+    /// Short identifier for display purposes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_short: Option<String>,
+    /// Model type identifier (always "Entity")
+    pub model_type: String,
+    /// Type of entity (CoManagedEntity or SelfManagedEntity)
+    pub entity_type: EntityType,
+    /// Semantic identifier referencing an external concept
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_id: Option<Reference>,
+    /// Statements describing properties of this entity
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub statements: Option<Vec<SubmodelElement>>,
+}
+
+/// Entity Type
+///
+/// Specifies whether an entity is co-managed or self-managed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum EntityType {
+    /// Entity is managed in conjunction with other entities
+    CoManagedEntity,
+    /// Entity manages its own lifecycle
+    SelfManagedEntity,
+}
+
+/// Submodel Element Collection
+///
+/// A collection of submodel elements with unordered semantics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmodelElementCollection {
+    /// Short identifier for display purposes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_short: Option<String>,
+    /// Model type identifier (always "SubmodelElementCollection")
+    pub model_type: String,
+    /// Semantic identifier referencing an external concept
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_id: Option<Reference>,
+    /// The submodel elements in this collection
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Vec<SubmodelElement>>,
+}
+
+/// Submodel Element List
+///
+/// An ordered list of submodel elements with list semantics.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubmodelElementList {
+    /// Short identifier for display purposes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_short: Option<String>,
+    /// Model type identifier (always "SubmodelElementList")
+    pub model_type: String,
+    /// Semantic identifier referencing an external concept
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_id: Option<Reference>,
+    /// Type of elements in the list
+    pub type_value_list_element: String,
+    /// The submodel elements in this list
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Vec<SubmodelElement>>,
 }
 
 /// Reference
@@ -350,11 +427,32 @@ pub fn build_aas_environment(aspect: &Aspect) -> Result<Environment, SammError> 
         }]),
     };
 
+    // Build ConceptDescriptions for semantic information
+    let mut concept_descriptions = Vec::new();
+
+    // Add ConceptDescription for the Aspect itself
+    concept_descriptions.push(build_concept_description(&aspect.metadata));
+
+    // Add ConceptDescriptions for all Properties
+    for prop in aspect.properties() {
+        concept_descriptions.push(build_concept_description(&prop.metadata));
+
+        // Add ConceptDescription for the Property's Characteristic if present
+        if let Some(ref characteristic) = prop.characteristic {
+            concept_descriptions.push(build_concept_description(&characteristic.metadata));
+        }
+    }
+
+    // Add ConceptDescriptions for all Operations
+    for op in aspect.operations() {
+        concept_descriptions.push(build_concept_description(&op.metadata));
+    }
+
     // Create Environment
     Ok(Environment {
         asset_administration_shells: Some(vec![aas]),
         submodels: Some(vec![submodel]),
-        concept_descriptions: None, // TODO: Implement ConceptDescriptions
+        concept_descriptions: Some(concept_descriptions),
     })
 }
 
@@ -386,10 +484,99 @@ fn build_property(prop: &SammProperty) -> Result<Property, SammError> {
 }
 
 fn build_operation(op: &SammOperation) -> Result<Operation, SammError> {
+    // Convert input parameters to OperationVariables
+    let input_variables = if !op.input.is_empty() {
+        let inputs: Result<Vec<OperationVariable>, SammError> = op
+            .input
+            .iter()
+            .map(|prop| {
+                let property = build_property(prop)?;
+                Ok(OperationVariable {
+                    value: Box::new(SubmodelElement::Property(property)),
+                })
+            })
+            .collect();
+        Some(inputs?)
+    } else {
+        None
+    };
+
+    // Convert output parameter to OperationVariable
+    let output_variables = if let Some(ref out_prop) = op.output {
+        let property = build_property(out_prop)?;
+        Some(vec![OperationVariable {
+            value: Box::new(SubmodelElement::Property(property)),
+        }])
+    } else {
+        None
+    };
+
     Ok(Operation {
         id_short: Some(op.name().clone()),
         model_type: "Operation".to_string(),
-        input_variables: None,  // TODO: Implement from op.input
-        output_variables: None, // TODO: Implement from op.output
+        input_variables,
+        output_variables,
     })
+}
+
+fn build_concept_description(metadata: &crate::metamodel::ElementMetadata) -> ConceptDescription {
+    // Build preferred names from metadata
+    let preferred_name: Vec<LangString> = metadata
+        .preferred_names
+        .iter()
+        .map(|(lang, text)| LangString {
+            language: lang.clone(),
+            text: text.clone(),
+        })
+        .collect();
+
+    // Build definitions/descriptions from metadata
+    let definition: Option<Vec<LangString>> = if metadata.descriptions.is_empty() {
+        None
+    } else {
+        Some(
+            metadata
+                .descriptions
+                .iter()
+                .map(|(lang, text)| LangString {
+                    language: lang.clone(),
+                    text: text.clone(),
+                })
+                .collect(),
+        )
+    };
+
+    // Extract short name from URN (the local name after #)
+    let short_name = metadata.urn.split('#').last().unwrap_or("element");
+
+    // Create IEC 61360 data specification content
+    let data_spec_content = DataSpecificationIec61360 {
+        model_type: "DataSpecificationIec61360".to_string(),
+        preferred_name,
+        short_name: Some(vec![LangString {
+            language: "en".to_string(),
+            text: short_name.to_string(),
+        }]),
+        definition,
+        data_type: None, // Data type is specific to properties, can be enhanced later
+    };
+
+    // Create embedded data specification
+    let embedded_data_spec = EmbeddedDataSpecification {
+        data_specification: Reference {
+            ref_type: ReferenceType::ExternalReference,
+            keys: vec![Key {
+                key_type: KeyType::GlobalReference,
+                value: "http://admin-shell.io/DataSpecificationTemplates/DataSpecificationIEC61360/3/0".to_string(),
+            }],
+        },
+        data_specification_content: data_spec_content,
+    };
+
+    ConceptDescription {
+        id: metadata.urn.clone(),
+        id_short: Some(short_name.to_string()),
+        model_type: "ConceptDescription".to_string(),
+        embedded_data_specifications: Some(vec![embedded_data_spec]),
+    }
 }

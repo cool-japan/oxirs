@@ -12,15 +12,15 @@ use crate::{
 };
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 #[cfg(feature = "kubernetes")]
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
-#[cfg(feature = "kubernetes")]
-use tracing::{debug, error, info};
 #[cfg(not(feature = "kubernetes"))]
 use tracing::warn;
+#[cfg(feature = "kubernetes")]
+use tracing::{debug, error, info};
 
 #[cfg(feature = "kubernetes")]
 use k8s_openapi::api::core::v1::Service as K8sService;

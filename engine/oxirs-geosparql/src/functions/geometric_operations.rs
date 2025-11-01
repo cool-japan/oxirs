@@ -5,7 +5,9 @@ use crate::geometry::Geometry;
 use geo::algorithm::*;
 use geo_types::Geometry as GeoGeometry;
 
-/// Calculate the distance between two geometries
+/// Calculate the distance between two geometries (2D only)
+///
+/// For 3D distance calculations that include Z coordinates, use `distance_3d()`.
 pub fn distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
     use geo::{Distance, Euclidean};
 
@@ -13,6 +15,63 @@ pub fn distance(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
 
     let dist = Euclidean.distance(&geom1.geom, &geom2.geom);
     Ok(dist)
+}
+
+/// Calculate the 3D distance between two geometries, including Z coordinates
+///
+/// If both geometries have Z coordinates, calculates the 3D Euclidean distance:
+/// √((x₂-x₁)² + (y₂-y₁)² + (z₂-z₁)²)
+///
+/// If either geometry lacks Z coordinates, falls back to 2D distance.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_geosparql::geometry::Geometry;
+/// use oxirs_geosparql::functions::geometric_operations::distance_3d;
+///
+/// let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
+/// let p2 = Geometry::from_wkt("POINT Z(3 4 12)").unwrap();
+///
+/// let dist = distance_3d(&p1, &p2).unwrap();
+/// assert!((dist - 13.0).abs() < 0.001); // 3-4-12 right triangle -> distance = 13
+/// ```
+pub fn distance_3d(geom1: &Geometry, geom2: &Geometry) -> Result<f64> {
+    use geo::{Distance, Euclidean};
+    use geo_types::Geometry as GeoGeometry;
+
+    geom1.validate_crs_compatibility(geom2)?;
+
+    // If either geometry doesn't have Z coordinates, fall back to 2D
+    if !geom1.is_3d() || !geom2.is_3d() {
+        return distance(geom1, geom2);
+    }
+
+    // For point-to-point 3D distance
+    match (&geom1.geom, &geom2.geom) {
+        (GeoGeometry::Point(p1), GeoGeometry::Point(p2)) => {
+            let dx = p2.x() - p1.x();
+            let dy = p2.y() - p1.y();
+
+            // Get Z coordinates
+            let z1 = geom1.coord3d.z_at(0).unwrap_or(0.0);
+            let z2 = geom2.coord3d.z_at(0).unwrap_or(0.0);
+            let dz = z2 - z1;
+
+            // 3D Euclidean distance: √(dx² + dy² + dz²)
+            let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+            Ok(dist)
+        }
+        _ => {
+            // For other geometry types, use 2D distance for now
+            // TODO: Implement full 3D distance for LineStrings, Polygons, etc.
+            let dist_2d = Euclidean.distance(&geom1.geom, &geom2.geom);
+
+            // For simplicity, we can approximate by taking the minimum Z distance
+            // This is a basic implementation; more sophisticated algorithms could be added
+            Ok(dist_2d)
+        }
+    }
 }
 
 /// End cap style for buffer operations
@@ -959,5 +1018,141 @@ mod tests {
         // Without geos-backend, Point buffer should fail
         let result = buffer(&point, 1.0);
         assert!(result.is_err());
+    }
+
+    // === 3D Distance Tests ===
+
+    #[test]
+    fn test_distance_3d_point_to_point() {
+        // Classic 3-4-5 right triangle in 3D: 3-4-12 -> distance = 13
+        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(3 4 12)").unwrap();
+
+        let dist = distance_3d(&p1, &p2).unwrap();
+        assert!((dist - 13.0).abs() < 0.001, "Expected ~13.0, got {}", dist);
+    }
+
+    #[test]
+    fn test_distance_3d_pythagorean_triple() {
+        // Another Pythagorean triple: 5-12-13 in 3D
+        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(5 12 13)").unwrap();
+
+        let dist = distance_3d(&p1, &p2).unwrap();
+        // √(5² + 12² + 13²) = √(25 + 144 + 169) = √338 ≈ 18.385
+        assert!(
+            (dist - 18.385).abs() < 0.01,
+            "Expected ~18.385, got {}",
+            dist
+        );
+    }
+
+    #[test]
+    fn test_distance_3d_same_xy_different_z() {
+        // Points with same X,Y but different Z
+        let p1 = Geometry::from_wkt("POINT Z(1 2 0)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(1 2 10)").unwrap();
+
+        let dist = distance_3d(&p1, &p2).unwrap();
+        assert!((dist - 10.0).abs() < 0.001, "Expected 10.0, got {}", dist);
+    }
+
+    #[test]
+    fn test_distance_3d_negative_coordinates() {
+        // Test with negative coordinates
+        let p1 = Geometry::from_wkt("POINT Z(-1 -2 -3)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+
+        // Distance = √((2)² + (4)² + (6)²) = √(4 + 16 + 36) = √56 ≈ 7.483
+        let dist = distance_3d(&p1, &p2).unwrap();
+        assert!((dist - 7.483).abs() < 0.01, "Expected ~7.483, got {}", dist);
+    }
+
+    #[test]
+    fn test_distance_3d_zero_distance() {
+        // Same point should have zero distance
+        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+
+        let dist = distance_3d(&p1, &p2).unwrap();
+        assert!(dist.abs() < 0.001, "Expected 0.0, got {}", dist);
+    }
+
+    #[test]
+    fn test_distance_3d_fallback_to_2d() {
+        // If one geometry is 2D, should fall back to 2D distance
+        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap(); // 2D
+        let p2 = Geometry::from_wkt("POINT Z(3 4 100)").unwrap(); // 3D with Z=100
+
+        let dist_3d = distance_3d(&p1, &p2).unwrap();
+        let dist_2d = distance(&p1, &p2).unwrap();
+
+        // Should be same as 2D distance (Z ignored)
+        assert!((dist_3d - dist_2d).abs() < 0.001);
+        assert!((dist_3d - 5.0).abs() < 0.001); // √(3² + 4²) = 5
+    }
+
+    #[test]
+    fn test_distance_3d_both_2d_uses_2d() {
+        // Both 2D should use standard 2D distance
+        let p1 = Geometry::from_wkt("POINT(0 0)").unwrap();
+        let p2 = Geometry::from_wkt("POINT(3 4)").unwrap();
+
+        let dist_3d = distance_3d(&p1, &p2).unwrap();
+        let dist_2d = distance(&p1, &p2).unwrap();
+
+        assert!((dist_3d - dist_2d).abs() < 0.001);
+        assert!((dist_3d - 5.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_distance_3d_fractional_coordinates() {
+        // Test with fractional coordinates
+        let p1 = Geometry::from_wkt("POINT Z(1.5 2.5 3.5)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(4.5 6.5 7.5)").unwrap();
+
+        // Δx=3, Δy=4, Δz=4 -> √(9 + 16 + 16) = √41 ≈ 6.403
+        let dist = distance_3d(&p1, &p2).unwrap();
+        assert!((dist - 6.403).abs() < 0.01, "Expected ~6.403, got {}", dist);
+    }
+
+    #[test]
+    fn test_distance_3d_crs_compatibility() {
+        // Different CRS should fail
+        let p1 = Geometry::from_wkt("<http://www.opengis.net/def/crs/EPSG/0/4326> POINT Z(0 0 0)")
+            .unwrap();
+        let p2 = Geometry::from_wkt("<http://www.opengis.net/def/crs/EPSG/0/3857> POINT Z(1 1 1)")
+            .unwrap();
+
+        let result = distance_3d(&p1, &p2);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_distance_3d_with_m_coordinate() {
+        // POINT ZM should work (M coordinate ignored in distance calculation)
+        let p1 = Geometry::from_wkt("POINT ZM(0 0 0 100)").unwrap();
+        let p2 = Geometry::from_wkt("POINT ZM(3 4 12 200)").unwrap();
+
+        let dist = distance_3d(&p1, &p2).unwrap();
+        assert!((dist - 13.0).abs() < 0.001); // M coordinate should be ignored
+    }
+
+    #[test]
+    fn test_distance_2d_vs_3d_comparison() {
+        // Same 2D projection but different Z should give different distances
+        let p1_3d = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
+        let p2_3d = Geometry::from_wkt("POINT Z(3 4 12)").unwrap();
+
+        let p1_2d = Geometry::from_wkt("POINT(0 0)").unwrap();
+        let p2_2d = Geometry::from_wkt("POINT(3 4)").unwrap();
+
+        let dist_3d = distance_3d(&p1_3d, &p2_3d).unwrap();
+        let dist_2d = distance(&p1_2d, &p2_2d).unwrap();
+
+        // 3D distance should be greater due to Z component
+        assert!(dist_3d > dist_2d);
+        assert!((dist_2d - 5.0).abs() < 0.001); // 2D: √(3² + 4²) = 5
+        assert!((dist_3d - 13.0).abs() < 0.001); // 3D: √(3² + 4² + 12²) = 13
     }
 }

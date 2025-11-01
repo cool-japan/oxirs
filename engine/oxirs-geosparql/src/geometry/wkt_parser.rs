@@ -3,7 +3,7 @@
 //! Converts between WKT strings and geometry objects.
 
 use crate::error::{GeoSparqlError, Result};
-use crate::geometry::coord3d::Coord3D;
+use crate::geometry::coord3d::{Coord3D, CoordDim, MCoords, ZCoords};
 use crate::geometry::{Crs, Geometry};
 use geo_types::Geometry as GeoGeometry;
 use regex::Regex;
@@ -18,16 +18,176 @@ pub fn parse_wkt(wkt_str: &str) -> Result<Geometry> {
     let wkt_parsed: wkt::Wkt<f64> =
         wkt::Wkt::from_str(wkt_geom).map_err(|e| GeoSparqlError::InvalidWkt(e.to_string()))?;
 
+    // Extract Z/M coordinates before converting to geo_types
+    let coord3d = extract_3d_coords(&wkt_parsed)?;
+
     // Convert to geo_types geometry using try_into
     let geo_geom: GeoGeometry<f64> = wkt_parsed
         .try_into()
         .map_err(|_| GeoSparqlError::InvalidWkt("Failed to convert WKT to geometry".to_string()))?;
 
-    // For now, create default 2D coordinates
-    // TODO: Full 3D support (extract Z/M from wkt_parsed) will be added in future version
-    let coord3d = Coord3D::default();
-
     Ok(Geometry::with_crs_and_coord3d(geo_geom, crs, coord3d))
+}
+
+/// Extract 3D coordinates (Z/M) from parsed WKT
+fn extract_3d_coords(wkt: &wkt::Wkt<f64>) -> Result<Coord3D> {
+    use wkt::Wkt;
+
+    match wkt {
+        Wkt::Point(point) => extract_point_3d(&point.0),
+        Wkt::LineString(ls) => extract_linestring_3d(&ls.0),
+        Wkt::Polygon(poly) => extract_polygon_3d(poly),
+        Wkt::MultiPoint(mp) => extract_multipoint_3d(&mp.0),
+        Wkt::MultiLineString(mls) => extract_multilinestring_3d(&mls.0),
+        Wkt::MultiPolygon(mpoly) => extract_multipolygon_3d(&mpoly.0),
+        Wkt::GeometryCollection(gc) => extract_geometrycollection_3d(&gc.0),
+    }
+}
+
+/// Extract 3D coordinates from a Point
+fn extract_point_3d(coord: &Option<wkt::types::Coord<f64>>) -> Result<Coord3D> {
+    match coord {
+        Some(c) => {
+            let has_z = c.z.is_some();
+            let has_m = c.m.is_some();
+
+            let dim = match (has_z, has_m) {
+                (false, false) => CoordDim::XY,
+                (true, false) => CoordDim::XYZ,
+                (false, true) => CoordDim::XYM,
+                (true, true) => CoordDim::XYZM,
+            };
+
+            let z_coords = c.z.map(|z| ZCoords::new(vec![z]));
+            let m_coords = c.m.map(|m| MCoords::new(vec![m]));
+
+            Ok(Coord3D {
+                dim,
+                z_coords,
+                m_coords,
+            })
+        }
+        None => Ok(Coord3D::default()), // Empty point
+    }
+}
+
+/// Extract 3D coordinates from a LineString
+fn extract_linestring_3d(coords: &[wkt::types::Coord<f64>]) -> Result<Coord3D> {
+    if coords.is_empty() {
+        return Ok(Coord3D::default());
+    }
+
+    let has_z = coords[0].z.is_some();
+    let has_m = coords[0].m.is_some();
+
+    let dim = match (has_z, has_m) {
+        (false, false) => CoordDim::XY,
+        (true, false) => CoordDim::XYZ,
+        (false, true) => CoordDim::XYM,
+        (true, true) => CoordDim::XYZM,
+    };
+
+    let z_coords = if has_z {
+        Some(ZCoords::new(
+            coords.iter().map(|c| c.z.unwrap_or(0.0)).collect(),
+        ))
+    } else {
+        None
+    };
+
+    let m_coords = if has_m {
+        Some(MCoords::new(
+            coords.iter().map(|c| c.m.unwrap_or(0.0)).collect(),
+        ))
+    } else {
+        None
+    };
+
+    Ok(Coord3D {
+        dim,
+        z_coords,
+        m_coords,
+    })
+}
+
+/// Extract 3D coordinates from a Polygon
+fn extract_polygon_3d(poly: &wkt::types::Polygon<f64>) -> Result<Coord3D> {
+    // Handle empty polygon
+    if poly.0.is_empty() {
+        return Ok(Coord3D::default());
+    }
+
+    // Collect all coordinates from exterior and interior rings
+    let mut all_coords = Vec::new();
+
+    // Add exterior ring
+    all_coords.extend_from_slice(&poly.0[0].0);
+
+    // Add interior rings
+    for ring in &poly.0[1..] {
+        all_coords.extend_from_slice(&ring.0);
+    }
+
+    extract_linestring_3d(&all_coords)
+}
+
+/// Extract 3D coordinates from a MultiPoint
+fn extract_multipoint_3d(points: &[wkt::types::Point<f64>]) -> Result<Coord3D> {
+    let coords: Vec<wkt::types::Coord<f64>> = points.iter().filter_map(|p| p.0.clone()).collect();
+
+    extract_linestring_3d(&coords)
+}
+
+/// Extract 3D coordinates from a MultiLineString
+fn extract_multilinestring_3d(linestrings: &[wkt::types::LineString<f64>]) -> Result<Coord3D> {
+    let mut all_coords = Vec::new();
+
+    for ls in linestrings {
+        all_coords.extend_from_slice(&ls.0);
+    }
+
+    extract_linestring_3d(&all_coords)
+}
+
+/// Extract 3D coordinates from a MultiPolygon
+fn extract_multipolygon_3d(polygons: &[wkt::types::Polygon<f64>]) -> Result<Coord3D> {
+    let mut all_coords = Vec::new();
+
+    for poly in polygons {
+        // Add exterior ring
+        all_coords.extend_from_slice(&poly.0[0].0);
+
+        // Add interior rings
+        for ring in &poly.0[1..] {
+            all_coords.extend_from_slice(&ring.0);
+        }
+    }
+
+    extract_linestring_3d(&all_coords)
+}
+
+/// Extract 3D coordinates from a GeometryCollection
+fn extract_geometrycollection_3d(geometries: &[wkt::Wkt<f64>]) -> Result<Coord3D> {
+    use wkt::Wkt;
+
+    // For GeometryCollection, we take the dimension from the first non-empty geometry
+    for geom in geometries {
+        let coord3d = match geom {
+            Wkt::Point(point) => extract_point_3d(&point.0)?,
+            Wkt::LineString(ls) => extract_linestring_3d(&ls.0)?,
+            Wkt::Polygon(poly) => extract_polygon_3d(poly)?,
+            Wkt::MultiPoint(mp) => extract_multipoint_3d(&mp.0)?,
+            Wkt::MultiLineString(mls) => extract_multilinestring_3d(&mls.0)?,
+            Wkt::MultiPolygon(mpoly) => extract_multipolygon_3d(&mpoly.0)?,
+            Wkt::GeometryCollection(gc) => extract_geometrycollection_3d(&gc.0)?,
+        };
+
+        if coord3d.dim != CoordDim::XY {
+            return Ok(coord3d);
+        }
+    }
+
+    Ok(Coord3D::default())
 }
 
 /// Extract CRS from WKT string if present
@@ -43,30 +203,77 @@ fn extract_crs(wkt: &str) -> Result<(Crs, &str)> {
     }
 }
 
-// Removed - now using try_into() directly from wkt::Wkt to geo_types::Geometry
+/// Convert a Geometry (with 3D coordinates) to WKT string
+pub fn geometry_to_wkt_with_3d(geometry: &Geometry) -> String {
+    geometry_to_wkt_internal(&geometry.geom, &geometry.coord3d)
+}
 
-/// Convert a geo_types Geometry to WKT string
+/// Convert a geo_types Geometry to WKT string (2D only, for backwards compatibility)
 pub fn geometry_to_wkt(geom: &GeoGeometry<f64>) -> String {
+    geometry_to_wkt_internal(geom, &Coord3D::default())
+}
+
+/// Internal function to convert geometry with optional 3D coordinates
+fn geometry_to_wkt_internal(geom: &GeoGeometry<f64>, coord3d: &Coord3D) -> String {
+    let modifier = coord3d.dim.to_wkt_modifier();
+    let modifier_str = modifier.map(|m| format!(" {}", m)).unwrap_or_default();
+
     match geom {
         GeoGeometry::Point(p) => {
             if p.x().is_nan() || p.y().is_nan() {
-                "POINT EMPTY".to_string()
+                format!("POINT{} EMPTY", modifier_str)
             } else {
-                format!("POINT({} {})", p.x(), p.y())
+                let mut coords = format!("{} {}", p.x(), p.y());
+                if let Some(z) = coord3d.z_at(0) {
+                    coords.push_str(&format!(" {}", z));
+                }
+                if let Some(m) = coord3d.m_at(0) {
+                    coords.push_str(&format!(" {}", m));
+                }
+                format!("POINT{}({})", modifier_str, coords)
             }
         }
         GeoGeometry::Line(l) => {
+            let mut start_coords = format!("{} {}", l.start.x, l.start.y);
+            let mut end_coords = format!("{} {}", l.end.x, l.end.y);
+
+            if let Some(z) = coord3d.z_at(0) {
+                start_coords.push_str(&format!(" {}", z));
+            }
+            if let Some(m) = coord3d.m_at(0) {
+                start_coords.push_str(&format!(" {}", m));
+            }
+            if let Some(z) = coord3d.z_at(1) {
+                end_coords.push_str(&format!(" {}", z));
+            }
+            if let Some(m) = coord3d.m_at(1) {
+                end_coords.push_str(&format!(" {}", m));
+            }
+
             format!(
-                "LINESTRING({} {}, {} {})",
-                l.start.x, l.start.y, l.end.x, l.end.y
+                "LINESTRING{}({}, {})",
+                modifier_str, start_coords, end_coords
             )
         }
         GeoGeometry::LineString(ls) => {
             if ls.0.is_empty() {
-                "LINESTRING EMPTY".to_string()
+                format!("LINESTRING{} EMPTY", modifier_str)
             } else {
-                let coords: Vec<String> = ls.0.iter().map(|c| format!("{} {}", c.x, c.y)).collect();
-                format!("LINESTRING({})", coords.join(", "))
+                let coords: Vec<String> =
+                    ls.0.iter()
+                        .enumerate()
+                        .map(|(i, c)| {
+                            let mut s = format!("{} {}", c.x, c.y);
+                            if let Some(z) = coord3d.z_at(i) {
+                                s.push_str(&format!(" {}", z));
+                            }
+                            if let Some(m) = coord3d.m_at(i) {
+                                s.push_str(&format!(" {}", m));
+                            }
+                            s
+                        })
+                        .collect();
+                format!("LINESTRING{}({})", modifier_str, coords.join(", "))
             }
         }
         GeoGeometry::Polygon(poly) => {
@@ -263,5 +470,134 @@ mod tests {
             }
             _ => panic!("Expected Points"),
         }
+    }
+
+    // === 3D Geometry Tests ===
+
+    #[test]
+    fn test_parse_point_z() {
+        let geom = parse_wkt("POINT Z(1.0 2.0 3.0)").unwrap();
+        assert_eq!(geom.geometry_type(), "Point");
+        assert!(geom.is_3d());
+        assert!(!geom.is_measured());
+
+        // Check Z coordinate
+        assert_eq!(geom.coord3d.dim, CoordDim::XYZ);
+        assert_eq!(geom.coord3d.z_at(0), Some(3.0));
+        assert_eq!(geom.coord3d.m_at(0), None);
+    }
+
+    #[test]
+    fn test_parse_point_m() {
+        let geom = parse_wkt("POINT M(1.0 2.0 100.0)").unwrap();
+        assert_eq!(geom.geometry_type(), "Point");
+        assert!(!geom.is_3d());
+        assert!(geom.is_measured());
+
+        // Check M coordinate
+        assert_eq!(geom.coord3d.dim, CoordDim::XYM);
+        assert_eq!(geom.coord3d.z_at(0), None);
+        assert_eq!(geom.coord3d.m_at(0), Some(100.0));
+    }
+
+    #[test]
+    fn test_parse_point_zm() {
+        let geom = parse_wkt("POINT ZM(1.0 2.0 3.0 100.0)").unwrap();
+        assert_eq!(geom.geometry_type(), "Point");
+        assert!(geom.is_3d());
+        assert!(geom.is_measured());
+
+        // Check Z and M coordinates
+        assert_eq!(geom.coord3d.dim, CoordDim::XYZM);
+        assert_eq!(geom.coord3d.z_at(0), Some(3.0));
+        assert_eq!(geom.coord3d.m_at(0), Some(100.0));
+    }
+
+    #[test]
+    fn test_parse_linestring_z() {
+        let geom = parse_wkt("LINESTRING Z(0 0 10, 1 1 20, 2 2 30)").unwrap();
+        assert_eq!(geom.geometry_type(), "LineString");
+        assert!(geom.is_3d());
+
+        // Check Z coordinates
+        assert_eq!(geom.coord3d.dim, CoordDim::XYZ);
+        assert_eq!(geom.coord3d.z_at(0), Some(10.0));
+        assert_eq!(geom.coord3d.z_at(1), Some(20.0));
+        assert_eq!(geom.coord3d.z_at(2), Some(30.0));
+    }
+
+    #[test]
+    fn test_parse_polygon_z() {
+        let geom = parse_wkt("POLYGON Z((0 0 10, 4 0 20, 4 4 30, 0 4 40, 0 0 10))").unwrap();
+        assert_eq!(geom.geometry_type(), "Polygon");
+        assert!(geom.is_3d());
+
+        // Check Z coordinates
+        assert_eq!(geom.coord3d.dim, CoordDim::XYZ);
+        assert_eq!(geom.coord3d.z_at(0), Some(10.0));
+        assert_eq!(geom.coord3d.z_at(1), Some(20.0));
+        assert_eq!(geom.coord3d.z_at(2), Some(30.0));
+    }
+
+    #[test]
+    fn test_serialize_point_z() {
+        let geom = parse_wkt("POINT Z(1.0 2.0 3.0)").unwrap();
+        let wkt = geom.to_wkt();
+
+        // Should include Z modifier and Z coordinate
+        assert!(wkt.contains(" Z"));
+        assert!(wkt.contains("1 2 3"));
+    }
+
+    #[test]
+    fn test_serialize_point_m() {
+        let geom = parse_wkt("POINT M(1.0 2.0 100.0)").unwrap();
+        let wkt = geom.to_wkt();
+
+        // Should include M modifier and M coordinate
+        assert!(wkt.contains(" M"));
+        assert!(wkt.contains("1 2 100"));
+    }
+
+    #[test]
+    fn test_serialize_point_zm() {
+        let geom = parse_wkt("POINT ZM(1.0 2.0 3.0 100.0)").unwrap();
+        let wkt = geom.to_wkt();
+
+        // Should include ZM modifier and both coordinates
+        assert!(wkt.contains(" ZM"));
+        assert!(wkt.contains("1 2 3 100"));
+    }
+
+    #[test]
+    fn test_roundtrip_3d_point_z() {
+        let original_wkt = "POINT Z(1.5 2.5 3.5)";
+        let geom = parse_wkt(original_wkt).unwrap();
+        let new_wkt = geom.to_wkt();
+        let geom2 = parse_wkt(&new_wkt).unwrap();
+
+        assert_eq!(geom.coord3d.dim, geom2.coord3d.dim);
+        assert_eq!(geom.coord3d.z_at(0), geom2.coord3d.z_at(0));
+    }
+
+    #[test]
+    fn test_roundtrip_3d_linestring_z() {
+        let original_wkt = "LINESTRING Z(0 0 10, 1 1 20, 2 2 30)";
+        let geom = parse_wkt(original_wkt).unwrap();
+        let new_wkt = geom.to_wkt();
+        let geom2 = parse_wkt(&new_wkt).unwrap();
+
+        assert_eq!(geom.coord3d.dim, geom2.coord3d.dim);
+        assert_eq!(geom.coord3d.z_at(0), geom2.coord3d.z_at(0));
+        assert_eq!(geom.coord3d.z_at(1), geom2.coord3d.z_at(1));
+        assert_eq!(geom.coord3d.z_at(2), geom2.coord3d.z_at(2));
+    }
+
+    #[test]
+    fn test_2d_geometry_remains_2d() {
+        let geom = parse_wkt("POINT(1.0 2.0)").unwrap();
+        assert_eq!(geom.coord3d.dim, CoordDim::XY);
+        assert!(!geom.is_3d());
+        assert!(!geom.is_measured());
     }
 }
