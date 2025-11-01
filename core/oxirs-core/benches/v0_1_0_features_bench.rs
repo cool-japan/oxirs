@@ -101,16 +101,12 @@ fn bench_zero_copy_load_file(c: &mut Criterion) {
         file.write_all(&data).unwrap();
         drop(file);
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(size),
-            &file_path,
-            |b, path| {
-                b.iter(|| {
-                    let mut store = ZeroCopyTripleStore::new().unwrap();
-                    store.load_file_zero_copy(black_box(path)).unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(size), &file_path, |b, path| {
+            b.iter(|| {
+                let mut store = ZeroCopyTripleStore::new().unwrap();
+                store.load_file_zero_copy(black_box(path)).unwrap();
+            });
+        });
     }
     group.finish();
 }
@@ -176,15 +172,11 @@ fn bench_concurrent_rebuild_indices(c: &mut Criterion) {
         let triples = create_test_triples(*size);
         graph.insert_batch(triples).unwrap();
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(size),
-            &graph,
-            |b, graph| {
-                b.iter(|| {
-                    graph.rebuild_indices().unwrap();
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(size), &graph, |b, graph| {
+            b.iter(|| {
+                graph.rebuild_indices().unwrap();
+            });
+        });
     }
     group.finish();
 }

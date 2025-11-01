@@ -321,8 +321,8 @@ impl ZeroCopyTripleStore {
 
         // For zero-copy parsing, we'll use line-based processing for N-Triples
         // which is the simplest RDF format and most amenable to zero-copy parsing
-        let content =
-            str::from_utf8(buffer).map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
+        let content = str::from_utf8(buffer)
+            .map_err(|e| OxirsError::Parse(format!("Invalid UTF-8: {}", e)))?;
 
         let mut line_count = 0;
         let mut parse_errors = 0;
@@ -356,11 +356,7 @@ impl ZeroCopyTripleStore {
             }
         }
 
-        tracing::info!(
-            "Parsed {} lines with {} errors",
-            line_count,
-            parse_errors
-        );
+        tracing::info!("Parsed {} lines with {} errors", line_count, parse_errors);
 
         Ok(())
     }
