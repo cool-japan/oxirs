@@ -5,6 +5,8 @@
 //! - ComplEx: Complex number embeddings for asymmetric relations
 //! - DistMult: Bilinear diagonal model
 //! - RotatE: Rotation-based embeddings
+//! - HolE: Holographic embeddings using circular correlation
+//! - ConvE: Convolutional embeddings with 2D CNNs (optional)
 //! - TuckER: Tucker decomposition based embeddings (optional)
 //! - TransformerEmbedding: Transformer-based embeddings (BERT, RoBERTa, etc.)
 //! - GNNEmbedding: Graph Neural Network embeddings (GCN, GraphSAGE, GAT, etc.)
@@ -13,10 +15,14 @@
 pub mod complex;
 pub mod distmult;
 pub mod gnn;
+pub mod hole;
 pub mod ontology;
 pub mod rotate;
 pub mod transe;
 pub mod transformer;
+
+#[cfg(feature = "conve")]
+pub mod conve;
 
 #[cfg(feature = "tucker")]
 pub mod tucker;
@@ -32,12 +38,16 @@ pub mod scirs_neural;
 pub use complex::ComplEx;
 pub use distmult::DistMult;
 pub use gnn::{AggregationType, GNNConfig, GNNEmbedding, GNNType};
+pub use hole::{HoLE, HoLEConfig};
 pub use ontology::{
     OntologyAwareConfig, OntologyAwareEmbedding, OntologyConstraints, OntologyRelation,
 };
 pub use rotate::RotatE;
 pub use transe::TransE;
 pub use transformer::{PoolingStrategy, TransformerConfig, TransformerEmbedding, TransformerType};
+
+#[cfg(feature = "conve")]
+pub use conve::{ConvE, ConvEConfig};
 
 #[cfg(feature = "tucker")]
 pub use tucker::TuckER;

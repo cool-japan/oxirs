@@ -23,12 +23,12 @@ pub enum SchemaType {
     Protobuf,
 }
 
-impl ToString for SchemaType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SchemaType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SchemaType::Avro => "AVRO".to_string(),
-            SchemaType::Json => "JSON".to_string(),
-            SchemaType::Protobuf => "PROTOBUF".to_string(),
+            SchemaType::Avro => write!(f, "AVRO"),
+            SchemaType::Json => write!(f, "JSON"),
+            SchemaType::Protobuf => write!(f, "PROTOBUF"),
         }
     }
 }
@@ -45,16 +45,16 @@ pub enum CompatibilityLevel {
     None,
 }
 
-impl ToString for CompatibilityLevel {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for CompatibilityLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CompatibilityLevel::Backward => "BACKWARD".to_string(),
-            CompatibilityLevel::BackwardTransitive => "BACKWARD_TRANSITIVE".to_string(),
-            CompatibilityLevel::Forward => "FORWARD".to_string(),
-            CompatibilityLevel::ForwardTransitive => "FORWARD_TRANSITIVE".to_string(),
-            CompatibilityLevel::Full => "FULL".to_string(),
-            CompatibilityLevel::FullTransitive => "FULL_TRANSITIVE".to_string(),
-            CompatibilityLevel::None => "NONE".to_string(),
+            CompatibilityLevel::Backward => write!(f, "BACKWARD"),
+            CompatibilityLevel::BackwardTransitive => write!(f, "BACKWARD_TRANSITIVE"),
+            CompatibilityLevel::Forward => write!(f, "FORWARD"),
+            CompatibilityLevel::ForwardTransitive => write!(f, "FORWARD_TRANSITIVE"),
+            CompatibilityLevel::Full => write!(f, "FULL"),
+            CompatibilityLevel::FullTransitive => write!(f, "FULL_TRANSITIVE"),
+            CompatibilityLevel::None => write!(f, "NONE"),
         }
     }
 }
@@ -628,6 +628,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore] // Requires external schema registry service at localhost:8081
     async fn test_schema_registry_client() {
         let config = SchemaRegistryConfig {
             url: "http://localhost:8081".to_string(),

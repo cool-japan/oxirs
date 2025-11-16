@@ -7,30 +7,70 @@ use indicatif::{ProgressBar, ProgressStyle};
 use std::io::{self, Write};
 use std::time::Duration;
 
+pub mod alias;
+pub mod checkpoint;
 pub mod completion;
+pub mod dataset_manager;
 pub mod error;
 pub mod formatters;
+pub mod fuzzy_history;
 pub mod help;
 pub mod interactive;
 pub mod logging;
 pub mod output;
+pub mod pagination;
 pub mod progress;
+pub mod query_bookmarks;
+pub mod result_export;
+pub mod schema_autocomplete;
+pub mod sparql_autocomplete;
+pub mod syntax_highlighting;
+pub mod transaction;
+pub mod utils;
 pub mod validation;
+pub mod visual_query_builder;
 
+pub use alias::{AliasConfig, AliasManager};
+pub use checkpoint::{Checkpoint, CheckpointManager};
 pub use completion::{CommandCompletionProvider, CompletionContext, CompletionProvider};
+pub use dataset_manager::{
+    ConnectionState, DatasetConnection, DatasetManager, DatasetManagerConfig, DatasetManagerStats,
+};
 pub use error::{CliError, CliResult};
 pub use formatters::{
-    create_formatter, Binding, CsvFormatter, JsonFormatter, QueryResults, RdfTerm, ResultFormatter,
-    TableFormatter, XmlFormatter,
+    create_formatter, Binding, CsvFormatter, HtmlFormatter, JsonFormatter, MarkdownFormatter,
+    QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,
 };
+pub use fuzzy_history::{FuzzyConfig, FuzzyHistorySearch, FuzzyMatch, HistoryEntryWithMetadata};
 pub use help::{HelpCategory, HelpProvider};
+#[allow(deprecated)]
 pub use interactive::InteractiveMode;
 pub use logging::{
     init_logging, CommandLogger, DataLogger, LogConfig, LogFormat, PerfLogger, QueryLogger,
 };
 pub use output::{ColorScheme, OutputFormatter};
+pub use pagination::{NavigationCommand, PaginationConfig, ResultPaginator};
 pub use progress::{ProgressTracker, ProgressType};
+pub use query_bookmarks::{BookmarkConfig, BookmarkManager, QueryBookmark};
+pub use result_export::{ExportConfig, ExportFormat, ResultExporter};
+pub use schema_autocomplete::{
+    CacheStats, SchemaAutocompleteProvider, SchemaDiscoveryConfig, SchemaInfo,
+};
+pub use sparql_autocomplete::SparqlAutocompleteProvider;
+pub use syntax_highlighting::{
+    highlight_error, highlight_info, highlight_sparql, highlight_success, highlight_warning,
+    HighlightConfig,
+};
+pub use transaction::{
+    IsolationLevel, TransactionConfig, TransactionManager, TransactionMetadata,
+    TransactionOperation, TransactionState, TransactionStats,
+};
+pub use utils::*;
 pub use validation::ArgumentValidator;
+pub use visual_query_builder::{
+    FilterExpression, OptionalClause, OrderByClause, QueryBuilderConfig, QueryBuilderStats,
+    QueryType, TriplePattern, VisualQueryBuilder,
+};
 
 /// CLI Context for managing global state
 pub struct CliContext {

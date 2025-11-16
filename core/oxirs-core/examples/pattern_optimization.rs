@@ -290,6 +290,7 @@ fn print_pattern(pattern: &AlgebraTriplePattern) {
         AlgebraTermPattern::NamedNode(n) => format!("<{}>", n.as_str()),
         AlgebraTermPattern::BlankNode(b) => format!("_:{}", b.as_str()),
         AlgebraTermPattern::Literal(l) => format!("\"{}\"", l.value()),
+        AlgebraTermPattern::QuotedTriple(_) => "<<RDF-star triple>>".to_string(),
     };
 
     let predicate = match &pattern.predicate {
@@ -303,6 +304,7 @@ fn print_pattern(pattern: &AlgebraTriplePattern) {
         AlgebraTermPattern::NamedNode(n) => format!("<{}>", n.as_str()),
         AlgebraTermPattern::BlankNode(b) => format!("_:{}", b.as_str()),
         AlgebraTermPattern::Literal(l) => format!("\"{}\"", l.value()),
+        AlgebraTermPattern::QuotedTriple(_) => "<<RDF-star triple>>".to_string(),
     };
 
     println!("   {subject} {predicate} {object}");

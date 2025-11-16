@@ -27,7 +27,7 @@ impl FormatHandler for JsonHandler {
 
         // Parse JSON and extract text content
         let text = match serde_json::from_str::<serde_json::Value>(&json_str) {
-            Ok(value) => self.extract_text_from_json(&value),
+            Ok(value) => extract_text_from_json(&value),
             Err(_) => json_str.to_string(),
         };
 
@@ -65,22 +65,20 @@ impl FormatHandler for JsonHandler {
 }
 
 #[cfg(feature = "content-processing")]
-impl JsonHandler {
-    fn extract_text_from_json(&self, value: &serde_json::Value) -> String {
-        match value {
-            serde_json::Value::String(s) => s.clone(),
-            serde_json::Value::Array(arr) => arr
-                .iter()
-                .map(|v| self.extract_text_from_json(v))
-                .collect::<Vec<_>>()
-                .join(" "),
-            serde_json::Value::Object(obj) => obj
-                .values()
-                .map(|v| self.extract_text_from_json(v))
-                .collect::<Vec<_>>()
-                .join(" "),
-            _ => value.to_string(),
-        }
+fn extract_text_from_json(value: &serde_json::Value) -> String {
+    match value {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Array(arr) => arr
+            .iter()
+            .map(extract_text_from_json)
+            .collect::<Vec<_>>()
+            .join(" "),
+        serde_json::Value::Object(obj) => obj
+            .values()
+            .map(extract_text_from_json)
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => value.to_string(),
     }
 }
 

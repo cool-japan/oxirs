@@ -5,10 +5,7 @@
 use super::super::helpers::get_production_model_version;
 use super::super::{ApiState, TripleScoreRequest, TripleScoreResponse};
 #[cfg(feature = "api-server")]
-use crate::CachedEmbeddingModel;
-#[cfg(feature = "api-server")]
 use axum::{extract::State, http::StatusCode, response::Json};
-use std::sync::Arc;
 
 /// Score a triple
 #[cfg(feature = "api-server")]

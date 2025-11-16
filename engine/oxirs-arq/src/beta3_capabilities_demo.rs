@@ -179,7 +179,7 @@ impl Beta3CapabilitiesDemo {
         println!("==========================================");
 
         self.demo_array_macro_fix()?;
-        self.demo_deterministic_Random::default()?;
+        self.demo_deterministic_rng()?;
         self.demo_advanced_distributions()?;
         self.demo_collection_operations()?;
         self.demo_array_operations()?;

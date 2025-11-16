@@ -19,8 +19,6 @@ use uuid::Uuid;
 // Full OpenTelemetry integration can be enabled when dependencies are stable
 #[cfg(feature = "opentelemetry")]
 use opentelemetry::global::BoxedTracer;
-#[cfg(feature = "opentelemetry")]
-use opentelemetry::{global, trace::Tracer, KeyValue};
 
 use crate::StreamEvent;
 

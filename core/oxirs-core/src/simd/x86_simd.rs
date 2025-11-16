@@ -6,6 +6,12 @@ use std::arch::x86::*;
 use std::arch::x86_64::*;
 
 /// Add two f32 slices using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn add_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
     if !is_x86_feature_detected!("avx2") {
@@ -31,6 +37,12 @@ pub unsafe fn add_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Subtract two f32 slices using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn sub_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
     if !is_x86_feature_detected!("avx2") {
@@ -56,6 +68,12 @@ pub unsafe fn sub_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Multiply two f32 slices using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn mul_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
     if !is_x86_feature_detected!("avx2") {
@@ -81,6 +99,12 @@ pub unsafe fn mul_f32(a: &[f32], b: &[f32]) -> Vec<f32> {
 }
 
 /// Compute dot product using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
     if !is_x86_feature_detected!("avx2") {
@@ -110,6 +134,12 @@ pub unsafe fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute cosine distance using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length
+/// and should not be all zeros (to avoid division by zero). Runtime CPU feature detection is
+/// performed, falling back to scalar implementation if AVX2 is not available.
 #[inline]
 pub unsafe fn cosine_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     if !is_x86_feature_detected!("avx2") {
@@ -158,6 +188,12 @@ pub unsafe fn cosine_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute Euclidean distance using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn euclidean_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     if !is_x86_feature_detected!("avx2") {
@@ -188,6 +224,12 @@ pub unsafe fn euclidean_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute Manhattan distance using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn manhattan_distance_f32(a: &[f32], b: &[f32]) -> f32 {
     if !is_x86_feature_detected!("avx2") {
@@ -219,6 +261,11 @@ pub unsafe fn manhattan_distance_f32(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Compute L2 norm using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. Runtime CPU feature detection is performed,
+/// falling back to scalar implementation if AVX2 is not available.
 #[inline]
 pub unsafe fn norm_f32(a: &[f32]) -> f32 {
     if !is_x86_feature_detected!("avx2") {
@@ -237,14 +284,19 @@ pub unsafe fn norm_f32(a: &[f32]) -> f32 {
 
     let mut result = horizontal_sum_avx2(sum);
 
-    for i in simd_len..len {
-        result += a[i] * a[i];
+    for item in a.iter().take(len).skip(simd_len) {
+        result += item * item;
     }
 
     result.sqrt()
 }
 
 /// Sum all elements using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. Runtime CPU feature detection is performed,
+/// falling back to scalar implementation if AVX2 is not available.
 #[inline]
 pub unsafe fn sum_f32(a: &[f32]) -> f32 {
     if !is_x86_feature_detected!("avx2") {
@@ -262,8 +314,8 @@ pub unsafe fn sum_f32(a: &[f32]) -> f32 {
 
     let mut result = horizontal_sum_avx2(sum);
 
-    for i in simd_len..len {
-        result += a[i];
+    for item in a.iter().take(len).skip(simd_len) {
+        result += item;
     }
 
     result
@@ -272,6 +324,12 @@ pub unsafe fn sum_f32(a: &[f32]) -> f32 {
 // f64 implementations (using AVX2 for 4 elements at a time)
 
 /// Add two f64 slices using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn add_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     if !is_x86_feature_detected!("avx2") {
@@ -297,6 +355,12 @@ pub unsafe fn add_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
 }
 
 /// Subtract two f64 slices using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn sub_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     if !is_x86_feature_detected!("avx2") {
@@ -322,6 +386,12 @@ pub unsafe fn sub_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
 }
 
 /// Multiply two f64 slices using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn mul_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
     if !is_x86_feature_detected!("avx2") {
@@ -347,6 +417,12 @@ pub unsafe fn mul_f64(a: &[f64], b: &[f64]) -> Vec<f64> {
 }
 
 /// Compute dot product for f64 using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
     if !is_x86_feature_detected!("avx2") {
@@ -374,6 +450,12 @@ pub unsafe fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute cosine distance for f64 using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length
+/// and should not be all zeros (to avoid division by zero). Runtime CPU feature detection is
+/// performed, falling back to scalar implementation if AVX2 is not available.
 #[inline]
 pub unsafe fn cosine_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     if !is_x86_feature_detected!("avx2") {
@@ -392,6 +474,12 @@ pub unsafe fn cosine_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute Euclidean distance for f64 using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn euclidean_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     if !is_x86_feature_detected!("avx2") {
@@ -422,6 +510,12 @@ pub unsafe fn euclidean_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute Manhattan distance for f64 using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. The slices `a` and `b` must have the same length.
+/// Runtime CPU feature detection is performed, falling back to scalar implementation if AVX2
+/// is not available.
 #[inline]
 pub unsafe fn manhattan_distance_f64(a: &[f64], b: &[f64]) -> f64 {
     if !is_x86_feature_detected!("avx2") {
@@ -454,6 +548,11 @@ pub unsafe fn manhattan_distance_f64(a: &[f64], b: &[f64]) -> f64 {
 }
 
 /// Compute L2 norm for f64 using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. Runtime CPU feature detection is performed,
+/// falling back to scalar implementation if AVX2 is not available.
 #[inline]
 pub unsafe fn norm_f64(a: &[f64]) -> f64 {
     if !is_x86_feature_detected!("avx2") {
@@ -472,14 +571,19 @@ pub unsafe fn norm_f64(a: &[f64]) -> f64 {
 
     let mut result = horizontal_sum_avx2_f64(sum);
 
-    for i in simd_len..len {
-        result += a[i] * a[i];
+    for item in a.iter().take(len).skip(simd_len) {
+        result += item * item;
     }
 
     result.sqrt()
 }
 
 /// Sum all elements for f64 using AVX2
+///
+/// # Safety
+///
+/// This function uses AVX2 SIMD intrinsics. Runtime CPU feature detection is performed,
+/// falling back to scalar implementation if AVX2 is not available.
 #[inline]
 pub unsafe fn sum_f64(a: &[f64]) -> f64 {
     if !is_x86_feature_detected!("avx2") {
@@ -497,8 +601,8 @@ pub unsafe fn sum_f64(a: &[f64]) -> f64 {
 
     let mut result = horizontal_sum_avx2_f64(sum);
 
-    for i in simd_len..len {
-        result += a[i];
+    for item in a.iter().take(len).skip(simd_len) {
+        result += item;
     }
 
     result

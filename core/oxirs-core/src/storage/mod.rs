@@ -13,6 +13,7 @@
 // pub mod columnar; // TODO: Add 'columnar' feature to Cargo.toml when ready
 pub mod compression;
 pub mod immutable;
+pub mod mmap_storage;
 pub mod mvcc;
 pub mod temporal;
 #[cfg(feature = "rocksdb")]

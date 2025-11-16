@@ -85,7 +85,7 @@ impl GpuAccelerator {
 
     #[allow(unused_variables)]
     fn create_cuda_stream(device_id: i32) -> Result<*mut std::ffi::c_void> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -103,7 +103,7 @@ impl GpuAccelerator {
             }
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             // Fallback: return a dummy handle for testing
             Ok(1 as *mut std::ffi::c_void)
@@ -176,7 +176,7 @@ impl GpuAccelerator {
         result_buffer: &GpuBuffer,
         params: &SimilarityKernelParams,
     ) -> Result<()> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             // Get or compile kernel
             let kernel = self.get_or_compile_kernel(kernel_name)?;
@@ -202,7 +202,7 @@ impl GpuAccelerator {
             )?;
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             // Fallback CPU implementation for testing
             self.compute_similarity_cpu(
@@ -217,7 +217,7 @@ impl GpuAccelerator {
         Ok(())
     }
 
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     fn compute_similarity_cpu(
         &self,
         _query_buffer: &GpuBuffer,
@@ -252,7 +252,7 @@ impl GpuAccelerator {
         Ok(())
     }
 
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     fn compute_cosine_similarity(&self, a: &[f32], b: &[f32]) -> f32 {
         let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -265,7 +265,7 @@ impl GpuAccelerator {
         }
     }
 
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     fn compute_euclidean_distance(&self, a: &[f32], b: &[f32]) -> f32 {
         a.iter()
             .zip(b.iter())
@@ -307,9 +307,8 @@ impl GpuAccelerator {
 
     #[allow(unused_variables)]
     fn compile_kernel(&self, name: &str, source: &str) -> Result<CudaKernel> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
-            use cuda_runtime_sys::*;
             // In a real implementation, this would use NVRTC or similar to compile CUDA kernels
             // For now, return a dummy kernel
             Ok(CudaKernel {
@@ -319,7 +318,7 @@ impl GpuAccelerator {
             })
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             Ok(CudaKernel {
                 function: std::ptr::null_mut(),
@@ -329,7 +328,7 @@ impl GpuAccelerator {
         }
     }
 
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", cuda_runtime_available))]
     fn launch_kernel_impl(
         &self,
         kernel: &CudaKernel,
@@ -385,7 +384,7 @@ impl GpuAccelerator {
 
     /// Synchronize all operations
     pub fn synchronize(&self) -> Result<()> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -405,7 +404,7 @@ impl GpuAccelerator {
 
     /// Get current GPU memory usage in bytes
     pub fn get_memory_usage(&self) -> Result<usize> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -418,7 +417,7 @@ impl GpuAccelerator {
                 Ok(total - free)
             }
         }
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             // Return dummy value for testing
             Ok(0)
@@ -429,7 +428,7 @@ impl GpuAccelerator {
 impl Drop for GpuAccelerator {
     fn drop(&mut self) {
         // Cleanup CUDA streams
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             for stream in &self.stream_pool {
                 unsafe {
@@ -444,14 +443,14 @@ impl Drop for GpuAccelerator {
 
 /// Check if GPU acceleration is available
 pub fn is_gpu_available() -> bool {
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", cuda_runtime_available))]
     {
         match crate::gpu::device::GpuDevice::get_all_devices() {
             Ok(devices) => !devices.is_empty(),
             Err(_) => false,
         }
     }
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     {
         false
     }

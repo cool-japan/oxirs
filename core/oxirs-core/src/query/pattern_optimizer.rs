@@ -425,6 +425,10 @@ impl PatternOptimizer {
                     }
                 }
             }
+            AlgebraTermPattern::QuotedTriple(_) => {
+                // RDF-star quoted triples - moderately selective (similar to named nodes)
+                selectivity *= 0.1;
+            }
         }
 
         // Apply bounds and handle edge cases
@@ -825,6 +829,11 @@ impl PatternExecutor {
             AlgebraTermPattern::Literal(_) => {
                 return Err(OxirsError::Query("Literal cannot be subject".to_string()))
             }
+            AlgebraTermPattern::QuotedTriple(_) => {
+                return Err(OxirsError::Query(
+                    "RDF-star quoted triples not yet fully supported".to_string(),
+                ))
+            }
         };
 
         let predicate = match &pattern.predicate {
@@ -850,6 +859,11 @@ impl PatternExecutor {
             AlgebraTermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
             AlgebraTermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             AlgebraTermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
+            AlgebraTermPattern::QuotedTriple(_) => {
+                return Err(OxirsError::Query(
+                    "RDF-star quoted triples not yet fully supported".to_string(),
+                ))
+            }
         };
 
         Ok(ModelTriplePattern::new(subject, predicate, object))

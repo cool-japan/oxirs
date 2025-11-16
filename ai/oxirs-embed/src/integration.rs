@@ -75,7 +75,7 @@ impl VectorStoreBridge {
         // Sync relation embeddings
         let relations = model.get_relations();
         for relation in &relations {
-            match model.getrelation_embedding(relation) {
+            match model.get_relation_embedding(relation) {
                 Ok(_embedding) => {
                     let uri = self.generate_relation_uri(relation);
                     self.relation_mappings.insert(relation.clone(), uri);

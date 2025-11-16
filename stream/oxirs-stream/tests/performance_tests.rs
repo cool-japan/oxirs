@@ -812,7 +812,7 @@ mod scalability_tests {
 
         for &partitions in &partition_counts {
             // This would require creating Kafka topics with different partition counts
-            let topic_name = format!("partition-scale-test-{partitions}");
+            let _topic_name = format!("partition-scale-test-{partitions}");
 
             let config = create_performance_stream_config(StreamBackendType::Kafka {
                 brokers: vec!["localhost:9092".to_string()],

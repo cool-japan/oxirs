@@ -232,21 +232,15 @@ fn test_jsonld_format() -> Result<(), Box<dyn std::error::Error>> {
     println!("     ✓ Combined profiles");
 
     // Test JSON-LD parser
-    let context = serde_json::json!({"@vocab": "http://example.org/"});
     let parser = JsonLdParser::new()
         .with_profile(streaming_profile.clone())
-        .with_context(context.clone())
-        .with_base_iri("http://example.org/")
-        .expand_context();
+        .with_base_iri("http://example.org/")?;
 
     println!("   Parser configuration:");
     println!(
         "     ✓ Profile: {} entries",
         parser.profile().profiles().len()
     );
-    println!("     ✓ Context: {}", parser.context().is_some());
-    println!("     ✓ Base IRI: {}", parser.base_iri().unwrap_or("None"));
-    println!("     ✓ Expand context: {}", parser.is_expand_context());
 
     // Test empty JSON parsing
     let empty_result = parser.parse_str("{}")?;
@@ -255,9 +249,7 @@ fn test_jsonld_format() -> Result<(), Box<dyn std::error::Error>> {
     // Test JSON-LD serializer
     let serializer = JsonLdSerializer::new()
         .with_profile(expanded_profile)
-        .with_context(context)
-        .with_base_iri("http://example.org/")
-        .compact()
+        .with_base_iri("http://example.org/")?
         .pretty();
 
     println!("   Serializer configuration:");
@@ -265,13 +257,6 @@ fn test_jsonld_format() -> Result<(), Box<dyn std::error::Error>> {
         "     ✓ Profile: {} entries",
         serializer.profile().profiles().len()
     );
-    println!("     ✓ Context: {}", serializer.context().is_some());
-    println!(
-        "     ✓ Base IRI: {}",
-        serializer.base_iri().unwrap_or("None")
-    );
-    println!("     ✓ Compact output: {}", serializer.is_compact());
-    println!("     ✓ Pretty formatting: {}", serializer.is_pretty());
 
     Ok(())
 }

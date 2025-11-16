@@ -367,7 +367,17 @@ impl Store {
     ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
         let sparql_upper = sparql.to_uppercase();
 
-        if sparql_upper.contains("CLEAR") {
+        if sparql_upper.contains("CREATE") {
+            self.execute_create_operation(store, sparql)
+        } else if sparql_upper.contains("DROP") {
+            self.execute_drop_operation(store, sparql)
+        } else if sparql_upper.contains("COPY") {
+            self.execute_copy_operation(store, sparql)
+        } else if sparql_upper.contains("MOVE") {
+            self.execute_move_operation(store, sparql)
+        } else if sparql_upper.contains("ADD") {
+            self.execute_add_operation(store, sparql)
+        } else if sparql_upper.contains("CLEAR") {
             self.execute_clear_operation(store, sparql)
         } else if sparql_upper.contains("INSERT DATA") {
             self.execute_insert_data_operation(store, sparql)
@@ -854,6 +864,437 @@ impl Store {
         Ok((source_iri, target_graph))
     }
 
+    /// Execute CREATE operation (SPARQL 1.1)
+    /// Syntax: CREATE [SILENT] GRAPH <graphIRI>
+    fn execute_create_operation(
+        &self,
+        _store: &mut dyn CoreStore,
+        sparql: &str,
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        info!("Executing CREATE operation: {}", sparql.trim());
+
+        let sparql_upper = sparql.to_uppercase();
+        let silent = sparql_upper.contains("SILENT");
+
+        // Extract graph IRI
+        let graph_iri = self.extract_graph_iri_for_management(sparql, "CREATE")?;
+
+        // In most RDF stores, graphs are created implicitly when data is added
+        // For now, we just acknowledge the creation intent
+        info!(
+            "Graph '{}' marked for creation (graphs are created implicitly on data insertion)",
+            graph_iri
+        );
+
+        if silent {
+            Ok(("CREATE SILENT", 0, 0, vec![graph_iri]))
+        } else {
+            Ok(("CREATE", 0, 0, vec![graph_iri]))
+        }
+    }
+
+    /// Execute DROP operation (SPARQL 1.1)
+    /// Syntax: DROP [SILENT] (GRAPH <graphIRI> | DEFAULT | NAMED | ALL)
+    fn execute_drop_operation(
+        &self,
+        store: &mut dyn CoreStore,
+        sparql: &str,
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        info!("Executing DROP operation: {}", sparql.trim());
+
+        let sparql_upper = sparql.to_uppercase();
+        let silent = sparql_upper.contains("SILENT");
+
+        // Handle DROP ALL
+        if sparql_upper.contains("DROP") && sparql_upper.contains("ALL") {
+            let quad_count = store.len().map_err(|e| {
+                FusekiError::update_execution(format!("Failed to get store size: {e}"))
+            })?;
+
+            store.clear_all().map_err(|e| {
+                FusekiError::update_execution(format!("Failed to drop all graphs: {e}"))
+            })?;
+
+            info!("Dropped all graphs: {} quads removed", quad_count);
+            return if silent {
+                Ok(("DROP SILENT ALL", 0, quad_count, vec!["*all*".to_string()]))
+            } else {
+                Ok(("DROP ALL", 0, quad_count, vec!["*all*".to_string()]))
+            };
+        }
+
+        // Handle DROP DEFAULT
+        if sparql_upper.contains("DROP") && sparql_upper.contains("DEFAULT") {
+            return if silent {
+                let result = self.clear_default_graph(store)?;
+                Ok(("DROP SILENT DEFAULT", result.1, result.2, result.3))
+            } else {
+                let result = self.clear_default_graph(store)?;
+                Ok(("DROP DEFAULT", result.1, result.2, result.3))
+            };
+        }
+
+        // Handle DROP NAMED (all named graphs)
+        if sparql_upper.contains("DROP") && sparql_upper.contains("NAMED") {
+            // Get all quads and filter out default graph
+            let all_quads_raw = store.find_quads(None, None, None, None).map_err(|e| {
+                FusekiError::update_execution(format!("Failed to query all quads: {e}"))
+            })?;
+
+            let all_quads: Vec<Quad> = all_quads_raw
+                .into_iter()
+                .filter(|quad| {
+                    !matches!(
+                        quad.graph_name(),
+                        oxirs_core::model::GraphName::DefaultGraph
+                    )
+                })
+                .collect();
+
+            let deleted_count = all_quads.len();
+            for quad in all_quads {
+                store.remove_quad(&quad).map_err(|e| {
+                    FusekiError::update_execution(format!("Failed to remove quad: {e}"))
+                })?;
+            }
+
+            info!("Dropped all named graphs: {} quads removed", deleted_count);
+            return if silent {
+                Ok((
+                    "DROP SILENT NAMED",
+                    0,
+                    deleted_count,
+                    vec!["*named*".to_string()],
+                ))
+            } else {
+                Ok(("DROP NAMED", 0, deleted_count, vec!["*named*".to_string()]))
+            };
+        }
+
+        // Handle DROP GRAPH <IRI>
+        if let Ok(graph_iri) = self.extract_graph_iri_for_management(sparql, "DROP") {
+            let result = self.clear_named_graph(store, &graph_iri)?;
+            return if silent {
+                Ok(("DROP SILENT GRAPH", result.1, result.2, result.3))
+            } else {
+                Ok(("DROP GRAPH", result.1, result.2, result.3))
+            };
+        }
+
+        Err(FusekiError::update_execution(
+            "Invalid DROP syntax: expected DROP [SILENT] (GRAPH <IRI> | DEFAULT | NAMED | ALL)"
+                .to_string(),
+        ))
+    }
+
+    /// Execute COPY operation (SPARQL 1.1)
+    /// Syntax: COPY [SILENT] (GRAPH <sourceIRI> | DEFAULT) TO (GRAPH <targetIRI> | DEFAULT)
+    fn execute_copy_operation(
+        &self,
+        store: &mut dyn CoreStore,
+        sparql: &str,
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        info!("Executing COPY operation: {}", sparql.trim());
+
+        let sparql_upper = sparql.to_uppercase();
+        let silent = sparql_upper.contains("SILENT");
+
+        // Parse source and target graphs
+        let (source_graph, target_graph) = self.parse_graph_management_statement(sparql, "COPY")?;
+
+        // Clear target graph first
+        self.clear_graph_by_name(store, &target_graph)?;
+
+        // Copy all quads from source to target
+        let source_quads = self.get_quads_from_graph(store, &source_graph)?;
+        let target_graph_name = self.graph_name_from_string(&target_graph)?;
+
+        let mut copied_count = 0;
+        for quad in &source_quads {
+            let new_quad = oxirs_core::model::Quad::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+                target_graph_name.clone(),
+            );
+
+            if store
+                .insert_quad(new_quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
+            {
+                copied_count += 1;
+            }
+        }
+
+        info!(
+            "Copied {} quads from '{}' to '{}'",
+            copied_count, source_graph, target_graph
+        );
+
+        if silent {
+            Ok((
+                "COPY SILENT",
+                copied_count,
+                0,
+                vec![source_graph, target_graph],
+            ))
+        } else {
+            Ok(("COPY", copied_count, 0, vec![source_graph, target_graph]))
+        }
+    }
+
+    /// Execute MOVE operation (SPARQL 1.1)
+    /// Syntax: MOVE [SILENT] (GRAPH <sourceIRI> | DEFAULT) TO (GRAPH <targetIRI> | DEFAULT)
+    fn execute_move_operation(
+        &self,
+        store: &mut dyn CoreStore,
+        sparql: &str,
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        info!("Executing MOVE operation: {}", sparql.trim());
+
+        let sparql_upper = sparql.to_uppercase();
+        let silent = sparql_upper.contains("SILENT");
+
+        // Parse source and target graphs
+        let (source_graph, target_graph) = self.parse_graph_management_statement(sparql, "MOVE")?;
+
+        // Clear target graph first
+        self.clear_graph_by_name(store, &target_graph)?;
+
+        // Copy all quads from source to target
+        let source_quads = self.get_quads_from_graph(store, &source_graph)?;
+        let target_graph_name = self.graph_name_from_string(&target_graph)?;
+
+        let mut moved_count = 0;
+        for quad in &source_quads {
+            let new_quad = oxirs_core::model::Quad::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+                target_graph_name.clone(),
+            );
+
+            if store
+                .insert_quad(new_quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
+            {
+                moved_count += 1;
+            }
+        }
+
+        // Delete source quads
+        for quad in source_quads {
+            store.remove_quad(&quad).map_err(|e| {
+                FusekiError::update_execution(format!("Failed to remove quad: {e}"))
+            })?;
+        }
+
+        info!(
+            "Moved {} quads from '{}' to '{}'",
+            moved_count, source_graph, target_graph
+        );
+
+        if silent {
+            Ok((
+                "MOVE SILENT",
+                moved_count,
+                moved_count,
+                vec![source_graph, target_graph],
+            ))
+        } else {
+            Ok((
+                "MOVE",
+                moved_count,
+                moved_count,
+                vec![source_graph, target_graph],
+            ))
+        }
+    }
+
+    /// Execute ADD operation (SPARQL 1.1)
+    /// Syntax: ADD [SILENT] (GRAPH <sourceIRI> | DEFAULT) TO (GRAPH <targetIRI> | DEFAULT)
+    fn execute_add_operation(
+        &self,
+        store: &mut dyn CoreStore,
+        sparql: &str,
+    ) -> FusekiResult<(&'static str, usize, usize, Vec<String>)> {
+        info!("Executing ADD operation: {}", sparql.trim());
+
+        let sparql_upper = sparql.to_uppercase();
+        let silent = sparql_upper.contains("SILENT");
+
+        // Parse source and target graphs
+        let (source_graph, target_graph) = self.parse_graph_management_statement(sparql, "ADD")?;
+
+        // Copy all quads from source to target (without clearing target)
+        let source_quads = self.get_quads_from_graph(store, &source_graph)?;
+        let target_graph_name = self.graph_name_from_string(&target_graph)?;
+
+        let mut added_count = 0;
+        for quad in &source_quads {
+            let new_quad = oxirs_core::model::Quad::new(
+                quad.subject().clone(),
+                quad.predicate().clone(),
+                quad.object().clone(),
+                target_graph_name.clone(),
+            );
+
+            if store
+                .insert_quad(new_quad)
+                .map_err(|e| FusekiError::update_execution(format!("Failed to insert quad: {e}")))?
+            {
+                added_count += 1;
+            }
+        }
+
+        info!(
+            "Added {} quads from '{}' to '{}'",
+            added_count, source_graph, target_graph
+        );
+
+        if silent {
+            Ok((
+                "ADD SILENT",
+                added_count,
+                0,
+                vec![source_graph, target_graph],
+            ))
+        } else {
+            Ok(("ADD", added_count, 0, vec![source_graph, target_graph]))
+        }
+    }
+
+    /// Helper: Extract graph IRI for graph management operations
+    fn extract_graph_iri_for_management(
+        &self,
+        sparql: &str,
+        operation: &str,
+    ) -> FusekiResult<String> {
+        let operation_upper = operation.to_uppercase();
+        let sparql_upper = sparql.to_uppercase();
+
+        // Find operation position
+        let op_pos = sparql_upper.find(&operation_upper).ok_or_else(|| {
+            FusekiError::update_execution(format!("Operation '{operation}' not found"))
+        })?;
+
+        let remaining = &sparql[op_pos + operation.len()..];
+
+        // Skip SILENT if present
+        let search_start = if remaining.trim_start().to_uppercase().starts_with("SILENT") {
+            &remaining[6..]
+        } else {
+            remaining
+        };
+
+        // Look for GRAPH keyword or direct IRI
+        let search_upper = search_start.to_uppercase();
+        let iri_start_pos = if let Some(graph_pos) = search_upper.find("GRAPH") {
+            &search_start[graph_pos + 5..]
+        } else {
+            search_start
+        };
+
+        // Extract IRI between < and >
+        let open_bracket = iri_start_pos
+            .find('<')
+            .ok_or_else(|| FusekiError::update_execution("Graph IRI not found".to_string()))?;
+        let close_bracket = iri_start_pos[open_bracket + 1..].find('>').ok_or_else(|| {
+            FusekiError::update_execution("Graph IRI closing '>' not found".to_string())
+        })?;
+
+        let iri = &iri_start_pos[open_bracket + 1..open_bracket + 1 + close_bracket];
+        Ok(iri.trim().to_string())
+    }
+
+    /// Helper: Parse graph management statement (COPY/MOVE/ADD)
+    fn parse_graph_management_statement(
+        &self,
+        sparql: &str,
+        operation: &str,
+    ) -> FusekiResult<(String, String)> {
+        let sparql_upper = sparql.to_uppercase();
+
+        // Find TO keyword
+        let to_pos = sparql_upper
+            .find(" TO ")
+            .ok_or_else(|| FusekiError::update_execution("TO keyword not found".to_string()))?;
+
+        let source_part = &sparql[..to_pos];
+        let target_part = &sparql[to_pos + 4..];
+
+        // Parse source
+        let source = if source_part.to_uppercase().contains("DEFAULT") {
+            "default".to_string()
+        } else if let Ok(iri) = self.extract_graph_iri_for_management(source_part, operation) {
+            iri
+        } else {
+            return Err(FusekiError::update_execution(
+                "Failed to parse source graph".to_string(),
+            ));
+        };
+
+        // Parse target
+        let target = if target_part.to_uppercase().contains("DEFAULT") {
+            "default".to_string()
+        } else {
+            // Find IRI in target part
+            let open_bracket = target_part.find('<').ok_or_else(|| {
+                FusekiError::update_execution("Target graph IRI not found".to_string())
+            })?;
+            let close_bracket = target_part[open_bracket + 1..].find('>').ok_or_else(|| {
+                FusekiError::update_execution("Target graph IRI closing '>' not found".to_string())
+            })?;
+            target_part[open_bracket + 1..open_bracket + 1 + close_bracket]
+                .trim()
+                .to_string()
+        };
+
+        Ok((source, target))
+    }
+
+    /// Helper: Get all quads from a graph (by name string)
+    fn get_quads_from_graph(
+        &self,
+        store: &dyn CoreStore,
+        graph_name: &str,
+    ) -> FusekiResult<Vec<Quad>> {
+        let graph_name_obj = self.graph_name_from_string(graph_name)?;
+
+        let quads = store
+            .find_quads(None, None, None, Some(&graph_name_obj))
+            .map_err(|e| FusekiError::update_execution(format!("Failed to query graph: {e}")))?;
+
+        Ok(quads)
+    }
+
+    /// Helper: Clear a graph by name string
+    fn clear_graph_by_name(
+        &self,
+        store: &mut dyn CoreStore,
+        graph_name: &str,
+    ) -> FusekiResult<usize> {
+        if graph_name == "default" {
+            let result = self.clear_default_graph(store)?;
+            Ok(result.2)
+        } else {
+            let result = self.clear_named_graph(store, graph_name)?;
+            Ok(result.2)
+        }
+    }
+
+    /// Helper: Convert graph name string to GraphName
+    fn graph_name_from_string(&self, name: &str) -> FusekiResult<oxirs_core::model::GraphName> {
+        if name == "default" {
+            Ok(oxirs_core::model::GraphName::DefaultGraph)
+        } else {
+            let named_node = oxirs_core::model::NamedNode::new(name).map_err(|e| {
+                FusekiError::update_execution(format!("Invalid graph IRI '{name}': {e}"))
+            })?;
+            Ok(oxirs_core::model::GraphName::NamedNode(named_node))
+        }
+    }
+
     /// Fetch RDF data from URL using HTTP
     async fn fetch_rdf_from_url(&self, url: &str) -> FusekiResult<(String, Option<String>)> {
         let response = reqwest::get(url).await.map_err(|e| {
@@ -980,13 +1421,82 @@ impl Store {
     }
 
     /// Parse data block into quads using simple N-Triples-like parsing
+    /// Handles both plain triples and GRAPH <iri> { triples } syntax
     fn parse_data_block(&self, data_block: &str) -> FusekiResult<Vec<Quad>> {
         let mut quads = Vec::new();
+        let data_block = data_block.trim();
 
-        // Use the oxirs-core parser for N-Triples format
+        // Check if this is a GRAPH block
+        let data_upper = data_block.to_uppercase();
+        if data_upper.starts_with("GRAPH") {
+            // Extract graph IRI and triples
+            let after_graph = &data_block[5..].trim_start();
+
+            // Find graph IRI between < and >
+            if let Some(open_bracket) = after_graph.find('<') {
+                if let Some(close_bracket) = after_graph[open_bracket + 1..].find('>') {
+                    let graph_iri =
+                        &after_graph[open_bracket + 1..open_bracket + 1 + close_bracket];
+
+                    // Find the triples block between { and }
+                    if let Some(open_brace) = after_graph.find('{') {
+                        if let Some(close_brace) = after_graph.rfind('}') {
+                            let triples_block = &after_graph[open_brace + 1..close_brace].trim();
+
+                            // Create graph name
+                            let graph_name =
+                                oxirs_core::model::NamedNode::new(graph_iri).map_err(|e| {
+                                    FusekiError::update_execution(format!("Invalid graph IRI: {e}"))
+                                })?;
+                            let graph_name_obj =
+                                oxirs_core::model::GraphName::NamedNode(graph_name);
+
+                            // Parse triples and convert to quads
+                            let parser = Parser::new(CoreRdfFormat::NTriples);
+                            for line in triples_block.lines() {
+                                let line = line.trim();
+                                if line.is_empty() || line.starts_with('#') {
+                                    continue;
+                                }
+
+                                let line_with_period = if line.ends_with('.') {
+                                    line.to_string()
+                                } else {
+                                    format!("{line}.")
+                                };
+
+                                match parser.parse_str_to_quads(&line_with_period) {
+                                    Ok(parsed_quads) => {
+                                        // Convert to quads with the specified graph
+                                        for quad in parsed_quads {
+                                            let new_quad = oxirs_core::model::Quad::new(
+                                                quad.subject().clone(),
+                                                quad.predicate().clone(),
+                                                quad.object().clone(),
+                                                graph_name_obj.clone(),
+                                            );
+                                            quads.push(new_quad);
+                                        }
+                                    }
+                                    Err(e) => {
+                                        warn!("Failed to parse line '{}': {}", line, e);
+                                    }
+                                }
+                            }
+
+                            return Ok(quads);
+                        }
+                    }
+                }
+            }
+
+            return Err(FusekiError::update_execution(
+                "Invalid GRAPH syntax in data block".to_string(),
+            ));
+        }
+
+        // Not a GRAPH block - parse as plain triples (default graph)
         let parser = Parser::new(CoreRdfFormat::NTriples);
-
-        // Parse each line as a potential triple
         for line in data_block.lines() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {

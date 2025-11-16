@@ -1,10 +1,10 @@
 //! # OxiRS CLI Tool
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs/badge.svg)](https://docs.rs/oxirs)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Command-line interface for OxiRS providing import, export, SPARQL queries,
 //! benchmarking, and server management tools.
@@ -87,13 +87,11 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-pub mod benchmark;
 pub mod cli;
 pub mod commands;
 pub mod config;
 pub mod export;
-pub mod import;
-pub mod server;
+pub mod profiling;
 pub mod tools;
 
 /// OxiRS CLI application
@@ -177,6 +175,9 @@ pub enum Commands {
         /// Named graph URI
         #[arg(short, long)]
         graph: Option<String>,
+        /// Resume from previous checkpoint if interrupted
+        #[arg(long)]
+        resume: bool,
     },
     /// Export RDF data
     Export {
@@ -190,6 +191,9 @@ pub enum Commands {
         /// Named graph URI
         #[arg(short, long)]
         graph: Option<String>,
+        /// Resume from previous checkpoint if interrupted
+        #[arg(long)]
+        resume: bool,
     },
     /// Execute SPARQL query
     Query {
@@ -200,7 +204,7 @@ pub enum Commands {
         /// Query is a file path
         #[arg(short, long)]
         file: bool,
-        /// Output format (json, csv, tsv, table)
+        /// Output format (json, csv, tsv, table, xml, html, markdown, md)
         #[arg(short, long, default_value = "table")]
         output: String,
     },
@@ -214,32 +218,56 @@ pub enum Commands {
         #[arg(short, long)]
         file: bool,
     },
-    /// Run performance benchmarks
+    /// Run performance benchmarks and generate benchmark datasets
     Benchmark {
-        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
-        dataset: String,
-        /// Benchmark suite (sp2bench, watdiv, ldbc)
-        #[arg(short, long, default_value = "sp2bench")]
-        suite: String,
-        /// Number of iterations
-        #[arg(short, long, default_value = "10")]
-        iterations: usize,
-        /// Output report file
-        #[arg(short, long)]
-        output: Option<PathBuf>,
+        #[command(subcommand)]
+        action: BenchmarkAction,
     },
-    /// Migrate data between formats/versions
+    /// Migrate data between formats/databases
     Migrate {
-        /// Source dataset path
-        source: PathBuf,
-        /// Target dataset path
-        target: PathBuf,
-        /// Source format
+        #[command(subcommand)]
+        action: MigrateAction,
+    },
+    /// Generate synthetic RDF datasets for testing and benchmarking
+    Generate {
+        /// Output file path
+        output: PathBuf,
+        /// Dataset size (tiny/small/medium/large/xlarge or number)
+        #[arg(short, long, default_value = "small")]
+        size: String,
+        /// Dataset type (rdf/graph/semantic/bibliographic/geographic/organizational)
+        #[arg(short = 't', long, default_value = "rdf")]
+        r#type: String,
+        /// Output format (turtle, ntriples, rdfxml, jsonld, trig, nquads, n3)
+        #[arg(short, long, default_value = "turtle")]
+        format: String,
+        /// Random seed for reproducibility
         #[arg(long)]
-        from: String,
-        /// Target format
+        seed: Option<u64>,
+        /// SHACL/RDFS/OWL schema file for constrained generation
         #[arg(long)]
-        to: String,
+        schema: Option<PathBuf>,
+    },
+    /// Manage database indexes for query performance
+    Index {
+        #[command(subcommand)]
+        action: IndexAction,
+    },
+    /// Export RDF graph visualization
+    Visualize {
+        /// Dataset name or path
+        dataset: String,
+        /// Output file path
+        output: PathBuf,
+        /// Visualization format (dot/graphviz, mermaid/mmd, cytoscape/json)
+        #[arg(short, long, default_value = "dot")]
+        format: String,
+        /// Specific graph to export (omit for all graphs)
+        #[arg(short, long)]
+        graph: Option<String>,
+        /// Maximum number of nodes to include
+        #[arg(long, default_value = "1000")]
+        max_nodes: Option<usize>,
     },
     /// Manage server configuration
     Config {
@@ -487,7 +515,7 @@ pub enum Commands {
         format: String,
     },
 
-    /// Database backup utilities
+    /// Database backup utilities with encryption support
     TdbBackup {
         /// Source dataset location
         source: PathBuf,
@@ -499,6 +527,18 @@ pub enum Commands {
         /// Incremental backup
         #[arg(long)]
         incremental: bool,
+        /// Encrypt backup with AES-256-GCM
+        #[arg(long)]
+        encrypt: bool,
+        /// Password for encryption (prompted if not provided)
+        #[arg(long, requires = "encrypt")]
+        password: Option<String>,
+        /// Keyfile for encryption (alternative to password)
+        #[arg(long, requires = "encrypt", conflicts_with = "password")]
+        keyfile: Option<PathBuf>,
+        /// Generate a new encryption keyfile
+        #[arg(long, conflicts_with_all = ["encrypt", "password"])]
+        generate_keyfile: Option<PathBuf>,
     },
 
     /// Database compaction
@@ -508,6 +548,12 @@ pub enum Commands {
         /// Delete logs after compaction
         #[arg(long)]
         delete_old: bool,
+    },
+
+    /// Point-in-Time Recovery (PITR) operations
+    Pitr {
+        #[command(subcommand)]
+        action: PitrAction,
     },
 
     // === Validation Tools ===
@@ -727,6 +773,112 @@ pub enum Commands {
         #[command(subcommand)]
         action: HistoryAction,
     },
+
+    /// CI/CD integration tools
+    Cicd {
+        #[command(subcommand)]
+        action: CicdAction,
+    },
+
+    /// Command alias management
+    Alias {
+        #[command(subcommand)]
+        action: AliasAction,
+    },
+
+    /// ReBAC relationship management
+    Rebac(commands::rebac::RebacArgs),
+}
+
+/// CI/CD integration actions
+#[derive(Subcommand)]
+pub enum CicdAction {
+    /// Generate test report from benchmark results
+    Report {
+        /// Input benchmark results file (JSON)
+        input: PathBuf,
+        /// Output report file
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Report format (junit, tap, json)
+        #[arg(short, long, default_value = "junit")]
+        format: String,
+    },
+    /// Generate Docker integration files
+    Docker {
+        /// Output directory for Docker files
+        #[arg(short, long, default_value = ".")]
+        output: PathBuf,
+    },
+    /// Generate GitHub Actions workflow
+    Github {
+        /// Output file path
+        #[arg(short, long, default_value = ".github/workflows/ci.yml")]
+        output: PathBuf,
+    },
+    /// Generate GitLab CI configuration
+    Gitlab {
+        /// Output file path
+        #[arg(short, long, default_value = ".gitlab-ci.yml")]
+        output: PathBuf,
+    },
+}
+
+/// Alias management actions
+#[derive(Subcommand)]
+pub enum AliasAction {
+    /// List all aliases
+    List,
+    /// Show a specific alias
+    Show {
+        /// Alias name
+        name: String,
+    },
+    /// Add or update an alias
+    Add {
+        /// Alias name
+        name: String,
+        /// Command to alias
+        command: String,
+    },
+    /// Remove an alias
+    Remove {
+        /// Alias name
+        name: String,
+    },
+    /// Reset aliases to defaults
+    Reset,
+}
+
+/// Index management actions
+#[derive(Subcommand)]
+pub enum IndexAction {
+    /// List all indexes in a dataset
+    List {
+        /// Dataset name or path
+        dataset: String,
+    },
+    /// Rebuild indexes for better performance
+    Rebuild {
+        /// Dataset name or path
+        dataset: String,
+        /// Specific index name to rebuild (omit to rebuild all)
+        #[arg(long)]
+        index: Option<String>,
+    },
+    /// Show detailed index statistics
+    Stats {
+        /// Dataset name or path
+        dataset: String,
+        /// Output format (text, json, csv)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Optimize indexes to reduce fragmentation
+    Optimize {
+        /// Dataset name or path
+        dataset: String,
+    },
 }
 
 /// Configuration management actions
@@ -808,6 +960,213 @@ pub enum HistoryAction {
     Clear,
     /// Show history statistics
     Stats,
+}
+
+/// Migration actions for converting between databases and formats
+#[derive(Subcommand)]
+pub enum MigrateAction {
+    /// Convert RDF data between formats (turtle, ntriples, etc.)
+    Format {
+        /// Source file path
+        source: PathBuf,
+        /// Target file path
+        target: PathBuf,
+        /// Source format
+        #[arg(long)]
+        from: String,
+        /// Target format
+        #[arg(long)]
+        to: String,
+    },
+    /// Migrate from Apache Jena TDB1 database to OxiRS
+    FromTdb1 {
+        /// TDB1 database directory
+        tdb_dir: PathBuf,
+        /// Target OxiRS dataset name
+        dataset: String,
+        /// Skip validation (faster but less safe)
+        #[arg(long)]
+        skip_validation: bool,
+    },
+    /// Migrate from Apache Jena TDB2 database to OxiRS
+    FromTdb2 {
+        /// TDB2 database directory
+        tdb_dir: PathBuf,
+        /// Target OxiRS dataset name
+        dataset: String,
+        /// Skip validation (faster but less safe)
+        #[arg(long)]
+        skip_validation: bool,
+    },
+    /// Migrate from Virtuoso database to OxiRS
+    FromVirtuoso {
+        /// Virtuoso connection string
+        connection: String,
+        /// Target OxiRS dataset name
+        dataset: String,
+        /// Graph URIs to migrate (comma-separated, or 'all')
+        #[arg(long, default_value = "all")]
+        graphs: String,
+    },
+    /// Migrate from RDF4J repository to OxiRS
+    FromRdf4j {
+        /// RDF4J repository directory
+        repo_dir: PathBuf,
+        /// Target OxiRS dataset name
+        dataset: String,
+    },
+    /// Migrate from Blazegraph database to OxiRS
+    FromBlazegraph {
+        /// Blazegraph SPARQL endpoint URL
+        endpoint: String,
+        /// Target OxiRS dataset name
+        dataset: String,
+        /// Namespace to migrate
+        #[arg(long, default_value = "kb")]
+        namespace: String,
+    },
+    /// Migrate from Ontotext GraphDB to OxiRS
+    FromGraphdb {
+        /// GraphDB SPARQL endpoint URL
+        endpoint: String,
+        /// Target OxiRS dataset name
+        dataset: String,
+        /// Repository name
+        #[arg(long)]
+        repository: String,
+    },
+}
+
+/// Point-in-Time Recovery (PITR) actions
+#[derive(Subcommand)]
+pub enum PitrAction {
+    /// Initialize transaction logging for a dataset
+    Init {
+        /// Dataset directory
+        dataset: PathBuf,
+        /// Maximum log file size in MB
+        #[arg(long, default_value = "100")]
+        max_log_size: u64,
+        /// Enable auto-archival of old logs
+        #[arg(long)]
+        auto_archive: bool,
+    },
+    /// Create a named checkpoint
+    Checkpoint {
+        /// Dataset directory
+        dataset: PathBuf,
+        /// Checkpoint name
+        name: String,
+    },
+    /// List available checkpoints
+    List {
+        /// Dataset directory
+        dataset: PathBuf,
+        /// Output format (text, json)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
+    /// Recover to a specific point in time
+    RecoverTimestamp {
+        /// Dataset directory
+        dataset: PathBuf,
+        /// Target timestamp (ISO 8601 format: 2024-01-01T12:00:00Z)
+        timestamp: String,
+        /// Output directory for recovered data
+        output: PathBuf,
+    },
+    /// Recover to a specific transaction ID
+    RecoverTransaction {
+        /// Dataset directory
+        dataset: PathBuf,
+        /// Target transaction ID
+        transaction_id: u64,
+        /// Output directory for recovered data
+        output: PathBuf,
+    },
+    /// Archive transaction logs
+    Archive {
+        /// Dataset directory
+        dataset: PathBuf,
+    },
+}
+
+/// Benchmark actions for performance testing and dataset generation
+#[derive(Subcommand)]
+pub enum BenchmarkAction {
+    /// Run benchmark suite on a dataset
+    Run {
+        /// Target dataset (alphanumeric, _, - only; no dots or extensions)
+        dataset: String,
+        /// Benchmark suite (sp2bench, watdiv, ldbc, bsbm, custom)
+        #[arg(short, long, default_value = "sp2bench")]
+        suite: String,
+        /// Number of iterations
+        #[arg(short, long, default_value = "10")]
+        iterations: usize,
+        /// Output report file
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Enable detailed timing information
+        #[arg(long)]
+        detailed: bool,
+        /// Warmup iterations before benchmarking
+        #[arg(long, default_value = "3")]
+        warmup: usize,
+    },
+    /// Generate synthetic benchmark datasets
+    Generate {
+        /// Output dataset path
+        output: PathBuf,
+        /// Dataset size (tiny, small, medium, large, xlarge)
+        #[arg(short, long, default_value = "small")]
+        size: String,
+        /// Dataset type (rdf, graph, semantic)
+        #[arg(short = 't', long, default_value = "rdf")]
+        dataset_type: String,
+        /// Random seed for reproducibility
+        #[arg(long)]
+        seed: Option<u64>,
+        /// Number of triples to generate
+        #[arg(long)]
+        triples: Option<usize>,
+        /// Schema file for constrained generation
+        #[arg(long)]
+        schema: Option<PathBuf>,
+    },
+    /// Analyze query workload from log files
+    Analyze {
+        /// Query log file or dataset
+        input: PathBuf,
+        /// Output analysis report
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Report format (text, json, html)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+        /// Include query optimization suggestions
+        #[arg(long)]
+        suggestions: bool,
+        /// Analyze patterns and frequencies
+        #[arg(long)]
+        patterns: bool,
+    },
+    /// Compare benchmark results for regression detection
+    Compare {
+        /// Baseline benchmark results file
+        baseline: PathBuf,
+        /// Current benchmark results file
+        current: PathBuf,
+        /// Output comparison report
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Regression threshold percentage
+        #[arg(long, default_value = "10.0")]
+        threshold: f64,
+        /// Report format (text, json, html)
+        #[arg(short, long, default_value = "text")]
+        format: String,
+    },
 }
 
 /// SAMM Aspect Model actions (Java ESMF SDK compatible)
@@ -1044,7 +1403,8 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             file,
             format,
             graph,
-        } => commands::import::run(dataset, file, format, graph)
+            resume,
+        } => commands::import::run(dataset, file, format, graph, resume)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Export {
@@ -1052,7 +1412,8 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             file,
             format,
             graph,
-        } => commands::export::run(dataset, file, format, graph)
+            resume,
+        } => commands::export::run(dataset, file, format, graph, resume)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Query {
@@ -1070,20 +1431,127 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         } => commands::update::run(dataset, update, file)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
-        Commands::Benchmark {
-            dataset,
-            suite,
-            iterations,
+        Commands::Benchmark { action } => match action {
+            BenchmarkAction::Run {
+                dataset,
+                suite,
+                iterations,
+                output,
+                detailed,
+                warmup,
+            } => commands::benchmark::run(dataset, suite, iterations, output, detailed, warmup)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            BenchmarkAction::Generate {
+                output,
+                size,
+                dataset_type,
+                seed,
+                triples,
+                schema,
+            } => commands::benchmark::generate(output, size, dataset_type, seed, triples, schema)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            BenchmarkAction::Analyze {
+                input,
+                output,
+                format,
+                suggestions,
+                patterns,
+            } => commands::benchmark::analyze(input, output, format, suggestions, patterns)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            BenchmarkAction::Compare {
+                baseline,
+                current,
+                output,
+                threshold,
+                format,
+            } => commands::benchmark::compare(baseline, current, output, threshold, format)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        },
+        Commands::Migrate { action } => match action {
+            MigrateAction::Format {
+                source,
+                target,
+                from,
+                to,
+            } => commands::migrate::format(source, target, from, to)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            MigrateAction::FromTdb1 {
+                tdb_dir,
+                dataset,
+                skip_validation,
+            } => commands::migrate::from_tdb1(tdb_dir, dataset, skip_validation)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            MigrateAction::FromTdb2 {
+                tdb_dir,
+                dataset,
+                skip_validation,
+            } => commands::migrate::from_tdb2(tdb_dir, dataset, skip_validation)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            MigrateAction::FromVirtuoso {
+                connection,
+                dataset,
+                graphs,
+            } => commands::migrate::from_virtuoso(connection, dataset, graphs)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            MigrateAction::FromRdf4j { repo_dir, dataset } => {
+                commands::migrate::from_rdf4j(repo_dir, dataset)
+                    .await
+                    .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+            }
+            MigrateAction::FromBlazegraph {
+                endpoint,
+                dataset,
+                namespace,
+            } => commands::migrate::from_blazegraph(endpoint, dataset, namespace)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            MigrateAction::FromGraphdb {
+                endpoint,
+                dataset,
+                repository,
+            } => commands::migrate::from_graphdb(endpoint, dataset, repository)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        },
+        Commands::Generate {
             output,
-        } => commands::benchmark::run(dataset, suite, iterations, output)
+            size,
+            r#type,
+            format,
+            seed,
+            schema,
+        } => commands::generate::run(output, size, r#type, format, seed, schema)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
-        Commands::Migrate {
-            source,
-            target,
-            from,
-            to,
-        } => commands::migrate::run(source, target, from, to)
+        Commands::Index { action } => match action {
+            IndexAction::List { dataset } => commands::index::list(dataset)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            IndexAction::Rebuild { dataset, index } => commands::index::rebuild(dataset, index)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            IndexAction::Stats { dataset, format } => commands::index::stats(dataset, format)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+            IndexAction::Optimize { dataset } => commands::index::optimize(dataset)
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
+        },
+        Commands::Visualize {
+            dataset,
+            output,
+            format,
+            graph,
+            max_nodes,
+        } => commands::visualize::export(dataset, output, format, graph, max_nodes)
             .await
             .map_err(|e| Box::new(e) as Box<dyn std::error::Error>),
         Commands::Config { action } => commands::config::run(action)
@@ -1203,11 +1671,184 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             target,
             compress,
             incremental,
-        } => tools::tdbbackup::run(source, target, compress, incremental).await,
+            encrypt,
+            password,
+            keyfile,
+            generate_keyfile,
+        } => {
+            use tools::backup_encryption;
+
+            // Handle keyfile generation
+            if let Some(keyfile_path) = generate_keyfile {
+                println!("Generating encryption keyfile...");
+                backup_encryption::generate_keyfile(&keyfile_path)?;
+                println!(
+                    "Keyfile generated successfully at: {}",
+                    keyfile_path.display()
+                );
+                println!(
+                    "⚠️  Keep this keyfile secure! Loss of the keyfile means loss of data access."
+                );
+                return Ok(());
+            }
+
+            // Clone target for encryption if needed
+            let target_for_encryption = target.clone();
+
+            // Run backup
+            tools::tdbbackup::run(source, target, compress, incremental).await?;
+
+            // Encrypt backup if requested
+            if encrypt {
+                use dialoguer::Password;
+
+                println!("\nEncrypting backup...");
+                let backup_file = &target_for_encryption;
+                let encrypted_file = backup_file.with_extension("oxirs.enc");
+
+                let encryption_config = if let Some(ref pwd) = password {
+                    backup_encryption::EncryptionConfig {
+                        password: Some(pwd.clone()),
+                        keyfile: None,
+                        verify: true,
+                    }
+                } else if let Some(ref kf) = keyfile {
+                    backup_encryption::EncryptionConfig {
+                        password: None,
+                        keyfile: Some(kf.clone()),
+                        verify: true,
+                    }
+                } else {
+                    // Prompt for password
+                    let pwd = Password::new()
+                        .with_prompt("Enter encryption password")
+                        .with_confirmation("Confirm password", "Passwords don't match")
+                        .interact()?;
+
+                    backup_encryption::EncryptionConfig {
+                        password: Some(pwd),
+                        keyfile: None,
+                        verify: true,
+                    }
+                };
+
+                backup_encryption::encrypt_backup(
+                    backup_file,
+                    &encrypted_file,
+                    &encryption_config,
+                )?;
+                println!(
+                    "✓ Backup encrypted successfully: {}",
+                    encrypted_file.display()
+                );
+            }
+            Ok(())
+        }
         Commands::TdbCompact {
             location,
             delete_old,
         } => tools::tdbcompact::run(location, delete_old).await,
+
+        Commands::Pitr { action } => {
+            use chrono::{DateTime, Utc};
+            use tools::pitr::{PitrConfig, TransactionLog};
+
+            match action {
+                PitrAction::Init {
+                    dataset,
+                    max_log_size,
+                    auto_archive,
+                } => {
+                    println!("Initializing PITR for dataset: {}", dataset.display());
+                    let config = PitrConfig {
+                        log_dir: dataset.join("pitr/logs"),
+                        archive_dir: dataset.join("pitr/archive"),
+                        max_log_size: max_log_size * 1_048_576, // Convert MB to bytes
+                        auto_archive,
+                    };
+                    let _log = TransactionLog::new(config)?;
+                    println!("✓ PITR initialized successfully");
+                }
+                PitrAction::Checkpoint { dataset, name } => {
+                    let config = PitrConfig {
+                        log_dir: dataset.join("pitr/logs"),
+                        archive_dir: dataset.join("pitr/archive"),
+                        max_log_size: 100_000_000,
+                        auto_archive: false,
+                    };
+                    let log = TransactionLog::new(config)?;
+                    let checkpoint_path = log.create_checkpoint(&name)?;
+                    println!("✓ Checkpoint created: {}", checkpoint_path.display());
+                }
+                PitrAction::List { dataset, format } => {
+                    let config = PitrConfig {
+                        log_dir: dataset.join("pitr/logs"),
+                        archive_dir: dataset.join("pitr/archive"),
+                        max_log_size: 100_000_000,
+                        auto_archive: false,
+                    };
+                    let log = TransactionLog::new(config)?;
+                    let checkpoints = log.list_checkpoints()?;
+
+                    if format == "json" {
+                        println!("{}", serde_json::to_string_pretty(&checkpoints)?);
+                    } else {
+                        println!("Available Checkpoints:");
+                        println!("{:-<80}", "");
+                        for cp in checkpoints {
+                            println!("Name: {}", cp.name);
+                            println!("  Timestamp: {}", cp.timestamp.to_rfc3339());
+                            println!("  Last Transaction ID: {}", cp.last_transaction_id);
+                            println!("  Log Files: {}", cp.log_files.len());
+                            println!();
+                        }
+                    }
+                }
+                PitrAction::RecoverTimestamp {
+                    dataset,
+                    timestamp,
+                    output,
+                } => {
+                    let target_time: DateTime<Utc> = timestamp.parse()?;
+                    let config = PitrConfig {
+                        log_dir: dataset.join("pitr/logs"),
+                        archive_dir: dataset.join("pitr/archive"),
+                        max_log_size: 100_000_000,
+                        auto_archive: false,
+                    };
+                    let log = TransactionLog::new(config)?;
+                    let count = log.recover_to_timestamp(target_time, &output)?;
+                    println!("✓ Recovered {} transactions to {}", count, output.display());
+                }
+                PitrAction::RecoverTransaction {
+                    dataset,
+                    transaction_id,
+                    output,
+                } => {
+                    let config = PitrConfig {
+                        log_dir: dataset.join("pitr/logs"),
+                        archive_dir: dataset.join("pitr/archive"),
+                        max_log_size: 100_000_000,
+                        auto_archive: false,
+                    };
+                    let log = TransactionLog::new(config)?;
+                    let count = log.recover_to_transaction(transaction_id, &output)?;
+                    println!("✓ Recovered {} transactions to {}", count, output.display());
+                }
+                PitrAction::Archive { dataset } => {
+                    let config = PitrConfig {
+                        log_dir: dataset.join("pitr/logs"),
+                        archive_dir: dataset.join("pitr/archive"),
+                        max_log_size: 100_000_000,
+                        auto_archive: false,
+                    };
+                    let mut log = TransactionLog::new(config)?;
+                    let archived = log.archive_logs()?;
+                    println!("✓ Archived {} log files", archived);
+                }
+            }
+            Ok(())
+        }
 
         // Validation Tools
         Commands::Shacl {
@@ -1360,5 +2001,40 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 .await
                 .map_err(|e| e.into()),
         },
+        Commands::Cicd { action } => match action {
+            CicdAction::Report {
+                input,
+                output,
+                format,
+            } => commands::cicd::generate_test_report(input, output, format)
+                .await
+                .map_err(|e| e.into()),
+            CicdAction::Docker { output } => commands::cicd::generate_docker_files(output)
+                .await
+                .map_err(|e| e.into()),
+            CicdAction::Github { output } => commands::cicd::generate_github_workflow(output)
+                .await
+                .map_err(|e| e.into()),
+            CicdAction::Gitlab { output } => commands::cicd::generate_gitlab_ci(output)
+                .await
+                .map_err(|e| e.into()),
+        },
+        Commands::Alias { action } => match action {
+            AliasAction::List => commands::alias::list().await.map_err(|e| e.into()),
+            AliasAction::Show { name } => commands::alias::show(name.clone())
+                .await
+                .map_err(|e| e.into()),
+            AliasAction::Add { name, command } => {
+                commands::alias::add(name.clone(), command.clone())
+                    .await
+                    .map_err(|e| e.into())
+            }
+            AliasAction::Remove { name } => commands::alias::remove(name.clone())
+                .await
+                .map_err(|e| e.into()),
+            AliasAction::Reset => commands::alias::reset().await.map_err(|e| e.into()),
+        },
+
+        Commands::Rebac(args) => commands::rebac::execute(args).await.map_err(|e| e.into()),
     }
 }

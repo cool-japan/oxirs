@@ -1,12 +1,12 @@
 # OxiRS SHACL 🔍
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
+✨ **Beta Software**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 A high-performance SHACL (Shapes Constraint Language) validator for RDF data, implemented in Rust as part of the OxiRS ecosystem. Currently in active development with core constraint support implemented.
 
@@ -38,8 +38,8 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-shacl = "0.1.0-alpha.3"
-oxirs-core = "0.1.0-alpha.3"
+oxirs-shacl = "0.1.0-beta.1"
+oxirs-core = "0.1.0-beta.1"
 ```
 
 ### Basic Usage

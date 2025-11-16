@@ -43,9 +43,9 @@ Beta.1 maintains **99% backward compatibility** with Alpha.3. Most applications 
 ```toml
 # Before (Alpha.3)
 [dependencies]
-oxirs-core = "0.1.0-alpha.3"
-oxirs-arq = "0.1.0-alpha.3"
-oxirs-fuseki = "0.1.0-alpha.3"
+oxirs-core = "0.1.0-beta.1"
+oxirs-arq = "0.1.0-beta.1"
+oxirs-fuseki = "0.1.0-beta.1"
 
 # After (Beta.1)
 [dependencies]

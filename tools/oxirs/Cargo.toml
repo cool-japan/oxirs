@@ -28,6 +28,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+reqwest.workspace = true  # HTTP client for triplestore migrations
 # rand functionality now provided by scirs2-core (use scirs2_core::random)
 uuid = "1.18"       # UUID generation
 sysinfo = "0.30"    # System information
@@ -41,7 +42,8 @@ rustyline = "17.0"  # Interactive mode
 rustyline-derive = "0.11"  # Helper derive macros
 strsim = "0.11"     # String similarity for suggestions
 atty = "0.2"        # Terminal detection
-regex = "1.11"      # Pattern matching for validation
+regex = "1.12"      # Pattern matching for validation
+once_cell = "1.21"  # Lazy static initialization
 url = "2.5"         # URL parsing and validation
 dirs = "6.0"        # Platform-specific directories
 clap_complete = "4.4"  # Shell completion support
@@ -50,8 +52,16 @@ unicode-width = "0.2"  # Unicode text width
 terminal_size = "0.4"  # Terminal dimensions
 shlex = "1.3"       # Shell-like parsing
 ring = "0.17"       # Cryptography for secrets
+aes-gcm = "0.10"    # AES-256-GCM encryption for backups
+argon2 = "0.5"      # Argon2 key derivation for backup encryption
 chrono = { version = "0.4", features = ["serde"] }  # Date/time handling
 dialoguer = "0.12"  # Interactive prompts
+flate2 = "1.1"      # Gzip compression/decompression
+hostname = "0.4"    # System hostname for test reports
+md5 = "0.8"         # MD5 hashing for checkpoint filenames
+hex = "0.4"         # Hex encoding for checksums
+rust_xlsxwriter = "0.66"  # Excel XLSX file generation
+inferno = "0.11"    # Flame graph generation for profiling
 
 [dev-dependencies]
 criterion.workspace = true

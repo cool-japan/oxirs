@@ -600,6 +600,10 @@ impl PatternEmbedder {
             AlgebraTermPattern::NamedNode(n) => format!("NODE_{}", n.as_str()),
             AlgebraTermPattern::Literal(l) => format!("LIT_{}", l.value()),
             AlgebraTermPattern::BlankNode(b) => format!("BLANK_{}", b.as_str()),
+            AlgebraTermPattern::QuotedTriple(triple) => {
+                // RDF-star quoted triple - convert to string representation
+                format!("QUOTED_TRIPLE_{:?}", triple)
+            }
         }
     }
 
@@ -1168,6 +1172,23 @@ impl NeuralTransformerPatternIntegration {
         }
 
         Ok(())
+    }
+
+    /// Process pattern embeddings through the transformer
+    ///
+    /// This method takes raw pattern embeddings and processes them through
+    /// the transformer architecture to produce attention-enhanced embeddings.
+    pub fn process_pattern_embeddings(&mut self, embeddings: &Array2<f64>) -> Result<Array2<f64>> {
+        // Apply positional encoding
+        let positioned_embeddings = self.apply_positional_encoding(embeddings)?;
+
+        // Process through transformer encoder
+        let enhanced_embeddings = self.transformer_encode(&positioned_embeddings)?;
+
+        // Update statistics
+        self.stats.attention_computations += embeddings.shape()[0];
+
+        Ok(enhanced_embeddings)
     }
 
     /// Get performance statistics

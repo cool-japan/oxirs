@@ -255,7 +255,7 @@ mod kafka_backend_tests {
     #[ignore] // Requires Kafka server
     async fn test_kafka_backend_integration() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Kafka {
+        let config = create_test_stream_config(StreamBackendType::Kafka {
             brokers: vec![test_config.kafka_url],
             security_protocol: None,
             sasl_config: None,
@@ -292,7 +292,7 @@ mod kafka_backend_tests {
     #[ignore] // Requires Kafka server
     async fn test_kafka_transaction_support() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Kafka {
+        let config = create_test_stream_config(StreamBackendType::Kafka {
             brokers: vec![test_config.kafka_url],
             security_protocol: None,
             sasl_config: None,
@@ -332,7 +332,7 @@ mod nats_backend_tests {
     #[ignore] // Requires NATS server
     async fn test_nats_jetstream_integration() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Nats {
+        let config = create_test_stream_config(StreamBackendType::Nats {
             url: test_config.nats_url,
             cluster_urls: None,
             jetstream_config: Some(NatsJetStreamConfig {
@@ -368,7 +368,7 @@ mod nats_backend_tests {
     #[ignore] // Requires NATS server
     async fn test_nats_consumer_groups() -> Result<()> {
         let test_config = TestConfig::default();
-        let config1 = create_test_stream_config(StreamBackend::Nats {
+        let config1 = create_test_stream_config(StreamBackendType::Nats {
             url: test_config.nats_url.clone(),
             cluster_urls: None,
             jetstream_config: Some(NatsJetStreamConfig {
@@ -426,7 +426,7 @@ mod redis_backend_tests {
     #[ignore] // Requires Redis server
     async fn test_redis_streams_integration() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Redis {
+        let config = create_test_stream_config(StreamBackendType::Redis {
             url: test_config.redis_url,
             cluster_urls: None,
             pool_size: Some(5),
@@ -462,7 +462,7 @@ mod redis_backend_tests {
             "redis://localhost:7002".to_string(),
         ];
 
-        let config = create_test_stream_config(StreamBackend::Redis {
+        let config = create_test_stream_config(StreamBackendType::Redis {
             url: "redis://localhost:7000".to_string(),
             cluster_urls: Some(cluster_urls),
             pool_size: Some(10),
@@ -499,7 +499,7 @@ mod pulsar_backend_tests {
     #[ignore] // Requires Pulsar server
     async fn test_pulsar_integration() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Pulsar {
+        let config = create_test_stream_config(StreamBackendType::Pulsar {
             service_url: test_config.pulsar_url,
             auth_config: None,
         });
@@ -529,7 +529,7 @@ mod pulsar_backend_tests {
     #[ignore] // Requires Pulsar server with auth
     async fn test_pulsar_authentication() -> Result<()> {
         let test_config = TestConfig::default();
-        let mut config = create_test_stream_config(StreamBackend::Pulsar {
+        let mut config = create_test_stream_config(StreamBackendType::Pulsar {
             service_url: test_config.pulsar_url,
             auth_config: None,
         });
@@ -565,7 +565,7 @@ mod kinesis_backend_tests {
     #[ignore] // Requires AWS credentials and Kinesis
     async fn test_kinesis_integration() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Kinesis {
+        let config = create_test_stream_config(StreamBackendType::Kinesis {
             region: test_config.kinesis_region,
             stream_name: "test-kinesis-stream".to_string(),
             credentials: None,
@@ -589,7 +589,7 @@ mod kinesis_backend_tests {
             }
         }
 
-        assert!(received_events.len() > 0); // Should receive at least some events
+        assert!(!received_events.is_empty()); // Should receive at least some events
 
         stream.close().await?;
         Ok(())
@@ -599,7 +599,7 @@ mod kinesis_backend_tests {
     #[ignore] // Requires AWS credentials
     async fn test_kinesis_enhanced_fanout() -> Result<()> {
         let test_config = TestConfig::default();
-        let config = create_test_stream_config(StreamBackend::Kinesis {
+        let config = create_test_stream_config(StreamBackendType::Kinesis {
             region: test_config.kinesis_region,
             stream_name: "test-enhanced-fanout".to_string(),
             credentials: None,

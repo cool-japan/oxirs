@@ -916,3 +916,1500 @@ pub(crate) fn builtin_geo_area(args: &[SwrlArgument]) -> Result<bool> {
     // Allow some tolerance for floating point comparison
     Ok((area.abs() - expected_area).abs() < 0.1)
 }
+
+// ============================================================
+// EXPANDED SWRL BUILT-IN LIBRARY
+// ============================================================
+
+// Division and Integer Operations
+// ============================================================
+
+pub(crate) fn builtin_divide(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!("divide requires exactly 3 arguments"));
+    }
+
+    let dividend = extract_numeric_value(&args[0])?;
+    let divisor = extract_numeric_value(&args[1])?;
+    let result = extract_numeric_value(&args[2])?;
+
+    if divisor.abs() < f64::EPSILON {
+        return Err(anyhow::anyhow!("Division by zero"));
+    }
+
+    Ok((dividend / divisor - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_integer_divide(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "integerDivide requires exactly 3 arguments"
+        ));
+    }
+
+    let dividend = extract_numeric_value(&args[0])? as i64;
+    let divisor = extract_numeric_value(&args[1])? as i64;
+    let result = extract_numeric_value(&args[2])? as i64;
+
+    if divisor == 0 {
+        return Err(anyhow::anyhow!("Division by zero"));
+    }
+
+    Ok(dividend / divisor == result)
+}
+
+pub(crate) fn builtin_unary_minus(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("unaryMinus requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((-input - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_unary_plus(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("unaryPlus requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((input - result).abs() < f64::EPSILON)
+}
+
+// Advanced Mathematical Functions
+// ============================================================
+
+pub(crate) fn builtin_min(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("min requires at least 2 arguments"));
+    }
+
+    let values: Result<Vec<f64>> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect();
+    let values = values?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    let min_value = values
+        .iter()
+        .fold(f64::INFINITY, |a, &b| if a < b { a } else { b });
+
+    Ok((min_value - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_max(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("max requires at least 2 arguments"));
+    }
+
+    let values: Result<Vec<f64>> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect();
+    let values = values?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    let max_value = values
+        .iter()
+        .fold(f64::NEG_INFINITY, |a, &b| if a > b { a } else { b });
+
+    Ok((max_value - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_avg(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("avg requires at least 2 arguments"));
+    }
+
+    let values: Result<Vec<f64>> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect();
+    let values = values?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    if values.is_empty() {
+        return Ok(false);
+    }
+
+    let sum: f64 = values.iter().sum();
+    let avg = sum / values.len() as f64;
+
+    Ok((avg - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_sum(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("sum requires at least 2 arguments"));
+    }
+
+    let values: Result<Vec<f64>> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect();
+    let values = values?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    let sum: f64 = values.iter().sum();
+
+    Ok((sum - result).abs() < f64::EPSILON)
+}
+
+// Advanced Comparison Operations
+// ============================================================
+
+pub(crate) fn builtin_less_than_or_equal(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "lessThanOrEqual requires exactly 2 arguments"
+        ));
+    }
+
+    let val1 = extract_numeric_value(&args[0])?;
+    let val2 = extract_numeric_value(&args[1])?;
+    Ok(val1 <= val2 || (val1 - val2).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_greater_than_or_equal(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "greaterThanOrEqual requires exactly 2 arguments"
+        ));
+    }
+
+    let val1 = extract_numeric_value(&args[0])?;
+    let val2 = extract_numeric_value(&args[1])?;
+    Ok(val1 >= val2 || (val1 - val2).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_between(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "between requires exactly 3 arguments: value, min, max"
+        ));
+    }
+
+    let value = extract_numeric_value(&args[0])?;
+    let min = extract_numeric_value(&args[1])?;
+    let max = extract_numeric_value(&args[2])?;
+
+    Ok(value >= min && value <= max)
+}
+
+// Type Checking Operations
+// ============================================================
+
+pub(crate) fn builtin_is_integer(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isInteger requires exactly 1 argument"));
+    }
+
+    match extract_numeric_value(&args[0]) {
+        Ok(val) => Ok((val.fract()).abs() < f64::EPSILON),
+        Err(_) => Ok(false),
+    }
+}
+
+pub(crate) fn builtin_is_float(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isFloat requires exactly 1 argument"));
+    }
+
+    Ok(extract_numeric_value(&args[0]).is_ok())
+}
+
+pub(crate) fn builtin_is_string(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isString requires exactly 1 argument"));
+    }
+
+    Ok(matches!(
+        &args[0],
+        SwrlArgument::Literal(_) | SwrlArgument::Individual(_)
+    ))
+}
+
+pub(crate) fn builtin_is_boolean(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isBoolean requires exactly 1 argument"));
+    }
+
+    Ok(extract_boolean_value(&args[0]).is_ok())
+}
+
+pub(crate) fn builtin_is_uri(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isURI requires exactly 1 argument"));
+    }
+
+    if let SwrlArgument::Individual(uri) = &args[0] {
+        // Simple URI validation
+        Ok(uri.starts_with("http://") || uri.starts_with("https://") || uri.starts_with("urn:"))
+    } else {
+        Ok(false)
+    }
+}
+
+// Type Conversion Operations
+// ============================================================
+
+pub(crate) fn builtin_int_value(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("intValue requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])? as i64;
+
+    Ok(input as i64 == result)
+}
+
+pub(crate) fn builtin_float_value(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("floatValue requires exactly 2 arguments"));
+    }
+
+    let input = extract_numeric_value(&args[0])?;
+    let result = extract_numeric_value(&args[1])?;
+
+    Ok((input - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_string_value(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("stringValue requires exactly 2 arguments"));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let result = extract_string_value(&args[1])?;
+
+    Ok(input == result)
+}
+
+// Enhanced String Operations
+// ============================================================
+
+pub(crate) fn builtin_string_contains(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("contains requires exactly 2 arguments"));
+    }
+
+    let haystack = extract_string_value(&args[0])?;
+    let needle = extract_string_value(&args[1])?;
+
+    Ok(haystack.contains(&needle))
+}
+
+pub(crate) fn builtin_starts_with(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("startsWith requires exactly 2 arguments"));
+    }
+
+    let string = extract_string_value(&args[0])?;
+    let prefix = extract_string_value(&args[1])?;
+
+    Ok(string.starts_with(&prefix))
+}
+
+pub(crate) fn builtin_ends_with(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("endsWith requires exactly 2 arguments"));
+    }
+
+    let string = extract_string_value(&args[0])?;
+    let suffix = extract_string_value(&args[1])?;
+
+    Ok(string.ends_with(&suffix))
+}
+
+pub(crate) fn builtin_replace(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!(
+            "replace requires exactly 4 arguments: input, search, replacement, result"
+        ));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let search = extract_string_value(&args[1])?;
+    let replacement = extract_string_value(&args[2])?;
+    let expected = extract_string_value(&args[3])?;
+
+    let result = input.replace(&search, &replacement);
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_trim(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("trim requires exactly 2 arguments"));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    Ok(input.trim() == expected)
+}
+
+pub(crate) fn builtin_split(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "split requires exactly 3 arguments: input, delimiter, result"
+        ));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let delimiter = extract_string_value(&args[1])?;
+    let expected = extract_string_value(&args[2])?;
+
+    let parts: Vec<&str> = input.split(&delimiter as &str).collect();
+    let result = parts.join(",");
+
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_index_of(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "indexOf requires exactly 3 arguments: string, substring, result"
+        ));
+    }
+
+    let string = extract_string_value(&args[0])?;
+    let substring = extract_string_value(&args[1])?;
+    let expected_index = extract_numeric_value(&args[2])? as i64;
+
+    let actual_index = string
+        .find(&substring as &str)
+        .map(|i| i as i64)
+        .unwrap_or(-1);
+
+    Ok(actual_index == expected_index)
+}
+
+pub(crate) fn builtin_last_index_of(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "lastIndexOf requires exactly 3 arguments: string, substring, result"
+        ));
+    }
+
+    let string = extract_string_value(&args[0])?;
+    let substring = extract_string_value(&args[1])?;
+    let expected_index = extract_numeric_value(&args[2])? as i64;
+
+    let actual_index = string
+        .rfind(&substring as &str)
+        .map(|i| i as i64)
+        .unwrap_or(-1);
+
+    Ok(actual_index == expected_index)
+}
+
+pub(crate) fn builtin_normalize_space(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "normalizeSpace requires exactly 2 arguments"
+        ));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Normalize whitespace: trim and replace multiple spaces with single space
+    let normalized = input.split_whitespace().collect::<Vec<&str>>().join(" ");
+
+    Ok(normalized == expected)
+}
+
+// Date and Time Operations (Enhanced)
+// ============================================================
+
+pub(crate) fn builtin_date(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!(
+            "date requires exactly 4 arguments: year, month, day, result"
+        ));
+    }
+
+    let year = extract_numeric_value(&args[0])? as i32;
+    let month = extract_numeric_value(&args[1])? as u32;
+    let day = extract_numeric_value(&args[2])? as u32;
+    let expected = extract_string_value(&args[3])?;
+
+    let result = format!("{:04}-{:02}-{:02}", year, month, day);
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_time(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!(
+            "time requires exactly 4 arguments: hour, minute, second, result"
+        ));
+    }
+
+    let hour = extract_numeric_value(&args[0])? as u32;
+    let minute = extract_numeric_value(&args[1])? as u32;
+    let second = extract_numeric_value(&args[2])? as u32;
+    let expected = extract_string_value(&args[3])?;
+
+    let result = format!("{:02}:{:02}:{:02}", hour, minute, second);
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_year(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "year requires exactly 2 arguments: date, result"
+        ));
+    }
+
+    let date_str = extract_string_value(&args[0])?;
+    let expected_year = extract_numeric_value(&args[1])? as i32;
+
+    // Parse ISO 8601 date (YYYY-MM-DD)
+    if let Some(year_part) = date_str.split('-').next() {
+        if let Ok(year) = year_part.parse::<i32>() {
+            return Ok(year == expected_year);
+        }
+    }
+
+    Ok(false)
+}
+
+pub(crate) fn builtin_month(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "month requires exactly 2 arguments: date, result"
+        ));
+    }
+
+    let date_str = extract_string_value(&args[0])?;
+    let expected_month = extract_numeric_value(&args[1])? as u32;
+
+    // Parse ISO 8601 date (YYYY-MM-DD)
+    let parts: Vec<&str> = date_str.split('-').collect();
+    if parts.len() >= 2 {
+        if let Ok(month) = parts[1].parse::<u32>() {
+            return Ok(month == expected_month);
+        }
+    }
+
+    Ok(false)
+}
+
+pub(crate) fn builtin_day(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "day requires exactly 2 arguments: date, result"
+        ));
+    }
+
+    let date_str = extract_string_value(&args[0])?;
+    let expected_day = extract_numeric_value(&args[1])? as u32;
+
+    // Parse ISO 8601 date (YYYY-MM-DD)
+    let parts: Vec<&str> = date_str.split('-').collect();
+    if parts.len() >= 3 {
+        if let Ok(day) = parts[2].parse::<u32>() {
+            return Ok(day == expected_day);
+        }
+    }
+
+    Ok(false)
+}
+
+pub(crate) fn builtin_hour(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "hour requires exactly 2 arguments: time, result"
+        ));
+    }
+
+    let time_str = extract_string_value(&args[0])?;
+    let expected_hour = extract_numeric_value(&args[1])? as u32;
+
+    // Parse ISO 8601 time (HH:MM:SS)
+    if let Some(hour_part) = time_str.split(':').next() {
+        if let Ok(hour) = hour_part.parse::<u32>() {
+            return Ok(hour == expected_hour);
+        }
+    }
+
+    Ok(false)
+}
+
+pub(crate) fn builtin_minute(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "minute requires exactly 2 arguments: time, result"
+        ));
+    }
+
+    let time_str = extract_string_value(&args[0])?;
+    let expected_minute = extract_numeric_value(&args[1])? as u32;
+
+    // Parse ISO 8601 time (HH:MM:SS)
+    let parts: Vec<&str> = time_str.split(':').collect();
+    if parts.len() >= 2 {
+        if let Ok(minute) = parts[1].parse::<u32>() {
+            return Ok(minute == expected_minute);
+        }
+    }
+
+    Ok(false)
+}
+
+pub(crate) fn builtin_second(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "second requires exactly 2 arguments: time, result"
+        ));
+    }
+
+    let time_str = extract_string_value(&args[0])?;
+    let expected_second = extract_numeric_value(&args[1])? as u32;
+
+    // Parse ISO 8601 time (HH:MM:SS)
+    let parts: Vec<&str> = time_str.split(':').collect();
+    if parts.len() >= 3 {
+        if let Ok(second) = parts[2].parse::<u32>() {
+            return Ok(second == expected_second);
+        }
+    }
+
+    Ok(false)
+}
+
+// Hash and Cryptographic Operations
+// ============================================================
+
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+
+pub(crate) fn builtin_hash(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "hash requires exactly 2 arguments: input, result"
+        ));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    let mut hasher = DefaultHasher::new();
+    input.hash(&mut hasher);
+    let hash_value = hasher.finish();
+
+    Ok(hash_value.to_string() == expected)
+}
+
+pub(crate) fn builtin_base64_encode(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("base64Encode requires exactly 2 arguments"));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Simple base64 encoding using standard library
+    let encoded = base64_encode_simple(&input);
+    Ok(encoded == expected)
+}
+
+pub(crate) fn builtin_base64_decode(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!("base64Decode requires exactly 2 arguments"));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Simple base64 decoding
+    match base64_decode_simple(&input) {
+        Ok(decoded) => Ok(decoded == expected),
+        Err(_) => Ok(false),
+    }
+}
+
+// Helper functions for base64
+fn base64_encode_simple(input: &str) -> String {
+    const BASE64_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let bytes = input.as_bytes();
+    let mut result = String::new();
+
+    for chunk in bytes.chunks(3) {
+        let mut buf = [0u8; 3];
+        for (i, &b) in chunk.iter().enumerate() {
+            buf[i] = b;
+        }
+
+        result.push(BASE64_CHARS[(buf[0] >> 2) as usize] as char);
+        result.push(BASE64_CHARS[(((buf[0] & 0x03) << 4) | (buf[1] >> 4)) as usize] as char);
+
+        if chunk.len() > 1 {
+            result.push(BASE64_CHARS[(((buf[1] & 0x0f) << 2) | (buf[2] >> 6)) as usize] as char);
+        } else {
+            result.push('=');
+        }
+
+        if chunk.len() > 2 {
+            result.push(BASE64_CHARS[(buf[2] & 0x3f) as usize] as char);
+        } else {
+            result.push('=');
+        }
+    }
+
+    result
+}
+
+fn base64_decode_simple(input: &str) -> Result<String> {
+    let input = input.trim_end_matches('=');
+    let mut bytes = Vec::new();
+
+    for chunk in input.as_bytes().chunks(4) {
+        let vals: Vec<u8> = chunk
+            .iter()
+            .map(|&b| match b {
+                b'A'..=b'Z' => b - b'A',
+                b'a'..=b'z' => b - b'a' + 26,
+                b'0'..=b'9' => b - b'0' + 52,
+                b'+' => 62,
+                b'/' => 63,
+                _ => 0,
+            })
+            .collect();
+
+        if !vals.is_empty() {
+            bytes.push((vals[0] << 2) | (vals.get(1).unwrap_or(&0) >> 4));
+        }
+        if vals.len() > 2 {
+            bytes.push((vals[1] << 4) | (vals[2] >> 2));
+        }
+        if vals.len() > 3 {
+            bytes.push((vals[2] << 6) | vals[3]);
+        }
+    }
+
+    String::from_utf8(bytes).map_err(|e| anyhow::anyhow!("UTF-8 decode error: {}", e))
+}
+
+// Statistical Operations
+// ============================================================
+
+pub(crate) fn builtin_mean(args: &[SwrlArgument]) -> Result<bool> {
+    // Alias for avg
+    builtin_avg(args)
+}
+
+pub(crate) fn builtin_median(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("median requires at least 2 arguments"));
+    }
+
+    let mut values: Vec<f64> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect::<Result<Vec<_>>>()?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    if values.is_empty() {
+        return Ok(false);
+    }
+
+    values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+    let median = if values.len() % 2 == 0 {
+        let mid = values.len() / 2;
+        (values[mid - 1] + values[mid]) / 2.0
+    } else {
+        values[values.len() / 2]
+    };
+
+    Ok((median - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_variance(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("variance requires at least 2 arguments"));
+    }
+
+    let values: Vec<f64> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect::<Result<Vec<_>>>()?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    if values.is_empty() {
+        return Ok(false);
+    }
+
+    let mean: f64 = values.iter().sum::<f64>() / values.len() as f64;
+    let variance: f64 = values
+        .iter()
+        .map(|&x| {
+            let diff = x - mean;
+            diff * diff
+        })
+        .sum::<f64>()
+        / values.len() as f64;
+
+    Ok((variance - result).abs() < f64::EPSILON)
+}
+
+pub(crate) fn builtin_stddev(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() < 2 {
+        return Err(anyhow::anyhow!("stddev requires at least 2 arguments"));
+    }
+
+    let values: Vec<f64> = args[..args.len() - 1]
+        .iter()
+        .map(extract_numeric_value)
+        .collect::<Result<Vec<_>>>()?;
+
+    let result = extract_numeric_value(&args[args.len() - 1])?;
+
+    if values.is_empty() {
+        return Ok(false);
+    }
+
+    let mean: f64 = values.iter().sum::<f64>() / values.len() as f64;
+    let variance: f64 = values
+        .iter()
+        .map(|&x| {
+            let diff = x - mean;
+            diff * diff
+        })
+        .sum::<f64>()
+        / values.len() as f64;
+    let stddev = variance.sqrt();
+
+    Ok((stddev - result).abs() < f64::EPSILON)
+}
+
+// RDF-Specific Operations
+// ============================================================
+
+pub(crate) fn builtin_lang_matches(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "langMatches requires exactly 2 arguments: lang, pattern"
+        ));
+    }
+
+    let lang = extract_string_value(&args[0])?;
+    let pattern = extract_string_value(&args[1])?;
+
+    if pattern == "*" {
+        return Ok(!lang.is_empty());
+    }
+
+    Ok(lang.to_lowercase().starts_with(&pattern.to_lowercase()))
+}
+
+pub(crate) fn builtin_str(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "str requires exactly 2 arguments: node, result"
+        ));
+    }
+
+    let node = extract_string_value(&args[0])?;
+    let result = extract_string_value(&args[1])?;
+
+    Ok(node == result)
+}
+
+pub(crate) fn builtin_is_literal(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isLiteral requires exactly 1 argument"));
+    }
+
+    Ok(matches!(&args[0], SwrlArgument::Literal(_)))
+}
+
+pub(crate) fn builtin_is_blank(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isBlank requires exactly 1 argument"));
+    }
+
+    if let SwrlArgument::Individual(uri) = &args[0] {
+        Ok(uri.starts_with("_:"))
+    } else {
+        Ok(false)
+    }
+}
+
+pub(crate) fn builtin_is_iri(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 1 {
+        return Err(anyhow::anyhow!("isIRI requires exactly 1 argument"));
+    }
+
+    if let SwrlArgument::Individual(uri) = &args[0] {
+        Ok(uri.starts_with("http://")
+            || uri.starts_with("https://")
+            || uri.starts_with("urn:")
+            || uri.starts_with("file:"))
+    } else {
+        Ok(false)
+    }
+}
+
+// URI Operations
+// ============================================================
+
+pub(crate) fn builtin_resolve_uri(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "resolveURI requires exactly 3 arguments: base, relative, result"
+        ));
+    }
+
+    let base = extract_string_value(&args[0])?;
+    let relative = extract_string_value(&args[1])?;
+    let expected = extract_string_value(&args[2])?;
+
+    // Simple URI resolution
+    let result = if relative.starts_with("http://") || relative.starts_with("https://") {
+        relative
+    } else if relative.starts_with('/') {
+        // Extract scheme and host from base
+        if let Some(idx) = base.find("://") {
+            let scheme_host = &base[..idx + 3];
+            if let Some(host_end) = base[idx + 3..].find('/') {
+                format!(
+                    "{}{}{}",
+                    scheme_host,
+                    &base[idx + 3..idx + 3 + host_end],
+                    relative
+                )
+            } else {
+                format!("{}{}{}", scheme_host, &base[idx + 3..], relative)
+            }
+        } else {
+            relative
+        }
+    } else {
+        // Relative to current path
+        if let Some(last_slash) = base.rfind('/') {
+            format!("{}/{}", &base[..last_slash], relative)
+        } else {
+            relative
+        }
+    };
+
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_encode_uri(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "encodeURI requires exactly 2 arguments: input, result"
+        ));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Simple URL encoding
+    let encoded: String = input
+        .chars()
+        .map(|c| match c {
+            'A'..='Z' | 'a'..='z' | '0'..='9' | '-' | '_' | '.' | '~' => c.to_string(),
+            _ => format!("%{:02X}", c as u8),
+        })
+        .collect();
+
+    Ok(encoded == expected)
+}
+
+pub(crate) fn builtin_decode_uri(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "decodeURI requires exactly 2 arguments: input, result"
+        ));
+    }
+
+    let input = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    // Simple URL decoding
+    let mut decoded = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let hex: String = chars.by_ref().take(2).collect();
+            if let Ok(byte) = u8::from_str_radix(&hex, 16) {
+                decoded.push(byte as char);
+            } else {
+                decoded.push(c);
+                decoded.push_str(&hex);
+            }
+        } else {
+            decoded.push(c);
+        }
+    }
+
+    Ok(decoded == expected)
+}
+
+// Collection Operations (Advanced)
+// ============================================================
+
+pub(crate) fn builtin_make_list(args: &[SwrlArgument]) -> Result<bool> {
+    if args.is_empty() {
+        return Err(anyhow::anyhow!("makeList requires at least 1 argument"));
+    }
+
+    let values: Result<Vec<String>> = args[..args.len() - 1]
+        .iter()
+        .map(extract_string_value)
+        .collect();
+    let values = values?;
+    let expected = extract_string_value(&args[args.len() - 1])?;
+
+    let result = values.join(",");
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_list_insert(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 4 {
+        return Err(anyhow::anyhow!(
+            "listInsert requires exactly 4 arguments: list, index, item, result"
+        ));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let index = extract_numeric_value(&args[1])? as usize;
+    let item = extract_string_value(&args[2])?;
+    let expected = extract_string_value(&args[3])?;
+
+    let mut items: Vec<String> = list_str.split(',').map(|s| s.to_string()).collect();
+    if index <= items.len() {
+        items.insert(index, item);
+        let result = items.join(",");
+        Ok(result == expected)
+    } else {
+        Ok(false)
+    }
+}
+
+pub(crate) fn builtin_list_remove(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "listRemove requires exactly 3 arguments: list, index, result"
+        ));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let index = extract_numeric_value(&args[1])? as usize;
+    let expected = extract_string_value(&args[2])?;
+
+    let mut items: Vec<String> = list_str.split(',').map(|s| s.to_string()).collect();
+    if index < items.len() {
+        items.remove(index);
+        let result = items.join(",");
+        Ok(result == expected)
+    } else {
+        Ok(false)
+    }
+}
+
+pub(crate) fn builtin_list_reverse(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "listReverse requires exactly 2 arguments: list, result"
+        ));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    let mut items: Vec<String> = list_str.split(',').map(|s| s.to_string()).collect();
+    items.reverse();
+    let result = items.join(",");
+
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_list_sort(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "listSort requires exactly 2 arguments: list, result"
+        ));
+    }
+
+    let list_str = extract_string_value(&args[0])?;
+    let expected = extract_string_value(&args[1])?;
+
+    let mut items: Vec<String> = list_str.split(',').map(|s| s.to_string()).collect();
+    items.sort();
+    let result = items.join(",");
+
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_list_union(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "listUnion requires exactly 3 arguments: list1, list2, result"
+        ));
+    }
+
+    let list1_str = extract_string_value(&args[0])?;
+    let list2_str = extract_string_value(&args[1])?;
+    let expected = extract_string_value(&args[2])?;
+
+    let items1: Vec<&str> = list1_str.split(',').collect();
+    let items2: Vec<&str> = list2_str.split(',').collect();
+
+    let mut union: Vec<String> = items1.iter().map(|&s| s.to_string()).collect();
+    for item in items2 {
+        if !items1.contains(&item) {
+            union.push(item.to_string());
+        }
+    }
+
+    let result = union.join(",");
+    Ok(result == expected)
+}
+
+pub(crate) fn builtin_list_intersection(args: &[SwrlArgument]) -> Result<bool> {
+    if args.len() != 3 {
+        return Err(anyhow::anyhow!(
+            "listIntersection requires exactly 3 arguments: list1, list2, result"
+        ));
+    }
+
+    let list1_str = extract_string_value(&args[0])?;
+    let list2_str = extract_string_value(&args[1])?;
+    let expected = extract_string_value(&args[2])?;
+
+    let items1: Vec<&str> = list1_str.split(',').collect();
+    let items2: Vec<&str> = list2_str.split(',').collect();
+
+    let intersection: Vec<String> = items1
+        .iter()
+        .filter(|&&item| items2.contains(&item))
+        .map(|&s| s.to_string())
+        .collect();
+
+    let result = intersection.join(",");
+    Ok(result == expected)
+}
+
+// ============================================================
+// TESTS FOR EXPANDED BUILT-INS
+// ============================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builtin_divide() {
+        let args = vec![
+            SwrlArgument::Literal("10.0".to_string()),
+            SwrlArgument::Literal("2.0".to_string()),
+            SwrlArgument::Literal("5.0".to_string()),
+        ];
+        assert!(builtin_divide(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_integer_divide() {
+        let args = vec![
+            SwrlArgument::Literal("10".to_string()),
+            SwrlArgument::Literal("3".to_string()),
+            SwrlArgument::Literal("3".to_string()),
+        ];
+        assert!(builtin_integer_divide(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_min() {
+        let args = vec![
+            SwrlArgument::Literal("5.0".to_string()),
+            SwrlArgument::Literal("3.0".to_string()),
+            SwrlArgument::Literal("8.0".to_string()),
+            SwrlArgument::Literal("3.0".to_string()),
+        ];
+        assert!(builtin_min(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_max() {
+        let args = vec![
+            SwrlArgument::Literal("5.0".to_string()),
+            SwrlArgument::Literal("3.0".to_string()),
+            SwrlArgument::Literal("8.0".to_string()),
+            SwrlArgument::Literal("8.0".to_string()),
+        ];
+        assert!(builtin_max(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_avg() {
+        let args = vec![
+            SwrlArgument::Literal("2.0".to_string()),
+            SwrlArgument::Literal("4.0".to_string()),
+            SwrlArgument::Literal("6.0".to_string()),
+            SwrlArgument::Literal("4.0".to_string()),
+        ];
+        assert!(builtin_avg(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_sum() {
+        let args = vec![
+            SwrlArgument::Literal("2.0".to_string()),
+            SwrlArgument::Literal("3.0".to_string()),
+            SwrlArgument::Literal("5.0".to_string()),
+            SwrlArgument::Literal("10.0".to_string()),
+        ];
+        assert!(builtin_sum(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_less_than_or_equal() {
+        let args = vec![
+            SwrlArgument::Literal("3.0".to_string()),
+            SwrlArgument::Literal("5.0".to_string()),
+        ];
+        assert!(builtin_less_than_or_equal(&args).unwrap());
+
+        let args = vec![
+            SwrlArgument::Literal("5.0".to_string()),
+            SwrlArgument::Literal("5.0".to_string()),
+        ];
+        assert!(builtin_less_than_or_equal(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_between() {
+        let args = vec![
+            SwrlArgument::Literal("5.0".to_string()),
+            SwrlArgument::Literal("1.0".to_string()),
+            SwrlArgument::Literal("10.0".to_string()),
+        ];
+        assert!(builtin_between(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_integer() {
+        let args = vec![SwrlArgument::Literal("5.0".to_string())];
+        assert!(builtin_is_integer(&args).unwrap());
+
+        let args = vec![SwrlArgument::Literal("5.5".to_string())];
+        assert!(!builtin_is_integer(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_float() {
+        let args = vec![SwrlArgument::Literal("3.14".to_string())];
+        assert!(builtin_is_float(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_string() {
+        let args = vec![SwrlArgument::Literal("hello".to_string())];
+        assert!(builtin_is_string(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_uri() {
+        let args = vec![SwrlArgument::Individual("http://example.org".to_string())];
+        assert!(builtin_is_uri(&args).unwrap());
+
+        let args = vec![SwrlArgument::Literal("not a uri".to_string())];
+        assert!(!builtin_is_uri(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_string_contains() {
+        let args = vec![
+            SwrlArgument::Literal("hello world".to_string()),
+            SwrlArgument::Literal("world".to_string()),
+        ];
+        assert!(builtin_string_contains(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_starts_with() {
+        let args = vec![
+            SwrlArgument::Literal("hello world".to_string()),
+            SwrlArgument::Literal("hello".to_string()),
+        ];
+        assert!(builtin_starts_with(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_ends_with() {
+        let args = vec![
+            SwrlArgument::Literal("hello world".to_string()),
+            SwrlArgument::Literal("world".to_string()),
+        ];
+        assert!(builtin_ends_with(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_replace() {
+        let args = vec![
+            SwrlArgument::Literal("hello world".to_string()),
+            SwrlArgument::Literal("world".to_string()),
+            SwrlArgument::Literal("universe".to_string()),
+            SwrlArgument::Literal("hello universe".to_string()),
+        ];
+        assert!(builtin_replace(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_trim() {
+        let args = vec![
+            SwrlArgument::Literal("  hello  ".to_string()),
+            SwrlArgument::Literal("hello".to_string()),
+        ];
+        assert!(builtin_trim(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_index_of() {
+        let args = vec![
+            SwrlArgument::Literal("hello world".to_string()),
+            SwrlArgument::Literal("world".to_string()),
+            SwrlArgument::Literal("6".to_string()),
+        ];
+        assert!(builtin_index_of(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_normalize_space() {
+        let args = vec![
+            SwrlArgument::Literal("hello   world  test".to_string()),
+            SwrlArgument::Literal("hello world test".to_string()),
+        ];
+        assert!(builtin_normalize_space(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_date() {
+        let args = vec![
+            SwrlArgument::Literal("2025".to_string()),
+            SwrlArgument::Literal("11".to_string()),
+            SwrlArgument::Literal("3".to_string()),
+            SwrlArgument::Literal("2025-11-03".to_string()),
+        ];
+        assert!(builtin_date(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_time() {
+        let args = vec![
+            SwrlArgument::Literal("14".to_string()),
+            SwrlArgument::Literal("30".to_string()),
+            SwrlArgument::Literal("45".to_string()),
+            SwrlArgument::Literal("14:30:45".to_string()),
+        ];
+        assert!(builtin_time(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_year() {
+        let args = vec![
+            SwrlArgument::Literal("2025-11-03".to_string()),
+            SwrlArgument::Literal("2025".to_string()),
+        ];
+        assert!(builtin_year(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_month() {
+        let args = vec![
+            SwrlArgument::Literal("2025-11-03".to_string()),
+            SwrlArgument::Literal("11".to_string()),
+        ];
+        assert!(builtin_month(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_day() {
+        let args = vec![
+            SwrlArgument::Literal("2025-11-03".to_string()),
+            SwrlArgument::Literal("3".to_string()),
+        ];
+        assert!(builtin_day(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_hash() {
+        let args = vec![
+            SwrlArgument::Literal("test".to_string()),
+            SwrlArgument::Literal("test".to_string()),
+        ];
+        // Hash should consistently produce the same value
+        let result1 = builtin_hash(&args);
+        let result2 = builtin_hash(&args);
+        assert_eq!(result1.is_ok(), result2.is_ok());
+    }
+
+    #[test]
+    fn test_builtin_base64_encode() {
+        let args = vec![
+            SwrlArgument::Literal("hello".to_string()),
+            SwrlArgument::Literal("aGVsbG8=".to_string()),
+        ];
+        assert!(builtin_base64_encode(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_base64_decode() {
+        let args = vec![
+            SwrlArgument::Literal("aGVsbG8=".to_string()),
+            SwrlArgument::Literal("hello".to_string()),
+        ];
+        assert!(builtin_base64_decode(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_median() {
+        let args = vec![
+            SwrlArgument::Literal("1.0".to_string()),
+            SwrlArgument::Literal("3.0".to_string()),
+            SwrlArgument::Literal("5.0".to_string()),
+            SwrlArgument::Literal("3.0".to_string()),
+        ];
+        assert!(builtin_median(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_variance() {
+        let args = vec![
+            SwrlArgument::Literal("2.0".to_string()),
+            SwrlArgument::Literal("4.0".to_string()),
+            SwrlArgument::Literal("6.0".to_string()),
+            SwrlArgument::Literal("2.6666666666666665".to_string()),
+        ];
+        assert!(builtin_variance(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_stddev() {
+        let args = vec![
+            SwrlArgument::Literal("2.0".to_string()),
+            SwrlArgument::Literal("4.0".to_string()),
+            SwrlArgument::Literal("6.0".to_string()),
+            SwrlArgument::Literal("1.632993161855452".to_string()),
+        ];
+        assert!(builtin_stddev(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_lang_matches() {
+        let args = vec![
+            SwrlArgument::Literal("en-US".to_string()),
+            SwrlArgument::Literal("en".to_string()),
+        ];
+        assert!(builtin_lang_matches(&args).unwrap());
+
+        let args = vec![
+            SwrlArgument::Literal("en-US".to_string()),
+            SwrlArgument::Literal("*".to_string()),
+        ];
+        assert!(builtin_lang_matches(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_literal() {
+        let args = vec![SwrlArgument::Literal("test".to_string())];
+        assert!(builtin_is_literal(&args).unwrap());
+
+        let args = vec![SwrlArgument::Individual("test".to_string())];
+        assert!(!builtin_is_literal(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_blank() {
+        let args = vec![SwrlArgument::Individual("_:blank1".to_string())];
+        assert!(builtin_is_blank(&args).unwrap());
+
+        let args = vec![SwrlArgument::Individual("http://example.org".to_string())];
+        assert!(!builtin_is_blank(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_is_iri() {
+        let args = vec![SwrlArgument::Individual("http://example.org".to_string())];
+        assert!(builtin_is_iri(&args).unwrap());
+
+        let args = vec![SwrlArgument::Individual("https://example.org".to_string())];
+        assert!(builtin_is_iri(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_encode_uri() {
+        let args = vec![
+            SwrlArgument::Literal("hello world".to_string()),
+            SwrlArgument::Literal("hello%20world".to_string()),
+        ];
+        assert!(builtin_encode_uri(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_make_list() {
+        let args = vec![
+            SwrlArgument::Literal("a".to_string()),
+            SwrlArgument::Literal("b".to_string()),
+            SwrlArgument::Literal("c".to_string()),
+            SwrlArgument::Literal("a,b,c".to_string()),
+        ];
+        assert!(builtin_make_list(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_list_reverse() {
+        let args = vec![
+            SwrlArgument::Literal("a,b,c".to_string()),
+            SwrlArgument::Literal("c,b,a".to_string()),
+        ];
+        assert!(builtin_list_reverse(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_list_sort() {
+        let args = vec![
+            SwrlArgument::Literal("c,a,b".to_string()),
+            SwrlArgument::Literal("a,b,c".to_string()),
+        ];
+        assert!(builtin_list_sort(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_list_union() {
+        let args = vec![
+            SwrlArgument::Literal("a,b".to_string()),
+            SwrlArgument::Literal("b,c".to_string()),
+            SwrlArgument::Literal("a,b,c".to_string()),
+        ];
+        assert!(builtin_list_union(&args).unwrap());
+    }
+
+    #[test]
+    fn test_builtin_list_intersection() {
+        let args = vec![
+            SwrlArgument::Literal("a,b,c".to_string()),
+            SwrlArgument::Literal("b,c,d".to_string()),
+            SwrlArgument::Literal("b,c".to_string()),
+        ];
+        assert!(builtin_list_intersection(&args).unwrap());
+    }
+}

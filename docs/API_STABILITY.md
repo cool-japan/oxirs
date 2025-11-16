@@ -460,7 +460,7 @@ pub fn ConcreteStore::new() -> Result<Self> {
 
 **Breaking Change Risk**: 5% overall
 
-### v0.1.0-rc.1 (December 2025)
+### v0.1.0-rc.1 (November 2025)
 **Focus**: Release candidate with full API freeze
 
 - 🟢 **Stable**: All core modules frozen (99% frozen)

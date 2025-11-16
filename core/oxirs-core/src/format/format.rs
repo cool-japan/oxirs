@@ -110,7 +110,7 @@ impl std::ops::BitOrAssign<JsonLdProfile> for JsonLdProfileSet {
 ///
 /// This enumeration covers all major RDF serialization formats supported by OxiRS.
 /// Based on W3C specifications and community standards.
-#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize)]
+#[derive(Eq, PartialEq, Debug, Clone, Hash, Serialize, Deserialize, Default)]
 #[non_exhaustive]
 pub enum RdfFormat {
     /// [N3](https://w3c.github.io/N3/spec/)
@@ -124,6 +124,7 @@ pub enum RdfFormat {
     /// [TriG](https://www.w3.org/TR/trig/)
     TriG,
     /// [Turtle](https://www.w3.org/TR/turtle/)
+    #[default]
     Turtle,
     /// [JSON-LD](https://www.w3.org/TR/json-ld/) with optional profiles
     JsonLd { profile: JsonLdProfileSet },
@@ -409,12 +410,6 @@ impl RdfFormat {
 impl fmt::Display for RdfFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
-    }
-}
-
-impl Default for RdfFormat {
-    fn default() -> Self {
-        Self::Turtle // Turtle is the most common and human-readable format
     }
 }
 

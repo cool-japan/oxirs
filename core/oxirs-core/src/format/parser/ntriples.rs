@@ -145,8 +145,8 @@ pub(super) fn parse_n3_reader<R: Read + Send + 'static>(
                 // For now, we just handle standard RDF terms
                 let quad = oxrdf::Quad::new(
                     match n3_quad.subject {
-                        oxttl::n3::N3Term::NamedNode(n) => oxrdf::Subject::NamedNode(n),
-                        oxttl::n3::N3Term::BlankNode(b) => oxrdf::Subject::BlankNode(b),
+                        oxttl::n3::N3Term::NamedNode(n) => oxrdf::NamedOrBlankNode::NamedNode(n),
+                        oxttl::n3::N3Term::BlankNode(b) => oxrdf::NamedOrBlankNode::BlankNode(b),
                         _ => {
                             return Err(crate::format::error::RdfParseError::unsupported(
                                 "N3 extended terms not yet supported",
@@ -195,8 +195,8 @@ pub(super) fn parse_n3_slice<'a>(parser: RdfParser, slice: &'a [u8]) -> SliceQua
             .and_then(|n3_quad| {
                 let quad = oxrdf::Quad::new(
                     match n3_quad.subject {
-                        oxttl::n3::N3Term::NamedNode(n) => oxrdf::Subject::NamedNode(n),
-                        oxttl::n3::N3Term::BlankNode(b) => oxrdf::Subject::BlankNode(b),
+                        oxttl::n3::N3Term::NamedNode(n) => oxrdf::NamedOrBlankNode::NamedNode(n),
+                        oxttl::n3::N3Term::BlankNode(b) => oxrdf::NamedOrBlankNode::BlankNode(b),
                         _ => {
                             return Err(crate::format::error::RdfParseError::unsupported(
                                 "N3 extended terms not yet supported",

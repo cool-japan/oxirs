@@ -1,11 +1,11 @@
 # OxiRS Engine 🚀
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Build Status](https://github.com/cool-japan/oxirs/workflows/CI/badge.svg)](https://github.com/cool-japan/oxirs/actions)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 15, 2025
 
 ⚠️ **Alpha Software**: This is an early alpha release. Some features are experimental. APIs may change without notice.
 
@@ -198,13 +198,13 @@ Add to your `Cargo.toml`:
 ```toml
 [dependencies]
 # Individual modules (stable features)
-oxirs-arq = "0.1.0-alpha.3"
-oxirs-shacl = "0.1.0-alpha.3"
+oxirs-arq = "0.1.0-beta.1"
+oxirs-shacl = "0.1.0-beta.1"
 
 # Individual modules (experimental features)
-oxirs-vec = "0.1.0-alpha.3"
-oxirs-rule = "0.1.0-alpha.3"
-oxirs-star = "0.1.0-alpha.3"
+oxirs-vec = "0.1.0-beta.1"
+oxirs-rule = "0.1.0-beta.1"
+oxirs-star = "0.1.0-beta.1"
 ```
 
 Note: There is no single `oxirs-engine` crate. Use individual modules as needed.

@@ -5,7 +5,7 @@ use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::{DataLogger, PerfLogger};
 use crate::cli::validation::MultiValidator;
 use crate::cli::validation::{dataset_validation, fs_validation, validate_rdf_format};
-use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
+use crate::cli::{progress::helpers, ArgumentValidator, Checkpoint, CheckpointManager, CliContext};
 use oxirs_core::format::{RdfFormat, RdfParser};
 use oxirs_core::model::{GraphName, NamedNode};
 use oxirs_core::rdf_store::RdfStore;
@@ -20,6 +20,7 @@ pub async fn run(
     file: PathBuf,
     format: Option<String>,
     graph: Option<String>,
+    resume: bool,
 ) -> CommandResult {
     // Create CLI context for proper output formatting
     let ctx = CliContext::new();
@@ -73,6 +74,35 @@ pub async fn run(
         ctx.info(&format!("Target graph: {g}"));
     }
 
+    // Initialize checkpoint manager
+    let checkpoint_manager = CheckpointManager::new()
+        .map_err(|e| format!("Failed to initialize checkpoint manager: {}", e))?;
+
+    // Check for existing checkpoint if resume is enabled
+    let mut start_offset = 0u64;
+    let mut processed_count = 0usize;
+
+    if resume {
+        if let Some(checkpoint) = checkpoint_manager
+            .load("import", &dataset, file.to_str().unwrap_or(""))
+            .map_err(|e| format!("Failed to load checkpoint: {}", e))?
+        {
+            ctx.info(&format!(
+                "Found checkpoint from {}: {} triples processed ({:.1}% complete)",
+                checkpoint.timestamp,
+                checkpoint.processed_count,
+                checkpoint_manager.progress_percentage(&checkpoint)
+            ));
+
+            start_offset = checkpoint.last_offset;
+            processed_count = checkpoint.processed_count;
+
+            ctx.info(&format!("Resuming from offset {}", start_offset));
+        } else {
+            ctx.info("No checkpoint found, starting fresh import");
+        }
+    }
+
     // Load dataset configuration or use dataset path directly
     let dataset_dir = PathBuf::from(&dataset);
     let dataset_path = if dataset_dir.join("oxirs.toml").exists() {
@@ -119,6 +149,10 @@ pub async fn run(
 
     // Open file for reading
     let file_handle = fs::File::open(&file)?;
+
+    // Note: We cannot seek to arbitrary byte positions in RDF files
+    // Instead, we'll parse from the beginning and skip already-processed triples
+
     read_progress.finish_with_message("File opened");
     data_logger.update_progress(file_size, 0);
 
@@ -126,11 +160,30 @@ pub async fn run(
     let parse_progress = helpers::query_progress();
     parse_progress.set_message("Parsing and importing RDF data");
 
-    // Parse and import with progress
-    let (triple_count, error_count) =
-        parse_and_import(&store, file_handle, &detected_format, graph.as_deref())?;
+    // Parse and import with progress and checkpointing
+    let (triple_count, error_count) = parse_and_import(
+        &store,
+        file_handle,
+        &detected_format,
+        graph.as_deref(),
+        resume,
+        &checkpoint_manager,
+        &dataset,
+        &file,
+        file_size,
+        start_offset,
+        processed_count,
+    )?;
 
     parse_progress.finish_with_message("Import complete");
+
+    // Delete checkpoint on successful completion
+    if resume {
+        checkpoint_manager
+            .delete("import", &dataset, file.to_str().unwrap_or(""))
+            .map_err(|e| format!("Failed to delete checkpoint: {}", e))?;
+        ctx.info("Checkpoint cleared after successful import");
+    }
 
     let duration = start_time.elapsed();
 
@@ -143,22 +196,40 @@ pub async fn run(
     perf_logger.add_metadata("error_count", error_count);
     perf_logger.complete(Some(5000)); // Log if import takes more than 5 seconds
 
-    // Report statistics with formatted output
+    // Report statistics with enhanced formatting
+    use crate::cli::{format_bytes, format_duration, format_number};
+
     ctx.info("Import Statistics");
     ctx.success(&format!(
-        "Import completed in {:.2} seconds",
-        duration.as_secs_f64()
+        "✓ Import completed in {}",
+        format_duration(duration)
     ));
-    ctx.info(&format!("Triples imported: {triple_count}"));
+    ctx.info(&format!(
+        "  Triples imported: {}",
+        format_number(triple_count as u64)
+    ));
+    ctx.info(&format!("  File size: {}", format_bytes(file_size)));
 
     if error_count > 0 {
-        ctx.warn(&format!("Errors encountered: {error_count}"));
+        ctx.warn(&format!(
+            "  Errors encountered: {}",
+            format_number(error_count as u64)
+        ));
     }
 
-    ctx.info(&format!(
-        "Average rate: {:.0} triples/second",
-        triple_count as f64 / duration.as_secs_f64()
-    ));
+    if duration.as_secs_f64() > 0.0 {
+        let rate = triple_count as f64 / duration.as_secs_f64();
+        ctx.info(&format!(
+            "  Import rate: {} triples/second",
+            format_number(rate as u64)
+        ));
+
+        let throughput = file_size as f64 / duration.as_secs_f64();
+        ctx.info(&format!(
+            "  Throughput: {}/second",
+            format_bytes(throughput as u64)
+        ));
+    }
 
     Ok(())
 }
@@ -190,11 +261,19 @@ fn is_supported_format(format: &str) -> bool {
 }
 
 /// Parse RDF content and import into store
+#[allow(clippy::too_many_arguments)]
 fn parse_and_import<S: oxirs_core::Store>(
     store: &S,
     file: fs::File,
     format: &str,
     graph: Option<&str>,
+    enable_checkpointing: bool,
+    checkpoint_manager: &CheckpointManager,
+    dataset: &str,
+    file_path: &Path,
+    total_size: u64,
+    _start_offset: u64,
+    start_count: usize,
 ) -> Result<(usize, usize), Box<dyn std::error::Error>> {
     // Step 1: Determine RDF format from string
     let rdf_format = match format {
@@ -229,13 +308,23 @@ fn parse_and_import<S: oxirs_core::Store>(
     let reader = BufReader::new(file);
     let parser = RdfParser::new(rdf_format);
 
-    let mut triple_count = 0;
+    let mut total_parsed = 0; // Total triples parsed (including skipped ones)
     let mut error_count = 0;
+
+    // Checkpoint every 10,000 triples
+    const CHECKPOINT_INTERVAL: usize = 10_000;
 
     // Step 4: Parse and insert quads
     for quad_result in parser.for_reader(reader) {
         match quad_result {
             Ok(mut quad) => {
+                total_parsed += 1;
+
+                // Skip already-processed triples when resuming
+                if total_parsed <= start_count {
+                    continue;
+                }
+
                 // If a target graph is specified and the quad is in the default graph,
                 // move it to the target graph
                 if matches!(target_graph, GraphName::NamedNode(_))
@@ -252,7 +341,24 @@ fn parse_and_import<S: oxirs_core::Store>(
                 // Insert quad into store
                 match store.insert_quad(quad) {
                     Ok(_) => {
-                        triple_count += 1;
+                        // Save checkpoint periodically if checkpointing is enabled
+                        if enable_checkpointing && total_parsed % CHECKPOINT_INTERVAL == 0 {
+                            let checkpoint = Checkpoint {
+                                operation: "import".to_string(),
+                                dataset: dataset.to_string(),
+                                file_path: file_path.to_string_lossy().to_string(),
+                                processed_count: total_parsed,
+                                last_offset: 0, // Not used for RDF parsing
+                                timestamp: chrono::Local::now().to_rfc3339(),
+                                format: format.to_string(),
+                                graph: graph.map(|s| s.to_string()),
+                                total_size,
+                            };
+
+                            if let Err(e) = checkpoint_manager.save(&checkpoint) {
+                                eprintln!("Warning: Failed to save checkpoint: {e}");
+                            }
+                        }
                     }
                     Err(e) => {
                         eprintln!("Warning: Failed to insert quad: {e}");
@@ -267,5 +373,5 @@ fn parse_and_import<S: oxirs_core::Store>(
         }
     }
 
-    Ok((triple_count, error_count))
+    Ok((total_parsed, error_count))
 }

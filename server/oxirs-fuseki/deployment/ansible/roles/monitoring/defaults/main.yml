@@ -1,0 +1,12 @@
+---
+# Monitoring role default variables
+
+node_exporter_version: "1.8.2"
+prometheus_version: "2.53.1"
+
+enable_cron_monitoring: true
+enable_alerting: false
+
+prometheus_scrape_interval: 15s
+prometheus_evaluation_interval: 15s
+prometheus_retention_days: 15

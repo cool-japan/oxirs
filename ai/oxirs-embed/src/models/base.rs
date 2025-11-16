@@ -152,11 +152,14 @@ impl BaseModel {
     }
 
     /// Generate negative samples for training
-    pub fn generate_negative_samples(
+    pub fn generate_negative_samples<R>(
         &self,
         num_samples: usize,
-        rng: &mut Random,
-    ) -> Vec<(usize, usize, usize)> {
+        rng: &mut Random<R>,
+    ) -> Vec<(usize, usize, usize)>
+    where
+        R: scirs2_core::random::RngCore,
+    {
         let mut negative_samples = Vec::new();
         let num_entities = self.num_entities();
 

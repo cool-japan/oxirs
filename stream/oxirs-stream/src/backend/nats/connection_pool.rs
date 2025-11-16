@@ -6,7 +6,7 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info, warn};
 
 #[cfg(feature = "nats")]
 use async_nats::{Client, ConnectOptions};
@@ -138,13 +138,12 @@ impl ConnectionPool {
         #[cfg(feature = "nats")]
         {
             // Perform actual health check with NATS server info
-            match connection.client.server_info() {
-                info => {
-                    connection.is_healthy = true;
-                    connection.last_health_check = Utc::now();
-                    connection.last_error = None;
-                    debug!("Health check passed for: {}", connection.url);
-                }
+            let _info = connection.client.server_info();
+            {
+                connection.is_healthy = true;
+                connection.last_health_check = Utc::now();
+                connection.last_error = None;
+                debug!("Health check passed for: {}", connection.url);
             }
         }
 
@@ -161,13 +160,12 @@ impl ConnectionPool {
         #[cfg(feature = "nats")]
         {
             // Perform actual health check with NATS server info
-            match connection.client.server_info() {
-                info => {
-                    connection.is_healthy = true;
-                    connection.last_health_check = Utc::now();
-                    connection.last_error = None;
-                    debug!("Health check passed for: {}", connection.url);
-                }
+            let _info = connection.client.server_info();
+            {
+                connection.is_healthy = true;
+                connection.last_health_check = Utc::now();
+                connection.last_error = None;
+                debug!("Health check passed for: {}", connection.url);
             }
         }
 

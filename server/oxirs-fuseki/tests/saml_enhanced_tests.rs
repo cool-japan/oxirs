@@ -248,7 +248,7 @@ mod saml_authentication_tests {
         assert!(deserialized.is_ok());
 
         let restored = deserialized.unwrap();
-        assert_eq!(restored.required, true);
+        assert!(restored.required);
         assert_eq!(restored.accepted_contexts.len(), 2);
         assert!(matches!(restored.minimum_strength, AuthnStrength::High));
         assert_eq!(restored.timeout_minutes, 15);

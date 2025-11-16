@@ -269,17 +269,19 @@ pub struct AuthContext {
 }
 
 /// Event priority levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum EventPriority {
     Low = 0,
+    #[default]
     Normal = 1,
     High = 2,
     Critical = 3,
 }
 
 /// Compression types for payload optimization
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CompressionType {
+    #[default]
     None,
     Gzip,
     Lz4,
@@ -289,8 +291,9 @@ pub enum CompressionType {
 }
 
 /// Serialization formats supported
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum SerializationFormat {
+    #[default]
     Json,
     MessagePack,
     Protobuf,
@@ -401,24 +404,6 @@ impl Default for RetryPolicy {
             backoff_multiplier: 2.0,
             use_jitter: true,
         }
-    }
-}
-
-impl Default for EventPriority {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
-impl Default for CompressionType {
-    fn default() -> Self {
-        Self::None
-    }
-}
-
-impl Default for SerializationFormat {
-    fn default() -> Self {
-        Self::Json
     }
 }
 

@@ -9,9 +9,10 @@ use std::time::Duration;
 use crate::ml::VotingStrategy;
 
 /// Advanced model selection strategies for dynamic orchestration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum ModelSelectionStrategy {
     /// Performance-based selection using historical metrics
+    #[default]
     PerformanceBased,
     /// Adaptive selection based on data characteristics
     DataAdaptive,
@@ -23,12 +24,6 @@ pub enum ModelSelectionStrategy {
     MetaLearning,
     /// Hybrid approach combining multiple strategies
     Hybrid(Vec<ModelSelectionStrategy>),
-}
-
-impl Default for ModelSelectionStrategy {
-    fn default() -> Self {
-        Self::PerformanceBased
-    }
 }
 
 /// Performance requirements for model selection

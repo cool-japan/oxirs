@@ -19,14 +19,26 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 // Module declarations
+pub mod api_key_service; // API key management with rotation and revocation
 pub mod certificate;
+pub mod graph_auth; // 🆕 Graph-level authorization (Phase 2)
+pub mod jwt; // JWT token generation and validation
+pub mod jwt_validation; // JWT validation and JWK management
 pub mod ldap;
 pub mod oauth;
+pub mod oauth_providers; // Provider-specific OAuth2 implementations
 pub mod password;
 pub mod permissions;
+pub mod policy_engine; // 🆕 Unified Policy Engine (RBAC + ReBAC)
+pub mod query_filter; // 🆕 SPARQL query result filtering (Phase 2)
+pub mod rbac; // Enhanced Role-Based Access Control
+pub mod rdf_rebac; // 🆕 RDF-native ReBAC implementation (Phase 4)
+pub mod rebac; // 🆕 Relationship-Based Access Control
+pub mod rebac_migration; // 🆕 ReBAC migration tools (Export/Import/Migrate)
 #[cfg(feature = "saml")]
 pub mod saml;
 pub mod session;
+pub mod token_management; // Token introspection and revocation (RFC 7662, RFC 7009)
 pub mod types;
 
 // Re-export key types for easy access

@@ -5,6 +5,8 @@
 use crate::cli::formatters::{
     create_formatter, Binding, QueryResults as FormatterQueryResults, RdfTerm,
 };
+use crate::cli::sparql_autocomplete::SparqlAutocompleteProvider;
+use crate::cli::syntax_highlighting::{highlight_sparql, HighlightConfig};
 use crate::cli::CliResult;
 use oxirs_core::model::{Predicate, Subject, Term};
 use oxirs_core::rdf_store::{OxirsQueryResults, QueryResults as CoreQueryResults, RdfStore};
@@ -16,10 +18,21 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
+use strsim; // Fuzzy string matching
 
-/// SPARQL query helper for readline with keyword completion
+/// SPARQL query helper for readline with enhanced context-aware completion
 #[derive(Helper, Highlighter, Validator)]
-struct SparqlHelper;
+struct SparqlHelper {
+    autocomplete_provider: SparqlAutocompleteProvider,
+}
+
+impl SparqlHelper {
+    fn new() -> Self {
+        Self {
+            autocomplete_provider: SparqlAutocompleteProvider::new(),
+        }
+    }
+}
 
 impl rustyline::completion::Completer for SparqlHelper {
     type Candidate = String;
@@ -30,60 +43,28 @@ impl rustyline::completion::Completer for SparqlHelper {
         pos: usize,
         _ctx: &rustyline::Context<'_>,
     ) -> rustyline::Result<(usize, Vec<Self::Candidate>)> {
-        let keywords = vec![
-            "SELECT",
-            "CONSTRUCT",
-            "ASK",
-            "DESCRIBE",
-            "WHERE",
-            "FILTER",
-            "OPTIONAL",
-            "UNION",
-            "GRAPH",
-            "SERVICE",
-            "BIND",
-            "VALUES",
-            "PREFIX",
-            "BASE",
-            "DISTINCT",
-            "REDUCED",
-            "ORDER BY",
-            "GROUP BY",
-            "HAVING",
-            "LIMIT",
-            "OFFSET",
-            "FROM",
-            "FROM NAMED",
-            "INSERT",
-            "DELETE",
-            "CLEAR",
-            "DROP",
-            "CREATE",
-            "LOAD",
-            "COPY",
-            "MOVE",
-            "ADD",
-        ];
+        use crate::cli::completion::{CompletionContext, CompletionProvider};
 
+        // Create completion context from the current line
+        let context = CompletionContext::from_line(line, pos);
+
+        // Get completions from the SPARQL autocomplete provider
+        let completions = self.autocomplete_provider.get_completions(&context);
+
+        // Find start position for completion (start of current word)
         let line_before = &line[..pos];
         let start = line_before
             .rfind(char::is_whitespace)
             .map(|i| i + 1)
             .unwrap_or(0);
 
-        let prefix = &line_before[start..].to_uppercase();
-
-        if prefix.is_empty() {
-            return Ok((start, vec![]));
-        }
-
-        let matches: Vec<String> = keywords
-            .iter()
-            .filter(|k| k.starts_with(prefix))
-            .map(|k| k.to_string())
+        // Convert CompletionItem to rustyline's String candidates
+        let candidates: Vec<String> = completions
+            .into_iter()
+            .map(|item| item.replacement)
             .collect();
 
-        Ok((start, matches))
+        Ok((start, candidates))
     }
 }
 
@@ -171,7 +152,7 @@ impl QuerySession {
     }
 }
 
-/// Format SPARQL query for better readability
+/// Format SPARQL query for better readability with syntax highlighting
 fn format_sparql_query(query: &str) -> String {
     let mut formatted = String::new();
     let mut indent_level: usize = 0;
@@ -198,7 +179,11 @@ fn format_sparql_query(query: &str) -> String {
         }
     }
 
-    formatted.trim_end().to_string()
+    let formatted_text = formatted.trim_end().to_string();
+
+    // Apply syntax highlighting
+    let highlight_config = HighlightConfig::default();
+    highlight_sparql(&formatted_text, &highlight_config)
 }
 
 /// Get query template by name
@@ -669,7 +654,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
 
     let mut rl = Editor::<SparqlHelper, DefaultHistory>::new()
         .map_err(|e| crate::cli::CliError::from(format!("Failed to create editor: {}", e)))?;
-    rl.set_helper(Some(SparqlHelper));
+    rl.set_helper(Some(SparqlHelper::new()));
 
     // Load history
     let history_dir = dirs::data_local_dir()
@@ -687,7 +672,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
     // Print welcome message
     println!("╔═══════════════════════════════════════════════════════════╗");
     println!("║              OxiRS Interactive SPARQL Shell             ║");
-    println!("║                    Version 0.1.0-alpha.2                 ║");
+    println!("║                    Version 0.1.0-beta.1                 ║");
     println!("╚═══════════════════════════════════════════════════════════╝");
     println!();
     println!("Connected to dataset: {}", dataset_name);
@@ -712,7 +697,7 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
     println!("  .history          Show query history");
     println!("  .show <n>         Show query #n");
     println!("  .replay <n>       Replay query #n");
-    println!("  .search <word>    Search queries");
+    println!("  .search <word>    Search queries (fuzzy matching)");
     println!("  .format <n>       Format query #n");
     println!();
     println!("File Operations:");
@@ -876,10 +861,14 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                                 );
                                 for (i, query) in current_session.queries.iter().enumerate() {
                                     println!("\n[Query #{}]", i + 1);
+                                    // Apply syntax highlighting
+                                    let highlight_config = HighlightConfig::default();
+                                    let highlighted_query =
+                                        highlight_sparql(query, &highlight_config);
                                     // Show first 2 lines or full query if short
-                                    let lines: Vec<&str> = query.lines().collect();
+                                    let lines: Vec<&str> = highlighted_query.lines().collect();
                                     if lines.len() <= 2 {
-                                        println!("{}", query);
+                                        println!("{}", highlighted_query);
                                     } else {
                                         println!("{}", lines[0]);
                                         println!("{}", lines[1]);
@@ -1150,33 +1139,94 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                         ".search" => {
                             if parts.len() < 2 {
                                 eprintln!("Usage: .search <keyword>");
+                                eprintln!("  Supports fuzzy matching - finds similar queries even with typos");
+                                eprintln!("  Results are ranked by relevance");
                             } else {
                                 let keyword = parts[1].trim();
-                                let matches: Vec<(usize, &String)> = current_session
-                                    .queries
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|(_, q)| {
-                                        q.to_lowercase().contains(&keyword.to_lowercase())
-                                    })
-                                    .collect();
 
-                                if matches.is_empty() {
+                                // Collect matches with relevance scores
+                                let mut scored_matches: Vec<(usize, &String, f64)> =
+                                    current_session
+                                        .queries
+                                        .iter()
+                                        .enumerate()
+                                        .filter_map(|(idx, q)| {
+                                            let query_lower = q.to_lowercase();
+                                            let keyword_lower = keyword.to_lowercase();
+
+                                            // Exact substring match gets highest score
+                                            if query_lower.contains(&keyword_lower) {
+                                                return Some((idx, q, 1.0));
+                                            }
+
+                                            // Fuzzy match using Jaro-Winkler distance
+                                            let max_similarity = q
+                                                .split_whitespace()
+                                                .map(|word| {
+                                                    strsim::jaro_winkler(
+                                                        &word.to_lowercase(),
+                                                        &keyword_lower,
+                                                    )
+                                                })
+                                                .max_by(|a, b| {
+                                                    a.partial_cmp(b)
+                                                        .unwrap_or(std::cmp::Ordering::Equal)
+                                                })
+                                                .unwrap_or(0.0);
+
+                                            // Only include matches above 0.7 similarity threshold
+                                            if max_similarity >= 0.7 {
+                                                Some((idx, q, max_similarity))
+                                            } else {
+                                                None
+                                            }
+                                        })
+                                        .collect();
+
+                                // Sort by score (highest first)
+                                scored_matches.sort_by(|a, b| {
+                                    b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal)
+                                });
+
+                                if scored_matches.is_empty() {
                                     println!("No queries found matching: {}", keyword);
+                                    println!("Try a different search term or use fewer characters");
                                 } else {
                                     println!("╔═══════════════════════════════════════════════════════════╗");
                                     println!(
-                                        "║         Search Results for: {:<29}                  ║",
+                                        "║         Fuzzy Search Results for: {:<27}                ║",
                                         keyword
                                     );
                                     println!("╚═══════════════════════════════════════════════════════════╝");
-                                    println!("Found {} matches:\n", matches.len());
+                                    println!(
+                                        "Found {} matches (sorted by relevance):\n",
+                                        scored_matches.len()
+                                    );
 
-                                    for (idx, query) in matches {
-                                        println!("[Query #{}]", idx + 1);
-                                        let lines: Vec<&str> = query.lines().collect();
+                                    for (idx, query, score) in scored_matches {
+                                        // Show relevance indicator
+                                        let relevance = if score >= 0.95 {
+                                            "Excellent match"
+                                        } else if score >= 0.85 {
+                                            "Good match"
+                                        } else {
+                                            "Possible match"
+                                        };
+
+                                        println!(
+                                            "[Query #{}] - {} ({:.0}% relevant)",
+                                            idx + 1,
+                                            relevance,
+                                            score * 100.0
+                                        );
+
+                                        // Apply syntax highlighting
+                                        let highlight_config = HighlightConfig::default();
+                                        let highlighted_query =
+                                            highlight_sparql(query, &highlight_config);
+                                        let lines: Vec<&str> = highlighted_query.lines().collect();
                                         if lines.len() <= 2 {
-                                            println!("{}", query);
+                                            println!("{}", highlighted_query);
                                         } else {
                                             println!("{}", lines[0]);
                                             println!("... ({} more lines)", lines.len() - 1);
@@ -1220,7 +1270,11 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
                                 let template_name = parts[1].trim();
                                 if let Some(template) = get_query_template(template_name) {
                                     println!("\n─── Template: {} ───", template_name);
-                                    println!("{}", template);
+                                    // Apply syntax highlighting to template
+                                    let highlight_config = HighlightConfig::default();
+                                    let highlighted_template =
+                                        highlight_sparql(&template, &highlight_config);
+                                    println!("{}", highlighted_template);
                                     println!("────────────────────────");
                                     println!("\nType or paste to use this template");
                                 } else {
@@ -1385,6 +1439,65 @@ pub fn execute(dataset: Option<String>, _config_path: Option<PathBuf>) -> CliRes
     }
 
     Ok(())
+}
+
+fn print_help() {
+    println!("╔═══════════════════════════════════════════════════════════╗");
+    println!("║                 OxiRS Interactive Help                   ║");
+    println!("╚═══════════════════════════════════════════════════════════╝");
+    println!();
+    println!("Meta Commands:");
+    println!("  .help             Show this help message");
+    println!("  .quit, .exit      Exit the shell");
+    println!("  .stats            Show dataset and session statistics");
+    println!();
+    println!("Session Management:");
+    println!("  .session          Show current session information");
+    println!("  .save <filename>  Save session to file");
+    println!("  .load <filename>  Load session from file");
+    println!("  .list             List all saved sessions");
+    println!("  .clear            Clear current session queries");
+    println!();
+    println!("Query Management:");
+    println!("  .history          Show all queries in session");
+    println!("  .show <n>         Display query number n");
+    println!("  .replay <n>       Re-execute query number n");
+    println!("  .search <keyword> Search queries with fuzzy matching and ranking");
+    println!("  .format <n>       Format and pretty-print query number n");
+    println!();
+    println!("File Operations:");
+    println!("  .export <file>    Export all queries to SPARQL file");
+    println!("  .import <file>    Import queries from SPARQL file");
+    println!("  .batch <file>     Execute all queries from file with timing");
+    println!();
+    println!("Templates:");
+    println!("  .template         List available query templates");
+    println!("  .template <name>  Show specific template (select, construct, etc.)");
+    println!();
+    println!("  Sessions are stored in: ~/.local/share/oxirs/sessions/");
+    println!("  Each session contains query history and metadata.");
+    println!();
+    println!("Query Examples:");
+    println!("  SELECT * WHERE {{ ?s ?p ?o }} LIMIT 10");
+    println!("  ASK {{ ?s a <http://example.org/Person> }}");
+    println!();
+    println!("Multi-line Queries:");
+    println!("  Queries automatically continue over multiple lines until");
+    println!("  all braces, brackets, and quotes are balanced.");
+    println!("  The prompt changes to 'oxirs...>' for continuation lines.");
+    println!();
+    println!("  Example:");
+    println!("    oxirs> SELECT ?name ?email WHERE {{");
+    println!("    oxirs...>   ?person foaf:name ?name .");
+    println!("    oxirs...>   ?person foaf:mbox ?email");
+    println!("    oxirs...> }} LIMIT 10");
+    println!();
+    println!("Keyboard Shortcuts:");
+    println!("  Ctrl+C            Cancel multi-line input or interrupt");
+    println!("  Ctrl+D            Exit the shell");
+    println!("  Up/Down           Navigate history");
+    println!("  Backslash (\\)     Force continuation to next line");
+    println!();
 }
 
 #[cfg(test)]
@@ -1568,63 +1681,4 @@ mod tests {
         let hints = validate_sparql_syntax(query);
         assert!(hints.iter().any(|h| h.contains("FILTER")));
     }
-}
-
-fn print_help() {
-    println!("╔═══════════════════════════════════════════════════════════╗");
-    println!("║                 OxiRS Interactive Help                   ║");
-    println!("╚═══════════════════════════════════════════════════════════╝");
-    println!();
-    println!("Meta Commands:");
-    println!("  .help             Show this help message");
-    println!("  .quit, .exit      Exit the shell");
-    println!("  .stats            Show dataset and session statistics");
-    println!();
-    println!("Session Management:");
-    println!("  .session          Show current session information");
-    println!("  .save <filename>  Save session to file");
-    println!("  .load <filename>  Load session from file");
-    println!("  .list             List all saved sessions");
-    println!("  .clear            Clear current session queries");
-    println!();
-    println!("Query Management:");
-    println!("  .history          Show all queries in session");
-    println!("  .show <n>         Display query number n");
-    println!("  .replay <n>       Re-execute query number n");
-    println!("  .search <keyword> Search queries containing keyword");
-    println!("  .format <n>       Format and pretty-print query number n");
-    println!();
-    println!("File Operations:");
-    println!("  .export <file>    Export all queries to SPARQL file");
-    println!("  .import <file>    Import queries from SPARQL file");
-    println!("  .batch <file>     Execute all queries from file with timing");
-    println!();
-    println!("Templates:");
-    println!("  .template         List available query templates");
-    println!("  .template <name>  Show specific template (select, construct, etc.)");
-    println!();
-    println!("  Sessions are stored in: ~/.local/share/oxirs/sessions/");
-    println!("  Each session contains query history and metadata.");
-    println!();
-    println!("Query Examples:");
-    println!("  SELECT * WHERE {{ ?s ?p ?o }} LIMIT 10");
-    println!("  ASK {{ ?s a <http://example.org/Person> }}");
-    println!();
-    println!("Multi-line Queries:");
-    println!("  Queries automatically continue over multiple lines until");
-    println!("  all braces, brackets, and quotes are balanced.");
-    println!("  The prompt changes to 'oxirs...>' for continuation lines.");
-    println!();
-    println!("  Example:");
-    println!("    oxirs> SELECT ?name ?email WHERE {{");
-    println!("    oxirs...>   ?person foaf:name ?name .");
-    println!("    oxirs...>   ?person foaf:mbox ?email");
-    println!("    oxirs...> }} LIMIT 10");
-    println!();
-    println!("Keyboard Shortcuts:");
-    println!("  Ctrl+C            Cancel multi-line input or interrupt");
-    println!("  Ctrl+D            Exit the shell");
-    println!("  Up/Down           Navigate history");
-    println!("  Backslash (\\)     Force continuation to next line");
-    println!();
 }

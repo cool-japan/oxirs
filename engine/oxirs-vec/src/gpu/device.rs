@@ -1,6 +1,6 @@
 //! GPU device information and management
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", cuda_runtime_available))]
 use anyhow::anyhow;
 use anyhow::Result;
 
@@ -22,7 +22,7 @@ pub struct GpuDevice {
 impl GpuDevice {
     /// Get information about a specific GPU device
     pub fn get_device_info(device_id: i32) -> Result<Self> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -68,9 +68,10 @@ impl GpuDevice {
             }
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
-            // Fallback for testing without CUDA
+            // Fallback for testing without CUDA or when CUDA toolkit not installed
+            tracing::warn!("CUDA not available - using simulated GPU device");
             Ok(Self {
                 device_id,
                 name: format!("Simulated GPU {device_id}"),
@@ -88,7 +89,7 @@ impl GpuDevice {
 
     /// Get information about all available GPU devices
     pub fn get_all_devices() -> Result<Vec<Self>> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -108,9 +109,10 @@ impl GpuDevice {
             }
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
-            // Fallback: simulate 2 GPUs for testing
+            // Fallback: simulate 2 GPUs for testing when CUDA not available
+            tracing::warn!("CUDA not available - using simulated GPU devices");
             Ok(vec![Self::get_device_info(0)?, Self::get_device_info(1)?])
         }
     }

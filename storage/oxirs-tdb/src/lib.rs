@@ -1,9 +1,9 @@
 //! # OxiRS TDB - Apache Jena TDB/TDB2 Compatible Storage Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! High-performance RDF triple store with B+Tree indexes, ACID transactions,
 //! and Apache Jena TDB/TDB2 API compatibility.
@@ -76,7 +76,7 @@
 //! - [`oxirs-core`](https://docs.rs/oxirs-core) - RDF data model
 //! - [`oxirs-arq`](https://docs.rs/oxirs-arq) - SPARQL query engine
 
-#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-alpha.3")]
+#![doc(html_root_url = "https://docs.rs/oxirs-tdb/0.1.0-beta.1")]
 #![warn(missing_docs)]
 #![allow(dead_code)] // Allow during development
 #![allow(unused_imports)] // Allow during development
@@ -112,9 +112,61 @@ pub mod production;
 // Backup and restore utilities
 pub mod backup;
 
+// Crash recovery and corruption detection
+pub mod recovery;
+
+// Query hint support
+pub mod query_hints;
+
+// Query result caching
+pub mod query_cache;
+
+// Cost-based query optimization
+// TODO(v0.1.0-rc.1): Complete StatisticsSnapshot API integration for full functionality
+pub mod query_optimizer;
+
+// Statistics collection for cost-based optimization
+pub mod statistics;
+
+// Query monitoring (timeout enforcement and slow query logging)
+pub mod query_monitor;
+
+// Advanced diagnostic tools
+pub mod diagnostics;
+
+// High-performance operations using SciRS2-Core
+pub mod performance;
+
+// RDF-star support for quoted triples
+pub mod rdf_star;
+
+// Connection pooling for multi-client access
+pub mod connection_pool;
+
+// Query resource quotas for per-query resource limiting
+pub mod query_resource_quota;
+
+// Materialized views for query acceleration
+pub mod materialized_views;
+
+// WAL archiving for point-in-time recovery
+pub mod wal_archive;
+
 // Re-export commonly used types
+pub use connection_pool::{ConnectionPool, ConnectionPoolConfig, ConnectionPoolStatsSnapshot};
 pub use error::{Result, TdbError};
+pub use materialized_views::{
+    MaterializedView, MaterializedViewConfig, MaterializedViewManager,
+    MaterializedViewManagerStats, RefreshStrategy, ViewInfo,
+};
+pub use query_resource_quota::{
+    QueryQuotaStats, QueryResourceQuotaConfig, QueryResourceQuotaManager, QueryResourceTracker,
+    QueryResourceUsage,
+};
 pub use store::{TdbConfig, TdbStats, TdbStore};
+pub use wal_archive::{
+    WalArchiveConfig, WalArchiveMetadata, WalArchiver, WalArchiverStatsSnapshot,
+};
 
 /// TDB storage engine version
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

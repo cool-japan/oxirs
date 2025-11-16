@@ -33,7 +33,7 @@ mod duration_serde {
     }
 }
 
-/// Serde helper for Option<Duration> serialization
+/// Serde helper for `Option<Duration>` serialization
 mod option_duration_serde {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::time::Duration;

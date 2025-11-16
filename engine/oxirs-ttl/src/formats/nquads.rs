@@ -17,6 +17,31 @@ impl NQuadsParser {
         Self
     }
 
+    /// Strip inline comments from a line (# after data, not inside quotes or IRIs)
+    fn strip_inline_comment<'a>(&self, line: &'a str) -> &'a str {
+        let mut in_string = false;
+        let mut in_iri = false;
+        let mut escaped = false;
+
+        for (i, ch) in line.char_indices() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+
+            match ch {
+                '\\' if in_string => escaped = true,
+                '"' => in_string = !in_string,
+                '<' if !in_string => in_iri = true,
+                '>' if !in_string => in_iri = false,
+                '#' if !in_string && !in_iri => return line[..i].trim_end(),
+                _ => {}
+            }
+        }
+
+        line
+    }
+
     /// Parse a single line of N-Quads format
     fn parse_line(&self, line: &str, line_num: usize) -> TurtleResult<Option<Quad>> {
         let line = line.trim();
@@ -25,6 +50,9 @@ impl NQuadsParser {
         if line.is_empty() || line.starts_with('#') {
             return Ok(None);
         }
+
+        // Strip inline comments (# after the statement, not inside quotes)
+        let line = self.strip_inline_comment(line);
 
         // Lines must end with '.'
         if !line.ends_with('.') {
@@ -88,7 +116,9 @@ impl NQuadsParser {
                     in_string = !in_string;
                 }
                 '<' if !in_string => {
-                    if !current_token.is_empty() {
+                    // Check if this is part of a typed literal (^^<IRI>)
+                    // If current_token ends with ^^, keep building the same token
+                    if !current_token.ends_with("^^") && !current_token.is_empty() {
                         tokens.push(current_token.clone());
                         current_token.clear();
                     }
@@ -98,8 +128,12 @@ impl NQuadsParser {
                 '>' if in_iri && !in_string => {
                     current_token.push('>');
                     in_iri = false;
-                    tokens.push(current_token.clone());
-                    current_token.clear();
+                    // Only push token if we're not in the middle of a typed literal
+                    // If the token starts with a quote, it's a literal with datatype
+                    if !current_token.starts_with('"') {
+                        tokens.push(current_token.clone());
+                        current_token.clear();
+                    }
                 }
                 ' ' | '\t' if !in_string && !in_iri => {
                     if !current_token.is_empty() {
@@ -196,33 +230,32 @@ impl NQuadsParser {
             }));
         }
 
-        // Find the closing quote (handling escapes)
-        let mut end_quote = None;
-        let mut i = 1;
-        let chars: Vec<char> = token.chars().collect();
+        // Find the closing quote (handling escapes) - use byte indices for proper UTF-8 handling
+        let mut end_quote_byte_idx = None;
+        let mut char_iter = token.char_indices().skip(1); // Skip opening quote
 
-        while i < chars.len() {
-            if chars[i] == '\\' {
-                i += 2; // Skip escaped character
-            } else if chars[i] == '"' {
-                end_quote = Some(i);
+        while let Some((byte_idx, ch)) = char_iter.next() {
+            if ch == '\\' {
+                // Skip the escaped character
+                char_iter.next();
+            } else if ch == '"' {
+                end_quote_byte_idx = Some(byte_idx);
                 break;
-            } else {
-                i += 1;
             }
         }
 
-        let end_quote = end_quote.ok_or_else(|| {
+        let end_quote_byte_idx = end_quote_byte_idx.ok_or_else(|| {
             TurtleParseError::syntax(TurtleSyntaxError::Generic {
                 message: "Unterminated literal".to_string(),
                 position: TextPosition::default(),
             })
         })?;
 
-        let value_with_escapes = &token[1..end_quote];
+        // Use byte indices for slicing to properly handle UTF-8 multi-byte characters
+        let value_with_escapes = &token[1..end_quote_byte_idx];
         let value = self.unescape_string(value_with_escapes)?;
 
-        let remainder = &token[end_quote + 1..];
+        let remainder = &token[end_quote_byte_idx + 1..];
 
         if remainder.is_empty() {
             // Simple literal
@@ -271,7 +304,7 @@ impl NQuadsParser {
                     Some('r') => result.push('\r'),
                     Some('t') => result.push('\t'),
                     Some('u') => {
-                        // Unicode escape \uXXXX
+                        // Unicode escape \uXXXX (4 hex digits)
                         let mut hex = String::new();
                         for _ in 0..4 {
                             if let Some(hex_char) = chars.next() {
@@ -289,6 +322,38 @@ impl NQuadsParser {
                         let code_point = u32::from_str_radix(&hex, 16).map_err(|_| {
                             TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
                                 sequence: format!("u{hex}"),
+                                position: TextPosition::default(),
+                            })
+                        })?;
+
+                        let unicode_char = char::from_u32(code_point).ok_or_else(|| {
+                            TurtleParseError::syntax(TurtleSyntaxError::InvalidUnicode {
+                                codepoint: code_point,
+                                position: TextPosition::default(),
+                            })
+                        })?;
+
+                        result.push(unicode_char);
+                    }
+                    Some('U') => {
+                        // Unicode escape \UXXXXXXXX (8 hex digits)
+                        let mut hex = String::new();
+                        for _ in 0..8 {
+                            if let Some(hex_char) = chars.next() {
+                                hex.push(hex_char);
+                            } else {
+                                return Err(TurtleParseError::syntax(
+                                    TurtleSyntaxError::InvalidEscape {
+                                        sequence: format!("U{hex}"),
+                                        position: TextPosition::default(),
+                                    },
+                                ));
+                            }
+                        }
+
+                        let code_point = u32::from_str_radix(&hex, 16).map_err(|_| {
+                            TurtleParseError::syntax(TurtleSyntaxError::InvalidEscape {
+                                sequence: format!("U{hex}"),
                                 position: TextPosition::default(),
                             })
                         })?;

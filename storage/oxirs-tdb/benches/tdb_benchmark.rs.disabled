@@ -6,20 +6,24 @@
 #![allow(clippy::uninlined_format_args, unused_variables)]
 
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use oxirs_tdb::{
-    compression::{AdaptiveCompressor, CompressionAlgorithm},
-    SimpleTdbConfig, TdbStore, Term,
-};
+use oxirs_core::Term;
+use oxirs_tdb::{compression::AdaptiveCompressor, TdbConfig, TdbStore};
 use scirs2_core::rand_prelude::IndexedRandom;
-use scirs2_core::random::{DistributionExt, Random, Rng};
+use scirs2_core::random::{Random, Rng};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 
 /// Generate random terms for benchmarking
 fn generate_random_triple(rng: &mut impl Rng) -> (Term, Term, Term) {
-    let subject = Term::iri(format!("http://example.org/subject/{}", rng.random::<u64>()));
-    let predicate = Term::iri(format!("http://example.org/predicate/{}", rng.random::<u8>()));
+    let subject = Term::iri(format!(
+        "http://example.org/subject/{}",
+        rng.random::<u64>()
+    ));
+    let predicate = Term::iri(format!(
+        "http://example.org/predicate/{}",
+        rng.random::<u8>()
+    ));
     let object = if rng.random::<bool>() {
         Term::literal(format!("value_{}", rng.random::<u32>()))
     } else {
@@ -40,11 +44,7 @@ fn bench_insertion(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let config = SimpleTdbConfig {
-                        location: temp_dir.path().to_string_lossy().to_string(),
-                        ..Default::default()
-                    };
-                    let store = TdbStore::new(config).unwrap();
+                    let store = TdbStore::open(temp_dir.path()).unwrap();
                     let mut rng = Random::default();
                     let triples: Vec<(Term, Term, Term)> = (0..size)
                         .map(|_| generate_random_triple(&mut rng))
@@ -80,11 +80,7 @@ fn bench_bulk_load_transactions(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let config = SimpleTdbConfig {
-                        location: temp_dir.path().to_string_lossy().to_string(),
-                        ..Default::default()
-                    };
-                    let store = TdbStore::new(config).unwrap();
+                    let store = TdbStore::open(temp_dir.path()).unwrap();
                     let mut rng = Random::default();
                     let triples: Vec<(Term, Term, Term)> = (0..size)
                         .map(|_| generate_random_triple(&mut rng))
@@ -127,11 +123,7 @@ fn bench_query(c: &mut Criterion) {
         .into_iter()
         .map(|size| {
             let temp_dir = TempDir::new().unwrap();
-            let config = SimpleTdbConfig {
-                location: temp_dir.path().to_string_lossy().to_string(),
-                ..Default::default()
-            };
-            let store = TdbStore::new(config).unwrap();
+            let store = TdbStore::open(temp_dir.path()).unwrap();
             let mut rng = Random::default();
 
             // Load triples
@@ -186,11 +178,7 @@ fn bench_concurrent(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = SimpleTdbConfig {
-        location: temp_dir.path().to_string_lossy().to_string(),
-        ..Default::default()
-    };
-    let store = Arc::new(TdbStore::new(config).unwrap());
+    let store = Arc::new(TdbStore::open(temp_dir.path()).unwrap());
 
     // Pre-load 100K triples
     let mut rng = Random::default();
@@ -231,11 +219,7 @@ fn bench_mvcc(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(5));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = SimpleTdbConfig {
-        location: temp_dir.path().to_string_lossy().to_string(),
-        ..Default::default()
-    };
-    let store = TdbStore::new(config).unwrap();
+    let store = TdbStore::open(temp_dir.path()).unwrap();
 
     // Pre-load some data
     let mut rng = Random::default();
@@ -280,12 +264,11 @@ fn bench_large_scale(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let temp_dir = TempDir::new().unwrap();
-                let config = SimpleTdbConfig {
-                    location: temp_dir.path().to_string_lossy().to_string(),
-                    cache_size: 1024 * 1024 * 500, // 500MB cache for large dataset
-                    ..Default::default()
-                };
-                let store = TdbStore::new(config).unwrap();
+                // 500MB cache = (1024 * 1024 * 500) / 4096 pages
+                let store = TdbStore::open_with_config(
+                    TdbConfig::new(temp_dir.path()).with_buffer_pool_size(128000), // 500MB / 4KB = 128000 pages
+                )
+                .unwrap();
                 (temp_dir, store)
             },
             |(_temp_dir, store)| {
@@ -372,12 +355,7 @@ fn bench_compression_configs(c: &mut Criterion) {
             b.iter_batched_ref(
                 || {
                     let temp_dir = TempDir::new().unwrap();
-                    let config = SimpleTdbConfig {
-                        location: temp_dir.path().to_string_lossy().to_string(),
-                        ..Default::default()
-                    };
-
-                    let store = TdbStore::new(config).unwrap();
+                    let store = TdbStore::open(temp_dir.path()).unwrap();
                     let mut rng = Random::default();
                     let triples: Vec<(Term, Term, Term)> = (0..10000)
                         .map(|_| generate_random_triple(&mut rng))
@@ -417,12 +395,12 @@ fn bench_memory_usage(c: &mut Criterion) {
                 b.iter_batched_ref(
                     || {
                         let temp_dir = TempDir::new().unwrap();
-                        let config = SimpleTdbConfig {
-                            location: temp_dir.path().to_string_lossy().to_string(),
-                            cache_size,
-                            ..Default::default()
-                        };
-                        let store = TdbStore::new(config).unwrap();
+                        // Convert cache_size in bytes to buffer_pool_size in pages (4KB each)
+                        let buffer_pool_size = cache_size / 4096;
+                        let store = TdbStore::open_with_config(
+                            TdbConfig::new(temp_dir.path()).with_buffer_pool_size(buffer_pool_size),
+                        )
+                        .unwrap();
                         let mut rng = Random::default();
                         let triples: Vec<(Term, Term, Term)> = (0..50000)
                             .map(|_| generate_random_triple(&mut rng))
@@ -458,12 +436,11 @@ fn bench_index_patterns(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(15));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = SimpleTdbConfig {
-        location: temp_dir.path().to_string_lossy().to_string(),
-        cache_size: 1024 * 1024 * 200, // 200MB for large dataset
-        ..Default::default()
-    };
-    let store = TdbStore::new(config).unwrap();
+    // 200MB cache = (1024 * 1024 * 200) / 4096 pages
+    let store = TdbStore::open_with_config(
+        TdbConfig::new(temp_dir.path()).with_buffer_pool_size(51200), // 200MB / 4KB = 51200 pages
+    )
+    .unwrap();
 
     // Load 500K triples with different distribution patterns
     let mut rng = Random::default();
@@ -549,12 +526,11 @@ fn bench_real_world_patterns(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(20));
 
     let temp_dir = TempDir::new().unwrap();
-    let config = SimpleTdbConfig {
-        location: temp_dir.path().to_string_lossy().to_string(),
-        cache_size: 1024 * 1024 * 300, // 300MB
-        ..Default::default()
-    };
-    let store = TdbStore::new(config).unwrap();
+    // 300MB cache = (1024 * 1024 * 300) / 4096 pages
+    let store = TdbStore::open_with_config(
+        TdbConfig::new(temp_dir.path()).with_buffer_pool_size(76800), // 300MB / 4KB = 76800 pages
+    )
+    .unwrap();
 
     // Simulate knowledge graph data with realistic patterns
     let mut rng = Random::default();
@@ -689,12 +665,8 @@ fn bench_recovery(c: &mut Criterion) {
         b.iter_batched_ref(
             || {
                 let temp_dir = TempDir::new().unwrap();
-                let config = SimpleTdbConfig {
-                    location: temp_dir.path().to_string_lossy().to_string(),
-                    enable_transactions: true,
-                    ..Default::default()
-                };
-                let store = TdbStore::new(config).unwrap();
+                // Transactions are enabled by default in the new API
+                let store = TdbStore::open(temp_dir.path()).unwrap();
 
                 // Load some data to checkpoint
                 let mut rng = Random::default();

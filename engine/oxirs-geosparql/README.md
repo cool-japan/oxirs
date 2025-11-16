@@ -1,10 +1,10 @@
 # oxirs-geosparql
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
 
 ⚠️ **Alpha Software**: APIs may change without notice. Suitable for production alpha testing and internal deployments.
 
@@ -30,7 +30,7 @@ Add this to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-geosparql = "0.1.0-alpha.3"
+oxirs-geosparql = "0.1.0-beta.1"
 ```
 
 ## Usage
@@ -235,7 +235,7 @@ oxirs-geosparql provides **two buffer implementations**:
 **1. Pure Rust Buffer** (`rust-buffer` feature):
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0-alpha.3"", features = ["rust-buffer"] }
+oxirs-geosparql = { version = "0.1.0-beta.1"", features = ["rust-buffer"] }
 ```
 
 ```rust
@@ -257,7 +257,7 @@ let buffered = buffer(&poly, 2.0).unwrap(); // Pure Rust!
 **2. GEOS Backend** (`geos-backend` feature):
 ```toml
 [dependencies]
-oxirs-geosparql = { version = "0.1.0-alpha.3"", features = ["geos-backend"] }
+oxirs-geosparql = { version = "0.1.0-beta.1"", features = ["geos-backend"] }
 ```
 
 **Advantages:**

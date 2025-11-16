@@ -7,10 +7,11 @@ use crate::{
     model::*,
     parser::RdfFormat,
     rdf_store::{OxirsQueryResults, RdfStore},
+    transaction::{IsolationLevel, TransactionManager},
     OxirsError, Result, Store as OxirsStoreTrait,
 };
 use std::io::{BufRead, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
 /// Oxigraph-compatible store implementation
@@ -20,6 +21,8 @@ use std::sync::{Arc, RwLock};
 /// Uses interior mutability to match Oxigraph's API where mutations take &self
 pub struct Store {
     inner: Arc<RwLock<RdfStore>>,
+    tx_manager: Arc<RwLock<Option<TransactionManager>>>,
+    wal_dir: Option<PathBuf>,
 }
 
 impl Store {
@@ -29,6 +32,8 @@ impl Store {
     pub fn new() -> Result<Self> {
         Ok(Store {
             inner: Arc::new(RwLock::new(RdfStore::new()?)),
+            tx_manager: Arc::new(RwLock::new(None)),
+            wal_dir: None,
         })
     }
 
@@ -36,8 +41,13 @@ impl Store {
     ///
     /// This matches oxigraph::Store::open()
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
+        let path_buf = path.as_ref().to_path_buf();
+        let wal_dir = path_buf.join("wal");
+
         Ok(Store {
-            inner: Arc::new(RwLock::new(RdfStore::open(path)?)),
+            inner: Arc::new(RwLock::new(RdfStore::open(&path_buf)?)),
+            tx_manager: Arc::new(RwLock::new(None)),
+            wal_dir: Some(wal_dir),
         })
     }
 
@@ -411,22 +421,42 @@ impl Store {
     }
 
     /// Creates a transaction for the store
+    ///
+    /// This method provides ACID transaction support with automatic commit/abort handling.
+    /// The transaction uses Snapshot isolation level by default.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// store.transaction(|tx| {
+    ///     // Perform transactional operations
+    ///     Ok(())
+    /// })?;
+    /// ```
     pub fn transaction<T, E>(
         &self,
-        f: impl FnOnce(&mut crate::Transaction) -> std::result::Result<T, E>,
+        f: impl FnOnce(&mut crate::AcidTransaction) -> std::result::Result<T, E>,
     ) -> std::result::Result<T, E>
     where
         E: From<OxirsError>,
     {
-        // Get write access to the store
-        let mut store = self.inner.write().map_err(|e| {
-            E::from(OxirsError::Store(format!(
-                "Failed to acquire write lock: {e}"
-            )))
+        // Ensure TransactionManager is initialized
+        self.ensure_tx_manager()?;
+
+        // Get the transaction manager
+        let mut tx_mgr_guard = self
+            .tx_manager
+            .write()
+            .map_err(|e| E::from(OxirsError::Store(format!("Failed to acquire lock: {e}"))))?;
+
+        let tx_mgr = tx_mgr_guard.as_mut().ok_or_else(|| {
+            E::from(OxirsError::Store(
+                "Transaction manager not initialized".to_string(),
+            ))
         })?;
 
-        // Create a transaction
-        let mut transaction = crate::Transaction::new(&mut store);
+        // Begin a transaction with Snapshot isolation
+        let mut transaction = tx_mgr.begin(IsolationLevel::Snapshot).map_err(E::from)?;
 
         // Execute the user function
         let result = f(&mut transaction);
@@ -438,10 +468,34 @@ impl Store {
                 Ok(value)
             }
             Err(error) => {
-                transaction.abort();
+                let _ = transaction.abort();
                 Err(error)
             }
         }
+    }
+
+    /// Ensures the transaction manager is initialized
+    fn ensure_tx_manager(&self) -> Result<()> {
+        let mut tx_mgr_guard = self
+            .tx_manager
+            .write()
+            .map_err(|e| OxirsError::Store(format!("Failed to acquire lock: {e}")))?;
+
+        if tx_mgr_guard.is_none() {
+            // Determine WAL directory
+            let wal_dir = if let Some(ref wal_path) = self.wal_dir {
+                wal_path.clone()
+            } else {
+                // Use temporary directory for in-memory stores
+                std::env::temp_dir().join("oxirs_wal")
+            };
+
+            // Create the transaction manager
+            let tx_mgr = TransactionManager::new(&wal_dir)?;
+            *tx_mgr_guard = Some(tx_mgr);
+        }
+
+        Ok(())
     }
 
     /// Validates the store integrity
@@ -761,7 +815,7 @@ mod tests {
     fn test_oxigraph_compat_extend() {
         let store = Store::new().unwrap();
 
-        let quads = vec![
+        let quads = [
             Quad::new(
                 NamedNode::new("http://example.org/s1").unwrap(),
                 NamedNode::new("http://example.org/p1").unwrap(),

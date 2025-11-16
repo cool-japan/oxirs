@@ -397,7 +397,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         Ok(EmbedVector::new(embedding))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<EmbedVector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<EmbedVector> {
         self.get_entity_embedding(relation)
     }
 

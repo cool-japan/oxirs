@@ -5,6 +5,7 @@
 
 // Module declarations
 pub mod anthropic_provider;
+pub mod chain_of_thought; // NEW: Chain-of-Thought reasoning
 pub mod circuit_breaker;
 pub mod config;
 pub mod cross_modal_reasoning;
@@ -18,10 +19,14 @@ pub mod performance_optimization;
 pub mod providers;
 pub mod real_time_adaptation;
 pub mod reasoning;
+pub mod tree_of_thoughts; // NEW: Tree-of-Thoughts reasoning
 pub mod types;
 
 // Re-export commonly used types
 pub use anthropic_provider::AnthropicProvider;
+pub use chain_of_thought::{
+    ChainOfThought, ChainOfThoughtConfig, ChainOfThoughtEngine, StepType, ThoughtStep,
+};
 pub use circuit_breaker::{CircuitBreaker, CircuitBreakerStats};
 pub use config::{
     BackoffStrategy, CircuitBreakerConfig, CircuitBreakerState, FallbackConfig, LLMConfig,
@@ -53,6 +58,9 @@ pub use performance_optimization::{
 pub use providers::LLMProvider;
 pub use real_time_adaptation::{
     AdaptationConfig, AdaptationMetrics, AdaptationStrategy, RealTimeAdaptation,
+};
+pub use tree_of_thoughts::{
+    SearchStrategy, ThoughtNode, TreeOfThoughts, TreeOfThoughtsConfig, TreeOfThoughtsEngine,
 };
 pub use types::{
     ChatMessage, ChatRole, LLMRequest, LLMResponse, LLMResponseChunk, LLMResponseStream, Priority,

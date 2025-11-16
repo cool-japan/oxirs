@@ -300,20 +300,19 @@ fn provide_optimization_recommendations(
         );
 
         // Generate specific recommendations
-        if result.name.contains("Backward") || result.name.contains("Hybrid") {
-            if !recommendations.contains(&"query_optimization") {
-                recommendations.push("query_optimization");
-            }
+        if (result.name.contains("Backward") || result.name.contains("Hybrid"))
+            && !recommendations.contains(&"query_optimization")
+        {
+            recommendations.push("query_optimization");
         }
-        if result.name.contains("Post-Reasoning") || result.name.contains("Full") {
-            if !recommendations.contains(&"validation_caching") {
-                recommendations.push("validation_caching");
-            }
+        if (result.name.contains("Post-Reasoning") || result.name.contains("Full"))
+            && !recommendations.contains(&"validation_caching")
+        {
+            recommendations.push("validation_caching");
         }
-        if result.name.contains("Distributed") {
-            if !recommendations.contains(&"network_optimization") {
-                recommendations.push("network_optimization");
-            }
+        if result.name.contains("Distributed") && !recommendations.contains(&"network_optimization")
+        {
+            recommendations.push("network_optimization");
         }
     }
     println!("  └────┴──────────────────────────────────┴──────────────┘");

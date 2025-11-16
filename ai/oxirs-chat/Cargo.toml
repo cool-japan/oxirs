@@ -17,6 +17,7 @@ oxirs-vec.workspace = true
 oxirs-embed.workspace = true
 
 # SciRS2 dependencies for AI chat and NLP
+scirs2-core = { workspace = true, features = ["random"] }
 scirs2-text = { workspace = true }
 scirs2-neural = { workspace = true }
 scirs2-stats = { workspace = true }
@@ -46,7 +47,7 @@ async-stream = "0.3"
 # anthropic-sdk = "0.1" # Add when available
 
 # Storage and Caching
-sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
+sqlx = { version = "0.9.0-alpha.1", features = ["runtime-tokio", "sqlite"] }
 redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 uuid = { version = "1.18", features = ["v4", "serde"] }
 
@@ -61,15 +62,14 @@ metrics-exporter-prometheus = "0.15"
 
 # Template Engine for SPARQL
 handlebars = "5.1"
-regex = "1.11"
-
-# Vector Search Integration (disabled due to dependency conflicts)
-# candle-core = "0.6"
-# candle-nn = "0.6"
-# candle-transformers = "0.6"
+regex = "1.12"
 
 # Async traits
 async-trait = "0.1"
+
+# Cryptographic functions for webhooks
+hmac = "0.12"
+sha2 = "0.10"
 
 # Session persistence and state management
 sled = "0.34"
@@ -83,7 +83,6 @@ base64 = "0.22"
 
 # Natural Language Processing
 tokenizers = "0.22"
-# nlp = "0.6" # Add when needed for entity extraction
 
 # OpenTelemetry for monitoring
 opentelemetry = { workspace = true }
@@ -92,7 +91,7 @@ opentelemetry-prometheus = "0.27"
 # Rate limiting
 governor = "0.10"
 
-# Random number generation for routing
+# Random number generation removed - use scirs2-core::random instead
 fastrand = "2.3"
 
 [dev-dependencies]
@@ -107,4 +106,3 @@ nl2sparql = []
 [[bin]]
 name = "oxirs-chat"
 path = "src/main.rs"
-

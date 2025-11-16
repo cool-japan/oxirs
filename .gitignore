@@ -1,12 +1,24 @@
 # Rust
 /target/
 **/*.rs.bk
+*.rs.cleanup
 *.pdb
 Cargo.lock
 **/*.rs.backup
 **/*.rs.bak
 **/*.rs.bak2
 **/*.rs.bak3
+**/*.rs.bak4
+**/*.rs.bak5
+**/*.rs.bak6
+**/*.rs.bak7
+**/*.rs.bak8
+**/*.rs.bak9
+**/*.rs.bak10
+**/*.rs.final
+**/*.rs.final2
+**/*.rs.final3
+**/*.rs.cleanup
 
 # IDE
 .vscode/

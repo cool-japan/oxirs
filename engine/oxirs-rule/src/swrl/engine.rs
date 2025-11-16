@@ -490,6 +490,484 @@ impl SwrlEngine {
             implementation: builtin_geo_area,
         });
 
+        // ====== EXPANDED SWRL BUILT-INS ======
+
+        // Division and Integer Operations
+        self.register_builtin(BuiltinFunction {
+            name: "divide".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_divide,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "integerDivide".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_integer_divide,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "unaryMinus".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_unary_minus,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "unaryPlus".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_unary_plus,
+        });
+
+        // Advanced Mathematical Functions
+        self.register_builtin(BuiltinFunction {
+            name: "min".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_min,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "max".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_max,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "avg".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_avg,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "sum".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_sum,
+        });
+
+        // Advanced Comparison Operations
+        self.register_builtin(BuiltinFunction {
+            name: "lessThanOrEqual".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_less_than_or_equal,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "greaterThanOrEqual".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_greater_than_or_equal,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "between".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_between,
+        });
+
+        // Type Checking Operations
+        self.register_builtin(BuiltinFunction {
+            name: "isInteger".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_integer,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isFloat".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_float,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isString".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_string,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isBoolean".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_boolean,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isURI".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_uri,
+        });
+
+        // Type Conversion Operations
+        self.register_builtin(BuiltinFunction {
+            name: "intValue".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_int_value,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "floatValue".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_float_value,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "stringValue".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_string_value,
+        });
+
+        // Enhanced String Operations
+        self.register_builtin(BuiltinFunction {
+            name: "stringContains".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_string_contains,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "startsWith".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_starts_with,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "endsWith".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_ends_with,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "replace".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_replace,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "trim".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_trim,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "split".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_split,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "indexOf".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_index_of,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "lastIndexOf".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_last_index_of,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "normalizeSpace".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_normalize_space,
+        });
+
+        // Enhanced Date and Time Operations
+        self.register_builtin(BuiltinFunction {
+            name: "date".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_date,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "time".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_time,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "year".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_year,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "month".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_month,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "day".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_day,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "hour".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_hour,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "minute".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_minute,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "second".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_second,
+        });
+
+        // Hash and Cryptographic Operations
+        self.register_builtin(BuiltinFunction {
+            name: "hash".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_hash,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "base64Encode".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_base64_encode,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "base64Decode".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_base64_decode,
+        });
+
+        // Statistical Operations
+        self.register_builtin(BuiltinFunction {
+            name: "mean".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_mean,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "median".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_median,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "variance".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_variance,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "stddev".to_string(),
+            namespace: vocabulary::SWRLX_NS.to_string(),
+            min_args: 2,
+            max_args: None,
+            implementation: builtin_stddev,
+        });
+
+        // RDF-Specific Operations
+        self.register_builtin(BuiltinFunction {
+            name: "langMatches".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_lang_matches,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "str".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_str,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isLiteral".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_literal,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isBlank".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_blank,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "isIRI".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: Some(1),
+            implementation: builtin_is_iri,
+        });
+
+        // URI Operations
+        self.register_builtin(BuiltinFunction {
+            name: "resolveURI".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_resolve_uri,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "encodeURI".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_encode_uri,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "decodeURI".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_decode_uri,
+        });
+
+        // Advanced Collection Operations
+        self.register_builtin(BuiltinFunction {
+            name: "makeList".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 1,
+            max_args: None,
+            implementation: builtin_make_list,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "listInsert".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 4,
+            max_args: Some(4),
+            implementation: builtin_list_insert,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "listRemove".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_list_remove,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "listReverse".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_list_reverse,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "listSort".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 2,
+            max_args: Some(2),
+            implementation: builtin_list_sort,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "listUnion".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_list_union,
+        });
+
+        self.register_builtin(BuiltinFunction {
+            name: "listIntersection".to_string(),
+            namespace: vocabulary::SWRLB_NS.to_string(),
+            min_args: 3,
+            max_args: Some(3),
+            implementation: builtin_list_intersection,
+        });
+
         info!(
             "Registered {} core SWRL built-in functions",
             self.builtins.len()

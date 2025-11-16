@@ -8,6 +8,14 @@ use std::collections::BinaryHeap;
 impl HnswIndex {
     /// Search for k nearest neighbors
     pub fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
+        // Try query cache first if enabled
+        if let Some(ref cache) = self.query_cache() {
+            if let Some(cached_results) = cache.get(query, k) {
+                return Ok(cached_results);
+            }
+        }
+
+        // Cache miss - perform actual search
         if self.nodes().is_empty() || self.entry_point().is_none() {
             return Ok(Vec::new());
         }
@@ -55,6 +63,11 @@ impl HnswIndex {
                     .map(|node| (node.uri.clone(), candidate.distance))
             })
             .collect();
+
+        // Cache the results if caching is enabled
+        if let Some(ref cache) = self.query_cache() {
+            cache.put(query, k, results.clone());
+        }
 
         Ok(results)
     }
@@ -422,7 +435,7 @@ impl HnswIndex {
     }
 
     /// Calculate distance between query and node
-    fn calculate_distance(&self, query: &Vector, node_id: usize) -> Result<f32> {
+    pub(crate) fn calculate_distance(&self, query: &Vector, node_id: usize) -> Result<f32> {
         if let Some(node) = self.nodes().get(node_id) {
             // Use the configured similarity metric
             self.config().metric.distance(query, &node.vector)

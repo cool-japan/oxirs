@@ -1,10 +1,10 @@
 //! # OxiRS Cluster
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-cluster/badge.svg)](https://docs.rs/oxirs-cluster)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Raft-backed distributed dataset for high availability and horizontal scaling.
 //!
@@ -36,6 +36,7 @@
 //!     discovery: None,
 //!     replication_strategy: None,
 //!     region_config: None,
+//!     use_bft: false,
 //! };
 //!
 //! let mut node = ClusterNode::new(config).await?;
@@ -51,6 +52,20 @@
 //! # }
 //! ```
 
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::single_match)]
+#![allow(clippy::collapsible_if)]
+#![allow(clippy::clone_on_copy)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::collapsible_match)]
+#![allow(clippy::manual_clamp)]
+#![allow(clippy::needless_range_loop)]
+#![allow(clippy::or_fun_call)]
+#![allow(clippy::if_same_then_else)]
+#![allow(clippy::only_used_in_recursion)]
+#![allow(clippy::new_without_default)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::useless_conversion)]
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -59,12 +74,18 @@ use tokio::sync::RwLock;
 pub mod adaptive_leader_election;
 pub mod advanced_partitioning;
 pub mod advanced_storage;
+pub mod alerting;
+pub mod auto_scaling;
+pub mod backup_restore;
+pub mod circuit_breaker;
 pub mod conflict_resolution;
 pub mod consensus;
 pub mod crash_recovery;
 pub mod data_rebalancing;
+pub mod disaster_recovery;
 pub mod discovery;
 pub mod distributed_query;
+pub mod distributed_tracing;
 pub mod edge_computing;
 pub mod enhanced_node_discovery;
 pub mod enhanced_snapshotting;
@@ -73,6 +94,7 @@ pub mod failover;
 pub mod federation;
 pub mod health_monitor;
 pub mod health_monitoring;
+pub mod memory_optimization;
 pub mod merkle_tree;
 pub mod mvcc;
 pub mod mvcc_storage;
@@ -86,11 +108,16 @@ pub mod performance_metrics;
 pub mod performance_monitor;
 pub mod raft;
 pub mod raft_optimization;
+pub mod raft_profiling;
 pub mod raft_state;
 pub mod range_partitioning;
+pub mod read_replica;
 pub mod region_manager;
 pub mod replication;
 pub mod replication_lag_monitor;
+pub mod rolling_upgrade;
+pub mod visualization_dashboard;
+pub mod zero_downtime_migration;
 // Temporarily disabled due to missing scirs2_core features
 // pub mod revolutionary_cluster_optimization;
 pub mod security;

@@ -7,6 +7,7 @@
 #![allow(dead_code)]
 
 pub mod constraints;
+pub mod js_wasm;
 pub mod metadata;
 pub mod performance;
 pub mod registry;
@@ -16,6 +17,9 @@ pub mod standard;
 // Re-export key types
 pub use constraints::{
     ComponentExecutionResult, CompositeConstraint, CompositionType, CustomConstraint,
+};
+pub use js_wasm::{
+    interop, ExternalValidatorBuilder, JavaScriptValidator, RuntimeConfig, WasmValidator,
 };
 pub use metadata::{
     ComponentLibrary, ComponentMetadata, ParameterConstraint, ParameterDefinition,

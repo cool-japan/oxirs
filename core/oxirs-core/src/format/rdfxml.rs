@@ -48,16 +48,30 @@ impl RdfXmlParser {
     }
 
     /// Parse RDF/XML from a reader
-    pub fn parse_reader<R: Read>(&self, _reader: R) -> ParseResult<Vec<Triple>> {
-        // TODO: Implement actual RDF/XML parsing
-        // This would involve:
-        // 1. XML parsing with namespace awareness
-        // 2. RDF/XML grammar processing
-        // 3. Resource identification and property parsing
-        // 4. Blank node management
-        // 5. Collection and container handling
+    pub fn parse_reader<R: Read>(&self, reader: R) -> ParseResult<Vec<Triple>> {
+        // Use the actual RDF/XML parser from oxirs-core::rdfxml
+        let mut parser = crate::rdfxml::RdfXmlParser::new();
 
-        Ok(Vec::new())
+        // Apply base IRI if set
+        if let Some(base) = &self.base_iri {
+            parser = parser
+                .with_base_iri(base.clone())
+                .map_err(|e| RdfParseError::syntax(format!("Invalid base IRI: {e}")))?;
+        }
+
+        // Apply lenient mode if enabled
+        if self.lenient {
+            parser = parser.lenient();
+        }
+
+        // Parse triples from reader
+        let mut triples = Vec::new();
+        for result in parser.for_reader(reader) {
+            let triple = result.map_err(|e| RdfParseError::syntax(format!("{e}")))?;
+            triples.push(triple);
+        }
+
+        Ok(triples)
     }
 
     /// Parse RDF/XML from a byte slice
@@ -69,24 +83,8 @@ impl RdfXmlParser {
 
     /// Parse RDF/XML from a string
     pub fn parse_str(&self, input: &str) -> ParseResult<Vec<Triple>> {
-        // TODO: Implement string-based RDF/XML parsing
-
-        // Basic XML validation
-        if !input.trim_start().starts_with("<?xml") && !input.trim_start().starts_with('<') {
-            return Err(RdfParseError::syntax("Input does not appear to be XML"));
-        }
-
-        // TODO: Implement XML parsing and RDF/XML processing
-        // This would involve:
-        // 1. Parse XML document
-        // 2. Process RDF namespace declarations
-        // 3. Handle rdf:RDF root element
-        // 4. Process resource descriptions
-        // 5. Handle typed nodes, properties, and values
-        // 6. Process collections and containers
-        // 7. Generate triples
-
-        Ok(Vec::new())
+        // Use parse_reader with a byte slice cursor
+        self.parse_reader(input.as_bytes())
     }
 
     /// Get the prefixes
@@ -236,6 +234,8 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 
     /// Write the complete RDF/XML document
     fn write_document(&mut self) -> SerializeResult<()> {
+        use std::collections::BTreeMap;
+
         // Write XML declaration
         if self.config.xml_declaration {
             writeln!(self.writer, "<?xml version=\"1.0\" encoding=\"UTF-8\"?>")?;
@@ -262,27 +262,144 @@ impl<W: Write> WriterRdfXmlSerializer<W> {
 
         writeln!(self.writer, ">")?;
 
-        // TODO: Implement actual RDF/XML serialization
-        // This would involve:
-        // 1. Group triples by subject
-        // 2. Generate rdf:Description elements
-        // 3. Handle typed resources
-        // 4. Serialize properties and values
-        // 5. Handle blank nodes
-        // 6. Process collections and containers
-        // 7. Apply pretty formatting
-
-        // Stub implementation
+        // Group triples by subject - clone to avoid borrow conflicts
+        let mut grouped: BTreeMap<String, Vec<(crate::model::Predicate, crate::model::Object)>> =
+            BTreeMap::new();
         for triple in &self.triples {
-            if self.config.pretty {
-                writeln!(self.writer, "  <!-- TODO: Serialize triple: {triple} -->")?;
-            } else {
-                writeln!(self.writer, "<!-- TODO: Serialize triple: {triple} -->")?;
+            let subject_key = format!("{}", triple.subject());
+            grouped
+                .entry(subject_key)
+                .or_default()
+                .push((triple.predicate().clone(), triple.object().clone()));
+        }
+
+        // Serialize each subject as rdf:Description
+        let indent = if self.config.pretty { "  " } else { "" };
+        let newline = if self.config.pretty { "\n" } else { "" };
+
+        for (subject_idx, (subject_str, properties)) in grouped.iter().enumerate() {
+            if subject_idx > 0 && self.config.pretty {
+                writeln!(self.writer)?;
             }
+
+            // Start rdf:Description
+            write!(self.writer, "{indent}<rdf:Description")?;
+
+            // Add subject as rdf:about or rdf:nodeID
+            if let Some(stripped) = subject_str.strip_prefix("_:") {
+                write!(self.writer, " rdf:nodeID=\"{}\"", stripped)?;
+            } else {
+                write!(self.writer, " rdf:about=\"{subject_str}\"")?;
+            }
+
+            if properties.is_empty() {
+                writeln!(self.writer, "/>")?;
+                continue;
+            }
+
+            write!(self.writer, ">{newline}")?;
+
+            // Serialize properties
+            for (pred, obj) in properties {
+                self.write_property(pred, obj)?;
+            }
+
+            writeln!(self.writer, "{indent}</rdf:Description>")?;
         }
 
         // Close RDF root element
         writeln!(self.writer, "</rdf:RDF>")?;
+
+        Ok(())
+    }
+
+    /// Write a single property triple
+    fn write_property(
+        &mut self,
+        predicate: &crate::model::Predicate,
+        object: &crate::model::Object,
+    ) -> SerializeResult<()> {
+        let indent = if self.config.pretty { "    " } else { "" };
+        let newline = if self.config.pretty { "\n" } else { "" };
+
+        let pred_str = match predicate {
+            crate::model::Predicate::NamedNode(nn) => format!("{nn}"),
+            crate::model::Predicate::Variable(v) => {
+                // Variables in RDF/XML are not standard - use as-is
+                format!("{v}")
+            }
+        };
+
+        // Extract namespace and local name
+        let (ns, local) = if let Some((n, l)) = namespaces::extract_namespace(&pred_str) {
+            (n, l)
+        } else {
+            ("", pred_str.as_str())
+        };
+
+        // Find or generate prefix
+        let prefix = if ns == "http://www.w3.org/1999/02/22-rdf-syntax-ns#" {
+            "rdf"
+        } else if let Some((p, _)) = self
+            .config
+            .prefixes
+            .iter()
+            .find(|(_, iri)| iri.as_str() == ns)
+        {
+            p.as_str()
+        } else {
+            "ns"
+        };
+
+        write!(self.writer, "{indent}<{prefix}:{local}")?;
+
+        match object {
+            crate::model::Object::NamedNode(nn) => {
+                // Resource reference
+                writeln!(self.writer, " rdf:resource=\"{nn}\"/>{newline}")?;
+            }
+            crate::model::Object::BlankNode(bn) => {
+                // Blank node reference
+                writeln!(
+                    self.writer,
+                    " rdf:nodeID=\"{}\"/>{newline}",
+                    bn.as_str().trim_start_matches("_:")
+                )?;
+            }
+            crate::model::Object::Literal(lit) => {
+                // Literal value
+                if let Some(lang) = lit.language() {
+                    write!(self.writer, " xml:lang=\"{lang}\"")?;
+                } else {
+                    let dt = lit.datatype();
+                    if dt.as_str() != "http://www.w3.org/2001/XMLSchema#string" {
+                        write!(self.writer, " rdf:datatype=\"{dt}\"")?;
+                    }
+                }
+                // Escape XML characters in literal value
+                let value = lit
+                    .value()
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;")
+                    .replace('"', "&quot;");
+                writeln!(self.writer, ">{value}</{prefix}:{local}>{newline}")?;
+            }
+            crate::model::Object::Variable(v) => {
+                // Variables in RDF/XML are not standard - serialize as comment
+                writeln!(
+                    self.writer,
+                    "><!-- Variable: {v} --></{prefix}:{local}>{newline}"
+                )?;
+            }
+            crate::model::Object::QuotedTriple(qt) => {
+                // RDF-star quoted triples - serialize nested structure
+                writeln!(
+                    self.writer,
+                    "><!-- QuotedTriple: {qt} --></{prefix}:{local}>{newline}"
+                )?;
+            }
+        }
 
         Ok(())
     }
@@ -348,20 +465,65 @@ pub mod namespaces {
     }
 
     /// Generate prefix for namespace
-    pub fn generate_prefix(
-        _namespace: &str,
-        existing_prefixes: &HashMap<String, String>,
-    ) -> String {
-        // TODO: Implement smart prefix generation
-        // For now, use simple numbering
+    ///
+    /// Attempts to extract a meaningful prefix from the namespace URI by:
+    /// 1. Looking for common vocabulary prefixes in the URI path
+    /// 2. Extracting the last significant path component
+    /// 3. Falling back to numbered prefixes (ns1, ns2, etc.)
+    pub fn generate_prefix(namespace: &str, existing_prefixes: &HashMap<String, String>) -> String {
+        // Try to extract a smart prefix from the namespace URI
+        let candidate_prefix = extract_prefix_from_uri(namespace);
+
+        // Check if the candidate prefix is available
+        if !existing_prefixes.contains_key(&candidate_prefix)
+            && !existing_prefixes.values().any(|v| v == namespace)
+        {
+            return candidate_prefix;
+        }
+
+        // If the candidate is taken, try with a number suffix
         let mut counter = 1;
         loop {
-            let prefix = format!("ns{counter}");
+            let prefix = if candidate_prefix == "ns" {
+                // Original candidate was generic, use ns1, ns2, etc.
+                format!("ns{counter}")
+            } else {
+                // Append number to the meaningful prefix
+                format!("{candidate_prefix}{counter}")
+            };
+
             if !existing_prefixes.contains_key(&prefix) {
                 return prefix;
             }
             counter += 1;
         }
+    }
+
+    /// Extract a meaningful prefix from a namespace URI
+    fn extract_prefix_from_uri(namespace: &str) -> String {
+        // Remove trailing # or /
+        let trimmed = namespace.trim_end_matches('#').trim_end_matches('/');
+
+        // Try to extract from path segments
+        if let Some(last_segment) = trimmed.rsplit('/').next() {
+            // Handle version numbers and dates in URIs
+            let segment = if last_segment.chars().all(|c| c.is_numeric() || c == '.') {
+                // Last segment is a version/date, try the previous one
+                trimmed.rsplit('/').nth(1).unwrap_or(last_segment)
+            } else {
+                last_segment
+            };
+
+            // Clean up the segment to make a valid prefix
+            let cleaned: String = segment.chars().filter(|c| c.is_alphanumeric()).collect();
+
+            if !cleaned.is_empty() && cleaned.chars().next().unwrap().is_alphabetic() {
+                return cleaned.to_lowercase();
+            }
+        }
+
+        // Fallback to generic prefix
+        "ns".to_string()
     }
 }
 

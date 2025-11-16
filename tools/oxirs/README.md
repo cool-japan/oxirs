@@ -1,23 +1,25 @@
 # OxiRS CLI
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
 **Command-line interface for OxiRS semantic web operations**
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
+⚡ **Production-Ready**: APIs are stable and tested. Ready for production use with comprehensive documentation.
 
 ## Overview
 
-`oxirs` is the unified command-line tool for the OxiRS ecosystem, providing comprehensive functionality for RDF data management, SPARQL operations, server administration, and development workflows. It's designed to be the Swiss Army knife for semantic web developers and data engineers.
+`oxirs` is the unified command-line tool for the OxiRS ecosystem, providing comprehensive functionality for RDF data management, SPARQL operations, server administration, and development workflows. It's designed to be the Swiss Army knife for semantic web developers and data engineers working with knowledge graphs and semantic data.
 
-## What's New in v0.1.0-alpha.3 (October 12, 2025)
+## What's New in v0.1.0-beta.1 (November 2025)
 
-- **Query Intelligence Suite**: `oxirs explain` now offers PostgreSQL-style plans with analyze/full modes, complexity scoring, and optimization hints.
-- **Reusable Query Templates**: Nine parameterizable SPARQL templates across basic, analytics, federation, and property-path categories accelerate common workflows.
-- **Persistent Query History**: Automatic tracking, replay, search, and statistics for every query, saved under `~/.local/share/oxirs/query_history.json`.
-- **Cache-Ready Core**: Introduces TTL-configurable, thread-safe result caching primitives ahead of beta performance targets.
+- **API Stability**: All CLI commands and flags are now stable with semantic versioning guarantees
+- **Enhanced Documentation**: Comprehensive help text, examples, and error messages for all commands
+- **Production Hardening**: Improved error handling, logging, and resource management
+- **Performance Improvements**: Faster query execution, import/export operations, and batch processing
+- **Better User Experience**: Enhanced progress indicators, colored output, and interactive prompts
+- **Security Enhancements**: Input validation, secure credential handling, and audit logging
 
 ## Features
 
@@ -35,7 +37,11 @@
 ### From Crates.io
 
 ```bash
-cargo install oxirs
+# Install the latest beta release
+cargo install oxirs --version 0.1.0-beta.1
+
+# Or install with all optional features
+cargo install oxirs --version 0.1.0-beta.1 --features all-features
 ```
 
 ### From Source
@@ -44,6 +50,27 @@ cargo install oxirs
 git clone https://github.com/cool-japan/oxirs
 cd oxirs/tools/oxirs
 cargo install --path .
+
+# Or with all features
+cargo install --path . --features all-features
+```
+
+### Shell Completion
+
+Generate shell completion scripts for your shell:
+
+```bash
+# Bash
+oxirs --completion bash > ~/.local/share/bash-completion/completions/oxirs
+
+# Zsh
+oxirs --completion zsh > ~/.zfunc/_oxirs
+
+# Fish
+oxirs --completion fish > ~/.config/fish/completions/oxirs.fish
+
+# PowerShell
+oxirs --completion powershell > oxirs.ps1
 ```
 
 ## Quick Start
@@ -631,75 +658,68 @@ Licensed under either of:
 
 at your option.
 
-## Status
+---
 
-🚧 **Alpha Release (v0.1.0-alpha.3)** - October 12, 2025
+## Best Practices
 
-Current alpha features:
-- ✅ Dataset initialization and management
-- ✅ **Persistent RDF storage** (N-Quads format, auto-save on import)
-- ✅ Data import/export (Turtle, N-Triples, RDF/XML, JSON-LD, N-Quads, TriG)
-- ✅ **SPARQL query execution** (SELECT, ASK, CONSTRUCT, DESCRIBE)
-- ✅ Triple pattern matching with variable binding
-- ✅ **Automatic data persistence** (save/load from disk)
-- ✅ **Query optimization analysis** (EXPLAIN/ANALYZE commands)
-- ✅ **Query templates** (9 pre-built SPARQL patterns)
-- ✅ **Query history** (automatic tracking, replay, search)
-- ✅ Server management with configuration
-- ✅ Interactive REPL mode
-- ✅ RDF validation tools (syntax, SHACL, ShEx)
-- 🚧 PREFIX support (planned for next release)
-- 🚧 Advanced SPARQL features (FILTER, OPTIONAL, UNION)
-- 🚧 Benchmarking tools (in progress)
-- 🚧 TDB storage tools (in progress)
-- ⏳ Migration utilities (planned)
-
-### Changes in v0.1.0-alpha.3
-
-- **Query Optimization** (`oxirs explain`): PostgreSQL EXPLAIN-style query analysis
-  - 3 analysis modes: explain, analyze, full
-  - Complexity estimation (joins, filters, optionals, unions)
-  - Optimization hints for query improvement
-  - Query algebra visualization
-
-- **Query Templates** (`oxirs template`): 9 pre-built SPARQL query patterns
-  - Categories: Basic, Advanced, Aggregation, PropertyPaths, Federation, Analytics
-  - Parameter substitution with required/optional parameters
-  - List, show details, and render queries from templates
-
-- **Query History** (`oxirs history`): Automatic query tracking and management
-  - Automatic recording of all query executions
-  - Track execution time, result count, success/failure
-  - Replay historical queries with `oxirs history replay <id>`
-  - Search history by query text
-  - View statistics (success rate, avg execution time, dataset breakdown)
-  - Persistent storage at `~/.local/share/oxirs/query_history.json`
-
-- **Query Caching Infrastructure**: Foundation for result caching (ready for integration)
-  - TTL-based expiration
-  - LRU eviction strategy
-  - Thread-safe singleton cache
-
-### Changes in v0.1.0-alpha.2
-
-- **Persistent storage**: Data automatically saved to `<dataset>/data.nq` on import
-- **SPARQL queries**: Basic SELECT, ASK, CONSTRUCT, DESCRIBE queries now working
-- **Dataset naming**: Dataset names must be alphanumeric with `_` and `-` only (no file extensions)
-- **Command syntax**: Simplified positional arguments (e.g., `oxirs import mydata file.ttl`)
-- **Configuration format**: Unified TOML format with `[datasets.{name}]` sections
-- **Interactive mode**: Added `oxirs interactive` command for REPL
-- **Auto-load**: Query command automatically loads data from disk
-
-### Working Example
+### Command Cheat Sheet
 
 ```bash
-# Initialize and use a dataset
-oxirs init mykg
-oxirs import mykg data.ttl --format turtle
-oxirs query mykg "SELECT * WHERE { ?s ?p ?o } LIMIT 10"
+# Quick reference for common tasks
 
-# Data persists! Close terminal, reopen, and query again
-oxirs query mykg "SELECT * WHERE { ?s ?p ?o }"  # Same results!
+# Data Operations
+oxirs init mydata                              # Create new dataset
+oxirs import mydata file.ttl -f turtle         # Import data
+oxirs export mydata output.nq -f nquads        # Export data
+oxirs query mydata "SELECT * WHERE {?s ?p ?o}" # Query data
+
+# Server Operations
+oxirs serve mydata --port 3030                 # Start server
+oxirs serve mydata --graphql                   # With GraphQL
+
+# Format Conversion
+oxirs migrate --source data.ttl --target data.nt --from turtle --to ntriples
+
+# Validation
+oxirs rdfparse file.ttl -f turtle              # Validate syntax
+
+# Analysis
+oxirs explain mydata query.sparql --file       # Query analysis
+oxirs tdbstats mydata --detailed               # Dataset statistics
 ```
 
-Note: This is an alpha release. Some features are incomplete and APIs may change.
+### Performance Tips
+
+**For Large Datasets (>1M triples)**:
+- Use batch import with parallel processing: `oxirs batch import --dataset mydata --files *.nt --parallel 8`
+- Use TDB loader for bulk loading: `oxirs tdbloader mydata *.nt --progress --stats`
+- Stream large exports: `oxirs export mydata output.nq --format nquads | gzip > output.nq.gz`
+
+**For Query Performance**:
+- Analyze queries before execution: `oxirs explain mydata query.sparql --file --mode full`
+- Use appropriate output format (JSON for programmatic use, table for humans)
+- Enable query caching for repeated queries
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| "Dataset not found" | Run `oxirs init <name>` first to create the dataset |
+| "Format not recognized" | Specify format explicitly with `--format` flag |
+| "Permission denied" | Check directory permissions with `chmod 755 <dir>` |
+| "Port already in use" | Use different port with `--port <num>` |
+| "Out of memory" | Use streaming operations or increase batch size |
+| "Invalid SPARQL syntax" | Use `oxirs qparse` to validate query syntax |
+
+**Debug Mode**:
+```bash
+# Enable verbose logging
+oxirs --verbose query mydata "SELECT * WHERE {?s ?p ?o}"
+
+# Debug specific modules
+RUST_LOG=oxirs_core=debug,oxirs_arq=trace oxirs query mydata query.sparql
+```
+
+---
+
+**OxiRS CLI v0.1.0-beta.1** - Production-ready command-line interface for semantic web operations

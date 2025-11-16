@@ -71,15 +71,10 @@ pub enum IsolationLevel {
 }
 
 /// Consumer position reset strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum OffsetReset {
     Earliest,
+    #[default]
     Latest,
     None,
-}
-
-impl Default for OffsetReset {
-    fn default() -> Self {
-        Self::Latest
-    }
 }

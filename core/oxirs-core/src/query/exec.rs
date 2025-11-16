@@ -194,6 +194,9 @@ impl<'a> QueryExecutor<'a> {
             TermPattern::Literal(l) => {
                 matches!(term, Term::Literal(lit) if lit == l)
             }
+            TermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples not yet supported in query execution")
+            }
         }
     }
 

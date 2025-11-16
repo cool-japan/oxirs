@@ -7,8 +7,9 @@
 //! - GRAPH syntax: `GRAPH ex:graph2 { ex:alice ex:worksFor ex:company . }`
 
 use crate::error::{TextPosition, TurtleParseError, TurtleResult, TurtleSyntaxError};
+use crate::formats::turtle::TurtleParser;
 use crate::toolkit::{Parser, Serializer};
-use oxirs_core::model::{GraphName, Literal, NamedNode, Quad, Triple};
+use oxirs_core::model::{BlankNode, GraphName, Literal, NamedNode, Quad, Triple};
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Read, Write};
 
@@ -59,6 +60,10 @@ impl TriGParser {
     fn parse_trig_content<R: BufRead>(&self, reader: R) -> TurtleResult<Vec<Quad>> {
         let mut quads = Vec::new();
         let mut current_graph = GraphName::DefaultGraph;
+        let mut graph_depth = 0; // Track whether we're inside a named graph
+        let mut prefixes = self.prefixes.clone();
+        let mut base_iri = self.base_iri.clone();
+
         let content = {
             let mut buffer = String::new();
             let mut reader = reader;
@@ -83,14 +88,33 @@ impl TriGParser {
 
             // Handle prefix declarations
             if line.starts_with("@prefix") {
-                // Parse prefix declaration - delegate to turtle parser logic
+                // Parse: @prefix ex: <http://example.org/> .
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 3 {
+                    let prefix = parts[1].trim_end_matches(':');
+                    let iri = parts[2]
+                        .trim_start_matches('<')
+                        .trim_end_matches('>')
+                        .trim_end_matches('.');
+                    // Resolve prefix IRI against base if it's relative
+                    let resolved_iri = Self::resolve_iri(iri, &base_iri);
+                    prefixes.insert(prefix.to_string(), resolved_iri);
+                }
                 i += 1;
                 continue;
             }
 
             // Handle base declarations
             if line.starts_with("@base") {
-                // Parse base declaration
+                // Parse: @base <http://example.org/> .
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 {
+                    let iri = parts[1]
+                        .trim_start_matches('<')
+                        .trim_end_matches('>')
+                        .trim_end_matches('.');
+                    base_iri = Some(iri.to_string());
+                }
                 i += 1;
                 continue;
             }
@@ -103,46 +127,172 @@ impl TriGParser {
                 if graph_part.starts_with("GRAPH") {
                     // GRAPH <iri> { syntax
                     let graph_iri = graph_part.strip_prefix("GRAPH").unwrap_or("").trim();
-                    current_graph = self.parse_graph_name(graph_iri)?;
+                    current_graph = self
+                        .parse_graph_name_with_prefixes_and_base(graph_iri, &prefixes, &base_iri)?;
                 } else if !graph_part.is_empty() {
                     // <iri> { syntax
-                    current_graph = self.parse_graph_name(graph_part)?;
+                    current_graph = self.parse_graph_name_with_prefixes_and_base(
+                        graph_part, &prefixes, &base_iri,
+                    )?;
                 } else {
                     current_graph = GraphName::DefaultGraph;
                 }
 
+                graph_depth += 1;
                 i += 1;
                 continue;
             }
 
             // Check for graph end
             if line.trim() == "}" {
+                if graph_depth == 0 {
+                    return Err(TurtleParseError::Syntax(TurtleSyntaxError::Generic {
+                        message: "Unexpected closing brace '}'".to_string(),
+                        position: TextPosition::default(),
+                    }));
+                }
+                graph_depth -= 1;
                 current_graph = GraphName::DefaultGraph;
                 i += 1;
                 continue;
             }
 
-            // Parse triple and convert to quad
-            if line.ends_with('.') {
-                if let Ok(triple) = self.parse_simple_triple(line) {
-                    let quad = Quad::new(
-                        triple.subject().clone(),
-                        triple.predicate().clone(),
-                        triple.object().clone(),
-                        current_graph.clone(),
-                    );
-                    quads.push(quad);
+            // Accumulate multi-line statements (handle semicolons and commas)
+            if !line.is_empty()
+                && !line.starts_with('@')
+                && !line.contains('{')
+                && line.trim() != "}"
+            {
+                // Strip inline comments from the line
+                let line_without_comment = if let Some(comment_pos) = line.find('#') {
+                    line[..comment_pos].trim_end()
+                } else {
+                    line
+                };
+
+                let mut statement = line_without_comment.to_string();
+
+                // Track if we're inside a multiline string literal
+                let count_triple_quotes =
+                    |s: &str| s.matches("\"\"\"").count() + s.matches("'''").count();
+
+                // Continue accumulating lines until we find one ending with '.'
+                // but only if we're not inside a multiline string literal
+                while i + 1 < lines.len() {
+                    let inside_multiline = count_triple_quotes(&statement) % 2 == 1;
+                    if !inside_multiline && statement.trim_end().ends_with('.') {
+                        break;
+                    }
+                    i += 1;
+                    let next_line = lines[i].trim();
+                    // Stop if we hit a graph closing brace
+                    if next_line == "}" {
+                        i -= 1; // Back up so the main loop processes the '}'
+                        break;
+                    }
+                    if !next_line.is_empty() && !next_line.starts_with('#') {
+                        // Strip inline comments from the next line as well
+                        let next_line_without_comment =
+                            if let Some(comment_pos) = next_line.find('#') {
+                                next_line[..comment_pos].trim_end()
+                            } else {
+                                next_line
+                            };
+
+                        if !next_line_without_comment.is_empty() {
+                            // Preserve newlines for multiline string literals
+                            statement.push('\n');
+                            statement.push_str(next_line_without_comment);
+                        }
+                    }
+                }
+
+                // Parse the complete statement using Turtle parser
+                if statement.trim_end().ends_with('.') {
+                    match self.parse_triple_with_turtle(&statement, &prefixes, &base_iri) {
+                        Ok(triples) => {
+                            for triple in triples {
+                                let quad = Quad::new(
+                                    triple.subject().clone(),
+                                    triple.predicate().clone(),
+                                    triple.object().clone(),
+                                    current_graph.clone(),
+                                );
+                                quads.push(quad);
+                            }
+                        }
+                        Err(_e) if self.lenient => {
+                            // In lenient mode, skip failed triples
+                        }
+                        Err(e) => return Err(e),
+                    }
+                } else if !statement.trim().is_empty() && !self.lenient {
+                    // Statement doesn't end with '.' - this is invalid syntax
+                    return Err(TurtleParseError::Syntax(TurtleSyntaxError::Generic {
+                        message: format!("Statement must end with '.': {}", statement.trim()),
+                        position: TextPosition::default(),
+                    }));
                 }
             }
 
             i += 1;
         }
 
+        // Check for unclosed graphs
+        if graph_depth > 0 && !self.lenient {
+            return Err(TurtleParseError::Syntax(TurtleSyntaxError::Generic {
+                message: "Unclosed graph: missing closing brace '}'".to_string(),
+                position: TextPosition::default(),
+            }));
+        }
+
         Ok(quads)
     }
 
-    /// Parse a simple triple from a line (basic implementation)
+    /// Parse triple(s) using Turtle parser for full syntax support
+    fn parse_triple_with_turtle(
+        &self,
+        content: &str,
+        prefixes: &HashMap<String, String>,
+        base_iri: &Option<String>,
+    ) -> TurtleResult<Vec<Triple>> {
+        // Create a complete Turtle document by prepending prefix/base declarations
+        let mut document = String::new();
+
+        // Add base declaration if present
+        if let Some(base) = base_iri {
+            document.push_str(&format!("@base <{}> .\n", base));
+        }
+
+        // Add prefix declarations
+        for (prefix, iri) in prefixes {
+            document.push_str(&format!("@prefix {}: <{}> .\n", prefix, iri));
+        }
+
+        // Add the statement
+        document.push_str(content);
+
+        let mut turtle_parser = TurtleParser::new();
+        if self.lenient {
+            turtle_parser.lenient = true;
+        }
+
+        turtle_parser.parse_document(&document)
+    }
+
+    // Legacy parsing methods - kept for potential future use but currently unused
+    // as we now use TurtleParser for all triple parsing
+    #[allow(dead_code)]
     fn parse_simple_triple(&self, line: &str) -> TurtleResult<Triple> {
+        self.parse_simple_triple_with_prefixes(line, &self.prefixes)
+    }
+
+    #[allow(dead_code)]
+    fn parse_simple_triple_with_prefixes(
+        &self,
+        line: &str,
+        prefixes: &HashMap<String, String>,
+    ) -> TurtleResult<Triple> {
         // This is a simplified parser - in production you'd want full Turtle parsing
         let line = line.trim_end_matches('.').trim();
         let parts: Vec<&str> = line.split_whitespace().collect();
@@ -155,29 +305,60 @@ impl TriGParser {
         }
 
         // Very basic parsing - this should use proper Turtle tokenization
-        let subject = self.parse_term_as_subject(parts[0])?;
-        let predicate = self.parse_term_as_predicate(parts[1])?;
-        let object = self.parse_term_as_object(&parts[2..].join(" "))?;
+        let subject = self.parse_term_as_subject_with_prefixes(parts[0], prefixes)?;
+        let predicate = self.parse_term_as_predicate_with_prefixes(parts[1], prefixes)?;
+        let object = self.parse_term_as_object_with_prefixes(&parts[2..].join(" "), prefixes)?;
 
         Ok(Triple::new(subject, predicate, object))
     }
 
-    /// Parse a graph name from string
+    #[allow(dead_code)]
     fn parse_graph_name(&self, graph_str: &str) -> TurtleResult<GraphName> {
+        self.parse_graph_name_with_prefixes(graph_str, &self.prefixes)
+    }
+
+    /// Parse a graph name with provided prefixes
+    fn parse_graph_name_with_prefixes(
+        &self,
+        graph_str: &str,
+        prefixes: &HashMap<String, String>,
+    ) -> TurtleResult<GraphName> {
+        self.parse_graph_name_with_prefixes_and_base(graph_str, prefixes, &None)
+    }
+
+    /// Parse a graph name with provided prefixes and base IRI
+    fn parse_graph_name_with_prefixes_and_base(
+        &self,
+        graph_str: &str,
+        prefixes: &HashMap<String, String>,
+        base_iri: &Option<String>,
+    ) -> TurtleResult<GraphName> {
         let graph_str = graph_str.trim();
 
         if graph_str.starts_with('<') && graph_str.ends_with('>') {
             let iri = graph_str.trim_start_matches('<').trim_end_matches('>');
-            let named_node = NamedNode::new(iri).map_err(|e| {
+            // Resolve relative IRI against base if needed
+            let resolved_iri = Self::resolve_iri(iri, base_iri);
+            let named_node = NamedNode::new(&resolved_iri).map_err(|e| {
                 TurtleParseError::Syntax(TurtleSyntaxError::Generic {
                     message: format!("Invalid IRI: {e}"),
                     position: TextPosition::start(),
                 })
             })?;
             Ok(GraphName::NamedNode(named_node))
+        } else if graph_str.starts_with("_:") {
+            // Handle blank nodes as graph names
+            let label = graph_str.trim_start_matches("_:");
+            let blank_node = BlankNode::new(label).map_err(|e| {
+                TurtleParseError::Syntax(TurtleSyntaxError::Generic {
+                    message: format!("Invalid blank node: {e}"),
+                    position: TextPosition::start(),
+                })
+            })?;
+            Ok(GraphName::BlankNode(blank_node))
         } else if graph_str.contains(':') {
             // Handle prefixed names
-            let expanded = self.expand_prefixed_name(graph_str)?;
+            let expanded = Self::expand_prefixed_name_static(graph_str, prefixes)?;
             let named_node = NamedNode::new(&expanded).map_err(|e| {
                 TurtleParseError::Syntax(TurtleSyntaxError::Generic {
                     message: format!("Invalid IRI: {e}"),
@@ -193,13 +374,47 @@ impl TriGParser {
         }
     }
 
-    /// Expand a prefixed name (simplified implementation)
+    /// Resolve a potentially relative IRI against a base IRI
+    fn resolve_iri(iri: &str, base_iri: &Option<String>) -> String {
+        // If IRI is already absolute (has a scheme), return as-is
+        if iri.contains("://")
+            || iri.starts_with("http:")
+            || iri.starts_with("https:")
+            || iri.starts_with("urn:")
+        {
+            return iri.to_string();
+        }
+
+        // If we have a base IRI, resolve against it
+        if let Some(base) = base_iri {
+            // Simple resolution: concatenate base + relative
+            // For a production system, you'd want proper IRI resolution per RFC 3986
+            if base.ends_with('/') || base.ends_with('#') {
+                format!("{}{}", base, iri)
+            } else {
+                format!("{}/{}", base, iri)
+            }
+        } else {
+            // No base IRI, return as-is
+            iri.to_string()
+        }
+    }
+
+    #[allow(dead_code)]
     fn expand_prefixed_name(&self, prefixed: &str) -> TurtleResult<String> {
+        Self::expand_prefixed_name_static(prefixed, &self.prefixes)
+    }
+
+    /// Static version of expand_prefixed_name
+    fn expand_prefixed_name_static(
+        prefixed: &str,
+        prefixes: &HashMap<String, String>,
+    ) -> TurtleResult<String> {
         if let Some(colon_pos) = prefixed.find(':') {
             let prefix = &prefixed[..colon_pos];
             let local = &prefixed[colon_pos + 1..];
 
-            if let Some(namespace) = self.prefixes.get(prefix) {
+            if let Some(namespace) = prefixes.get(prefix) {
                 Ok(format!("{namespace}{local}"))
             } else {
                 Err(TurtleParseError::Syntax(TurtleSyntaxError::Generic {
@@ -215,8 +430,17 @@ impl TriGParser {
         }
     }
 
-    /// Parse term as subject (simplified)
+    #[allow(dead_code)]
     fn parse_term_as_subject(&self, term: &str) -> TurtleResult<oxirs_core::model::Subject> {
+        self.parse_term_as_subject_with_prefixes(term, &self.prefixes)
+    }
+
+    #[allow(dead_code)]
+    fn parse_term_as_subject_with_prefixes(
+        &self,
+        term: &str,
+        prefixes: &HashMap<String, String>,
+    ) -> TurtleResult<oxirs_core::model::Subject> {
         use oxirs_core::model::{BlankNode, Subject};
 
         if term.starts_with('<') && term.ends_with('>') {
@@ -237,7 +461,7 @@ impl TriGParser {
             })?;
             Ok(Subject::BlankNode(blank_node))
         } else if term.contains(':') {
-            let expanded = self.expand_prefixed_name(term)?;
+            let expanded = Self::expand_prefixed_name_static(term, prefixes)?;
             let named_node = NamedNode::new(&expanded).map_err(|e| {
                 TurtleParseError::Syntax(TurtleSyntaxError::Generic {
                     message: format!("Invalid IRI: {e}"),
@@ -253,8 +477,17 @@ impl TriGParser {
         }
     }
 
-    /// Parse term as predicate (simplified)
+    #[allow(dead_code)]
     fn parse_term_as_predicate(&self, term: &str) -> TurtleResult<oxirs_core::model::Predicate> {
+        self.parse_term_as_predicate_with_prefixes(term, &self.prefixes)
+    }
+
+    #[allow(dead_code)]
+    fn parse_term_as_predicate_with_prefixes(
+        &self,
+        term: &str,
+        prefixes: &HashMap<String, String>,
+    ) -> TurtleResult<oxirs_core::model::Predicate> {
         use oxirs_core::model::Predicate;
 
         if term == "a" {
@@ -272,7 +505,7 @@ impl TriGParser {
             })?;
             Ok(Predicate::NamedNode(named_node))
         } else if term.contains(':') {
-            let expanded = self.expand_prefixed_name(term)?;
+            let expanded = Self::expand_prefixed_name_static(term, prefixes)?;
             let named_node = NamedNode::new(&expanded).map_err(|e| {
                 TurtleParseError::Syntax(TurtleSyntaxError::Generic {
                     message: format!("Invalid IRI: {e}"),
@@ -288,8 +521,17 @@ impl TriGParser {
         }
     }
 
-    /// Parse term as object (simplified)
+    #[allow(dead_code)]
     fn parse_term_as_object(&self, term: &str) -> TurtleResult<oxirs_core::model::Object> {
+        self.parse_term_as_object_with_prefixes(term, &self.prefixes)
+    }
+
+    #[allow(dead_code)]
+    fn parse_term_as_object_with_prefixes(
+        &self,
+        term: &str,
+        prefixes: &HashMap<String, String>,
+    ) -> TurtleResult<oxirs_core::model::Object> {
         use oxirs_core::model::{BlankNode, Literal, Object};
 
         let term = term.trim();
@@ -317,7 +559,7 @@ impl TriGParser {
             })?;
             Ok(Object::BlankNode(blank_node))
         } else if term.contains(':') {
-            let expanded = self.expand_prefixed_name(term)?;
+            let expanded = Self::expand_prefixed_name_static(term, prefixes)?;
             let named_node = NamedNode::new(&expanded).map_err(|e| {
                 TurtleParseError::Syntax(TurtleSyntaxError::Generic {
                     message: format!("Invalid IRI: {e}"),

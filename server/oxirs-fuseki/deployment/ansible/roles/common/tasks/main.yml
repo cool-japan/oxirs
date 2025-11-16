@@ -1,0 +1,101 @@
+---
+# Common role tasks for all servers
+
+- name: Update package cache (Debian/Ubuntu)
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+  tags: [packages]
+
+- name: Update package cache (RedHat/CentOS)
+  ansible.builtin.yum:
+    update_cache: true
+  when: ansible_os_family == 'RedHat'
+  tags: [packages]
+
+- name: Install required system packages
+  ansible.builtin.package:
+    name: "{{ common_packages }}"
+    state: present
+  tags: [packages]
+
+- name: Ensure NTP service is installed and running
+  ansible.builtin.package:
+    name: "{{ ntp_package }}"
+    state: present
+  register: ntp_installed
+  tags: [ntp]
+
+- name: Start and enable NTP service
+  ansible.builtin.service:
+    name: "{{ ntp_service }}"
+    state: started
+    enabled: true
+  when: ntp_installed is changed
+  tags: [ntp]
+
+- name: Configure system timezone
+  community.general.timezone:
+    name: "{{ system_timezone }}"
+  tags: [timezone]
+
+- name: Set system hostname
+  ansible.builtin.hostname:
+    name: "{{ inventory_hostname }}"
+  tags: [hostname]
+
+- name: Configure /etc/hosts
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    line: "{{ ansible_default_ipv4.address }} {{ inventory_hostname }}"
+    state: present
+  tags: [hostname]
+
+- name: Configure system limits
+  ansible.builtin.pam_limits:
+    domain: "{{ item.domain }}"
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop: "{{ system_limits }}"
+  tags: [limits]
+
+- name: Configure kernel parameters
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: true
+  loop: "{{ kernel_parameters }}"
+  tags: [sysctl]
+
+- name: Create common directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - /opt
+    - /var/log
+    - /var/lib
+  tags: [directories]
+
+- name: Setup logrotate
+  ansible.builtin.copy:
+    dest: /etc/logrotate.d/oxirs-common
+    content: |
+      /var/log/oxirs-fuseki/*.log {
+          daily
+          rotate 14
+          compress
+          delaycompress
+          notifempty
+          create 0640 {{ oxirs_user }} {{ oxirs_group }}
+          sharedscripts
+          postrotate
+              systemctl reload oxirs-fuseki > /dev/null 2>&1 || true
+          endscript
+      }
+    mode: '0644'
+  tags: [logrotate]

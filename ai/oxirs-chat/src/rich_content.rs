@@ -153,8 +153,9 @@ pub enum RichContent {
 }
 
 // Code visualization types
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum CodeTheme {
+    #[default]
     Light,
     Dark,
     HighContrast,
@@ -272,8 +273,9 @@ pub enum EdgeThickness {
     Custom(f64),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum GraphLayout {
+    #[default]
     ForceDirected,
     Circular,
     Hierarchical,
@@ -1667,18 +1669,6 @@ pub enum ValidationType {
 }
 
 // Default implementations for existing types
-
-impl Default for CodeTheme {
-    fn default() -> Self {
-        Self::Light
-    }
-}
-
-impl Default for GraphLayout {
-    fn default() -> Self {
-        Self::ForceDirected
-    }
-}
 
 impl Default for QueryPerformanceStats {
     fn default() -> Self {

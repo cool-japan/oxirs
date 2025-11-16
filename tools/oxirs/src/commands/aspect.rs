@@ -763,24 +763,27 @@ async fn convert(
             Ok(())
         }
         "diagram" => {
-            use oxirs_samm::generators::diagram::{generate_diagram, DiagramFormat};
+            use oxirs_samm::generators::diagram::{generate_diagram, DiagramFormat, DiagramStyle};
 
             // Determine diagram format from --format variant parameter
             let diagram_format = if let Some(variant) = &format_variant {
                 match variant.as_str() {
-                    "dot" => DiagramFormat::Dot,
-                    "svg" => DiagramFormat::Svg,
-                    "png" => DiagramFormat::Png,
+                    "dot" => DiagramFormat::Dot(DiagramStyle::default()),
+                    "svg" => DiagramFormat::Svg(DiagramStyle::default()),
+                    "png" => DiagramFormat::Png(DiagramStyle::default()),
+                    "mermaid" => DiagramFormat::Mermaid(DiagramStyle::default()),
+                    "plantuml" => DiagramFormat::PlantUml(DiagramStyle::default()),
+                    "html" => DiagramFormat::HtmlReport(DiagramStyle::default()),
                     _ => {
                         eprintln!(
                             "Warning: Unknown diagram format '{}', defaulting to DOT",
                             variant
                         );
-                        DiagramFormat::Dot
+                        DiagramFormat::Dot(DiagramStyle::default())
                     }
                 }
             } else {
-                DiagramFormat::Dot
+                DiagramFormat::Dot(DiagramStyle::default())
             };
 
             let output = generate_diagram(&aspect, diagram_format)

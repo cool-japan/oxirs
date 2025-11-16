@@ -1,10 +1,10 @@
 # OxiRS TTL - RDF Format Support
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. APIs may change without notice. Not recommended for production use.
+✨ **Beta Software**: Production-ready with API stability guarantees. Semantic versioning enforced.
 
 High-performance parsers and serializers for RDF formats including Turtle, N-Triples, TriG, N-Quads, JSON-LD, and RDF/XML.
 
@@ -38,7 +38,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-oxirs-ttl = "0.1.0-alpha.3"
+oxirs-ttl = "0.1.0-beta.1"
 ```
 
 ## Quick Start
@@ -253,7 +253,7 @@ let dataset = Dataset::from_parser(
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.3)
+### Beta Release (v0.1.0-beta.1)
 - ✅ Turtle, TriG, N-Triples, N-Quads, JSON-LD, RDF/XML parsing & serialization
 - ✅ Streaming pipelines powering CLI import/export/migrate commands
 - ✅ Automatic dataset persistence with N-Quads-backed save/load

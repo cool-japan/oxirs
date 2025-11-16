@@ -24,11 +24,78 @@ impl NodeConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement node constraint evaluation
-        Ok(ConstraintEvaluationResult::Satisfied)
+        // Node constraint validates that each value node conforms to the specified shape
+        // This is the sh:node constraint from SHACL spec
+
+        let values = &context.values;
+
+        if values.is_empty() {
+            // No values to validate - this is satisfied
+            return Ok(ConstraintEvaluationResult::satisfied());
+        }
+
+        // Validate each value against the node shape
+        for value in values {
+            let conforms = self.value_conforms_to_shape(value, store, context)?;
+            if !conforms {
+                return Ok(ConstraintEvaluationResult::violated(
+                    Some(value.clone()),
+                    Some(format!(
+                        "Value node does not conform to shape '{}'",
+                        self.shape.as_str()
+                    )),
+                ));
+            }
+        }
+
+        Ok(ConstraintEvaluationResult::satisfied())
+    }
+
+    /// Check if a value conforms to the node shape
+    fn value_conforms_to_shape(
+        &self,
+        value: &Term,
+        store: &dyn Store,
+        context: &ConstraintContext,
+    ) -> Result<bool> {
+        // Get the shape definition from the validation context
+        if let Some(shapes_registry) = &context.shapes_registry {
+            if let Some(shape_def) = shapes_registry.get(&self.shape) {
+                // Create a temporary validation engine for this shape validation
+                let config = ValidationConfig::default();
+                let mut temp_shapes = indexmap::IndexMap::new();
+                temp_shapes.insert(self.shape.clone(), shape_def.clone());
+
+                let mut validator = ValidationEngine::new(&temp_shapes, config);
+
+                // Validate the value against the shape
+                match validator.validate_node_against_shape(store, shape_def, value, None) {
+                    Ok(report) => {
+                        // Check if validation passed (no violations)
+                        Ok(report.conforms())
+                    }
+                    Err(e) => {
+                        // If validation failed due to error, consider it non-conforming
+                        tracing::warn!("Node shape validation error: {}", e);
+                        Ok(false)
+                    }
+                }
+            } else {
+                // Shape not found - cannot validate
+                Err(ShaclError::ShapeParsing(format!(
+                    "Node shape '{}' not found in shapes collection",
+                    self.shape.as_str()
+                )))
+            }
+        } else {
+            // No shapes registry available - cannot validate
+            Err(ShaclError::ValidationEngine(
+                "Shapes registry not available in constraint context".to_string(),
+            ))
+        }
     }
 }
 
@@ -50,11 +117,84 @@ impl PropertyConstraint {
 
     pub fn evaluate(
         &self,
-        _context: &ConstraintContext,
-        _store: &dyn Store,
+        context: &ConstraintContext,
+        store: &dyn Store,
     ) -> Result<ConstraintEvaluationResult> {
-        // TODO: Implement property constraint evaluation
-        Ok(ConstraintEvaluationResult::Satisfied)
+        // Property constraint validates property values according to a property shape
+        // This is the sh:property constraint from SHACL spec
+        //
+        // A property shape defines constraints on the values of a specific property
+        // For example, a property shape might constrain foaf:name to be a string with max length 100
+        //
+        // The property constraint evaluates the property shape against the focus node
+
+        // Get the property shape definition
+        if let Some(shapes_registry) = &context.shapes_registry {
+            if let Some(property_shape) = shapes_registry.get(&self.shape) {
+                // Create a temporary validation engine for this property shape validation
+                let config = ValidationConfig::default();
+                let mut temp_shapes = indexmap::IndexMap::new();
+                temp_shapes.insert(self.shape.clone(), property_shape.clone());
+
+                let mut validator = ValidationEngine::new(&temp_shapes, config);
+
+                // Validate the focus node against the property shape
+                // The property shape will define which property to check and what constraints to apply
+                match validator.validate_node_against_shape(
+                    store,
+                    property_shape,
+                    &context.focus_node,
+                    None,
+                ) {
+                    Ok(report) => {
+                        if !report.conforms() {
+                            // Property shape validation failed
+                            // Extract the first violation message for clarity
+                            let violation_msg = report
+                                .violations()
+                                .first()
+                                .and_then(|v| v.message().as_ref())
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    format!(
+                                        "Focus node does not conform to property shape '{}'",
+                                        self.shape.as_str()
+                                    )
+                                });
+
+                            return Ok(ConstraintEvaluationResult::violated(
+                                Some(context.focus_node.clone()),
+                                Some(violation_msg),
+                            ));
+                        }
+                        Ok(ConstraintEvaluationResult::satisfied())
+                    }
+                    Err(e) => {
+                        // Validation error - treat as violation
+                        tracing::warn!("Property shape validation error: {}", e);
+                        Ok(ConstraintEvaluationResult::violated(
+                            Some(context.focus_node.clone()),
+                            Some(format!(
+                                "Error validating property shape '{}': {}",
+                                self.shape.as_str(),
+                                e
+                            )),
+                        ))
+                    }
+                }
+            } else {
+                // Property shape not found
+                Err(ShaclError::ShapeParsing(format!(
+                    "Property shape '{}' not found in shapes collection",
+                    self.shape.as_str()
+                )))
+            }
+        } else {
+            // No shapes registry available
+            Err(ShaclError::ValidationEngine(
+                "Shapes registry not available in constraint context".to_string(),
+            ))
+        }
     }
 }
 

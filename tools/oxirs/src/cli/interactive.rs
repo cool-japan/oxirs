@@ -1,6 +1,16 @@
-//! Interactive mode support for CLI
+//! Interactive mode support for CLI (DEPRECATED)
+//!
+//! **DEPRECATED**: This module is obsolete and no longer used by the main application.
+//! Use `commands::interactive::execute()` instead for the modern interactive mode with:
+//! - Real SPARQL query execution
+//! - Advanced session management
+//! - Query history and templates
+//!
+//! This module is kept for backwards compatibility only and will be removed in v0.2.0.
 //!
 //! Provides REPL-like interactive command execution with history and completion.
+
+#![allow(deprecated)]
 
 use rustyline::completion::{Completer, FilenameCompleter, Pair};
 use rustyline::error::ReadlineError;
@@ -12,7 +22,16 @@ use rustyline_derive::{Helper, Hinter};
 use std::borrow::Cow;
 use std::collections::HashMap;
 
-/// Interactive mode handler
+/// Interactive mode handler (DEPRECATED)
+///
+/// # Deprecation Notice
+///
+/// This struct is deprecated and will be removed in v0.2.0.
+/// Use `commands::interactive::execute()` instead.
+#[deprecated(
+    since = "0.1.0-beta.1",
+    note = "Use commands::interactive::execute() instead"
+)]
 pub struct InteractiveMode {
     editor: Editor<OxirsHelper, rustyline::history::DefaultHistory>,
     history_file: String,
@@ -454,8 +473,8 @@ impl InteractiveMode {
         let format = args.get(2).map(|s| s.to_string());
         let graph = args.get(3).map(|s| s.to_string());
 
-        // Integrate with actual import
-        crate::commands::import::run(dataset.to_string(), file, format, graph).await?;
+        // Integrate with actual import (resume not supported in interactive mode)
+        crate::commands::import::run(dataset.to_string(), file, format, graph, false).await?;
 
         Ok(())
     }
@@ -472,8 +491,8 @@ impl InteractiveMode {
         let format = args[2].to_string();
         let graph = args.get(3).map(|s| s.to_string());
 
-        // Integrate with actual export
-        crate::commands::export::run(dataset.to_string(), file, format, graph).await?;
+        // Integrate with actual export (resume not supported in interactive mode)
+        crate::commands::export::run(dataset.to_string(), file, format, graph, false).await?;
 
         Ok(())
     }
@@ -774,8 +793,9 @@ impl InteractiveMode {
             crate::commands::import::run(
                 dataset.to_string(),
                 file.clone(),
-                None, // Auto-detect format
-                None, // Default graph
+                None,  // Auto-detect format
+                None,  // Default graph
+                false, // Resume not supported in interactive mode
             )
             .await?;
         }
@@ -809,6 +829,7 @@ impl InteractiveMode {
                 file,
                 "ntriples".to_string(), // Default format for TDB dumps
                 None,                   // All graphs
+                false,                  // Resume not supported in interactive mode
             )
             .await?;
         } else {

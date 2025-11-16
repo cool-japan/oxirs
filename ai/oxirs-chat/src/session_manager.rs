@@ -38,7 +38,7 @@ impl Default for ChatConfig {
 }
 
 /// Session state enumeration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SessionState {
     Active,
     Idle,
@@ -436,3 +436,17 @@ pub struct SessionData {
     pub topic_history: Vec<TopicTransition>,
     pub performance_metrics: SessionMetrics,
 }
+
+// Compatibility aliases for lib.rs
+impl SessionData {
+    pub fn user_id(&self) -> Option<&str> {
+        self.user_preferences.get("user_id").map(|s| s.as_str())
+    }
+
+    pub fn set_user_id(&mut self, user_id: String) {
+        self.user_preferences.insert("user_id".to_string(), user_id);
+    }
+}
+
+// Re-export with compatibility
+pub use SessionState as state;

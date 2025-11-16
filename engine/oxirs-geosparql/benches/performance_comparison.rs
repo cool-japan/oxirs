@@ -8,7 +8,10 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use geo_types::{Geometry as GeoGeometry, Point};
 use oxirs_geosparql::functions::geometric_operations::distance as standard_distance;
 use oxirs_geosparql::geometry::Geometry;
-use oxirs_geosparql::performance::{parallel, simd, BatchProcessor};
+use oxirs_geosparql::performance::{simd, BatchProcessor};
+
+#[cfg(feature = "parallel")]
+use oxirs_geosparql::performance::parallel;
 
 /// Generate test geometries
 fn generate_points(n: usize) -> Vec<Geometry> {

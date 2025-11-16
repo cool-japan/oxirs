@@ -1,4 +1,208 @@
 //! RDF serialization utilities for various formats
+//!
+//! **Stability**: ✅ **Stable** - Core serializer APIs are production-ready.
+//!
+//! This module provides serializers to export RDF data to various standard formats.
+//! It supports both triple-based (graph) and quad-based (dataset) serialization.
+//!
+//! ## Supported Formats
+//!
+//! ### Triple Formats (Graphs)
+//! - **Turtle** (.ttl) - Compact, human-readable with prefixes
+//! - **N-Triples** (.nt) - Line-based, simple format
+//! - **RDF/XML** (.rdf) - XML-based format
+//! - **JSON-LD** (.jsonld) - JSON format for linked data
+//!
+//! ### Quad Formats (Datasets)
+//! - **TriG** (.trig) - Turtle with named graph support
+//! - **N-Quads** (.nq) - Line-based quad format
+//!
+//! ## Examples
+//!
+//! ### Basic Serialization
+//!
+//! ```rust
+//! use oxirs_core::serializer::Serializer;
+//! use oxirs_core::parser::RdfFormat;
+//! use oxirs_core::model::{Graph, NamedNode, Triple, Literal};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a graph with some data
+//! let mut graph = Graph::new();
+//! let triple = Triple::new(
+//!     NamedNode::new("http://example.org/alice")?,
+//!     NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
+//!     Literal::new("Alice"),
+//! );
+//! graph.insert(triple);
+//!
+//! // Serialize to Turtle format
+//! let serializer = Serializer::new(RdfFormat::Turtle);
+//! let turtle = serializer.serialize_graph(&graph)?;
+//! println!("{}", turtle);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Serialize to N-Triples
+//!
+//! ```rust
+//! use oxirs_core::serializer::Serializer;
+//! use oxirs_core::parser::RdfFormat;
+//! use oxirs_core::model::{Graph, NamedNode, Triple};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # let mut graph = Graph::new();
+//! # let triple = Triple::new(
+//! #     NamedNode::new("http://example.org/alice")?,
+//! #     NamedNode::new("http://xmlns.com/foaf/0.1/knows")?,
+//! #     NamedNode::new("http://example.org/bob")?,
+//! # );
+//! # graph.insert(triple);
+//! // N-Triples: one triple per line, no prefixes
+//! let serializer = Serializer::new(RdfFormat::NTriples);
+//! let ntriples = serializer.serialize_graph(&graph)?;
+//!
+//! // Output:
+//! // <http://example.org/alice> <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> .
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Serialize Datasets with Named Graphs
+//!
+//! ```rust
+//! use oxirs_core::serializer::Serializer;
+//! use oxirs_core::parser::RdfFormat;
+//! use oxirs_core::model::{Dataset, NamedNode, Quad, GraphName, Literal};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! // Create a dataset with named graphs
+//! let mut dataset = Dataset::new();
+//!
+//! let graph1 = GraphName::NamedNode(NamedNode::new("http://example.org/graph1")?);
+//! let quad1 = Quad::new(
+//!     NamedNode::new("http://example.org/alice")?,
+//!     NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
+//!     Literal::new("Alice"),
+//!     graph1,
+//! );
+//! dataset.insert(quad1);
+//!
+//! // Serialize to N-Quads format
+//! let serializer = Serializer::new(RdfFormat::NQuads);
+//! let nquads = serializer.serialize_dataset(&dataset)?;
+//! println!("{}", nquads);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Serialize to TriG (Turtle with Graphs)
+//!
+//! ```rust
+//! use oxirs_core::serializer::Serializer;
+//! use oxirs_core::parser::RdfFormat;
+//! use oxirs_core::model::{Dataset, NamedNode, Quad, GraphName, Literal};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # let mut dataset = Dataset::new();
+//! # let graph = GraphName::NamedNode(NamedNode::new("http://example.org/graph1")?);
+//! # dataset.insert(Quad::new(
+//! #     NamedNode::new("http://example.org/alice")?,
+//! #     NamedNode::new("http://xmlns.com/foaf/0.1/name")?,
+//! #     Literal::new("Alice"),
+//! #     graph,
+//! # ));
+//! // TriG: Turtle syntax with named graph blocks
+//! let serializer = Serializer::new(RdfFormat::TriG);
+//! let trig = serializer.serialize_dataset(&dataset)?;
+//!
+//! // Output includes graph blocks:
+//! // <http://example.org/graph1> {
+//! //     <http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice" .
+//! // }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Writing to Files
+//!
+//! ```rust,no_run
+//! use oxirs_core::serializer::Serializer;
+//! use oxirs_core::parser::RdfFormat;
+//! use oxirs_core::model::Graph;
+//! use std::fs;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! # let graph = Graph::new();
+//! // Serialize and write to file
+//! let serializer = Serializer::new(RdfFormat::Turtle);
+//! let turtle = serializer.serialize_graph(&graph)?;
+//! fs::write("output.ttl", turtle)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Quad Serialization Helper
+//!
+//! ```rust
+//! use oxirs_core::serializer::Serializer;
+//! use oxirs_core::parser::RdfFormat;
+//! use oxirs_core::model::{NamedNode, Quad, Literal, GraphName};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let quad = Quad::new(
+//!     NamedNode::new("http://example.org/subject")?,
+//!     NamedNode::new("http://example.org/predicate")?,
+//!     Literal::new("value"),
+//!     GraphName::DefaultGraph,
+//! );
+//!
+//! let serializer = Serializer::new(RdfFormat::NQuads);
+//! let nquad_line = serializer.serialize_quad_to_nquads(&quad)?;
+//! println!("{}", nquad_line);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Format Capabilities
+//!
+//! | Format | Graphs | Quads | Prefixes | Compact | Human-Readable |
+//! |--------|--------|-------|----------|---------|----------------|
+//! | Turtle | ✅ | ❌ | ✅ | ✅ | ✅ |
+//! | N-Triples | ✅ | ❌ | ❌ | ❌ | ⚠️ |
+//! | TriG | ✅ | ✅ | ✅ | ✅ | ✅ |
+//! | N-Quads | ✅ | ✅ | ❌ | ❌ | ⚠️ |
+//! | RDF/XML | ✅ | ❌ | ✅ | ❌ | ⚠️ |
+//! | JSON-LD | ✅ | ✅ | ✅ | ⚠️ | ⚠️ |
+//!
+//! ## Format Selection Guidelines
+//!
+//! - **For human readability**: Use Turtle or TriG
+//! - **For machine processing**: Use N-Triples or N-Quads
+//! - **For web APIs**: Use JSON-LD
+//! - **For XML systems**: Use RDF/XML
+//! - **For named graphs**: Use TriG or N-Quads
+//!
+//! ## Performance Tips
+//!
+//! 1. **N-Triples/N-Quads** - Fastest to serialize (line-based)
+//! 2. **Large datasets** - Use N-Quads for streaming serialization
+//! 3. **Prefixes** - Turtle/TriG reduce output size with prefix declarations
+//! 4. **Human review** - Turtle/TriG are most readable
+//!
+//! ## Error Handling
+//!
+//! Serialization can fail in these cases:
+//! - **Format mismatch** - Using quad-only format for graphs (e.g., TriG for a Graph)
+//! - **Unsupported features** - Variables in concrete formats
+//! - **Invalid data** - Malformed IRIs or literals
+//!
+//! ## Related Modules
+//!
+//! - [`crate::parser`] - Parse RDF from various formats
+//! - [`crate::model`] - RDF data model types
+//! - [`crate::rdf_store`] - Store RDF data
 
 use crate::{
     model::{dataset::Dataset, graph::Graph, GraphName, Quad},
@@ -378,10 +582,10 @@ impl Serializer {
         // Convert subject
         let subject = match triple.subject() {
             crate::model::Subject::NamedNode(n) => {
-                oxrdf::Subject::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+                oxrdf::NamedOrBlankNode::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
             }
             crate::model::Subject::BlankNode(b) => {
-                oxrdf::Subject::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+                oxrdf::NamedOrBlankNode::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
             }
             _ => {
                 return Err(crate::OxirsError::Serialize(
@@ -451,10 +655,10 @@ impl Serializer {
         // Convert subject
         let subject = match quad.subject() {
             crate::model::Subject::NamedNode(n) => {
-                oxrdf::Subject::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
+                oxrdf::NamedOrBlankNode::NamedNode(oxrdf::NamedNode::new_unchecked(n.as_str()))
             }
             crate::model::Subject::BlankNode(b) => {
-                oxrdf::Subject::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
+                oxrdf::NamedOrBlankNode::BlankNode(oxrdf::BlankNode::new_unchecked(b.as_str()))
             }
             _ => {
                 return Err(crate::OxirsError::Serialize(

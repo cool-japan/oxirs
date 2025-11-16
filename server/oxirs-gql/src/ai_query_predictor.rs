@@ -830,7 +830,8 @@ impl AIQueryPredictor {
                 let mut message_sum = 0.0;
                 let mut neighbor_count = 0;
 
-                // Message passing from neighbors
+                // Message passing from neighbors - need index j to access adjacency matrix
+                #[allow(clippy::needless_range_loop)]
                 for j in 0..num_nodes {
                     if adjacency_matrix[i][j] > 0.0 {
                         let neighbor_feature = node_embeddings.get(j).unwrap_or(&0.0);

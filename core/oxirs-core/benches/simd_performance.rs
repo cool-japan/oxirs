@@ -275,11 +275,10 @@ fn bench_embedding_operations(c: &mut Criterion) {
                 bencher.iter(|| {
                     let normalized: Vec<f32> = vectors
                         .iter()
-                        .map(|v| {
+                        .flat_map(|v| {
                             let norm = f32::norm(v);
                             v.iter().map(|&x| x / norm).collect::<Vec<f32>>()
                         })
-                        .flatten()
                         .collect();
                     black_box(normalized)
                 });

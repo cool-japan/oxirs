@@ -105,9 +105,7 @@ use scirs2_core::ndarray_ext::{Array, ArrayView, ArrayViewMut, Axis, Ix1, Ix2, I
 use scirs2_core::ndarray_ext::manipulation;  // for tensor operations in AI modules
 use scirs2_core::ndarray_ext::stats;         // for similarity metrics, statistics
 use scirs2_core::ndarray_ext::matrix;        // for graph adjacency matrices
-
-// IMPORTANT: For array! macro in tests, use:
-use scirs2_autograd::ndarray::array;  // array! macro is here, not in scirs2_core
+use scirs2_core::ndarray_ext::array;         // array! macro for test arrays
 ```
 
 #### Random Number Generation (replaces rand)
@@ -199,12 +197,12 @@ use scirs2_core::advanced_distributed_computing::{DistributedOptimizer, AllReduc
 
 1. **NEVER** import `ndarray` directly - use `scirs2_core::ndarray_ext`
 2. **NEVER** import `rand` directly - use `scirs2_core::random`
-3. **ALWAYS** use scirs2-core's SIMD operations for graph algorithms
-4. **ALWAYS** use scirs2-core's GPU abstractions for vector embeddings
-5. **ALWAYS** use scirs2-core's memory management for large RDF datasets
-6. **ALWAYS** use scirs2-core's profiling for SPARQL query optimization
-7. **ALWAYS** use scirs2-core's error types and result handling
-8. **EXCEPTION**: Use `scirs2_autograd::ndarray::array` for the array! macro (not available in scirs2_core)
+3. **NEVER** use `scirs2_autograd` - array! macro is now in `scirs2_core::ndarray_ext`
+4. **ALWAYS** use scirs2-core's SIMD operations for graph algorithms
+5. **ALWAYS** use scirs2-core's GPU abstractions for vector embeddings
+6. **ALWAYS** use scirs2-core's memory management for large RDF datasets
+7. **ALWAYS** use scirs2-core's profiling for SPARQL query optimization
+8. **ALWAYS** use scirs2-core's error types and result handling
 
 ## OxiRS Module-Specific SciRS2 Usage
 
@@ -367,9 +365,7 @@ SplitRS was developed during the OxiRS refactoring project and successfully refa
 use scirs2_core::ndarray_ext::{Array, Array1, Array2, ArrayView, Ix1, Ix2, IxDyn};
 use scirs2_core::ndarray_ext::stats::{mean, variance, correlation};
 use scirs2_core::ndarray_ext::matrix::{eye, diag, kron};
-
-// For array! macro in tests (SPECIAL CASE)
-use scirs2_autograd::ndarray::array;
+use scirs2_core::ndarray_ext::array;  // array! macro for test arrays
 
 // Random number generation for API keys, sampling
 use scirs2_core::random::{Random, rng, DistributionExt};
@@ -504,9 +500,10 @@ When reviewing or writing OxiRS code, verify:
 ### ✅ Arrays and Numerical Operations
 - [ ] NO direct `use ndarray::{...}`
 - [ ] NO direct `Array`, `Array1`, `Array2` from ndarray
+- [ ] NO `use scirs2_autograd::ndarray::array` (BANNED)
 - [ ] YES `use scirs2_core::ndarray_ext::{Array, Array1, Array2, ...}`
 - [ ] YES use scirs2-core's stats, matrix, manipulation modules
-- [ ] For array! macro: `use scirs2_autograd::ndarray::array`
+- [ ] YES for array! macro: `use scirs2_core::ndarray_ext::array`
 
 ### ✅ Random Number Generation
 - [ ] NO direct `use rand::{...}`
@@ -535,17 +532,15 @@ When reviewing or writing OxiRS code, verify:
 ### Common Anti-Patterns to Avoid
 ```rust
 // ❌ WRONG - Direct dependencies
-use ndarray::{Array2, arr2};
+use ndarray::{Array2, arr2, array};
 use rand::Rng;
 use rand_distr::Normal;
+use scirs2_autograd::ndarray::array;  // BANNED - use scirs2_core instead
 
 // ✅ CORRECT - Full SciRS2 usage
-use scirs2_core::ndarray_ext::{Array2, arr2};
+use scirs2_core::ndarray_ext::{Array2, arr2, array};  // array! macro included
 use scirs2_core::random::{Random, rng};
 use scirs2_core::random::distributions::Normal;
-
-// ✅ SPECIAL CASE - array! macro only
-use scirs2_autograd::ndarray::array;  // For tests needing array! macro
 ```
 
 ## Important Notes
@@ -554,7 +549,7 @@ use scirs2_autograd::ndarray::array;  // For tests needing array! macro
 - **GraphQL Implementation**: Use Juniper patterns from ~/work/juniper/ as reference
 - **Oxigraph Reference**: Check ~/work/oxigraph/ for RDF/SPARQL implementation patterns
 - **SciRS2 Policy**: See SCIRS2_INTEGRATION_POLICY.md for detailed integration requirements
-- **array! Macro**: Use `scirs2_autograd::ndarray::array` (not available in scirs2_core)
+- **array! Macro**: Use `scirs2_core::ndarray_ext::array` (now available in scirs2_core)
 
 ## Important Files
 

@@ -3,9 +3,7 @@
 //! This module contains handlers for model lifecycle management endpoints.
 
 #[cfg(feature = "api-server")]
-use super::super::{
-    ApiState, HealthMetrics, HealthStatus, ModelHealth, ModelInfoRequest, ModelInfoResponse,
-};
+use super::super::{ApiState, HealthMetrics, HealthStatus, ModelHealth, ModelInfoResponse};
 #[cfg(feature = "api-server")]
 use crate::{ModelStats, TrainingStats};
 #[cfg(feature = "api-server")]

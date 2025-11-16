@@ -5,10 +5,14 @@
 
 /// Adaptive compression selection based on data characteristics
 pub mod adaptive;
+/// Adaptive compression algorithm selection
+pub mod adaptive_selection;
 /// Bitmap compression for boolean and sparse data
 pub mod bitmap;
 /// Bloom filter for membership testing
 pub mod bloom;
+/// Brotli compression algorithm (high compression ratio)
+pub mod brotli_compression;
 /// Column-store compression optimizations
 pub mod column_store;
 /// Delta encoding for numerical sequences
@@ -17,12 +21,20 @@ pub mod delta;
 pub mod dictionary;
 /// Frame-of-reference encoding
 pub mod frame_of_reference;
+/// LZ4 compression algorithm (very fast)
+pub mod lz4;
 /// Prefix compression for strings
 pub mod prefix;
 /// Run-length encoding for repeated values
 pub mod run_length;
 /// SIMD-accelerated scan operations
 pub mod simd_scan;
+/// Snappy compression algorithm (fast with good ratio)
+pub mod snappy;
+/// Unified compression interface with automatic algorithm selection
+pub mod unified;
+/// Zstandard compression algorithm (excellent ratio)
+pub mod zstd_compression;
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -31,15 +43,20 @@ use std::fmt;
 
 // Re-export main compression implementations
 pub use adaptive::AdaptiveCompressor;
+pub use adaptive_selection::{AdaptiveCompressionSelector, SelectionStrategy};
 pub use bitmap::{BitmapRoaringEncoder, BitmapWAHEncoder};
 pub use bloom::{BloomFilter, BloomFilterStats};
+pub use brotli_compression::BrotliCompressor;
 pub use column_store::ColumnStoreCompressor;
 pub use delta::DeltaEncoder;
 pub use dictionary::AdaptiveDictionary;
 pub use frame_of_reference::FrameOfReferenceEncoder;
+pub use lz4::Lz4Compressor;
 pub use prefix::{CompressedString, CompressionStats as PrefixCompressionStats, PrefixCompressor};
 pub use run_length::RunLengthEncoder;
 pub use simd_scan::SimdScanner;
+pub use snappy::SnappyCompressor;
+pub use zstd_compression::ZstdCompressor;
 
 /// Advanced compression types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,6 +77,14 @@ pub enum AdvancedCompressionType {
     ColumnStore = 16,
     /// Hybrid compression choosing best method
     Adaptive = 17,
+    /// LZ4 compression (very fast)
+    Lz4 = 20,
+    /// Zstandard compression (excellent ratio)
+    Zstd = 21,
+    /// Snappy compression (fast with good ratio)
+    Snappy = 22,
+    /// Brotli compression (high compression ratio)
+    Brotli = 23,
 }
 
 impl fmt::Display for AdvancedCompressionType {
@@ -73,6 +98,10 @@ impl fmt::Display for AdvancedCompressionType {
             AdvancedCompressionType::AdaptiveDictionary => write!(f, "AdaptiveDictionary"),
             AdvancedCompressionType::ColumnStore => write!(f, "ColumnStore"),
             AdvancedCompressionType::Adaptive => write!(f, "Adaptive"),
+            AdvancedCompressionType::Lz4 => write!(f, "LZ4"),
+            AdvancedCompressionType::Zstd => write!(f, "Zstd"),
+            AdvancedCompressionType::Snappy => write!(f, "Snappy"),
+            AdvancedCompressionType::Brotli => write!(f, "Brotli"),
         }
     }
 }
@@ -172,5 +201,9 @@ mod tests {
     fn test_compression_type_display() {
         assert_eq!(AdvancedCompressionType::RunLength.to_string(), "RunLength");
         assert_eq!(AdvancedCompressionType::BitmapWAH.to_string(), "BitmapWAH");
+        assert_eq!(AdvancedCompressionType::Lz4.to_string(), "LZ4");
+        assert_eq!(AdvancedCompressionType::Zstd.to_string(), "Zstd");
+        assert_eq!(AdvancedCompressionType::Snappy.to_string(), "Snappy");
+        assert_eq!(AdvancedCompressionType::Brotli.to_string(), "Brotli");
     }
 }

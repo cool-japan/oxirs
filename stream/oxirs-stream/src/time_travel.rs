@@ -183,9 +183,10 @@ impl Clone for TemporalFilter {
 }
 
 /// Temporal projection specification
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum TemporalProjection {
     /// Return full events
+    #[default]
     FullEvents,
     /// Return only metadata
     MetadataOnly,
@@ -193,12 +194,6 @@ pub enum TemporalProjection {
     Fields(Vec<String>),
     /// Return aggregated data
     Aggregation(AggregationType),
-}
-
-impl Default for TemporalProjection {
-    fn default() -> Self {
-        Self::FullEvents
-    }
 }
 
 /// Aggregation type for temporal queries
@@ -211,11 +206,12 @@ pub enum AggregationType {
 }
 
 /// Temporal ordering specification
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum TemporalOrdering {
     /// Order by timestamp ascending
     TimeAscending,
     /// Order by timestamp descending
+    #[default]
     TimeDescending,
     /// Order by version ascending
     VersionAscending,
@@ -223,12 +219,6 @@ pub enum TemporalOrdering {
     VersionDescending,
     /// Order by custom field
     Custom(String, bool), // field, ascending
-}
-
-impl Default for TemporalOrdering {
-    fn default() -> Self {
-        Self::TimeDescending
-    }
 }
 
 /// Result of a temporal query

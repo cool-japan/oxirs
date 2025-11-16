@@ -6,7 +6,7 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 #[cfg(feature = "compression")]
 use flate2::{read::GzDecoder, write::GzEncoder, Compression as GzCompression};
@@ -246,14 +246,12 @@ impl CompressionManager {
             } else {
                 CompressionAlgorithm::Snappy // Fast for high entropy
             }
+        } else if repetition_factor > 0.3 {
+            CompressionAlgorithm::Zstd // Excellent for repetitive data
+        } else if entropy > 0.9 {
+            CompressionAlgorithm::Lz4 // Fast for random data
         } else {
-            if repetition_factor > 0.3 {
-                CompressionAlgorithm::Zstd // Excellent for repetitive data
-            } else if entropy > 0.9 {
-                CompressionAlgorithm::Lz4 // Fast for random data
-            } else {
-                CompressionAlgorithm::Gzip // Balanced choice
-            }
+            CompressionAlgorithm::Gzip // Balanced choice
         }
     }
 

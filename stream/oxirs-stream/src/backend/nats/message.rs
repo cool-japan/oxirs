@@ -2,7 +2,7 @@
 //!
 //! This module contains message format definitions for the NATS backend.
 
-use crate::{EventMetadata, PatchOperation, RdfPatch, StreamEvent};
+use crate::{EventMetadata, StreamEvent};
 use serde::{Deserialize, Serialize};
 
 /// NATS event message format

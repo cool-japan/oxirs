@@ -324,10 +324,10 @@ impl QuantumChannel {
         particle_b: &QuantumParticle,
     ) -> StreamResult<BellState> {
         // Simulate quantum measurement with probabilistic outcomes
-        use rand::Rng;
-        let mut rng = rand::Random::default();
-        
-        let measurement_outcome: f64 = rng.random();
+        use scirs2_core::random::Random;
+        let mut rng = Random::new();
+
+        let measurement_outcome: f64 = rng.uniform_01();
         
         let bell_state = match measurement_outcome {
             x if x < 0.25 => BellState::PhiPlus,
@@ -451,13 +451,13 @@ impl QuantumChannel {
     /// Measure particle spin state
     async fn measure_particle_spin(&self, particle: &QuantumParticle) -> StreamResult<SpinState> {
         // Simulate quantum measurement collapse
-        use rand::Rng;
-        let mut rng = rand::Random::default();
-        
+        use scirs2_core::random::Random;
+        let mut rng = Random::new();
+
         match &particle.spin {
             SpinState::Superposition(up_amp, down_amp) => {
                 let probability_up = up_amp.powi(2);
-                let measurement: f64 = rng.random();
+                let measurement: f64 = rng.uniform_01();
                 
                 if measurement < probability_up {
                     Ok(SpinState::Up)

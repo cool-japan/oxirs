@@ -62,12 +62,12 @@ pub enum KafkaAcks {
     All,
 }
 
-impl ToString for KafkaAcks {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for KafkaAcks {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KafkaAcks::None => "0".to_string(),
-            KafkaAcks::Leader => "1".to_string(),
-            KafkaAcks::All => "all".to_string(),
+            KafkaAcks::None => write!(f, "0"),
+            KafkaAcks::Leader => write!(f, "1"),
+            KafkaAcks::All => write!(f, "all"),
         }
     }
 }
@@ -82,14 +82,14 @@ pub enum KafkaCompressionType {
     Zstd,
 }
 
-impl ToString for KafkaCompressionType {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for KafkaCompressionType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            KafkaCompressionType::None => "none".to_string(),
-            KafkaCompressionType::Gzip => "gzip".to_string(),
-            KafkaCompressionType::Snappy => "snappy".to_string(),
-            KafkaCompressionType::Lz4 => "lz4".to_string(),
-            KafkaCompressionType::Zstd => "zstd".to_string(),
+            KafkaCompressionType::None => write!(f, "none"),
+            KafkaCompressionType::Gzip => write!(f, "gzip"),
+            KafkaCompressionType::Snappy => write!(f, "snappy"),
+            KafkaCompressionType::Lz4 => write!(f, "lz4"),
+            KafkaCompressionType::Zstd => write!(f, "zstd"),
         }
     }
 }
@@ -142,13 +142,13 @@ pub enum SecurityProtocol {
     SaslSsl,
 }
 
-impl ToString for SecurityProtocol {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SecurityProtocol {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SecurityProtocol::Plaintext => "PLAINTEXT".to_string(),
-            SecurityProtocol::Ssl => "SSL".to_string(),
-            SecurityProtocol::SaslPlaintext => "SASL_PLAINTEXT".to_string(),
-            SecurityProtocol::SaslSsl => "SASL_SSL".to_string(),
+            SecurityProtocol::Plaintext => write!(f, "PLAINTEXT"),
+            SecurityProtocol::Ssl => write!(f, "SSL"),
+            SecurityProtocol::SaslPlaintext => write!(f, "SASL_PLAINTEXT"),
+            SecurityProtocol::SaslSsl => write!(f, "SASL_SSL"),
         }
     }
 }
@@ -171,14 +171,14 @@ pub enum SaslMechanism {
     OAuthBearer,
 }
 
-impl ToString for SaslMechanism {
-    fn to_string(&self) -> String {
+impl std::fmt::Display for SaslMechanism {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SaslMechanism::Plain => "PLAIN".to_string(),
-            SaslMechanism::ScramSha256 => "SCRAM-SHA-256".to_string(),
-            SaslMechanism::ScramSha512 => "SCRAM-SHA-512".to_string(),
-            SaslMechanism::Gssapi => "GSSAPI".to_string(),
-            SaslMechanism::OAuthBearer => "OAUTHBEARER".to_string(),
+            SaslMechanism::Plain => write!(f, "PLAIN"),
+            SaslMechanism::ScramSha256 => write!(f, "SCRAM-SHA-256"),
+            SaslMechanism::ScramSha512 => write!(f, "SCRAM-SHA-512"),
+            SaslMechanism::Gssapi => write!(f, "GSSAPI"),
+            SaslMechanism::OAuthBearer => write!(f, "OAUTHBEARER"),
         }
     }
 }

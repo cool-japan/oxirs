@@ -111,10 +111,12 @@ fn benchmark_pattern_matching(facts: &[RuleAtom]) {
 
     // Pattern: entities with values containing "1" or "2"
     let predicate = |fact: &RuleAtom| {
-        if let RuleAtom::Triple { object, .. } = fact {
-            if let Term::Constant(val) = object {
-                return val.contains('1') || val.contains('2');
-            }
+        if let RuleAtom::Triple {
+            object: Term::Constant(val),
+            ..
+        } = fact
+        {
+            return val.contains('1') || val.contains('2');
         }
         false
     };

@@ -86,6 +86,9 @@ impl SearchResult {
     }
 }
 
+/// Retrieval result (alias for SearchResult for backward compatibility)
+pub type RetrievalResult = SearchResult;
+
 /// Query context for RAG retrieval
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryContext {

@@ -149,6 +149,8 @@ pub struct Claims {
     pub exp: i64,
     pub iat: i64,
     pub nbf: i64,
+    pub iss: String,
+    pub aud: String,
 }
 
 /// MFA secrets storage

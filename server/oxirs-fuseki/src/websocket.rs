@@ -12,7 +12,7 @@
 //! - Event-driven data updates
 
 use crate::{
-    auth::AuthUser,
+    auth::{AuthUser, SessionManager},
     error::{FusekiError, FusekiResult},
     metrics::MetricsService,
     store::Store,
@@ -58,6 +58,8 @@ pub struct SubscriptionManager {
     metrics: Arc<MetricsService>,
     /// Configuration
     config: Arc<WebSocketConfig>,
+    /// Session manager for authentication
+    session_manager: Option<Arc<SessionManager>>,
 }
 
 /// WebSocket configuration
@@ -295,6 +297,28 @@ impl SubscriptionManager {
             query_executor: Arc::new(QueryExecutor::new(store)),
             metrics,
             config: Arc::new(config),
+            session_manager: None,
+        }
+    }
+
+    /// Create a new subscription manager with authentication support
+    pub fn new_with_auth(
+        store: Arc<Store>,
+        metrics: Arc<MetricsService>,
+        config: WebSocketConfig,
+        session_manager: Arc<SessionManager>,
+    ) -> Self {
+        let (tx, _rx) = broadcast::channel(1000);
+
+        Self {
+            subscriptions: Arc::new(DashMap::new()),
+            query_subscriptions: Arc::new(DashMap::new()),
+            connections: Arc::new(DashMap::new()),
+            change_broadcaster: tx,
+            query_executor: Arc::new(QueryExecutor::new(store)),
+            metrics,
+            config: Arc::new(config),
+            session_manager: Some(session_manager),
         }
     }
 
@@ -584,24 +608,64 @@ impl SubscriptionManager {
     }
 
     /// Handle authentication
-    async fn handle_auth(&self, connection_id: &str, _token: &str) -> FusekiResult<()> {
-        // TODO: Implement actual authentication
-        // For now, just update connection state
-        if let Some(mut conn) = self.connections.get_mut(connection_id) {
-            conn.state = ConnectionState::Authenticated;
+    async fn handle_auth(&self, connection_id: &str, token: &str) -> FusekiResult<()> {
+        // Validate JWT token or session token
+        let authenticated = if let Some(ref session_manager) = self.session_manager {
+            // Try JWT token validation first
+            match session_manager.validate_jwt_token(token) {
+                Ok(validation) => {
+                    // Update connection with authenticated user info
+                    if let Some(mut conn) = self.connections.get_mut(connection_id) {
+                        conn.state = ConnectionState::Authenticated;
+                        conn.user = Some(AuthUser(validation.user));
+                    }
+                    true
+                }
+                Err(_) => {
+                    // Try session token validation as fallback
+                    match session_manager.validate_session(token).await {
+                        Ok(crate::auth::types::AuthResult::Authenticated(user)) => {
+                            if let Some(mut conn) = self.connections.get_mut(connection_id) {
+                                conn.state = ConnectionState::Authenticated;
+                                conn.user = Some(AuthUser(user));
+                            }
+                            true
+                        }
+                        _ => false,
+                    }
+                }
+            }
+        } else {
+            // No authentication configured - allow all
+            if let Some(mut conn) = self.connections.get_mut(connection_id) {
+                conn.state = ConnectionState::Authenticated;
+            }
+            true
+        };
+
+        if authenticated {
+            self.send_ws_message(
+                connection_id,
+                WsMessage::Ack {
+                    message_id: Uuid::new_v4().to_string(),
+                    success: true,
+                    error: None,
+                },
+            )
+            .await?;
+            Ok(())
+        } else {
+            self.send_ws_message(
+                connection_id,
+                WsMessage::Error {
+                    code: "AUTH_FAILED".to_string(),
+                    message: "Authentication failed: Invalid token".to_string(),
+                    details: None,
+                },
+            )
+            .await?;
+            Err(FusekiError::authentication("Invalid authentication token"))
         }
-
-        self.send_ws_message(
-            connection_id,
-            WsMessage::Ack {
-                message_id: Uuid::new_v4().to_string(),
-                success: true,
-                error: None,
-            },
-        )
-        .await?;
-
-        Ok(())
     }
 
     /// Check subscription limits
@@ -1052,6 +1116,7 @@ impl Clone for SubscriptionManager {
             query_executor: Arc::clone(&self.query_executor),
             metrics: Arc::clone(&self.metrics),
             config: Arc::clone(&self.config),
+            session_manager: self.session_manager.clone(),
         }
     }
 }

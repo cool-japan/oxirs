@@ -320,11 +320,11 @@ pub(super) fn convert_quad(oxrdf_quad: oxrdf::Quad) -> ParseResult<crate::model:
 
     // Convert subject
     let subject = match oxrdf_quad.subject {
-        oxrdf::Subject::NamedNode(n) => Subject::NamedNode(
+        oxrdf::NamedOrBlankNode::NamedNode(n) => Subject::NamedNode(
             NamedNode::new(n.as_str())
                 .map_err(|e| RdfParseError::invalid_iri(format!("{}: {}", n.as_str(), e)))?,
         ),
-        oxrdf::Subject::BlankNode(b) => Subject::BlankNode(
+        oxrdf::NamedOrBlankNode::BlankNode(b) => Subject::BlankNode(
             BlankNode::new(b.as_str())
                 .map_err(|e| RdfParseError::InvalidBlankNode(format!("{}: {}", b.as_str(), e)))?,
         ),

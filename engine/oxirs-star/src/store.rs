@@ -558,6 +558,56 @@ impl StarStore {
         }
     }
 
+    /// Get the store configuration
+    pub fn config(&self) -> &StarConfig {
+        &self.config
+    }
+
+    /// Query triples matching a pattern
+    pub fn query(
+        &self,
+        subject: Option<&StarTerm>,
+        predicate: Option<&StarTerm>,
+        object: Option<&StarTerm>,
+    ) -> StarResult<Vec<StarTriple>> {
+        let mut results = Vec::new();
+
+        // Query star triples (those containing quoted triples)
+        let star_triples = self.star_triples.read().unwrap();
+        for triple in star_triples.iter() {
+            let matches = (subject.is_none() || subject == Some(&triple.subject))
+                && (predicate.is_none() || predicate == Some(&triple.predicate))
+                && (object.is_none() || object == Some(&triple.object));
+
+            if matches {
+                results.push(triple.clone());
+            }
+        }
+
+        // Query regular triples from core store if no quoted triples in pattern
+        if subject.map_or(true, |s| !matches!(s, StarTerm::QuotedTriple(_)))
+            && predicate.map_or(true, |p| !matches!(p, StarTerm::QuotedTriple(_)))
+            && object.map_or(true, |o| !matches!(o, StarTerm::QuotedTriple(_)))
+        {
+            // Get all regular triples and filter
+            let all = self.all_triples();
+            for triple in all {
+                // Only include if not already in results and matches pattern
+                if !triple.contains_quoted_triples() {
+                    let matches = (subject.is_none() || subject == Some(&triple.subject))
+                        && (predicate.is_none() || predicate == Some(&triple.predicate))
+                        && (object.is_none() || object == Some(&triple.object));
+
+                    if matches && !results.contains(&triple) {
+                        results.push(triple);
+                    }
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
     /// Insert a RDF-star triple into the store
     pub fn insert(&self, triple: &StarTriple) -> StarResult<()> {
         let span = span!(Level::DEBUG, "insert_triple");
@@ -1438,11 +1488,6 @@ impl StarStore {
             }
         }
         true
-    }
-
-    /// Get configuration
-    pub fn config(&self) -> &StarConfig {
-        &self.config
     }
 
     /// Update configuration (requires store recreation for some settings)

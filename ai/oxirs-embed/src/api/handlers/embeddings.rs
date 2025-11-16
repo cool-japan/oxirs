@@ -7,10 +7,7 @@ use super::super::{
     ApiState, BatchEmbeddingRequest, BatchEmbeddingResponse, EmbeddingRequest, EmbeddingResponse,
 };
 #[cfg(feature = "api-server")]
-use crate::{CachedEmbeddingModel, EmbeddingModel};
-#[cfg(feature = "api-server")]
 use axum::{extract::State, http::StatusCode, response::Json};
-use std::sync::Arc;
 
 /// Generate embedding for a single entity
 #[cfg(feature = "api-server")]
@@ -72,8 +69,8 @@ pub async fn embed_single(
     let response = EmbeddingResponse {
         entity_id: request.entity_id.clone(),
         entity: request.entity,
-        embedding: embedding,
-        dimensions: dimensions,
+        embedding,
+        dimensions,
         model_id: request.model_id.unwrap_or(model_version),
         model_version: model_version.to_string(),
         from_cache,
@@ -127,12 +124,12 @@ pub async fn embed_batch(
 
         let (embedding, from_cache) = if use_cache {
             // Check cache first
-            if let Some(cached_embedding) = state.cache_manager.get_embedding(&entity) {
+            if let Some(cached_embedding) = state.cache_manager.get_embedding(entity) {
                 cache_hits += 1;
                 (cached_embedding, true)
             } else {
                 // Cache miss - get from model and cache result
-                match model.get_entity_embedding(&entity) {
+                match model.get_entity_embedding(entity) {
                     Ok(emb) => {
                         state
                             .cache_manager
@@ -144,7 +141,7 @@ pub async fn embed_batch(
                 }
             }
         } else {
-            match model.get_entity_embedding(&entity) {
+            match model.get_entity_embedding(entity) {
                 Ok(emb) => {
                     cache_misses += 1;
                     (emb, false)
@@ -159,8 +156,8 @@ pub async fn embed_batch(
         embeddings.push(EmbeddingResponse {
             entity_id: entity.clone(),
             entity: entity.clone(),
-            embedding: embedding,
-            dimensions: dimensions,
+            embedding,
+            dimensions,
             model_id: request.model_id.unwrap_or(model_version),
             model_version: model_version.to_string(),
             from_cache,

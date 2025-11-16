@@ -1374,7 +1374,7 @@ impl EmbeddingModel for ContinualLearningModel {
         Err(anyhow!("Entity not found: {}", entity))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(&relation_id) = self.relations.get(relation) {
             if relation_id < self.embeddings.nrows() {
                 let embedding = self.embeddings.row(relation_id);
@@ -1386,7 +1386,7 @@ impl EmbeddingModel for ContinualLearningModel {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let predicate_emb = self.getrelation_embedding(predicate)?;
+        let predicate_emb = self.get_relation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // Simple TransE-style scoring

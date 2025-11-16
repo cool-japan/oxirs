@@ -8,7 +8,7 @@ use crate::algebra::{
     PropertyPath, PropertyPathPattern, Term, TriplePattern, UnaryOperator, Variable,
 };
 use crate::update::{GraphReference, GraphTarget, QuadPattern, UpdateOperation};
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use oxirs_core::model::NamedNode;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -386,7 +386,12 @@ impl QueryParser {
                 }
                 '|' => {
                     chars.next();
-                    tokens.push(Token::Pipe);
+                    if chars.peek() == Some(&'|') {
+                        chars.next();
+                        tokens.push(Token::Or);
+                    } else {
+                        tokens.push(Token::Pipe);
+                    }
                 }
                 '^' => {
                     chars.next();
@@ -417,6 +422,16 @@ impl QueryParser {
                         tokens.push(Token::Bang);
                     }
                     continue; // Skip the normal ! parsing
+                }
+                '&' => {
+                    chars.next();
+                    if chars.peek() == Some(&'&') {
+                        chars.next();
+                        tokens.push(Token::And);
+                    } else {
+                        return Err(anyhow!("Unexpected '&' - did you mean '&&'?"));
+                    }
+                    continue;
                 }
                 '$' => {
                     chars.next();

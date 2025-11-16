@@ -1301,7 +1301,7 @@ mod tests {
     fn test_scalar_quantization() {
         let vector = Vector::new(vec![0.1, 0.5, 0.9, 0.3, 0.7]);
         let mut quantizer = ScalarQuantizer::new(8);
-        quantizer.train(&[vector.clone()]).unwrap();
+        quantizer.train(std::slice::from_ref(&vector)).unwrap();
 
         let compressed = quantizer.compress(&vector).unwrap();
         let decompressed = quantizer.decompress(&compressed, 5).unwrap();

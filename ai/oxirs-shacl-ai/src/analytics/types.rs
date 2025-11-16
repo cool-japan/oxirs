@@ -183,19 +183,14 @@ pub struct InsightsSummary {
 }
 
 /// Overall health assessment
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum OverallHealth {
     Excellent,
+    #[default]
     Good,
     Fair,
     Poor,
     Critical,
-}
-
-impl Default for OverallHealth {
-    fn default() -> Self {
-        Self::Good
-    }
 }
 
 /// Insight severity levels (Higher values = Higher severity)

@@ -885,8 +885,8 @@ impl ParallelExecutor {
             for entry in entries.flatten() {
                 let name = entry.file_name();
                 let name_str = name.to_string_lossy();
-                if name_str.starts_with("node") {
-                    if let Ok(node_id) = name_str[4..].parse::<usize>() {
+                if let Some(stripped) = name_str.strip_prefix("node") {
+                    if let Ok(node_id) = stripped.parse::<usize>() {
                         numa_nodes.push(node_id);
                     }
                 }

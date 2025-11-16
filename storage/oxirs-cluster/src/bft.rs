@@ -5,7 +5,7 @@
 
 use crate::{ClusterError, Result};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use rand::rngs::OsRng;
+// Note: OsRng imported via fully qualified path to avoid scirs2-core re-export conflict
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
@@ -261,11 +261,9 @@ impl ByzantineTracker {
 impl BftConsensus {
     /// Create a new BFT consensus instance
     pub fn new(node_id: String, config: BftConfig) -> Result<Self> {
-        // Generate a random SigningKey using OsRng
-        let mut csprng = OsRng;
-        let mut seed_bytes = [0u8; 32];
-        use rand::RngCore;
-        csprng.fill_bytes(&mut seed_bytes);
+        // Generate a random SigningKey using rand crate's random() to avoid type conflicts
+        // This avoids the scirs2-core OsRng re-export issue
+        let seed_bytes: [u8; 32] = rand::random();
         let keypair = SigningKey::from_bytes(&seed_bytes);
 
         Ok(BftConsensus {

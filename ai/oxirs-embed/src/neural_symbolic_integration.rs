@@ -1349,7 +1349,7 @@ impl EmbeddingModel for NeuralSymbolicModel {
         Err(anyhow!("Entity not found: {}", entity))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(&relation_id) = self.relations.get(relation) {
             // Generate embedding from neural-symbolic integration
             let input = Array1::from_shape_fn(self.config.base_config.dimensions, |i| {

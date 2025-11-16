@@ -1,7 +1,5 @@
 //! Tests for the adaptive intelligent caching system
 
-#![cfg(test)]
-
 use crate::similarity::SimilarityMetric;
 use std::collections::HashMap;
 use std::time::{Instant, SystemTime};

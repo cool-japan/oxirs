@@ -1,10 +1,10 @@
 //! # OxiRS Chat
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-chat/badge.svg)](https://docs.rs/oxirs-chat)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 #![allow(dead_code)]
 //!
@@ -181,8 +181,12 @@ pub mod cache;
 pub mod chat;
 pub mod chat_session;
 pub mod context;
+pub mod custom_prompts; // NEW: Custom prompts system for users
+pub mod custom_tools; // NEW: Custom tools framework for extensibility
 pub mod enterprise_integration;
+pub mod error;
 pub mod explanation;
+pub mod exploration_guidance; // NEW: Data exploration guidance
 pub mod external_services;
 pub mod graph_exploration;
 pub mod health_monitoring;
@@ -190,16 +194,25 @@ pub mod llm;
 pub mod message_analytics;
 pub mod messages;
 pub mod nl2sparql;
+pub mod nlp; // Natural Language Processing (NEW: intent, sentiment, entities, coreference)
 pub mod performance;
 pub mod persistence;
+pub mod query_refinement; // NEW: Query refinement system
 pub mod rag;
-// pub mod revolutionary_chat_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
+pub mod schema_introspection; // NEW: Automatic schema discovery for better NL2SPARQL
+                              // pub mod revolutionary_chat_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
+pub mod export; // Multi-format export (NEW)
+pub mod plugins; // Plugin system (NEW)
 pub mod rich_content;
 pub mod server;
 pub mod session;
 pub mod session_manager;
 pub mod sparql_optimizer;
+pub mod suggestions; // Query suggestions (NEW)
 pub mod types;
+pub mod utils; // Utility modules for stats, NLP, and ranking
+pub mod visualization; // NEW: Result visualization helpers
+pub mod webhooks; // Webhook support (NEW)
 pub mod workflow;
 
 // Re-export commonly used types
@@ -210,9 +223,15 @@ pub use session_manager::{
     ChatConfig, ContextWindow, SessionData, SessionMetrics, SessionState, TopicTracker,
 };
 pub use types::*;
+pub use types::{SessionStats, ThreadInfo};
 
 // Re-export key RAG types
 pub use rag::{AssembledContext, QueryContext, RAGConfig, RAGSystem};
+
+// Re-export schema introspection types
+pub use schema_introspection::{
+    DiscoveredSchema, IntrospectionConfig, RdfClass, RdfProperty, SchemaIntrospector,
+};
 
 // LLM manager type alias for chat functionality
 pub type ChatManager = llm::manager::EnhancedLLMManager;
@@ -293,9 +312,25 @@ impl OxiRSChat {
         let llm_config = llm_config.unwrap_or_default();
         let llm_manager = llm::LLMManager::new(llm_config)?;
 
-        // Initialize NL2SPARQL engine
+        // Initialize NL2SPARQL engine with store for schema discovery
         let nl2sparql_config = nl2sparql::NL2SPARQLConfig::default();
-        let nl2sparql_engine = nl2sparql::NL2SPARQLSystem::new(nl2sparql_config, None)?;
+        let nl2sparql_engine =
+            nl2sparql::NL2SPARQLSystem::with_store(nl2sparql_config, None, store.clone())?;
+
+        // Optionally discover schema for schema-aware query generation
+        // This can take some time for large datasets, so it's done in background
+        let nl2sparql_for_schema = Arc::new(Mutex::new(nl2sparql_engine));
+        let nl2sparql_clone = nl2sparql_for_schema.clone();
+
+        // Spawn background task for schema discovery
+        tokio::spawn(async move {
+            let mut engine = nl2sparql_clone.lock().await;
+            if let Err(e) = engine.discover_schema().await {
+                warn!("Failed to discover schema for NL2SPARQL: {}", e);
+            } else {
+                info!("Schema discovery completed for NL2SPARQL enhancement");
+            }
+        });
 
         Ok(Self {
             config,
@@ -304,8 +339,20 @@ impl OxiRSChat {
             session_timeout: Duration::from_secs(3600), // 1 hour default
             rag_engine: Arc::new(Mutex::new(rag_engine)),
             llm_manager: Arc::new(Mutex::new(llm_manager)),
-            nl2sparql_engine: Arc::new(Mutex::new(nl2sparql_engine)),
+            nl2sparql_engine: nl2sparql_for_schema,
         })
+    }
+
+    /// Manually trigger schema discovery for NL2SPARQL (if not done automatically)
+    pub async fn discover_schema(&self) -> Result<()> {
+        let mut nl2sparql = self.nl2sparql_engine.lock().await;
+        nl2sparql.discover_schema().await
+    }
+
+    /// Get the discovered schema (if available)
+    pub async fn get_discovered_schema(&self) -> Option<DiscoveredSchema> {
+        let nl2sparql = self.nl2sparql_engine.lock().await;
+        nl2sparql.get_schema().cloned()
     }
 
     /// Create a new chat session

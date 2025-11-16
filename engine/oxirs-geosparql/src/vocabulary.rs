@@ -30,6 +30,23 @@ pub const DEFAULT_CRS: &str = "http://www.opengis.net/def/crs/OGC/1.3/CRS84";
 /// EPSG CRS prefix
 pub const EPSG_PREFIX: &str = "http://www.opengis.net/def/crs/EPSG/0/";
 
+// OGC GeoSPARQL Core Class and Datatype URIs
+
+/// GeoSPARQL WKT Literal datatype
+pub const GEO_WKT_LITERAL: &str = "http://www.opengis.net/ont/geosparql#wktLiteral";
+
+/// GeoSPARQL GML Literal datatype
+pub const GEO_GML_LITERAL: &str = "http://www.opengis.net/ont/geosparql#gmlLiteral";
+
+/// GeoSPARQL Geometry class
+pub const GEO_GEOMETRY: &str = "http://www.opengis.net/ont/geosparql#Geometry";
+
+/// GeoSPARQL Feature class
+pub const GEO_FEATURE: &str = "http://www.opengis.net/ont/geosparql#Feature";
+
+/// GeoSPARQL SpatialObject class
+pub const GEO_SPATIAL_OBJECT: &str = "http://www.opengis.net/ont/geosparql#SpatialObject";
+
 // Full URI constants for commonly used functions (for function registration)
 
 /// Simple Features equals relation (full URI)

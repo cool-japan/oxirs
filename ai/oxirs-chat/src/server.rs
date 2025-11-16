@@ -555,6 +555,9 @@ async fn get_stats(State(state): State<AppState>) -> Result<Json<crate::SessionS
         expired_sessions: 0,
         suspended_sessions: 0,
         total_messages: 0, // Would need to aggregate from all sessions
+        total_tokens: 0,
+        avg_response_time_ms: 0.0,
+        uptime_seconds: 0,
     };
 
     Ok(Json(stats))

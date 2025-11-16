@@ -272,13 +272,13 @@ mod tests {
     #[test]
     fn test_import_validates_zip_extension() {
         let file = PathBuf::from("test.txt");
-        assert!(!file.extension().map_or(false, |ext| ext == "zip"));
+        assert!(!file.extension().is_some_and(|ext| ext == "zip"));
     }
 
     #[test]
     fn test_export_validates_ttl_extension() {
         let file = PathBuf::from("test.ttl");
-        assert!(file.extension().map_or(false, |ext| ext == "ttl"));
+        assert!(file.extension().is_some_and(|ext| ext == "ttl"));
     }
 
     #[test]

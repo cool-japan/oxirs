@@ -1,0 +1,33 @@
+[Unit]
+Description=OxiRS Fuseki SPARQL Server
+Documentation=https://github.com/cool-japan/oxirs
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ oxirs_user }}
+Group={{ oxirs_group }}
+WorkingDirectory={{ oxirs_install_dir }}
+Environment="RUST_LOG={{ log_level | default('info') }}"
+Environment="OXIRS_CONFIG={{ oxirs_config_dir }}/oxirs.toml"
+ExecStart={{ oxirs_install_dir }}/bin/oxirs-fuseki --config {{ oxirs_config_dir }}/oxirs.toml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=10s
+LimitNOFILE=65536
+LimitNPROC=32768
+
+# Security hardening
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ oxirs_data_dir }} {{ oxirs_log_dir }}
+
+# Resource limits
+MemoryMax={{ max_memory | default('8G') }}
+CPUQuota={{ (max_threads | default(8)) * 100 }}%
+
+[Install]
+WantedBy=multi-user.target

@@ -249,12 +249,12 @@ impl EcommerceReasoningSystem {
         let products: Vec<String> = results
             .iter()
             .filter_map(|atom| {
-                if let RuleAtom::Triple { object, .. } = atom {
-                    if let Term::Constant(product) = object {
-                        Some(product.clone())
-                    } else {
-                        None
-                    }
+                if let RuleAtom::Triple {
+                    object: Term::Constant(product),
+                    ..
+                } = atom
+                {
+                    Some(product.clone())
                 } else {
                     None
                 }

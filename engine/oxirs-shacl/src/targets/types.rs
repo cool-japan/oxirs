@@ -187,6 +187,8 @@ pub enum HierarchicalRelationship {
     SuperclassOf,
     /// Follow any rdfs:subPropertyOf relationship
     SubpropertyOf,
+    /// Follow rdf:type relationship
+    TypeOf,
     /// Follow any rdfs:subPropertyOf relationship in inverse
     SuperpropertyOf,
     /// Custom SPARQL path

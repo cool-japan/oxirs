@@ -1,5 +1,6 @@
 //! Session management for authenticated users
 
+use crate::auth::jwt::JwtManager;
 use crate::auth::types::{AuthResult, User, UserSession};
 use crate::error::{FusekiError, FusekiResult};
 use chrono::{Duration, Utc};
@@ -14,6 +15,7 @@ use uuid::Uuid;
 pub struct SessionManager {
     sessions: Arc<RwLock<HashMap<String, UserSession>>>,
     timeout_seconds: i64,
+    jwt_manager: Option<Arc<JwtManager>>,
 }
 
 impl SessionManager {
@@ -22,6 +24,16 @@ impl SessionManager {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             timeout_seconds,
+            jwt_manager: None,
+        }
+    }
+
+    /// Create a new session manager with JWT support
+    pub fn new_with_jwt(timeout_seconds: i64, jwt_manager: Arc<JwtManager>) -> Self {
+        Self {
+            sessions: Arc::new(RwLock::new(HashMap::new())),
+            timeout_seconds,
+            jwt_manager: Some(jwt_manager),
         }
     }
 
@@ -122,51 +134,27 @@ impl SessionManager {
     }
 
     /// Create JWT token for user
-    #[cfg(feature = "auth")]
     pub fn create_jwt_token(&self, user: &User) -> FusekiResult<String> {
-        // TODO: Implement actual JWT token creation
-        // For now, return a placeholder token
-        Ok(format!("jwt_token_for_{}", user.username))
-    }
-
-    /// Create JWT token for user (feature-gated fallback)
-    #[cfg(not(feature = "auth"))]
-    pub fn create_jwt_token(&self, _user: &User) -> FusekiResult<String> {
-        Err(FusekiError::service_unavailable("JWT auth not enabled"))
+        if let Some(jwt_manager) = &self.jwt_manager {
+            jwt_manager.generate_token(user)
+        } else {
+            Err(FusekiError::service_unavailable(
+                "JWT manager not configured. Initialize SessionManager with JWT support.",
+            ))
+        }
     }
 
     /// Validate JWT token
-    #[cfg(feature = "auth")]
     pub fn validate_jwt_token(
         &self,
         token: &str,
     ) -> FusekiResult<crate::auth::types::TokenValidation> {
-        // TODO: Implement actual JWT token validation
-        // For now, return a placeholder validation for valid tokens
-        if token.starts_with("jwt_token_for_") {
-            let username = token.strip_prefix("jwt_token_for_").unwrap_or("unknown");
-            Ok(crate::auth::types::TokenValidation {
-                user: User {
-                    username: username.to_string(),
-                    roles: vec!["user".to_string()], // Default role
-                    email: None,
-                    full_name: None,
-                    last_login: Some(chrono::Utc::now()),
-                    permissions: vec![], // Empty permissions for now
-                },
-                expires_at: chrono::Utc::now() + chrono::Duration::hours(1),
-            })
+        if let Some(jwt_manager) = &self.jwt_manager {
+            jwt_manager.validate_token(token)
         } else {
-            Err(FusekiError::authentication("Invalid JWT token"))
+            Err(FusekiError::service_unavailable(
+                "JWT manager not configured. Initialize SessionManager with JWT support.",
+            ))
         }
-    }
-
-    /// Validate JWT token (feature-gated fallback)
-    #[cfg(not(feature = "auth"))]
-    pub fn validate_jwt_token(
-        &self,
-        _token: &str,
-    ) -> FusekiResult<crate::auth::types::TokenValidation> {
-        Err(FusekiError::service_unavailable("JWT auth not enabled"))
     }
 }

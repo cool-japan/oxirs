@@ -138,7 +138,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = sparql.query_with_reasoning(&[pattern.clone()])?;
+            let _ = sparql.query_with_reasoning(std::slice::from_ref(&pattern))?;
         }
         let duration = start.elapsed();
 
@@ -186,7 +186,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = sparql.query_with_reasoning(&[pattern.clone()])?;
+            let _ = sparql.query_with_reasoning(std::slice::from_ref(&pattern))?;
         }
         let duration = start.elapsed();
 
@@ -236,7 +236,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = sparql.query_with_reasoning(&[pattern.clone()])?;
+            let _ = sparql.query_with_reasoning(std::slice::from_ref(&pattern))?;
         }
         let duration = start.elapsed();
 
@@ -282,7 +282,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = sparql.query_with_reasoning(&[pattern.clone()])?;
+            let _ = sparql.query_with_reasoning(std::slice::from_ref(&pattern))?;
         }
         let duration = start.elapsed();
 
@@ -314,7 +314,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = shacl.validate_with_reasoning(&[constraint.clone()], &facts)?;
+            let _ = shacl.validate_with_reasoning(std::slice::from_ref(&constraint), &facts)?;
         }
         let duration = start.elapsed();
 
@@ -346,7 +346,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = shacl.validate_with_reasoning(&[constraint.clone()], &facts)?;
+            let _ = shacl.validate_with_reasoning(std::slice::from_ref(&constraint), &facts)?;
         }
         let duration = start.elapsed();
 
@@ -378,7 +378,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = shacl.validate_with_reasoning(&[constraint.clone()], &facts)?;
+            let _ = shacl.validate_with_reasoning(std::slice::from_ref(&constraint), &facts)?;
         }
         let duration = start.elapsed();
 
@@ -410,7 +410,7 @@ impl IntegrationBenchmarkSuite {
 
         let start = Instant::now();
         for _ in 0..iterations {
-            let _ = shacl.validate_with_reasoning(&[constraint.clone()], &facts)?;
+            let _ = shacl.validate_with_reasoning(std::slice::from_ref(&constraint), &facts)?;
         }
         let duration = start.elapsed();
 

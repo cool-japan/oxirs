@@ -313,7 +313,10 @@ fn extract_jpeg_dimensions(_data: &[u8]) -> Result<(u32, u32)> {
 }
 
 #[cfg(feature = "content-processing")]
-fn extract_image_features(data: &[u8], config: &ContentExtractionConfig) -> Result<ExtractedImage> {
+fn extract_image_features(
+    data: &[u8],
+    _config: &ContentExtractionConfig,
+) -> Result<ExtractedImage> {
     let format = detect_image_format(data)?;
     let dimensions = get_image_dimensions(data).unwrap_or((0, 0));
 

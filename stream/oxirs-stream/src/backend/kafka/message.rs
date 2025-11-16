@@ -52,7 +52,7 @@ impl KafkaEvent {
         let source = self.source.clone();
         let metadata = self.metadata.clone();
 
-        self.try_into().unwrap_or_else(|_| {
+        self.try_into().unwrap_or({
             // Fallback to a default event if conversion fails
             StreamEvent::Heartbeat {
                 timestamp,

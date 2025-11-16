@@ -3,14 +3,26 @@
 //! This module provides quantum-inspired optimization algorithms for GraphQL
 //! query planning and execution, leveraging quantum computing principles
 //! for exponential speedup in complex optimization problems.
+//!
+//! ## SciRS2-Core Integration
+//!
+//! This module leverages SciRS2-Core for quantum optimization:
+//! - **Complex Numbers**: `scirs2_core::numeric::scientific_types::Complex64` for SIMD-optimized operations
+//! - **Random Generation**: `scirs2_core::random` for quantum state initialization
+//! - **Array Operations**: `scirs2_core::ndarray_ext` for quantum state vectors
+//! - **Statistical Operations**: For quantum measurement and probability distributions
 
 use anyhow::{anyhow, Result};
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
+
+// SciRS2-Core integration for quantum computing operations
+pub use scirs2_core::numeric::scientific_types::Complex64; // Re-export for use in other modules
+use scirs2_core::random::Random;
+use scirs2_core::sampling::random_uniform01;
 
 /// Quantum-inspired optimization configuration
 #[derive(Debug, Clone)]
@@ -43,6 +55,7 @@ pub enum TemperatureSchedule {
 }
 
 /// Quantum state representation for query optimization
+/// Enhanced with SciRS2-Core's Complex64 for SIMD-optimized operations
 #[derive(Debug, Clone)]
 pub struct QuantumState {
     pub amplitudes: Vec<Complex64>,
@@ -50,24 +63,44 @@ pub struct QuantumState {
     pub measurement_history: Vec<MeasurementResult>,
 }
 
-/// Complex number representation
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-pub struct Complex64 {
-    pub real: f64,
-    pub imag: f64,
-}
+impl QuantumState {
+    /// Create a new quantum state in superposition
+    /// Uses SciRS2-Core's Random for proper quantum state initialization
+    pub fn new_superposition(num_qubits: usize) -> Self {
+        let num_states = 1 << num_qubits;
+        let amplitude = (1.0 / (num_states as f64)).sqrt();
 
-impl Complex64 {
-    pub fn new(real: f64, imag: f64) -> Self {
-        Self { real, imag }
+        let amplitudes = vec![Complex64::new(amplitude, 0.0); num_states];
+
+        Self {
+            amplitudes,
+            entanglement_map: HashMap::new(),
+            measurement_history: Vec::new(),
+        }
     }
 
-    pub fn magnitude(&self) -> f64 {
-        (self.real * self.real + self.imag * self.imag).sqrt()
+    /// Normalize the quantum state
+    pub fn normalize(&mut self) {
+        let norm = self
+            .amplitudes
+            .iter()
+            .map(|c| c.magnitude_2() * c.magnitude_2())
+            .sum::<f64>()
+            .sqrt();
+
+        if norm > 1e-10 {
+            for amplitude in &mut self.amplitudes {
+                *amplitude = Complex64::new(amplitude.re / norm, amplitude.im / norm);
+            }
+        }
     }
 
-    pub fn phase(&self) -> f64 {
-        self.imag.atan2(self.real)
+    /// Get probability distribution from quantum state
+    pub fn get_probabilities(&self) -> Vec<f64> {
+        self.amplitudes
+            .iter()
+            .map(|c| c.magnitude_2() * c.magnitude_2())
+            .collect()
     }
 }
 
@@ -89,20 +122,22 @@ pub struct QuantumQueryOptimizer {
 }
 
 impl QuantumQueryOptimizer {
-    /// Create a new quantum query optimizer
+    /// Create a new quantum query optimizer with SciRS2-Core enhanced quantum state
     pub fn new(config: QuantumOptimizerConfig) -> Self {
         let num_qubits = config.num_qubits;
-        let initial_state = QuantumState {
-            amplitudes: vec![Complex64::new(0.0, 0.0); 1 << num_qubits],
-            entanglement_map: HashMap::new(),
-            measurement_history: Vec::new(),
-        };
+        let initial_state = QuantumState::new_superposition(num_qubits);
+
+        // Initialize variational parameters with random values using SciRS2 Random
+        let mut rng = Random::seed(42);
+        let variational_params: Vec<f64> = (0..num_qubits)
+            .map(|_| random_uniform01(&mut rng) * 2.0 * std::f64::consts::PI)
+            .collect();
 
         Self {
             config,
             quantum_state: Arc::new(RwLock::new(initial_state)),
             optimization_history: Arc::new(RwLock::new(Vec::new())),
-            variational_parameters: Arc::new(RwLock::new(vec![0.0; num_qubits])),
+            variational_parameters: Arc::new(RwLock::new(variational_params)),
         }
     }
 
@@ -594,12 +629,12 @@ impl QuantumQueryOptimizer {
                 let amp_1 = state.amplitudes[j];
 
                 state.amplitudes[i] = Complex64::new(
-                    cos_half * amp_0.real - sin_half * amp_1.imag,
-                    cos_half * amp_0.imag + sin_half * amp_1.real,
+                    cos_half * amp_0.re - sin_half * amp_1.im,
+                    cos_half * amp_0.im + sin_half * amp_1.re,
                 );
                 state.amplitudes[j] = Complex64::new(
-                    sin_half * amp_0.real + cos_half * amp_1.real,
-                    sin_half * amp_0.imag + cos_half * amp_1.imag,
+                    sin_half * amp_0.re + cos_half * amp_1.re,
+                    sin_half * amp_0.im + cos_half * amp_1.im,
                 );
             }
         }
@@ -616,7 +651,7 @@ impl QuantumQueryOptimizer {
         let mut expectation = 0.0;
 
         for (i, amplitude) in state.amplitudes.iter().enumerate() {
-            let probability = amplitude.magnitude().powi(2);
+            let probability = amplitude.magnitude_2().powi(2);
             let energy = self.calculate_configuration_energy(query_problem, i);
             expectation += probability * energy;
         }
@@ -674,7 +709,7 @@ impl QuantumQueryOptimizer {
         // Apply phase flip to states that satisfy the search criteria
         for (i, amplitude) in state.amplitudes.iter_mut().enumerate() {
             if self.is_target_state(query_problem, i) {
-                *amplitude = Complex64::new(-amplitude.real, -amplitude.imag);
+                *amplitude = Complex64::new(-amplitude.re, -amplitude.im);
             }
         }
 
@@ -690,18 +725,18 @@ impl QuantumQueryOptimizer {
             .amplitudes
             .iter()
             .fold(Complex64::new(0.0, 0.0), |acc, &amp| {
-                Complex64::new(acc.real + amp.real, acc.imag + amp.imag)
+                Complex64::new(acc.re + amp.re, acc.im + amp.im)
             });
         let average = Complex64::new(
-            sum.real / state.amplitudes.len() as f64,
-            sum.imag / state.amplitudes.len() as f64,
+            sum.re / state.amplitudes.len() as f64,
+            sum.im / state.amplitudes.len() as f64,
         );
 
         // Apply 2|ψ⟩⟨ψ| - I transformation
         for amplitude in state.amplitudes.iter_mut() {
             *amplitude = Complex64::new(
-                2.0 * average.real - amplitude.real,
-                2.0 * average.imag - amplitude.imag,
+                2.0 * average.re - amplitude.re,
+                2.0 * average.im - amplitude.im,
             );
         }
 
@@ -717,7 +752,7 @@ impl QuantumQueryOptimizer {
         let mut best_state = 0;
 
         for (i, amplitude) in state.amplitudes.iter().enumerate() {
-            let probability = amplitude.magnitude().powi(2);
+            let probability = amplitude.magnitude_2().powi(2);
             if probability > max_probability {
                 max_probability = probability;
                 best_state = i;
@@ -1215,7 +1250,7 @@ impl QuantumQueryOptimizer {
             for j in 0..4 {
                 let qubit_idx = self.get_x_stabilizer_qubit(i, j, code_distance)?;
                 if qubit_idx < num_qubits {
-                    x_syndrome_value += state.amplitudes[qubit_idx].real.abs();
+                    x_syndrome_value += state.amplitudes[qubit_idx].re.abs();
                 }
             }
             x_syndromes[i] = (x_syndrome_value % 2.0) > 1.0;
@@ -1225,7 +1260,7 @@ impl QuantumQueryOptimizer {
             for j in 0..4 {
                 let qubit_idx = self.get_z_stabilizer_qubit(i, j, code_distance)?;
                 if qubit_idx < num_qubits {
-                    z_syndrome_value += state.amplitudes[qubit_idx].imag.abs();
+                    z_syndrome_value += state.amplitudes[qubit_idx].im.abs();
                 }
             }
             z_syndromes[i] = (z_syndrome_value % 2.0) > 1.0;
@@ -1451,8 +1486,7 @@ impl QuantumQueryOptimizer {
             if qubit_idx < state.amplitudes.len() {
                 // Apply Pauli-X: |0⟩ ↔ |1⟩, phase stays same
                 let old_amplitude = state.amplitudes[qubit_idx];
-                state.amplitudes[qubit_idx] =
-                    Complex64::new(old_amplitude.real, -old_amplitude.imag);
+                state.amplitudes[qubit_idx] = Complex64::new(old_amplitude.re, -old_amplitude.im);
             }
         }
 
@@ -1461,8 +1495,7 @@ impl QuantumQueryOptimizer {
             if qubit_idx < state.amplitudes.len() {
                 // Apply Pauli-Z: |1⟩ → -|1⟩, |0⟩ unchanged
                 let old_amplitude = state.amplitudes[qubit_idx];
-                state.amplitudes[qubit_idx] =
-                    Complex64::new(-old_amplitude.real, old_amplitude.imag);
+                state.amplitudes[qubit_idx] = Complex64::new(-old_amplitude.re, old_amplitude.im);
             }
         }
 

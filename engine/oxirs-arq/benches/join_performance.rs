@@ -84,7 +84,7 @@ fn bench_hash_join_sizes(c: &mut Criterion) {
         let join_variables = vec![create_variable("var0"), create_variable("var1")];
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
-            let mut hash_join = CacheFriendlyHashJoin::new(16);
+            let hash_join = CacheFriendlyHashJoin::new(16);
             b.iter(|| {
                 let result = hash_join
                     .join_parallel(
@@ -113,7 +113,7 @@ fn bench_sort_merge_join_sizes(c: &mut Criterion) {
         let join_variables = vec![create_variable("var0"), create_variable("var1")];
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
-            let mut sort_merge = SortMergeJoin::new(1024 * 1024 * 1024); // 1GB
+            let sort_merge = SortMergeJoin::new(1024 * 1024 * 1024); // 1GB
             b.iter(|| {
                 let result = sort_merge
                     .join(
@@ -151,7 +151,7 @@ fn bench_optimized_vs_naive(c: &mut Criterion) {
 
         // Benchmark optimized hash join
         group.bench_with_input(BenchmarkId::new("hash_join", size), size, |b, _| {
-            let mut hash_join = CacheFriendlyHashJoin::new(16);
+            let hash_join = CacheFriendlyHashJoin::new(16);
             b.iter(|| {
                 let result = hash_join
                     .join_parallel(
@@ -166,7 +166,7 @@ fn bench_optimized_vs_naive(c: &mut Criterion) {
 
         // Benchmark sort-merge join
         group.bench_with_input(BenchmarkId::new("sort_merge", size), size, |b, _| {
-            let mut sort_merge = SortMergeJoin::new(1024 * 1024 * 1024);
+            let sort_merge = SortMergeJoin::new(1024 * 1024 * 1024);
             b.iter(|| {
                 let result = sort_merge
                     .join(
@@ -198,7 +198,7 @@ fn bench_parallel_scalability(c: &mut Criterion) {
             partitions,
             |b, &part_count| {
                 b.iter(|| {
-                    let mut hash_join = CacheFriendlyHashJoin::new(part_count);
+                    let hash_join = CacheFriendlyHashJoin::new(part_count);
                     let result = hash_join
                         .join_parallel(
                             left_solutions.clone(),
@@ -228,7 +228,7 @@ fn bench_join_selectivity(c: &mut Criterion) {
         let right_solutions = generate_solutions(*right_size, 4);
 
         group.bench_with_input(BenchmarkId::from_parameter(label), label, |b, _| {
-            let mut hash_join = CacheFriendlyHashJoin::new(16);
+            let hash_join = CacheFriendlyHashJoin::new(16);
             b.iter(|| {
                 let result = hash_join
                     .join_parallel(
@@ -264,10 +264,10 @@ fn bench_multi_way_join(c: &mut Criterion) {
             |b, &count| {
                 b.iter(|| {
                     let mut result = inputs[0].clone();
-                    for i in 1..count {
+                    for input in inputs.iter().take(count).skip(1) {
                         let hash_join = CacheFriendlyHashJoin::new(16);
                         result = hash_join
-                            .join_parallel(result, inputs[i].clone(), &join_variables)
+                            .join_parallel(result, input.clone(), &join_variables)
                             .expect("Join failed");
                     }
                     black_box(result);
@@ -290,7 +290,7 @@ fn bench_memory_efficiency(c: &mut Criterion) {
 
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, _| {
             b.iter(|| {
-                let mut hash_join = CacheFriendlyHashJoin::new(16);
+                let hash_join = CacheFriendlyHashJoin::new(16);
                 let result = hash_join
                     .join_parallel(
                         left_solutions.clone(),

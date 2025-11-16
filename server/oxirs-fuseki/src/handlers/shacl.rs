@@ -10,6 +10,7 @@
 //! - graph: Target graph URI (or "default"/"union")
 //! - target: Optional target node URI for focused validation
 
+use async_graphql::indexmap::IndexMap;
 use axum::{
     body::Bytes,
     extract::{Query, State},
@@ -165,10 +166,7 @@ pub async fn handle_shacl_validation<S: Store + Send + Sync + 'static>(
         params.graph
     );
 
-    // 4. Run SHACL validation
-    // TODO: Integrate with oxirs-shacl validator
-    // For now, return a placeholder validation report
-
+    // 4. Run SHACL validation using oxirs-shacl validator
     let conforms = validate_shapes(&shapes_triples, &data_triples, params.target.as_deref())?;
 
     let duration = start.elapsed();
@@ -257,17 +255,12 @@ fn get_graph_triples<S: Store>(
         .collect())
 }
 
-/// Validate data against shapes
-///
-/// TODO: Integrate with oxirs-shacl validator
+/// Validate data against shapes using actual oxirs-shacl validator
 fn validate_shapes(
     shapes_triples: &[oxirs_core::model::Triple],
     data_triples: &[oxirs_core::model::Triple],
     target_node: Option<&str>,
 ) -> Result<bool, ShaclError> {
-    // Placeholder validation logic
-    // In production, this should use oxirs-shacl validator
-
     debug!(
         "Validating {} data triples against {} shape triples",
         data_triples.len(),
@@ -278,9 +271,96 @@ fn validate_shapes(
         debug!("Focused validation on target node: {}", target);
     }
 
-    // TODO: Call oxirs-shacl validator
-    // For now, return true (conforms)
-    Ok(true)
+    // 1. Parse shapes from triples using oxirs-shacl
+    let shapes_store = oxirs_core::rdf_store::ConcreteStore::new().map_err(|e| {
+        ShaclError::ValidationError(format!("Failed to create shapes store: {}", e))
+    })?;
+
+    for triple in shapes_triples {
+        shapes_store.insert_triple(triple.clone()).map_err(|e| {
+            ShaclError::ValidationError(format!("Failed to insert shape triple: {}", e))
+        })?;
+    }
+
+    // 2. Use ShapeParser to extract SHACL shapes from the RDF graph
+    let mut shape_parser = oxirs_shacl::ShapeParser::new();
+    let shapes_vec = shape_parser
+        .parse_shapes_from_store(&shapes_store, None) // None = default graph
+        .map_err(|e| ShaclError::ValidationError(format!("Shape parsing failed: {}", e)))?;
+
+    if shapes_vec.is_empty() {
+        warn!("No SHACL shapes found in the shapes graph");
+        return Ok(true); // No shapes = no constraints to violate
+    }
+
+    // Convert Vec<Shape> to IndexMap<ShapeId, Shape> for the validation engine
+    let shapes: IndexMap<_, _> = shapes_vec
+        .into_iter()
+        .map(|shape| (shape.id.clone(), shape))
+        .collect();
+
+    info!("Parsed {} SHACL shapes", shapes.len());
+
+    // 3. Create data store for validation
+    let data_store = oxirs_core::rdf_store::ConcreteStore::new()
+        .map_err(|e| ShaclError::ValidationError(format!("Failed to create data store: {}", e)))?;
+
+    for triple in data_triples {
+        data_store.insert_triple(triple.clone()).map_err(|e| {
+            ShaclError::ValidationError(format!("Failed to insert data triple: {}", e))
+        })?;
+    }
+
+    // 4. Configure validation
+    let config = oxirs_shacl::ValidationConfig {
+        max_violations: 0, // Unlimited violations for comprehensive reports
+        include_info: true,
+        include_warnings: true,
+        fail_fast: false, // Get all violations
+        max_recursion_depth: 100,
+        timeout_ms: Some(60000), // 60 second timeout
+        parallel: true,          // Enable parallel validation for performance
+        context: std::collections::HashMap::new(),
+        strategy: oxirs_shacl::ValidationStrategy::Optimized,
+    };
+
+    // 5. Create validation engine
+    let mut engine = oxirs_shacl::ValidationEngine::new(&shapes, config);
+
+    // 6. Run validation
+    let report = if let Some(target_iri) = target_node {
+        // Focused validation on specific target node against all shapes
+        let target_term = oxirs_core::model::NamedNode::new(target_iri)
+            .map_err(|e| ShaclError::ValidationError(format!("Invalid target node IRI: {}", e)))?;
+
+        let target_terms = vec![oxirs_core::model::Term::NamedNode(target_term)];
+
+        // Validate the target node(s) against all shapes
+        let mut combined_report = oxirs_shacl::ValidationReport::new();
+        for shape in shapes.values() {
+            let shape_report = engine
+                .validate_nodes(&data_store, shape, &target_terms)
+                .map_err(|e| ShaclError::ValidationError(format!("Validation failed: {}", e)))?;
+            combined_report.merge_result(shape_report);
+        }
+        combined_report
+    } else {
+        // Full store validation
+        engine
+            .validate_store(&data_store)
+            .map_err(|e| ShaclError::ValidationError(format!("Validation failed: {}", e)))?
+    };
+
+    // 7. Check if data conforms to shapes
+    let conforms = report.conforms;
+
+    debug!(
+        "Validation complete: conforms={}, violations={}",
+        conforms,
+        report.violations.len()
+    );
+
+    Ok(conforms)
 }
 
 /// Build SHACL validation report

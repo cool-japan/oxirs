@@ -22,8 +22,8 @@ pub fn sf_equals(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
 
     let result = match (&geom1.geom, &geom2.geom) {
         (geo_types::Geometry::Point(p1), geo_types::Geometry::Point(p2)) => {
-            use geo::{Distance, Euclidean};
-            Euclidean.distance(*p1, *p2) < 1e-10
+            use geo::EuclideanDistance;
+            p1.euclidean_distance(p2) < 1e-10
         }
         (geo_types::Geometry::LineString(ls1), geo_types::Geometry::LineString(ls2)) => {
             ls1.0 == ls2.0
@@ -249,6 +249,174 @@ pub fn sf_overlaps(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
     Ok(intersects && !geom1_within_geom2 && !geom2_within_geom1)
 }
 
+// ============================================================================
+// 3D Topological Relations
+// ============================================================================
+
+/// Test if two 3D geometries spatially intersect
+///
+/// Returns true if the two geometries have at least one point in common in 3D space.
+/// Both geometries must have Z coordinates.
+///
+/// # Performance
+///
+/// Uses 3D bounding box pre-filtering for fast rejection.
+pub fn sf_intersects_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
+    geom1.validate_crs_compatibility(geom2)?;
+
+    if !geom1.is_3d() || !geom2.is_3d() {
+        return Err(crate::error::GeoSparqlError::UnsupportedOperation(
+            "Both geometries must have Z coordinates for 3D intersection test".to_string(),
+        ));
+    }
+
+    // Get Z ranges for both geometries
+    let (z1_min, z1_max) = get_z_range(geom1)?;
+    let (z2_min, z2_max) = get_z_range(geom2)?;
+
+    // Fast path: check if Z ranges are disjoint
+    if z1_max < z2_min || z2_max < z1_min {
+        return Ok(false);
+    }
+
+    // Check 2D intersection
+    if !geom1.geom.intersects(&geom2.geom) {
+        return Ok(false);
+    }
+
+    // For simple point-to-point, use 3D distance
+    if let (geo_types::Geometry::Point(_), geo_types::Geometry::Point(_)) =
+        (&geom1.geom, &geom2.geom)
+    {
+        use crate::functions::geometric_operations::distance_3d;
+        let dist = distance_3d(geom1, geom2)?;
+        return Ok(dist < 1e-10);
+    }
+
+    // If 2D projections intersect and Z ranges overlap, geometries intersect in 3D
+    Ok(true)
+}
+
+/// Test if two 3D geometries are spatially disjoint
+///
+/// Returns true if the two geometries have no points in common in 3D space.
+pub fn sf_disjoint_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
+    Ok(!sf_intersects_3d(geom1, geom2)?)
+}
+
+/// Test if first 3D geometry is within the second
+///
+/// Returns true if the first geometry is completely within the second geometry in 3D space.
+pub fn sf_within_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
+    geom1.validate_crs_compatibility(geom2)?;
+
+    if !geom1.is_3d() || !geom2.is_3d() {
+        return Err(crate::error::GeoSparqlError::UnsupportedOperation(
+            "Both geometries must have Z coordinates for 3D within test".to_string(),
+        ));
+    }
+
+    // Get Z ranges
+    let (z1_min, z1_max) = get_z_range(geom1)?;
+    let (z2_min, z2_max) = get_z_range(geom2)?;
+
+    // Check if Z range of geom1 is within Z range of geom2
+    if z1_min < z2_min || z1_max > z2_max {
+        return Ok(false);
+    }
+
+    // Check 2D within relationship
+    let within_2d = sf_within(geom1, geom2)?;
+
+    Ok(within_2d)
+}
+
+/// Test if first 3D geometry contains the second
+///
+/// Returns true if the first geometry completely contains the second geometry in 3D space.
+pub fn sf_contains_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
+    sf_within_3d(geom2, geom1)
+}
+
+/// Test if two 3D geometries touch at boundaries only
+///
+/// Returns true if the geometries have at least one boundary point in common in 3D,
+/// but no interior points in common.
+pub fn sf_touches_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
+    geom1.validate_crs_compatibility(geom2)?;
+
+    if !geom1.is_3d() || !geom2.is_3d() {
+        return Err(crate::error::GeoSparqlError::UnsupportedOperation(
+            "Both geometries must have Z coordinates for 3D touches test".to_string(),
+        ));
+    }
+
+    // Get Z ranges
+    let (z1_min, z1_max) = get_z_range(geom1)?;
+    let (z2_min, z2_max) = get_z_range(geom2)?;
+
+    // For touching in 3D, Z ranges should touch or overlap slightly
+    // If they're completely disjoint in Z, they can't touch
+    if z1_max < z2_min || z2_max < z1_min {
+        return Ok(false);
+    }
+
+    // Use 2D touches relationship combined with Z range checks
+    let touches_2d = sf_touches(geom1, geom2)?;
+
+    // For true 3D touching, either:
+    // 1. They touch in 2D and Z ranges overlap
+    // 2. Z ranges touch exactly (one max equals the other min)
+    let z_ranges_touch = (z1_max - z2_min).abs() < 1e-10 || (z2_max - z1_min).abs() < 1e-10;
+
+    Ok(touches_2d || z_ranges_touch)
+}
+
+/// Test if two 3D geometries overlap
+///
+/// Returns true if the geometries have some but not all points in common in 3D space.
+pub fn sf_overlaps_3d(geom1: &Geometry, geom2: &Geometry) -> Result<bool> {
+    geom1.validate_crs_compatibility(geom2)?;
+
+    if !geom1.is_3d() || !geom2.is_3d() {
+        return Err(crate::error::GeoSparqlError::UnsupportedOperation(
+            "Both geometries must have Z coordinates for 3D overlaps test".to_string(),
+        ));
+    }
+
+    // Overlaps if they intersect but neither contains the other
+    let intersects = sf_intersects_3d(geom1, geom2)?;
+    if !intersects {
+        return Ok(false);
+    }
+
+    let geom1_within = sf_within_3d(geom1, geom2)?;
+    let geom2_within = sf_within_3d(geom2, geom1)?;
+
+    Ok(!geom1_within && !geom2_within)
+}
+
+/// Helper function to get Z coordinate range for a geometry
+fn get_z_range(geom: &Geometry) -> Result<(f64, f64)> {
+    if let Some(ref z_coords) = geom.coord3d.z_coords {
+        if z_coords.values.is_empty() {
+            return Ok((0.0, 0.0));
+        }
+
+        let mut min_z = f64::MAX;
+        let mut max_z = f64::MIN;
+
+        for &z in &z_coords.values {
+            min_z = min_z.min(z);
+            max_z = max_z.max(z);
+        }
+
+        Ok((min_z, max_z))
+    } else {
+        Ok((0.0, 0.0))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -461,5 +629,156 @@ mod tests {
 
         // These are disjoint, so they don't touch
         assert!(!sf_touches(&poly1, &poly2).unwrap());
+    }
+
+    // ========================================================================
+    // 3D Topological Relations Tests
+    // ========================================================================
+
+    #[test]
+    fn test_sf_intersects_3d_points_same_location() {
+        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+
+        assert!(sf_intersects_3d(&p1, &p2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_intersects_3d_points_different_z() {
+        let p1 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(1 2 10)").unwrap();
+
+        // Same XY but different Z - should not intersect
+        assert!(!sf_intersects_3d(&p1, &p2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_intersects_3d_linestrings_crossing_z() {
+        // Two linestrings that cross in XY but at different Z levels
+        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 0)").unwrap();
+        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 5, 10 0 5)").unwrap();
+
+        // They cross in XY but at different Z levels (0 vs 5)
+        // Z ranges: [0,0] and [5,5] - disjoint
+        assert!(!sf_intersects_3d(&ls1, &ls2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_intersects_3d_linestrings_overlapping_z() {
+        let ls1 = Geometry::from_wkt("LINESTRING Z(0 0 0, 10 10 10)").unwrap();
+        let ls2 = Geometry::from_wkt("LINESTRING Z(0 10 5, 10 0 5)").unwrap();
+
+        // Z ranges: [0,10] and [5,5] - overlap at z=5
+        assert!(sf_intersects_3d(&ls1, &ls2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_disjoint_3d_points() {
+        let p1 = Geometry::from_wkt("POINT Z(0 0 0)").unwrap();
+        let p2 = Geometry::from_wkt("POINT Z(10 10 10)").unwrap();
+
+        assert!(sf_disjoint_3d(&p1, &p2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_disjoint_3d_vertical_separation() {
+        // Polygons overlapping in XY but at different Z levels
+        let poly1 =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
+        let poly2 =
+            Geometry::from_wkt("POLYGON Z((2 2 20, 8 2 20, 8 8 20, 2 8 20, 2 2 20))").unwrap();
+
+        // Overlap in XY but Z ranges [0,0] and [20,20] are disjoint
+        assert!(sf_disjoint_3d(&poly1, &poly2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_within_3d_point_in_cube() {
+        // Point inside a cube (represented as polygon with Z range)
+        let point = Geometry::from_wkt("POINT Z(5 5 5)").unwrap();
+        let cube =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))").unwrap();
+
+        // Point at (5,5,5) should be within the cube XY=[0,10], Z=[0,10]
+        assert!(sf_within_3d(&point, &cube).unwrap());
+    }
+
+    #[test]
+    fn test_sf_within_3d_point_outside_z_range() {
+        let point = Geometry::from_wkt("POINT Z(5 5 15)").unwrap();
+        let cube =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))").unwrap();
+
+        // Point at z=15 is outside the cube's Z range [0,10]
+        assert!(!sf_within_3d(&point, &cube).unwrap());
+    }
+
+    #[test]
+    fn test_sf_contains_3d_cube_contains_point() {
+        let cube =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 10, 10 10 10, 0 10 0, 0 0 0))").unwrap();
+        let point = Geometry::from_wkt("POINT Z(5 5 5)").unwrap();
+
+        assert!(sf_contains_3d(&cube, &point).unwrap());
+    }
+
+    #[test]
+    fn test_sf_touches_3d_adjacent_polygons_same_z() {
+        // Two polygons sharing an edge at the same Z level
+        let poly1 = Geometry::from_wkt("POLYGON Z((0 0 5, 5 0 5, 5 5 5, 0 5 5, 0 0 5))").unwrap();
+        let poly2 = Geometry::from_wkt("POLYGON Z((5 0 5, 10 0 5, 10 5 5, 5 5 5, 5 0 5))").unwrap();
+
+        // They share an edge in XY and have the same Z
+        assert!(sf_touches_3d(&poly1, &poly2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_touches_3d_stacked_polygons() {
+        // Two polygons stacked vertically (same XY, touching Z ranges)
+        let poly1 =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
+        let poly2 =
+            Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))").unwrap();
+
+        // Z ranges don't touch: [0,0] and [10,10] - gap between them
+        // For this simple implementation, they don't touch
+        assert!(!sf_touches_3d(&poly1, &poly2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_overlaps_3d_partial_overlap() {
+        // Two polygons with partial overlap in 3D
+        let poly1 =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 5, 10 10 5, 0 10 0, 0 0 0))").unwrap();
+        let poly2 =
+            Geometry::from_wkt("POLYGON Z((5 5 3, 15 5 8, 15 15 8, 5 15 3, 5 5 3))").unwrap();
+
+        // They overlap in XY and Z ranges overlap [0,5] and [3,8]
+        assert!(sf_overlaps_3d(&poly1, &poly2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_overlaps_3d_no_overlap_different_z() {
+        let poly1 =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
+        let poly2 =
+            Geometry::from_wkt("POLYGON Z((2 2 20, 8 2 20, 8 8 20, 2 8 20, 2 2 20))").unwrap();
+
+        // Overlap in XY but Z ranges [0,0] and [20,20] don't overlap
+        assert!(!sf_overlaps_3d(&poly1, &poly2).unwrap());
+    }
+
+    #[test]
+    fn test_sf_3d_requires_z_coordinates() {
+        let p1 = Geometry::from_wkt("POINT(1 2)").unwrap(); // 2D
+        let p2 = Geometry::from_wkt("POINT Z(1 2 3)").unwrap(); // 3D
+
+        // Should return error for mixing 2D and 3D
+        assert!(sf_intersects_3d(&p1, &p2).is_err());
+        assert!(sf_disjoint_3d(&p1, &p2).is_err());
+        assert!(sf_within_3d(&p1, &p2).is_err());
+        assert!(sf_contains_3d(&p1, &p2).is_err());
+        assert!(sf_touches_3d(&p1, &p2).is_err());
+        assert!(sf_overlaps_3d(&p1, &p2).is_err());
     }
 }

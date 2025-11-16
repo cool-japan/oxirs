@@ -296,7 +296,7 @@ async fn export_from_file_impl(model_file: &str, output_path: &Path) -> Result<E
 
     // Add file to ZIP with proper structure: namespace/version/filename.ttl
     let zip_path = format!("{}/{}/{}.ttl", namespace, version, model_name);
-    zip.start_file(&zip_path, options)
+    zip.start_file(&*zip_path, options)
         .map_err(|e| SammError::ParseError(format!("Failed to create ZIP entry: {}", e)))?;
 
     zip.write_all(content.as_bytes()).map_err(SammError::Io)?;
@@ -452,7 +452,7 @@ async fn export_from_urn_impl(
 
         // Add file to ZIP with proper structure: namespace/version/filename.ttl
         let zip_path = format!("{}/{}/{}.ttl", namespace, final_version, model_name);
-        zip.start_file(&zip_path, options)
+        zip.start_file(&*zip_path, options)
             .map_err(|e| SammError::ParseError(format!("Failed to create ZIP entry: {}", e)))?;
 
         zip.write_all(content.as_bytes()).map_err(SammError::Io)?;

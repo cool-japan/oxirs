@@ -79,7 +79,7 @@ impl PyVectorStore {
             }
         };
 
-        let index_type = match index_type {
+        let _index_type = match index_type {
             "memory" => IndexType::Flat,
             "hnsw" => IndexType::Hnsw,
             "ivf" => IndexType::Ivf,
@@ -134,7 +134,7 @@ impl PyVectorStore {
         vector: PyReadonlyArray1<f32>,
         metadata: Option<HashMap<String, String>>,
     ) -> PyResult<()> {
-        let vector_data = vector.as_array().to_owned().into_raw_vec();
+        let (vector_data, _offset) = vector.as_array().to_owned().into_raw_vec_and_offset();
         let vector_obj = Vector::new(vector_data);
         let mut store = self
             .store
@@ -156,7 +156,7 @@ impl PyVectorStore {
     #[pyo3(signature = (vector_ids, vectors, metadata = None))]
     fn index_batch(
         &self,
-        py: Python,
+        _py: Python,
         vector_ids: Vec<String>,
         vectors: PyReadonlyArray2<f32>,
         metadata: Option<Vec<HashMap<String, String>>>,
@@ -174,7 +174,7 @@ impl PyVectorStore {
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
         for (i, id) in vector_ids.iter().enumerate() {
-            let vector_data = vectors_array.row(i).to_owned().into_raw_vec();
+            let (vector_data, _offset) = vectors_array.row(i).to_owned().into_raw_vec_and_offset();
             let vector_obj = Vector::new(vector_data);
             let meta = metadata
                 .as_ref()
@@ -192,6 +192,7 @@ impl PyVectorStore {
 
     /// Perform similarity search
     #[pyo3(signature = (query, limit = 10, threshold = None, metric = "cosine"))]
+    #[allow(unused_variables)]
     fn similarity_search(
         &self,
         py: Python,
@@ -200,7 +201,7 @@ impl PyVectorStore {
         threshold: Option<f64>,
         metric: &str,
     ) -> PyResult<PyObject> {
-        let similarity_metric = parse_similarity_metric(metric)?;
+        let _similarity_metric = parse_similarity_metric(metric)?;
 
         let store = self
             .store
@@ -225,6 +226,7 @@ impl PyVectorStore {
 
     /// Search using a vector directly
     #[pyo3(signature = (query_vector, limit = 10, threshold = None, metric = "cosine"))]
+    #[allow(unused_variables)]
     fn vector_search(
         &self,
         py: Python,
@@ -233,9 +235,9 @@ impl PyVectorStore {
         threshold: Option<f64>,
         metric: &str,
     ) -> PyResult<PyObject> {
-        let query_data = query_vector.as_array().to_owned().into_raw_vec();
+        let (query_data, _offset) = query_vector.as_array().to_owned().into_raw_vec_and_offset();
         let query_obj = Vector::new(query_data);
-        let similarity_metric = parse_similarity_metric(metric)?;
+        let _similarity_metric = parse_similarity_metric(metric)?;
 
         let store = self
             .store
@@ -399,9 +401,9 @@ impl PyVectorStore {
             .read()
             .map_err(|e| VectorSearchError::new_err(format!("Lock error: {}", e)))?;
 
-        Ok(store
+        store
             .get_vector_ids()
-            .map_err(|e| VectorSearchError::new_err(e.to_string()))?)
+            .map_err(|e| VectorSearchError::new_err(e.to_string()))
     }
 
     /// Remove vector by ID
@@ -464,8 +466,8 @@ impl PyVectorStore {
     }
 
     /// Load vector store from disk
-    #[staticmethod]
-    fn load(path: &str) -> PyResult<Self> {
+    #[classmethod]
+    fn load(_cls: &Bound<'_, pyo3::types::PyType>, path: &str) -> PyResult<Self> {
         let store = VectorStore::load_from_disk(path)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
@@ -515,7 +517,7 @@ impl PyVectorAnalytics {
         let vector_data: Vec<Vec<f32>> = vectors_array
             .rows()
             .into_iter()
-            .map(|row| row.to_owned().into_raw_vec())
+            .map(|row| row.to_owned().into_raw_vec_and_offset().0)
             .collect();
 
         let analysis = self
@@ -624,7 +626,7 @@ impl PyRealTimeEmbeddingPipeline {
     }
 
     /// Add content for real-time embedding updates
-    fn add_content(&mut self, content_id: &str, content: &str) -> PyResult<()> {
+    fn add_content(&mut self, content_id: &str, _content: &str) -> PyResult<()> {
         // Implementation would integrate with real-time pipeline
         println!("Adding content {} for real-time processing", content_id);
         Ok(())
@@ -637,7 +639,7 @@ impl PyRealTimeEmbeddingPipeline {
     }
 
     /// Get real-time embedding for content
-    fn get_embedding(&self, py: Python, content_id: &str) -> PyResult<Option<PyObject>> {
+    fn get_embedding(&self, py: Python, _content_id: &str) -> PyResult<Option<PyObject>> {
         // Return a sample embedding for demonstration
         let sample_embedding = vec![0.1f32; 384];
         let numpy_array = sample_embedding.into_pyarray(py);
@@ -726,7 +728,7 @@ impl PyMLFrameworkIntegration {
     fn fine_tune(
         &mut self,
         training_data: PyReadonlyArray2<f32>,
-        training_labels: Vec<String>,
+        _training_labels: Vec<String>,
         epochs: Option<usize>,
     ) -> PyResult<()> {
         let data_array = training_data.as_array();
@@ -1196,7 +1198,7 @@ impl PyAdvancedNeuralEmbeddings {
     fn fine_tune_model(
         &mut self,
         training_data: Vec<String>,
-        training_labels: Option<Vec<String>>,
+        _training_labels: Option<Vec<String>>,
         validation_split: Option<f32>,
         epochs: Option<usize>,
     ) -> PyResult<()> {
@@ -1324,13 +1326,13 @@ fn parse_similarity_metric(metric: &str) -> PyResult<SimilarityMetric> {
 /// Utility functions exposed to Python
 #[pyfunction]
 fn compute_similarity(
-    py: Python,
+    _py: Python,
     vector1: PyReadonlyArray1<f32>,
     vector2: PyReadonlyArray1<f32>,
     metric: &str,
 ) -> PyResult<f64> {
-    let v1 = vector1.as_array().to_owned().into_raw_vec();
-    let v2 = vector2.as_array().to_owned().into_raw_vec();
+    let (v1, _offset1) = vector1.as_array().to_owned().into_raw_vec_and_offset();
+    let (v2, _offset2) = vector2.as_array().to_owned().into_raw_vec_and_offset();
     let similarity_metric = parse_similarity_metric(metric)?;
 
     let similarity = crate::similarity::compute_similarity(&v1, &v2, similarity_metric)
@@ -1341,7 +1343,7 @@ fn compute_similarity(
 
 #[pyfunction]
 fn normalize_vector(py: Python, vector: PyReadonlyArray1<f32>) -> PyResult<PyObject> {
-    let mut v = vector.as_array().to_owned().into_raw_vec();
+    let (mut v, _offset) = vector.as_array().to_owned().into_raw_vec_and_offset();
     crate::similarity::normalize_vector(&mut v)
         .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
 
@@ -1354,7 +1356,7 @@ fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<PyObj
     let mut normalized_vectors = Vec::new();
 
     for row in vectors_array.rows() {
-        let mut v = row.to_owned().into_raw_vec();
+        let (mut v, _offset) = row.to_owned().into_raw_vec_and_offset();
         crate::similarity::normalize_vector(&mut v)
             .map_err(|e| VectorSearchError::new_err(e.to_string()))?;
         normalized_vectors.push(v);
@@ -1420,9 +1422,6 @@ fn oxirs_vec(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use numpy::PyArray2;
-
     #[test]
     fn test_python_bindings_compilation() {
         // This test ensures the Python bindings compile correctly

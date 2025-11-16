@@ -2,9 +2,33 @@
 //!
 //! Detailed tests for each streaming backend's unique features and capabilities.
 
+#[cfg(any(
+    feature = "kafka",
+    feature = "nats",
+    feature = "redis",
+    feature = "pulsar",
+    feature = "kinesis"
+))]
+use anyhow::Result;
 use chrono::Utc;
 use oxirs_stream::*;
 use std::collections::HashMap;
+#[cfg(any(
+    feature = "kafka",
+    feature = "nats",
+    feature = "redis",
+    feature = "pulsar",
+    feature = "kinesis"
+))]
+use std::time::Duration;
+#[cfg(any(
+    feature = "kafka",
+    feature = "nats",
+    feature = "redis",
+    feature = "pulsar",
+    feature = "kinesis"
+))]
+use tokio::time::timeout;
 use uuid::Uuid;
 
 /// Helper to create test event with metadata
@@ -78,7 +102,7 @@ mod kafka_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 enable_batching: true,
                 enable_pipelining: true,
                 buffer_size: 2048,
@@ -195,7 +219,7 @@ mod kafka_specific_tests {
                 ca_cert_path: Some("/etc/kafka/certs/ca.crt".to_string()),
                 sasl_config: None, // SASL config will be set separately
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 enable_batching: true,
                 enable_pipelining: true,
                 buffer_size: 1024,
@@ -271,7 +295,7 @@ mod kafka_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 1024,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -384,7 +408,7 @@ mod nats_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 512,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -486,7 +510,7 @@ mod nats_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 1024,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -568,7 +592,7 @@ mod nats_specific_tests {
                 ca_cert_path: Some("/etc/nats/certs/ca.crt".to_string()),
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 256,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -646,7 +670,7 @@ mod redis_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 512,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -753,7 +777,7 @@ mod redis_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 2048,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -842,7 +866,7 @@ mod pulsar_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 enable_batching: true,
                 enable_pipelining: true,
                 buffer_size: 1024,
@@ -885,16 +909,16 @@ mod pulsar_specific_tests {
         tokio::time::sleep(Duration::from_millis(300)).await;
 
         // Each stream should only receive its own namespace events
-        if let Ok(Ok(Some(received1))) = timeout(Duration::from_secs(5), stream1.consume()).await {
-            if let StreamEvent::TripleAdded { object, .. } = received1 {
-                assert!(object.contains("namespace1_data"));
-            }
+        if let Ok(Ok(Some(StreamEvent::TripleAdded { object, .. }))) =
+            timeout(Duration::from_secs(5), stream1.consume()).await
+        {
+            assert!(object.contains("namespace1_data"));
         }
 
-        if let Ok(Ok(Some(received2))) = timeout(Duration::from_secs(5), stream2.consume()).await {
-            if let StreamEvent::TripleAdded { object, .. } = received2 {
-                assert!(object.contains("namespace2_data"));
-            }
+        if let Ok(Ok(Some(StreamEvent::TripleAdded { object, .. }))) =
+            timeout(Duration::from_secs(5), stream2.consume()).await
+        {
+            assert!(object.contains("namespace2_data"));
         }
 
         stream1.close().await?;
@@ -939,7 +963,7 @@ mod pulsar_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 512,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -975,7 +999,7 @@ mod pulsar_specific_tests {
         // Should only receive one copy due to deduplication
         let mut received_count = 0;
         for _ in 0..3 {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(500), stream.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(500), stream.consume()).await {
                 received_count += 1;
             }
         }
@@ -1033,7 +1057,7 @@ mod kinesis_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 4096,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -1049,6 +1073,9 @@ mod kinesis_specific_tests {
                 metrics_interval: Duration::from_secs(10),
                 health_check_interval: Duration::from_secs(30),
                 enable_profiling: false,
+                prometheus_endpoint: None,
+                jaeger_endpoint: None,
+                log_level: "info".to_string(),
             },
         };
 
@@ -1073,7 +1100,7 @@ mod kinesis_specific_tests {
 
         let mut received_count = 0;
         for _ in 0..50 {
-            if let Ok(Some(_)) = timeout(Duration::from_millis(100), stream.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_millis(100), stream.consume()).await {
                 received_count += 1;
             }
         }
@@ -1121,7 +1148,7 @@ mod kinesis_specific_tests {
                 ca_cert_path: None,
                 sasl_config: None,
             },
-            performance: PerformanceConfig {
+            performance: StreamPerformanceConfig {
                 buffer_size: 2048,
                 enable_pipelining: true,
                 prefetch_count: 32,
@@ -1137,6 +1164,9 @@ mod kinesis_specific_tests {
                 metrics_interval: Duration::from_secs(10),
                 health_check_interval: Duration::from_secs(20),
                 enable_profiling: false,
+                prometheus_endpoint: None,
+                jaeger_endpoint: None,
+                log_level: "info".to_string(),
             },
         };
 
@@ -1162,13 +1192,13 @@ mod kinesis_specific_tests {
         let mut consumer3_count = 0;
 
         for _ in 0..4 {
-            if let Ok(Some(_)) = timeout(Duration::from_secs(3), consumer1.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(3), consumer1.consume()).await {
                 consumer1_count += 1;
             }
-            if let Ok(Some(_)) = timeout(Duration::from_secs(3), consumer2.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(3), consumer2.consume()).await {
                 consumer2_count += 1;
             }
-            if let Ok(Some(_)) = timeout(Duration::from_secs(3), consumer3.consume()).await {
+            if let Ok(Ok(Some(_))) = timeout(Duration::from_secs(3), consumer3.consume()).await {
                 consumer3_count += 1;
             }
         }

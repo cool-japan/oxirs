@@ -174,8 +174,8 @@ impl AdvancedVectorIndex {
 
     #[cfg(feature = "hnsw")]
     fn build_hnsw_index(&mut self) -> Result<()> {
-        if let Some(dimensions) = self.dimensions {
-            let mut hnsw = Hnsw::<f32, DistCosine>::new(
+        if let Some(_dimensions) = self.dimensions {
+            let hnsw = Hnsw::<f32, DistCosine>::new(
                 self.config.max_connections,
                 self.vectors.len(),
                 16, // layer factor

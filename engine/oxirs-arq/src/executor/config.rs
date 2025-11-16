@@ -4,8 +4,7 @@
 
 use crate::builtin::register_builtin_functions;
 use crate::extensions::ExtensionRegistry;
-use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -75,13 +74,15 @@ pub struct StreamingConfig {
     pub enabled: bool,
 }
 
-// Global function registry
-lazy_static! {
-    static ref FUNCTION_REGISTRY: Arc<ExtensionRegistry> = {
+// Global function registry using modern Rust OnceLock
+static FUNCTION_REGISTRY: OnceLock<Arc<ExtensionRegistry>> = OnceLock::new();
+
+fn get_function_registry() -> &'static Arc<ExtensionRegistry> {
+    FUNCTION_REGISTRY.get_or_init(|| {
         let registry = Arc::<ExtensionRegistry>::new(ExtensionRegistry::new());
         register_builtin_functions(&registry).expect("Failed to register built-in functions");
         registry
-    };
+    })
 }
 
 impl Default for ExecutionContext {
@@ -95,7 +96,7 @@ impl Default for ExecutionContext {
             collect_stats: false,
             parallel_threshold: 1000,
             enable_caching: true,
-            extension_registry: FUNCTION_REGISTRY.clone(),
+            extension_registry: get_function_registry().clone(),
         }
     }
 }

@@ -913,7 +913,8 @@ impl RaftNode {
         for _ in 0..entries_to_compact {
             if let Some(entry) = log.entries.pop_front() {
                 // Serialize entry for compaction
-                let serialized = bincode::serialize(&entry).unwrap();
+                let serialized =
+                    bincode::serde::encode_to_vec(&entry, bincode::config::standard()).unwrap();
                 compacted_data.extend_from_slice(&serialized);
                 removed_entries.push(entry);
             }

@@ -257,6 +257,100 @@ fn bench_crs_handling(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark WKT parsing with 3D coordinates (Z/M) to measure pre-allocation optimizations
+fn bench_wkt_parsing_3d(c: &mut Criterion) {
+    let mut group = c.benchmark_group("wkt_parsing_3d");
+
+    // Pre-create large WKT strings to avoid temporary lifetime issues
+    let large_linestring_z = format!(
+        "LINESTRING Z({})",
+        (0..100)
+            .map(|i| format!("{} {} {}", i, i * 2, i * 3))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let large_polygon_z = format!(
+        "POLYGON Z(({}))",
+        (0..50)
+            .map(|i| {
+                let angle = (i as f64) * 2.0 * std::f64::consts::PI / 50.0;
+                let x = 10.0 * angle.cos();
+                let y = 10.0 * angle.sin();
+                format!("{} {} 5", x, y)
+            })
+            .chain(std::iter::once("10 0 5".to_string())) // Close the ring
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+
+    let test_cases: Vec<(&str, &str)> = vec![
+        ("point_z", "POINT Z(1.5 2.5 3.5)"),
+        ("point_m", "POINT M(1.5 2.5 4.0)"),
+        ("point_zm", "POINT ZM(1.5 2.5 3.5 4.0)"),
+        (
+            "linestring_z",
+            "LINESTRING Z(0 0 0, 1 1 1, 2 2 2, 3 3 3, 4 4 4, 5 5 5, 6 6 6, 7 7 7, 8 8 8, 9 9 9)",
+        ),
+        (
+            "polygon_z",
+            "POLYGON Z((0 0 5, 10 0 5, 10 10 5, 0 10 5, 0 0 5), (2 2 5, 8 2 5, 8 8 5, 2 8 5, 2 2 5))",
+        ),
+        (
+            "multipoint_z",
+            "MULTIPOINT Z((0 0 1), (1 1 2), (2 2 3), (3 3 4), (4 4 5))",
+        ),
+        (
+            "multilinestring_z",
+            "MULTILINESTRING Z((0 0 0, 1 1 1, 2 2 2), (3 3 3, 4 4 4), (5 5 5, 6 6 6, 7 7 7))",
+        ),
+        (
+            "multipolygon_z",
+            "MULTIPOLYGON Z(((0 0 5, 5 0 5, 5 5 5, 0 5 5, 0 0 5)), ((10 10 10, 15 10 10, 15 15 10, 10 15 10, 10 10 10)))",
+        ),
+        ("large_linestring_z", &large_linestring_z),
+        ("large_polygon_z", &large_polygon_z),
+    ];
+
+    for (name, wkt) in test_cases {
+        group.throughput(Throughput::Elements(1));
+        group.bench_with_input(BenchmarkId::from_parameter(name), &wkt, |b, wkt| {
+            b.iter(|| {
+                let geom = Geometry::from_wkt(black_box(wkt)).unwrap();
+                black_box(geom);
+            });
+        });
+    }
+
+    group.finish();
+}
+
+/// Benchmark CRS extraction with lazy static regex
+fn bench_crs_extraction(c: &mut Criterion) {
+    let mut group = c.benchmark_group("crs_extraction");
+
+    let test_cases =
+        vec![
+        ("no_crs", "POINT(1 2)"),
+        ("with_crs", "<http://www.opengis.net/def/crs/EPSG/0/4326> POINT(1 2)"),
+        (
+            "with_crs_complex",
+            "<http://www.opengis.net/def/crs/EPSG/0/4326> POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))",
+        ),
+    ];
+
+    for (name, wkt) in test_cases {
+        group.bench_with_input(BenchmarkId::from_parameter(name), &wkt, |b, wkt| {
+            b.iter(|| {
+                let geom = Geometry::from_wkt(black_box(wkt)).unwrap();
+                black_box(geom);
+            });
+        });
+    }
+
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_wkt_parsing,
@@ -265,5 +359,7 @@ criterion_group!(
     bench_geometric_operations,
     bench_scaling_complexity,
     bench_crs_handling,
+    bench_wkt_parsing_3d,
+    bench_crs_extraction,
 );
 criterion_main!(benches);

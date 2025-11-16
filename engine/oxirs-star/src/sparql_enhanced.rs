@@ -46,7 +46,7 @@ pub enum TermOrVariable {
 }
 
 /// Solution modifier for query results
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct SolutionModifier {
     /// ORDER BY clauses
     pub order_by: Vec<OrderCondition>,
@@ -134,17 +134,6 @@ pub struct EnhancedQuery {
     pub group_by: Option<GroupByClause>,
     /// Solution modifiers
     pub modifiers: SolutionModifier,
-}
-
-impl Default for SolutionModifier {
-    fn default() -> Self {
-        Self {
-            order_by: Vec::new(),
-            distinct: false,
-            limit: None,
-            offset: None,
-        }
-    }
 }
 
 /// Enhanced SPARQL executor with full spec support

@@ -223,7 +223,7 @@ impl Compressor {
         compressed.triples = data.to_vec();
 
         // Apply secondary compression
-        let serialized = bincode::serialize(&compressed)?;
+        let serialized = bincode::serde::encode_to_vec(&compressed, bincode::config::standard())?;
         self.compress_zstd(&serialized, 3)
     }
 
@@ -233,7 +233,9 @@ impl Compressor {
         let decompressed = self.decompress_zstd(data)?;
 
         // Deserialize
-        let compressed: RdfCompressedData = bincode::deserialize(&decompressed)?;
+        let compressed: RdfCompressedData =
+            bincode::serde::decode_from_slice(&decompressed, bincode::config::standard())
+                .map(|(v, _)| v)?;
 
         // Restore dictionary
         if compressed.options.uri_dictionary && !compressed.dictionary.is_empty() {

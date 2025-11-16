@@ -439,7 +439,7 @@ impl EmbeddingModel for SimpleEmbeddingModel {
         Ok(EmbedVector::new(embedding))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<EmbedVector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<EmbedVector> {
         let embedding = self.text_to_embedding(relation);
         Ok(EmbedVector::new(embedding))
     }

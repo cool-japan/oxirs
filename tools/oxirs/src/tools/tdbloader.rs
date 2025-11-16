@@ -324,60 +324,172 @@ fn parse_turtle_for_loading(content: &str) -> Result<Vec<LoadTriple>, String> {
 
 /// Store triples in the TDB dataset
 fn store_triples_in_dataset(
-    _dataset_location: &Path,
+    dataset_location: &Path,
     triples: &[LoadTriple],
-    default_graph: Option<&str>,
+    _default_graph: Option<&str>,
 ) -> ToolResult<usize> {
-    // In a real implementation, this would:
-    // 1. Open the TDB dataset at the specified location
-    // 2. Begin a transaction
-    // 3. Insert each triple into the appropriate graph
-    // 4. Commit the transaction
-    // 5. Return the count of successfully stored triples
+    use oxirs_tdb::store::TdbStore;
 
     println!("    Storing {} triples in dataset...", triples.len());
 
-    // Simulate storage with some processing time
-    let batch_size = 1000;
-    let mut stored_count = 0;
+    // Open or create TDB dataset
+    let mut store =
+        TdbStore::open(dataset_location).map_err(|e| format!("Failed to open TDB store: {}", e))?;
 
-    for chunk in triples.chunks(batch_size) {
-        // Simulate batch processing
-        std::thread::sleep(std::time::Duration::from_millis(1));
+    // Convert all triples to Term format for bulk insertion
+    let mut term_triples = Vec::new();
+    for load_triple in triples {
+        // Parse subject
+        let subject = parse_term(&load_triple.subject)
+            .map_err(|e| format!("Invalid subject '{}': {}", load_triple.subject, e))?;
 
-        for triple in chunk {
-            // Simulate individual triple storage
-            let target_graph = triple.graph.as_deref().or(default_graph);
-            if let Some(graph) = target_graph {
-                // Store in named graph
-                let _ = graph; // Suppress unused warning
-            }
-            // Store triple (placeholder)
-            stored_count += 1;
-        }
+        // Parse predicate
+        let predicate = parse_term(&load_triple.predicate)
+            .map_err(|e| format!("Invalid predicate '{}': {}", load_triple.predicate, e))?;
+
+        // Parse object
+        let object = parse_term(&load_triple.object)
+            .map_err(|e| format!("Invalid object '{}': {}", load_triple.object, e))?;
+
+        term_triples.push((subject, predicate, object));
     }
+
+    // Use bulk insertion for better performance
+    let stored_count = term_triples.len();
+    store
+        .insert_triples_bulk(&term_triples)
+        .map_err(|e| format!("Failed to insert triples: {}", e))?;
 
     Ok(stored_count)
 }
 
+/// Parse a term string into TDB Term
+fn parse_term(term_str: &str) -> Result<oxirs_tdb::dictionary::Term, String> {
+    use oxirs_tdb::dictionary::Term;
+
+    let term_str = term_str.trim();
+
+    // IRI: <http://example.org/resource>
+    if term_str.starts_with('<') && term_str.ends_with('>') {
+        let iri = &term_str[1..term_str.len() - 1];
+        return Ok(Term::Iri(iri.to_string()));
+    }
+
+    // Blank node: _:b1
+    if let Some(id) = term_str.strip_prefix("_:") {
+        return Ok(Term::BlankNode(id.to_string()));
+    }
+
+    // Literal: "value" or "value"@lang or "value"^^<datatype>
+    if term_str.starts_with('"') {
+        return parse_literal(term_str);
+    }
+
+    Err(format!("Invalid term format: {}", term_str))
+}
+
+/// Parse a literal term
+fn parse_literal(literal_str: &str) -> Result<oxirs_tdb::dictionary::Term, String> {
+    use oxirs_tdb::dictionary::Term;
+    // Find the closing quote
+    let mut in_escape = false;
+    let mut quote_pos = None;
+
+    for (i, ch) in literal_str.chars().enumerate().skip(1) {
+        if in_escape {
+            in_escape = false;
+            continue;
+        }
+
+        if ch == '\\' {
+            in_escape = true;
+            continue;
+        }
+
+        if ch == '"' {
+            quote_pos = Some(i);
+            break;
+        }
+    }
+
+    let quote_pos = quote_pos.ok_or_else(|| "Unclosed literal quote".to_string())?;
+    let value = &literal_str[1..quote_pos];
+
+    // Unescape the value
+    let value = value
+        .replace("\\n", "\n")
+        .replace("\\t", "\t")
+        .replace("\\r", "\r")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\");
+
+    let rest = &literal_str[quote_pos + 1..];
+
+    // Check for language tag: @lang
+    if let Some(lang_tag) = rest.strip_prefix('@') {
+        let lang = lang_tag.trim();
+        return Ok(Term::Literal {
+            value,
+            language: Some(lang.to_string()),
+            datatype: None,
+        });
+    }
+
+    // Check for datatype: ^^<datatype>
+    if let Some(datatype_str) = rest.strip_prefix("^^") {
+        if datatype_str.starts_with('<') && datatype_str.ends_with('>') {
+            let datatype = &datatype_str[1..datatype_str.len() - 1];
+            return Ok(Term::Literal {
+                value,
+                language: None,
+                datatype: Some(datatype.to_string()),
+            });
+        }
+        return Err(format!("Invalid datatype format: {}", datatype_str));
+    }
+
+    // Plain literal (xsd:string)
+    Ok(Term::Literal {
+        value,
+        language: None,
+        datatype: Some("http://www.w3.org/2001/XMLSchema#string".to_string()),
+    })
+}
+
 /// Print dataset statistics
 fn print_dataset_statistics(dataset_location: &PathBuf) -> ToolResult<()> {
+    use oxirs_tdb::store::TdbStore;
+    use std::collections::HashSet;
+
     println!("\n=== Dataset Statistics ===");
     println!("Location: {}", dataset_location.display());
 
-    // In a real implementation, this would query the dataset for:
-    // - Total number of triples/quads
-    // - Number of named graphs
-    // - Number of unique subjects, predicates, objects
-    // - Dataset size on disk
-    // - Index statistics
+    // Open TDB store
+    let store =
+        TdbStore::open(dataset_location).map_err(|e| format!("Failed to open TDB store: {}", e))?;
 
-    // Simulate statistics
-    println!("Total triples: ~1,000,000 (simulated)");
-    println!("Named graphs: 5 (simulated)");
-    println!("Unique subjects: ~50,000 (simulated)");
-    println!("Unique predicates: ~200 (simulated)");
-    println!("Unique objects: ~800,000 (simulated)");
+    // Query dataset statistics
+    let triples = store
+        .query_triples(None, None, None)
+        .map_err(|e| format!("Failed to query triples: {}", e))?;
+
+    let triple_count = triples.len();
+
+    // Count unique subjects, predicates, and objects
+    let mut subjects = HashSet::new();
+    let mut predicates = HashSet::new();
+    let mut objects = HashSet::new();
+
+    for (s, p, o) in &triples {
+        subjects.insert(format!("{:?}", s));
+        predicates.insert(format!("{:?}", p));
+        objects.insert(format!("{:?}", o));
+    }
+
+    println!("Total triples: {}", format_number(triple_count));
+    println!("Unique subjects: {}", format_number(subjects.len()));
+    println!("Unique predicates: {}", format_number(predicates.len()));
+    println!("Unique objects: {}", format_number(objects.len()));
 
     // Calculate disk usage
     if let Ok(metadata) = fs::metadata(dataset_location) {
@@ -394,7 +506,46 @@ fn print_dataset_statistics(dataset_location: &PathBuf) -> ToolResult<()> {
         }
     }
 
+    // Calculate compression ratio if possible
+    if triple_count > 0 {
+        // Estimate uncompressed size (rough estimate: 150 bytes per triple on average)
+        let estimated_uncompressed = (triple_count as u64) * 150;
+
+        if let Ok(metadata) = fs::metadata(dataset_location) {
+            if metadata.is_dir() {
+                let mut total_size = 0u64;
+                if let Ok(entries) = fs::read_dir(dataset_location) {
+                    for entry in entries.flatten() {
+                        if let Ok(meta) = entry.metadata() {
+                            total_size += meta.len();
+                        }
+                    }
+                }
+
+                if total_size > 0 {
+                    let ratio = estimated_uncompressed as f64 / total_size as f64;
+                    println!("Estimated compression ratio: {:.2}x", ratio);
+                }
+            }
+        }
+    }
+
     println!("==========================");
 
     Ok(())
+}
+
+/// Format number with thousands separators
+fn format_number(n: usize) -> String {
+    let s = n.to_string();
+    let mut result = String::new();
+
+    for (count, c) in s.chars().rev().enumerate() {
+        if count > 0 && count % 3 == 0 {
+            result.insert(0, ',');
+        }
+        result.insert(0, c);
+    }
+
+    result
 }

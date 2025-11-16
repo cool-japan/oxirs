@@ -3,7 +3,8 @@
 //! Provides advanced NL2SPARQL capabilities with template-based generation,
 //! semantic parsing, query optimization, and comprehensive validation.
 
-pub mod types;
+pub mod context_aware;
+pub mod types; // NEW: Context-aware query generation
 
 pub use types::*;
 
@@ -18,6 +19,7 @@ use tokio::sync::Mutex as TokioMutex;
 use tracing::{debug, error, info, warn};
 
 use crate::llm::{ChatMessage, ChatRole, LLMManager, LLMRequest, Priority, UseCase};
+use crate::schema_introspection::{DiscoveredSchema, SchemaIntrospector};
 use crate::QueryContext;
 use oxirs_core::Store;
 
@@ -29,6 +31,8 @@ pub struct NL2SPARQLSystem {
     validator: SPARQLValidator,
     optimizer: SPARQLOptimizer,
     store: Option<Arc<dyn Store>>,
+    /// Cached discovered schema for schema-aware query generation
+    schema: Option<DiscoveredSchema>,
 }
 
 impl NL2SPARQLSystem {
@@ -44,6 +48,7 @@ impl NL2SPARQLSystem {
             validator: SPARQLValidator::new(),
             optimizer: SPARQLOptimizer::new(),
             store: None,
+            schema: None,
         };
 
         system.initialize_templates()?;
@@ -63,10 +68,36 @@ impl NL2SPARQLSystem {
             validator: SPARQLValidator::new(),
             optimizer: SPARQLOptimizer::new(),
             store: Some(store),
+            schema: None,
         };
 
         system.initialize_templates()?;
         Ok(system)
+    }
+
+    /// Discover and cache schema from the store for schema-aware query generation
+    pub async fn discover_schema(&mut self) -> Result<()> {
+        if let Some(store) = &self.store {
+            info!("Discovering schema for NL2SPARQL enhancement");
+            let introspector = SchemaIntrospector::new(store.clone());
+            let schema = introspector.discover_schema().await?;
+            info!("{}", schema.summary());
+            self.schema = Some(schema);
+            Ok(())
+        } else {
+            warn!("No store available for schema discovery");
+            Err(anyhow!("Store required for schema discovery"))
+        }
+    }
+
+    /// Get the discovered schema if available
+    pub fn get_schema(&self) -> Option<&DiscoveredSchema> {
+        self.schema.as_ref()
+    }
+
+    /// Set schema manually (for testing or external schema sources)
+    pub fn set_schema(&mut self, schema: DiscoveredSchema) {
+        self.schema = Some(schema);
     }
 
     /// Generate SPARQL query from natural language
@@ -976,8 +1007,9 @@ LIMIT {{limit}}
     }
 
     fn create_sparql_generation_prompt(&self) -> String {
-        r#"You are an expert at converting natural language queries to SPARQL queries.
-        
+        let mut prompt =
+            r#"You are an expert at converting natural language queries to SPARQL queries.
+
 Guidelines:
 1. Generate valid SPARQL 1.1 syntax
 2. Use appropriate prefixes (rdf, rdfs, owl, etc.)
@@ -987,8 +1019,83 @@ Guidelines:
 6. Use proper variable naming
 7. Include comments explaining complex parts
 
-Always respond with just the SPARQL query, no additional explanation unless requested."#
-            .to_string()
+"#
+            .to_string();
+
+        // Add schema information if available (schema-aware generation)
+        if let Some(schema) = &self.schema {
+            prompt.push_str("\n**Available Schema Information:**\n\n");
+
+            // Add prefix declarations
+            if !schema.prefixes.is_empty() {
+                prompt.push_str("**Common Prefixes:**\n");
+                for (prefix, uri) in schema.prefixes.iter().take(10) {
+                    prompt.push_str(&format!("PREFIX {}: <{}>\n", prefix, uri));
+                }
+                prompt.push('\n');
+            }
+
+            // Add class information
+            if !schema.classes.is_empty() {
+                prompt.push_str("**Available Classes:**\n");
+                for class in schema.classes.iter().take(15) {
+                    if let Some(label) = &class.label {
+                        prompt.push_str(&format!(
+                            "- {} ({}): {} instances\n",
+                            label, class.uri, class.instance_count
+                        ));
+                    } else {
+                        prompt.push_str(&format!(
+                            "- {}: {} instances\n",
+                            class.uri, class.instance_count
+                        ));
+                    }
+                    // Add key properties for this class
+                    if !class.properties.is_empty() {
+                        let key_props: Vec<String> = class
+                            .properties
+                            .iter()
+                            .take(5)
+                            .map(|p| {
+                                p.label.clone().unwrap_or_else(|| {
+                                    p.uri
+                                        .split(&['#', '/'][..])
+                                        .next_back()
+                                        .unwrap_or(&p.uri)
+                                        .to_string()
+                                })
+                            })
+                            .collect();
+                        prompt.push_str(&format!("  Properties: {}\n", key_props.join(", ")));
+                    }
+                }
+                prompt.push('\n');
+            }
+
+            // Add property information
+            if !schema.properties.is_empty() {
+                prompt.push_str("**Frequently Used Properties:**\n");
+                for property in schema.properties.iter().take(20) {
+                    if let Some(label) = &property.label {
+                        prompt.push_str(&format!(
+                            "- {} ({}): {} usages\n",
+                            label, property.uri, property.usage_count
+                        ));
+                    } else {
+                        prompt.push_str(&format!(
+                            "- {}: {} usages\n",
+                            property.uri, property.usage_count
+                        ));
+                    }
+                }
+                prompt.push('\n');
+            }
+
+            prompt.push_str("Use the schema information above to generate accurate SPARQL queries with correct class and property URIs.\n\n");
+        }
+
+        prompt.push_str("Always respond with just the SPARQL query, no additional explanation unless requested.");
+        prompt
     }
 
     fn extract_sparql_from_response(&self, response: &str) -> Result<String> {

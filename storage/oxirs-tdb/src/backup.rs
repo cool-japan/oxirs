@@ -256,6 +256,7 @@ impl BackupManager {
     // ========== Private Helper Methods ==========
 
     /// Copy database files from source to destination
+    #[allow(clippy::only_used_in_recursion)]
     fn copy_database_files(&self, source: &Path, dest: &Path) -> Result<()> {
         fs::create_dir_all(dest).map_err(TdbError::Io)?;
 
@@ -279,6 +280,7 @@ impl BackupManager {
     }
 
     /// Calculate total size of a directory
+    #[allow(clippy::only_used_in_recursion)]
     fn calculate_directory_size(&self, dir: &Path) -> Result<u64> {
         let mut total_size = 0u64;
 
@@ -321,6 +323,7 @@ impl BackupManager {
     }
 
     /// Collect all files in a directory recursively
+    #[allow(clippy::only_used_in_recursion)]
     fn collect_files(
         &self,
         base_dir: &Path,
@@ -434,7 +437,7 @@ mod tests {
         assert_eq!(backup_entries.len(), 1);
 
         manager
-            .restore_backup(&backup_entries[0].path(), &restore_dir)
+            .restore_backup(backup_entries[0].path(), &restore_dir)
             .unwrap();
 
         // Verify restored data
@@ -470,7 +473,7 @@ mod tests {
 
         // Verify backup
         assert!(manager
-            .verify_backup(&backup_entries[0].path(), &metadata)
+            .verify_backup(backup_entries[0].path(), &metadata)
             .unwrap());
 
         fs::remove_dir_all(&temp_dir).ok();
@@ -515,11 +518,15 @@ mod tests {
         let source_dir = temp_dir.join("source");
         let backup_dir = temp_dir.join("backups");
 
-        // Create source
+        // Create fresh directories
         fs::create_dir_all(&source_dir).unwrap();
+        fs::create_dir_all(&backup_dir).unwrap();
         fs::write(source_dir.join("data.tdb"), b"data").unwrap();
 
         let manager = BackupManager::default();
+
+        // Ensure no old backups exist
+        let _ = manager.cleanup_old_backups(&backup_dir, 0);
 
         // Create 5 backups
         for _ in 0..5 {

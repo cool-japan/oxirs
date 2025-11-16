@@ -609,7 +609,7 @@ impl ModelParameters {
             // Xavier initialization
             let std = (2.0 / (input_dim + output_dim) as f32).sqrt();
             let weight = Array2::from_shape_fn((output_dim, input_dim), |_| {
-                rng.random_range(-std..std)
+                rng.uniform(-std, std)
             });
             let bias = Array1::zeros(output_dim);
             

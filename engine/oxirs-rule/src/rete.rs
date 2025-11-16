@@ -10,14 +10,13 @@ use anyhow::Result;
 use scirs2_core::metrics::{Counter, Gauge};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
-use std::sync::LazyLock;
 use tracing::{debug, info, warn};
 
 // Global metrics for memory tracking
-static TOKEN_CLONES: LazyLock<Counter> =
-    LazyLock::new(|| Counter::new("rete_token_clones".to_string()));
-static ACTIVE_TOKENS: LazyLock<Gauge> =
-    LazyLock::new(|| Gauge::new("rete_active_tokens".to_string()));
+lazy_static::lazy_static! {
+    static ref TOKEN_CLONES: Counter = Counter::new("rete_token_clones".to_string());
+    static ref ACTIVE_TOKENS: Gauge = Gauge::new("rete_active_tokens".to_string());
+}
 
 /// Unique identifier for RETE nodes
 pub type NodeId = usize;

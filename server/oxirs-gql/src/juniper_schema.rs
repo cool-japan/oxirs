@@ -335,8 +335,7 @@ pub struct StoreInfo {
 }
 
 /// Create the root schema
-pub type Schema =
-    RootNode<'static, Query, EmptyMutation<GraphQLContext>, EmptySubscription<GraphQLContext>>;
+pub type Schema = RootNode<Query, EmptyMutation<GraphQLContext>, EmptySubscription<GraphQLContext>>;
 
 pub fn create_schema() -> Schema {
     Schema::new(Query, EmptyMutation::new(), EmptySubscription::new())

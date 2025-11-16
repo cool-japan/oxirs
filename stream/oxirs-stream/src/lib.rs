@@ -1,10 +1,10 @@
 //! # OxiRS Stream - Ultra-High Performance RDF Streaming Platform
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-stream/badge.svg)](https://docs.rs/oxirs-stream)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Real-time streaming support with Kafka/NATS/Redis I/O, RDF Patch, SPARQL Update delta,
 //! and advanced event processing capabilities.
@@ -118,6 +118,40 @@ pub use consciousness_streaming::{
     ConsciousnessLevel, ConsciousnessStats, ConsciousnessStreamProcessor, DreamSequence,
     EmotionalContext, IntuitiveEngine, MeditationState,
 };
+pub use disaster_recovery::{
+    BackupCompression, BackupConfig, BackupEncryption, BackupFrequency, BackupJob,
+    BackupRetentionPolicy, BackupSchedule, BackupStatus, BackupStorage, BackupType,
+    BackupVerification, BackupVerificationResult, BackupWindow, BusinessContinuityConfig,
+    ChecksumAlgorithm, CompressionAlgorithm, DRMetrics, DisasterRecoveryConfig,
+    DisasterRecoveryManager, DisasterScenario, EncryptionAlgorithm as BackupEncryptionAlgorithm,
+    FailoverConfig as DRFailoverConfig, ImpactLevel, KeyDerivationFunction, RecoveryConfig,
+    RecoveryOperation, RecoveryPriority, RecoveryRunbook, RecoveryStatus, RecoveryType,
+    ReplicationConfig as DRReplicationConfig, ReplicationMode as DRReplicationMode,
+    ReplicationTarget as DRReplicationTarget, RunbookExecution, RunbookExecutionStatus,
+    RunbookStep, StorageLocation,
+};
+pub use enterprise_audit::{
+    ActionResult, AuditEncryptionConfig, AuditEventType, AuditFilterConfig, AuditMetrics,
+    AuditRetentionConfig, AuditSeverity, AuditStorageBackend, AuditStorageConfig,
+    AuditStreamingConfig, AuthType, ComplianceConfig, ComplianceFinding, ComplianceReport,
+    ComplianceStandard, CompressionType as AuditCompressionType, DestinationAuth, DestinationType,
+    EncryptionAlgorithm, EnterpriseAuditConfig, EnterpriseAuditEvent, EnterpriseAuditLogger,
+    FindingType, KeyManagementConfig, KmsType, S3AuditConfig, StreamingDestination,
+};
+pub use enterprise_monitoring::{
+    Alert, AlertCondition, AlertManager, AlertRule, AlertSeverity as MonitoringAlertSeverity,
+    AlertingConfig, BreachNotificationConfig, ComparisonOperator, EnterpriseMonitoringConfig,
+    EnterpriseMonitoringSystem, EscalationLevel, EscalationPolicy, HealthCheckConfig,
+    HealthCheckEndpoint, HealthCheckType, MeasurementWindow, MetricDefinition, MetricType,
+    MetricValue, MetricsCollector, MetricsConfig, MetricsEndpoint, MetricsEndpointType,
+    MetricsExportConfig, MetricsFormat, NotificationChannel, ProfilingConfig, SlaBreach, SlaConfig,
+    SlaMeasurement, SlaMetricType, SlaObjective, SlaSeverity, SlaStatus, SlaTracker,
+};
+pub use multi_tenancy::{
+    IsolationMode, MultiTenancyConfig, MultiTenancyManager, MultiTenancyMetrics,
+    NamespaceResources, ResourceAllocationStrategy, ResourceType, ResourceUsage, Tenant,
+    TenantLifecycleConfig, TenantNamespace, TenantQuota, TenantStatus, TenantTier,
+};
 pub use observability::{
     AlertConfig, AlertEvent, AlertSeverity, AlertType, BusinessMetrics, SpanLog, SpanStatus,
     StreamObservability, StreamingMetrics, TelemetryConfig, TraceSpan,
@@ -145,11 +179,21 @@ pub use security::{
     RateLimiter, SecurityConfig as StreamSecurityConfig, SecurityContext, SecurityManager,
     SecurityMetrics, SessionConfig, ThreatAlert, ThreatDetectionConfig, ThreatDetector,
 };
+pub use temporal_join::{
+    IntervalJoin, JoinResult, LateDataConfig, LateDataStrategy, TemporalJoin, TemporalJoinConfig,
+    TemporalJoinMetrics, TemporalJoinType, TemporalWindow, TimeSemantics, WatermarkConfig,
+    WatermarkStrategy,
+};
 pub use time_travel::{
     AggregationType, TemporalAggregations, TemporalFilter, TemporalOrdering, TemporalProjection,
     TemporalQuery, TemporalQueryResult, TemporalResultMetadata, TemporalStatistics, TimePoint,
     TimeRange as TimeTravelTimeRange, TimeTravelConfig, TimeTravelEngine, TimeTravelMetrics,
     TimelinePoint,
+};
+pub use tls_security::{
+    CertRotationConfig, CertificateConfig, CertificateFormat, CertificateInfo, CipherSuite,
+    ExpiryWarning, MutualTlsConfig, OcspConfig, RevocationCheckConfig, SessionResumptionConfig,
+    TlsConfig, TlsManager, TlsMetrics, TlsSessionInfo, TlsVersion,
 };
 pub use wasm_edge_computing::{
     EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, WasmEdgeConfig,
@@ -159,6 +203,60 @@ pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
     WebhookConfig, WebhookInfo, WebhookManager, WebhookMetadata, WebhookSecurity,
     WebhookStatistics,
+};
+
+// New v0.1.0 feature exports
+pub use custom_serialization::{
+    BenchmarkResults, BsonSerializer, CustomSerializer, FlexBuffersSerializer, IonSerializer,
+    RonSerializer, SerializerBenchmark, SerializerBenchmarkSuite, SerializerRegistry,
+    SerializerStats, ThriftSerializer,
+};
+pub use end_to_end_encryption::{
+    E2EEConfig, E2EEEncryptionAlgorithm, E2EEManager, E2EEStats, EncryptedMessage,
+    HomomorphicEncryption, KeyExchangeAlgorithm, KeyPair, KeyRotationConfig, MultiPartyConfig,
+    ZeroKnowledgeProof,
+};
+pub use gpu_acceleration::{
+    AggregationOp, GpuBackend, GpuBuffer, GpuConfig, GpuContext, GpuProcessorConfig, GpuStats,
+    GpuStreamProcessor,
+};
+pub use ml_integration::{
+    AnomalyDetectionAlgorithm, AnomalyDetectionConfig, AnomalyDetector, AnomalyResult,
+    AnomalyStats, FeatureConfig, FeatureExtractor, FeatureVector, MLIntegrationManager,
+    MLModelConfig, ModelMetrics, ModelType, OnlineLearningModel, PredictionResult,
+};
+pub use rate_limiting::{
+    QuotaCheckResult, QuotaEnforcementMode, QuotaLimits, QuotaManager, QuotaOperation,
+    RateLimitAlgorithm, RateLimitConfig as AdvancedRateLimitConfig, RateLimitMonitoringConfig,
+    RateLimitStats as AdvancedRateLimitStats, RateLimiter as AdvancedRateLimiter,
+    RejectionStrategy,
+};
+pub use scalability::{
+    AdaptiveBuffer, AutoScaler, LoadBalancingStrategy as ScalingLoadBalancingStrategy,
+    Node as ScalingNode, NodeHealth, Partition, PartitionManager, PartitionStrategy,
+    ResourceLimits, ResourceUsage as ScalingResourceUsage, ScalingConfig, ScalingDirection,
+    ScalingMode,
+};
+pub use schema_evolution::{
+    CompatibilityCheckResult, CompatibilityIssue, CompatibilityIssueType,
+    CompatibilityMode as SchemaCompatibilityMode, DeprecationInfo, EvolutionResult,
+    FieldDefinition, FieldType, IssueSeverity, MigrationRule, MigrationStrategy, SchemaChange,
+    SchemaDefinition as SchemaEvolutionDefinition, SchemaEvolutionManager,
+    SchemaFormat as SchemaEvolutionFormat, SchemaVersion,
+};
+pub use stream_replay::{
+    EventProcessor, ReplayCheckpoint, ReplayConfig, ReplayFilter, ReplayMode, ReplaySpeed,
+    ReplayStats, ReplayStatus as StreamReplayStatus, ReplayTransformation, StateSnapshot,
+    StreamReplayManager, TransformationType,
+};
+pub use transactional_processing::{
+    IsolationLevel as TransactionalIsolationLevel, LogEntryType, TransactionCheckpoint,
+    TransactionLogEntry, TransactionMetadata, TransactionState, TransactionalConfig,
+    TransactionalProcessor, TransactionalStats,
+};
+pub use zero_copy::{
+    MemoryMappedBuffer, SharedRefBuffer, SimdBatchProcessor, SimdOperation, SplicedBuffer,
+    ZeroCopyBuffer, ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
 };
 
 pub mod backend;
@@ -171,19 +269,26 @@ pub mod config;
 pub mod connection_pool;
 pub mod consciousness_streaming;
 pub mod consumer;
+pub mod cqels;
 pub mod cqrs;
+pub mod csparql;
 pub mod delta;
 pub mod diagnostics;
+pub mod disaster_recovery;
 pub mod dlq;
+pub mod enterprise_audit;
+pub mod enterprise_monitoring;
 pub mod error;
 pub mod event;
 pub mod event_sourcing;
 pub mod failover;
 pub mod graphql_bridge;
+pub mod graphql_subscriptions;
 pub mod health_monitor;
 pub mod join;
 pub mod monitoring;
 pub mod multi_region_replication;
+pub mod multi_tenancy;
 pub mod observability;
 pub mod patch;
 pub mod performance_optimizer;
@@ -202,10 +307,24 @@ pub mod serialization;
 pub mod sparql_streaming;
 pub mod state;
 pub mod store_integration;
+pub mod temporal_join;
 pub mod time_travel;
+pub mod tls_security;
 pub mod types;
 pub mod wasm_edge_computing;
 pub mod webhook;
+
+// New v0.1.0 modules for advanced features
+pub mod custom_serialization;
+pub mod end_to_end_encryption;
+pub mod gpu_acceleration;
+pub mod ml_integration;
+pub mod rate_limiting;
+pub mod scalability;
+pub mod schema_evolution;
+pub mod stream_replay;
+pub mod transactional_processing;
+pub mod zero_copy;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -412,15 +531,15 @@ enum BackendProducer {
     #[cfg(feature = "kafka")]
     Kafka(backend::kafka::KafkaProducer),
     #[cfg(feature = "nats")]
-    Nats(backend::nats::NatsProducer),
+    Nats(Box<backend::nats::NatsProducer>),
     #[cfg(feature = "redis")]
     Redis(backend::redis::RedisProducer),
     #[cfg(feature = "kinesis")]
     Kinesis(backend::kinesis::KinesisProducer),
     #[cfg(feature = "pulsar")]
-    Pulsar(backend::pulsar::PulsarProducer),
+    Pulsar(Box<backend::pulsar::PulsarProducer>),
     #[cfg(feature = "rabbitmq")]
-    RabbitMQ(backend::rabbitmq::RabbitMQProducer),
+    RabbitMQ(Box<backend::rabbitmq::RabbitMQProducer>),
     Memory(MemoryProducer),
 }
 
@@ -615,7 +734,7 @@ impl StreamProducer {
 
                 let mut producer = backend::nats::NatsProducer::new(stream_config)?;
                 producer.connect().await?;
-                BackendProducer::Nats(producer)
+                BackendProducer::Nats(Box::new(producer))
             }
             #[cfg(feature = "redis")]
             StreamBackendType::Redis {
@@ -703,7 +822,7 @@ impl StreamProducer {
 
                 let mut producer = backend::pulsar::PulsarProducer::new(stream_config)?;
                 producer.connect().await?;
-                BackendProducer::Pulsar(producer)
+                BackendProducer::Pulsar(Box::new(producer))
             }
             #[cfg(feature = "rabbitmq")]
             StreamBackendType::RabbitMQ {
@@ -733,7 +852,7 @@ impl StreamProducer {
 
                 let mut producer = backend::rabbitmq::RabbitMQProducer::new(stream_config)?;
                 producer.connect().await?;
-                BackendProducer::RabbitMQ(producer)
+                BackendProducer::RabbitMQ(Box::new(producer))
             }
             StreamBackendType::Memory {
                 max_size: _,
@@ -1087,15 +1206,15 @@ enum BackendConsumer {
     #[cfg(feature = "kafka")]
     Kafka(backend::kafka::KafkaConsumer),
     #[cfg(feature = "nats")]
-    Nats(backend::nats::NatsConsumer),
+    Nats(Box<backend::nats::NatsConsumer>),
     #[cfg(feature = "redis")]
     Redis(backend::redis::RedisConsumer),
     #[cfg(feature = "kinesis")]
     Kinesis(backend::kinesis::KinesisConsumer),
     #[cfg(feature = "pulsar")]
-    Pulsar(backend::pulsar::PulsarConsumer),
+    Pulsar(Box<backend::pulsar::PulsarConsumer>),
     #[cfg(feature = "rabbitmq")]
-    RabbitMQ(backend::rabbitmq::RabbitMQConsumer),
+    RabbitMQ(Box<backend::rabbitmq::RabbitMQConsumer>),
     Memory(MemoryConsumer),
 }
 
@@ -1287,7 +1406,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::nats::NatsConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Nats(consumer)
+                BackendConsumer::Nats(Box::new(consumer))
             }
             #[cfg(feature = "redis")]
             StreamBackendType::Redis {
@@ -1375,7 +1494,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::pulsar::PulsarConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::Pulsar(consumer)
+                BackendConsumer::Pulsar(Box::new(consumer))
             }
             #[cfg(feature = "rabbitmq")]
             StreamBackendType::RabbitMQ {
@@ -1405,7 +1524,7 @@ impl StreamConsumer {
 
                 let mut consumer = backend::rabbitmq::RabbitMQConsumer::new(stream_config)?;
                 consumer.connect().await?;
-                BackendConsumer::RabbitMQ(consumer)
+                BackendConsumer::RabbitMQ(Box::new(consumer))
             }
             StreamBackendType::Memory {
                 max_size: _,

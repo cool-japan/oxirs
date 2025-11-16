@@ -96,7 +96,9 @@ pub fn parse_gml(gml_str: &str) -> Result<Geometry> {
             }
             Ok(Event::Text(e)) => {
                 if in_pos_list || in_coordinates {
-                    coords_buffer.push_str(&e.unescape().unwrap_or_default());
+                    // In quick-xml 0.38+, decode text from bytes
+                    let text = String::from_utf8_lossy(e.as_ref());
+                    coords_buffer.push_str(&text);
                 }
             }
             Ok(Event::End(e)) => {

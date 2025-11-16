@@ -933,6 +933,9 @@ impl TargetSelector {
             HierarchicalRelationship::SuperpropertyOf => {
                 "^<http://www.w3.org/2000/01/rdf-schema#subPropertyOf>".to_string()
             }
+            HierarchicalRelationship::TypeOf => {
+                "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".to_string()
+            }
             HierarchicalRelationship::CustomPath(sparql_path) => sparql_path.clone(),
         };
 
@@ -1435,128 +1438,381 @@ impl TargetSelector {
     /// Helper methods for condition evaluation
     fn check_property_exists(
         &self,
-        _store: &dyn Store,
+        store: &dyn Store,
         node: &Term,
         property: &oxirs_core::model::NamedNode,
         forward: bool,
-        _graph_name: Option<&str>,
+        graph_name: Option<&str>,
     ) -> Result<bool> {
-        // Use SPARQL query to check property existence
-        let node_sparql = format_term_for_sparql(node)?;
-        let property_sparql = format!("<{}>", property.as_str());
+        use oxirs_core::{Object, Predicate, Subject};
 
-        let query = if forward {
-            format!("ASK {{ {node_sparql} {property_sparql} ?o }}")
+        let predicate: Predicate = property.clone().into();
+
+        // Check property existence using Store queries
+        let quads = if forward {
+            // Check if: node property ?o (node is subject)
+            let subject_ref = match node {
+                Term::NamedNode(n) => Subject::from(n.clone()),
+                Term::BlankNode(n) => Subject::from(n.clone()),
+                _ => return Ok(false),
+            };
+
+            if let Some(graph) = graph_name {
+                let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                    ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                })?;
+                let gn = Some(oxirs_core::GraphName::from(graph_node));
+                store.find_quads(Some(&subject_ref), Some(&predicate), None, gn.as_ref())?
+            } else {
+                store.find_quads(Some(&subject_ref), Some(&predicate), None, None)?
+            }
         } else {
-            format!("ASK {{ ?s {property_sparql} {node_sparql} }}")
+            // Check if: ?s property node (node is object)
+            let object_ref = match node {
+                Term::NamedNode(n) => Object::from(n.clone()),
+                Term::BlankNode(n) => Object::from(n.clone()),
+                Term::Literal(lit) => Object::from(lit.clone()),
+                _ => return Ok(false),
+            };
+
+            if let Some(graph) = graph_name {
+                let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                    ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                })?;
+                let gn = Some(oxirs_core::GraphName::from(graph_node));
+                store.find_quads(None, Some(&predicate), Some(&object_ref), gn.as_ref())?
+            } else {
+                store.find_quads(None, Some(&predicate), Some(&object_ref), None)?
+            }
         };
 
-        // For now, return false as placeholder
-        // TODO: Integrate with SPARQL engine when available
-        tracing::warn!(
-            "Property existence check not fully implemented yet: {}",
-            query
-        );
-        Ok(false)
+        Ok(!quads.is_empty())
     }
 
     fn check_property_value(
         &self,
-        _store: &dyn Store,
+        store: &dyn Store,
         node: &Term,
         property: &oxirs_core::model::NamedNode,
         value: &Term,
         forward: bool,
-        _graph_name: Option<&str>,
+        graph_name: Option<&str>,
     ) -> Result<bool> {
-        let node_sparql = format_term_for_sparql(node)?;
-        let property_sparql = format!("<{}>", property.as_str());
-        let value_sparql = format_term_for_sparql(value)?;
+        use oxirs_core::{Object, Predicate, Subject};
 
-        let query = if forward {
-            format!("ASK {{ {node_sparql} {property_sparql} {value_sparql} }}")
+        let predicate: Predicate = property.clone().into();
+
+        // Check if the specific triple exists: node property value (or value property node)
+        let quads = if forward {
+            // Check if: node property value
+            let subject_ref = match node {
+                Term::NamedNode(n) => Subject::from(n.clone()),
+                Term::BlankNode(n) => Subject::from(n.clone()),
+                _ => return Ok(false),
+            };
+
+            let object_ref = match value {
+                Term::NamedNode(n) => Object::from(n.clone()),
+                Term::BlankNode(n) => Object::from(n.clone()),
+                Term::Literal(lit) => Object::from(lit.clone()),
+                _ => return Ok(false),
+            };
+
+            if let Some(graph) = graph_name {
+                let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                    ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                })?;
+                let gn = Some(oxirs_core::GraphName::from(graph_node));
+                store.find_quads(
+                    Some(&subject_ref),
+                    Some(&predicate),
+                    Some(&object_ref),
+                    gn.as_ref(),
+                )?
+            } else {
+                store.find_quads(
+                    Some(&subject_ref),
+                    Some(&predicate),
+                    Some(&object_ref),
+                    None,
+                )?
+            }
         } else {
-            format!("ASK {{ {value_sparql} {property_sparql} {node_sparql} }}")
+            // Check if: value property node
+            let subject_ref = match value {
+                Term::NamedNode(n) => Subject::from(n.clone()),
+                Term::BlankNode(n) => Subject::from(n.clone()),
+                _ => return Ok(false),
+            };
+
+            let object_ref = match node {
+                Term::NamedNode(n) => Object::from(n.clone()),
+                Term::BlankNode(n) => Object::from(n.clone()),
+                Term::Literal(lit) => Object::from(lit.clone()),
+                _ => return Ok(false),
+            };
+
+            if let Some(graph) = graph_name {
+                let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                    ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                })?;
+                let gn = Some(oxirs_core::GraphName::from(graph_node));
+                store.find_quads(
+                    Some(&subject_ref),
+                    Some(&predicate),
+                    Some(&object_ref),
+                    gn.as_ref(),
+                )?
+            } else {
+                store.find_quads(
+                    Some(&subject_ref),
+                    Some(&predicate),
+                    Some(&object_ref),
+                    None,
+                )?
+            }
         };
 
-        // TODO: Integrate with SPARQL engine when available
-        tracing::warn!("Property value check not fully implemented yet: {}", query);
-        Ok(false)
+        Ok(!quads.is_empty())
     }
 
     fn check_node_type(
         &self,
-        _store: &dyn Store,
+        store: &dyn Store,
         node: &Term,
         class_iri: &oxirs_core::model::NamedNode,
-        _graph_name: Option<&str>,
+        graph_name: Option<&str>,
     ) -> Result<bool> {
-        let node_sparql = format_term_for_sparql(node)?;
-        let class_sparql = format!("<{}>", class_iri.as_str());
+        use oxirs_core::{Object, Predicate, Subject};
 
-        let query = format!(
-            "ASK {{ {node_sparql} <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> {class_sparql} }}"
-        );
+        // Check if: node rdf:type class
+        let subject_ref = match node {
+            Term::NamedNode(n) => Subject::from(n.clone()),
+            Term::BlankNode(n) => Subject::from(n.clone()),
+            _ => return Ok(false),
+        };
 
-        // TODO: Integrate with SPARQL engine when available
-        tracing::warn!("Node type check not fully implemented yet: {}", query);
-        Ok(false)
+        let rdf_type =
+            oxirs_core::model::NamedNode::new("http://www.w3.org/1999/02/22-rdf-syntax-ns#type")
+                .map_err(|e| ShaclError::TargetSelection(format!("Invalid IRI: {}", e)))?;
+        let predicate: Predicate = rdf_type.into();
+        let object: Object = class_iri.clone().into();
+
+        let quads = if let Some(graph) = graph_name {
+            let graph_node = oxirs_core::model::NamedNode::new(graph)
+                .map_err(|e| ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e)))?;
+            let gn = Some(oxirs_core::GraphName::from(graph_node));
+            store.find_quads(
+                Some(&subject_ref),
+                Some(&predicate),
+                Some(&object),
+                gn.as_ref(),
+            )?
+        } else {
+            store.find_quads(Some(&subject_ref), Some(&predicate), Some(&object), None)?
+        };
+
+        Ok(!quads.is_empty())
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn count_property_values(
         &self,
-        _store: &dyn Store,
-        _node: &Term,
-        _property: &oxirs_core::model::NamedNode,
-        _direction: &PropertyDirection,
-        _graph_name: Option<&str>,
+        store: &dyn Store,
+        node: &Term,
+        property: &oxirs_core::model::NamedNode,
+        direction: &PropertyDirection,
+        graph_name: Option<&str>,
     ) -> Result<usize> {
-        // TODO: Implement actual counting logic
-        tracing::warn!("Property value counting not fully implemented yet");
-        Ok(0)
+        use oxirs_core::{Object, Predicate, Subject};
+
+        let predicate: Predicate = property.clone().into();
+
+        let quads = match direction {
+            PropertyDirection::Subject => {
+                // node -> property -> ?object
+                // Count values where the node has this property
+                let subject_ref = match node {
+                    Term::NamedNode(n) => Subject::from(n.clone()),
+                    Term::BlankNode(n) => Subject::from(n.clone()),
+                    _ => return Ok(0), // Literals can't be subjects
+                };
+
+                if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, gn.as_ref())?
+                } else {
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, None)?
+                }
+            }
+            PropertyDirection::Object => {
+                // ?subject -> property -> node
+                // Count subjects that have this property pointing to our node
+                let object_ref: Object = match node {
+                    Term::NamedNode(n) => n.clone().into(),
+                    Term::BlankNode(n) => n.clone().into(),
+                    Term::Literal(lit) => lit.clone().into(),
+                    _ => return Ok(0),
+                };
+
+                if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(None, Some(&predicate), Some(&object_ref), gn.as_ref())?
+                } else {
+                    store.find_quads(None, Some(&predicate), Some(&object_ref), None)?
+                }
+            }
+            PropertyDirection::Either => {
+                // Count both as subject and as object
+                let as_subject = self.count_property_values(
+                    store,
+                    node,
+                    property,
+                    &PropertyDirection::Subject,
+                    graph_name,
+                )?;
+                let as_object = self.count_property_values(
+                    store,
+                    node,
+                    property,
+                    &PropertyDirection::Object,
+                    graph_name,
+                )?;
+                return Ok(as_subject + as_object);
+            }
+        };
+
+        Ok(quads.len())
     }
 
     fn get_related_nodes(
         &self,
-        _store: &dyn Store,
+        store: &dyn Store,
         node: &Term,
         relationship: &HierarchicalRelationship,
-        _graph_name: Option<&str>,
+        graph_name: Option<&str>,
     ) -> Result<Vec<Term>> {
+        use oxirs_core::{Object, Predicate, Subject};
+
         match relationship {
             HierarchicalRelationship::Property(prop) => {
-                // Follow property in forward direction
-                let _query = format!(
-                    "SELECT ?related WHERE {{ {} <{}> ?related }}",
-                    format_term_for_sparql(node)?,
-                    prop.as_str()
-                );
-                // TODO: Execute query and return results
-                Ok(Vec::new())
+                // Follow property in forward direction: node -> prop -> ?related
+                let subject_ref = match node {
+                    Term::NamedNode(n) => Subject::from(n.clone()),
+                    Term::BlankNode(n) => Subject::from(n.clone()),
+                    _ => return Ok(Vec::new()), // Literals can't be subjects
+                };
+
+                let predicate: Predicate = prop.clone().into();
+
+                let quads = if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, gn.as_ref())?
+                } else {
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, None)?
+                };
+
+                Ok(quads
+                    .into_iter()
+                    .map(|q| q.object().clone().into())
+                    .collect())
             }
             HierarchicalRelationship::InverseProperty(prop) => {
-                // Follow property in inverse direction
-                let _query = format!(
-                    "SELECT ?related WHERE {{ ?related <{}> {} }}",
-                    prop.as_str(),
-                    format_term_for_sparql(node)?
-                );
-                // TODO: Execute query and return results
-                Ok(Vec::new())
+                // Follow property in inverse direction: ?related -> prop -> node
+                let object_ref: Object = match node {
+                    Term::NamedNode(n) => n.clone().into(),
+                    Term::BlankNode(n) => n.clone().into(),
+                    Term::Literal(lit) => lit.clone().into(),
+                    _ => return Ok(Vec::new()),
+                };
+
+                let predicate: Predicate = prop.clone().into();
+
+                let quads = if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(None, Some(&predicate), Some(&object_ref), gn.as_ref())?
+                } else {
+                    store.find_quads(None, Some(&predicate), Some(&object_ref), None)?
+                };
+
+                Ok(quads
+                    .into_iter()
+                    .map(|q| q.subject().clone().into())
+                    .collect())
             }
             HierarchicalRelationship::SubclassOf => {
                 // Follow rdfs:subClassOf
-                let _query = format!(
-                    "SELECT ?related WHERE {{ {} <http://www.w3.org/2000/01/rdf-schema#subClassOf> ?related }}",
-                    format_term_for_sparql(node)?
-                );
-                // TODO: Execute query and return results
-                Ok(Vec::new())
+                let subject_ref = match node {
+                    Term::NamedNode(n) => Subject::from(n.clone()),
+                    Term::BlankNode(n) => Subject::from(n.clone()),
+                    _ => return Ok(Vec::new()),
+                };
+
+                let subclass_of = oxirs_core::model::NamedNode::new(
+                    "http://www.w3.org/2000/01/rdf-schema#subClassOf",
+                )
+                .map_err(|e| ShaclError::TargetSelection(format!("Invalid IRI: {}", e)))?;
+                let predicate: Predicate = subclass_of.into();
+
+                let quads = if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, gn.as_ref())?
+                } else {
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, None)?
+                };
+
+                Ok(quads
+                    .into_iter()
+                    .map(|q| q.object().clone().into())
+                    .collect())
+            }
+            HierarchicalRelationship::TypeOf => {
+                // Follow rdf:type
+                let subject_ref = match node {
+                    Term::NamedNode(n) => Subject::from(n.clone()),
+                    Term::BlankNode(n) => Subject::from(n.clone()),
+                    _ => return Ok(Vec::new()),
+                };
+
+                let rdf_type = oxirs_core::model::NamedNode::new(
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                )
+                .map_err(|e| ShaclError::TargetSelection(format!("Invalid IRI: {}", e)))?;
+                let predicate: Predicate = rdf_type.into();
+
+                let quads = if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, gn.as_ref())?
+                } else {
+                    store.find_quads(Some(&subject_ref), Some(&predicate), None, None)?
+                };
+
+                Ok(quads
+                    .into_iter()
+                    .map(|q| q.object().clone().into())
+                    .collect())
             }
             _ => {
-                // TODO: Implement other relationship types
-                tracing::warn!(
-                    "Hierarchical relationship type not fully implemented yet: {:?}",
+                tracing::debug!(
+                    "Hierarchical relationship type not yet supported: {:?}",
                     relationship
                 );
                 Ok(Vec::new())
@@ -1595,13 +1851,116 @@ impl TargetSelector {
 
     fn evaluate_path_filter(
         &self,
-        _node: &Term,
-        _filter: &PathFilter,
-        _store: &dyn Store,
-        _graph_name: Option<&str>,
+        node: &Term,
+        filter: &PathFilter,
+        store: &dyn Store,
+        graph_name: Option<&str>,
     ) -> Result<bool> {
-        // TODO: Implement path filter evaluation
-        tracing::warn!("Path filter evaluation not fully implemented yet");
-        Ok(true)
+        use oxirs_core::{Object, Predicate, Subject};
+
+        match filter {
+            PathFilter::NodeType(node_type_filter) => {
+                // Filter based on node type
+                match node_type_filter {
+                    NodeTypeFilter::IriOnly => {
+                        // Only accept IRI nodes (named nodes)
+                        Ok(matches!(node, Term::NamedNode(_)))
+                    }
+                    NodeTypeFilter::BlankNodeOnly => {
+                        // Only accept blank nodes
+                        Ok(matches!(node, Term::BlankNode(_)))
+                    }
+                    NodeTypeFilter::LiteralOnly => {
+                        // Only accept literals
+                        Ok(matches!(node, Term::Literal(_)))
+                    }
+                    NodeTypeFilter::InstanceOf(class) => {
+                        // Check if node is an instance of the specified class
+                        // i.e., check if: node rdf:type class
+                        let subject_ref = match node {
+                            Term::NamedNode(n) => Subject::from(n.clone()),
+                            Term::BlankNode(n) => Subject::from(n.clone()),
+                            _ => return Ok(false), // Literals can't have types
+                        };
+
+                        let rdf_type = oxirs_core::model::NamedNode::new(
+                            "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+                        )
+                        .map_err(|e| ShaclError::TargetSelection(format!("Invalid IRI: {}", e)))?;
+                        let predicate: Predicate = rdf_type.into();
+                        let object: Object = class.clone().into();
+
+                        let quads = if let Some(graph) = graph_name {
+                            let graph_node =
+                                oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                                    ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                                })?;
+                            let gn = Some(oxirs_core::GraphName::from(graph_node));
+                            store.find_quads(
+                                Some(&subject_ref),
+                                Some(&predicate),
+                                Some(&object),
+                                gn.as_ref(),
+                            )?
+                        } else {
+                            store.find_quads(
+                                Some(&subject_ref),
+                                Some(&predicate),
+                                Some(&object),
+                                None,
+                            )?
+                        };
+
+                        Ok(!quads.is_empty())
+                    }
+                }
+            }
+            PathFilter::PropertyValue { property, value } => {
+                // Check if node has specified property with specified value
+                // i.e., check if: node property value
+                let subject_ref = match node {
+                    Term::NamedNode(n) => Subject::from(n.clone()),
+                    Term::BlankNode(n) => Subject::from(n.clone()),
+                    _ => return Ok(false), // Literals can't be subjects
+                };
+
+                let predicate: Predicate = property.clone().into();
+                let object: Object = match value {
+                    Term::NamedNode(n) => n.clone().into(),
+                    Term::BlankNode(n) => n.clone().into(),
+                    Term::Literal(lit) => lit.clone().into(),
+                    _ => return Ok(false),
+                };
+
+                let quads = if let Some(graph) = graph_name {
+                    let graph_node = oxirs_core::model::NamedNode::new(graph).map_err(|e| {
+                        ShaclError::TargetSelection(format!("Invalid graph IRI: {}", e))
+                    })?;
+                    let gn = Some(oxirs_core::GraphName::from(graph_node));
+                    store.find_quads(
+                        Some(&subject_ref),
+                        Some(&predicate),
+                        Some(&object),
+                        gn.as_ref(),
+                    )?
+                } else {
+                    store.find_quads(Some(&subject_ref), Some(&predicate), Some(&object), None)?
+                };
+
+                Ok(!quads.is_empty())
+            }
+            PathFilter::SparqlCondition {
+                condition: _,
+                prefixes: _,
+            } => {
+                // SPARQL condition filtering requires query execution
+                // For now, log a debug message and return true (don't filter)
+                // This would require integration with SPARQL query engine
+                tracing::debug!(
+                    "SPARQL condition path filter requires query execution - not yet implemented"
+                );
+                Ok(true)
+            }
+        }
     }
 }

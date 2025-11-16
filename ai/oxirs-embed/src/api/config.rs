@@ -81,7 +81,7 @@ impl Default for RateLimitConfig {
 }
 
 /// Authentication configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct AuthConfig {
     /// Enable API key authentication
     pub require_api_key: bool,
@@ -91,15 +91,4 @@ pub struct AuthConfig {
     pub enable_jwt: bool,
     /// JWT secret
     pub jwt_secret: Option<String>,
-}
-
-impl Default for AuthConfig {
-    fn default() -> Self {
-        Self {
-            require_api_key: false,
-            api_keys: Vec::new(),
-            enable_jwt: false,
-            jwt_secret: None,
-        }
-    }
 }

@@ -306,7 +306,7 @@ impl ImmutableStorage {
         let commit_block = Block {
             hash: commit.hash,
             block_type: BlockType::Commit,
-            data: bincode::serialize(&commit)?,
+            data: bincode::serde::encode_to_vec(&commit, bincode::config::standard())?,
             references: vec![tree_root],
         };
         self.store_block(&mut blocks_guard, commit_block).await?;
@@ -328,7 +328,9 @@ impl ImmutableStorage {
 
         // Load commit block
         let commit_block = self.load_block(&blocks, &commit_hash).await?;
-        let commit: Commit = bincode::deserialize(&commit_block.data)?;
+        let commit: Commit =
+            bincode::serde::decode_from_slice(&commit_block.data, bincode::config::standard())
+                .map(|(v, _)| v)?;
 
         // Traverse tree to find triple blocks
         let triple_blocks = self.find_triple_blocks(&commit.tree).await?;
@@ -337,7 +339,9 @@ impl ImmutableStorage {
         let mut all_triples = Vec::new();
         for block_hash in triple_blocks {
             let block = self.load_block(&blocks, &block_hash).await?;
-            let triples: Vec<Triple> = bincode::deserialize(&block.data)?;
+            let triples: Vec<Triple> =
+                bincode::serde::decode_from_slice(&block.data, bincode::config::standard())
+                    .map(|(v, _)| v)?;
             all_triples.extend(triples);
         }
 
@@ -467,7 +471,7 @@ impl ImmutableStorage {
 
     /// Create a triple block
     fn create_triple_block(&self, triples: &[Triple]) -> Result<Block, OxirsError> {
-        let data = bincode::serialize(triples)?;
+        let data = bincode::serde::encode_to_vec(triples, bincode::config::standard())?;
         let hash = self.compute_hash(&data);
 
         Ok(Block {
@@ -635,14 +639,16 @@ impl ImmutableStorage {
 
     /// Compress block data
     fn compress_block(&self, block: &Block) -> Result<Vec<u8>, OxirsError> {
-        let serialized = bincode::serialize(block)?;
+        let serialized = bincode::serde::encode_to_vec(block, bincode::config::standard())?;
         zstd::encode_all(&serialized[..], 3).map_err(Into::into)
     }
 
     /// Decompress block data
     fn decompress_block(&self, data: &[u8]) -> Result<Block, OxirsError> {
         let decompressed = zstd::decode_all(data)?;
-        bincode::deserialize(&decompressed).map_err(Into::into)
+        bincode::serde::decode_from_slice(&decompressed, bincode::config::standard())
+            .map(|(v, _)| v)
+            .map_err(Into::into)
     }
 }
 

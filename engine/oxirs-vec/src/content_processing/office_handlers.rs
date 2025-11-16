@@ -167,7 +167,7 @@ impl FormatHandler for DocxHandler {
         }
 
         // Check for ZIP signature
-        if &data[0..4] != &[0x50, 0x4B, 0x03, 0x04] && &data[0..4] != &[0x50, 0x4B, 0x05, 0x06] {
+        if data[0..4] != [0x50, 0x4B, 0x03, 0x04] && data[0..4] != [0x50, 0x4B, 0x05, 0x06] {
             return false;
         }
 
@@ -197,7 +197,7 @@ impl DocxHandler {
             if trimmed.len() > 3 && trimmed.len() < 100 {
                 // Check if line looks like a heading
                 let words: Vec<&str> = trimmed.split_whitespace().collect();
-                if words.len() <= 8 && words.len() > 0 {
+                if words.len() <= 8 && !words.is_empty() {
                     let first_char = trimmed.chars().next().unwrap_or(' ');
                     if first_char.is_uppercase() {
                         headings.push(Heading {
@@ -294,7 +294,7 @@ impl FormatHandler for PptxHandler {
         }
 
         // Check for ZIP signature
-        if &data[0..4] != &[0x50, 0x4B, 0x03, 0x04] && &data[0..4] != &[0x50, 0x4B, 0x05, 0x06] {
+        if data[0..4] != [0x50, 0x4B, 0x03, 0x04] && data[0..4] != [0x50, 0x4B, 0x05, 0x06] {
             return false;
         }
 
@@ -368,7 +368,7 @@ impl FormatHandler for XlsxHandler {
         }
 
         // Check for ZIP signature
-        if &data[0..4] != &[0x50, 0x4B, 0x03, 0x04] && &data[0..4] != &[0x50, 0x4B, 0x05, 0x06] {
+        if data[0..4] != [0x50, 0x4B, 0x03, 0x04] && data[0..4] != [0x50, 0x4B, 0x05, 0x06] {
             return false;
         }
 
@@ -498,21 +498,19 @@ impl XlsxHandler {
                         b"c" => {
                             // Cell
                             // Parse cell reference and type
-                            for attr in e.attributes() {
-                                if let Ok(attr) = attr {
-                                    match attr.key.as_ref() {
-                                        b"r" => {
-                                            // Parse cell reference like "A1", "B2", etc.
-                                            let cell_ref = String::from_utf8_lossy(&attr.value);
-                                            (col_index, row_index) =
-                                                self.parse_cell_reference(&cell_ref);
-                                        }
-                                        b"t" => {
-                                            cell_type_owned =
-                                                String::from_utf8_lossy(&attr.value).to_string();
-                                        }
-                                        _ => {}
+                            for attr in e.attributes().flatten() {
+                                match attr.key.as_ref() {
+                                    b"r" => {
+                                        // Parse cell reference like "A1", "B2", etc.
+                                        let cell_ref = String::from_utf8_lossy(&attr.value);
+                                        (col_index, row_index) =
+                                            self.parse_cell_reference(&cell_ref);
                                     }
+                                    b"t" => {
+                                        cell_type_owned =
+                                            String::from_utf8_lossy(&attr.value).to_string();
+                                    }
+                                    _ => {}
                                 }
                             }
                         }

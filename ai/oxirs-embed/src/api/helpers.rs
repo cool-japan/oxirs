@@ -4,6 +4,7 @@
 
 use super::ApiState;
 use anyhow::{anyhow, Result};
+use std::sync::Arc;
 use uuid::Uuid;
 
 /// Get the production model version
@@ -102,6 +103,8 @@ pub fn calculate_cache_hit_rate(hits: usize, total: usize) -> f64 {
 
 /// Get the production model (not just the version)
 /// This is a stub that needs to be properly implemented based on the registry type
-pub async fn get_production_model<T>(registry: &T) -> Result<Box<dyn crate::EmbeddingModel>> {
+pub async fn get_production_model<T>(
+    _registry: &T,
+) -> Result<Arc<dyn crate::EmbeddingModel + Send + Sync>> {
     Err(anyhow!("get_production_model not yet implemented"))
 }

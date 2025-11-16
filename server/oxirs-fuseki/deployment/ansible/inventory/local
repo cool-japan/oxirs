@@ -1,0 +1,22 @@
+# OxiRS Fuseki Local Development Inventory
+
+[fuseki_servers]
+localhost ansible_connection=local environment=development
+
+[fuseki_servers:vars]
+oxirs_version=0.1.0-beta.2
+oxirs_http_port=3030
+oxirs_https_port=3031
+enable_tls=false
+enable_auth=false
+enable_metrics=true
+enable_clustering=false
+max_memory=2048m
+max_threads=2
+
+[local:children]
+fuseki_servers
+
+[local:vars]
+ansible_python_interpreter=/usr/bin/python3
+environment=development

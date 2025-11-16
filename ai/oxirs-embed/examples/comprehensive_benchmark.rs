@@ -28,10 +28,20 @@ use oxirs_embed::{
 };
 
 #[cfg(feature = "api-server")]
-use oxirs_embed::api::{start_server, ApiConfig, ApiState};
+use oxirs_embed::{
+    api::{ApiConfig, ApiState},
+    model_registry::ModelRegistry,
+};
 use std::collections::HashMap;
 use std::time::Instant;
 use tracing::info;
+
+#[cfg(feature = "api-server")]
+use std::sync::Arc;
+#[cfg(feature = "api-server")]
+use tempfile::tempdir;
+#[cfg(feature = "api-server")]
+use tokio::sync::RwLock;
 
 /// Comprehensive benchmark results
 #[derive(Debug, serde::Serialize)]
@@ -386,7 +396,7 @@ fn estimate_memory_usage<M: oxirs_embed::EmbeddingModel>(model: &M) -> f64 {
 
 /// Benchmark API server performance
 #[cfg(feature = "api-server")]
-async fn benchmark_api_server(state: ApiState) -> Result<ApiPerformance> {
+async fn benchmark_api_server(_state: ApiState) -> Result<ApiPerformance> {
     info!("Benchmarking API server performance...");
 
     // This would typically involve load testing with tools like wrk or custom HTTP clients

@@ -239,6 +239,8 @@ impl BallTree {
         let mut max_spread = 0.0;
         let mut split_dim = 0;
 
+        // We need the dimension index `d` to access the d-th component of each point
+        #[allow(clippy::needless_range_loop)]
         for d in 0..dim {
             let values: Vec<f32> = indices.iter().map(|&idx| points[idx][d]).collect();
 

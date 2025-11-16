@@ -1,10 +1,10 @@
 //! # OxiRS GraphQL - GraphQL Interface for RDF
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-gql/badge.svg)](https://docs.rs/oxirs-gql)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! GraphQL interface for RDF data with automatic schema generation from ontologies.
 //! Enables modern GraphQL clients to query knowledge graphs with intuitive GraphQL syntax.
@@ -285,22 +285,41 @@ impl MockStore {
 }
 
 // Individual modules
+pub mod aggregation;
+pub mod api_explorer;
 pub mod ast;
+pub mod custom_directives;
+pub mod custom_type_mappings;
+pub mod enhanced_errors;
 pub mod execution;
 pub mod federation;
+pub mod file_upload;
+pub mod graphiql_integration;
+pub mod horizontal_scaling;
 pub mod hybrid_optimizer;
 pub mod intelligent_federation_gateway;
 pub mod intelligent_query_cache;
 pub mod introspection;
+pub mod live_queries;
 pub mod mapping;
 pub mod ml_optimizer;
 pub mod optimizer;
+pub mod owl_enhanced_schema;
+pub mod pagination_filtering;
 pub mod parser;
+pub mod persisted_queries;
+pub mod playground_integration;
 pub mod quantum_optimizer;
+pub mod query_builder;
+pub mod query_debugger;
+pub mod rate_limiting;
 pub mod rdf_scalars;
 pub mod resolvers;
 pub mod schema;
+pub mod schema_cache;
+pub mod schema_docs_generator;
 pub mod server;
+pub mod sse_subscriptions;
 pub mod subscriptions;
 pub mod types;
 pub mod validation;
@@ -324,6 +343,9 @@ pub mod advanced_query_planner;
 pub mod advanced_subscriptions;
 pub mod ai_orchestration_engine;
 pub mod observability;
+
+// Production-ready features (November 2025)
+pub mod production;
 
 // Organized module groups
 pub mod core;

@@ -32,12 +32,22 @@ num_cpus = "1.17"
 chrono = { version = "0.4", features = ["serde"] }
 lru = "0.16"
 rayon.workspace = true  # For parallel operations
-bincode = "2.0.1"  # For efficient serialization
+bincode = "2.0"  # For efficient serialization
 
 # Compression dependencies
 flate2.workspace = true
 zstd.workspace = true
 lz4_flex.workspace = true
+
+# Async runtime for production features
+tokio = { version = "1.47", features = ["sync"] }
+
+# Cryptographic dependencies for provenance signatures
+ed25519-dalek = { version = "2.1", features = ["serde"] }
+sha2 = "0.10"
+hex = "0.4"
+base64 = "0.22"
+# Note: rand not needed directly - use scirs2_core::random (SCIRS2 POLICY)
 
 [dev-dependencies]
 criterion.workspace = true
@@ -50,6 +60,10 @@ harness = false
 
 [[bench]]
 name = "enhanced_benchmarks"
+harness = false
+
+[[bench]]
+name = "adaptive_benchmarks"
 harness = false
 
 [features]

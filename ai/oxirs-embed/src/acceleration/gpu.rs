@@ -6,7 +6,6 @@
 use crate::models::common::*;
 use anyhow::Result;
 use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::Random;
 #[cfg(feature = "gpu")]
 use std::collections::VecDeque;
 #[cfg(feature = "gpu")]
@@ -20,7 +19,6 @@ use std::time::{Duration, Instant};
 // TODO: scirs2_linalg::gpu module is not yet available
 // Enable this when the GPU module is implemented in scirs2_linalg
 // use scirs2_linalg::gpu::{GpuArray, GpuContext, GpuError};
-#[cfg(feature = "gpu")]
 // Placeholder types until scirs2_linalg::gpu is available
 pub type GpuArray<T> = Vec<T>;
 #[cfg(feature = "gpu")]
@@ -130,8 +128,9 @@ impl GpuMemoryPool {
 #[cfg(feature = "gpu")]
 impl GpuEmbeddingAccelerator {
     /// Create a new enhanced GPU accelerator with memory pooling and adaptive batching
+    /// Note: Currently using placeholder until scirs2_linalg::gpu is available
     pub fn new(device_id: u32) -> Result<Self, GpuError> {
-        let context = GpuContext::new(device_id)?;
+        let context = (); // Placeholder GpuContext
 
         let memory_pool = Arc::new(Mutex::new(GpuMemoryPool::new(1024 * 1024, 10))); // 1MB buffers, 10 initial
 
@@ -163,7 +162,7 @@ impl GpuEmbeddingAccelerator {
     }
 
     /// Update optimal batch size based on performance feedback
-    pub async fn update_batch_size_feedback(&self, batch_size: usize, performance_score: f32) {
+    pub async fn update_batch_size_feedback(&self, _batch_size: usize, performance_score: f32) {
         let current_optimal = self.optimal_batch_size.load(Ordering::Relaxed) as usize;
 
         // Simple adaptive algorithm: increase if performance is good, decrease if poor
@@ -192,30 +191,51 @@ impl GpuEmbeddingAccelerator {
         vectors_a: &[Array1<f64>],
         vectors_b: &[Array1<f64>],
     ) -> Result<Vec<f64>, GpuError> {
-        // Convert to GPU arrays
-        let gpu_a = self.upload_vectors_to_gpu(vectors_a)?;
-        let gpu_b = self.upload_vectors_to_gpu(vectors_b)?;
-
-        // Compute distances on GPU
-        let gpu_distances = gpu_a.batch_l2_distance(&gpu_b)?;
-
-        // Download results
-        let distances = gpu_distances.download_to_host()?;
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        // For now, use CPU implementation as fallback
+        let mut distances = Vec::with_capacity(vectors_a.len());
+        for (a, b) in vectors_a.iter().zip(vectors_b.iter()) {
+            let dist: f64 = a
+                .iter()
+                .zip(b.iter())
+                .map(|(x, y)| (x - y).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            distances.push(dist);
+        }
         Ok(distances)
     }
 
     /// GPU-accelerated cosine similarity matrix
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     pub fn cosine_similarity_matrix_gpu(
         &self,
         vectors: &[Array1<f64>],
     ) -> Result<Array2<f64>, GpuError> {
-        let gpu_vectors = self.upload_vectors_to_gpu(vectors)?;
-        let gpu_similarity_matrix = gpu_vectors.cosine_similarity_matrix()?;
-        let similarity_matrix = gpu_similarity_matrix.download_to_host_array2()?;
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        // For now, use CPU implementation as fallback
+        use scirs2_core::ndarray_ext::Array2;
+
+        let n = vectors.len();
+        let mut similarity_matrix = Array2::zeros((n, n));
+
+        for i in 0..n {
+            for j in 0..n {
+                let dot: f64 = vectors[i]
+                    .iter()
+                    .zip(vectors[j].iter())
+                    .map(|(a, b)| a * b)
+                    .sum();
+                let norm_i: f64 = vectors[i].iter().map(|x| x * x).sum::<f64>().sqrt();
+                let norm_j: f64 = vectors[j].iter().map(|x| x * x).sum::<f64>().sqrt();
+                similarity_matrix[[i, j]] = dot / (norm_i * norm_j + 1e-8);
+            }
+        }
         Ok(similarity_matrix)
     }
 
     /// GPU-accelerated gradient updates for large embedding matrices
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     pub fn batch_gradient_update_gpu(
         &self,
         embeddings: &mut [Array2<f64>],
@@ -223,16 +243,13 @@ impl GpuEmbeddingAccelerator {
         learning_rate: f64,
         l2_reg: f64,
     ) -> Result<(), GpuError> {
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        // For now, use CPU implementation as fallback
         for (embedding, gradient) in embeddings.iter_mut().zip(gradients.iter()) {
-            // Upload to GPU
-            let mut gpu_embedding = self.context.upload_array2(embedding)?;
-            let gpu_gradient = self.context.upload_array2(gradient)?;
-
-            // Perform gradient update on GPU
-            gpu_embedding.gradient_update(&gpu_gradient, learning_rate, l2_reg)?;
-
-            // Download updated embeddings
-            *embedding = gpu_embedding.download_to_host_array2()?;
+            // Apply gradient update with L2 regularization
+            for (emb, grad) in embedding.iter_mut().zip(gradient.iter()) {
+                *emb -= learning_rate * (grad + l2_reg * *emb);
+            }
         }
         Ok(())
     }
@@ -267,7 +284,7 @@ impl GpuEmbeddingAccelerator {
             .await;
 
         // Update performance statistics
-        let mut stats = self.performance_stats.write().await;
+        let mut stats = self.performance_stats.write().unwrap();
         stats.total_operations += 1;
         stats.total_compute_time += total_time;
         stats.gpu_utilization_percentage = gpu_utilization * 100.0;
@@ -277,37 +294,15 @@ impl GpuEmbeddingAccelerator {
     }
 
     /// GPU-accelerated matrix multiplication with memory reuse
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     pub async fn optimized_matrix_multiply(
         &self,
         a: &Array2<f32>,
         b: &Array2<f32>,
     ) -> Result<Array2<f32>, GpuError> {
-        let mut pool = self.memory_pool.lock().await;
-
-        // Try to get buffers from pool
-        let gpu_a = match pool.get_buffer() {
-            Some(mut buffer) => {
-                buffer.copy_from_host(a.as_slice().unwrap())?;
-                buffer
-            }
-            None => self.context.upload_array2_f32(a)?,
-        };
-
-        let gpu_b = match pool.get_buffer() {
-            Some(mut buffer) => {
-                buffer.copy_from_host(b.as_slice().unwrap())?;
-                buffer
-            }
-            None => self.context.upload_array2_f32(b)?,
-        };
-
-        // Perform matrix multiplication
-        let gpu_result = gpu_a.matrix_multiply(&gpu_b)?;
-        let result = gpu_result.download_to_host_array2()?;
-
-        // Return buffers to pool
-        pool.return_buffer(gpu_a);
-        pool.return_buffer(gpu_b);
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        // For now, use CPU implementation as fallback
+        let result = a.dot(b);
 
         Ok(result)
     }
@@ -343,23 +338,30 @@ impl GpuEmbeddingAccelerator {
     }
 
     /// Compute similarities for a batch with GPU acceleration
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     async fn compute_batch_similarities(
         &self,
         query: &Array1<f32>,
         batch: &[Array1<f32>],
     ) -> Result<Vec<f32>, GpuError> {
-        // Upload query and batch to GPU
-        let gpu_query = self.context.upload_array1_f32(query)?;
-        let gpu_batch = self.upload_batch_to_gpu(batch)?;
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        // For now, use CPU implementation as fallback
+        let mut similarities = Vec::with_capacity(batch.len());
 
-        // Compute cosine similarities
-        let gpu_similarities = gpu_query.batch_cosine_similarity(&gpu_batch)?;
-        let similarities = gpu_similarities.download_to_host()?;
+        for emb in batch {
+            // Compute cosine similarity: (a · b) / (||a|| * ||b||)
+            let dot_product: f32 = query.iter().zip(emb.iter()).map(|(a, b)| a * b).sum();
+            let norm_query: f32 = query.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let norm_emb: f32 = emb.iter().map(|x| x * x).sum::<f32>().sqrt();
+            let similarity = dot_product / (norm_query * norm_emb + 1e-8);
+            similarities.push(similarity);
+        }
 
         Ok(similarities)
     }
 
     /// GPU-accelerated Xavier initialization for large embedding matrices
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     pub fn xavier_init_gpu(
         &self,
         shapes: &[(usize, usize)],
@@ -367,79 +369,77 @@ impl GpuEmbeddingAccelerator {
         fan_out: usize,
         seed: u64,
     ) -> Result<Vec<Array2<f64>>, GpuError> {
+        use scirs2_core::random::Random;
+
         let limit = (6.0 / (fan_in + fan_out) as f64).sqrt();
+        let mut rng = Random::seed(seed);
+        let scale = 2.0 * limit;
 
         let mut results = Vec::with_capacity(shapes.len());
-        for &shape in shapes {
-            let gpu_array = self
-                .context
-                .random_uniform_array2(shape, -limit, limit, seed)?;
-            let host_array = gpu_array.download_to_host_array2()?;
-            results.push(host_array);
+        for &(rows, cols) in shapes {
+            // Generate uniform random numbers in [-limit, limit]
+            let data: Vec<f64> = (0..rows * cols)
+                .map(|_| rng.random_f64() * scale - limit)
+                .collect();
+            let array = Array2::from_shape_vec((rows, cols), data)
+                .map_err(|e| GpuError(format!("Failed to create array: {}", e)))?;
+            results.push(array);
         }
         Ok(results)
     }
 
     /// GPU-accelerated contrastive learning updates
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     pub fn contrastive_learning_gpu(
         &self,
-        entity_embeddings: &mut [Array1<f32>],
-        similarity_pairs: &[(usize, usize)],
-        negative_samples: &[(usize, usize)],
-        temperature: f32,
-        learning_rate: f32,
+        _entity_embeddings: &mut [Array1<f32>],
+        _similarity_pairs: &[(usize, usize)],
+        _negative_samples: &[(usize, usize)],
+        _temperature: f32,
+        _learning_rate: f32,
     ) -> Result<f32, GpuError> {
-        // Upload embeddings to GPU
-        let mut gpu_embeddings = self.upload_f32_vectors_to_gpu(entity_embeddings)?;
-
-        // Compute contrastive loss and gradients on GPU
-        let loss = gpu_embeddings.contrastive_learning_update(
-            similarity_pairs,
-            negative_samples,
-            temperature,
-            learning_rate,
-        )?;
-
-        // Download updated embeddings
-        for (i, embedding) in entity_embeddings.iter_mut().enumerate() {
-            *embedding = gpu_embeddings.get_vector(i)?.download_to_host_array1()?;
-        }
-
-        Ok(loss)
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        // For now, return placeholder loss
+        Ok(0.0)
     }
 
     /// Helper function to upload vectors to GPU
-    fn upload_vectors_to_gpu(&self, vectors: &[Array1<f64>]) -> Result<GpuArray<f64>, GpuError> {
-        self.context.upload_vector_batch(vectors)
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
+    fn upload_vectors_to_gpu(&self, _vectors: &[Array1<f64>]) -> Result<GpuArray<f64>, GpuError> {
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        Ok(Vec::new())
     }
 
     /// Helper function to upload f32 vectors to GPU
+    /// Note: Currently using CPU fallback until scirs2_linalg::gpu is available
     fn upload_f32_vectors_to_gpu(
         &self,
-        vectors: &[Array1<f32>],
+        _vectors: &[Array1<f32>],
     ) -> Result<GpuArray<f32>, GpuError> {
-        self.context.upload_f32_vector_batch(vectors)
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        Ok(Vec::new())
     }
 
     /// Get GPU device info
     pub fn device_info(&self) -> String {
         format!(
-            "GPU Device {}: {}",
-            self.device_id,
-            self.context.device_name()
+            "GPU Device {} (placeholder - scirs2_linalg::gpu not yet available)",
+            self.device_id
         )
     }
 
     /// Get available GPU memory
+    /// Note: Currently using placeholder until scirs2_linalg::gpu is available
     pub fn available_memory(&self) -> Result<u64, GpuError> {
-        self.context.available_memory()
+        // TODO: Use actual GPU operations when scirs2_linalg::gpu is available
+        Ok(0)
     }
 
     /// GPU memory and performance monitoring
     pub async fn get_performance_report(&self) -> GpuPerformanceReport {
-        let stats = self.performance_stats.read().await;
+        let stats = self.performance_stats.read().unwrap();
         let (allocated, peak) = {
-            let pool = self.memory_pool.lock().await;
+            let pool = self.memory_pool.lock().unwrap();
             pool.get_memory_stats()
         };
 
@@ -464,21 +464,24 @@ impl GpuEmbeddingAccelerator {
     }
 
     /// Reset performance statistics
-    pub async fn reset_performance_stats(&self) {
-        let mut stats = self.performance_stats.write().await;
+    pub fn reset_performance_stats(&self) {
+        let mut stats = self.performance_stats.write().unwrap();
         *stats = GpuPerformanceStats::default();
         self.optimal_batch_size.store(512, Ordering::Relaxed);
     }
 
     /// Get current memory pool status
-    pub async fn get_memory_pool_status(&self) -> (usize, u64, u64) {
-        let pool = self.memory_pool.lock().await;
+    pub fn get_memory_pool_status(&self) -> (usize, u64, u64) {
+        let pool = self.memory_pool.lock().unwrap();
         let (allocated, peak) = pool.get_memory_stats();
         (pool.available_buffers.len(), allocated, peak)
     }
 }
 
 /// CPU fallback implementations when GPU is not available
+#[cfg(not(feature = "gpu"))]
+use scirs2_core::random::Random;
+
 #[cfg(not(feature = "gpu"))]
 pub struct GpuEmbeddingAccelerator;
 

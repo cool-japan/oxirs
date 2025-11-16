@@ -220,29 +220,26 @@ impl KafkaBackend {
         client_config
             .set("bootstrap.servers", self.kafka_config.brokers.join(","))
             .set("client.id", &self.kafka_config.client_id)
-            .set("acks", &self.kafka_config.acks.to_string())
-            .set("retries", &self.kafka_config.retries.to_string())
-            .set("batch.size", &self.kafka_config.batch_size.to_string())
-            .set("linger.ms", &self.kafka_config.linger_ms.to_string())
-            .set(
-                "buffer.memory",
-                &self.kafka_config.buffer_memory.to_string(),
-            )
+            .set("acks", self.kafka_config.acks.to_string())
+            .set("retries", self.kafka_config.retries.to_string())
+            .set("batch.size", self.kafka_config.batch_size.to_string())
+            .set("linger.ms", self.kafka_config.linger_ms.to_string())
+            .set("buffer.memory", self.kafka_config.buffer_memory.to_string())
             .set(
                 "compression.type",
-                &self.kafka_config.compression_type.to_string(),
+                self.kafka_config.compression_type.to_string(),
             )
             .set(
                 "max.in.flight.requests.per.connection",
-                &self.kafka_config.max_in_flight_requests.to_string(),
+                self.kafka_config.max_in_flight_requests.to_string(),
             )
             .set(
                 "request.timeout.ms",
-                &self.kafka_config.request_timeout_ms.to_string(),
+                self.kafka_config.request_timeout_ms.to_string(),
             )
             .set(
                 "delivery.timeout.ms",
-                &self.kafka_config.delivery_timeout_ms.to_string(),
+                self.kafka_config.delivery_timeout_ms.to_string(),
             );
 
         // Enable idempotence for exactly-once semantics
@@ -259,12 +256,12 @@ impl KafkaBackend {
         if let Some(ref security_config) = self.kafka_config.security_config {
             client_config.set(
                 "security.protocol",
-                &security_config.security_protocol.to_string(),
+                security_config.security_protocol.to_string(),
             );
 
             if let Some(ref sasl_config) = security_config.sasl_config {
                 client_config
-                    .set("sasl.mechanism", &sasl_config.mechanism.to_string())
+                    .set("sasl.mechanism", sasl_config.mechanism.to_string())
                     .set("sasl.username", &sasl_config.username)
                     .set("sasl.password", &sasl_config.password);
             }
@@ -804,16 +801,16 @@ impl StreamBackendTrait for KafkaBackend {
             // Initialize Kafka producer
             let mut kafka_config = ClientConfig::new();
             kafka_config
-                .set("bootstrap.servers", &self.kafka_config.brokers.join(","))
+                .set("bootstrap.servers", self.kafka_config.brokers.join(","))
                 .set(
                     "message.timeout.ms",
-                    &self.kafka_config.request_timeout_ms.to_string(),
+                    self.kafka_config.request_timeout_ms.to_string(),
                 )
                 .set(
                     "compression.type",
-                    &self.kafka_config.compression_type.to_string(),
+                    self.kafka_config.compression_type.to_string(),
                 )
-                .set("acks", &self.kafka_config.acks.to_string())
+                .set("acks", self.kafka_config.acks.to_string())
                 .set("client.id", &self.kafka_config.client_id);
 
             let producer: FutureProducer = kafka_config.create().map_err(|e| {
@@ -1051,12 +1048,12 @@ impl StreamBackendTrait for KafkaBackend {
             if let Some(ref security_config) = self.kafka_config.security_config {
                 consumer_config.set(
                     "security.protocol",
-                    &security_config.security_protocol.to_string(),
+                    security_config.security_protocol.to_string(),
                 );
 
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
-                        .set("sasl.mechanism", &sasl_config.mechanism.to_string())
+                        .set("sasl.mechanism", sasl_config.mechanism.to_string())
                         .set("sasl.username", &sasl_config.username)
                         .set("sasl.password", &sasl_config.password);
                 }
@@ -1175,12 +1172,12 @@ impl StreamBackendTrait for KafkaBackend {
             if let Some(ref security_config) = self.kafka_config.security_config {
                 consumer_config.set(
                     "security.protocol",
-                    &security_config.security_protocol.to_string(),
+                    security_config.security_protocol.to_string(),
                 );
 
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
-                        .set("sasl.mechanism", &sasl_config.mechanism.to_string())
+                        .set("sasl.mechanism", sasl_config.mechanism.to_string())
                         .set("sasl.username", &sasl_config.username)
                         .set("sasl.password", &sasl_config.password);
                 }
@@ -1261,12 +1258,12 @@ impl StreamBackendTrait for KafkaBackend {
             if let Some(ref security_config) = self.kafka_config.security_config {
                 consumer_config.set(
                     "security.protocol",
-                    &security_config.security_protocol.to_string(),
+                    security_config.security_protocol.to_string(),
                 );
 
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
-                        .set("sasl.mechanism", &sasl_config.mechanism.to_string())
+                        .set("sasl.mechanism", sasl_config.mechanism.to_string())
                         .set("sasl.username", &sasl_config.username)
                         .set("sasl.password", &sasl_config.password);
                 }
@@ -1344,12 +1341,12 @@ impl StreamBackendTrait for KafkaBackend {
             if let Some(ref security_config) = self.kafka_config.security_config {
                 consumer_config.set(
                     "security.protocol",
-                    &security_config.security_protocol.to_string(),
+                    security_config.security_protocol.to_string(),
                 );
 
                 if let Some(ref sasl_config) = security_config.sasl_config {
                     consumer_config
-                        .set("sasl.mechanism", &sasl_config.mechanism.to_string())
+                        .set("sasl.mechanism", sasl_config.mechanism.to_string())
                         .set("sasl.username", &sasl_config.username)
                         .set("sasl.password", &sasl_config.password);
                 }
@@ -1426,11 +1423,7 @@ impl StreamBackendTrait for KafkaBackend {
                                 _ => 0,
                             };
 
-                            let lag = if high_water_offset > committed_offset {
-                                high_water_offset - committed_offset
-                            } else {
-                                0
-                            };
+                            let lag = high_water_offset.saturating_sub(committed_offset);
 
                             lag_map.insert(partition_id, lag);
                             debug!(
@@ -1489,14 +1482,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_kafka_backend_creation() {
-        let mut config = StreamConfig::default();
-        config.backend = crate::StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
+        let config = StreamConfig {
+            backend: crate::StreamBackendType::Kafka {
+                brokers: vec!["localhost:9092".to_string()],
+                security_protocol: None,
+                sasl_config: None,
+            },
+            topic: "test_topic".to_string(),
+            batch_size: 100,
+            ..Default::default()
         };
-        config.topic = "test_topic".to_string();
-        config.batch_size = 100;
 
         let backend = KafkaBackend::new(config);
         assert!(backend.is_ok());
@@ -1534,14 +1529,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_stats_update() {
-        let mut config = StreamConfig::default();
-        config.backend = crate::StreamBackendType::Kafka {
-            brokers: vec!["localhost:9092".to_string()],
-            security_protocol: None,
-            sasl_config: None,
+        let config = StreamConfig {
+            backend: crate::StreamBackendType::Kafka {
+                brokers: vec!["localhost:9092".to_string()],
+                security_protocol: None,
+                sasl_config: None,
+            },
+            topic: "test_topic".to_string(),
+            batch_size: 100,
+            ..Default::default()
         };
-        config.topic = "test_topic".to_string();
-        config.batch_size = 100;
 
         let backend = KafkaBackend::new(config).unwrap();
 

@@ -3,6 +3,7 @@
 use super::CommandResult;
 use crate::cli::error::helpers as error_helpers;
 use crate::cli::logging::QueryLogger;
+use crate::cli::syntax_highlighting::{highlight_sparql, HighlightConfig};
 use crate::cli::validation::MultiValidator;
 use crate::cli::validation::{dataset_validation, query_validation};
 use crate::cli::{progress::helpers, ArgumentValidator, CliContext};
@@ -72,9 +73,27 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
     // Validate SPARQL syntax
     query_validation::validate_sparql_syntax(&sparql_query)?;
 
+    // Estimate query complexity and show warnings
+    let complexity = query_validation::estimate_query_complexity(&sparql_query);
+    if complexity >= 7 {
+        ctx.warn(&format!(
+            "Complex query detected (complexity: {}/10) - {}",
+            complexity,
+            query_validation::complexity_description(complexity)
+        ));
+    }
+
     if ctx.should_show_verbose() {
         ctx.info("Query:");
-        ctx.verbose(&sparql_query);
+        // Apply syntax highlighting to the query
+        let highlight_config = HighlightConfig::default();
+        let highlighted_query = highlight_sparql(&sparql_query, &highlight_config);
+        println!("{}", highlighted_query);
+        ctx.verbose(&format!(
+            "Query complexity: {}/10 - {}",
+            complexity,
+            query_validation::complexity_description(complexity)
+        ));
     }
 
     // Load dataset configuration or use dataset path directly
@@ -179,7 +198,10 @@ pub async fn run(dataset: String, query: String, file: bool, output: String) -> 
 
 /// Check if output format is supported
 fn is_supported_output_format(format: &str) -> bool {
-    matches!(format, "json" | "csv" | "tsv" | "table" | "xml")
+    matches!(
+        format,
+        "json" | "csv" | "tsv" | "table" | "xml" | "html" | "markdown" | "md"
+    )
 }
 
 /// Enhanced format results using CLI context with comprehensive formatters

@@ -1,5 +1,11 @@
 //! # OxiRS GeoSPARQL
 //!
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
+//! [![docs.rs](https://docs.rs/oxirs-geosparql/badge.svg)](https://docs.rs/oxirs-geosparql)
+//!
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
+//!
 //! GeoSPARQL implementation for spatial data and queries in RDF/SPARQL.
 //!
 //! This crate provides:
@@ -46,11 +52,14 @@
 #![warn(missing_docs)]
 #![warn(clippy::all)]
 
+pub mod analysis;
 pub mod error;
 pub mod functions;
 pub mod geometry;
 pub mod index;
 pub mod performance;
+pub mod sparql_integration;
+pub mod validation;
 pub mod vocabulary;
 
 // Re-export commonly used types

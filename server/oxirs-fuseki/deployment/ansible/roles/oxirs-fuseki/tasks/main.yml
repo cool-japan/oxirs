@@ -1,0 +1,171 @@
+---
+# OxiRS Fuseki installation and configuration tasks
+
+- name: Create OxiRS user
+  ansible.builtin.user:
+    name: "{{ oxirs_user }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ oxirs_install_dir }}"
+    createhome: true
+  tags: [install, user]
+
+- name: Create OxiRS directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ oxirs_user }}"
+    group: "{{ oxirs_group }}"
+    mode: '0755'
+  loop:
+    - "{{ oxirs_install_dir }}"
+    - "{{ oxirs_data_dir }}"
+    - "{{ oxirs_log_dir }}"
+    - "{{ oxirs_config_dir }}"
+    - "{{ oxirs_data_dir }}/datasets"
+    - "{{ oxirs_data_dir }}/backups"
+  tags: [install, directories]
+
+- name: Install Rust (required for building)
+  ansible.builtin.shell: |
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    source $HOME/.cargo/env
+    rustup default stable
+  args:
+    creates: /root/.cargo/bin/rustc
+  environment:
+    CARGO_HOME: /root/.cargo
+    RUSTUP_HOME: /root/.rustup
+  when: install_from_source | default(false)
+  tags: [install, rust]
+
+- name: Clone OxiRS repository
+  ansible.builtin.git:
+    repo: https://github.com/cool-japan/oxirs.git
+    dest: "{{ oxirs_install_dir }}/source"
+    version: "{{ oxirs_version }}"
+    force: true
+  when: install_from_source | default(false)
+  tags: [install, source]
+
+- name: Build OxiRS Fuseki from source
+  ansible.builtin.shell: |
+    source /root/.cargo/env
+    cd {{ oxirs_install_dir }}/source
+    cargo build --release -p oxirs-fuseki --features production
+  args:
+    creates: "{{ oxirs_install_dir }}/source/target/release/oxirs-fuseki"
+  environment:
+    CARGO_HOME: /root/.cargo
+    RUSTUP_HOME: /root/.rustup
+  when: install_from_source | default(false)
+  tags: [install, build]
+
+- name: Install OxiRS Fuseki binary
+  ansible.builtin.copy:
+    src: "{{ oxirs_install_dir }}/source/target/release/oxirs-fuseki"
+    dest: "{{ oxirs_install_dir }}/bin/oxirs-fuseki"
+    remote_src: true
+    owner: "{{ oxirs_user }}"
+    group: "{{ oxirs_group }}"
+    mode: '0755'
+  when: install_from_source | default(false)
+  notify: restart oxirs-fuseki
+  tags: [install, binary]
+
+- name: Download pre-built OxiRS Fuseki binary
+  ansible.builtin.get_url:
+    url: "https://github.com/cool-japan/oxirs/releases/download/{{ oxirs_version }}/oxirs-fuseki-{{ ansible_system | lower }}-{{ ansible_architecture }}"
+    dest: "{{ oxirs_install_dir }}/bin/oxirs-fuseki"
+    owner: "{{ oxirs_user }}"
+    group: "{{ oxirs_group }}"
+    mode: '0755'
+  when: not (install_from_source | default(false))
+  notify: restart oxirs-fuseki
+  tags: [install, binary]
+
+- name: Generate configuration file
+  ansible.builtin.template:
+    src: oxirs.toml.j2
+    dest: "{{ oxirs_config_dir }}/oxirs.toml"
+    owner: "{{ oxirs_user }}"
+    group: "{{ oxirs_group }}"
+    mode: '0644'
+  notify: restart oxirs-fuseki
+  tags: [config]
+
+- name: Generate TLS certificates (self-signed for dev/staging)
+  ansible.builtin.command: |
+    openssl req -x509 -newkey rsa:4096 -nodes \
+      -keyout {{ oxirs_config_dir }}/server.key \
+      -out {{ oxirs_config_dir }}/server.crt \
+      -days 365 \
+      -subj "/CN={{ ansible_hostname }}"
+  args:
+    creates: "{{ oxirs_config_dir }}/server.crt"
+  when: enable_tls and environment != 'production'
+  tags: [tls]
+
+- name: Set TLS certificate permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: "{{ oxirs_user }}"
+    group: "{{ oxirs_group }}"
+    mode: '0600'
+  loop:
+    - "{{ oxirs_config_dir }}/server.key"
+    - "{{ oxirs_config_dir }}/server.crt"
+  when: enable_tls
+  tags: [tls]
+
+- name: Install systemd service file
+  ansible.builtin.template:
+    src: oxirs-fuseki.service.j2
+    dest: /etc/systemd/system/oxirs-fuseki.service
+    mode: '0644'
+  notify:
+    - reload systemd
+    - restart oxirs-fuseki
+  tags: [service]
+
+- name: Enable and start OxiRS Fuseki service
+  ansible.builtin.systemd:
+    name: oxirs-fuseki
+    enabled: true
+    state: started
+    daemon_reload: true
+  tags: [service]
+
+- name: Wait for OxiRS Fuseki to be ready
+  ansible.builtin.uri:
+    url: "http://localhost:{{ oxirs_http_port }}/$/ping"
+    status_code: 200
+    timeout: 5
+  register: health_check
+  retries: 10
+  delay: 3
+  until: health_check is succeeded
+  tags: [verify]
+
+- name: Configure firewall (UFW)
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - "{{ oxirs_http_port }}"
+    - "{{ oxirs_https_port }}"
+  when: ansible_os_family == 'Debian' and configure_firewall | default(true)
+  tags: [firewall]
+
+- name: Configure firewall (firewalld)
+  ansible.posix.firewalld:
+    port: "{{ item }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: true
+  loop:
+    - "{{ oxirs_http_port }}"
+    - "{{ oxirs_https_port }}"
+  when: ansible_os_family == 'RedHat' and configure_firewall | default(true)
+  tags: [firewall]

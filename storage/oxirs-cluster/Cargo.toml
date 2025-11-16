@@ -32,12 +32,13 @@ async-trait.workspace = true
 reqwest = { version = "0.12", features = ["json"] }
 futures.workspace = true
 num_cpus.workspace = true
+rayon = "1.10"  # Parallel processing for SIMD-accelerated operations
 
 # Byzantine fault tolerance dependencies
 sha2 = "0.10"
 hex = "0.4"
 ed25519-dalek = "2.1"
-rand = "0.8"  # Required by ed25519-dalek for key generation
+rand = "0.9"  # Required by ed25519-dalek for key generation
 # Note: For other random functionality, use scirs2_core::random
 
 # MVCC dependencies
@@ -69,6 +70,23 @@ serde_cbor = "0.11"
 lmdb = "0.8"
 memmap2 = "0.9"
 
+# OpenTelemetry for distributed tracing
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+tracing-opentelemetry = "0.28"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Alerting and monitoring dependencies
+lettre = { version = "0.11", features = ["tokio1-native-tls"] }
+slack-hook2 = "0.10"
+
+# Web dashboard dependencies
+axum = { version = "0.7", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
+
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.23"
@@ -78,4 +96,9 @@ default = []
 raft = ["openraft"]
 bft = []
 test-support = []
+leak_detection = []
+
+[[bench]]
+name = "raft_profiling_benchmark"
+harness = false
 

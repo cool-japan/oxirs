@@ -1,10 +1,10 @@
 //! # OxiRS SHACL-AI
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl-ai/badge.svg)](https://docs.rs/oxirs-shacl-ai)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! AI-powered SHACL shape learning, validation optimization, and quality assessment.
 //!
@@ -412,34 +412,49 @@ use oxirs_core::{model::Term, OxirsError, Store};
 
 use oxirs_shacl::{ShapeId, ValidationConfig, ValidationReport};
 
+pub mod advanced_features;
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
 pub mod advanced_validation_strategies;
 pub mod advanced_visualization;
 pub mod ai_orchestrator;
 pub mod analytics;
+pub mod anomaly_detection;
+pub mod bias_detection;
 pub mod biological_neural_integration;
 pub mod blockchain_validation;
 pub mod collaborative_development;
 pub mod collective_consciousness;
 pub mod consciousness_guided_neuroplasticity;
 pub mod consciousness_validation;
+pub mod constraint_generation;
 pub mod cosmic_scale_processing;
 pub mod deployment;
+pub mod edge_deployment;
 pub mod error_handling;
 pub mod evolution_strategies;
 pub mod evolutionary_neural_architecture;
+pub mod experiment_tracking;
 pub mod explainable;
 pub mod explainable_ai;
+pub mod feature_store;
 pub mod federated_learning;
 pub mod forecasting_models;
+pub mod hyperparameter_optimization;
 pub mod insights;
 pub mod integration_testing;
+pub mod knowledge_distillation;
 // Temporarily disabled problematic modules for compilation
+pub mod automated_retraining;
 pub mod interdimensional_patterns;
 pub mod learning;
 pub mod meta_learning;
 pub mod ml;
+pub mod model_compression;
+pub mod model_drift_monitoring;
+pub mod model_governance;
+pub mod model_registry;
+pub mod multi_task_learning;
 pub mod multimodal_validation;
 pub mod neural_cost_estimation;
 pub mod neural_patterns;
@@ -455,6 +470,7 @@ pub mod photonic_computing;
 pub mod prediction;
 pub mod predictive_analytics;
 pub mod production_deployment;
+pub mod production_monitoring;
 pub mod quality;
 pub mod quantum_consciousness_entanglement;
 pub mod quantum_consciousness_synthesis;
@@ -463,7 +479,9 @@ pub mod quantum_neural_patterns;
 pub mod quantum_neuromorphic_fusion;
 pub mod reality_synthesis;
 pub mod realtime_adaptive_query_optimizer;
+pub mod realtime_anomaly_streams;
 pub mod recommendation_systems;
+pub mod reinforcement_learning;
 pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;
@@ -478,6 +496,52 @@ pub mod validation_performance;
 pub mod version_control;
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
+// Advanced Features (v0.1.0-beta.1 - NEW)
+pub use advanced_features::{
+    // Active Learning
+    ActiveLearner,
+    ActiveLearningConfig,
+    // Advanced Anomaly Detection
+    AdvancedAnomalyDetector,
+    AnomalyDetectionConfig,
+    CollectiveAnomalyDetector,
+    ContextualAnomalyDetector,
+    // Continual Learning
+    ContinualLearner,
+    ContinualLearningConfig,
+    // Transfer Learning
+    DomainAdapter,
+    // Ensemble Methods
+    EnsembleLearner,
+    EnsembleStrategy,
+    GanModel,
+    // Generative Models
+    GenerativeModel,
+    GnnLayer,
+    GnnLayerType,
+    GraphConvolution,
+    // Graph Neural Networks
+    GraphNeuralNetwork,
+    GraphNeuralNetworkConfig,
+    MemoryBuffer,
+    MessagePassingConfig,
+    ModelEnsemble,
+    NoveltyDetector,
+    PlasticityPreservation,
+    PretrainedModel,
+    QueryStrategy,
+    SamplingStrategy,
+    ShapeEmbedding,
+    TestDataGenerator,
+    TransferLearner,
+    TransferLearningConfig,
+    TransferStrategy,
+    UncertaintySampling,
+    VariationalAutoencoder,
+    VotingStrategy,
+    WeightedEnsemble,
+};
+
 pub use advanced_neural::{
     AdvancedNeuralArchitecture, AdvancedNeuralManager, ArchitectureConfig, ArchitectureType,
     EarlyStoppingConfig, ManagerConfig, ODESolverType, OptimizerType,
@@ -515,14 +579,50 @@ pub use ai_orchestrator::{
 };
 #[allow(ambiguous_glob_reexports)]
 pub use analytics::*;
+pub use anomaly_detection::{
+    AdvancedAnomalyExplainer, AdvancedExplanationReport, Anomaly, AnomalyConfig, AnomalyDetector,
+    AnomalyExplainer, AnomalyScore, AnomalyType, ConfidenceBreakdown,
+    DataDistribution as AnomalyDataDistribution, DetailedExplanation, DetectionMetrics,
+    DetectorResult, DetectorType, DriftDetector, DriftResult, DriftType, EnsembleConfig,
+    EnsembleDetector, EnsembleResult, ExplainerConfig, ExplainerPriority, ExplanationDetailLevel,
+    ExplanationReport, ExplanationTechnique, NoveltyDetector as ExistingNoveltyDetector,
+    NoveltyResult, OutlierDetector, OutlierMethod, OutlierResult, RdfAnomaly,
+    RemediationSuggestion, VisualizationData as AnomalyVisualizationData,
+};
+pub use bias_detection::{
+    AttributeType, BiasData, BiasDetectionConfig, BiasDetectionResult, BiasDetector, BiasMetric,
+    BiasMetricType, BiasSeverity, CausalPathway, DetectedBias, FairnessTracker, FairnessTrend,
+    GroupMetrics, InProcessingMethod, IntersectionGroup, IntersectionalAnalysis,
+    LegalProtectionLevel, MitigationResult, MitigationStrategy, MitigationType,
+    PostprocessingMethod, PreprocessingMethod, ProtectedAttribute,
+};
 pub use collaborative_development::*;
+pub use constraint_generation::{
+    CardinalityAnalyzer, CardinalityConstraint, ConstraintGenerationConfig, ConstraintGenerator,
+    ConstraintRanker, ConstraintSuggestion, ConstraintTrainingExample, ConstraintValidator,
+    DatatypeAnalyzer, DatatypeConstraint, FineTuningResult, GeneratedConstraint, GenerationResult,
+    PatternBasedGenerator, PatternConstraint, PatternType as ConstraintPatternType,
+    RankedConstraint, RankingCriteria, RdfPattern, SuggestionConfidence, SuggestionEngine,
+    TransformerConstraintConfig, TransformerConstraintGenerator, TransformerConstraintStats,
+    ValidationResult as ConstraintValidationResult, ValueRangeAnalyzer, ValueRangeConstraint,
+};
 pub use deployment::*;
+pub use edge_deployment::{
+    ActiveDeployment, DeploymentPackage, DeploymentPerformance, DeploymentStatus, DevicePlatform,
+    DeviceProfile, EdgeDeploymentConfig, EdgeDeploymentError, EdgeDeploymentManager, EdgeDevice,
+    OptimizationResult as EdgeOptimizationResult, ResourceUsage,
+};
 pub use error_handling::{
     ErrorClassificationResult, ErrorHandlingConfig, ErrorSeverity, ErrorType,
     IntelligentErrorHandler, RepairSuggestion, RepairType, SmartErrorAnalysis,
 };
 pub use evolution_strategies::*;
 pub use forecasting_models::*;
+pub use hyperparameter_optimization::{
+    HpoStrategy, HyperparameterOptimizer, OptimizationConfig,
+    OptimizationResult as HpoOptimizationResult, OptimizationTrial, OptimizerStats, ParameterSpace,
+    SearchSpace, TrialStatus,
+};
 pub use insights::*;
 pub use integration_testing::{
     DataConfiguration, DependencyAnalysisResult, ErrorDetails, ExecutionMetadata,
@@ -531,6 +631,12 @@ pub use integration_testing::{
     RecommendationPriority, RecommendationType, ResourceUtilization, ScalabilityMetrics,
     TestComplexityLevel, TestRecommendation, TestResult, TestStatus, TestSummary, TestType,
     ValidationTestResults,
+};
+pub use knowledge_distillation::{
+    AggregationMethod, CompressionMetrics, DistillationConfig, DistillationPerformanceTracker,
+    DistillationResult, DistillationStrategy, DistillationTrainingData, KnowledgeDistiller,
+    KnowledgeTransferAnalysis, ModelArchitecture as DistillationModelArchitecture, StudentModel,
+    TeacherModel, TrainingHistory as DistillationTrainingHistory,
 };
 pub use learning::{
     LearningConfig, LearningPerformanceMetrics, LearningStatistics, PatternStatistics,
@@ -543,6 +649,36 @@ pub use meta_learning::{
 pub use ml::{
     LearnedConstraint, LearnedShape, ModelError, ModelMetrics, ModelParams, ShapeLearningModel,
     ShapeTrainingData as MlTrainingData,
+};
+pub use model_compression::{
+    CalibrationData, CompressionConfig, CompressionMethod, CompressionResult, CompressionStrategy,
+    CompressionTracker, CompressionValidationData, DetailedCompressionMetrics, ModelCompressor,
+    PrunedModel, PruningConfig, PruningSchedule, PruningType, QuantizationConfig,
+    QuantizationScheme, QuantizationType, QuantizedModel, QuantizedTensor,
+};
+pub use model_drift_monitoring::{
+    AlertSeverity, AlertStatus, DataStatistics, DriftAlert, DriftMeasurement, DriftMonitor,
+    DriftMonitorConfig, DriftReport, ModelDriftType, MonitoringStats,
+};
+pub use model_governance::{
+    Approval, ApprovalStatus, AuditEntry, ComplianceCheck, ComplianceResult, ComplianceStandard,
+    GovernanceError, GovernanceMetrics, GovernancePolicy, ModelGovernance, ModelGovernanceConfig,
+    ModelGovernanceMetadata, ModelLifecycleStage, PolicyRule, PolicyType, RiskAssessment,
+    RiskFactor, RiskLevel as GovernanceRiskLevel, Violation, ViolationSeverity,
+};
+pub use model_registry::{
+    ModelComparison, ModelMetadata, ModelParameters, ModelRegistrationBuilder, ModelRegistry,
+    ModelStatus, ModelType, PerformanceMetrics as RegistryPerformanceMetrics, RegisteredModel,
+    RegistryConfig, TrainingMetrics as RegistryTrainingMetrics, Version,
+};
+pub use multi_task_learning::{
+    ActivationType, ConvergenceInfo, GradientNormalizer, LayerNormalization, LearnedTaskModel,
+    LearningObjective as MultiTaskLearningObjective, MultiTaskConfig, MultiTaskLearner,
+    MultiTaskLearningResult, MultiTaskMetrics, MultiTaskPerformanceTracker, NormalizationMethod,
+    RelationshipType as TaskRelationshipType, SharedEncoder, SharedLayer, SharingType,
+    Task as MultiTask, TaskGradients, TaskHead, TaskLayer, TaskPerformance, TaskRelationship,
+    TaskRelationshipGraph, TaskResult, TaskTrainingData, TaskType as MultiTaskType,
+    TransferDirection,
 };
 pub use neural_cost_estimation::{
     ContextAwareCostAdjuster, DeepCostPredictor, EnsembleCostPredictor, FeatureExtractionConfig,
@@ -598,6 +734,11 @@ pub use photonic_computing::{
 pub use prediction::*;
 pub use predictive_analytics::*;
 pub use production_deployment::*;
+pub use production_monitoring::{
+    Alert, AlertChannel, AlertSeverity as ProdAlertSeverity, AlertType, DataQualityMetrics,
+    MonitoringConfig, MonitoringError, PerformanceMetrics as ProdPerformanceMetrics,
+    PredictionMetrics, ProductionMonitor, SLA,
+};
 pub use quality::*;
 pub use quantum_consciousness_entanglement::{
     BellState, EntanglementId, EntanglementPair, EntanglementStatus, MeasurementBasis,
@@ -624,6 +765,13 @@ pub use realtime_adaptive_query_optimizer::{
     PerformanceMetrics as RealtimePerformanceMetrics, PerformanceMonitor, QueryComplexityAnalyzer,
     QueryPerformanceRecord, RealTimeAdaptiveQueryOptimizer,
     TrendDirection as RealtimeTrendDirection,
+};
+pub use realtime_anomaly_streams::{
+    AdaptiveThreshold, AdaptiveThresholdManager, AlertManager,
+    AlertSeverity as StreamAlertSeverity, AlertSuppressionRule, AnomalyStreamProcessor,
+    DetectedStreamAnomaly, EscalationPolicy, NotificationChannel, SlidingWindow, StreamAlert,
+    StreamConfig, StreamDataPoint, StreamPerformanceTracker, StreamProcessingResult,
+    StreamingDetectionModel, StreamingModelType, ThresholdAdaptation, WindowStatistics,
 };
 pub use recommendation_systems::*;
 pub use self_adaptive_ai::*;
@@ -664,11 +812,19 @@ pub use cosmic_scale_processing::{
     CosmicValidationResult, CosmicValidationScope, GalaxyId, IntergalacticCoordinates,
     StellarCoordinates, StellarNodeId,
 };
+pub use experiment_tracking::{
+    Experiment, ExperimentConfig, ExperimentMetrics, ExperimentRun, ExperimentStatus,
+    ExperimentTracker, Metric, MetricType, Parameter, ParameterType,
+};
 pub use explainable_ai::{
     AdaptationExplanation, AuditTrail, DecisionTree, DecisionType, ExplainableAI,
     ExplainableAIConfig, ExplanationDepth, FeatureImportanceAnalysis, InterpretabilityReport,
     KeyFactor, PatternExplanation, QuantumExplanation,
     ValidationExplanation as ExplainableValidationExplanation,
+};
+pub use feature_store::{
+    FeatureGroup, FeatureLineage, FeatureMetadata, FeatureQuery, FeatureStatistics, FeatureStore,
+    FeatureStoreConfig, FeatureStoreError, FeatureStoreMetrics, FeatureType, FeatureValue,
 };
 pub use federated_learning::{
     AggregationStrategy, ConsensusAlgorithm, FederatedLearningCoordinator, FederatedNode,

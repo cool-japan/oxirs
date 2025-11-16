@@ -1,0 +1,51 @@
+# OxiRS Fuseki - Kubernetes RBAC
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: oxirs-fuseki
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: service-account
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: oxirs-fuseki
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: rbac
+rules:
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: [""]
+  resources: ["services"]
+  verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: oxirs-fuseki
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: rbac
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: oxirs-fuseki
+subjects:
+- kind: ServiceAccount
+  name: oxirs-fuseki
+  namespace: oxirs

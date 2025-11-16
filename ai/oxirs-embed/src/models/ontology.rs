@@ -1043,7 +1043,7 @@ impl EmbeddingModel for OntologyAwareEmbedding {
             .ok_or_else(|| anyhow!("Entity not found: {}", entity))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         self.relation_embeddings
             .get(relation)
             .map(|arr| Vector::new(arr.to_vec()))

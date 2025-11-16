@@ -32,6 +32,31 @@ impl NTriplesParser {
         Self { lenient: true }
     }
 
+    /// Strip inline comments from a line (# after data, not inside quotes or IRIs)
+    fn strip_inline_comment<'a>(&self, line: &'a str) -> &'a str {
+        let mut in_string = false;
+        let mut in_iri = false;
+        let mut escaped = false;
+
+        for (i, ch) in line.char_indices() {
+            if escaped {
+                escaped = false;
+                continue;
+            }
+
+            match ch {
+                '\\' if in_string => escaped = true,
+                '"' => in_string = !in_string,
+                '<' if !in_string => in_iri = true,
+                '>' if !in_string => in_iri = false,
+                '#' if !in_string && !in_iri => return line[..i].trim_end(),
+                _ => {}
+            }
+        }
+
+        line
+    }
+
     /// Parse a single N-Triples line
     pub fn parse_line(&self, line: &str, line_number: usize) -> TurtleResult<Option<Triple>> {
         let line = line.trim();
@@ -40,6 +65,9 @@ impl NTriplesParser {
         if line.is_empty() || line.starts_with('#') {
             return Ok(None);
         }
+
+        // Strip inline comments (# after the statement, not inside quotes)
+        let line = self.strip_inline_comment(line);
 
         // Must end with a dot
         if !line.ends_with('.') {
@@ -179,34 +207,35 @@ impl NTriplesParser {
             }));
         }
 
-        // Find the end quote (handling escapes)
-        let mut end_quote = None;
+        // Find the end quote (handling escapes) - use byte indices for proper UTF-8 handling
+        let mut end_quote_byte_idx = None;
         let mut escaped = false;
-        let chars: Vec<char> = token.chars().collect();
+        let char_indices = token.char_indices().skip(1); // Skip opening quote
 
-        for (i, &char) in chars.iter().enumerate().skip(1) {
+        for (byte_idx, ch) in char_indices {
             if escaped {
                 escaped = false;
                 continue;
             }
 
-            if char == '\\' {
+            if ch == '\\' {
                 escaped = true;
-            } else if char == '"' {
-                end_quote = Some(i);
+            } else if ch == '"' {
+                end_quote_byte_idx = Some(byte_idx);
                 break;
             }
         }
 
-        let end_quote = end_quote.ok_or_else(|| {
+        let end_quote_byte_idx = end_quote_byte_idx.ok_or_else(|| {
             TurtleParseError::syntax(TurtleSyntaxError::Generic {
                 message: "Unterminated string literal".to_string(),
                 position: TextPosition::new(line_number, token.len(), 0),
             })
         })?;
 
-        let value = &token[1..end_quote];
-        let remainder = &token[end_quote + 1..];
+        // Use byte indices for slicing to properly handle UTF-8 multi-byte characters
+        let value = &token[1..end_quote_byte_idx];
+        let remainder = &token[end_quote_byte_idx + 1..];
 
         // Unescape the string value
         let unescaped_value = self.unescape_string(value)?;
@@ -230,7 +259,7 @@ impl NTriplesParser {
         } else {
             Err(TurtleParseError::syntax(TurtleSyntaxError::Generic {
                 message: format!("Invalid literal suffix: {remainder}"),
-                position: TextPosition::new(line_number, end_quote + 1, 0),
+                position: TextPosition::new(line_number, end_quote_byte_idx + 1, 0),
             }))
         }
     }

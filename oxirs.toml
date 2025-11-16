@@ -1,31 +1,28 @@
 # OxiRS Configuration Example
 
 [server]
-host = "localhost"
+host = "0.0.0.0"
 port = 3030
 admin_ui = true
 cors = true
 
-[datasets]
 [datasets.default]
 name = "default"
 location = "./data/default"
 read_only = false
-
-[datasets.default.text]
-enabled = false
-analyzer = "english"
+shacl_shapes = []
+services = []
 
 [datasets.example]
 name = "example"
 location = "./data/example"
 read_only = true
-shacl_shapes = ["./shapes/person.ttl", "./shapes/organization.ttl"]
+shacl_shapes = []
+services = []
 
 [security]
 auth_required = false
 
-[security.users]
 [security.users.admin]
 password_hash = "$2b$12$..."
 roles = ["admin", "write", "read"]
@@ -45,6 +42,7 @@ streaming = false
 [logging]
 level = "info"
 format = "json"
+output = "stdout"
 
 [performance]
 cache_size = 104857600  # 100MB

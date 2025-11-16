@@ -4,7 +4,6 @@
 
 use super::config::*;
 use super::message::NatsEventMessage;
-use crate::error::{StreamError, StreamResult};
 use crate::{StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use futures_util::StreamExt;

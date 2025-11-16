@@ -14,14 +14,15 @@ unsafe impl Sync for CudaStream {}
 
 impl CudaStream {
     pub fn new(device_id: i32) -> anyhow::Result<Self> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
+            let _ = device_id;
             // CUDA functionality temporarily disabled for compilation compatibility
             // TODO: Implement proper CUDA runtime integration
             Err(anyhow::anyhow!("CUDA support needs proper implementation"))
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             Ok(Self {
                 handle: std::ptr::null_mut(),
@@ -31,13 +32,13 @@ impl CudaStream {
     }
 
     pub fn synchronize(&self) -> anyhow::Result<()> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             // CUDA functionality temporarily disabled
             Err(anyhow::anyhow!("CUDA support needs proper implementation"))
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             Ok(())
         }
@@ -46,7 +47,7 @@ impl CudaStream {
 
 impl Drop for CudaStream {
     fn drop(&mut self) {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             // CUDA cleanup temporarily disabled
         }
@@ -67,13 +68,13 @@ unsafe impl Sync for CudaKernel {}
 impl CudaKernel {
     #[allow(unused_variables)]
     pub fn load(ptx_code: &str, function_name: &str) -> anyhow::Result<Self> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             // CUDA functionality temporarily disabled for compilation compatibility
             Err(anyhow::anyhow!("CUDA support needs proper implementation"))
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             Ok(Self {
                 function: std::ptr::null_mut(),
@@ -86,7 +87,7 @@ impl CudaKernel {
 
 impl Drop for CudaKernel {
     fn drop(&mut self) {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             // CUDA cleanup temporarily disabled
         }

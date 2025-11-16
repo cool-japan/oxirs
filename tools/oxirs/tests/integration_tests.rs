@@ -1,4 +1,4 @@
-use oxirs::{run, Cli, Commands, ConfigAction};
+use oxirs::{run, BenchmarkAction, Cli, Commands, ConfigAction};
 use tempfile::tempdir;
 
 #[tokio::test]
@@ -173,6 +173,7 @@ async fn test_export_command_basic() {
             file: output_path,
             format: "turtle".to_string(),
             graph: None,
+            resume: false,
         },
         verbose: false,
         config: None,
@@ -218,10 +219,14 @@ async fn test_query_command_basic() {
 async fn test_benchmark_command_basic() {
     let cli = Cli {
         command: Commands::Benchmark {
-            dataset: "nonexistent".to_string(),
-            suite: "sp2bench".to_string(),
-            iterations: 1,
-            output: None,
+            action: BenchmarkAction::Run {
+                dataset: "nonexistent".to_string(),
+                suite: "sp2bench".to_string(),
+                iterations: 1,
+                output: None,
+                detailed: false,
+                warmup: 0,
+            },
         },
         verbose: false,
         config: None,
@@ -244,10 +249,14 @@ async fn test_benchmark_command_basic() {
 async fn test_benchmark_invalid_suite() {
     let cli = Cli {
         command: Commands::Benchmark {
-            dataset: "test".to_string(),
-            suite: "invalid_suite".to_string(),
-            iterations: 1,
-            output: None,
+            action: BenchmarkAction::Run {
+                dataset: "test".to_string(),
+                suite: "invalid_suite".to_string(),
+                iterations: 1,
+                output: None,
+                detailed: false,
+                warmup: 0,
+            },
         },
         verbose: false,
         config: None,

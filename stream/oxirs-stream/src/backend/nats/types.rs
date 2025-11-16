@@ -202,7 +202,7 @@ impl From<StreamEvent> for NatsEventMessage {
             StreamEvent::Heartbeat {
                 timestamp,
                 source,
-                metadata,
+                metadata: _,
             } => (
                 "heartbeat".to_string(),
                 serde_json::json!({

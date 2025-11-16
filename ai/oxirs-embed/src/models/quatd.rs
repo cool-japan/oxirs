@@ -5,16 +5,12 @@
 //!
 //! Reference: Zhang et al. "Quaternion Knowledge Graph Embeddings" (2019)
 
-use crate::models::{common::*, BaseModel};
+use crate::models::BaseModel;
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use scirs2_autograd::rand::prelude::StdRng;
-use scirs2_autograd::rand::{seq::SliceRandom, Rng, SeedableRng};
-use scirs2_core::ndarray_ext::{Array1, Array2};
-use scirs2_core::random::Random;
-use serde::{Deserialize, Serialize};
-use std::ops::{AddAssign, SubAssign};
+use scirs2_core::ndarray_ext::Array2;
+use scirs2_core::random::{Random, SliceRandom};
 use std::time::Instant;
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -191,19 +187,21 @@ impl QuatD {
             return;
         }
 
-        let mut rng = if let Some(seed) = self.base.config.seed {
-            StdRng::seed_from_u64(seed)
-        } else {
-            StdRng::from_entropy()
-        };
+        let mut rng = Random::seed(self.base.config.seed.unwrap_or_else(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        }));
 
         // Initialize entity embeddings as quaternions
         self.entity_embeddings =
-            { Array2::from_shape_fn((num_entities, 4), |_| rng.gen_range(-0.1..0.1)) };
+            Array2::from_shape_fn((num_entities, 4), |_| rng.gen_range(-0.1..0.1));
 
         // Initialize relation embeddings as quaternions
         self.relation_embeddings =
-            { Array2::from_shape_fn((num_relations, 4), |_| rng.gen_range(-0.1..0.1)) };
+            Array2::from_shape_fn((num_relations, 4), |_| rng.gen_range(-0.1..0.1));
 
         // Normalize quaternions to unit length
         self.normalize_all_quaternions();
@@ -437,12 +435,13 @@ impl QuatD {
 
     /// Perform one training epoch
     async fn train_epoch(&mut self, learning_rate: f64) -> Result<f64> {
-        let mut rng = if let Some(seed) = self.base.config.seed {
-            let mut thread_rng = StdRng::from_entropy();
-            StdRng::seed_from_u64(seed + thread_rng.next_u64())
-        } else {
-            StdRng::from_entropy()
-        };
+        let mut rng = Random::seed(self.base.config.seed.unwrap_or_else(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        }));
 
         let mut total_loss = 0.0;
         let num_batches = (self.base.triples.len() + self.base.config.batch_size - 1)
@@ -488,23 +487,23 @@ impl QuatD {
             // Apply gradients with quaternion regularization
             if batch_loss > 0.0 {
                 // Update entity embeddings
-                for ((i, j), grad) in self
+                for (((_i, _j), embedding_val), grad_val) in self
                     .entity_embeddings
                     .indexed_iter_mut()
                     .zip(batch_entity_grads.iter())
                 {
-                    let reg_term = self.quaternion_regularization * *grad;
-                    *grad -= learning_rate * (grad + reg_term);
+                    let reg_term = self.quaternion_regularization * *embedding_val;
+                    *embedding_val -= learning_rate * (grad_val + reg_term);
                 }
 
                 // Update relation embeddings
-                for ((i, j), grad) in self
+                for (((_i, _j), embedding_val), grad_val) in self
                     .relation_embeddings
                     .indexed_iter_mut()
                     .zip(batch_relation_grads.iter())
                 {
-                    let reg_term = self.quaternion_regularization * *grad;
-                    *grad -= learning_rate * (grad + reg_term);
+                    let reg_term = self.quaternion_regularization * *embedding_val;
+                    *embedding_val -= learning_rate * (grad_val + reg_term);
                 }
 
                 // Normalize quaternions after update
@@ -595,7 +594,7 @@ impl EmbeddingModel for QuatD {
         ))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if !self.embeddings_initialized {
             return Err(anyhow!("Model not trained"));
         }

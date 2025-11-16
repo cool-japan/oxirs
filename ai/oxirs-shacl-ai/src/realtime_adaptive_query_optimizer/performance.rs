@@ -168,6 +168,7 @@ impl PerformanceMonitor {
             AlgebraTermPattern::NamedNode(_) => "NODE",
             AlgebraTermPattern::BlankNode(_) => "BLANK",
             AlgebraTermPattern::Literal(_) => "LIT",
+            AlgebraTermPattern::QuotedTriple(_) => "QUOTED",
         };
 
         let p_type = match &pattern.predicate {
@@ -175,6 +176,7 @@ impl PerformanceMonitor {
             AlgebraTermPattern::NamedNode(_) => "NODE",
             AlgebraTermPattern::BlankNode(_) => "BLANK",
             AlgebraTermPattern::Literal(_) => "LIT",
+            AlgebraTermPattern::QuotedTriple(_) => "QUOTED",
         };
 
         let o_type = match &pattern.object {
@@ -182,6 +184,7 @@ impl PerformanceMonitor {
             AlgebraTermPattern::NamedNode(_) => "NODE",
             AlgebraTermPattern::BlankNode(_) => "BLANK",
             AlgebraTermPattern::Literal(_) => "LIT",
+            AlgebraTermPattern::QuotedTriple(_) => "QUOTED",
         };
 
         format!("{s_type}:{p_type}:{o_type}")

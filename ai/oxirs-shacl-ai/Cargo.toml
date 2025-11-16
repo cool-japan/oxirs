@@ -35,7 +35,7 @@ tokio.workspace = true
 num_cpus = "1.17"
 # ndarray and rand now provided by scirs2-core
 rand_distr = "0.5"
-regex = "1.11"
+regex = "1.12"
 indexmap = "2.11"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 threadpool = "1.8"
@@ -59,4 +59,3 @@ criterion.workspace = true
 default = []
 shape-induction = []
 data-repair = []
-disabled = []

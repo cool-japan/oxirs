@@ -206,6 +206,9 @@ pub struct SecurityConfig {
 
     #[validate(nested)]
     pub saml: Option<SamlConfig>,
+
+    #[validate(nested)]
+    pub rebac: Option<RebacConfig>,
 }
 
 /// Authentication configuration
@@ -450,6 +453,129 @@ pub struct SamlAttributeMappings {
 
     /// Group to role mapping
     pub group_role_mapping: HashMap<String, Vec<String>>,
+}
+
+/// ReBAC (Relationship-Based Access Control) configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct RebacConfig {
+    /// Enable ReBAC authorization
+    pub enabled: bool,
+
+    /// Policy evaluation mode
+    pub policy_mode: RebacPolicyMode,
+
+    /// Storage backend for relationships
+    pub storage: RebacStorageBackend,
+
+    /// OpenFGA server configuration (if using OpenFGA backend)
+    pub openfga: Option<OpenFgaConfig>,
+
+    /// Initial relationship tuples to load on startup
+    pub initial_relationships: Vec<RelationshipTupleConfig>,
+
+    /// Enable audit logging for authorization decisions
+    pub audit_enabled: bool,
+
+    /// Cache authorization decisions for this many seconds
+    #[validate(range(min = 0, max = 3600))]
+    pub cache_ttl_secs: u64,
+}
+
+/// ReBAC policy evaluation modes
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RebacPolicyMode {
+    /// Use only traditional RBAC
+    RbacOnly,
+
+    /// Use only ReBAC (relationship-based)
+    RebacOnly,
+
+    /// Try RBAC first, fall back to ReBAC (default)
+    #[default]
+    Combined,
+
+    /// Require both RBAC and ReBAC to allow
+    Both,
+}
+
+/// ReBAC storage backends
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum RebacStorageBackend {
+    /// In-memory storage (fast, not persistent)
+    #[default]
+    Memory,
+
+    /// OpenFGA server (scalable, persistent)
+    OpenFga,
+
+    /// RDF-based storage using named graphs (future)
+    Rdf,
+
+    /// Database storage (future)
+    Database,
+}
+
+/// OpenFGA server configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct OpenFgaConfig {
+    /// OpenFGA API URL
+    #[validate(length(min = 1))]
+    pub api_url: String,
+
+    /// Store ID
+    #[validate(length(min = 1))]
+    pub store_id: String,
+
+    /// Authorization model ID (optional, uses latest if not specified)
+    pub model_id: Option<String>,
+
+    /// API token for authentication
+    pub api_token: Option<String>,
+
+    /// Enable TLS for OpenFGA connection
+    pub tls_enabled: bool,
+
+    /// Connection timeout in seconds
+    #[validate(range(min = 1, max = 300))]
+    pub timeout_secs: u64,
+}
+
+/// Relationship tuple configuration for initial loading
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct RelationshipTupleConfig {
+    /// Subject (e.g., "user:alice", "organization:engineering")
+    #[validate(length(min = 1))]
+    pub subject: String,
+
+    /// Relation (e.g., "owner", "can_read", "member")
+    #[validate(length(min = 1))]
+    pub relation: String,
+
+    /// Object/resource (e.g., "dataset:public", "graph:http://example.org/g1")
+    #[validate(length(min = 1))]
+    pub object: String,
+
+    /// Optional condition
+    pub condition: Option<RelationshipConditionConfig>,
+}
+
+/// Relationship condition configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum RelationshipConditionConfig {
+    /// Time-based condition
+    TimeWindow {
+        not_before: Option<String>, // ISO 8601 datetime
+        not_after: Option<String>,  // ISO 8601 datetime
+    },
+
+    /// IP address condition
+    IpAddress { allowed_ips: Vec<String> },
+
+    /// Custom attribute-based condition
+    Attribute { key: String, value: String },
 }
 
 /// JWT configuration
@@ -841,6 +967,7 @@ impl Default for ServerConfig {
                 api_keys: None,
                 certificate: None,
                 saml: None,
+                rebac: None,
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {

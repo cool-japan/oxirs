@@ -335,9 +335,10 @@ unsafe impl Send for MemoryHandle {}
 unsafe impl Sync for MemoryHandle {}
 
 /// Memory allocation strategy
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub enum AllocationStrategy {
     /// First fit - use the first block that fits
+    #[default]
     FirstFit,
     /// Best fit - use the smallest block that fits
     BestFit,
@@ -345,12 +346,6 @@ pub enum AllocationStrategy {
     WorstFit,
     /// Next fit - start searching from the last allocated position
     NextFit,
-}
-
-impl Default for AllocationStrategy {
-    fn default() -> Self {
-        Self::FirstFit
-    }
 }
 
 #[cfg(test)]

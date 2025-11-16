@@ -109,6 +109,14 @@ pub struct ProfileCommand {
     /// Profile I/O operations
     #[arg(long)]
     pub io: bool,
+
+    /// Generate flame graph visualization
+    #[arg(long)]
+    pub flamegraph: bool,
+
+    /// Flame graph output file (default: `profile_<timestamp>.svg`)
+    #[arg(long)]
+    pub flamegraph_output: Option<PathBuf>,
 }
 
 /// Benchmark comparison command
@@ -373,6 +381,19 @@ impl ProfileCommand {
                 ))
             })?;
             info!("Profiling results saved to {}", save_path.display());
+        }
+
+        // Generate flame graph if requested
+        if self.flamegraph {
+            let flamegraph_path = self.flamegraph_output.clone().unwrap_or_else(|| {
+                PathBuf::from(format!(
+                    "profile_{}.svg",
+                    chrono::Utc::now().format("%Y%m%d_%H%M%S")
+                ))
+            });
+
+            generate_flamegraph(&result, &flamegraph_path).await?;
+            info!("Flame graph generated: {}", flamegraph_path.display());
         }
 
         // Print performance summary
@@ -720,6 +741,105 @@ impl ReportCommand {
     }
 }
 
+/// Generate a flame graph from profiling results
+async fn generate_flamegraph(
+    result: &ProfilingResult,
+    output_path: &PathBuf,
+) -> Result<(), CliError> {
+    use inferno::flamegraph;
+    use std::io::BufWriter;
+    use std::str::FromStr;
+
+    // Convert profiling result to flame graph format
+    // Format: <function_stack> <duration_in_ms>
+    let mut lines = Vec::new();
+
+    // Add main operation
+    let total_ms = result.total_duration.as_millis();
+    lines.push(format!("{} {}", result.operation_name, total_ms));
+
+    // Add checkpoints as stack frames
+    if !result.checkpoints.is_empty() {
+        let mut prev_time = std::time::Duration::from_secs(0);
+
+        for (idx, checkpoint) in result.checkpoints.iter().enumerate() {
+            let delta_ms = (checkpoint.duration_from_start - prev_time).as_millis();
+
+            if delta_ms > 0 {
+                // Create stack frame: operation_name;checkpoint_name duration
+                let stack_frame = format!(
+                    "{};checkpoint_{:03}_{}",
+                    result.operation_name,
+                    idx + 1,
+                    checkpoint.name.replace(' ', "_")
+                );
+                lines.push(format!("{} {}", stack_frame, delta_ms));
+            }
+
+            prev_time = checkpoint.duration_from_start;
+        }
+    }
+
+    // Add resource usage as stack frames based on start/end metrics
+    let memory_delta =
+        result.end_metrics.memory_usage as i64 - result.start_metrics.memory_usage as i64;
+    if memory_delta.abs() > 1_000_000 {
+        // > 1MB change
+        let mem_frame = format!("{};memory_delta", result.operation_name);
+        let mem_weight = (memory_delta.abs() as f64 / 1_000_000.0 * total_ms as f64) as u128;
+        if mem_weight > 0 {
+            lines.push(format!("{} {}", mem_frame, mem_weight.min(total_ms)));
+        }
+    }
+
+    // Add CPU usage frame
+    let avg_cpu = result.performance_summary.average_cpu_usage;
+    if avg_cpu > 1.0 {
+        let cpu_frame = format!("{};cpu_usage", result.operation_name);
+        let cpu_weight = (avg_cpu * total_ms as f32 / 100.0) as u128;
+        if cpu_weight > 0 {
+            lines.push(format!("{} {}", cpu_frame, cpu_weight));
+        }
+    }
+
+    // If no detailed data, create a simple single-frame graph
+    if lines.len() == 1 {
+        lines.push(format!("{};execution {}", result.operation_name, total_ms));
+    }
+
+    // Sort lines for better visualization
+    lines.sort();
+
+    // Generate flame graph SVG
+    let input_data = lines.join("\n");
+    let input_bytes = input_data.as_bytes();
+
+    let output_file = std::fs::File::create(output_path).map_err(|e| {
+        CliError::io_error(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to create flame graph file: {}", e),
+        ))
+    })?;
+
+    let writer = BufWriter::new(output_file);
+
+    let mut options = flamegraph::Options::default();
+    options.title = format!("Profile: {}", result.operation_name);
+    options.count_name = "ms".to_string();
+    options.colors = flamegraph::color::Palette::from_str("hot")
+        .unwrap_or(flamegraph::color::Palette::default());
+    options.min_width = 0.1;
+
+    flamegraph::from_reader(&mut options, input_bytes, writer).map_err(|e| {
+        CliError::io_error(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Failed to generate flame graph: {}", e),
+        ))
+    })?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -754,10 +874,13 @@ mod tests {
             memory: true,
             cpu: true,
             io: false,
+            flamegraph: true,
+            flamegraph_output: Some(PathBuf::from("/tmp/test_profile.svg")),
         };
 
         assert_eq!(cmd.operation, "test_op");
         assert!(cmd.detailed);
         assert!(cmd.memory);
+        assert!(cmd.flamegraph);
     }
 }

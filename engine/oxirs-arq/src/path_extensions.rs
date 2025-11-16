@@ -631,6 +631,390 @@ impl Default for ReachabilityIndex {
     }
 }
 
+/// Cost-based property path optimizer for selecting the best evaluation strategy
+pub struct CostBasedPathOptimizer {
+    /// Path statistics for cost estimation
+    path_stats: Arc<DashMap<String, PathStatistics>>,
+    /// Configuration for cost-based optimization
+    config: PathOptimizationConfig,
+}
+
+/// Statistics for a property path
+#[derive(Debug, Clone)]
+pub struct PathStatistics {
+    /// Average result cardinality
+    pub avg_cardinality: f64,
+    /// Average evaluation time in microseconds
+    pub avg_eval_time_us: f64,
+    /// Number of times this path was evaluated
+    pub evaluation_count: u64,
+    /// Selectivity (ratio of results to candidates)
+    pub selectivity: f64,
+    /// Last update timestamp
+    pub last_updated: std::time::Instant,
+}
+
+impl Default for PathStatistics {
+    fn default() -> Self {
+        Self {
+            avg_cardinality: 100.0, // Default estimate
+            avg_eval_time_us: 1000.0,
+            evaluation_count: 0,
+            selectivity: 0.1,
+            last_updated: std::time::Instant::now(),
+        }
+    }
+}
+
+/// Configuration for path optimization
+#[derive(Debug, Clone)]
+pub struct PathOptimizationConfig {
+    /// Enable cost-based optimization
+    pub enabled: bool,
+    /// Minimum samples before using statistics
+    pub min_samples: u64,
+    /// Cost weight for cardinality (0.0 to 1.0)
+    pub cardinality_weight: f64,
+    /// Cost weight for evaluation time (0.0 to 1.0)
+    pub time_weight: f64,
+    /// Enable adaptive learning from execution
+    pub adaptive_learning: bool,
+    /// Learning rate for statistics updates (0.0 to 1.0)
+    pub learning_rate: f64,
+}
+
+impl Default for PathOptimizationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            min_samples: 10,
+            cardinality_weight: 0.6,
+            time_weight: 0.4,
+            adaptive_learning: true,
+            learning_rate: 0.1,
+        }
+    }
+}
+
+/// Path evaluation strategy
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PathEvaluationStrategy {
+    /// Forward BFS from start node
+    ForwardBFS,
+    /// Backward BFS from end node
+    BackwardBFS,
+    /// Bidirectional BFS (meet in the middle)
+    BidirectionalBFS,
+    /// Use precomputed reachability index
+    IndexLookup,
+    /// Direct evaluation without optimization
+    Direct,
+}
+
+/// Cost estimate for a path evaluation strategy
+#[derive(Debug, Clone)]
+pub struct StrategyCostEstimate {
+    /// Estimated cardinality
+    pub estimated_cardinality: f64,
+    /// Estimated evaluation time in microseconds
+    pub estimated_time_us: f64,
+    /// Total estimated cost (weighted combination)
+    pub total_cost: f64,
+    /// Recommended strategy
+    pub strategy: PathEvaluationStrategy,
+    /// Confidence level (0.0 to 1.0)
+    pub confidence: f64,
+}
+
+impl CostBasedPathOptimizer {
+    /// Create a new cost-based path optimizer
+    pub fn new() -> Self {
+        Self::with_config(PathOptimizationConfig::default())
+    }
+
+    /// Create with custom configuration
+    pub fn with_config(config: PathOptimizationConfig) -> Self {
+        Self {
+            path_stats: Arc::new(DashMap::new()),
+            config,
+        }
+    }
+
+    /// Estimate cost and select best evaluation strategy
+    pub fn select_strategy(
+        &self,
+        path: &PropertyPath,
+        start: Option<&Term>,
+        end: Option<&Term>,
+        dataset_size: usize,
+    ) -> StrategyCostEstimate {
+        if !self.config.enabled {
+            return self.default_strategy(path);
+        }
+
+        let path_key = self.path_signature(path);
+        let stats = self.get_or_create_stats(&path_key);
+
+        // Analyze path complexity
+        let complexity = PathAnalyzer::analyze_complexity(path);
+
+        // Estimate costs for different strategies
+        let forward_cost =
+            self.estimate_forward_cost(&complexity, &stats, start.is_some(), dataset_size);
+        let backward_cost =
+            self.estimate_backward_cost(&complexity, &stats, end.is_some(), dataset_size);
+        let bidirectional_cost = self.estimate_bidirectional_cost(
+            &complexity,
+            &stats,
+            start.is_some() && end.is_some(),
+            dataset_size,
+        );
+        let index_cost = self.estimate_index_cost(&complexity, &stats);
+
+        // Select strategy with minimum cost
+        let estimates = vec![
+            (PathEvaluationStrategy::ForwardBFS, forward_cost),
+            (PathEvaluationStrategy::BackwardBFS, backward_cost),
+            (PathEvaluationStrategy::BidirectionalBFS, bidirectional_cost),
+            (PathEvaluationStrategy::IndexLookup, index_cost),
+        ];
+
+        let best = estimates
+            .into_iter()
+            .min_by(|(_, cost1), (_, cost2)| {
+                cost1
+                    .total_cost
+                    .partial_cmp(&cost2.total_cost)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .unwrap_or((
+                PathEvaluationStrategy::Direct,
+                StrategyCostEstimate {
+                    estimated_cardinality: stats.avg_cardinality,
+                    estimated_time_us: stats.avg_eval_time_us,
+                    total_cost: stats.avg_eval_time_us,
+                    strategy: PathEvaluationStrategy::Direct,
+                    confidence: 0.5,
+                },
+            ));
+
+        best.1
+    }
+
+    /// Record actual execution results for adaptive learning
+    pub fn record_execution(
+        &self,
+        path: &PropertyPath,
+        actual_cardinality: u64,
+        actual_time_us: u64,
+    ) {
+        if !self.config.adaptive_learning {
+            return;
+        }
+
+        let path_key = self.path_signature(path);
+        let mut stats = self.get_or_create_stats(&path_key);
+
+        // Update statistics using exponential moving average
+        let alpha = self.config.learning_rate;
+        stats.avg_cardinality =
+            (1.0 - alpha) * stats.avg_cardinality + alpha * (actual_cardinality as f64);
+        stats.avg_eval_time_us =
+            (1.0 - alpha) * stats.avg_eval_time_us + alpha * (actual_time_us as f64);
+        stats.evaluation_count += 1;
+
+        // Update selectivity (simplified)
+        if actual_cardinality > 0 {
+            let observed_selectivity = (actual_cardinality as f64) / 1000.0; // Normalize
+            stats.selectivity = (1.0 - alpha) * stats.selectivity + alpha * observed_selectivity;
+        }
+
+        stats.last_updated = std::time::Instant::now();
+
+        // Update in map
+        self.path_stats.insert(path_key, stats);
+    }
+
+    /// Get statistics for a path
+    pub fn get_statistics(&self, path: &PropertyPath) -> Option<PathStatistics> {
+        let path_key = self.path_signature(path);
+        self.path_stats.get(&path_key).map(|s| s.clone())
+    }
+
+    /// Clear all statistics
+    pub fn clear_statistics(&self) {
+        self.path_stats.clear();
+    }
+
+    // Private helper methods
+
+    fn path_signature(&self, path: &PropertyPath) -> String {
+        format!("{:?}", path)
+    }
+
+    fn get_or_create_stats(&self, path_key: &str) -> PathStatistics {
+        self.path_stats
+            .entry(path_key.to_string())
+            .or_default()
+            .clone()
+    }
+
+    fn default_strategy(&self, path: &PropertyPath) -> StrategyCostEstimate {
+        let complexity = PathAnalyzer::analyze_complexity(path);
+        StrategyCostEstimate {
+            estimated_cardinality: 100.0,
+            estimated_time_us: complexity.estimated_cost * 1000.0,
+            total_cost: complexity.estimated_cost * 1000.0,
+            strategy: if complexity.has_recursion {
+                PathEvaluationStrategy::BidirectionalBFS
+            } else {
+                PathEvaluationStrategy::ForwardBFS
+            },
+            confidence: 0.5,
+        }
+    }
+
+    fn estimate_forward_cost(
+        &self,
+        complexity: &PathComplexity,
+        stats: &PathStatistics,
+        has_start: bool,
+        dataset_size: usize,
+    ) -> StrategyCostEstimate {
+        let base_cost = if has_start {
+            stats.avg_eval_time_us
+        } else {
+            stats.avg_eval_time_us * (dataset_size as f64).sqrt()
+        };
+
+        let cardinality = stats.avg_cardinality;
+        let time_cost = base_cost * (complexity.depth as f64);
+
+        let total_cost =
+            self.config.cardinality_weight * cardinality + self.config.time_weight * time_cost;
+
+        let confidence = self.calculate_confidence(stats);
+
+        StrategyCostEstimate {
+            estimated_cardinality: cardinality,
+            estimated_time_us: time_cost,
+            total_cost,
+            strategy: PathEvaluationStrategy::ForwardBFS,
+            confidence,
+        }
+    }
+
+    fn estimate_backward_cost(
+        &self,
+        complexity: &PathComplexity,
+        stats: &PathStatistics,
+        has_end: bool,
+        dataset_size: usize,
+    ) -> StrategyCostEstimate {
+        let base_cost = if has_end {
+            stats.avg_eval_time_us
+        } else {
+            stats.avg_eval_time_us * (dataset_size as f64).sqrt()
+        };
+
+        let cardinality = stats.avg_cardinality;
+        let time_cost = base_cost * (complexity.depth as f64);
+
+        let total_cost =
+            self.config.cardinality_weight * cardinality + self.config.time_weight * time_cost;
+
+        let confidence = self.calculate_confidence(stats);
+
+        StrategyCostEstimate {
+            estimated_cardinality: cardinality,
+            estimated_time_us: time_cost,
+            total_cost,
+            strategy: PathEvaluationStrategy::BackwardBFS,
+            confidence,
+        }
+    }
+
+    fn estimate_bidirectional_cost(
+        &self,
+        complexity: &PathComplexity,
+        stats: &PathStatistics,
+        has_both: bool,
+        _dataset_size: usize,
+    ) -> StrategyCostEstimate {
+        if !has_both {
+            // Bidirectional only works when both start and end are bound
+            return StrategyCostEstimate {
+                estimated_cardinality: f64::INFINITY,
+                estimated_time_us: f64::INFINITY,
+                total_cost: f64::INFINITY,
+                strategy: PathEvaluationStrategy::BidirectionalBFS,
+                confidence: 0.0,
+            };
+        }
+
+        // Bidirectional search is typically faster for long paths
+        let speedup_factor = if complexity.depth > 3 { 0.5 } else { 0.8 };
+        let cardinality = stats.avg_cardinality;
+        let time_cost = stats.avg_eval_time_us * speedup_factor;
+
+        let total_cost =
+            self.config.cardinality_weight * cardinality + self.config.time_weight * time_cost;
+
+        let confidence = self.calculate_confidence(stats);
+
+        StrategyCostEstimate {
+            estimated_cardinality: cardinality,
+            estimated_time_us: time_cost,
+            total_cost,
+            strategy: PathEvaluationStrategy::BidirectionalBFS,
+            confidence,
+        }
+    }
+
+    fn estimate_index_cost(
+        &self,
+        complexity: &PathComplexity,
+        stats: &PathStatistics,
+    ) -> StrategyCostEstimate {
+        // Index lookup is very fast for simple paths
+        let is_simple = !complexity.has_recursion && complexity.depth <= 2;
+
+        let (time_cost, cardinality) = if is_simple {
+            (10.0, stats.avg_cardinality) // Constant time lookup
+        } else {
+            (f64::INFINITY, f64::INFINITY) // Not suitable for complex paths
+        };
+
+        let total_cost = if is_simple {
+            self.config.time_weight * time_cost
+        } else {
+            f64::INFINITY
+        };
+
+        StrategyCostEstimate {
+            estimated_cardinality: cardinality,
+            estimated_time_us: time_cost,
+            total_cost,
+            strategy: PathEvaluationStrategy::IndexLookup,
+            confidence: if is_simple { 0.9 } else { 0.0 },
+        }
+    }
+
+    fn calculate_confidence(&self, stats: &PathStatistics) -> f64 {
+        if stats.evaluation_count < self.config.min_samples {
+            (stats.evaluation_count as f64) / (self.config.min_samples as f64)
+        } else {
+            0.95 // High confidence after sufficient samples
+        }
+    }
+}
+
+impl Default for CostBasedPathOptimizer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -772,5 +1156,139 @@ mod tests {
         // Should have evicted some entries
         let stats = cache.stats();
         assert!(stats.size <= 10);
+    }
+
+    #[test]
+    fn test_cost_based_optimizer_default() {
+        let optimizer = CostBasedPathOptimizer::new();
+        let path = PropertyPath::Direct(create_test_term("http://example.org/knows"));
+
+        let start = create_test_term("http://example.org/alice");
+        let end = create_test_term("http://example.org/bob");
+
+        let estimate = optimizer.select_strategy(&path, Some(&start), Some(&end), 1000);
+
+        assert!(estimate.total_cost > 0.0);
+        assert!(estimate.confidence >= 0.0 && estimate.confidence <= 1.0);
+    }
+
+    #[test]
+    fn test_cost_based_optimizer_adaptive_learning() {
+        let optimizer = CostBasedPathOptimizer::new();
+        let path = PropertyPath::Direct(create_test_term("http://example.org/knows"));
+
+        // Record some executions
+        optimizer.record_execution(&path, 50, 500);
+        optimizer.record_execution(&path, 45, 480);
+        optimizer.record_execution(&path, 55, 520);
+
+        // Get updated statistics
+        let stats = optimizer.get_statistics(&path);
+        assert!(stats.is_some());
+
+        let stats = stats.unwrap();
+        assert_eq!(stats.evaluation_count, 3);
+        assert!(stats.avg_cardinality > 0.0);
+    }
+
+    #[test]
+    fn test_cost_based_optimizer_strategy_selection() {
+        let optimizer = CostBasedPathOptimizer::new();
+
+        // Simple path - should prefer forward or index
+        let simple = PropertyPath::Direct(create_test_term("http://example.org/p"));
+        let start = create_test_term("http://example.org/alice");
+        let end = create_test_term("http://example.org/bob");
+
+        let estimate = optimizer.select_strategy(&simple, Some(&start), Some(&end), 100);
+        assert!(matches!(
+            estimate.strategy,
+            PathEvaluationStrategy::ForwardBFS
+                | PathEvaluationStrategy::BidirectionalBFS
+                | PathEvaluationStrategy::IndexLookup
+        ));
+
+        // Recursive path - should consider bidirectional
+        let recursive = PropertyPath::ZeroOrMore(Box::new(simple));
+        let estimate = optimizer.select_strategy(&recursive, Some(&start), Some(&end), 100);
+        assert!(estimate.estimated_time_us > 0.0);
+    }
+
+    #[test]
+    fn test_path_statistics_confidence() {
+        let optimizer = CostBasedPathOptimizer::with_config(PathOptimizationConfig {
+            min_samples: 5,
+            ..Default::default()
+        });
+
+        let path = PropertyPath::Direct(create_test_term("http://example.org/p"));
+
+        // Low confidence with few samples
+        optimizer.record_execution(&path, 10, 100);
+        let stats = optimizer.get_statistics(&path).unwrap();
+        let confidence = if stats.evaluation_count < 5 {
+            (stats.evaluation_count as f64) / 5.0
+        } else {
+            0.95
+        };
+        assert!(confidence < 0.5);
+
+        // Higher confidence with more samples
+        for _ in 0..6 {
+            optimizer.record_execution(&path, 10, 100);
+        }
+        let stats = optimizer.get_statistics(&path).unwrap();
+        assert!(stats.evaluation_count >= 5);
+    }
+
+    #[test]
+    fn test_bidirectional_strategy_requires_both_endpoints() {
+        let optimizer = CostBasedPathOptimizer::new();
+        let path = PropertyPath::Direct(create_test_term("http://example.org/p"));
+        let start = create_test_term("http://example.org/alice");
+
+        // Without end node, bidirectional should have infinite cost
+        let estimate = optimizer.select_strategy(&path, Some(&start), None, 100);
+        // The selected strategy should not be bidirectional (or if it is, it has special handling)
+        assert!(
+            estimate.total_cost.is_finite()
+                || estimate.strategy != PathEvaluationStrategy::BidirectionalBFS
+        );
+    }
+
+    #[test]
+    fn test_cost_optimizer_clear_statistics() {
+        let optimizer = CostBasedPathOptimizer::new();
+        let path = PropertyPath::Direct(create_test_term("http://example.org/p"));
+
+        optimizer.record_execution(&path, 10, 100);
+        assert!(optimizer.get_statistics(&path).is_some());
+
+        optimizer.clear_statistics();
+        // After clearing, we should get default stats
+        let stats = optimizer.get_statistics(&path);
+        assert!(stats.is_none() || stats.unwrap().evaluation_count == 0);
+    }
+
+    #[test]
+    fn test_path_evaluation_strategies() {
+        // Test that all strategies are distinct
+        let strategies = [
+            PathEvaluationStrategy::ForwardBFS,
+            PathEvaluationStrategy::BackwardBFS,
+            PathEvaluationStrategy::BidirectionalBFS,
+            PathEvaluationStrategy::IndexLookup,
+            PathEvaluationStrategy::Direct,
+        ];
+
+        for (i, s1) in strategies.iter().enumerate() {
+            for (j, s2) in strategies.iter().enumerate() {
+                if i == j {
+                    assert_eq!(s1, s2);
+                } else {
+                    assert_ne!(s1, s2);
+                }
+            }
+        }
     }
 }

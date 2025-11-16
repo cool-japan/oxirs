@@ -79,7 +79,7 @@ pub struct CompactParams {
 
 /// Administrative UI handler
 #[instrument(skip(state))]
-pub async fn ui_handler(State(state): State<AppState>) -> Result<Html<String>, FusekiError> {
+pub async fn ui_handler(State(state): State<Arc<AppState>>) -> Result<Html<String>, FusekiError> {
     // Check if admin UI is enabled
     if !state.config.server.admin_ui {
         return Err(FusekiError::not_found("Admin UI is disabled"));
@@ -263,7 +263,9 @@ pub async fn server_info(
 
 /// Get server statistics
 #[instrument(skip(state))]
-pub async fn server_stats(State(state): State<AppState>) -> Result<Json<ServerStats>, FusekiError> {
+pub async fn server_stats(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<ServerStats>, FusekiError> {
     let stats = if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
 

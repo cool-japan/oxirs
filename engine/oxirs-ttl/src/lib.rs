@@ -1,10 +1,10 @@
 //! # OxiRS Turtle - RDF Format Parser
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-ttl/badge.svg)](https://docs.rs/oxirs-ttl)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! High-performance parsing and serialization for RDF formats in the Turtle family.
 //! Supports Turtle, TriG, N-Triples, N-Quads, and N3 with streaming and error recovery.
@@ -44,7 +44,15 @@
 pub mod error;
 pub mod formats;
 pub mod lexer;
+pub mod profiling;
+pub mod streaming;
 pub mod toolkit;
+
+#[cfg(feature = "parallel")]
+pub mod parallel;
+
+#[cfg(feature = "async-tokio")]
+pub mod async_parser;
 
 // Re-export the main format APIs
 pub mod turtle {
@@ -74,4 +82,6 @@ pub mod n3 {
 
 // Re-export common types
 pub use error::{TurtleParseError, TurtleSyntaxError};
+pub use profiling::{ParsingStats, TtlProfiler};
+pub use streaming::{PrintProgress, ProgressCallback, StreamingConfig, StreamingParser};
 pub use toolkit::{Parser, RuleRecognizer, Serializer, TokenRecognizer};

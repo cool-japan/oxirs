@@ -206,20 +206,15 @@ impl PartialEq for HistoneModification {
 }
 
 /// Modification type
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub enum ModificationType {
+    #[default]
     Acetylation,
     Methylation,
     Phosphorylation,
     Ubiquitination,
     Sumoylation,
     AdpRibosylation,
-}
-
-impl Default for ModificationType {
-    fn default() -> Self {
-        Self::Acetylation
-    }
 }
 
 /// Modification status

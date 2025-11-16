@@ -20,9 +20,9 @@ pub(super) fn parse_reader<R: Read + Send + 'static>(
         TurtleParser::new()
     };
 
-    // Enable unchecked mode if lenient parsing is requested
+    // Enable lenient mode if lenient parsing is requested
     if parser.is_lenient() {
-        oxttl_parser = oxttl_parser.unchecked();
+        oxttl_parser = oxttl_parser.lenient();
     }
 
     // Parse the reader
@@ -62,9 +62,9 @@ pub(super) fn parse_slice<'a>(parser: RdfParser, slice: &'a [u8]) -> SliceQuadPa
         TurtleParser::new()
     };
 
-    // Enable unchecked mode if lenient parsing is requested
+    // Enable lenient mode if lenient parsing is requested
     if parser.is_lenient() {
-        oxttl_parser = oxttl_parser.unchecked();
+        oxttl_parser = oxttl_parser.lenient();
     }
 
     // Parse the slice

@@ -1,10 +1,10 @@
 //! # OxiRS Rule Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-rule/badge.svg)](https://docs.rs/oxirs-rule)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Forward/backward rule engine for RDFS, OWL, and SWRL reasoning with RETE optimization.
 //! Provides Jena-compatible rule-based inference for knowledge graphs.
@@ -58,39 +58,67 @@
 
 use anyhow::Result;
 
+pub mod active_learning;
+pub mod adaptive_strategies;
 pub mod advanced_integration_example;
 pub mod backward;
+pub mod benchmark_suite;
 pub mod cache;
 pub mod composition;
 pub mod comprehensive_tutorial;
 pub mod conflict;
+pub mod coverage;
 pub mod debug;
+pub mod dempster_shafer;
+pub mod description_logic;
 pub mod distributed;
+pub mod explainable_generation;
 pub mod explanation;
 pub mod forward;
+pub mod fuzzy;
 pub mod getting_started;
+pub mod gpu_matching;
+pub mod hermit_reasoner;
 pub mod incremental;
 pub mod integration;
 pub mod integration_benchmarks;
 pub mod language;
+pub mod lazy_materialization;
+pub mod lockfree;
 pub mod materialization;
+pub mod migration;
 pub mod optimization;
 pub mod owl;
+pub mod owl_profiles;
 pub mod parallel;
+pub mod pellet_classifier;
 pub mod performance;
+pub mod possibilistic;
+pub mod probabilistic;
+pub mod problog;
+pub mod profiler;
+pub mod quantum_optimizer;
 pub mod rdf_integration;
 pub mod rdf_processing_simple;
 pub mod rdfs;
 pub mod rete;
 pub mod rete_enhanced;
+pub mod rule_compression;
+pub mod rule_learning;
+pub mod rule_refinement;
 pub mod shacl_integration;
 pub mod simd_ops;
 pub mod sparql_integration;
+pub mod statistical_relational;
 pub mod swrl;
+pub mod temporal;
+pub mod test_generator;
 pub mod transaction;
+pub mod transfer_learning;
+pub mod uncertainty_propagation;
 
 /// Rule representation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Rule {
     pub name: String,
     pub body: Vec<RuleAtom>,
@@ -139,6 +167,7 @@ pub struct RuleEngine {
     forward_chainer: forward::ForwardChainer,
     backward_chainer: backward::BackwardChainer,
     rete_network: rete::ReteNetwork,
+    cache: Option<crate::cache::RuleCache>,
 }
 
 impl RuleEngine {
@@ -148,6 +177,7 @@ impl RuleEngine {
             forward_chainer: forward::ForwardChainer::new(),
             backward_chainer: backward::BackwardChainer::new(),
             rete_network: rete::ReteNetwork::new(),
+            cache: Some(crate::cache::RuleCache::new()),
         }
     }
 
@@ -198,6 +228,7 @@ impl RuleEngine {
         self.forward_chainer.clear_facts();
         self.backward_chainer.clear_facts();
         self.rete_network.clear();
+        self.clear_cache();
     }
 
     /// Add a single fact to the knowledge base
@@ -205,15 +236,90 @@ impl RuleEngine {
         self.add_facts(vec![fact]);
     }
 
-    /// Set cache (placeholder implementation)
-    pub fn set_cache(&mut self, _cache: Option<crate::cache::RuleCache>) {
-        // TODO: Implement cache setting
+    /// Set cache for the rule engine
+    ///
+    /// Enables or disables caching by setting the cache instance.
+    /// Pass `Some(cache)` to enable caching with a specific cache configuration,
+    /// or `None` to disable caching.
+    pub fn set_cache(&mut self, cache: Option<crate::cache::RuleCache>) {
+        self.cache = cache;
+        tracing::debug!(
+            "Rule engine cache {}",
+            if self.cache.is_some() {
+                "enabled"
+            } else {
+                "disabled"
+            }
+        );
     }
 
-    /// Get cache (placeholder implementation)
-    pub fn get_cache(&self) -> Option<crate::cache::RuleCache> {
-        // TODO: Implement cache getting
-        None
+    /// Get a reference to the cache
+    ///
+    /// Returns a reference to the cache if enabled.
+    /// The cache is wrapped in Option to allow disabling caching.
+    pub fn get_cache(&self) -> Option<&crate::cache::RuleCache> {
+        self.cache.as_ref()
+    }
+
+    /// Get mutable reference to the cache
+    ///
+    /// Returns a mutable reference to the cache if enabled.
+    /// Useful for clearing cache, updating statistics, etc.
+    pub fn get_cache_mut(&mut self) -> Option<&mut crate::cache::RuleCache> {
+        self.cache.as_mut()
+    }
+
+    /// Enable caching with default settings
+    ///
+    /// Creates a new cache with default configuration and enables it.
+    pub fn enable_cache(&mut self) {
+        self.cache = Some(crate::cache::RuleCache::new());
+        tracing::info!("Rule engine cache enabled with default settings");
+    }
+
+    /// Disable caching
+    ///
+    /// Removes the cache and disables caching functionality.
+    pub fn disable_cache(&mut self) {
+        self.cache = None;
+        tracing::info!("Rule engine cache disabled");
+    }
+
+    /// Check if caching is enabled
+    pub fn is_cache_enabled(&self) -> bool {
+        self.cache.is_some()
+    }
+
+    /// Clear the cache if enabled
+    ///
+    /// Clears all cached rule results, derivations, unifications, and patterns.
+    pub fn clear_cache(&mut self) {
+        if let Some(cache) = &self.cache {
+            cache.clear_all();
+            tracing::debug!("Rule engine cache cleared");
+        }
+    }
+
+    /// Get cache statistics if caching is enabled
+    ///
+    /// Returns combined statistics for all cache types (rule results, derivations, etc.)
+    pub fn get_cache_statistics(&self) -> Option<crate::cache::CachingStatistics> {
+        self.cache.as_ref().map(|cache| cache.get_statistics())
+    }
+
+    /// Warm up the cache with current rules and common facts
+    ///
+    /// Pre-populates the cache with patterns from the current rule set
+    /// and provided common facts to improve initial query performance.
+    pub fn warm_cache(&self, common_facts: &[RuleAtom]) {
+        if let Some(cache) = &self.cache {
+            cache.warm_cache(&self.rules, common_facts);
+            tracing::info!(
+                "Cache warmed up with {} rules and {} facts",
+                self.rules.len(),
+                common_facts.len()
+            );
+        }
     }
 }
 

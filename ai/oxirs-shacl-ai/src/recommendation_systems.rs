@@ -1759,7 +1759,7 @@ mod tests {
 
     #[test]
     fn test_recommendation_priority_ordering() {
-        let mut recommendations = vec![
+        let mut recommendations = [
             Recommendation {
                 id: Uuid::new_v4(),
                 priority: RecommendationPriority::Low,

@@ -150,14 +150,14 @@ impl HtmlHandler {
 
     fn extract_headings(&self, html: &str) -> Vec<Heading> {
         let mut headings = Vec::new();
+        let tag_remove_re = regex::Regex::new(r"<[^>]*>").unwrap();
 
         for level in 1..=6 {
             let pattern = format!(r"<h{}[^>]*>(.*?)</h{}>", level, level);
             if let Ok(re) = regex::Regex::new(&pattern) {
                 for (i, capture) in re.captures_iter(html).enumerate() {
                     if let Some(heading_text) = capture.get(1) {
-                        let text = regex::Regex::new(r"<[^>]*>")
-                            .unwrap()
+                        let text = tag_remove_re
                             .replace_all(heading_text.as_str(), "")
                             .trim()
                             .to_string();
@@ -183,14 +183,14 @@ impl HtmlHandler {
 
     fn extract_links(&self, html: &str) -> Vec<crate::content_processing::ExtractedLink> {
         let mut links = Vec::new();
+        let tag_remove_re = regex::Regex::new(r"<[^>]*>").unwrap();
 
         if let Ok(re) = regex::Regex::new(r#"<a[^>]*href\s*=\s*["']([^"']*)["'][^>]*>(.*?)</a>"#) {
             for capture in re.captures_iter(html) {
                 if let (Some(url), Some(text)) = (capture.get(1), capture.get(2)) {
                     links.push(crate::content_processing::ExtractedLink {
                         url: url.as_str().to_string(),
-                        text: regex::Regex::new(r"<[^>]*>")
-                            .unwrap()
+                        text: tag_remove_re
                             .replace_all(text.as_str(), "")
                             .trim()
                             .to_string(),
@@ -407,12 +407,10 @@ impl MarkdownHandler {
 
     fn extract_headings(&self, markdown: &str) -> Vec<Heading> {
         let mut headings = Vec::new();
+        let heading_re = regex::Regex::new(r"^(#{1,6})\s+(.+)$").unwrap();
 
         for (i, line) in markdown.lines().enumerate() {
-            if let Some(captures) = regex::Regex::new(r"^(#{1,6})\s+(.+)$")
-                .unwrap()
-                .captures(line)
-            {
+            if let Some(captures) = heading_re.captures(line) {
                 let level = captures[1].len();
                 let text = captures[2].to_string();
 

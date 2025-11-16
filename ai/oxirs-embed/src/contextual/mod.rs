@@ -148,7 +148,7 @@ impl EmbeddingModel for ContextualEmbeddingModel {
             .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", entity))
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         self.relations.get(relation)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Relation not found: {}", relation))

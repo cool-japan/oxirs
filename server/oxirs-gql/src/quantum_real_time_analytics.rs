@@ -56,6 +56,8 @@ impl Default for QuantumRealTimeAnalyticsConfig {
 /// Quantum-enhanced measurement result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumMeasurement {
+    #[serde(skip)]
+    #[allow(dead_code)]
     pub state_vector: Vec<Complex64>,
     pub probability_distribution: Vec<f64>,
     pub entanglement_entropy: f64,
@@ -80,6 +82,13 @@ pub struct QuantumAnalyticsMetrics {
 /// Real-time quantum query analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantumQueryAnalysis {
+    /// Superposition state magnitudes (for serialization)
+    pub state_magnitudes: Vec<f64>,
+    /// Superposition state phases (for serialization)
+    pub state_phases: Vec<f64>,
+    #[serde(skip)]
+    #[allow(dead_code)]
+    /// Internal complex representation (not serialized)
     pub query_superposition_states: Vec<Complex64>,
     pub entangled_operations: HashMap<String, f64>,
     pub interference_patterns: Vec<f64>,
@@ -187,7 +196,7 @@ impl QuantumRealTimeAnalyticsEngine {
         let probability_distribution: Vec<f64> = state
             .amplitudes
             .iter()
-            .map(|amp| amp.magnitude().powi(2))
+            .map(|amp| amp.magnitude_2().powi(2))
             .collect();
 
         // Calculate entanglement entropy
@@ -201,7 +210,7 @@ impl QuantumRealTimeAnalyticsEngine {
         let coherence_measure = state
             .amplitudes
             .iter()
-            .map(|amp| amp.magnitude())
+            .map(|amp| amp.magnitude_2())
             .sum::<f64>()
             / state.amplitudes.len() as f64;
 
@@ -211,7 +220,7 @@ impl QuantumRealTimeAnalyticsEngine {
             .amplitudes
             .iter()
             .zip(ideal_state.iter())
-            .map(|(a, b)| (a.real * b.real + a.imag * b.imag).abs())
+            .map(|(a, b)| (a.re * b.re + a.im * b.im).abs())
             .sum::<f64>()
             / state.amplitudes.len() as f64;
 
@@ -258,7 +267,7 @@ impl QuantumRealTimeAnalyticsEngine {
                 .amplitudes
                 .iter()
                 .zip(state.amplitudes.iter().skip(1))
-                .map(|(a, b)| (a.real * b.real + a.imag * b.imag).abs())
+                .map(|(a, b)| (a.re * b.re + a.im * b.im).abs())
                 .sum::<f64>();
             metrics.interference_optimization =
                 interference_sum / (state.amplitudes.len() - 1) as f64;
@@ -294,13 +303,13 @@ impl QuantumRealTimeAnalyticsEngine {
         // Normalize the superposition
         let total_magnitude: f64 = query_superposition_states
             .iter()
-            .map(|amp| amp.magnitude().powi(2))
+            .map(|amp| amp.magnitude_2().powi(2))
             .sum();
         let normalization_factor = total_magnitude.sqrt();
 
         for state in &mut query_superposition_states {
-            state.real /= normalization_factor;
-            state.imag /= normalization_factor;
+            state.re /= normalization_factor;
+            state.im /= normalization_factor;
         }
 
         // Analyze entangled operations
@@ -341,8 +350,8 @@ impl QuantumRealTimeAnalyticsEngine {
             let state2 = &query_superposition_states[i + 1];
 
             // Quantum interference calculation: |ψ₁ + ψ₂|²
-            let combined_real = state1.real + state2.real;
-            let combined_imag = state1.imag + state2.imag;
+            let combined_real = state1.re + state2.re;
+            let combined_imag = state1.im + state2.im;
             let interference = combined_real * combined_real + combined_imag * combined_imag;
 
             interference_patterns.push(interference);
@@ -369,7 +378,19 @@ impl QuantumRealTimeAnalyticsEngine {
             optimization_probability * (1.0 + uncertainty),
         );
 
+        // Extract magnitudes and phases for serialization
+        let state_magnitudes: Vec<f64> = query_superposition_states
+            .iter()
+            .map(|c| c.magnitude_2())
+            .collect();
+        let state_phases: Vec<f64> = query_superposition_states
+            .iter()
+            .map(|c| c.phase())
+            .collect();
+
         Ok(QuantumQueryAnalysis {
+            state_magnitudes,
+            state_phases,
             query_superposition_states,
             entangled_operations,
             interference_patterns,

@@ -1,10 +1,10 @@
 //! # OxiRS RDF-Star
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-star/badge.svg)](https://docs.rs/oxirs-star)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! RDF-star and SPARQL-star implementation providing comprehensive support for quoted triples.
 //!
@@ -200,25 +200,56 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tracing::{debug, info, span, Level};
 
+pub mod adaptive_query_optimizer;
+pub mod advanced_query;
+pub mod annotation_aggregation;
+pub mod annotation_lifecycle;
 pub mod annotations;
+pub mod backup_restore;
+pub mod bloom_filter;
 pub mod cli;
+pub mod cluster_scaling;
+pub mod compact_annotation_storage;
 pub mod compatibility;
+pub mod compliance_reporting;
+pub mod cryptographic_provenance;
 pub mod docs;
 pub mod enhanced_errors;
 pub mod functions;
+pub mod governance;
+pub mod graph_diff;
+pub mod graphql_star;
 pub mod index;
+pub mod lsm_annotation_store;
+pub mod materialized_views;
 pub mod memory_efficient_store;
+pub mod migration_tools;
+pub mod ml_sparql_optimizer;
 pub mod model;
+pub mod monitoring;
 pub mod parallel_query;
 pub mod parser;
+pub mod production;
 pub mod profiling;
+pub mod quantum_sparql_optimizer;
 pub mod query;
+pub mod query_optimizer;
+pub mod reasoning;
 pub mod reification;
+pub mod security_audit;
 pub mod semantics;
 pub mod serializer;
+pub mod shacl_star;
 pub mod sparql_enhanced;
+pub mod storage_integration;
 pub mod store;
+pub mod temporal_versioning;
+pub mod testing_utilities;
+pub mod tiered_storage;
 pub mod troubleshooting;
+pub mod trust_scoring;
+pub mod validation_framework;
+pub mod write_ahead_log;
 
 // Re-export main types
 pub use enhanced_errors::{

@@ -12,7 +12,9 @@ pub mod streaming;
 
 // Re-export main types for convenience
 pub use config::{ExecutionContext, ParallelConfig, StreamingConfig, ThreadPoolConfig};
-pub use dataset::{convert_property_path, Dataset, DatasetPathAdapter, InMemoryDataset};
+pub use dataset::{
+    convert_property_path, ConcreteStoreDataset, Dataset, DatasetPathAdapter, InMemoryDataset,
+};
 pub use stats::ExecutionStats;
 // pub use vectorized::{VectorizedConfig, VectorizedExecutor, VectorizedExecutionContext, ColumnarData, VectorizedPerformanceReport};
 

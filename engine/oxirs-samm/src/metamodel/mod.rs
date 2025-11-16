@@ -5,12 +5,17 @@
 mod aspect;
 mod characteristic;
 mod entity;
+pub mod extension;
 mod operation;
 mod property;
 
 pub use aspect::Aspect;
 pub use characteristic::{Characteristic, CharacteristicKind, Constraint};
 pub use entity::{ComplexType, Entity};
+pub use extension::{
+    Extension, ExtensionElement, ExtensionRegistry, PropertyDefinition, ValidationRule,
+    ValidationSeverity,
+};
 pub use operation::{Event, Operation};
 pub use property::Property;
 

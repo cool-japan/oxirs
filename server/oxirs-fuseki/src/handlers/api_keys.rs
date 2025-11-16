@@ -20,6 +20,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, info, instrument, warn};
 use uuid::Uuid;
 
@@ -153,7 +154,7 @@ pub struct ListApiKeysQuery {
 /// Create a new API key
 #[instrument(skip(state, request))]
 pub async fn create_api_key(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(request): Json<CreateApiKeyRequest>,
 ) -> Result<Json<CreateApiKeyResponse>, FusekiError> {
@@ -222,7 +223,7 @@ pub async fn create_api_key(
 /// List API keys for the authenticated user or all users (if admin)
 #[instrument(skip(state))]
 pub async fn list_api_keys(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(query): Query<ListApiKeysQuery>,
     headers: HeaderMap,
 ) -> Result<Json<Vec<ApiKeyInfo>>, FusekiError> {
@@ -259,7 +260,7 @@ pub async fn list_api_keys(
 /// Get details of a specific API key
 #[instrument(skip(state))]
 pub async fn get_api_key(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(key_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<ApiKeyInfo>, FusekiError> {
@@ -287,7 +288,7 @@ pub async fn get_api_key(
 /// Update an existing API key
 #[instrument(skip(state, request))]
 pub async fn update_api_key(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(key_id): Path<String>,
     headers: HeaderMap,
     Json(request): Json<UpdateApiKeyRequest>,
@@ -345,7 +346,7 @@ pub async fn update_api_key(
 /// Revoke/delete an API key
 #[instrument(skip(state))]
 pub async fn revoke_api_key(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(key_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
@@ -384,7 +385,7 @@ pub async fn revoke_api_key(
 /// Get usage statistics for an API key
 #[instrument(skip(state))]
 pub async fn get_api_key_usage(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(key_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<ApiKeyUsageStats>, FusekiError> {

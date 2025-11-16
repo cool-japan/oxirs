@@ -241,6 +241,36 @@ impl LockManager {
             .map(|locks| locks.iter().cloned().collect())
             .unwrap_or_default()
     }
+
+    /// Get all transactions currently holding locks on a page
+    pub fn get_lock_holders(&self, page_id: PageId) -> Vec<(TxnId, LockMode)> {
+        let lock_table = self.lock_table.read().unwrap();
+        lock_table
+            .get(&page_id)
+            .map(|entry| {
+                entry
+                    .granted
+                    .iter()
+                    .map(|req| (req.txn_id, req.mode))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Get all transactions waiting for a lock on a page
+    pub fn get_lock_waiters(&self, page_id: PageId) -> Vec<(TxnId, LockMode)> {
+        let lock_table = self.lock_table.read().unwrap();
+        lock_table
+            .get(&page_id)
+            .map(|entry| {
+                entry
+                    .waiting
+                    .iter()
+                    .map(|req| (req.txn_id, req.mode))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
 }
 
 impl Default for LockManager {

@@ -11,6 +11,7 @@ use chrono::{DateTime, Utc};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
@@ -618,6 +619,7 @@ pub struct HealthChecker {
     health_checks: Vec<HealthCheck>,
     last_check_time: Option<Instant>,
     check_history: VecDeque<HealthCheckResult>,
+    total_checks_performed: Arc<AtomicU32>,
 }
 
 /// Component health status
@@ -706,6 +708,7 @@ pub struct NotificationEngine {
     templates: HashMap<String, NotificationTemplate>,
     delivery_status: HashMap<String, NotificationStatus>,
     rate_limits: HashMap<String, RateLimit>,
+    total_notifications_sent: Arc<AtomicU32>,
 }
 
 /// Notification template
@@ -908,13 +911,22 @@ impl SystemMonitor {
             ShaclAiError::ShapeManagement(format!("Failed to lock alert manager: {e}"))
         })?;
 
+        let health_checker = self.health_checker.lock().map_err(|e| {
+            ShaclAiError::ShapeManagement(format!("Failed to lock health checker: {e}"))
+        })?;
+
+        let notifier = self
+            .notifier
+            .lock()
+            .map_err(|e| ShaclAiError::ShapeManagement(format!("Failed to lock notifier: {e}")))?;
+
         Ok(MonitoringStatistics {
             metrics_collected: metrics_collector.total_metrics_count(),
             alerts_triggered: alert_manager.total_alerts_count(),
             uptime_seconds: metrics_collector.uptime_seconds(),
             data_points_stored: metrics_collector.data_points_count(),
-            health_checks_performed: 0, // TODO: implement
-            notifications_sent: 0,      // TODO: implement
+            health_checks_performed: health_checker.total_checks_performed(),
+            notifications_sent: notifier.total_notifications_sent(),
         })
     }
 
@@ -1194,6 +1206,7 @@ impl HealthChecker {
             health_checks: Vec::new(),
             last_check_time: None,
             check_history: VecDeque::new(),
+            total_checks_performed: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -1212,6 +1225,9 @@ impl HealthChecker {
 
             let result = self.run_single_check(check, now)?;
             results.push(result);
+
+            // Increment health check counter
+            self.total_checks_performed.fetch_add(1, Ordering::Relaxed);
         }
 
         self.last_check_time = Some(Instant::now());
@@ -1276,6 +1292,11 @@ impl HealthChecker {
             SystemHealth::Healthy
         }
     }
+
+    /// Get the total number of health checks performed
+    fn total_checks_performed(&self) -> u32 {
+        self.total_checks_performed.load(Ordering::Relaxed)
+    }
 }
 
 impl MonitoringStorage {
@@ -1303,7 +1324,28 @@ impl NotificationEngine {
             templates: HashMap::new(),
             delivery_status: HashMap::new(),
             rate_limits: HashMap::new(),
+            total_notifications_sent: Arc::new(AtomicU32::new(0)),
         }
+    }
+
+    /// Send a notification and track it
+    fn send_notification(&mut self, notification: &AlertNotification) -> Result<()> {
+        // Increment notification counter
+        self.total_notifications_sent
+            .fetch_add(1, Ordering::Relaxed);
+
+        // Update delivery status
+        self.delivery_status
+            .insert(notification.id.clone(), NotificationStatus::Sent);
+
+        // In a real implementation, this would actually send the notification
+        // through the configured channels (email, slack, webhook, etc.)
+        Ok(())
+    }
+
+    /// Get the total number of notifications sent
+    fn total_notifications_sent(&self) -> u32 {
+        self.total_notifications_sent.load(Ordering::Relaxed)
     }
 }
 

@@ -885,6 +885,9 @@ impl QueryRouter {
             algebra::TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             algebra::TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
             algebra::TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
+            algebra::TermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples not yet supported in distributed queries")
+            }
         };
 
         Some(algebra::TriplePattern::new(subject, predicate, object))

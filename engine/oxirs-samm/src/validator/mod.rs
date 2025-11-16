@@ -1,7 +1,9 @@
 //! SAMM Model Validator
 //!
-//! Validates SAMM models against SHACL shapes.
+//! Validates SAMM models against SHACL shapes and provides helper functions
+//! for common validation tasks.
 
+pub mod helpers;
 mod shacl_validator;
 
 pub use shacl_validator::ShaclValidator;

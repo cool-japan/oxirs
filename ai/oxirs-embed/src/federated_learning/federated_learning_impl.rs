@@ -672,7 +672,7 @@ impl EmbeddingModel for FederatedEmbeddingModel {
         Ok(Vector::new(vec![0.0; 128]))
     }
 
-    fn getrelation_embedding(&self, _relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, _relation: &str) -> Result<Vector> {
         // Implementation would return relation embedding
         Ok(Vector::new(vec![0.0; 128]))
     }

@@ -1,10 +1,10 @@
 # OxiRS Vec - Vector Search Engine
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
+✨ **Beta Software**: Production-ready with API stability guarantees and comprehensive testing.
 
 High-performance vector search infrastructure for semantic similarity search in RDF knowledge graphs.
 
@@ -35,7 +35,7 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-vec = "0.1.0-alpha.3"
+oxirs-vec = "0.1.0-beta.1"
 ```
 
 ## Quick Start
@@ -238,7 +238,7 @@ for entity in dataset.subjects() {
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.3)
+### Beta Release (v0.1.0-beta.1)
 - ✅ HNSW/IVF/Flat indices with persisted dataset support
 - ✅ SPARQL/GraphQL integration enhanced with federation-aware vector filters
 - ✅ CLI pipelines for batch embedding import/export and monitoring

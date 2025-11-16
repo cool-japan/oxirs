@@ -19,7 +19,7 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 
 # SciRS2 Integration
-scirs2-core = { workspace = true }
+scirs2-core = { workspace = true, features = ["profiling", "parallel"] }
 
 # Storage
 memmap2 = "0.9"
@@ -36,15 +36,27 @@ log = "0.4"
 bytes = "1.10"
 byteorder = "1.5"
 crc32fast = "1.5"
+chrono = "0.4"
+
+# Compression
+lz4_flex = { workspace = true }
+zstd = { workspace = true }
+snap = { workspace = true }
+brotli = { workspace = true }
+flate2 = { workspace = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 tempfile = "3.23"
 proptest = "1.7"
-env_logger = "0.11"
+env_logger = "0.10"
 # Use scirs2-core::random instead of rand (see CLAUDE.md)
 
-# Benchmarks will be added later
+[[bench]]
+name = "bloom_filter_benchmark"
+harness = false
+
+# Future benchmarks
 # [[bench]]
 # name = "btree_bench"
 # harness = false

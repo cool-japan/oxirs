@@ -29,7 +29,7 @@ pub struct InternalNode<K>
 where
     K: Ord + Clone + Debug,
 {
-    /// Keys for routing (keys[i] is the smallest key in children[i+1])
+    /// Keys for routing (keys\[i\] is the smallest key in children\[i+1\])
     pub keys: Vec<K>,
     /// Child page IDs (always has keys.len() + 1 children)
     pub children: Vec<PageId>,

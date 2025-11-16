@@ -2,6 +2,7 @@
 
 pub mod algebra;
 pub mod binding_optimizer;
+pub mod cost_based_optimizer;
 pub mod distributed;
 pub mod exec;
 pub mod functions;
@@ -12,9 +13,12 @@ pub mod parser;
 pub mod pattern_optimizer;
 pub mod pattern_unification;
 pub mod plan;
+pub mod plan_cache;
 pub mod property_paths;
+pub mod query_profiler;
 pub mod sparql_algebra;
 pub mod sparql_query;
+pub mod statistics;
 pub mod streaming_results;
 pub mod update;
 pub mod wasm;
@@ -37,6 +41,9 @@ pub use algebra::{
     PropertyPath, Query as AlgebraQuery, TermPattern as AlgebraTermPattern,
 };
 pub use binding_optimizer::{BindingIterator, BindingOptimizer, BindingSet, Constraint, TermType};
+pub use cost_based_optimizer::{
+    CostBasedOptimizer, CostConfiguration, Optimization, OptimizedPlan, OptimizerStats,
+};
 pub use distributed::{DistributedConfig, DistributedQueryEngine, FederatedEndpoint};
 pub use gpu::{GpuBackend, GpuQueryExecutor};
 pub use jit::{JitCompiler, JitConfig};
@@ -46,6 +53,14 @@ pub use pattern_optimizer::{IndexType, OptimizedPatternPlan, PatternExecutor, Pa
 pub use pattern_unification::{
     PatternConverter, PatternOptimizer as UnifiedPatternOptimizer, UnifiedTermPattern,
     UnifiedTriplePattern,
+};
+pub use plan_cache::{CacheConfig, CacheStatistics, CachedPlan, QueryPlanCache, SerializablePlan};
+pub use query_profiler::{
+    ProfiledQuery, ProfilerConfig, ProfilingStatistics, QueryProfiler, QueryProfilingSession,
+    QueryStatistics,
+};
+pub use statistics::{
+    GraphStatistics, PredicateStatistics, QueryExecutionStats, SelectivityInfo, StatisticsSummary,
 };
 pub use streaming_results::{
     ConstructResults, SelectResults, Solution as StreamingSolution, SolutionMetadata,
@@ -479,6 +494,9 @@ impl QueryEngine {
             TermPattern::NamedNode(n) => Some(ObjectPattern::NamedNode(n.clone())),
             TermPattern::BlankNode(b) => Some(ObjectPattern::BlankNode(b.clone())),
             TermPattern::Literal(l) => Some(ObjectPattern::Literal(l.clone())),
+            TermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples not yet fully supported in query module")
+            }
         };
 
         Ok(crate::model::pattern::TriplePattern {

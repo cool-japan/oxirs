@@ -6,12 +6,15 @@ use scirs2_core::ndarray_ext::{Array1, Array2};
 use scirs2_core::random::{Random, Rng};
 
 /// Initialize embeddings with Xavier/Glorot initialization (optimized)
-pub fn xavier_init(
+pub fn xavier_init<R>(
     shape: (usize, usize),
     fan_in: usize,
     fan_out: usize,
-    rng: &mut Random,
-) -> Array2<f64> {
+    rng: &mut Random<R>,
+) -> Array2<f64>
+where
+    R: scirs2_core::random::RngCore,
+{
     let limit = (6.0 / (fan_in + fan_out) as f64).sqrt();
     let scale = 2.0 * limit;
     Array2::from_shape_fn(shape, |_| rng.random_f64() * scale - limit)

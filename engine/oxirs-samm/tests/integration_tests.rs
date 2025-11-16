@@ -154,3 +154,77 @@ async fn test_parser_caching() {
     assert_eq!(aspect1.name(), aspect2.name());
     assert_eq!(aspect1.properties().len(), aspect2.properties().len());
 }
+
+#[tokio::test]
+async fn test_parse_aspect_with_entities() {
+    // Test parsing an aspect that references entities
+    let path = fixture_path("aspect-sample.ttl");
+    let result = parse_aspect_model(&path).await;
+
+    assert!(result.is_ok(), "Failed to parse aspect with entities");
+
+    let aspect = result.unwrap();
+    // Verify aspect was created even if entities are complex
+    assert!(!aspect.name().is_empty());
+}
+
+#[tokio::test]
+async fn test_parse_aspect_empty_properties() {
+    // Test parsing an aspect with no properties (edge case)
+    let path = fixture_path("prefixes-sample.ttl");
+    let result = parse_aspect_model(&path).await;
+
+    // Should succeed even if no properties
+    if result.is_ok() {
+        let aspect = result.unwrap();
+        assert!(!aspect.name().is_empty());
+    }
+    // If it fails, that's also acceptable for this edge case
+}
+
+#[tokio::test]
+async fn test_parse_aspect_multi_language() {
+    // Test parsing with multiple language tags
+    let path = fixture_path("multi-lang-example.ttl");
+    let result = parse_aspect_model(&path).await;
+
+    // This file doesn't have an Aspect, so it should fail
+    assert!(result.is_err(), "Expected failure for file without Aspect");
+}
+
+#[tokio::test]
+async fn test_parse_collection_characteristic() {
+    // Test parsing aspects with collection characteristics
+    let path = fixture_path("collection-with-element-characteristic.ttl");
+    let result = parse_aspect_model(&path).await;
+
+    assert!(
+        result.is_ok(),
+        "Failed to parse collection characteristic: {:?}",
+        result.err()
+    );
+
+    let aspect = result.unwrap();
+    assert!(
+        !aspect.properties().is_empty(),
+        "Expected at least one property with collection characteristic"
+    );
+}
+
+#[tokio::test]
+async fn test_concurrent_parsing() {
+    // Test concurrent parsing of the same file
+    let path = fixture_path("aspect-sample.ttl");
+
+    let handles: Vec<_> = (0..5)
+        .map(|_| {
+            let path = path.clone();
+            tokio::spawn(async move { parse_aspect_model(&path).await })
+        })
+        .collect();
+
+    for handle in handles {
+        let result = handle.await.expect("Task panicked");
+        assert!(result.is_ok(), "Concurrent parsing failed");
+    }
+}

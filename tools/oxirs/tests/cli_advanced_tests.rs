@@ -297,7 +297,7 @@ async fn test_large_dataset_query() {
     for i in 0..1000 {
         insert_query.push_str(&format!("  ex:entity{} ex:value \"Value {}\" .\n", i, i));
     }
-    insert_query.push_str("}");
+    insert_query.push('}');
 
     let insert_cli = Cli {
         command: Commands::Update {

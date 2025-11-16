@@ -625,9 +625,13 @@ impl<R: AsyncRead + Unpin> TokioAsyncReaderJsonLdParser<R> {
     }
 
     async fn parse_step(&mut self) -> Result<(), JsonLdParseError> {
-        let event = self.json_parser.parse_next().await.inspect_err(|_| {
-            self.inner.json_error = true;
-        })?;
+        let event = match self.json_parser.parse_next().await {
+            Ok(e) => e,
+            Err(err) => {
+                self.inner.json_error = true;
+                return Err(err.into());
+            }
+        };
         self.inner
             .parse_event(event, &mut self.results, &mut self.errors);
         Ok(())

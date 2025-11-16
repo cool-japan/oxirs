@@ -26,6 +26,7 @@ pub fn convert_algebra_triple_pattern(pattern: &AlgebraTriplePattern) -> TripleP
         TermPattern::BlankNode(bn) => Some(SubjectPattern::BlankNode(bn.clone())),
         TermPattern::Variable(v) => Some(SubjectPattern::Variable(v.clone())),
         TermPattern::Literal(_) => None, // Literals can't be subjects in RDF
+        TermPattern::QuotedTriple(_) => None, // RDF-star not yet fully implemented
     };
 
     let predicate = match &pattern.predicate {
@@ -39,6 +40,7 @@ pub fn convert_algebra_triple_pattern(pattern: &AlgebraTriplePattern) -> TripleP
         TermPattern::BlankNode(bn) => Some(ObjectPattern::BlankNode(bn.clone())),
         TermPattern::Literal(lit) => Some(ObjectPattern::Literal(lit.clone())),
         TermPattern::Variable(v) => Some(ObjectPattern::Variable(v.clone())),
+        TermPattern::QuotedTriple(_) => None, // RDF-star not yet fully implemented
     };
 
     TriplePattern::new(subject, predicate, object)

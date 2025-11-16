@@ -351,7 +351,68 @@ pub struct GraphStats {
 /// Batch operations for improved performance
 impl ConcurrentGraph {
     /// Insert multiple triples in a batch
+    ///
+    /// For small batches (<100), uses sequential insertion.
+    /// For large batches, uses parallel insertion with concurrent index updates.
     pub fn insert_batch(&self, triples: Vec<Triple>) -> Result<usize, OxirsError> {
+        // For small batches, use sequential insertion
+        if triples.len() < 100 {
+            let mut inserted = 0;
+            for triple in triples {
+                if self.insert(triple)? {
+                    inserted += 1;
+                }
+            }
+            return Ok(inserted);
+        }
+
+        // For large batches, use parallel insertion
+        self.insert_batch_parallel(triples)
+    }
+
+    /// Parallel batch insertion for large datasets
+    ///
+    /// Uses Rayon for parallel processing and concurrent index updates.
+    /// This provides significant speedup for bulk loading operations.
+    #[cfg(feature = "parallel")]
+    fn insert_batch_parallel(&self, triples: Vec<Triple>) -> Result<usize, OxirsError> {
+        use rayon::prelude::*;
+        use std::sync::atomic::AtomicUsize;
+
+        let inserted_count = AtomicUsize::new(0);
+        let errors: Arc<parking_lot::Mutex<Vec<OxirsError>>> =
+            Arc::new(parking_lot::Mutex::new(Vec::new()));
+
+        // Process in parallel
+        triples.par_iter().for_each(|triple| {
+            match self.insert(triple.clone()) {
+                Ok(true) => {
+                    inserted_count.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(false) => {
+                    // Already exists, not an error
+                }
+                Err(e) => {
+                    errors.lock().push(e);
+                }
+            }
+        });
+
+        // Check for errors
+        let error_vec = errors.lock();
+        if !error_vec.is_empty() {
+            return Err(OxirsError::Store(format!(
+                "Batch insert failed with {} errors",
+                error_vec.len()
+            )));
+        }
+
+        Ok(inserted_count.load(Ordering::Relaxed))
+    }
+
+    /// Sequential fallback for parallel batch insertion
+    #[cfg(not(feature = "parallel"))]
+    fn insert_batch_parallel(&self, triples: Vec<Triple>) -> Result<usize, OxirsError> {
         let mut inserted = 0;
         for triple in triples {
             if self.insert(triple)? {
@@ -362,7 +423,65 @@ impl ConcurrentGraph {
     }
 
     /// Remove multiple triples in a batch
+    ///
+    /// For small batches (<100), uses sequential removal.
+    /// For large batches, uses parallel removal with concurrent index updates.
     pub fn remove_batch(&self, triples: &[Triple]) -> Result<usize, OxirsError> {
+        // For small batches, use sequential removal
+        if triples.len() < 100 {
+            let mut removed = 0;
+            for triple in triples {
+                if self.remove(triple)? {
+                    removed += 1;
+                }
+            }
+            return Ok(removed);
+        }
+
+        // For large batches, use parallel removal
+        self.remove_batch_parallel(triples)
+    }
+
+    /// Parallel batch removal for large datasets
+    #[cfg(feature = "parallel")]
+    fn remove_batch_parallel(&self, triples: &[Triple]) -> Result<usize, OxirsError> {
+        use rayon::prelude::*;
+        use std::sync::atomic::AtomicUsize;
+
+        let removed_count = AtomicUsize::new(0);
+        let errors: Arc<parking_lot::Mutex<Vec<OxirsError>>> =
+            Arc::new(parking_lot::Mutex::new(Vec::new()));
+
+        // Process in parallel
+        triples.par_iter().for_each(|triple| {
+            match self.remove(triple) {
+                Ok(true) => {
+                    removed_count.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(false) => {
+                    // Doesn't exist, not an error
+                }
+                Err(e) => {
+                    errors.lock().push(e);
+                }
+            }
+        });
+
+        // Check for errors
+        let error_vec = errors.lock();
+        if !error_vec.is_empty() {
+            return Err(OxirsError::Store(format!(
+                "Batch remove failed with {} errors",
+                error_vec.len()
+            )));
+        }
+
+        Ok(removed_count.load(Ordering::Relaxed))
+    }
+
+    /// Sequential fallback for parallel batch removal
+    #[cfg(not(feature = "parallel"))]
+    fn remove_batch_parallel(&self, triples: &[Triple]) -> Result<usize, OxirsError> {
         let mut removed = 0;
         for triple in triples {
             if self.remove(triple)? {
@@ -370,6 +489,57 @@ impl ConcurrentGraph {
             }
         }
         Ok(removed)
+    }
+
+    /// Rebuild all indices from scratch (useful for optimization after many operations)
+    ///
+    /// This operation is expensive but can improve query performance by defragmenting
+    /// the index structures and removing empty entries.
+    pub fn rebuild_indices(&self) -> Result<(), OxirsError> {
+        let guard = self.epoch_manager.pin();
+
+        // Load current graph state
+        let current = self.graph.load(&guard);
+        let graph_node = unsafe {
+            current
+                .as_ref()
+                .ok_or_else(|| OxirsError::Store("Graph not initialized".to_string()))?
+        };
+
+        // Clear existing indices
+        graph_node.spo_index.clear();
+        graph_node.pos_index.clear();
+        graph_node.osp_index.clear();
+
+        // Rebuild from triples
+        #[cfg(feature = "parallel")]
+        {
+            use rayon::prelude::*;
+
+            // Collect triples into a vector for parallel processing
+            let triples: Vec<Triple> = graph_node
+                .triples
+                .iter()
+                .map(|entry| entry.value().clone())
+                .collect();
+
+            triples.par_iter().for_each(|triple| {
+                self.update_indices_insert(graph_node, triple);
+            });
+        }
+
+        #[cfg(not(feature = "parallel"))]
+        {
+            for entry in graph_node.triples.iter() {
+                let triple = entry.value();
+                self.update_indices_insert(graph_node, triple);
+            }
+        }
+
+        // Increment version
+        graph_node.increment_version();
+
+        Ok(())
     }
 
     /// Clear all triples from the graph
@@ -518,5 +688,72 @@ mod tests {
         graph.clear().unwrap();
         assert_eq!(graph.len(), 0);
         assert!(graph.is_empty());
+    }
+
+    #[test]
+    fn test_parallel_batch_insert() {
+        let graph = ConcurrentGraph::new();
+
+        // Create a large batch (>100 to trigger parallel mode)
+        let triples: Vec<Triple> = (0..200)
+            .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
+            .collect();
+
+        let inserted = graph.insert_batch(triples).unwrap();
+        assert_eq!(inserted, 200);
+        assert_eq!(graph.len(), 200);
+    }
+
+    #[test]
+    fn test_parallel_batch_remove() {
+        let graph = ConcurrentGraph::new();
+
+        // Insert test data
+        let triples: Vec<Triple> = (0..200)
+            .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
+            .collect();
+
+        graph.insert_batch(triples.clone()).unwrap();
+        assert_eq!(graph.len(), 200);
+
+        // Remove in batch
+        let removed = graph.remove_batch(&triples).unwrap();
+        assert_eq!(removed, 200);
+        assert_eq!(graph.len(), 0);
+    }
+
+    #[test]
+    fn test_rebuild_indices() {
+        let graph = ConcurrentGraph::new();
+
+        // Insert triples
+        let triples: Vec<Triple> = (0..50)
+            .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
+            .collect();
+
+        graph.insert_batch(triples).unwrap();
+        assert_eq!(graph.len(), 50);
+
+        // Rebuild indices
+        graph.rebuild_indices().unwrap();
+
+        // Verify queries still work
+        let s = Subject::NamedNode(NamedNode::new("http://s0").unwrap());
+        let matches = graph.match_pattern(Some(&s), None, None);
+        assert_eq!(matches.len(), 1);
+    }
+
+    #[test]
+    fn test_small_batch_sequential() {
+        let graph = ConcurrentGraph::new();
+
+        // Small batch should use sequential insertion
+        let triples: Vec<Triple> = (0..50)
+            .map(|i| create_test_triple(&format!("http://s{i}"), "http://p", "http://o"))
+            .collect();
+
+        let inserted = graph.insert_batch(triples).unwrap();
+        assert_eq!(inserted, 50);
+        assert_eq!(graph.len(), 50);
     }
 }

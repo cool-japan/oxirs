@@ -37,6 +37,10 @@ pub enum GeoSparqlError {
         found: String,
     },
 
+    /// CRS incompatibility between geometries
+    #[error("CRS incompatibility: {0} vs {1}")]
+    CrsIncompatibility(String, String),
+
     /// CRS transformation failed
     #[error("CRS transformation failed: {0}")]
     CrsTransformationFailed(String),
@@ -68,6 +72,22 @@ pub enum GeoSparqlError {
     /// Index error
     #[error("Index error: {0}")]
     IndexError(String),
+
+    /// Invalid parameter
+    #[error("Invalid parameter: {0}")]
+    InvalidParameter(String),
+
+    /// Validation error
+    #[error("Validation error: {0}")]
+    ValidationError(String),
+
+    /// Invalid input
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    /// Computation error
+    #[error("Computation error: {0}")]
+    ComputationError(String),
 
     /// Other error
     #[error("GeoSPARQL error: {0}")]

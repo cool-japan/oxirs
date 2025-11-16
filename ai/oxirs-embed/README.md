@@ -1,20 +1,58 @@
 # OxiRS Embed - Knowledge Graph Embeddings
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
+⚡ **Beta Software**: Feature-complete beta release with comprehensive testing. APIs are stabilizing. Production-ready for experimental use.
 
 Generate vector embeddings for RDF knowledge graphs enabling semantic similarity search, entity linking, and neural-symbolic AI integration.
 
 ## Features
 
 ### Embedding Models
-- **Sentence Transformers** - Pre-trained models from HuggingFace
-- **OpenAI Embeddings** - GPT-based embeddings via API
-- **Custom Models** - Bring your own embedding models
-- **Multi-lingual Support** - Models for various languages
+- **TransE** - Translational distance models for knowledge graphs
+- **DistMult** - Bilinear diagonal models for symmetric relations
+- **ComplEx** - Complex-valued embeddings for asymmetric relations
+- **RotatE** - Rotation-based models in complex space
+- **HolE** - Holographic embeddings using circular correlation (NEW in v0.1.0-beta.1)
+- **ConvE** - Convolutional 2D neural network embeddings (NEW in v0.1.0-beta.1)
+- **TuckER** - Tucker decomposition for multi-relational learning
+- **QuatE** - Quaternion embeddings for complex patterns
+
+### Advanced Features (NEW in v0.1.0-beta.1)
+- **Link Prediction** - Predict missing triples (head/tail/relation)
+  - Filtered ranking to remove known triples
+  - Batch prediction for efficiency
+  - Evaluation metrics (MRR, Hits@K, Mean Rank)
+- **Entity Clustering** - Group similar entities
+  - K-Means with K-Means++ initialization
+  - Hierarchical (agglomerative) clustering
+  - DBSCAN (density-based) clustering
+  - Spectral clustering
+  - Quality metrics (silhouette score, inertia)
+- **Community Detection** - Find communities in knowledge graphs
+  - Louvain modularity optimization
+  - Label propagation
+  - Girvan-Newman edge betweenness
+  - Embedding-based detection
+- **Vector Search** - High-performance semantic search (NEW in beta.1)
+  - Exact search with multiple distance metrics
+  - Cosine similarity, Euclidean, dot product, Manhattan
+  - Batch search for multiple queries
+  - Radius-based filtering
+  - Parallel processing support
+- **Visualization** - t-SNE, PCA, UMAP, Random Projection
+  - 2D and 3D dimensionality reduction
+  - Export to CSV/JSON formats
+  - Cluster-aware visualizations
+- **Interpretability** - Model understanding tools
+  - Similarity analysis and nearest neighbors
+  - Feature importance analysis
+  - Counterfactual explanations
+  - Embedding space diagnostics
+- **Mixed Precision Training** - FP16/FP32 for faster training
+- **Model Quantization** - Int8/Int4/Binary compression (3-4x size reduction)
 
 ### Knowledge Graph Embedding
 - **Entity Embeddings** - Generate embeddings for RDF entities
@@ -27,6 +65,8 @@ Generate vector embeddings for RDF knowledge graphs enabling semantic similarity
 - **Entity Linking** - Link mentions to knowledge graph entities
 - **Relation Prediction** - Predict missing relationships
 - **Clustering** - Group similar entities
+- **Knowledge Graph Completion** - Fill missing facts in KGs
+- **Anomaly Detection** - Detect unusual patterns in graphs
 
 ## Installation
 
@@ -35,10 +75,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-embed = "0.1.0-alpha.3"
+oxirs-embed = "0.1.0-beta.1"
 
 # Enable specific providers
-oxirs-embed = { version = "0.1.0-alpha.3", features = ["openai", "sentence-transformers"] }
+oxirs-embed = { version = "0.1.0-beta.1", features = ["openai", "sentence-transformers"] }
 ```
 
 ## Quick Start
@@ -119,6 +159,279 @@ let similar_entities = find_similar(
 for (entity, score) in similar_entities {
     println!("{}: {:.3}", entity, score);
 }
+```
+
+## New Models (v0.1.0-beta.1)
+
+### HolE (Holographic Embeddings)
+
+HolE uses circular correlation to model entity and relation interactions. Effective for capturing symmetric and asymmetric patterns.
+
+```rust
+use oxirs_embed::{
+    models::hole::{HoLE, HoLEConfig},
+    EmbeddingModel, ModelConfig, NamedNode, Triple,
+};
+
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Configure HolE model
+    let config = HoLEConfig {
+        base: ModelConfig {
+            dimensions: 100,
+            learning_rate: 0.01,
+            max_epochs: 100,
+            ..Default::default()
+        },
+        regularization: 0.0001,
+        margin: 1.0,
+        num_negatives: 5,
+        use_sigmoid: true,
+    };
+
+    let mut model = HoLE::new(config);
+
+    // Add triples
+    model.add_triple(Triple::new(
+        NamedNode::new("paris")?,
+        NamedNode::new("capital_of")?,
+        NamedNode::new("france")?,
+    ))?;
+
+    // Train
+    let stats = model.train(Some(100)).await?;
+
+    // Score triple
+    let score = model.score_triple("paris", "capital_of", "france")?;
+    println!("Score: {:.4}", score);
+
+    Ok(())
+}
+```
+
+### ConvE (Convolutional Embeddings)
+
+ConvE uses 2D CNNs for expressive knowledge graph embeddings. Parameter-efficient with shared convolutional filters.
+
+```rust
+use oxirs_embed::models::conve::{ConvE, ConvEConfig};
+
+let config = ConvEConfig {
+    base: ModelConfig {
+        dimensions: 200,
+        learning_rate: 0.001,
+        max_epochs: 100,
+        ..Default::default()
+    },
+    reshape_width: 20,  // 200 / 20 = 10 height
+    num_filters: 32,
+    kernel_size: 3,
+    dropout_rate: 0.3,
+    ..Default::default()
+};
+
+let mut model = ConvE::new(config);
+
+// Add triples and train as before
+model.add_triple(triple)?;
+model.train(Some(100)).await?;
+```
+
+### Link Prediction
+
+Predict missing entities or relations in knowledge graphs.
+
+```rust
+use oxirs_embed::link_prediction::{LinkPredictionConfig, LinkPredictor};
+
+// Create predictor
+let pred_config = LinkPredictionConfig {
+    top_k: 5,
+    filter_known_triples: true,
+    min_confidence: 0.0,
+    parallel: true,
+    batch_size: 100,
+};
+
+let predictor = LinkPredictor::new(pred_config, model);
+
+// Predict tail entity (object prediction)
+let candidates = vec!["bob".to_string(), "charlie".to_string()];
+let predictions = predictor.predict_tail("alice", "knows", &candidates)?;
+
+for pred in predictions {
+    println!("{} (score: {:.4}, rank: {})", pred.entity, pred.score, pred.rank);
+}
+
+// Predict head entity (subject prediction)
+let predictions = predictor.predict_head("knows", "bob", &candidates)?;
+
+// Predict relation
+let relations = vec!["knows".to_string(), "friend_of".to_string()];
+let predictions = predictor.predict_relation("alice", "bob", &relations)?;
+```
+
+### Entity Clustering
+
+Group similar entities based on learned embeddings.
+
+```rust
+use oxirs_embed::clustering::{ClusteringAlgorithm, ClusteringConfig, EntityClustering};
+use std::collections::HashMap;
+
+// Extract embeddings
+let mut embeddings = HashMap::new();
+for entity in model.get_entities() {
+    if let Ok(emb) = model.get_entity_embedding(&entity) {
+        let array = scirs2_core::ndarray_ext::Array1::from_vec(emb.values);
+        embeddings.insert(entity, array);
+    }
+}
+
+// K-Means clustering
+let config = ClusteringConfig {
+    algorithm: ClusteringAlgorithm::KMeans,
+    num_clusters: 5,
+    max_iterations: 100,
+    ..Default::default()
+};
+
+let mut clustering = EntityClustering::new(config);
+let result = clustering.cluster(&embeddings)?;
+
+println!("Silhouette score: {:.3}", result.silhouette_score);
+println!("Cluster assignments:");
+for (entity, cluster_id) in result.assignments {
+    println!("  {} -> Cluster {}", entity, cluster_id);
+}
+```
+
+### Community Detection
+
+Find communities in knowledge graphs using graph structure and embeddings.
+
+```rust
+use oxirs_embed::community_detection::{CommunityAlgorithm, CommunityConfig, CommunityDetector};
+
+let config = CommunityConfig {
+    algorithm: CommunityAlgorithm::Louvain,
+    min_community_size: 2,
+    resolution: 1.0,
+    ..Default::default()
+};
+
+let mut detector = CommunityDetector::new(config);
+let result = detector.detect(&triples)?;
+
+println!("Modularity: {:.3}", result.modularity);
+println!("Found {} communities", result.communities.len());
+```
+
+### Vector Search
+
+High-performance semantic search for knowledge graph embeddings.
+
+```rust
+use oxirs_embed::vector_search::{VectorSearchIndex, SearchConfig, DistanceMetric};
+
+// Build search index
+let config = SearchConfig {
+    metric: DistanceMetric::Cosine,
+    parallel: true,
+    normalize: true,
+    ..Default::default()
+};
+
+let mut index = VectorSearchIndex::new(config);
+index.build(&embeddings)?;
+
+// Search for similar entities
+let query_embedding = embeddings["iphone"].to_vec();
+let results = index.search(&query_embedding, 10)?;
+
+for result in results {
+    println!("{}: similarity = {:.3}", result.entity_id, result.score);
+}
+
+// Batch search
+let queries = vec![query1, query2, query3];
+let batch_results = index.batch_search(&queries, 10)?;
+
+// Radius search (find all within distance)
+let radius_results = index.radius_search(&query_embedding, 0.5)?;
+```
+
+### Visualization
+
+Visualize embeddings in 2D/3D using dimensionality reduction.
+
+```rust
+use oxirs_embed::visualization::{EmbeddingVisualizer, ReductionMethod, VisualizationConfig};
+
+// PCA visualization
+let config = VisualizationConfig {
+    method: ReductionMethod::PCA,
+    target_dims: 2,
+    ..Default::default()
+};
+
+let mut visualizer = EmbeddingVisualizer::new(config);
+let result = visualizer.visualize(&embeddings)?;
+
+// t-SNE visualization (better for discovering clusters)
+let tsne_config = VisualizationConfig {
+    method: ReductionMethod::TSNE,
+    target_dims: 2,
+    tsne_perplexity: 30.0,
+    max_iterations: 1000,
+    ..Default::default()
+};
+
+let mut tsne_viz = EmbeddingVisualizer::new(tsne_config);
+let tsne_result = tsne_viz.visualize(&embeddings)?;
+
+// Export to CSV for plotting
+for (entity, coords) in &tsne_result.coordinates {
+    println!("{},{},{}", entity, coords[0], coords[1]);
+}
+```
+
+### Interpretability
+
+Understand why models make certain predictions.
+
+```rust
+use oxirs_embed::interpretability::{InterpretabilityAnalyzer, InterpretabilityConfig, InterpretationMethod};
+
+// Similarity analysis
+let config = InterpretabilityConfig {
+    method: InterpretationMethod::SimilarityAnalysis,
+    top_k: 10,
+    ..Default::default()
+};
+
+let analyzer = InterpretabilityAnalyzer::new(config);
+let analysis = analyzer.similarity_analysis("alice", &embeddings)?;
+
+println!("Most similar to 'alice':");
+for (entity, score) in &analysis.similar_entities {
+    println!("  {}: {:.3}", entity, score);
+}
+
+// Feature importance
+let importance_config = InterpretabilityConfig {
+    method: InterpretationMethod::FeatureImportance,
+    top_k: 10,
+    ..Default::default()
+};
+
+let imp_analyzer = InterpretabilityAnalyzer::new(importance_config);
+let importance = imp_analyzer.feature_importance("alice", &embeddings)?;
+
+// Counterfactual explanations
+let counterfactual = analyzer.counterfactual_explanation("alice", "bob", &embeddings)?;
+println!("To be like Bob, Alice would need to change {} dimensions",
+    counterfactual.required_changes.len());
 ```
 
 ## Supported Embedding Providers
@@ -312,7 +625,7 @@ let model = EmbeddingModel::builder()
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.3)
+### Beta Release (v0.1.0-beta.1)
 - ✅ Sentence Transformers integration with batch streaming + persistence
 - ✅ OpenAI embeddings support with provider failover and caching
 - ✅ Entity/graph embeddings wired into CLI ingest/export pipelines

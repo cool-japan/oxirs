@@ -1,0 +1,203 @@
+# OxiRS Fuseki - Production Docker Compose Stack
+# Includes SPARQL server, monitoring, and observability stack
+
+version: '3.9'
+
+services:
+  # OxiRS Fuseki SPARQL Server
+  oxirs-fuseki:
+    build:
+      context: ../..
+      dockerfile: server/oxirs-fuseki/Dockerfile
+    container_name: oxirs-fuseki
+    hostname: oxirs-fuseki
+    restart: unless-stopped
+    ports:
+      - "3030:3030"  # SPARQL HTTP endpoint
+      - "9090:9090"  # Metrics endpoint
+      - "8080:8080"  # Admin UI
+    volumes:
+      - oxirs-data:/data/oxirs
+      - oxirs-logs:/var/log/oxirs
+      - ./config/oxirs.toml:/etc/oxirs/oxirs.toml:ro
+      - ./config/tls:/etc/oxirs/tls:ro  # TLS certificates
+    environment:
+      - RUST_LOG=info
+      - OXIRS_CONFIG=/etc/oxirs/oxirs.toml
+      - OXIRS_DATA=/data/oxirs
+      - OXIRS_LOG_DIR=/var/log/oxirs
+    networks:
+      - oxirs-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/$/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - prometheus
+      - grafana
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: oxirs-prometheus
+    hostname: prometheus
+    restart: unless-stopped
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - oxirs-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: oxirs-grafana
+    hostname: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=oxirs123
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      - GF_INSTALL_PLUGINS=
+    networks:
+      - oxirs-network
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Redis for session storage and caching
+  redis:
+    image: redis:7-alpine
+    container_name: oxirs-redis
+    hostname: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --requirepass oxirs-redis-password
+    networks:
+      - oxirs-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # NGINX reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: oxirs-nginx
+    hostname: nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx-logs:/var/log/nginx
+    networks:
+      - oxirs-network
+    depends_on:
+      - oxirs-fuseki
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # OpenTelemetry Collector for distributed tracing
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: oxirs-otel-collector
+    hostname: otel-collector
+    restart: unless-stopped
+    ports:
+      - "4317:4317"  # OTLP gRPC
+      - "4318:4318"  # OTLP HTTP
+      - "8888:8888"  # Prometheus metrics
+      - "13133:13133"  # Health check
+    volumes:
+      - ./config/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    networks:
+      - oxirs-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Jaeger for tracing visualization
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: oxirs-jaeger
+    hostname: jaeger
+    restart: unless-stopped
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14268:14268"  # Jaeger collector
+      - "14250:14250"  # gRPC
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    networks:
+      - oxirs-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16686"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  oxirs-data:
+    driver: local
+  oxirs-logs:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+  redis-data:
+    driver: local
+  nginx-logs:
+    driver: local
+
+networks:
+  oxirs-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

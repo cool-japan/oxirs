@@ -1,12 +1,13 @@
 //! Configuration types for HNSW index
 
 use crate::similarity::SimilarityMetric;
+use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "gpu")]
 use crate::gpu::GpuConfig;
 
 /// Configuration for HNSW index
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HnswConfig {
     /// Maximum number of bi-directional links created for each node during construction (except layer 0)
     pub m: usize,

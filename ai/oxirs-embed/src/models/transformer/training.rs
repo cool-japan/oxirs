@@ -339,7 +339,7 @@ impl TransformerTrainer {
     }
 
     /// Get relation embeddings
-    pub fn getrelation_embeddings(&self) -> &HashMap<String, Array1<f32>> {
+    pub fn get_relation_embeddings(&self) -> &HashMap<String, Array1<f32>> {
         &self.relation_embeddings
     }
 

@@ -3,6 +3,7 @@
 //! This module contains the fundamental types used throughout the chat system,
 //! including messages, rich content elements, and associated metadata.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -1163,4 +1164,31 @@ pub struct InteractionPatterns {
     pub simple_questions: usize,
     pub technical_messages: usize,
     pub preferred_response_style: Option<String>,
+}
+
+// Additional types for compatibility with server.rs
+
+/// Thread information for message threads
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThreadInfo {
+    pub thread_id: String,
+    pub title: Option<String>,
+    pub message_count: usize,
+    pub created_at: DateTime<Utc>,
+    pub last_activity: DateTime<Utc>,
+}
+
+/// Session statistics for system monitoring
+// Updated SessionStats with all fields
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionStats {
+    pub total_sessions: usize,
+    pub active_sessions: usize,
+    pub idle_sessions: usize,
+    pub expired_sessions: usize,
+    pub suspended_sessions: usize,
+    pub total_messages: usize,
+    pub total_tokens: usize,
+    pub avg_response_time_ms: f64,
+    pub uptime_seconds: u64,
 }

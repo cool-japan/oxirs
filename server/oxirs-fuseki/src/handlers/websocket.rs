@@ -344,7 +344,7 @@ impl SubscriptionManager {
 #[instrument(skip(state, ws))]
 pub async fn websocket_handler(
     ws: WebSocketUpgrade,
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<WebSocketParams>,
     // auth_user: Option<AuthUser>, // Would be extracted in full implementation
 ) -> impl IntoResponse {
@@ -367,7 +367,7 @@ pub async fn websocket_handler(
 /// Handle WebSocket connection
 async fn handle_websocket_connection(
     socket: WebSocket,
-    state: AppState,
+    state: Arc<AppState>,
     subscription_manager: SubscriptionManager,
     _params: WebSocketParams,
 ) {

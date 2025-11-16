@@ -42,7 +42,6 @@ impl ConformanceStats {
         self.total_tests += 1;
         self.failed += 1;
     }
-
 }
 
 // ============================================================================
@@ -674,7 +673,7 @@ fn run_all_syntax_tests() -> ConformanceStats {
     let mut stats = ConformanceStats::default();
 
     // Turtle-star tests (use multiline format to separate directives from triples)
-    let turtle_tests = vec![
+    let turtle_tests = [
         (
             r#"@prefix ex: <http://example.org/> .
 <<ex:alice ex:age "30">> ex:certainty "0.9" ."#,
@@ -699,7 +698,7 @@ ex:source ex:states <<ex:alice ex:age "30">> ."#,
     ];
 
     let turtle_parser = StarParser::new(); // Single parser for Turtle tests
-    for (_i, (input, expected_len)) in turtle_tests.iter().enumerate() {
+    for (input, expected_len) in turtle_tests.iter() {
         match turtle_parser.parse_str(input, StarFormat::TurtleStar) {
             Ok(graph) if graph.len() == *expected_len => {
                 stats.record_pass();

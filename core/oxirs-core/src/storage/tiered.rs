@@ -150,7 +150,7 @@ mod tiered_impl {
 
     impl TieredStorageEngine {
         /// Create a new tiered storage engine
-        pub async fn new(config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
+        pub async fn create(config: StorageConfig) -> Result<Arc<dyn StorageEngine>, OxirsError> {
             // Initialize hot tier
             let hot_capacity = config.tiers.hot_tier.max_size_mb * 1024 * 1024 / 1000; // Approximate
             let hot_tier = Arc::new(Mutex::new(LruCache::new(
@@ -292,7 +292,10 @@ mod tiered_impl {
                 // Promote to hot tier
                 for hash in to_promote {
                     if let Ok(Some(data)) = warm.storage.get(hash.to_be_bytes()) {
-                        if let Ok(triple) = bincode::deserialize::<StoredTriple>(&data) {
+                        if let Ok((triple, _)) = bincode::serde::decode_from_slice::<StoredTriple, _>(
+                            &data,
+                            bincode::config::standard(),
+                        ) {
                             hot_tier.lock().put(hash, triple);
                             warm.storage.delete(hash.to_be_bytes())?;
                             warm.access_tracker.remove(&hash);
@@ -387,6 +390,11 @@ mod tiered_impl {
             }
 
             // Create stored triple with metadata
+            // Calculate serialized size by actually serializing
+            let temp_serialized =
+                bincode::serde::encode_to_vec(triple, bincode::config::standard())?;
+            let size_bytes = temp_serialized.len();
+
             let stored = StoredTriple {
                 triple: triple.clone(),
                 metadata: TripleMetadata {
@@ -396,7 +404,7 @@ mod tiered_impl {
                         last_access: now,
                         access_count: 0,
                         tier: self.determine_initial_tier(triple),
-                        size_bytes: bincode::serialized_size(triple)? as usize,
+                        size_bytes,
                     },
                     content_hash: hash,
                     compression: None,
@@ -410,7 +418,7 @@ mod tiered_impl {
                     self.stats.hot_count.fetch_add(1, Ordering::Relaxed);
                 }
                 StorageTier::Warm => {
-                    let data = bincode::serialize(&stored)?;
+                    let data = bincode::serde::encode_to_vec(&stored, bincode::config::standard())?;
                     self.warm_tier
                         .write()
                         .await
@@ -470,13 +478,14 @@ mod tiered_impl {
                 let warm = self.warm_tier.read().await;
                 // Iterate through warm tier storage
                 let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
-                for item in iter {
-                    if let Ok((_key, value)) = item {
-                        if let Ok(stored) = bincode::deserialize::<StoredTriple>(&value) {
-                            if pattern.matches(&stored.triple) {
-                                results.push(stored.triple.clone());
-                                self.stats.warm_hits.fetch_add(1, Ordering::Relaxed);
-                            }
+                for (_key, value) in iter.flatten() {
+                    if let Ok((stored, _)) = bincode::serde::decode_from_slice::<StoredTriple, _>(
+                        &value,
+                        bincode::config::standard(),
+                    ) {
+                        if pattern.matches(&stored.triple) {
+                            results.push(stored.triple.clone());
+                            self.stats.warm_hits.fetch_add(1, Ordering::Relaxed);
                         }
                     }
                 }
@@ -665,7 +674,7 @@ mod tiered_impl {
                 .iter()
                 .map(|(k, v)| (*k, v.clone()))
                 .collect();
-            let hot_bytes = bincode::serialize(&hot_data)?;
+            let hot_bytes = bincode::serde::encode_to_vec(&hot_data, bincode::config::standard())?;
             std::fs::write(hot_backup, hot_bytes)?;
 
             // Warm and cold tiers - backup by iterating and saving
@@ -674,14 +683,13 @@ mod tiered_impl {
                 let warm = self.warm_tier.read().await;
                 let mut data = Vec::new();
                 let iter = warm.storage.iterator(rocksdb::IteratorMode::Start);
-                for item in iter {
-                    if let Ok((key, value)) = item {
-                        data.push((key.to_vec(), value.to_vec()));
-                    }
+                for (key, value) in iter.flatten() {
+                    data.push((key.to_vec(), value.to_vec()));
                 }
                 data
             };
-            let warm_bytes = bincode::serialize(&warm_data)?;
+            let warm_bytes =
+                bincode::serde::encode_to_vec(&warm_data, bincode::config::standard())?;
             std::fs::write(warm_backup, warm_bytes)?;
 
             let cold_backup = path.join("cold.bin");
@@ -689,14 +697,13 @@ mod tiered_impl {
                 let cold = self.cold_tier.read().await;
                 let mut data = Vec::new();
                 let iter = cold.storage.iterator(rocksdb::IteratorMode::Start);
-                for item in iter {
-                    if let Ok((key, value)) = item {
-                        data.push((key.to_vec(), value.to_vec()));
-                    }
+                for (key, value) in iter.flatten() {
+                    data.push((key.to_vec(), value.to_vec()));
                 }
                 data
             };
-            let cold_bytes = bincode::serialize(&cold_data)?;
+            let cold_bytes =
+                bincode::serde::encode_to_vec(&cold_data, bincode::config::standard())?;
             std::fs::write(cold_backup, cold_bytes)?;
 
             // Index backup
@@ -706,7 +713,8 @@ mod tiered_impl {
                 .iter()
                 .map(|entry| (*entry.key(), entry.value().clone()))
                 .collect();
-            let index_bytes = bincode::serialize(&index_data)?;
+            let index_bytes =
+                bincode::serde::encode_to_vec(&index_data, bincode::config::standard())?;
             std::fs::write(index_backup, index_bytes)?;
 
             Ok(())
@@ -722,7 +730,9 @@ mod tiered_impl {
             let hot_backup = path.join("hot.bin");
             if hot_backup.exists() {
                 let hot_bytes = std::fs::read(hot_backup)?;
-                let hot_data: Vec<(u64, StoredTriple)> = bincode::deserialize(&hot_bytes)?;
+                let hot_data: Vec<(u64, StoredTriple)> =
+                    bincode::serde::decode_from_slice(&hot_bytes, bincode::config::standard())
+                        .map(|(v, _)| v)?;
 
                 let mut hot = self.hot_tier.lock();
                 hot.clear();
@@ -735,7 +745,9 @@ mod tiered_impl {
             let warm_backup = path.join("warm.bin");
             if warm_backup.exists() {
                 let warm_bytes = std::fs::read(warm_backup)?;
-                let warm_data: Vec<(Vec<u8>, Vec<u8>)> = bincode::deserialize(&warm_bytes)?;
+                let warm_data: Vec<(Vec<u8>, Vec<u8>)> =
+                    bincode::serde::decode_from_slice(&warm_bytes, bincode::config::standard())
+                        .map(|(v, _)| v)?;
 
                 let warm = self.warm_tier.write().await;
                 for (key, value) in warm_data {
@@ -747,7 +759,9 @@ mod tiered_impl {
             let cold_backup = path.join("cold.bin");
             if cold_backup.exists() {
                 let cold_bytes = std::fs::read(cold_backup)?;
-                let cold_data: Vec<(Vec<u8>, Vec<u8>)> = bincode::deserialize(&cold_bytes)?;
+                let cold_data: Vec<(Vec<u8>, Vec<u8>)> =
+                    bincode::serde::decode_from_slice(&cold_bytes, bincode::config::standard())
+                        .map(|(v, _)| v)?;
 
                 let cold = self.cold_tier.write().await;
                 for (key, value) in cold_data {
@@ -759,7 +773,9 @@ mod tiered_impl {
             let index_backup = path.join("index.bin");
             if index_backup.exists() {
                 let index_bytes = std::fs::read(index_backup)?;
-                let index_data: HashMap<u64, AccessInfo> = bincode::deserialize(&index_bytes)?;
+                let index_data: HashMap<u64, AccessInfo> =
+                    bincode::serde::decode_from_slice(&index_bytes, bincode::config::standard())
+                        .map(|(v, _)| v)?;
 
                 self.index.clear();
                 for (k, v) in index_data {
@@ -835,7 +851,7 @@ mod tiered_impl {
             config.tiers.archive_tier.backend =
                 ArchiveBackend::Local(format!("{}/archive", test_dir));
 
-            let engine = TieredStorageEngine::new(config).await.unwrap();
+            let engine = TieredStorageEngine::create(config).await.unwrap();
 
             // Create test triple
             let subject = NamedNode::new("http://example.org/subject").unwrap();

@@ -166,6 +166,9 @@ impl From<TermPattern> for SubjectPattern {
             TermPattern::BlankNode(b) => SubjectPattern::BlankNode(b),
             TermPattern::Variable(v) => SubjectPattern::Variable(v),
             TermPattern::Literal(_) => panic!("Literals cannot be subjects"),
+            TermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples as subjects not yet fully implemented")
+            }
         }
     }
 }
@@ -177,6 +180,7 @@ impl From<TermPattern> for PredicatePattern {
             TermPattern::Variable(v) => PredicatePattern::Variable(v),
             TermPattern::BlankNode(_) => panic!("Blank nodes cannot be predicates"),
             TermPattern::Literal(_) => panic!("Literals cannot be predicates"),
+            TermPattern::QuotedTriple(_) => panic!("Quoted triples cannot be predicates"),
         }
     }
 }
@@ -188,6 +192,9 @@ impl From<TermPattern> for ObjectPattern {
             TermPattern::BlankNode(b) => ObjectPattern::BlankNode(b),
             TermPattern::Literal(l) => ObjectPattern::Literal(l),
             TermPattern::Variable(v) => ObjectPattern::Variable(v),
+            TermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples as objects not yet fully implemented")
+            }
         }
     }
 }

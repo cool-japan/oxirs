@@ -56,18 +56,13 @@ mod bft_tests {
     #[test]
     fn test_node_registration() {
         use ed25519_dalek::SigningKey;
-        use rand::rngs::OsRng;
-        use rand::RngCore;
-
         let config = BftConfig::new(4);
         let consensus = BftConsensus::new("node1".to_string(), config).unwrap();
 
         // Generate keypairs for nodes (ed25519-dalek 2.x)
-        let mut csprng = OsRng;
-        let mut seed_bytes2 = [0u8; 32];
-        let mut seed_bytes3 = [0u8; 32];
-        csprng.fill_bytes(&mut seed_bytes2);
-        csprng.fill_bytes(&mut seed_bytes3);
+        // Use rand::random() to avoid scirs2-core OsRng re-export conflict
+        let seed_bytes2: [u8; 32] = rand::random();
+        let seed_bytes3: [u8; 32] = rand::random();
         let keypair2 = SigningKey::from_bytes(&seed_bytes2);
         let keypair3 = SigningKey::from_bytes(&seed_bytes3);
 
@@ -96,11 +91,8 @@ mod bft_tests {
 
         // Generate a test keypair (ed25519-dalek 2.x)
         use ed25519_dalek::SigningKey;
-        use rand::rngs::OsRng;
-        use rand::RngCore;
-        let mut csprng = OsRng;
-        let mut seed_bytes = [0u8; 32];
-        csprng.fill_bytes(&mut seed_bytes);
+        // Use rand::random() to avoid scirs2-core OsRng re-export conflict
+        let seed_bytes: [u8; 32] = rand::random();
         let keypair = SigningKey::from_bytes(&seed_bytes);
 
         // Test peer registration

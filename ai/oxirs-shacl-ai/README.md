@@ -1,10 +1,10 @@
 # OxiRS SHACL-AI - AI-Enhanced SHACL Validation
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
+✨ **Beta Software**: Production-ready with API stability guarantees and comprehensive testing.
 
 AI-powered SHACL validation combining traditional constraint checking with machine learning for shape inference, anomaly detection, and intelligent validation.
 
@@ -35,8 +35,8 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-shacl-ai = "0.1.0-alpha.3"
-oxirs-shacl = "0.1.0-alpha.3"
+oxirs-shacl-ai = "0.1.0-beta.1"
+oxirs-shacl = "0.1.0-beta.1"
 ```
 
 ## Quick Start
@@ -349,7 +349,7 @@ let config = AiConfig {
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.3)
+### Beta Release (v0.1.0-beta.1)
 - ✅ Shape learning with persisted dataset snapshots and CLI integration
 - ✅ Neural network validation leveraging SciRS2 telemetry for drift detection
 - ✅ Anomaly detection with vector-based similarity checks

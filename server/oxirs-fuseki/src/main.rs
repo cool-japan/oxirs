@@ -31,7 +31,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
-    let mut builder = Server::builder().port(args.port).host(args.host);
+    // Use config file if provided, otherwise use CLI args
+    let (host, port) = if let Some(config_path) = args.config {
+        use oxirs_fuseki::config::ServerConfig;
+        let config = ServerConfig::from_file(config_path)?;
+        (config.server.host, config.server.port)
+    } else {
+        (args.host, args.port)
+    };
+
+    let mut builder = Server::builder().port(port).host(host);
 
     if let Some(dataset_path) = args.dataset {
         builder = builder.dataset_path(dataset_path.to_string_lossy());

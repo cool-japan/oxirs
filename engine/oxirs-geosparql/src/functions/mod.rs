@@ -4,12 +4,17 @@
 //! for use in SPARQL queries.
 
 pub mod bbox_utils;
+pub mod buffer_3d;
 pub mod coordinate_transformation;
 pub mod egenhofer;
 pub mod geometric_operations;
 pub mod geometric_properties;
 pub mod rcc8;
 pub mod simple_features;
+pub mod topological_3d;
+
+#[cfg(feature = "proj-support")]
+pub mod transformation_cache;
 
 use crate::error::Result;
 use crate::geometry::Geometry;

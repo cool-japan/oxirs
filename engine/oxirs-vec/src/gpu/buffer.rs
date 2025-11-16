@@ -41,7 +41,7 @@ impl GpuBuffer {
     fn allocate_gpu_memory(size: usize, device_id: i32) -> Result<*mut u8> {
         // Simulate GPU memory allocation
         // In a real implementation, this would use CUDA runtime API
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             let mut ptr: *mut std::ffi::c_void = std::ptr::null_mut();
@@ -59,7 +59,7 @@ impl GpuBuffer {
             Ok(ptr as *mut u8)
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             // Fallback: allocate host memory for testing
             let layout = std::alloc::Layout::from_size_align(size, std::mem::align_of::<f32>())
@@ -75,7 +75,7 @@ impl GpuBuffer {
     }
 
     fn copy_host_to_device(&self, src: *const f32, dst: *mut f32, size: usize) -> Result<()> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -91,7 +91,7 @@ impl GpuBuffer {
             }
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             // Fallback: simple memory copy for testing
             unsafe {
@@ -102,7 +102,7 @@ impl GpuBuffer {
     }
 
     fn copy_device_to_host(&self, src: *const f32, dst: *mut f32, size: usize) -> Result<()> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -118,7 +118,7 @@ impl GpuBuffer {
             }
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             // Fallback: simple memory copy for testing
             unsafe {
@@ -146,7 +146,7 @@ impl GpuBuffer {
 
     /// Zero out the buffer
     pub fn zero(&mut self) -> Result<()> {
-        #[cfg(feature = "cuda")]
+        #[cfg(all(feature = "cuda", cuda_runtime_available))]
         {
             use cuda_runtime_sys::*;
             unsafe {
@@ -161,7 +161,7 @@ impl GpuBuffer {
             }
         }
 
-        #[cfg(not(feature = "cuda"))]
+        #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
         {
             unsafe {
                 std::ptr::write_bytes(self.ptr, 0, self.size);
@@ -174,7 +174,7 @@ impl GpuBuffer {
 impl Drop for GpuBuffer {
     fn drop(&mut self) {
         if !self.ptr.is_null() {
-            #[cfg(feature = "cuda")]
+            #[cfg(all(feature = "cuda", cuda_runtime_available))]
             {
                 use cuda_runtime_sys::*;
                 unsafe {
@@ -182,7 +182,7 @@ impl Drop for GpuBuffer {
                 }
             }
 
-            #[cfg(not(feature = "cuda"))]
+            #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
             {
                 // Fallback: deallocate host memory
                 let layout = std::alloc::Layout::from_size_align(

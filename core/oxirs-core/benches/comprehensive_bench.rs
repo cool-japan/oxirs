@@ -13,7 +13,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use oxirs_core::{
     format::turtle::{TurtleParser, TurtleSerializer},
-    model::{Literal, NamedNode, Quad, Subject, Triple},
+    model::{GraphName, Literal, NamedNode, Quad, Subject, Triple},
     optimization::{OptimizedGraph, RdfArena},
     rdf_store::ConcreteStore,
 };
@@ -226,7 +226,7 @@ fn bench_store_operations(c: &mut Criterion) {
             &quads,
             |b, quads| {
                 b.iter(|| {
-                    let store = ConcreteStore::new();
+                    let store = ConcreteStore::new().unwrap();
                     for quad in quads {
                         black_box(store.insert_quad(quad.clone()).unwrap());
                     }
@@ -304,7 +304,7 @@ fn generate_quads(count: usize) -> Vec<Quad> {
             let subject = NamedNode::new(format!("http://example.org/s{i}")).unwrap();
             let predicate = NamedNode::new("http://example.org/p").unwrap();
             let object = Literal::new(format!("Object {i}"));
-            Quad::new(subject, predicate, object, None)
+            Quad::new(subject, predicate, object, GraphName::DefaultGraph)
         })
         .collect()
 }

@@ -4,6 +4,7 @@
 //! automatic expiration handling, and concurrent session management.
 
 use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -32,7 +33,7 @@ use zstd::{Decoder, Encoder};
 use crate::{
     analytics::{
         ComplexityMetrics, ConfidenceMetrics, ConversationAnalytics, ConversationQuality,
-        EmotionScore, ImplicitSatisfactionSignals, IntentType, SatisfactionMetrics,
+        ImplicitSatisfactionSignals, IntentType, SatisfactionMetrics,
     },
     ChatConfig, Message, SessionMetrics,
 };
@@ -1579,6 +1580,8 @@ impl SessionPersistenceManager {
         // Create default metrics
         let user_satisfaction = SatisfactionMetrics {
             overall_satisfaction: 4.0, // Default good satisfaction
+            response_quality: 4.2,
+            helpfulness: 4.1,
             satisfaction_breakdown: {
                 let mut breakdown = HashMap::new();
                 breakdown.insert("response_quality".to_string(), 4.2);
@@ -1589,47 +1592,42 @@ impl SessionPersistenceManager {
                 breakdown
             },
             implicit_signals: ImplicitSatisfactionSignals {
+                positive_acknowledgments: 0,
+                clarification_requests: 0,
+                topic_continuity: 0.85,
                 follow_up_questions: 0,
                 positive_feedback_indicators: 0,
                 task_completion_rate: 0.85,
                 session_continuation: true,
             },
-            explicit_feedback: None,
+            explicit_feedback: Vec::new(),
         };
 
         let conversation_quality = ConversationQuality {
+            overall_score: 0.83,
+            overall_quality: 0.83,
+            coherence: 0.85,
             coherence_score: 0.85,
+            relevance: 0.88,
             relevance_score: 0.88,
+            completeness: 0.82,
+            completeness_score: 0.82,
             helpfulness_score: 0.87,
             accuracy_score: 0.90,
             clarity_score: 0.85,
-            completeness_score: 0.82,
             engagement_score: 0.80,
             error_rate: 0.05,
             response_appropriateness: 0.85,
-            overall_quality: 0.83,
         };
 
         // Create default progression data
-        let sentiment_progression = vec![
-            EmotionScore {
-                emotion: "joy".to_string(),
-                intensity: 0.6,
-                confidence: 0.8,
-            },
-            EmotionScore {
-                emotion: "sadness".to_string(),
-                intensity: 0.1,
-                confidence: 0.7,
-            },
-            EmotionScore {
-                emotion: "trust".to_string(),
-                intensity: 0.7,
-                confidence: 0.9,
-            },
-        ];
+        let sentiment_progression = vec![0.6, 0.1, 0.7];
 
         let complexity_progression = vec![ComplexityMetrics {
+            turn_number: 1,
+            message_complexity: 0.65,
+            topic_depth: 0.7,
+            reasoning_complexity: 0.6,
             linguistic_complexity: 0.6,
             semantic_complexity: 0.7,
             context_dependency: 0.8,
@@ -1638,6 +1636,9 @@ impl SessionPersistenceManager {
         }];
 
         let confidence_progression = vec![ConfidenceMetrics {
+            turn_number: 1,
+            confidence_score: 0.85,
+            uncertainty_markers: 0,
             overall_confidence: 0.85,
             uncertainty_factors: vec![],
             confidence_breakdown: {
@@ -1649,22 +1650,45 @@ impl SessionPersistenceManager {
             },
         }];
 
+        // Convert SystemTime to DateTime<Utc>
+        let start_time_utc = DateTime::<Utc>::from(session.created_at);
+        let end_time_utc = DateTime::<Utc>::from(session.last_accessed);
+
+        // Convert intent_distribution from HashMap<IntentType, i32> to HashMap<String, usize>
+        let intent_distribution_string: HashMap<String, usize> = intent_distribution
+            .into_iter()
+            .map(|(k, v)| (format!("{:?}", k), v as usize))
+            .collect();
+
+        // Extract f32 values for user_satisfaction and conversation_quality
+        let user_satisfaction_f32 = user_satisfaction.overall_satisfaction;
+        let conversation_quality_f32 = conversation_quality.overall_quality;
+
+        // Extract implicit_signals from user_satisfaction
+        let implicit_signals = user_satisfaction.implicit_signals.clone();
+
         Ok(ConversationAnalytics {
+            // Core progression metrics
+            complexity_progression,
+            confidence_progression,
+            quality: conversation_quality,
+            satisfaction: user_satisfaction,
+            implicit_signals,
+
+            // Additional fields
             session_id: session.session_id.clone(),
-            start_time: session.created_at,
-            end_time: Some(session.last_accessed),
+            start_time: start_time_utc,
+            end_time: end_time_utc,
             message_count: session.messages.len(),
             user_message_count,
             assistant_message_count,
-            average_response_time,
+            average_response_time: average_response_time.as_secs_f64(),
             total_tokens,
-            user_satisfaction,
-            conversation_quality,
+            user_satisfaction: user_satisfaction_f32,
+            conversation_quality: conversation_quality_f32,
             topics_discussed,
             sentiment_progression,
-            complexity_progression,
-            confidence_progression,
-            intent_distribution,
+            intent_distribution: intent_distribution_string,
             patterns_detected: Vec::new(), // No patterns detected by default
             anomalies: Vec::new(),         // No anomalies detected by default
             metadata: HashMap::new(),

@@ -182,6 +182,9 @@ impl UnifiedTermPattern {
             AlgebraTermPattern::BlankNode(bn) => UnifiedTermPattern::BlankNode(bn.clone()),
             AlgebraTermPattern::Literal(lit) => UnifiedTermPattern::Literal(lit.clone()),
             AlgebraTermPattern::Variable(var) => UnifiedTermPattern::Variable(var.clone()),
+            AlgebraTermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples not yet supported in pattern unification")
+            }
         }
     }
 
@@ -400,7 +403,7 @@ mod tests {
 
     #[test]
     fn test_pattern_selectivity() {
-        let patterns = vec![
+        let patterns = [
             UnifiedTriplePattern::new(
                 UnifiedTermPattern::Variable(Variable::new("s").unwrap()),
                 UnifiedTermPattern::Variable(Variable::new("p").unwrap()),

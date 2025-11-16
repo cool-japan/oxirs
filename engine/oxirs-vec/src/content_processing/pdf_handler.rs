@@ -71,10 +71,7 @@ impl FormatHandler for PdfHandler {
 
         // Extract images (basic implementation)
         let images = if config.extract_images {
-            match self.extract_pdf_images(data, config) {
-                Ok(imgs) => imgs,
-                Err(_) => Vec::new(), // Fail silently for now
-            }
+            self.extract_pdf_images(data, config).unwrap_or_default()
         } else {
             Vec::new()
         };
@@ -142,7 +139,7 @@ impl PdfHandler {
                 let words: Vec<&str> = trimmed.split_whitespace().collect();
                 let capitalized_words = words
                     .iter()
-                    .filter(|w| w.chars().next().map_or(false, |c| c.is_uppercase()))
+                    .filter(|w| w.chars().next().is_some_and(|c| c.is_uppercase()))
                     .count();
 
                 if capitalized_words >= words.len() / 2 && words.len() <= 10 {

@@ -37,12 +37,12 @@ impl GpuDevice {
 
 /// Query available GPU devices
 pub fn query_gpu_devices() -> Result<Vec<GpuDevice>> {
-    #[cfg(feature = "cuda")]
+    #[cfg(all(feature = "cuda", cuda_runtime_available))]
     {
         get_cuda_devices()
     }
 
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(all(feature = "cuda", cuda_runtime_available)))]
     {
         // Return empty list if CUDA is not available
         Ok(Vec::new())
@@ -75,7 +75,7 @@ pub fn get_gpu_device(device_id: i32) -> Result<GpuDevice> {
         .ok_or_else(|| anyhow!("GPU device {} not found", device_id))
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", cuda_runtime_available))]
 fn get_cuda_devices() -> Result<Vec<GpuDevice>> {
     use cuda_runtime_sys::*;
 
@@ -97,7 +97,7 @@ fn get_cuda_devices() -> Result<Vec<GpuDevice>> {
     Ok(devices)
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", cuda_runtime_available))]
 fn get_cuda_device_info(device_id: i32) -> Result<GpuDevice> {
     use cuda_runtime_sys::*;
 
@@ -150,7 +150,7 @@ fn get_cuda_device_info(device_id: i32) -> Result<GpuDevice> {
     })
 }
 
-#[cfg(feature = "cuda")]
+#[cfg(all(feature = "cuda", cuda_runtime_available))]
 fn estimate_cuda_cores(props: &cuda_runtime_sys::cudaDeviceProp) -> i32 {
     // Simplified CUDA core estimation based on compute capability
     let sm_count = props.multiProcessorCount;

@@ -345,6 +345,9 @@ pub struct VideoKeyframe {
     pub scene_change_score: f32,
 }
 
+/// Type alias for color timeline entries (timestamp, dominant_colors)
+pub type ColorTimelineEntry = (f32, Vec<(u8, u8, u8)>);
+
 /// Video analysis results
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoAnalysis {
@@ -355,7 +358,7 @@ pub struct VideoAnalysis {
     /// Visual activity level
     pub activity_level: f32,
     /// Color characteristics over time
-    pub color_timeline: Vec<(f32, Vec<(u8, u8, u8)>)>, // (timestamp, dominant_colors)
+    pub color_timeline: Vec<ColorTimelineEntry>,
 }
 
 /// Video scene detection result

@@ -190,6 +190,51 @@ fn serialize_element_to_xml(element: &SubmodelElement) -> Result<String, SammErr
             xml.push_str("        </operation>\n");
             Ok(xml)
         }
+        SubmodelElement::Entity(entity) => {
+            let mut xml = String::from("        <entity>\n");
+            if let Some(id_short) = &entity.id_short {
+                xml.push_str(&format!(
+                    "          <idShort>{}</idShort>\n",
+                    escape_xml(id_short)
+                ));
+            }
+            xml.push_str(&format!(
+                "          <modelType>{}</modelType>\n",
+                escape_xml(&entity.model_type)
+            ));
+            xml.push_str("        </entity>\n");
+            Ok(xml)
+        }
+        SubmodelElement::SubmodelElementCollection(collection) => {
+            let mut xml = String::from("        <submodelElementCollection>\n");
+            if let Some(id_short) = &collection.id_short {
+                xml.push_str(&format!(
+                    "          <idShort>{}</idShort>\n",
+                    escape_xml(id_short)
+                ));
+            }
+            xml.push_str(&format!(
+                "          <modelType>{}</modelType>\n",
+                escape_xml(&collection.model_type)
+            ));
+            xml.push_str("        </submodelElementCollection>\n");
+            Ok(xml)
+        }
+        SubmodelElement::SubmodelElementList(list) => {
+            let mut xml = String::from("        <submodelElementList>\n");
+            if let Some(id_short) = &list.id_short {
+                xml.push_str(&format!(
+                    "          <idShort>{}</idShort>\n",
+                    escape_xml(id_short)
+                ));
+            }
+            xml.push_str(&format!(
+                "          <modelType>{}</modelType>\n",
+                escape_xml(&list.model_type)
+            ));
+            xml.push_str("        </submodelElementList>\n");
+            Ok(xml)
+        }
     }
 }
 
@@ -230,8 +275,7 @@ pub fn serialize_aasx_with_options(
     env: &Environment,
     aasx_options: AasxOptions,
 ) -> Result<Vec<u8>, SammError> {
-    let mut zip_data = Vec::new();
-    let mut zip = ZipWriter::new(std::io::Cursor::new(&mut zip_data));
+    let mut zip = ZipWriter::new(std::io::Cursor::new(Vec::new()));
 
     let file_options: FileOptions<()> = FileOptions::default()
         .compression_method(CompressionMethod::Deflated)
@@ -263,10 +307,12 @@ pub fn serialize_aasx_with_options(
     zip.write_all(&thumbnail)
         .map_err(|e| SammError::Generation(format!("Failed to write thumbnail: {}", e)))?;
 
-    zip.finish()
+    // Finish the ZIP and extract the inner Vec
+    let cursor = zip
+        .finish()
         .map_err(|e| SammError::Generation(format!("Failed to finalize AASX: {}", e)))?;
 
-    Ok(zip_data)
+    Ok(cursor.into_inner())
 }
 
 /// Create AASX manifest file

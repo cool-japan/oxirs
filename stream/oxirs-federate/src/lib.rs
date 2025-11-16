@@ -1,10 +1,10 @@
 //! # OxiRS Federation - Federated Query Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-federate/badge.svg)](https://docs.rs/oxirs-federate)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Federated query processing capabilities for SPARQL and GraphQL with service discovery,
 //! query decomposition, result integration, and fault tolerance.
@@ -61,39 +61,62 @@ use crate::{
 };
 
 pub mod adaptive_load_balancer;
+pub mod advanced_anomaly_detection;
+pub mod advanced_benchmarking;
+pub mod advanced_consensus;
+pub mod advanced_enterprise_features;
+pub mod advanced_ml_optimizer;
+pub mod advanced_query_optimizer;
+pub mod advanced_semantic_features;
+pub mod anomaly_detection;
 pub mod auth;
 pub mod auto_discovery;
+pub mod automl_pipeline;
 pub mod cache;
 pub mod capability_assessment;
 pub mod cdc;
+pub mod cloud_cost_optimizer;
 pub mod connection_pool_manager;
 pub mod discovery;
+pub mod distributed_consensus;
+pub mod distributed_ml_trainer;
 pub mod distributed_tracing;
 pub mod distributed_transactions;
 pub mod executor;
+pub mod gpu_accelerated_query;
+pub mod graph_algorithms;
 pub mod graphql;
 pub mod integration;
+pub mod jit_query_compiler;
 pub mod join_optimizer;
 pub mod k8s_discovery;
 pub mod materialized_views;
+pub mod memory_efficient_datasets;
 pub mod metadata;
+pub mod ml_model_serving;
 pub mod ml_optimizer;
 pub mod monitoring;
+pub mod multi_level_federation;
 pub mod nats_federation;
 pub mod network_optimizer;
 pub mod optimization_cache;
 pub mod performance_analyzer;
+pub mod performance_benchmarks;
 pub mod planner;
 pub mod privacy;
+pub mod production_hardening;
 pub mod query_decomposition;
 pub mod request_batcher;
 pub mod result_streaming;
+pub mod schema_alignment;
 pub mod semantic_enhancer;
+pub mod semantic_reasoner;
 pub mod service;
 pub mod service_client;
 pub mod service_executor;
 pub mod service_optimizer;
 pub mod service_registry;
+pub mod simd_optimized_joins;
 pub mod source_selection;
 pub mod streaming;
 pub mod streaming_optimizer;
@@ -104,8 +127,68 @@ pub mod vector_similarity_federation;
 // Re-enabled specific non-duplicate exports after fixing ServiceRegistry conflicts
 // AutoDiscovery and CacheConfig already imported above, skipping duplicates
 pub use adaptive_load_balancer::AdaptiveLoadBalancer;
+pub use advanced_query_optimizer::{
+    AdvancedOptimizerConfig, AdvancedQueryOptimizer, HardwareProfile, OptimizedPlan, QueryPlan,
+    TrainingExample,
+};
+// Advanced ML Optimizer (v0.1.0 advanced features)
+pub use advanced_ml_optimizer::{
+    ActivationType, AdvancedMLConfig, AdvancedMLOptimizer, AutoML, DeepCardinalityEstimator,
+    ExplainableAI, JoinType, NeuralArchitectureSearch, OnlineLearningManager, RLJoinOptimizer,
+    TrainingEpoch, TransferLearningManager,
+};
+// Advanced Benchmarking (v0.1.0 advanced features)
+pub use advanced_benchmarking::{
+    AdvancedBenchmarkConfig, AdvancedBenchmarkSuite, BenchmarkResult, CustomBenchmarkConfig,
+    CustomBenchmarkGenerator, LUBMSuite, RegressionDetectionResult, SP2BenchSuite,
+    ScalabilityTestResult, StressTestResult, WatDivSuite, WorkloadCharacterization,
+};
+// Advanced Semantic Features (v0.1.0 advanced features)
+pub use advanced_semantic_features::{
+    AdvancedSemanticConfig, AdvancedSemanticFeatures, AutoMapping, AutoMappingGenerator,
+    ChangeType, ConceptRelationship, DeepOntologyMatcher, Entity, EntityMatch, EntityResolver,
+    MappingType, MatchType, MultiLingualConcept, MultiLingualSchemaManager, OntologyConcept,
+    OntologyMatch, RelationType, SchemaChange, SchemaEvolutionTracker, SchemaVersion,
+};
+// Advanced Anomaly Detection (v0.1.0 advanced features)
+pub use advanced_anomaly_detection::{
+    AdvancedAnomalyConfig, AdvancedAnomalyDetection, HealingAction, HealingActionType,
+    IsolationForest, IssueType, LSTMPredictor, MaintenancePriority, MaintenanceTask,
+    PredictiveMaintenanceScheduler, RootCause, RootCauseAnalyzer, SelfHealingEngine,
+    Severity as AnomalySeverity,
+};
+// Advanced Consensus (v0.1.0 advanced features)
+pub use advanced_consensus::{
+    AdvancedConsensusSystem, ByzantineFaultTolerance, DistributedLock, GCounter,
+    NetworkPartitionDetector, PNCounter, VectorClock,
+};
+// Advanced Enterprise Features (v0.1.0 advanced features)
+pub use advanced_enterprise_features::{
+    AdvancedEnterpriseFeatures, AuditLogEntry, AuditLogger, AuditResult, DataLineageTracker,
+    DataSubject, DeletionRequest, EdgeComputingManager, EdgeNode, EdgeNodeStatus,
+    GDPRComplianceManager, GeoLocation, GeographicQueryRouter, LineageNode, MultiTenancyConfig,
+    MultiTenancyManager, PrivacyPreservingFederation, QuantumResistantSecurity, ResourceQuota,
+    ResourceUsage, Tenant,
+};
+// v0.2.0 Performance & Scalability Features
+pub use anomaly_detection::{
+    AnomalyAlert, AnomalyDetector, AnomalyDetectorConfig, DataPoint, Severity, Trend, TrendAnalysis,
+};
 pub use auth::AuthManager;
+pub use automl_pipeline::{
+    ArchitectureCandidate, AutoMLConfig, AutoMLPipeline, HyperparameterConfig, LayerType,
+    MetaLearningTask, OptimizationStatistics, SearchSpace, TrialMetrics, TrialResult,
+};
+pub use cloud_cost_optimizer::{
+    CloudCostOptimizer, CloudInstance, CloudProvider, CostOptimizerConfig, CostRecommendation,
+    CostTracking, DeploymentConfig, InstanceStatus, OptimizationStrategy, RecommendationPriority,
+    RecommendationType, RoutingDecision, WorkloadMetrics,
+};
 pub use connection_pool_manager::ConnectionPoolManager;
+pub use distributed_ml_trainer::{
+    AggregationStrategy, DistributedMLConfig, DistributedMLTrainer, TrainingMetrics, TrainingMode,
+    WorkerInfo, WorkerMetrics, WorkerStatus,
+};
 pub use distributed_tracing::TracingConfig;
 pub use distributed_transactions::{
     DistributedTransactionCoordinator, IsolationLevel, Operation, OperationState, OperationType,
@@ -113,15 +196,47 @@ pub use distributed_transactions::{
     TransactionConfig, TransactionProtocol, TransactionResult, TransactionState,
 };
 pub use executor::ExecutionStatus; // ExecutionMetrics not exported from executor
-                                   // Import from graphql module - minimal types to avoid conflicts
-                                   // pub use graphql::GraphQLFederation;
+pub use gpu_accelerated_query::{
+    FilterCondition, FilterOperator, GpuAccelerationConfig, GpuBackendType, GpuJoinProcessor,
+    GpuProcessingResult, GpuProcessingStats, GpuQueryProcessor, QueryBatch,
+};
+pub use graph_algorithms::{
+    AStar, BellmanFord, CentralityAnalyzer, ConnectivityAnalyzer, Dijkstra, Edge, FederationGraph,
+    FloydWarshall, PrimMST, ShortestPathResult,
+};
+pub use jit_query_compiler::{
+    CompiledQuery, ExecutionMode, JitCompilationConfig, JitCompilationStats, JitQueryCompiler,
+    JitQueryOptimizer, OptimizationRule,
+};
+pub use ml_model_serving::{
+    ABTestConfig, ABTestResults, MLModelServing, ModelMetrics, ModelServingConfig, ModelStatus,
+    ModelType, ModelVersion, QueryTransformerModel, TransformerConfig,
+};
+pub use simd_optimized_joins::{JoinAlgorithm, JoinStatistics, SimdJoinConfig, SimdJoinProcessor};
+// Import from graphql module - minimal types to avoid conflicts
+// pub use graphql::GraphQLFederation;
 
 // More specific imports to avoid conflicts - conservative approach
 // Re-enabled after fixing module exports - only exports that actually exist
 // pub use integration::ResultIntegratorConfig; // Already imported above
 pub use ml_optimizer::MLOptimizer;
+pub use multi_level_federation::{
+    FederationCapability, FederationMetrics, FederationNode, MultiLevelConfig,
+    MultiLevelFederation, TopologyOptimizationResult, TopologyStats,
+};
 pub use network_optimizer::NetworkOptimizer;
 pub use optimization_cache::OptimizationCache;
+pub use production_hardening::{
+    CircuitBreakerState, ComplexityResult, HardeningConfig, HardeningStatistics,
+    ProductionHardening, QueryRequest as HardeningQueryRequest, ValidationResult,
+};
+pub use schema_alignment::{
+    Alignment, AlignmentConfig, AlignmentResult, AlignmentType, ClassMetadata, MappingExample,
+    PropertyMetadata, SchemaAligner, VocabularyMetadata,
+};
+pub use semantic_reasoner::{
+    InconsistencyReport, InconsistencyType, ReasonerConfig, SemanticReasoner, Triple,
+};
 // Re-enabled: JoinOptimizer now properly implemented
 pub use join_optimizer::JoinOptimizer;
 // pub use k8s_discovery::KubernetesDiscovery;

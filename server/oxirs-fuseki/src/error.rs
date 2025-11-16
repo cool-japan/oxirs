@@ -432,6 +432,12 @@ impl FusekiError {
             message: message.into(),
         }
     }
+
+    pub fn request_timeout(message: impl Into<String>) -> Self {
+        Self::ServiceUnavailable {
+            message: message.into(),
+        }
+    }
 }
 
 /// Extension trait for converting Results to FusekiError

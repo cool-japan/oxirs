@@ -1,4 +1,147 @@
-//! RDF parsing utilities for various formats with ultra-performance streaming
+//! RDF parsing utilities for various formats with high-performance streaming
+//!
+//! **Stability**: ✅ **Stable** - Core parser APIs are production-ready.
+//!
+//! This module provides parsers for all major RDF serialization formats:
+//! - **Turtle** (.ttl) - A compact, human-readable format
+//! - **N-Triples** (.nt) - Line-based triple format
+//! - **TriG** (.trig) - Turtle with named graphs
+//! - **N-Quads** (.nq) - Line-based quad format
+//! - **RDF/XML** (.rdf, .xml) - XML-based format
+//! - **JSON-LD** (.jsonld) - JSON-based linked data format
+//!
+//! ## Features
+//!
+//! - **Streaming parsers** - Process large files without loading into memory
+//! - **Error recovery** - Continue parsing after encountering errors (optional)
+//! - **Base IRI resolution** - Resolve relative IRIs against a base
+//! - **Format detection** - Automatic format detection from file extensions or content
+//! - **Async support** - Non-blocking I/O for high-throughput applications
+//!
+//! ## Examples
+//!
+//! ### Basic Parsing
+//!
+//! ```rust
+//! use oxirs_core::parser::{Parser, RdfFormat};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let turtle_data = r#"
+//!     @prefix foaf: <http://xmlns.com/foaf/0.1/> .
+//!
+//!     <http://example.org/alice> foaf:name "Alice" ;
+//!                                 foaf:knows <http://example.org/bob> .
+//! "#;
+//!
+//! let parser = Parser::new(RdfFormat::Turtle);
+//! let quads = parser.parse_str_to_quads(turtle_data)?;
+//!
+//! println!("Parsed {} quads", quads.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Parsing with Configuration
+//!
+//! ```rust,ignore
+//! use oxirs_core::parser::{Parser, RdfFormat, ParserConfig};
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let config = ParserConfig {
+//!     base_iri: Some("http://example.org/base/".to_string()),
+//!     ignore_errors: true,
+//!     max_errors: Some(10),
+//! };
+//!
+//! let parser = Parser::new(RdfFormat::Turtle).with_config(config);
+//! let quads = parser.parse_str_to_quads("<relative> <p> <o> .")?;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Format Detection
+//!
+//! ```rust,ignore
+//! use oxirs_core::parser::RdfFormat;
+//!
+//! // Detect from file extension
+//! let format = RdfFormat::from_extension("ttl");
+//! assert_eq!(format, Some(RdfFormat::Turtle));
+//!
+//! // Check format capabilities
+//! assert!(!RdfFormat::Turtle.supports_quads());
+//! assert!(RdfFormat::TriG.supports_quads());
+//! ```
+//!
+//! ### Streaming Large Files
+//!
+//! ```rust,ignore,no_run
+//! use oxirs_core::parser::{Parser, RdfFormat};
+//! use std::fs::File;
+//! use std::io::BufReader;
+//!
+//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! let file = File::open("large_dataset.nt")?;
+//! let reader = BufReader::new(file);
+//!
+//! let parser = Parser::new(RdfFormat::NTriples);
+//! for quad in parser.for_reader(reader) {
+//!     let quad = quad?;
+//!     // Process quad without loading entire file into memory
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Async Parsing (with `async` feature)
+//!
+//! ```rust,no_run
+//! # #[cfg(feature = "async")]
+//! use oxirs_core::parser::{AsyncStreamingParser, RdfFormat};
+//!
+//! # #[cfg(feature = "async")]
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//! let parser = AsyncStreamingParser::new(RdfFormat::Turtle);
+//! let mut sink = parser.parse_stream(tokio::io::stdin()).await?;
+//!
+//! while let Some(quad) = sink.next_quad().await? {
+//!     // Process quad asynchronously
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Performance Tips
+//!
+//! 1. **Use streaming** - For large files, use `for_reader()` to avoid loading everything into memory
+//! 2. **Choose the right format** - N-Triples/N-Quads are fastest to parse (line-based)
+//! 3. **Enable async** - For I/O-bound workloads, async parsing provides better throughput
+//! 4. **Batch processing** - Process multiple files in parallel using rayon
+//!
+//! ## Error Handling
+//!
+//! Parsers can be configured to handle errors in different ways:
+//!
+//! - **Strict mode** (default) - Stop on first error
+//! - **Error recovery** - Collect errors and continue parsing
+//! - **Max errors** - Stop after a threshold of errors
+//!
+//! ## Format Support Matrix
+//!
+//! | Format | Triples | Quads | Prefixes | Comments | Streaming |
+//! |--------|---------|-------|----------|----------|-----------|
+//! | Turtle | ✅ | ❌ | ✅ | ✅ | ✅ |
+//! | N-Triples | ✅ | ❌ | ❌ | ✅ | ✅ |
+//! | TriG | ✅ | ✅ | ✅ | ✅ | ✅ |
+//! | N-Quads | ✅ | ✅ | ❌ | ✅ | ✅ |
+//! | RDF/XML | ✅ | ❌ | ✅ | ✅ | ✅ |
+//! | JSON-LD | ✅ | ✅ | ✅ | ❌ | ✅ |
+//!
+//! ## Related Modules
+//!
+//! - [`crate::serializer`] - Serialize RDF to various formats
+//! - [`crate::model`] - RDF data model types
+//! - [`crate::rdf_store`] - Store parsed RDF data
 
 #[cfg(feature = "async")]
 mod async_parser;

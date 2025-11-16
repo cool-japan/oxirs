@@ -414,8 +414,12 @@ impl KnowledgeGraphEmbedding for TransE {
     async fn train(
         &mut self,
         triples: &[Triple],
-        _config: &TrainingConfig,
+        config: &TrainingConfig,
     ) -> Result<TrainingMetrics> {
+        use std::time::Instant;
+
+        let start_time = Instant::now();
+
         // Initialize embeddings
         self.initialize_embeddings(triples).await?;
 
@@ -431,53 +435,297 @@ impl KnowledgeGraphEmbedding for TransE {
             })
             .collect();
 
-        let mut total_loss = 0.0;
-        let margin = 1.0; // Margin for margin-based loss
+        // Split into training and validation sets
+        let val_size = (triple_strings.len() as f32 * config.validation_split) as usize;
+        let train_triples = &triple_strings[val_size..];
+        let val_triples = &triple_strings[..val_size];
 
-        for _epoch in 0..self.config.max_epochs {
+        // Use margin-based loss with fixed margin (can be made configurable later)
+        let margin = 1.0;
+
+        let learning_rate = config.learning_rate;
+        let batch_size = config.batch_size;
+
+        // Initialize optimizer states for Adam (default optimizer)
+        let mut entity_m1: HashMap<String, Array1<f32>> = HashMap::new();
+        let mut entity_m2: HashMap<String, Array1<f32>> = HashMap::new();
+        let mut relation_m1: HashMap<String, Array1<f32>> = HashMap::new();
+        let mut relation_m2: HashMap<String, Array1<f32>> = HashMap::new();
+
+        // Adam hyperparameters (standard defaults)
+        let (beta1, beta2, epsilon) = (0.9, 0.999, 1e-8);
+        let weight_decay = 0.0001;
+
+        let mut loss_history = Vec::new();
+        let mut best_val_loss = f32::INFINITY;
+        let mut patience_counter = 0;
+        let mut final_epoch = 0;
+
+        for epoch in 0..config.max_epochs {
             let mut epoch_loss = 0.0;
+            let mut num_batches = 0;
 
-            // Generate negative samples
-            let negatives = self.generate_negative_samples(
-                &triple_strings,
-                (triple_strings.len() as f32 * self.config.negative_sampling_ratio) as usize,
-            );
+            // Shuffle training data using Fisher-Yates shuffle
+            let mut shuffled_indices: Vec<usize> = (0..train_triples.len()).collect();
+            {
+                use scirs2_core::random::Random;
+                let mut rng = Random::default();
+                for i in (1..shuffled_indices.len()).rev() {
+                    let j = rng.random_range(0, i + 1);
+                    shuffled_indices.swap(i, j);
+                }
+            } // RNG dropped here before any await points
 
-            // Training step (simplified - in real implementation would use proper SGD)
-            for (i, positive) in triple_strings.iter().enumerate() {
-                let positive_score = self
-                    .compute_score(&positive.0, &positive.1, &positive.2)
-                    .await?;
+            // Process mini-batches
+            for batch_start in (0..train_triples.len()).step_by(batch_size) {
+                let batch_end = (batch_start + batch_size).min(train_triples.len());
+                let batch_indices = &shuffled_indices[batch_start..batch_end];
 
-                if i < negatives.len() {
-                    let (head, relation, tail) = &negatives[i];
-                    let negative_score = self.compute_score(head, relation, tail).await?;
+                // Collect batch triples
+                let batch_triples: Vec<_> =
+                    batch_indices.iter().map(|&i| &train_triples[i]).collect();
 
-                    // Margin-based loss: max(0, positive_score - negative_score + margin)
-                    let loss = (positive_score - negative_score + margin).max(0.0);
-                    epoch_loss += loss;
+                // Generate negative samples for this batch
+                let negatives = self.generate_negative_samples(
+                    &batch_triples
+                        .iter()
+                        .map(|t| (*t).clone())
+                        .collect::<Vec<_>>(),
+                    batch_triples.len(),
+                );
+
+                // Accumulate gradients for this batch
+                let mut entity_gradients: HashMap<String, Array1<f32>> = HashMap::new();
+                let mut relation_gradients: HashMap<String, Array1<f32>> = HashMap::new();
+
+                let mut batch_loss = 0.0;
+
+                for (i, positive) in batch_triples.iter().enumerate() {
+                    if i >= negatives.len() {
+                        continue;
+                    }
+
+                    // Get embeddings
+                    let entity_embs = self.entity_embeddings.read().await;
+                    let relation_embs = self.relation_embeddings.read().await;
+
+                    let h_pos = entity_embs
+                        .get(&positive.0)
+                        .ok_or_else(|| anyhow!("Entity not found: {}", positive.0))?
+                        .clone();
+                    let r = relation_embs
+                        .get(&positive.1)
+                        .ok_or_else(|| anyhow!("Relation not found: {}", positive.1))?
+                        .clone();
+                    let t_pos = entity_embs
+                        .get(&positive.2)
+                        .ok_or_else(|| anyhow!("Entity not found: {}", positive.2))?
+                        .clone();
+
+                    let (h_neg_key, _, t_neg_key) = &negatives[i];
+                    let h_neg = entity_embs
+                        .get(h_neg_key)
+                        .cloned()
+                        .unwrap_or_else(|| h_pos.clone());
+                    let t_neg = entity_embs
+                        .get(t_neg_key)
+                        .cloned()
+                        .unwrap_or_else(|| t_pos.clone());
+
+                    drop(entity_embs);
+                    drop(relation_embs);
+
+                    // Compute scores
+                    let diff_pos = &h_pos + &r - &t_pos;
+                    let score_pos = diff_pos.mapv(|x| x.abs()).sum();
+
+                    let diff_neg = &h_neg + &r - &t_neg;
+                    let score_neg = diff_neg.mapv(|x| x.abs()).sum();
+
+                    // Margin-based loss: max(0, score_pos - score_neg + margin)
+                    let loss = (score_pos - score_neg + margin).max(0.0);
+                    batch_loss += loss;
+
+                    // Compute gradients only if loss > 0
+                    if loss > 0.0 {
+                        // Gradient for positive triple: sign(h + r - t)
+                        let grad_pos = diff_pos.mapv(|x| x.signum());
+
+                        // Gradient for negative triple: -sign(h' + r - t')
+                        let grad_neg = diff_neg.mapv(|x| -x.signum());
+
+                        // Accumulate gradients for positive triple
+                        *entity_gradients
+                            .entry(positive.0.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim)) +=
+                            &grad_pos;
+                        *relation_gradients
+                            .entry(positive.1.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim)) +=
+                            &grad_pos;
+                        *entity_gradients
+                            .entry(positive.2.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim)) -=
+                            &grad_pos;
+
+                        // Accumulate gradients for negative triple
+                        *entity_gradients
+                            .entry(h_neg_key.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim)) +=
+                            &grad_neg;
+                        *entity_gradients
+                            .entry(t_neg_key.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim)) -=
+                            &grad_neg;
+                    }
+                }
+
+                epoch_loss += batch_loss;
+                num_batches += 1;
+
+                // Apply gradients to update embeddings
+                let mut entity_embs = self.entity_embeddings.write().await;
+                let mut relation_embs = self.relation_embeddings.write().await;
+
+                // Update entity embeddings with Adam optimizer
+                for (entity, gradient) in entity_gradients {
+                    if let Some(embedding) = entity_embs.get_mut(&entity) {
+                        // Adam optimizer with bias correction
+                        let m1 = entity_m1
+                            .entry(entity.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim));
+                        let m2 = entity_m2
+                            .entry(entity.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim));
+
+                        // Update biased first moment estimate
+                        *m1 = &*m1 * beta1 + &gradient * (1.0 - beta1);
+
+                        // Update biased second raw moment estimate
+                        *m2 = &*m2 * beta2 + &gradient.mapv(|g| g * g) * (1.0 - beta2);
+
+                        // Compute bias-corrected moment estimates
+                        let t = epoch as f32 + 1.0;
+                        let m1_hat = &*m1 / (1.0 - beta1.powf(t));
+                        let m2_hat = &*m2 / (1.0 - beta2.powf(t));
+
+                        // Update parameters (element-wise division)
+                        for i in 0..embedding.len() {
+                            let update = learning_rate * m1_hat[i] / (m2_hat[i].sqrt() + epsilon);
+                            embedding[i] -= update;
+                        }
+
+                        // Apply weight decay
+                        if weight_decay > 0.0 {
+                            *embedding = &*embedding * (1.0 - learning_rate * weight_decay);
+                        }
+
+                        // Normalize embeddings (important for TransE)
+                        let norm = embedding.mapv(|x| x * x).sum().sqrt();
+                        if norm > 1.0 {
+                            *embedding = &*embedding / norm;
+                        }
+                    }
+                }
+
+                // Update relation embeddings with Adam optimizer
+                for (relation, gradient) in relation_gradients {
+                    if let Some(embedding) = relation_embs.get_mut(&relation) {
+                        let m1 = relation_m1
+                            .entry(relation.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim));
+                        let m2 = relation_m2
+                            .entry(relation.clone())
+                            .or_insert_with(|| Array1::zeros(self.config.embedding_dim));
+
+                        *m1 = &*m1 * beta1 + &gradient * (1.0 - beta1);
+                        *m2 = &*m2 * beta2 + &gradient.mapv(|g| g * g) * (1.0 - beta2);
+
+                        let t = epoch as f32 + 1.0;
+                        let m1_hat = &*m1 / (1.0 - beta1.powf(t));
+                        let m2_hat = &*m2 / (1.0 - beta2.powf(t));
+
+                        // Update parameters (element-wise division)
+                        for i in 0..embedding.len() {
+                            let update = learning_rate * m1_hat[i] / (m2_hat[i].sqrt() + epsilon);
+                            embedding[i] -= update;
+                        }
+
+                        // Apply weight decay
+                        if weight_decay > 0.0 {
+                            *embedding = &*embedding * (1.0 - learning_rate * weight_decay);
+                        }
+                    }
                 }
             }
 
-            total_loss = epoch_loss / triple_strings.len() as f32;
+            // Calculate average epoch loss
+            let avg_epoch_loss = if num_batches > 0 {
+                epoch_loss / num_batches as f32
+            } else {
+                0.0
+            };
+            loss_history.push(avg_epoch_loss);
+            final_epoch = epoch;
 
-            // Early stopping check (simplified)
-            if total_loss < 1e-6 {
-                break;
+            // Validation (run every 10 epochs)
+            let validation_frequency = 10;
+            if epoch % validation_frequency == 0 && !val_triples.is_empty() {
+                let mut val_loss = 0.0;
+                for triple in val_triples {
+                    let score = self.compute_score(&triple.0, &triple.1, &triple.2).await?;
+                    val_loss += score;
+                }
+                val_loss /= val_triples.len() as f32;
+
+                // Early stopping with patience
+                let min_delta = 1e-4;
+                if val_loss < best_val_loss - min_delta {
+                    best_val_loss = val_loss;
+                    patience_counter = 0;
+                } else {
+                    patience_counter += 1;
+                    if patience_counter >= config.patience {
+                        tracing::info!("Early stopping triggered at epoch {}", epoch);
+                        break;
+                    }
+                }
+
+                // Log every 10 epochs
+                if epoch % 10 == 0 {
+                    tracing::info!(
+                        "Epoch {}/{}: train_loss={:.4}, val_loss={:.4}",
+                        epoch,
+                        config.max_epochs,
+                        avg_epoch_loss,
+                        val_loss
+                    );
+                }
+            } else if epoch % 10 == 0 {
+                tracing::info!(
+                    "Epoch {}/{}: train_loss={:.4}",
+                    epoch,
+                    config.max_epochs,
+                    avg_epoch_loss
+                );
             }
         }
 
         self.trained = true;
 
-        // Calculate accuracy on a validation set (simplified)
-        let accuracy = self.calculate_accuracy(&triple_strings).await?;
+        // Calculate final accuracy
+        let accuracy = if !val_triples.is_empty() {
+            self.calculate_accuracy(val_triples).await?
+        } else {
+            self.calculate_accuracy(train_triples).await?
+        };
 
         Ok(TrainingMetrics {
-            loss: total_loss,
-            loss_history: vec![total_loss],
+            loss: loss_history.last().copied().unwrap_or(0.0),
+            loss_history,
             accuracy,
-            epochs: self.config.max_epochs,
-            time_elapsed: std::time::Duration::from_secs(0),
+            epochs: final_epoch + 1,
+            time_elapsed: start_time.elapsed(),
             kg_metrics: KnowledgeGraphMetrics::default(),
         })
     }

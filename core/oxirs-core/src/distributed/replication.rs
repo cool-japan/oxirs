@@ -1010,7 +1010,7 @@ impl ReplicationManager {
         };
 
         // Serialize and write
-        let serialized = bincode::serialize(&entry)?;
+        let serialized = bincode::serde::encode_to_vec(&entry, bincode::config::standard())?;
         if let Some(ref mut file) = wal.current_file {
             use std::io::Write;
             file.write_all(&serialized)?;

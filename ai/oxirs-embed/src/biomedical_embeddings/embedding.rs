@@ -440,7 +440,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
         self.get_typed_entity_embedding(entity)
     }
 
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector> {
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
         if let Some(embedding) = self.relation_embeddings.get(relation) {
             Ok(Vector::from_array1(embedding))
         } else {
@@ -450,7 +450,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         let subject_emb = self.get_entity_embedding(subject)?;
-        let relation_emb = self.getrelation_embedding(predicate)?;
+        let relation_emb = self.get_relation_embedding(predicate)?;
         let object_emb = self.get_entity_embedding(object)?;
 
         // TransE-style scoring with biomedical enhancements
@@ -488,7 +488,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
 
         // Generic prediction
         let _subject_emb = self.get_entity_embedding(subject)?;
-        let _relation_emb = self.getrelation_embedding(predicate)?;
+        let _relation_emb = self.get_relation_embedding(predicate)?;
 
         let mut scores = Vec::new();
         for entity in self.entity_types.keys() {
@@ -512,7 +512,7 @@ impl EmbeddingModel for BiomedicalEmbedding {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         let _object_emb = self.get_entity_embedding(object)?;
-        let _relation_emb = self.getrelation_embedding(predicate)?;
+        let _relation_emb = self.get_relation_embedding(predicate)?;
 
         let mut scores = Vec::new();
         for entity in self.entity_types.keys() {

@@ -303,6 +303,100 @@ impl StarSerializer {
     }
 }
 
+/// Iterator that yields chunks of items from an underlying iterator.
+///
+/// This utility is useful for batch processing operations where you want to
+/// process data in fixed-size chunks for better memory efficiency and performance.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_star::serializer::star_serializer::utils::ChunkedIterator;
+///
+/// let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+/// let mut chunked = ChunkedIterator::new(data.into_iter(), 3);
+///
+/// assert_eq!(chunked.next(), Some(vec![1, 2, 3]));
+/// assert_eq!(chunked.next(), Some(vec![4, 5, 6]));
+/// assert_eq!(chunked.next(), Some(vec![7, 8, 9]));
+/// assert_eq!(chunked.next(), Some(vec![10]));
+/// assert_eq!(chunked.next(), None);
+/// ```
+pub struct ChunkedIterator<I: Iterator> {
+    inner: I,
+    chunk_size: usize,
+}
+
+impl<I: Iterator> ChunkedIterator<I> {
+    /// Create a new ChunkedIterator that yields chunks of the specified size.
+    ///
+    /// # Arguments
+    ///
+    /// * `iter` - The underlying iterator to chunk
+    /// * `chunk_size` - The maximum size of each chunk (must be > 0)
+    ///
+    /// # Panics
+    ///
+    /// Panics if `chunk_size` is 0.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use oxirs_star::serializer::star_serializer::utils::ChunkedIterator;
+    ///
+    /// let data = vec![1, 2, 3, 4, 5];
+    /// let chunked = ChunkedIterator::new(data.into_iter(), 2);
+    /// let chunks: Vec<_> = chunked.collect();
+    ///
+    /// assert_eq!(chunks.len(), 3);
+    /// assert_eq!(chunks[0], vec![1, 2]);
+    /// assert_eq!(chunks[1], vec![3, 4]);
+    /// assert_eq!(chunks[2], vec![5]);
+    /// ```
+    pub fn new(iter: I, chunk_size: usize) -> Self {
+        assert!(chunk_size > 0, "chunk_size must be greater than 0");
+        Self {
+            inner: iter,
+            chunk_size,
+        }
+    }
+
+    /// Get the configured chunk size
+    pub fn chunk_size(&self) -> usize {
+        self.chunk_size
+    }
+}
+
+impl<I: Iterator> Iterator for ChunkedIterator<I> {
+    type Item = Vec<I::Item>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut chunk = Vec::with_capacity(self.chunk_size);
+
+        for _ in 0..self.chunk_size {
+            match self.inner.next() {
+                Some(item) => chunk.push(item),
+                None => break,
+            }
+        }
+
+        if chunk.is_empty() {
+            None
+        } else {
+            Some(chunk)
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let (lower, upper) = self.inner.size_hint();
+
+        let lower_chunks = (lower + self.chunk_size - 1) / self.chunk_size;
+        let upper_chunks = upper.map(|u| (u + self.chunk_size - 1) / self.chunk_size);
+
+        (lower_chunks, upper_chunks)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -866,19 +960,66 @@ mod tests {
         assert!(streaming_estimate < 10_000_000);
     }
 
-    // TODO: Re-enable when ChunkedIterator is implemented
-    // #[test]
-    // fn test_chunked_iterator() {
-    //     let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-    //     let chunked = ChunkedIterator::new(data.into_iter(), 3);
-    //
-    //     let chunks: Vec<_> = chunked.collect();
-    //     assert_eq!(chunks.len(), 4);
-    //     assert_eq!(chunks[0], vec![1, 2, 3]);
-    //     assert_eq!(chunks[1], vec![4, 5, 6]);
-    //     assert_eq!(chunks[2], vec![7, 8, 9]);
-    //     assert_eq!(chunks[3], vec![10]);
-    // }
+    #[test]
+    fn test_chunked_iterator() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let chunked = ChunkedIterator::new(data.into_iter(), 3);
+
+        let chunks: Vec<_> = chunked.collect();
+        assert_eq!(chunks.len(), 4);
+        assert_eq!(chunks[0], vec![1, 2, 3]);
+        assert_eq!(chunks[1], vec![4, 5, 6]);
+        assert_eq!(chunks[2], vec![7, 8, 9]);
+        assert_eq!(chunks[3], vec![10]);
+    }
+
+    #[test]
+    fn test_chunked_iterator_exact_chunks() {
+        let data = vec![1, 2, 3, 4, 5, 6];
+        let chunked = ChunkedIterator::new(data.into_iter(), 2);
+
+        let chunks: Vec<_> = chunked.collect();
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0], vec![1, 2]);
+        assert_eq!(chunks[1], vec![3, 4]);
+        assert_eq!(chunks[2], vec![5, 6]);
+    }
+
+    #[test]
+    fn test_chunked_iterator_single_item() {
+        let data = vec![42];
+        let chunked = ChunkedIterator::new(data.into_iter(), 10);
+
+        let chunks: Vec<_> = chunked.collect();
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0], vec![42]);
+    }
+
+    #[test]
+    fn test_chunked_iterator_empty() {
+        let data: Vec<i32> = vec![];
+        let chunked = ChunkedIterator::new(data.into_iter(), 5);
+
+        let chunks: Vec<_> = chunked.collect();
+        assert_eq!(chunks.len(), 0);
+    }
+
+    #[test]
+    fn test_chunked_iterator_size_hint() {
+        let data = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        let chunked = ChunkedIterator::new(data.into_iter(), 3);
+
+        let (lower, upper) = chunked.size_hint();
+        assert_eq!(lower, 4); // 10 items / 3 chunk_size = 4 chunks
+        assert_eq!(upper, Some(4));
+    }
+
+    #[test]
+    #[should_panic(expected = "chunk_size must be greater than 0")]
+    fn test_chunked_iterator_zero_chunk_size() {
+        let data = vec![1, 2, 3];
+        let _chunked = ChunkedIterator::new(data.into_iter(), 0);
+    }
 
     #[test]
     fn test_compression_type_selection() {

@@ -12,11 +12,11 @@ categories = ["database", "data-structures", "parsing"]
 rust-version.workspace = true
 
 [dependencies]
-# Temporary: OxiGraph dependencies for parser implementations (until native implementations complete)
-oxttl.workspace = true         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
-oxrdfxml.workspace = true      # RDF/XML parser
-oxjsonld.workspace = true      # JSON-LD parser
-oxrdf.workspace = true         # RDF data model (required by parsers)
+# OxiGraph parser dependencies (upgraded to latest versions)
+oxttl.workspace = true         # Turtle, N-Triples, N-Quads, TriG, N3 parsers (v0.2.1)
+oxrdfxml.workspace = true      # RDF/XML parser (v0.2.1)
+oxjsonld.workspace = true      # JSON-LD parser (v0.2.1)
+oxrdf.workspace = true         # RDF data model (v0.3.1)
 
 json-event-parser = { version = "0.2", features = ["async-tokio"] }
 quick-xml = { version = "0.38", features = ["async-tokio"] }
@@ -26,7 +26,7 @@ anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 url = "2.5.7"
-regex = "1.11"
+regex = "1.12"
 lazy_static = "1.5"
 once_cell = "1.21"
 
@@ -45,6 +45,7 @@ simd-json = "0.14"
 wide = { version = "0.7", optional = true }
 num_cpus = "1.17"
 sys-info = "0.9"
+libc = "0.2"
 tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-util"] }
 async-trait = "0.1"
 smallvec = "1.15"
@@ -66,9 +67,9 @@ fastrand = "2.3"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 urlencoding = "2.1"
 
-# Storage engine dependencies  
+# Storage engine dependencies
 rocksdb = { workspace = true, optional = true }
-bincode = "1.3"
+bincode = "2.0"
 lru = "0.16"
 glob = "0.3"
 
@@ -92,10 +93,10 @@ bimap = "0.6"
 bytes = "1.10"
 
 # SciRS2 scientific computing dependencies (replaces direct ndarray/rand usage)
-scirs2-core = { workspace = true }
+scirs2-core = { workspace = true, features = ["memory_management", "memory_efficient", "parallel"] }
 
 # GPU monitoring (optional)
-nvml-wrapper = { version = "0.10", optional = true }
+nvml-wrapper = { version = "0.11", optional = true }
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri.workspace = true         # Fast IRI validation and parsing

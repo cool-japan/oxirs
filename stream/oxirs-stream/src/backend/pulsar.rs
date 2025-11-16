@@ -6,7 +6,7 @@
 //! schema registry, message ordering, and real-time processing capabilities.
 //! Optimized for cloud-native deployments and massive scale scenarios.
 
-use crate::{EventMetadata, PatchOperation, RdfPatch, StreamBackend, StreamConfig, StreamEvent};
+use crate::{EventMetadata, PatchOperation, RdfPatch, StreamConfig, StreamEvent};
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use futures::StreamExt;
@@ -15,20 +15,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{RwLock, Semaphore};
-use tokio::time;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 #[cfg(feature = "pulsar")]
 use pulsar::{
-    authentication::Authentication,
     compression::Compression,
-    consumer::{Consumer, ConsumerBuilder, ConsumerOptions, DeadLetterPolicy, InitialPosition},
-    error::Error as PulsarError,
-    message::{Message as PulsarMessageTrait, Payload},
-    producer::{Producer, ProducerBuilder, ProducerOptions},
-    proto::Schema,
-    Executor, Pulsar, TokioExecutor,
+    consumer::{Consumer, ConsumerOptions, InitialPosition},
+    producer::{Producer, ProducerOptions},
+    Pulsar, TokioExecutor,
 };
 
 /// Pulsar producer configuration with enterprise features
@@ -157,7 +152,7 @@ pub struct PulsarProducer {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct ProducerStats {
+pub struct ProducerStats {
     messages_sent: u64,
     messages_failed: u64,
     bytes_sent: u64,
@@ -329,7 +324,7 @@ impl PulsarProducer {
         // Create Pulsar client
         #[cfg(feature = "pulsar")]
         {
-            let mut builder = Pulsar::builder(&self.pulsar_config.service_url, TokioExecutor);
+            let builder = Pulsar::builder(&self.pulsar_config.service_url, TokioExecutor);
 
             // Add authentication if configured
             // Note: Authentication setup depends on the specific auth method
@@ -512,7 +507,7 @@ impl PulsarProducer {
                 pulsar_msg = pulsar_msg.event_time(message.event_time.timestamp_millis() as u64);
 
                 // Send message
-                let _receipt = pulsar_msg.send().await?;
+                let _receipt = pulsar_msg.send_non_blocking().await?;
 
                 debug!("Message sent successfully");
 
@@ -741,7 +736,7 @@ pub enum PulsarSubscriptionInitialPosition {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize)]
-struct ConsumerStats {
+pub struct ConsumerStats {
     messages_received: u64,
     messages_acknowledged: u64,
     messages_negative_acknowledged: u64,
@@ -803,7 +798,7 @@ impl PulsarConsumer {
         #[cfg(feature = "pulsar")]
         {
             // Create Pulsar client
-            let mut builder = Pulsar::builder(&self.pulsar_config.service_url, TokioExecutor);
+            let builder = Pulsar::builder(&self.pulsar_config.service_url, TokioExecutor);
 
             // Add authentication if configured
             // Note: Authentication setup depends on the specific auth method
@@ -823,7 +818,8 @@ impl PulsarConsumer {
             }
 
             // Set subscription type
-            let sub_type = match self.pulsar_config.subscription_type {
+            // Note: Subscription type is currently handled by the Pulsar library based on consumer configuration
+            let _sub_type = match self.pulsar_config.subscription_type {
                 PulsarSubscriptionType::Exclusive => {
                     pulsar::message::proto::command_subscribe::SubType::Exclusive
                 }
@@ -933,25 +929,25 @@ impl PulsarConsumer {
                         stats.avg_processing_time_ms =
                             (stats.avg_processing_time_ms + processing_time) / 2.0;
 
-                        return Ok(Some(event));
+                        Ok(Some(event))
                     }
                     Ok(Some(Err(e))) => {
                         error!("Error receiving message: {}", e);
                         let mut stats = self.stats.write().await;
                         stats.connection_errors += 1;
-                        return Err(anyhow!("Pulsar consumer error: {}", e));
+                        Err(anyhow!("Pulsar consumer error: {}", e))
                     }
                     Ok(None) => {
                         // No message available
-                        return Ok(None);
+                        Ok(None)
                     }
                     Err(_) => {
                         // Timeout - no message available
-                        return Ok(None);
+                        Ok(None)
                     }
                 }
             } else {
-                return Err(anyhow!("Consumer not connected"));
+                Err(anyhow!("Consumer not connected"))
             }
         }
 
@@ -973,9 +969,9 @@ impl PulsarConsumer {
 
                 return Ok(Some(message.event_data));
             }
-        }
 
-        Ok(None)
+            Ok(None)
+        }
     }
 
     async fn acknowledge_message(&mut self, message: &PulsarMessage) -> Result<()> {
@@ -990,7 +986,7 @@ impl PulsarConsumer {
 
         #[cfg(feature = "pulsar")]
         {
-            if let Some(consumer) = &mut self.consumer {
+            if let Some(_consumer) = &mut self.consumer {
                 // In a real implementation, we'd need to keep track of the original Message
                 // to call consumer.nack(&msg). For now, just update stats.
                 let mut stats = self.stats.write().await;
@@ -1170,7 +1166,7 @@ pub struct PulsarSubscriptionStats {
 #[cfg(all(test, feature = "pulsar"))]
 mod tests {
     use super::*;
-    use crate::{StreamBackend, StreamConfig};
+    use crate::StreamConfig;
 
     fn test_pulsar_config() -> StreamConfig {
         StreamConfig {

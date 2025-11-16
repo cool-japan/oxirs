@@ -39,7 +39,17 @@ use crate::metamodel::{Aspect, Characteristic, Entity, ModelElement, Operation, 
 use serde_json::json;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use tera::{Context, Tera, Value};
+
+/// Hook function signature for pre-render processing
+pub type PreRenderHook = Arc<dyn Fn(&mut TemplateContext) -> Result<()> + Send + Sync>;
+
+/// Hook function signature for post-render processing
+pub type PostRenderHook = Arc<dyn Fn(&str) -> Result<String> + Send + Sync>;
+
+/// Template validation hook signature
+pub type ValidationHook = Arc<dyn Fn(&str) -> Result<()> + Send + Sync>;
 
 /// Template engine for SAMM code generation
 pub struct TemplateEngine {
@@ -47,6 +57,12 @@ pub struct TemplateEngine {
     tera: Tera,
     /// Loaded template paths for tracking
     loaded_templates: Vec<PathBuf>,
+    /// Pre-render hooks (context transformation)
+    pre_render_hooks: Vec<PreRenderHook>,
+    /// Post-render hooks (output transformation)
+    post_render_hooks: Vec<PostRenderHook>,
+    /// Validation hooks for generated code
+    validation_hooks: HashMap<String, ValidationHook>,
 }
 
 impl TemplateEngine {
@@ -75,7 +91,147 @@ impl TemplateEngine {
         Ok(Self {
             tera,
             loaded_templates: Vec::new(),
+            pre_render_hooks: Vec::new(),
+            post_render_hooks: Vec::new(),
+            validation_hooks: HashMap::new(),
         })
+    }
+
+    /// Register a pre-render hook
+    ///
+    /// Pre-render hooks modify the context before template rendering.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use oxirs_samm::templates::TemplateEngine;
+    /// use std::sync::Arc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut engine = TemplateEngine::new()?;
+    ///
+    /// // Add custom metadata to context
+    /// engine.add_pre_render_hook(Arc::new(|ctx| {
+    ///     ctx.insert("version", "1.0.0");
+    ///     ctx.insert("generated_by", "OxiRS SAMM");
+    ///     Ok(())
+    /// }));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_pre_render_hook(&mut self, hook: PreRenderHook) {
+        self.pre_render_hooks.push(hook);
+    }
+
+    /// Register a post-render hook
+    ///
+    /// Post-render hooks modify the rendered output.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use oxirs_samm::templates::TemplateEngine;
+    /// use std::sync::Arc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut engine = TemplateEngine::new()?;
+    ///
+    /// // Add copyright header
+    /// engine.add_post_render_hook(Arc::new(|output| {
+    ///     Ok(format!("// Copyright 2025\n\n{}", output))
+    /// }));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_post_render_hook(&mut self, hook: PostRenderHook) {
+        self.post_render_hooks.push(hook);
+    }
+
+    /// Register a validation hook for a specific template
+    ///
+    /// Validation hooks verify generated code meets quality standards.
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use oxirs_samm::templates::TemplateEngine;
+    /// use std::sync::Arc;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut engine = TemplateEngine::new()?;
+    ///
+    /// // Validate that output contains required imports
+    /// engine.add_validation_hook("rust.tera", Arc::new(|output| {
+    ///     if !output.contains("use serde") {
+    ///         return Err(oxirs_samm::error::SammError::ValidationError(
+    ///             "Missing serde import".to_string()
+    ///         ));
+    ///     }
+    ///     Ok(())
+    /// }));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_validation_hook(&mut self, template_name: impl Into<String>, hook: ValidationHook) {
+        self.validation_hooks.insert(template_name.into(), hook);
+    }
+
+    /// Register a custom Tera filter
+    ///
+    /// # Example
+    ///
+    /// ```rust,no_run
+    /// use oxirs_samm::templates::TemplateEngine;
+    /// use tera::{Result as TeraResult, Value};
+    /// use std::collections::HashMap;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut engine = TemplateEngine::new()?;
+    ///
+    /// // Custom filter to reverse strings
+    /// engine.register_filter("reverse", |value: &Value, _args: &HashMap<String, Value>| -> TeraResult<Value> {
+    ///     if let Some(s) = value.as_str() {
+    ///         Ok(Value::String(s.chars().rev().collect()))
+    ///     } else {
+    ///         Ok(value.clone())
+    ///     }
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn register_filter<F>(&mut self, name: &str, filter: F)
+    where
+        F: tera::Filter + 'static,
+    {
+        self.tera.register_filter(name, filter);
+        tracing::debug!("Registered custom filter: {}", name);
+    }
+
+    /// Register a custom Tera function
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use oxirs_samm::templates::TemplateEngine;
+    /// use tera::{Result as TeraResult, Value};
+    /// use std::collections::HashMap;
+    ///
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut engine = TemplateEngine::new()?;
+    ///
+    /// // Custom function to generate a version string
+    /// engine.register_function("version", |_args: &HashMap<String, Value>| -> TeraResult<Value> {
+    ///     Ok(Value::String("1.0.0".to_string()))
+    /// });
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn register_function<F>(&mut self, name: &str, function: F)
+    where
+        F: tera::Function + 'static,
+    {
+        self.tera.register_function(name, function);
+        tracing::debug!("Registered custom function: {}", name);
     }
 
     /// Load a custom template from a file
@@ -132,12 +288,87 @@ impl TemplateEngine {
     }
 
     /// Render a template with the given context
+    ///
+    /// This method applies all registered hooks in the following order:
+    /// 1. Pre-render hooks (modify context)
+    /// 2. Template rendering
+    /// 3. Post-render hooks (modify output)
+    /// 4. Validation hooks (verify output quality)
     pub fn render(&self, template_name: &str, context: &TemplateContext) -> Result<String> {
+        let mut context = context.clone();
+
+        // Apply pre-render hooks
+        for hook in &self.pre_render_hooks {
+            hook(&mut context)?;
+        }
+
         let tera_context = context.to_tera_context();
 
-        self.tera
+        // Render template
+        let mut output = self
+            .tera
             .render(template_name, &tera_context)
-            .map_err(|e| SammError::ParseError(format!("Template rendering failed: {}", e)))
+            .map_err(|e| SammError::ParseError(format!("Template rendering failed: {}", e)))?;
+
+        // Apply post-render hooks
+        for hook in &self.post_render_hooks {
+            output = hook(&output)?;
+        }
+
+        // Apply validation hooks if registered for this template
+        if let Some(validator) = self.validation_hooks.get(template_name) {
+            validator(&output)?;
+        }
+
+        Ok(output)
+    }
+
+    /// Render with custom one-time hooks
+    ///
+    /// Allows passing hooks without registering them permanently.
+    pub fn render_with_hooks(
+        &self,
+        template_name: &str,
+        context: &TemplateContext,
+        pre_hooks: &[PreRenderHook],
+        post_hooks: &[PostRenderHook],
+    ) -> Result<String> {
+        let mut context = context.clone();
+
+        // Apply temporary pre-render hooks
+        for hook in pre_hooks {
+            hook(&mut context)?;
+        }
+
+        // Apply permanent pre-render hooks
+        for hook in &self.pre_render_hooks {
+            hook(&mut context)?;
+        }
+
+        let tera_context = context.to_tera_context();
+
+        // Render template
+        let mut output = self
+            .tera
+            .render(template_name, &tera_context)
+            .map_err(|e| SammError::ParseError(format!("Template rendering failed: {}", e)))?;
+
+        // Apply permanent post-render hooks
+        for hook in &self.post_render_hooks {
+            output = hook(&output)?;
+        }
+
+        // Apply temporary post-render hooks
+        for hook in post_hooks {
+            output = hook(&output)?;
+        }
+
+        // Apply validation hook if registered
+        if let Some(validator) = self.validation_hooks.get(template_name) {
+            validator(&output)?;
+        }
+
+        Ok(output)
     }
 
     /// Get list of available templates

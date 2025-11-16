@@ -1,0 +1,63 @@
+[package]
+name = "oxirs-geosparql-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.oxirs-geosparql]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+
+# Fuzz targets
+[[bin]]
+name = "fuzz_wkt_parser"
+path = "fuzz_targets/fuzz_wkt_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_geojson_parser"
+path = "fuzz_targets/fuzz_geojson_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_ewkb_parser"
+path = "fuzz_targets/fuzz_ewkb_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_gml_parser"
+path = "fuzz_targets/fuzz_gml_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_flatgeobuf_parser"
+path = "fuzz_targets/fuzz_flatgeobuf_parser.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_zero_copy_wkt"
+path = "fuzz_targets/fuzz_zero_copy_wkt.rs"
+test = false
+doc = false
+bench = false
+
+[profile.release]
+debug = 1

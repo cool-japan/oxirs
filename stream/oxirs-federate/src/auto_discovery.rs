@@ -10,6 +10,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, RwLock};
 use tokio::time::interval;
+#[cfg(feature = "service-discovery")]
+use tracing::debug;
 use tracing::{error, info, warn};
 
 #[cfg(feature = "service-discovery")]
@@ -18,13 +20,22 @@ use mdns_sd::{ServiceDaemon, ServiceEvent, ServiceInfo};
 use crate::{discovery::ServiceDiscovery, service::ServiceType, service_registry::ServiceRegistry};
 
 /// Service discovery daemon for automatic discovery
-#[derive(Debug)]
 pub struct AutoDiscovery {
     config: AutoDiscoveryConfig,
     #[cfg(feature = "service-discovery")]
     mdns_daemon: Option<ServiceDaemon>,
     discovered_services: Arc<RwLock<HashMap<String, DiscoveredEndpoint>>>,
     discovery_channel: Option<mpsc::Sender<DiscoveredEndpoint>>,
+}
+
+impl std::fmt::Debug for AutoDiscovery {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutoDiscovery")
+            .field("config", &self.config)
+            .field("discovered_services", &"<Arc<RwLock>>")
+            .field("discovery_channel", &self.discovery_channel.is_some())
+            .finish()
+    }
 }
 
 impl AutoDiscovery {
@@ -135,20 +146,21 @@ impl AutoDiscovery {
         tx: mpsc::Sender<DiscoveredEndpoint>,
     ) {
         match event {
-            ServiceEvent::ServiceResolved(info) => {
+            ServiceEvent::ServiceResolved(resolved) => {
+                // ResolvedService has same interface as ServiceInfo
                 debug!(
                     "Discovered {:?} service: {}",
                     service_type,
-                    info.get_fullname()
+                    resolved.get_fullname()
                 );
 
-                let endpoint = Self::extract_endpoint_from_mdns(&info);
+                let endpoint = Self::extract_endpoint_from_resolved(&resolved);
                 if let Some(endpoint) = endpoint {
                     let discovered = DiscoveredEndpoint {
                         url: endpoint,
                         service_type,
                         discovery_method: DiscoveryMethod::MDNS,
-                        metadata: Self::extract_mdns_metadata(&info),
+                        metadata: Self::extract_resolved_metadata(&resolved),
                         timestamp: chrono::Utc::now(),
                     };
 
@@ -166,8 +178,9 @@ impl AutoDiscovery {
 
     /// Extract endpoint URL from mDNS service info
     #[cfg(feature = "service-discovery")]
+    #[allow(dead_code)]
     fn extract_endpoint_from_mdns(info: &ServiceInfo) -> Option<String> {
-        let addresses: Vec<_> = info.get_addresses().collect();
+        let addresses: Vec<_> = info.get_addresses().iter().collect();
         if let Some(addr) = addresses.first() {
             let port = info.get_port();
             let path = info
@@ -181,15 +194,47 @@ impl AutoDiscovery {
         }
     }
 
+    /// Extract endpoint URL from resolved mDNS service
+    #[cfg(feature = "service-discovery")]
+    fn extract_endpoint_from_resolved(resolved: &mdns_sd::ResolvedService) -> Option<String> {
+        let addresses: Vec<_> = resolved.get_addresses().iter().collect();
+        if let Some(addr) = addresses.first() {
+            let port = resolved.get_port();
+            let path = resolved
+                .get_properties()
+                .get_property_val_str("path")
+                .unwrap_or("");
+
+            Some(format!("http://{}:{}{}", addr, port, path))
+        } else {
+            None
+        }
+    }
+
     /// Extract metadata from mDNS service info
     #[cfg(feature = "service-discovery")]
+    #[allow(dead_code)]
     fn extract_mdns_metadata(info: &ServiceInfo) -> HashMap<String, String> {
         let mut metadata = HashMap::new();
 
-        for (key, value) in info.get_properties().iter() {
-            if let Ok(val_str) = std::str::from_utf8(value) {
-                metadata.insert(key.clone(), val_str.to_string());
-            }
+        for property in info.get_properties().iter() {
+            let key = property.key();
+            let val_str = property.val_str();
+            metadata.insert(key.to_string(), val_str.to_string());
+        }
+
+        metadata
+    }
+
+    /// Extract metadata from resolved mDNS service
+    #[cfg(feature = "service-discovery")]
+    fn extract_resolved_metadata(resolved: &mdns_sd::ResolvedService) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+
+        for property in resolved.get_properties().iter() {
+            let key = property.key();
+            let val_str = property.val_str();
+            metadata.insert(key.to_string(), val_str.to_string());
         }
 
         metadata

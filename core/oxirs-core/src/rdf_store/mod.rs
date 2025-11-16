@@ -1,12 +1,319 @@
 //! RDF store implementation with pluggable storage backends
+//!
+//! **Stability**: ✅ **Stable** - Core store APIs are production-ready.
+//!
+//! This module provides the primary interface for storing, querying, and manipulating RDF data.
+//! It includes multiple storage backends optimized for different use cases.
+//!
+//! ## Overview
+//!
+//! The RDF store is the central component for managing RDF data. It provides:
+//! - **Quad storage** - Store RDF quads (triples with named graphs)
+//! - **Pattern matching** - Query data using SPARQL-like patterns
+//! - **SPARQL execution** - Execute SPARQL queries directly
+//! - **Persistence** - Optional disk-based storage with automatic saving
+//! - **Named graphs** - Full support for RDF datasets with named graphs
+//!
+//! ## Core Types
+//!
+//! - **[`RdfStore`]** - Primary store implementation with pluggable backends
+//! - **[`ConcreteStore`]** - Convenience wrapper (alias for RdfStore)
+//! - **[`Store`]** - Trait defining the store interface
+//! - **[`StorageBackend`]** - Enum of available storage backends
+//!
+//! ## Storage Backends
+//!
+//! ### Memory Backend
+//! - Fast in-memory storage
+//! - No persistence (data lost on shutdown)
+//! - Good for: testing, temporary data, small datasets
+//!
+//! ### Persistent Backend
+//! - Disk-backed storage with automatic save
+//! - Data persisted as N-Quads format
+//! - Good for: long-running applications, data preservation
+//!
+//! ### UltraMemory Backend
+//! - High-performance with arena allocators
+//! - Multi-index support (SPO, POS, OSP)
+//! - Good for: large datasets, query-heavy workloads
+//!
+//! ## Examples
+//!
+//! ### Basic Store Creation and Usage
+//!
+//! ```rust
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::{NamedNode, Triple, Literal};
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! // Create an in-memory store
+//! let mut store = RdfStore::new()?;
+//!
+//! // Add a triple
+//! let subject = NamedNode::new("http://example.org/alice")?;
+//! let predicate = NamedNode::new("http://xmlns.com/foaf/0.1/name")?;
+//! let object = Literal::new("Alice");
+//!
+//! let triple = Triple::new(subject, predicate, object);
+//! store.insert_triple(triple)?;
+//!
+//! // Check the store
+//! assert_eq!(store.len()?, 1);
+//! assert!(!store.is_empty()?);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Persistent Storage
+//!
+//! ```rust,no_run
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::{NamedNode, Triple, Literal};
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! // Open or create a persistent store
+//! let mut store = RdfStore::open("./my_knowledge_base")?;
+//!
+//! // Add data - automatically saved to disk
+//! let triple = Triple::new(
+//!     NamedNode::new("http://example.org/resource")?,
+//!     NamedNode::new("http://purl.org/dc/terms/title")?,
+//!     Literal::new("My Resource"),
+//! );
+//! store.insert_triple(triple)?;
+//!
+//! // Data persists across restarts
+//! drop(store);
+//!
+//! // Reopen - data is still there
+//! let store = RdfStore::open("./my_knowledge_base")?;
+//! assert_eq!(store.len()?, 1);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Pattern Matching Queries
+//!
+//! ```rust
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::{NamedNode, Triple, Literal, Predicate};
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! # let mut store = RdfStore::new()?;
+//! # let alice = NamedNode::new("http://example.org/alice")?;
+//! # let bob = NamedNode::new("http://example.org/bob")?;
+//! # let knows = NamedNode::new("http://xmlns.com/foaf/0.1/knows")?;
+//! # let name = NamedNode::new("http://xmlns.com/foaf/0.1/name")?;
+//! # store.insert_triple(Triple::new(alice.clone(), knows.clone(), bob.clone()))?;
+//! # store.insert_triple(Triple::new(alice.clone(), name.clone(), Literal::new("Alice")))?;
+//! # store.insert_triple(Triple::new(bob.clone(), name.clone(), Literal::new("Bob")))?;
+//! // Query all triples with foaf:knows predicate
+//! let knows_pred = Predicate::NamedNode(knows);
+//! let results = store.query_triples(None, Some(&knows_pred), None)?;
+//!
+//! for triple in results {
+//!     println!("{:?} knows {:?}", triple.subject(), triple.object());
+//! }
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### SPARQL Queries
+//!
+//! ```rust
+//! use oxirs_core::RdfStore;
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! # let store = RdfStore::new()?;
+//! // Execute a SPARQL SELECT query
+//! let query = r#"
+//!     PREFIX foaf: <http://xmlns.com/foaf/0.1/>
+//!     SELECT ?person ?name WHERE {
+//!         ?person foaf:name ?name .
+//!     }
+//! "#;
+//!
+//! let results = store.query(query)?;
+//! println!("Found {} results", results.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Working with Named Graphs
+//!
+//! ```rust
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::{NamedNode, Quad, GraphName, Literal};
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! # let mut store = RdfStore::new()?;
+//! // Create a named graph
+//! let graph = GraphName::NamedNode(NamedNode::new("http://example.org/graph1")?);
+//!
+//! // Add a quad to the named graph
+//! let quad = Quad::new(
+//!     NamedNode::new("http://example.org/subject")?,
+//!     NamedNode::new("http://example.org/predicate")?,
+//!     Literal::new("value"),
+//!     graph,
+//! );
+//! store.insert_quad(quad)?;
+//!
+//! // Query the named graph
+//! let graph_node = NamedNode::new("http://example.org/graph1")?;
+//! let quads = store.graph_quads(Some(&graph_node))?;
+//! println!("Graph contains {} quads", quads.len());
+//!
+//! // List all graphs
+//! let graphs = store.named_graphs()?;
+//! println!("Store has {} named graphs", graphs.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Bulk Operations for Performance
+//!
+//! ```rust
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::{NamedNode, Quad, Literal, Triple, GraphName};
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! # let mut store = RdfStore::new()?;
+//! // Prepare many quads
+//! let mut quads = Vec::new();
+//! for i in 0..10_000 {
+//!     let subject = NamedNode::new(&format!("http://example.org/item{}", i))?;
+//!     let predicate = NamedNode::new("http://example.org/value")?;
+//!     let object = Literal::new(&i.to_string());
+//!     let triple = Triple::new(subject, predicate, object);
+//!     quads.push(Quad::from_triple(triple));
+//! }
+//!
+//! // Bulk insert - much faster than individual inserts
+//! let ids = store.bulk_insert_quads(quads)?;
+//! println!("Bulk inserted {} quads", ids.len());
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Loading Data from URLs
+//!
+//! ```rust,no_run
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::NamedNode;
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! # let mut store = RdfStore::new()?;
+//! // Load RDF data from a URL
+//! let url = "https://example.org/data.ttl";
+//! let graph = Some(NamedNode::new("http://example.org/imported-graph")?);
+//!
+//! let count = store.load_from_url(url, graph.as_ref())?;
+//! println!("Loaded {} triples from {}", count, url);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ### Graph Management
+//!
+//! ```rust
+//! use oxirs_core::RdfStore;
+//! use oxirs_core::model::{NamedNode, GraphName};
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! # let mut store = RdfStore::new()?;
+//! // Create an empty named graph
+//! let graph_name = NamedNode::new("http://example.org/my-graph")?;
+//! store.create_graph(Some(&graph_name))?;
+//!
+//! // Clear a specific graph
+//! let graph = GraphName::NamedNode(graph_name.clone());
+//! store.clear_graph(Some(&graph))?;
+//!
+//! // Drop a graph entirely
+//! store.drop_graph(Some(&graph))?;
+//!
+//! // Clear all named graphs
+//! let cleared = store.clear_named_graphs()?;
+//! println!("Cleared {} quads from named graphs", cleared);
+//!
+//! // Clear everything
+//! let total_cleared = store.clear_all()?;
+//! println!("Cleared {} total quads", total_cleared);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Performance Characteristics
+//!
+//! | Operation | Memory | Persistent | UltraMemory |
+//! |-----------|--------|------------|-------------|
+//! | Insert (single) | Fast | Medium | Very Fast |
+//! | Insert (bulk) | Fast | Medium | Ultra Fast |
+//! | Query (pattern) | Fast | Fast | Very Fast |
+//! | Query (SPARQL) | Fast | Fast | Fast |
+//! | Persistence | None | Automatic | None |
+//! | Memory Usage | Low | Low | Medium |
+//! | Startup Time | Instant | Fast | Fast |
+//!
+//! ## Best Practices
+//!
+//! 1. **Use bulk operations** - For inserting many quads, use `bulk_insert_quads()`
+//! 2. **Choose the right backend** - Use persistent storage for long-running apps
+//! 3. **Use named graphs** - Organize data into logical graphs
+//! 4. **Check return values** - Insert operations return `true` if the quad was new
+//! 5. **Pattern matching first** - Try pattern matching before SPARQL for simple queries
+//!
+//! ## Error Handling
+//!
+//! Store operations return `Result<T, OxirsError>`. Common errors:
+//! - **Store errors** - Internal storage failures
+//! - **Query errors** - Invalid SPARQL or pattern queries
+//! - **IO errors** - File system errors (persistent storage)
+//! - **Parse errors** - Invalid IRI or term formats
+//!
+//! ## Thread Safety
+//!
+//! The `Store` trait is `Send + Sync`, allowing stores to be shared across threads:
+//!
+//! ```rust,no_run
+//! use oxirs_core::RdfStore;
+//! use std::sync::Arc;
+//!
+//! # fn main() -> Result<(), oxirs_core::OxirsError> {
+//! let store = Arc::new(RdfStore::new()?);
+//!
+//! // Share store across threads
+//! let store_clone = Arc::clone(&store);
+//! std::thread::spawn(move || {
+//!     // Use store in another thread
+//!     let _ = store_clone.len();
+//! });
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! ## Related Modules
+//!
+//! - [`crate::model`] - RDF data model types
+//! - [`crate::parser`] - Parse RDF from files
+//! - [`crate::serializer`] - Serialize RDF to files
+//! - [`crate::query`] - SPARQL query execution
 
 pub mod concrete;
 pub mod storage;
 pub mod types;
 
+#[cfg(feature = "async-tokio")]
+pub mod async_store;
+
 pub use concrete::*;
 pub use storage::*;
 pub use types::*;
+
+#[cfg(feature = "async-tokio")]
+pub use async_store::AsyncRdfStore;
 
 use crate::indexing::{IndexStats, MemoryUsage};
 use crate::model::*;

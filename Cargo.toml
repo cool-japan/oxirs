@@ -21,9 +21,12 @@ members = [
     "ai/oxirs-chat",
     "tools/oxirs",
 ]
+exclude = [
+    "engine/oxirs-geosparql/fuzz",
+]
 
 [workspace.package]
-version = "0.1.0-alpha.3"
+version = "0.1.0-beta.1"
 authors = ["KitaSan <info@kitasan.io>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
@@ -52,24 +55,24 @@ unsafe_code = "warn"
 
 [workspace.dependencies]
 # Internal OxiRS crates (version inherited from workspace.package)
-oxirs-core = { version = "0.1.0-alpha.3", path = "core/oxirs-core" }
-oxirs-fuseki = { version = "0.1.0-alpha.3", path = "server/oxirs-fuseki" }
-oxirs-gql = { version = "0.1.0-alpha.3", path = "server/oxirs-gql" }
-oxirs-arq = { version = "0.1.0-alpha.3", path = "engine/oxirs-arq" }
-oxirs-geosparql = { version = "0.1.0-alpha.3", path = "engine/oxirs-geosparql" }
-oxirs-rule = { version = "0.1.0-alpha.3", path = "engine/oxirs-rule" }
-oxirs-samm = { version = "0.1.0-alpha.3", path = "engine/oxirs-samm" }
-oxirs-shacl = { version = "0.1.0-alpha.3", path = "engine/oxirs-shacl" }
-oxirs-star = { version = "0.1.0-alpha.3", path = "engine/oxirs-star" }
-oxirs-ttl = { version = "0.1.0-alpha.3", path = "engine/oxirs-ttl" }
-oxirs-vec = { version = "0.1.0-alpha.3", path = "engine/oxirs-vec" }
-oxirs-tdb = { version = "0.1.0-alpha.3", path = "storage/oxirs-tdb" }
-oxirs-cluster = { version = "0.1.0-alpha.3", path = "storage/oxirs-cluster" }
-oxirs-stream = { version = "0.1.0-alpha.3", path = "stream/oxirs-stream" }
-oxirs-federate = { version = "0.1.0-alpha.3", path = "stream/oxirs-federate" }
-oxirs-embed = { version = "0.1.0-alpha.3", path = "ai/oxirs-embed" }
-oxirs-shacl-ai = { version = "0.1.0-alpha.3", path = "ai/oxirs-shacl-ai" }
-oxirs-chat = { version = "0.1.0-alpha.3", path = "ai/oxirs-chat" }
+oxirs-core = { version = "0.1.0-beta.1", path = "core/oxirs-core" }
+oxirs-fuseki = { version = "0.1.0-beta.1", path = "server/oxirs-fuseki" }
+oxirs-gql = { version = "0.1.0-beta.1", path = "server/oxirs-gql" }
+oxirs-arq = { version = "0.1.0-beta.1", path = "engine/oxirs-arq" }
+oxirs-geosparql = { version = "0.1.0-beta.1", path = "engine/oxirs-geosparql" }
+oxirs-rule = { version = "0.1.0-beta.1", path = "engine/oxirs-rule" }
+oxirs-samm = { version = "0.1.0-beta.1", path = "engine/oxirs-samm" }
+oxirs-shacl = { version = "0.1.0-beta.1", path = "engine/oxirs-shacl" }
+oxirs-star = { version = "0.1.0-beta.1", path = "engine/oxirs-star" }
+oxirs-ttl = { version = "0.1.0-beta.1", path = "engine/oxirs-ttl" }
+oxirs-vec = { version = "0.1.0-beta.1", path = "engine/oxirs-vec" }
+oxirs-tdb = { version = "0.1.0-beta.1", path = "storage/oxirs-tdb" }
+oxirs-cluster = { version = "0.1.0-beta.1", path = "storage/oxirs-cluster" }
+oxirs-stream = { version = "0.1.0-beta.1", path = "stream/oxirs-stream" }
+oxirs-federate = { version = "0.1.0-beta.1", path = "stream/oxirs-federate" }
+oxirs-embed = { version = "0.1.0-beta.1", path = "ai/oxirs-embed" }
+oxirs-shacl-ai = { version = "0.1.0-beta.1", path = "ai/oxirs-shacl-ai" }
+oxirs-chat = { version = "0.1.0-beta.1", path = "ai/oxirs-chat" }
 
 # Core RDF and SPARQL functionality (native OxiRS implementations)
 # oxigraph = "0.4.11"  # REMOVED: Replaced with native implementations
@@ -79,28 +82,29 @@ rio_api = "0.8"
 rio_turtle = "0.8"
 rio_xml = "0.8"
 
-# Temporary: OxiGraph parser dependencies (until native implementations complete)
-oxttl = "0.1.1"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
-oxrdfxml = "0.1.0"      # RDF/XML parser
-oxjsonld = "0.1.0"      # JSON-LD parser
-oxrdf = "0.2.2"         # RDF data model (required by parsers)
+# Stable OxiGraph parser dependencies (v0.2.x/v0.3.x)
+oxttl = "0.2.1"         # Turtle, N-Triples, N-Quads, TriG, N3 parsers
+oxrdfxml = "0.2.1"      # RDF/XML parser
+oxjsonld = "0.2.1"      # JSON-LD parser
+oxrdf = "0.3.1"         # RDF data model (required by parsers)
 
 # High-performance validation dependencies from oxrdf ecosystem
 oxiri = "0.2"         # Fast IRI validation and parsing
 oxilangtag = "0.1"    # Fast language tag validation
-oxsdatatypes = "0.2"  # Fast XSD datatype validation and parsing
+oxsdatatypes = "0.1"  # Fast XSD datatype validation and parsing
 
 # Async runtime and HTTP
-tokio = { version = "1.47.1", features = ["full"] }
+tokio = { version = "1.47.2", features = ["full"] }
 tokio-util = "0.7"
 tokio-stream = { version = "0.1", features = ["sync"] }
 hyper = { version = "1.7.0", features = ["full"] }
+hyper-util = { version = "0.1.17", features = ["full"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 
 # GraphQL
-juniper = "0.16.1"
-juniper_hyper = "0.9.0"
+juniper = "0.17.0"
+juniper_hyper = "0.10.0"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
@@ -124,7 +128,7 @@ hnsw_rs = "0.3"
 
 # Streaming
 rdkafka = "0.37"
-async-nats = "0.43"
+async-nats = "0.45"
 
 # Clustering
 openraft = "0.9"
@@ -141,6 +145,7 @@ tempfile = "3.23"
 async-trait = "0.1"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 chrono = { version = "0.4.42", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Arrow crates (temporarily disabled due to chrono compatibility issues)
 # arrow = "53.4.0"
@@ -176,21 +181,21 @@ futures = "0.3"
 # Direct rand and ndarray usage removed per SciRS2 integration policy
 # Use scirs2-core::random and scirs2-core::ndarray_ext instead
 
-# SciRS2 dependencies (Scientific Computing Library) - Using rc.1 from crates.io
+# SciRS2 dependencies (Scientific Computing Library) - Using rc.2 from crates.io
 # Note: scirs2 meta crate removed - we only use specific sub-crates as needed
-scirs2-core = { version = "0.1.0-rc.1", features = ["random"] }
-scirs2-linalg = { version = "0.1.0-rc.1" }
-scirs2-stats = { version = "0.1.0-rc.1" }
-scirs2-neural = { version = "0.1.0-rc.1" }
-scirs2-graph = { version = "0.1.0-rc.1" }
-scirs2-metrics = { version = "0.1.0-rc.1" }
-scirs2-fft = { version = "0.1.0-rc.1" }
-scirs2-signal = { version = "0.1.0-rc.1" }
-scirs2-optimize = { version = "0.1.0-rc.1" }
-scirs2-cluster = { version = "0.1.0-rc.1" }
-scirs2-text = { version = "0.1.0-rc.1" }
-scirs2-vision = { version = "0.1.0-rc.1" }
-scirs2-autograd = { version = "0.1.0-rc.1" }  # For array! macro support
+scirs2-core = { version = "0.1.0-rc.2", features = ["random"] }
+scirs2-linalg = { version = "0.1.0-rc.2" }
+scirs2-stats = { version = "0.1.0-rc.2" }
+scirs2-neural = { version = "0.1.0-rc.2" }
+scirs2-graph = { version = "0.1.0-rc.2" }
+scirs2-metrics = { version = "0.1.0-rc.2" }
+scirs2-fft = { version = "0.1.0-rc.2" }
+scirs2-signal = { version = "0.1.0-rc.2" }
+scirs2-optimize = { version = "0.1.0-rc.2" }
+scirs2-cluster = { version = "0.1.0-rc.2" }
+scirs2-text = { version = "0.1.0-rc.2" }
+scirs2-vision = { version = "0.1.0-rc.2" }
+# array! macro is now in scirs2-core, scirs2-autograd not needed
 
 # System utilities
 num_cpus = "1.17"
@@ -198,18 +203,32 @@ url = { version = "2.5", features = ["serde"] }
 rayon = "1.10"
 once_cell = "1.21"
 sysinfo = "0.30.13"  # System information for memory/CPU monitoring
+regex = "1.12.2"
+urlencoding = "2.1.3"
+fastrand = "2.3.0"
 
 # Compression libraries
 flate2 = "1.1"     # Gzip compression
 zstd = "0.13"      # Zstandard compression
 lz4_flex = "0.11"  # LZ4 compression
+snap = "1.1"       # Snappy compression
+brotli = "8.0"     # Brotli compression
+
+# Caching
+redis = { version = "0.27.6", features = ["async-std-comp"] }
+lru = "0.16.2"
+
+# Cryptography
+sha2 = { version = "0.10.9", features = ["oid"] }
+hmac = "0.12.1"
+hex = "0.4.3"
 
 # OpenTelemetry for observability
-opentelemetry = { version = "0.27", features = ["trace", "metrics"] }
-opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "rt-tokio"] }
-opentelemetry-otlp = { version = "0.27", features = ["trace", "metrics"] }
-opentelemetry_sdk = { version = "0.27", features = ["trace", "rt-tokio"] }
-opentelemetry-semantic-conventions = "0.27"
+opentelemetry = { version = "0.31", features = ["trace", "metrics"] }
+opentelemetry-jaeger = { version = "0.22", features = ["collector_client", "rt-tokio"] }  # Deprecated, latest version
+opentelemetry-otlp = { version = "0.31", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.31", features = ["trace", "rt-tokio"] }
+opentelemetry-semantic-conventions = "0.31"
 
 [workspace.metadata.docs.rs]
 all-features = true

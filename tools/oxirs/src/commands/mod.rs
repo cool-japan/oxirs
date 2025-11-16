@@ -35,6 +35,12 @@ pub mod benchmark;
 /// Migration and compatibility commands
 pub mod migrate;
 
+/// Dataset generation commands
+pub mod generate;
+
+/// Index management commands
+pub mod index;
+
 /// Configuration management commands
 pub mod config;
 
@@ -61,6 +67,18 @@ pub mod cache;
 
 /// Query history management
 pub mod history;
+
+/// CI/CD integration commands
+pub mod cicd;
+
+/// Alias management commands
+pub mod alias;
+
+/// RDF graph visualization export
+pub mod visualize;
+
+/// ReBAC relationship management
+pub mod rebac;
 
 /// Command stubs and utilities
 pub mod stubs;

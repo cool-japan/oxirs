@@ -1,8 +1,11 @@
 //! Compression Support for RDF Files
 //!
-//! Support for reading and writing compressed RDF files with gzip, bzip2, and xz compression.
+//! Support for reading and writing compressed RDF files with gzip compression.
 
 use super::ToolResult;
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::fs::File;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::Path;
@@ -109,9 +112,9 @@ pub fn open_reader(path: &Path) -> ToolResult<CompressedReader> {
         CompressionFormat::None => Ok(CompressedReader::None(BufReader::new(file))),
 
         CompressionFormat::Gzip => {
-            // Simulate gzip decompression (in production, use flate2 crate)
-            // For now, just wrap in BufReader as placeholder
-            let reader = BufReader::new(file);
+            // Actual gzip decompression using flate2
+            let decoder = GzDecoder::new(file);
+            let reader = BufReader::new(decoder);
             Ok(CompressedReader::Gzip(Box::new(reader)))
         }
 
@@ -137,8 +140,9 @@ pub fn open_writer(path: &Path, format: CompressionFormat) -> ToolResult<Compres
         CompressionFormat::None => Ok(CompressedWriter::None(BufWriter::new(file))),
 
         CompressionFormat::Gzip => {
-            // Simulate gzip compression (in production, use flate2 crate)
-            let writer = BufWriter::new(file);
+            // Actual gzip compression using flate2
+            let encoder = GzEncoder::new(file, Compression::default());
+            let writer = BufWriter::new(encoder);
             Ok(CompressedWriter::Gzip(Box::new(writer)))
         }
 
@@ -327,7 +331,7 @@ pub fn detect_rdf_format_compressed(path: &Path) -> Option<String> {
         .trim_end_matches(".lzma");
 
     // Detect RDF format from remaining extension
-    if let Some(ext) = path_without_compression.split('.').last() {
+    if let Some(ext) = path_without_compression.split('.').next_back() {
         let format = match ext {
             "ttl" | "turtle" => "turtle",
             "nt" | "ntriples" => "ntriples",

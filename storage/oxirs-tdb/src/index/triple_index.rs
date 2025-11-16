@@ -41,6 +41,19 @@ where
     pub fn delete(&mut self, key: &K) -> Result<bool> {
         Ok(self.btree.delete(key)?.is_some())
     }
+
+    /// Range scan over the index
+    pub fn range_scan(&self, start_key: Option<K>, end_key: Option<K>) -> Result<Vec<K>> {
+        let mut results = Vec::new();
+        let iter = self.btree.range_scan(start_key, end_key)?;
+
+        for item in iter {
+            let (key, _value) = item?;
+            results.push(key);
+        }
+
+        Ok(results)
+    }
 }
 
 /// SPO index (Subject-Predicate-Object ordering)
@@ -95,6 +108,106 @@ impl TripleIndexes {
         }
 
         Ok(exists)
+    }
+
+    /// Query triples with pattern matching using optimal index selection
+    ///
+    /// Pattern is (subject, predicate, object) where None = wildcard
+    /// Returns matching triples as Triple structs
+    pub fn query_pattern(
+        &self,
+        s: Option<NodeId>,
+        p: Option<NodeId>,
+        o: Option<NodeId>,
+    ) -> Result<Vec<Triple>> {
+        match (s, p, o) {
+            // All specified - exact lookup
+            (Some(s), Some(p), Some(o)) => {
+                let triple = Triple::new(s, p, o);
+                if self.contains(&triple)? {
+                    Ok(vec![triple])
+                } else {
+                    Ok(Vec::new())
+                }
+            }
+
+            // S and P specified - use SPO index
+            (Some(s), Some(p), None) => {
+                let start_key = SpoKey(s, p, NodeId::NULL);
+                let end_key = SpoKey(s, p.next(), NodeId::NULL);
+                let keys = self.spo.range_scan(Some(start_key), Some(end_key))?;
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.0, k.1, k.2))
+                    .collect())
+            }
+
+            // S specified - use SPO index
+            (Some(s), None, None) => {
+                let start_key = SpoKey(s, NodeId::NULL, NodeId::NULL);
+                let end_key = SpoKey(s.next(), NodeId::NULL, NodeId::NULL);
+                let keys = self.spo.range_scan(Some(start_key), Some(end_key))?;
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.0, k.1, k.2))
+                    .collect())
+            }
+
+            // P and O specified - use POS index
+            (None, Some(p), Some(o)) => {
+                let start_key = PosKey(p, o, NodeId::NULL);
+                let end_key = PosKey(p, o.next(), NodeId::NULL);
+                let keys = self.pos.range_scan(Some(start_key), Some(end_key))?;
+                // PosKey is (p, o, s) so we need to reconstruct Triple as (s, p, o)
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.2, k.0, k.1))
+                    .collect())
+            }
+
+            // P specified - use POS index
+            (None, Some(p), None) => {
+                let start_key = PosKey(p, NodeId::NULL, NodeId::NULL);
+                let end_key = PosKey(p.next(), NodeId::NULL, NodeId::NULL);
+                let keys = self.pos.range_scan(Some(start_key), Some(end_key))?;
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.2, k.0, k.1))
+                    .collect())
+            }
+
+            // O and S specified - use OSP index
+            (Some(s), None, Some(o)) => {
+                let start_key = OspKey(o, s, NodeId::NULL);
+                let end_key = OspKey(o, s.next(), NodeId::NULL);
+                let keys = self.osp.range_scan(Some(start_key), Some(end_key))?;
+                // OspKey is (o, s, p) so we need to reconstruct Triple as (s, p, o)
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.1, k.2, k.0))
+                    .collect())
+            }
+
+            // O specified - use OSP index
+            (None, None, Some(o)) => {
+                let start_key = OspKey(o, NodeId::NULL, NodeId::NULL);
+                let end_key = OspKey(o.next(), NodeId::NULL, NodeId::NULL);
+                let keys = self.osp.range_scan(Some(start_key), Some(end_key))?;
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.1, k.2, k.0))
+                    .collect())
+            }
+
+            // All wildcards - full scan (use SPO index)
+            (None, None, None) => {
+                let keys = self.spo.range_scan(None, None)?;
+                Ok(keys
+                    .into_iter()
+                    .map(|k| Triple::new(k.0, k.1, k.2))
+                    .collect())
+            }
+        }
     }
 
     /// Get SPO index for queries

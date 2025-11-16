@@ -118,7 +118,8 @@ impl BftNode {
 
     /// Calculate message digest
     fn calculate_digest(message: &BftMessage) -> Vec<u8> {
-        let serialized = bincode::serialize(message).unwrap_or_default();
+        let serialized =
+            bincode::serde::encode_to_vec(message, bincode::config::standard()).unwrap_or_default();
         let mut hasher = Sha256::new();
         hasher.update(&serialized);
         hasher.finalize().to_vec()

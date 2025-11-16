@@ -10,7 +10,9 @@ pub mod ldap;
 pub mod mfa;
 pub mod oauth2;
 pub mod patch; // RDF Patch
+pub mod performance; // Beta.2 Performance Monitoring
 pub mod prefixes; // Prefix Management
+pub mod rebac; // ReBAC (Relationship-Based Access Control) API
 pub mod request_log; // Request Logging
 #[cfg(feature = "saml")]
 pub mod saml;
@@ -45,6 +47,7 @@ pub use patch::handle_patch_server;
 pub use prefixes::{
     add_prefix, delete_prefix, expand_prefix, get_prefix, list_prefixes, update_prefix, PrefixStore,
 };
+pub use rebac::{add_tuple, batch_check_permissions, check_permission, list_tuples, remove_tuple};
 pub use request_log::{
     clear_logs, get_log_config, get_log_statistics, get_logs, update_log_config, RequestLogger,
 };

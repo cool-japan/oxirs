@@ -1,0 +1,167 @@
+# OxiRS Fuseki - Kubernetes Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oxirs-fuseki
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    version: v0.1.0-beta.1
+    component: sparql-server
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: oxirs-fuseki
+  template:
+    metadata:
+      labels:
+        app: oxirs-fuseki
+        version: v0.1.0-beta.1
+        component: sparql-server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: oxirs-fuseki
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+      - name: oxirs-fuseki
+        image: oxirs/oxirs-fuseki:v0.1.0-beta.1
+        imagePullPolicy: IfNotPresent
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+              - ALL
+
+        ports:
+        - name: sparql
+          containerPort: 3030
+          protocol: TCP
+        - name: metrics
+          containerPort: 9090
+          protocol: TCP
+        - name: admin
+          containerPort: 8080
+          protocol: TCP
+
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: OXIRS_CONFIG
+          value: "/etc/oxirs/oxirs.toml"
+        - name: OXIRS_DATA
+          value: "/data/oxirs"
+        - name: OXIRS_LOG_DIR
+          value: "/var/log/oxirs"
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/oxirs
+          readOnly: true
+        - name: data
+          mountPath: /data/oxirs
+        - name: logs
+          mountPath: /var/log/oxirs
+        - name: tmp
+          mountPath: /tmp
+        - name: tls-certs
+          mountPath: /etc/oxirs/tls
+          readOnly: true
+
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "2000m"
+            memory: "4Gi"
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: 3030
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: 3030
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 3030
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+
+      volumes:
+      - name: config
+        configMap:
+          name: oxirs-fuseki-config
+      - name: tls-certs
+        secret:
+          secretName: oxirs-fuseki-tls
+      - name: data
+        persistentVolumeClaim:
+          claimName: oxirs-fuseki-data
+      - name: logs
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: oxirs-fuseki
+              topologyKey: kubernetes.io/hostname
+
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: oxirs-fuseki

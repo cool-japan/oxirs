@@ -7,6 +7,7 @@ use crate::optimization::{
     AtomicFileWriter, BinarySerializer, CorruptionDetector, SerializationConfig,
 };
 use crate::raft::{OxirsNodeId, RdfApp};
+use crate::raft_profiling::{RaftOperation, RaftProfiler};
 use crate::storage::SnapshotMetadata;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
@@ -187,6 +188,8 @@ pub struct EnhancedSnapshotManager {
     active_transfers: Arc<RwLock<HashMap<String, TransferStatus>>>,
     /// Snapshot cache
     snapshot_cache: Arc<RwLock<HashMap<String, EnhancedSnapshotMetadata>>>,
+    /// Performance profiler
+    profiler: Arc<RaftProfiler>,
 }
 
 impl EnhancedSnapshotManager {
@@ -203,7 +206,13 @@ impl EnhancedSnapshotManager {
             corruption_detector,
             active_transfers: Arc::new(RwLock::new(HashMap::new())),
             snapshot_cache: Arc::new(RwLock::new(HashMap::new())),
+            profiler: Arc::new(RaftProfiler::new(node_id)),
         }
+    }
+
+    /// Get profiler reference
+    pub fn profiler(&self) -> &Arc<RaftProfiler> {
+        &self.profiler
     }
 
     /// Create an enhanced snapshot
@@ -212,6 +221,12 @@ impl EnhancedSnapshotManager {
         app_state: &RdfApp,
         options: SnapshotOptions,
     ) -> Result<EnhancedSnapshotMetadata> {
+        // Start profiling snapshot creation
+        let prof_op = self
+            .profiler
+            .start_operation(RaftOperation::CreateSnapshot)
+            .await;
+
         let snapshot_id = uuid::Uuid::new_v4().to_string();
         info!(
             "Creating enhanced snapshot {} with options: {:?}",
@@ -303,6 +318,15 @@ impl EnhancedSnapshotManager {
             snapshot_id,
             chunks.len()
         );
+
+        // Record memory usage
+        self.profiler
+            .record_memory_usage("snapshot", enhanced_metadata.base.size)
+            .await;
+
+        // Complete profiling
+        prof_op.complete().await;
+
         Ok(enhanced_metadata)
     }
 
@@ -620,6 +644,7 @@ impl Clone for EnhancedSnapshotManager {
             corruption_detector: CorruptionDetector::new(true),
             active_transfers: Arc::clone(&self.active_transfers),
             snapshot_cache: Arc::clone(&self.snapshot_cache),
+            profiler: Arc::clone(&self.profiler),
         }
     }
 }

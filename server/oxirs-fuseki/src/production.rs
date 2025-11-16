@@ -84,7 +84,7 @@ impl HttpProductionError {
             } else {
                 ErrorSeverity::Warning
             },
-            status >= 500 && status < 600,
+            (500..600).contains(&status),
         )
     }
 

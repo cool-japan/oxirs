@@ -42,7 +42,7 @@ impl HnswIndex {
     /// Single GPU distance calculation
     pub fn single_gpu_distance_calculation(
         &self,
-        accelerator: &Arc<GpuAccelerator>,
+        _accelerator: &Arc<GpuAccelerator>,
         query: &Vector,
         candidates: &[usize],
     ) -> Result<Vec<f32>> {
@@ -122,11 +122,9 @@ impl HnswIndex {
             .into_iter()
             .take(k)
             .filter_map(|(id, distance)| {
-                if let Some(node) = self.nodes().get(id) {
-                    Some((node.uri.clone(), distance))
-                } else {
-                    None
-                }
+                self.nodes()
+                    .get(id)
+                    .map(|node| (node.uri.clone(), distance))
             })
             .collect();
 
@@ -140,16 +138,13 @@ impl HnswIndex {
 
     /// Get GPU performance statistics
     pub fn gpu_performance_stats(&self) -> Option<GpuPerformanceStats> {
-        if let Some(accelerator) = self.gpu_accelerator() {
-            Some(GpuPerformanceStats {
+        self.gpu_accelerator()
+            .map(|accelerator| GpuPerformanceStats {
                 gpu_memory_used: accelerator.get_memory_usage().unwrap_or(0),
                 kernel_execution_time: 0.0, // Would be tracked in real implementation
                 memory_transfer_time: 0.0,  // Would be tracked in real implementation
                 throughput_vectors_per_second: 0.0, // Would be calculated in real implementation
             })
-        } else {
-            None
-        }
     }
 
     /// Warm up GPU kernels and memory

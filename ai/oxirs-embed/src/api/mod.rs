@@ -29,7 +29,6 @@ pub use types::*;
 /// Start the API server
 #[cfg(feature = "api-server")]
 pub async fn start_server(state: ApiState) -> anyhow::Result<()> {
-    use axum::Router;
     use std::net::SocketAddr;
     use tower::ServiceBuilder;
     use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};

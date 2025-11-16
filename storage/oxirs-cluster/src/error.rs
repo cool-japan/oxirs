@@ -52,6 +52,10 @@ pub enum ClusterError {
     #[error("Shard not found: {0}")]
     ShardNotFound(crate::shard::ShardId),
 
+    /// Circuit breaker is open
+    #[error("Circuit breaker is open - too many failures")]
+    CircuitOpen,
+
     /// Generic error
     #[error("{0}")]
     Other(String),

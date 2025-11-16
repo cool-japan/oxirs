@@ -99,7 +99,7 @@ fn example_graph_arena() -> Result<(), Box<dyn std::error::Error>> {
     let arena = GraphArena::with_capacity(8192);
 
     // Create some terms - duplicates will be cached
-    let terms = vec![
+    let terms = [
         Term::NamedNode(NamedNode::new("http://example.org/Person")?),
         Term::NamedNode(NamedNode::new("http://example.org/name")?),
         Term::Literal(Literal::new("Alice")),

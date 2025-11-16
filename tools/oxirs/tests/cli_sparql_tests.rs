@@ -69,6 +69,7 @@ impl TestDataset {
                 file: data_file,
                 format: Some("turtle".to_string()),
                 graph: None,
+                resume: false,
             },
             verbose: false,
             config: None,

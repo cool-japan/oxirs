@@ -256,17 +256,17 @@ impl TaskSampler {
     }
 
     fn sample_difficulty(&self) -> f32 {
-        use scirs2_core::random::{thread_rng, Rng};
-        let mut rng = rand::rng();
-        
+        use scirs2_core::random::Random;
+        let mut rng = Random::default();
+
         match &self.config.difficulty_sampling {
-            s if s == "uniform" => rng.random_range(0.0..1.0),
+            s if s == "uniform" => rng.uniform(0.0, 1.0),
             s if s == "normal" => {
                 // Simplified normal distribution
                 let val: f32 = rng.random();
                 (val - 0.5) * 2.0 + 0.5 // Center around 0.5
             }
-            _ => rng.random_range(0.0..1.0),
+            _ => rng.uniform(0.0, 1.0),
         }
     }
 
@@ -324,7 +324,7 @@ impl TaskSampler {
         let mut input = Array1::zeros(input_dim);
         for i in 0..input_dim {
             let base_value = (class_idx as f32 * 2.0 + difficulty) * (i as f32 / input_dim as f32);
-            let noise = rng.random_range(-0.1..0.1) * difficulty;
+            let noise = rng.uniform(-0.1, 0.1) * difficulty;
             input[i] = base_value + noise;
         }
         

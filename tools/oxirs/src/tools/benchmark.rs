@@ -138,111 +138,103 @@ fn load_benchmark_queries(config: &BenchmarkConfig) -> ToolResult<Vec<BenchmarkQ
 
 /// Load SP2Bench queries
 fn load_sp2bench_queries() -> ToolResult<Vec<BenchmarkQuery>> {
-    let mut queries = Vec::new();
-
-    // Q1: Simple triple pattern
-    queries.push(BenchmarkQuery {
-        id: "SP2B-Q1".to_string(),
-        name: "Simple Triple Pattern".to_string(),
-        query: "SELECT ?yr WHERE { ?journal rdf:type bench:Journal . ?journal dc:title \"Journal 1 (1940)\"^^xsd:string . ?journal dcterms:issued ?yr }".to_string(),
-        category: "Simple".to_string(),
-    });
-
-    // Q2: Triple patterns with FILTER
-    queries.push(BenchmarkQuery {
-        id: "SP2B-Q2".to_string(),
-        name: "Triple Patterns with FILTER".to_string(),
-        query: "SELECT ?inproc ?author ?booktitle ?title ?proc ?ee ?page ?url ?yr ?abstract WHERE { ?inproc rdf:type bench:Inproceedings . ?inproc dc:creator ?author . ?inproc bench:booktitle ?booktitle . ?inproc dc:title ?title . ?inproc dcterms:partOf ?proc . ?inproc rdfs:seeAlso ?ee . ?inproc swrc:pages ?page . ?inproc foaf:homepage ?url . ?inproc dcterms:issued ?yr FILTER(?yr > 1970) }".to_string(),
-        category: "Filter".to_string(),
-    });
-
-    // Q3: Join of multiple triple patterns
-    queries.push(BenchmarkQuery {
-        id: "SP2B-Q3a".to_string(),
-        name: "Join of Multiple Patterns".to_string(),
-        query:
-            "SELECT ?article WHERE { ?article rdf:type bench:Article . ?article ?property ?value }"
-                .to_string(),
-        category: "Join".to_string(),
-    });
-
-    // Q4: OPTIONAL patterns
-    queries.push(BenchmarkQuery {
-        id: "SP2B-Q4".to_string(),
-        name: "OPTIONAL Patterns".to_string(),
-        query: "SELECT ?name ?nameTitle WHERE { ?article rdf:type bench:Article . ?article dc:creator ?author . ?author foaf:name ?name . OPTIONAL { ?author dc:title ?nameTitle } }".to_string(),
-        category: "Optional".to_string(),
-    });
-
-    // Q5: UNION
-    queries.push(BenchmarkQuery {
-        id: "SP2B-Q5a".to_string(),
-        name: "UNION Query".to_string(),
-        query: "SELECT DISTINCT ?person ?name WHERE { ?article rdf:type bench:Article . ?article dc:creator ?person . ?inproc rdf:type bench:Inproceedings . ?inproc dc:creator ?person2 . ?person foaf:name ?name . ?person2 foaf:name ?name2 FILTER(?name = ?name2) }".to_string(),
-        category: "Union".to_string(),
-    });
+    let queries = vec![
+        // Q1: Simple triple pattern
+        BenchmarkQuery {
+            id: "SP2B-Q1".to_string(),
+            name: "Simple Triple Pattern".to_string(),
+            query: "SELECT ?yr WHERE { ?journal rdf:type bench:Journal . ?journal dc:title \"Journal 1 (1940)\"^^xsd:string . ?journal dcterms:issued ?yr }".to_string(),
+            category: "Simple".to_string(),
+        },
+        // Q2: Triple patterns with FILTER
+        BenchmarkQuery {
+            id: "SP2B-Q2".to_string(),
+            name: "Triple Patterns with FILTER".to_string(),
+            query: "SELECT ?inproc ?author ?booktitle ?title ?proc ?ee ?page ?url ?yr ?abstract WHERE { ?inproc rdf:type bench:Inproceedings . ?inproc dc:creator ?author . ?inproc bench:booktitle ?booktitle . ?inproc dc:title ?title . ?inproc dcterms:partOf ?proc . ?inproc rdfs:seeAlso ?ee . ?inproc swrc:pages ?page . ?inproc foaf:homepage ?url . ?inproc dcterms:issued ?yr FILTER(?yr > 1970) }".to_string(),
+            category: "Filter".to_string(),
+        },
+        // Q3: Join of multiple triple patterns
+        BenchmarkQuery {
+            id: "SP2B-Q3a".to_string(),
+            name: "Join of Multiple Patterns".to_string(),
+            query:
+                "SELECT ?article WHERE { ?article rdf:type bench:Article . ?article ?property ?value }"
+                    .to_string(),
+            category: "Join".to_string(),
+        },
+        // Q4: OPTIONAL patterns
+        BenchmarkQuery {
+            id: "SP2B-Q4".to_string(),
+            name: "OPTIONAL Patterns".to_string(),
+            query: "SELECT ?name ?nameTitle WHERE { ?article rdf:type bench:Article . ?article dc:creator ?author . ?author foaf:name ?name . OPTIONAL { ?author dc:title ?nameTitle } }".to_string(),
+            category: "Optional".to_string(),
+        },
+        // Q5: UNION
+        BenchmarkQuery {
+            id: "SP2B-Q5a".to_string(),
+            name: "UNION Query".to_string(),
+            query: "SELECT DISTINCT ?person ?name WHERE { ?article rdf:type bench:Article . ?article dc:creator ?person . ?inproc rdf:type bench:Inproceedings . ?inproc dc:creator ?person2 . ?person foaf:name ?name . ?person2 foaf:name ?name2 FILTER(?name = ?name2) }".to_string(),
+            category: "Union".to_string(),
+        },
+    ];
 
     Ok(queries)
 }
 
 /// Load WatDiv queries
 fn load_watdiv_queries() -> ToolResult<Vec<BenchmarkQuery>> {
-    let mut queries = Vec::new();
-
-    // Linear query (L)
-    queries.push(BenchmarkQuery {
-        id: "WatDiv-L1".to_string(),
-        name: "Linear Query 1".to_string(),
-        query: "SELECT ?v0 ?v1 ?v2 ?v3 WHERE { ?v0 wsdbm:follows ?v1 . ?v1 wsdbm:follows ?v2 . ?v2 wsdbm:likes ?v3 }".to_string(),
-        category: "Linear".to_string(),
-    });
-
-    // Star query (S)
-    queries.push(BenchmarkQuery {
-        id: "WatDiv-S1".to_string(),
-        name: "Star Query 1".to_string(),
-        query: "SELECT ?v0 ?v1 ?v2 ?v3 ?v4 WHERE { ?v0 wsdbm:follows ?v1 . ?v0 wsdbm:likes ?v2 . ?v0 wsdbm:friendOf ?v3 . ?v0 dc:Location ?v4 }".to_string(),
-        category: "Star".to_string(),
-    });
-
-    // Snowflake query (F)
-    queries.push(BenchmarkQuery {
-        id: "WatDiv-F1".to_string(),
-        name: "Snowflake Query 1".to_string(),
-        query: "SELECT ?v0 ?v1 ?v2 ?v3 ?v4 ?v5 WHERE { ?v0 wsdbm:follows ?v1 . ?v1 wsdbm:likes ?v2 . ?v0 wsdbm:friendOf ?v3 . ?v3 wsdbm:likes ?v4 . ?v0 dc:Location ?v5 }".to_string(),
-        category: "Snowflake".to_string(),
-    });
-
-    // Complex query (C)
-    queries.push(BenchmarkQuery {
-        id: "WatDiv-C1".to_string(),
-        name: "Complex Query 1".to_string(),
-        query: "SELECT ?v0 ?v1 ?v2 ?v3 WHERE { ?v0 wsdbm:follows ?v1 . ?v1 wsdbm:likes ?v2 . ?v1 wsdbm:friendOf ?v3 . ?v3 wsdbm:likes ?v2 }".to_string(),
-        category: "Complex".to_string(),
-    });
+    let queries = vec![
+        // Linear query (L)
+        BenchmarkQuery {
+            id: "WatDiv-L1".to_string(),
+            name: "Linear Query 1".to_string(),
+            query: "SELECT ?v0 ?v1 ?v2 ?v3 WHERE { ?v0 wsdbm:follows ?v1 . ?v1 wsdbm:follows ?v2 . ?v2 wsdbm:likes ?v3 }".to_string(),
+            category: "Linear".to_string(),
+        },
+        // Star query (S)
+        BenchmarkQuery {
+            id: "WatDiv-S1".to_string(),
+            name: "Star Query 1".to_string(),
+            query: "SELECT ?v0 ?v1 ?v2 ?v3 ?v4 WHERE { ?v0 wsdbm:follows ?v1 . ?v0 wsdbm:likes ?v2 . ?v0 wsdbm:friendOf ?v3 . ?v0 dc:Location ?v4 }".to_string(),
+            category: "Star".to_string(),
+        },
+        // Snowflake query (F)
+        BenchmarkQuery {
+            id: "WatDiv-F1".to_string(),
+            name: "Snowflake Query 1".to_string(),
+            query: "SELECT ?v0 ?v1 ?v2 ?v3 ?v4 ?v5 WHERE { ?v0 wsdbm:follows ?v1 . ?v1 wsdbm:likes ?v2 . ?v0 wsdbm:friendOf ?v3 . ?v3 wsdbm:likes ?v4 . ?v0 dc:Location ?v5 }".to_string(),
+            category: "Snowflake".to_string(),
+        },
+        // Complex query (C)
+        BenchmarkQuery {
+            id: "WatDiv-C1".to_string(),
+            name: "Complex Query 1".to_string(),
+            query: "SELECT ?v0 ?v1 ?v2 ?v3 WHERE { ?v0 wsdbm:follows ?v1 . ?v1 wsdbm:likes ?v2 . ?v1 wsdbm:friendOf ?v3 . ?v3 wsdbm:likes ?v2 }".to_string(),
+            category: "Complex".to_string(),
+        },
+    ];
 
     Ok(queries)
 }
 
 /// Load LDBC queries
 fn load_ldbc_queries() -> ToolResult<Vec<BenchmarkQuery>> {
-    let mut queries = Vec::new();
-
-    // LDBC SNB Interactive Complex Read 1
-    queries.push(BenchmarkQuery {
-        id: "LDBC-IC1".to_string(),
-        name: "Interactive Complex 1".to_string(),
-        query: "SELECT ?personId ?firstName ?lastName ?birthday ?locationIP ?browserUsed ?cityId WHERE { ?person rdf:type snvoc:Person . ?person snvoc:id ?personId . ?person snvoc:firstName ?firstName . ?person snvoc:lastName ?lastName . ?person snvoc:birthday ?birthday . ?person snvoc:locationIP ?locationIP . ?person snvoc:browserUsed ?browserUsed . ?person snvoc:isLocatedIn ?city . ?city snvoc:id ?cityId }".to_string(),
-        category: "Complex".to_string(),
-    });
-
-    // LDBC SNB Interactive Short 1
-    queries.push(BenchmarkQuery {
-        id: "LDBC-IS1".to_string(),
-        name: "Interactive Short 1".to_string(),
-        query: "SELECT ?firstName ?lastName ?birthday WHERE { ?person rdf:type snvoc:Person . ?person snvoc:id ?personId . ?person snvoc:firstName ?firstName . ?person snvoc:lastName ?lastName . ?person snvoc:birthday ?birthday }".to_string(),
-        category: "Short".to_string(),
-    });
+    let queries = vec![
+        // LDBC SNB Interactive Complex Read 1
+        BenchmarkQuery {
+            id: "LDBC-IC1".to_string(),
+            name: "Interactive Complex 1".to_string(),
+            query: "SELECT ?personId ?firstName ?lastName ?birthday ?locationIP ?browserUsed ?cityId WHERE { ?person rdf:type snvoc:Person . ?person snvoc:id ?personId . ?person snvoc:firstName ?firstName . ?person snvoc:lastName ?lastName . ?person snvoc:birthday ?birthday . ?person snvoc:locationIP ?locationIP . ?person snvoc:browserUsed ?browserUsed . ?person snvoc:isLocatedIn ?city . ?city snvoc:id ?cityId }".to_string(),
+            category: "Complex".to_string(),
+        },
+        // LDBC SNB Interactive Short 1
+        BenchmarkQuery {
+            id: "LDBC-IS1".to_string(),
+            name: "Interactive Short 1".to_string(),
+            query: "SELECT ?firstName ?lastName ?birthday WHERE { ?person rdf:type snvoc:Person . ?person snvoc:id ?personId . ?person snvoc:firstName ?firstName . ?person snvoc:lastName ?lastName . ?person snvoc:birthday ?birthday }".to_string(),
+            category: "Short".to_string(),
+        },
+    ];
 
     Ok(queries)
 }

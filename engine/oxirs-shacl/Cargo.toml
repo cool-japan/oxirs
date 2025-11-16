@@ -23,7 +23,7 @@ serde_json.workspace = true
 anyhow.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-regex = "1.11"
+regex = "1.12"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 indexmap = { version = "2.11", features = ["serde"] }
 petgraph = "0.8"
@@ -42,6 +42,7 @@ num_cpus.workspace = true
 serde_yaml = "0.9"
 semver = { version = "1.0", features = ["serde"] }
 tracing-subscriber = "0.3"
+wasmi = "0.40"  # Lightweight WASM interpreter for custom validators
 
 [dev-dependencies]
 criterion.workspace = true

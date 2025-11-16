@@ -1,0 +1,96 @@
+# OxiRS Fuseki - Kubernetes ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oxirs-fuseki-config
+  namespace: oxirs
+  labels:
+    app: oxirs-fuseki
+    component: configuration
+data:
+  oxirs.toml: |
+    # OxiRS Fuseki Configuration - Kubernetes Production
+
+    [server]
+    host = "0.0.0.0"
+    port = 3030
+    admin_ui = true
+    cors = true
+    request_timeout_secs = 300
+    max_request_size_mb = 100
+    graceful_shutdown_timeout_secs = 30
+
+    [server.tls]
+    cert_path = "/etc/oxirs/tls/tls.crt"
+    key_path = "/etc/oxirs/tls/tls.key"
+    require_client_cert = false
+
+    [security]
+    auth_required = true
+    session_timeout_secs = 3600
+    max_failed_attempts = 5
+    lockout_duration_secs = 900
+
+    [security.jwt]
+    secret = "${JWT_SECRET}"
+    issuer = "oxirs-fuseki"
+    audience = "oxirs-api"
+    expiration_secs = 3600
+
+    [security.oauth]
+    enabled = false
+
+    [security.ldap]
+    enabled = false
+
+    [monitoring]
+    enabled = true
+
+    [monitoring.metrics]
+    enabled = true
+    port = 9090
+    path = "/metrics"
+
+    [monitoring.tracing]
+    enabled = true
+    endpoint = "http://otel-collector:4317"
+
+    [monitoring.slow_query]
+    threshold_ms = 1000
+    enabled = true
+
+    [performance]
+    enabled = true
+
+    [performance.caching]
+    enabled = true
+    max_size = 10000
+    ttl_secs = 600
+
+    [performance.connection_pool]
+    max_connections = 100
+    min_connections = 10
+    connection_timeout_secs = 30
+    idle_timeout_secs = 600
+
+    [performance.compression]
+    enabled = true
+    level = 6
+    min_size_bytes = 1024
+
+    [datasets.default]
+    name = "default"
+    type = "memory"
+    persistent = true
+    data_path = "/data/oxirs/default"
+
+    [federation]
+    enabled = true
+    max_concurrent_requests = 10
+    request_timeout_secs = 60
+
+    [streaming]
+    enabled = false
+
+    [clustering]
+    enabled = false

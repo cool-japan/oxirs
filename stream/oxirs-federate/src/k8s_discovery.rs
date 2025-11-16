@@ -7,20 +7,27 @@
 #[cfg(not(feature = "kubernetes"))]
 use crate::FederatedService;
 #[cfg(feature = "kubernetes")]
-use crate::{auto_discovery::DiscoveryMethod, FederatedService, ServiceType};
+use crate::{
+    auto_discovery::DiscoveryMethod, discovery::ServiceDiscovery, FederatedService, ServiceType,
+};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "kubernetes")]
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::time::Duration;
 use tokio::sync::mpsc;
+#[cfg(not(feature = "kubernetes"))]
 use tracing::warn;
+#[cfg(feature = "kubernetes")]
+use tracing::{debug, error, info};
 
 #[cfg(feature = "kubernetes")]
-use k8s_openapi::api::core::v1::{Service as K8sService, ServicePort};
+use k8s_openapi::api::core::v1::Service as K8sService;
 #[cfg(feature = "kubernetes")]
 use kube::{
-    api::{Api, ListParams, WatchEvent, WatchParams},
-    runtime::watcher::{watcher, Config as WatcherConfig, Event},
+    api::{Api, ListParams},
+    // runtime::watcher::{watcher, Config as WatcherConfig, Event},
     Client,
 };
 
@@ -164,6 +171,16 @@ impl K8sServiceDiscovery {
             list_params = list_params.labels(&selector);
         }
 
+        // Note: Watcher functionality requires kube runtime feature
+        // For now, perform one-time discovery
+        let service_list = services.list(&list_params).await?;
+        for service in service_list.items {
+            Self::handle_service_event(&service, &config, &tx, true).await;
+        }
+
+        info!("Kubernetes service discovery completed");
+
+        /* Watcher functionality - requires kube runtime feature
         let watcher_config = WatcherConfig::default();
         let mut stream = watcher(services, watcher_config)
             .default_backoff()
@@ -189,6 +206,7 @@ impl K8sServiceDiscovery {
             });
 
         stream.await?;
+        */
         Ok(())
     }
 
@@ -244,7 +262,7 @@ impl K8sServiceDiscovery {
             for endpoint in endpoints {
                 let discovered = DiscoveredEndpoint {
                     url: endpoint.url,
-                    service_type,
+                    service_type: service_type.clone(),
                     discovery_method: DiscoveryMethod::Kubernetes,
                     metadata: endpoint.metadata,
                     timestamp: chrono::Utc::now(),
@@ -259,7 +277,7 @@ impl K8sServiceDiscovery {
 
     /// Extract service type from annotations
     fn extract_service_type(
-        annotations: Option<&HashMap<String, String>>,
+        annotations: Option<&BTreeMap<String, String>>,
         type_annotations: &ServiceTypeAnnotations,
     ) -> Option<ServiceType> {
         annotations.and_then(|annots| {
@@ -310,7 +328,7 @@ impl K8sServiceDiscovery {
                 continue;
             }
 
-            let port_name = port.name.as_ref().map(|s| s.as_str()).unwrap_or("http");
+            let port_name = port.name.as_deref().unwrap_or("http");
 
             // Determine protocol
             let protocol = if port_name.contains("https") || port.port == 443 {
@@ -362,11 +380,8 @@ impl K8sServiceDiscovery {
         endpoint_path: &str,
         config: &K8sDiscoveryConfig,
     ) -> Vec<String> {
-        let service_name = service
-            .metadata
-            .name
-            .as_ref()
-            .unwrap_or(&"unknown".to_string());
+        let default_name = "unknown".to_string();
+        let service_name = service.metadata.name.as_ref().unwrap_or(&default_name);
 
         let mut urls = Vec::new();
 

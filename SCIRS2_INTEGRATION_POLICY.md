@@ -19,8 +19,7 @@ use ndarray::{Array2, Array3};
 
 // ✅ REQUIRED - SciRS2 foundation
 use scirs2_core::random::{Random, rng};
-use scirs2_core::ndarray_ext::{Array2, Array3};
-use scirs2_autograd::ndarray::array;  // Only for array! macro
+use scirs2_core::ndarray_ext::{Array2, Array3, array};  // array! macro included
 ```
 
 ### 3. **Architectural Hierarchy**
@@ -43,16 +42,11 @@ ndarray, rand, num-traits, etc. (Core Rust Scientific Stack)
 ### **ESSENTIAL (Always Required)**
 
 #### `scirs2-core` - FOUNDATION
-- **Use Cases**: Core scientific primitives, random number generation, numerical arrays, error handling
+- **Use Cases**: Core scientific primitives, random number generation, numerical arrays, error handling, array! macro
 - **OxiRS Modules**: ALL - replaces direct `rand` and `ndarray` usage
 - **Status**: ✅ REQUIRED - Foundation crate for all numerical computations
 - **Features**: `["random"]` - enabled for random number generation
-
-#### `scirs2-autograd` - ARRAY MACRO SUPPORT
-- **Use Cases**: Provides `array!` macro for creating test arrays (macro not available in scirs2-core)
-- **OxiRS Modules**: Test modules requiring `array!` macro
-- **Status**: ✅ REQUIRED - For array! macro support in tests
-- **Important**: Only use for `array!` macro - other operations should use scirs2-core
+- **Important**: Includes `array!` macro for creating test arrays - NO need for scirs2-autograd
 
 ### **CURRENTLY INTEGRATED**
 
@@ -232,25 +226,22 @@ ndarray, rand, num-traits, etc. (Core Rust Scientific Stack)
 
 1. **array! Macro Usage Pattern**
 
-   **Key Point**: The `array!` macro is only available in `scirs2_autograd`, not `scirs2_core`
+   **Key Point**: The `array!` macro is now available in `scirs2_core::ndarray_ext`
 
    **Correct Usage Pattern**:
    ```rust
-   // For regular array operations - USE scirs2_core
-   use scirs2_core::ndarray_ext::{Array, Array1, Array2, ArrayView};
+   // All array operations use scirs2_core
+   use scirs2_core::ndarray_ext::{Array, Array1, Array2, ArrayView, array};
    use scirs2_core::ndarray_ext::stats::{mean, variance};
-
-   // ONLY for array! macro - USE scirs2_autograd
-   use scirs2_autograd::ndarray::array;  // array! macro only
 
    // Example usage
    let data = Array2::zeros((3, 3));      // Use scirs2_core types
-   let test_arr = array![[1, 2], [3, 4]]; // Use scirs2_autograd macro
+   let test_arr = array![[1, 2], [3, 4]]; // Use scirs2_core array! macro
    ```
 
-   **When to use each**:
-   - `scirs2_core::ndarray_ext::*` - For all production array operations
-   - `scirs2_autograd::ndarray::array` - Only for test arrays using array! macro
+   **Important**:
+   - `scirs2_core::ndarray_ext::*` - For ALL array operations including array! macro
+   - ❌ FORBIDDEN: `scirs2_autograd::ndarray::array` - DO NOT USE
 
 2. **Complete Migration Pattern from Direct Dependencies**
    ```rust
@@ -266,9 +257,9 @@ ndarray, rand, num-traits, etc. (Core Rust Scientific Stack)
    // NEW: use scirs2_core::ndarray_ext::{Array1, Array2, Array3, ArrayView, Axis};
 
    // OLD: use ndarray::{arr1, arr2, array};
-   // NEW:
-   use scirs2_core::ndarray_ext::{arr1, arr2};           // arr1, arr2 functions
-   use scirs2_autograd::ndarray::array;                  // array! macro ONLY
+   // NEW: use scirs2_core::ndarray_ext::{arr1, arr2, array};  // array! macro included
+
+   // ❌ FORBIDDEN: use scirs2_autograd::ndarray::array;  // DO NOT USE
 
    // ========== LINEAR ALGEBRA ==========
    // OLD: Manual matrix operations with ndarray
@@ -325,7 +316,7 @@ This policy ensures OxiRS properly leverages SciRS2's scientific computing found
 
 **Document Version**: 2.0
 **Last Updated**: 2025-09-22
-**Next Review**: 2025-12-22 (Quarterly)
+**Next Review**: 2026-02-22 (Quarterly)
 **Owner**: OxiRS Architecture Team
 
 ## Quick Reference
@@ -334,8 +325,7 @@ This policy ensures OxiRS properly leverages SciRS2's scientific computing found
 ```toml
 # Essential SciRS2 dependencies for OxiRS (from workspace Cargo.toml)
 scirs2 = { version = "0.1.0-beta.2" }
-scirs2-core = { version = "0.1.0-beta.2", features = ["random"] }  # Foundation
-scirs2-autograd = { version = "0.1.0-beta.2" }  # For array! macro support
+scirs2-core = { version = "0.1.0-beta.2", features = ["random"] }  # Foundation (includes array! macro)
 
 # Production integrated crates
 scirs2-linalg = { version = "0.1.0-beta.2" }     # Vector operations, embeddings

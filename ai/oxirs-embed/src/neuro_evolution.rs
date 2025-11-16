@@ -1073,13 +1073,13 @@ impl ArchitectureEvaluator {
         // Simulate based on architecture properties
         let base_accuracy = 0.7 + rng.gen_range(0.0..0.2);
         let complexity_factor = 1.0 / (1.0 + architecture.complexity.parameters as f64 / 1e6);
-        let accuracy = base_accuracy * (0.8 + 0.4 * complexity_factor);
+        let accuracy = (base_accuracy * (0.8 + 0.4 * complexity_factor)).min(1.0);
 
         let inference_time = 10.0 + architecture.complexity.parameters as f64 / 1e5;
         let memory_usage = architecture.complexity.memory_mb as f64;
 
-        let generalization_score = accuracy * (0.9 + 0.1 * rng.gen_range(0.0..1.0));
-        let robustness_score = accuracy * (0.85 + 0.15 * rng.gen_range(0.0..1.0));
+        let generalization_score = (accuracy * (0.9 + 0.1 * rng.gen_range(0.0..1.0))).min(1.0);
+        let robustness_score = (accuracy * (0.85 + 0.15 * rng.gen_range(0.0..1.0))).min(1.0);
 
         let metrics = PerformanceMetrics {
             accuracy,

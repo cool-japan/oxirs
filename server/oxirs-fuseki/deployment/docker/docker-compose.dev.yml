@@ -1,0 +1,59 @@
+# OxiRS Fuseki - Development Docker Compose Stack
+# Minimal stack for local development
+
+version: '3.9'
+
+services:
+  # OxiRS Fuseki SPARQL Server (Development)
+  oxirs-fuseki-dev:
+    build:
+      context: ../..
+      dockerfile: server/oxirs-fuseki/Dockerfile
+      args:
+        - PROFILE=dev
+    container_name: oxirs-fuseki-dev
+    hostname: oxirs-fuseki-dev
+    restart: unless-stopped
+    ports:
+      - "3030:3030"  # SPARQL HTTP endpoint
+      - "9090:9090"  # Metrics endpoint
+      - "8080:8080"  # Admin UI
+    volumes:
+      - ./dev-data:/data/oxirs
+      - ./dev-logs:/var/log/oxirs
+      - ../../config/oxirs.dev.toml:/etc/oxirs/oxirs.toml:ro
+    environment:
+      - RUST_LOG=debug
+      - RUST_BACKTRACE=1
+      - OXIRS_CONFIG=/etc/oxirs/oxirs.toml
+      - OXIRS_DATA=/data/oxirs
+      - OXIRS_LOG_DIR=/var/log/oxirs
+      - OXIRS_DEV_MODE=true
+    networks:
+      - oxirs-dev-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/$/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for session storage (Development)
+  redis-dev:
+    image: redis:7-alpine
+    container_name: oxirs-redis-dev
+    hostname: redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - oxirs-dev-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  oxirs-dev-network:
+    driver: bridge

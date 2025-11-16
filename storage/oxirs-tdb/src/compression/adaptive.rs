@@ -210,6 +210,8 @@ impl AdaptiveCompressor {
                 let mut similar_chunks = 0;
                 for i in 1..chunks.len() {
                     let mut differences = 0;
+                    // Need index j to compare elements at the same position in different chunks
+                    #[allow(clippy::needless_range_loop)]
                     for j in 0..chunk_size {
                         if chunks[i][j] != chunks[0][j] {
                             differences += 1;
@@ -261,6 +263,26 @@ impl AdaptiveCompressor {
                 let encoder = ColumnStoreCompressor::new();
                 encoder.compress(data)?
             }
+            AdvancedCompressionType::Lz4 => {
+                use crate::compression::Lz4Compressor;
+                let encoder = Lz4Compressor::balanced();
+                encoder.compress(data)?
+            }
+            AdvancedCompressionType::Zstd => {
+                use crate::compression::ZstdCompressor;
+                let encoder = ZstdCompressor::balanced();
+                encoder.compress(data)?
+            }
+            AdvancedCompressionType::Snappy => {
+                use crate::compression::SnappyCompressor;
+                let encoder = SnappyCompressor::new();
+                encoder.compress(data)?
+            }
+            AdvancedCompressionType::Brotli => {
+                use crate::compression::BrotliCompressor;
+                let encoder = BrotliCompressor::balanced();
+                encoder.compress(data)?
+            }
             AdvancedCompressionType::Adaptive => {
                 return Err(anyhow!("Recursive adaptive compression not allowed"));
             }
@@ -307,6 +329,10 @@ impl AdaptiveCompressor {
             "BitmapWAH" => AdvancedCompressionType::BitmapWAH,
             "BitmapRoaring" => AdvancedCompressionType::BitmapRoaring,
             "ColumnStore" => AdvancedCompressionType::ColumnStore,
+            "LZ4" => AdvancedCompressionType::Lz4,
+            "Zstd" => AdvancedCompressionType::Zstd,
+            "Snappy" => AdvancedCompressionType::Snappy,
+            "Brotli" => AdvancedCompressionType::Brotli,
             _ => {
                 return Err(anyhow!(
                     "Unknown selected algorithm: {}",
@@ -347,6 +373,26 @@ impl AdaptiveCompressor {
             }
             AdvancedCompressionType::ColumnStore => {
                 let encoder = ColumnStoreCompressor::new();
+                encoder.decompress(&temp_compressed)
+            }
+            AdvancedCompressionType::Lz4 => {
+                use crate::compression::Lz4Compressor;
+                let encoder = Lz4Compressor::balanced();
+                encoder.decompress(&temp_compressed)
+            }
+            AdvancedCompressionType::Zstd => {
+                use crate::compression::ZstdCompressor;
+                let encoder = ZstdCompressor::balanced();
+                encoder.decompress(&temp_compressed)
+            }
+            AdvancedCompressionType::Snappy => {
+                use crate::compression::SnappyCompressor;
+                let encoder = SnappyCompressor::new();
+                encoder.decompress(&temp_compressed)
+            }
+            AdvancedCompressionType::Brotli => {
+                use crate::compression::BrotliCompressor;
+                let encoder = BrotliCompressor::balanced();
                 encoder.decompress(&temp_compressed)
             }
             AdvancedCompressionType::Adaptive => {

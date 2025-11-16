@@ -3,14 +3,12 @@
 //! This module provides GraphQL schema and resolvers for embedding services.
 
 #[cfg(feature = "graphql")]
-use super::{ApiState, HealthStatus};
+use super::ApiState;
 #[cfg(feature = "graphql")]
 use async_graphql::{
     Context, EmptyMutation, EmptySubscription, Object, Result as GraphQLResult, Schema,
     SimpleObject,
 };
-#[cfg(feature = "graphql")]
-use chrono::{DateTime, Utc};
 #[cfg(feature = "graphql")]
 use std::sync::Arc;
 #[cfg(feature = "graphql")]
@@ -29,7 +27,7 @@ pub struct ModelInfo {
     pub num_relations: i32,
     pub num_triples: i32,
     pub dimensions: i32,
-    pub created_at: DateTime<Utc>,
+    pub created_at: String, // ISO 8601 timestamp
 }
 
 /// GraphQL representation of system health
@@ -157,7 +155,7 @@ impl Query {
                 num_relations: stats.num_relations as i32,
                 num_triples: stats.num_triples as i32,
                 dimensions: stats.dimensions as i32,
-                created_at: model_metadata.created_at,
+                created_at: model_metadata.created_at.to_rfc3339(),
             });
         }
 
@@ -196,7 +194,7 @@ impl Query {
             num_relations: stats.num_relations as i32,
             num_triples: stats.num_triples as i32,
             dimensions: stats.dimensions as i32,
-            created_at: model_metadata.created_at,
+            created_at: model_metadata.created_at.to_rfc3339(),
         }))
     }
 
@@ -333,10 +331,11 @@ pub fn create_schema() -> Schema<Query, EmptyMutation, EmptySubscription> {
 pub async fn graphql_handler(
     schema: axum::extract::Extension<Schema<Query, EmptyMutation, EmptySubscription>>,
     state: axum::extract::Extension<Arc<ApiState>>,
-    req: async_graphql_axum::GraphQLRequest,
-) -> async_graphql_axum::GraphQLResponse {
-    let request = req.into_inner().data(state.0.clone());
-    schema.execute(request).await.into()
+    req: axum::extract::Json<async_graphql::Request>,
+) -> axum::Json<async_graphql::Response> {
+    let request = req.0.data(state.0.clone());
+    let response = schema.execute(request).await;
+    axum::Json(response)
 }
 
 /// GraphiQL playground handler

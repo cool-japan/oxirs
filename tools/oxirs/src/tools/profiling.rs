@@ -146,31 +146,32 @@ fn profile_query_execution(query: &str, _data_sources: &[PathBuf]) -> ToolResult
     let total_time = start.elapsed();
 
     // Build phase profiles
-    let mut phases = Vec::new();
-    phases.push(PhaseProfile {
-        name: "Parsing".to_string(),
-        duration: parsing_time,
-        memory_delta: 0,
-        results_count: 0,
-    });
-    phases.push(PhaseProfile {
-        name: "Optimization".to_string(),
-        duration: optimization_time,
-        memory_delta: 0,
-        results_count: 0,
-    });
-    phases.push(PhaseProfile {
-        name: "Execution".to_string(),
-        duration: execution_time,
-        memory_delta: 0,
-        results_count: intermediate_count,
-    });
-    phases.push(PhaseProfile {
-        name: "Materialization".to_string(),
-        duration: result_materialization_time,
-        memory_delta: 0,
-        results_count: final_count,
-    });
+    let phases = vec![
+        PhaseProfile {
+            name: "Parsing".to_string(),
+            duration: parsing_time,
+            memory_delta: 0,
+            results_count: 0,
+        },
+        PhaseProfile {
+            name: "Optimization".to_string(),
+            duration: optimization_time,
+            memory_delta: 0,
+            results_count: 0,
+        },
+        PhaseProfile {
+            name: "Execution".to_string(),
+            duration: execution_time,
+            memory_delta: 0,
+            results_count: intermediate_count,
+        },
+        PhaseProfile {
+            name: "Materialization".to_string(),
+            duration: result_materialization_time,
+            memory_delta: 0,
+            results_count: final_count,
+        },
+    ];
 
     Ok(QueryProfile {
         total_time,

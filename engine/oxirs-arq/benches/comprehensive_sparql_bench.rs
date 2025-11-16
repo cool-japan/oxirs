@@ -8,13 +8,15 @@
 //! - Pattern matching and evaluation
 //! - Join operations (hash, merge, nested loop)
 //! - Filter and aggregation performance
-//! - Federation and SERVICE clause execution
 //! - Memory usage and scalability
 
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
-use oxirs_arq::{QueryEngine, QueryExecutor};
+use oxirs_arq::{
+    executor::{ConcreteStoreDataset, QueryExecutor},
+    query::QueryParser,
+};
 use oxirs_core::{
-    model::{Literal, NamedNode, Quad, Triple},
+    model::{Literal, NamedNode, Quad},
     rdf_store::ConcreteStore,
 };
 use std::time::Duration;
@@ -35,7 +37,8 @@ fn bench_query_parsing(c: &mut Criterion) {
     for (name, query) in queries {
         group.bench_with_input(BenchmarkId::from_parameter(name), query, |b, query| {
             b.iter(|| {
-                black_box(QueryEngine::parse_query(query));
+                let mut parser = QueryParser::new();
+                let _ = black_box(parser.parse(query));
             });
         });
     }
@@ -52,16 +55,21 @@ fn bench_pattern_matching(c: &mut Criterion) {
 
     for size in sizes {
         let store = setup_test_store(size);
+        let dataset = ConcreteStoreDataset::new(store);
 
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(
             BenchmarkId::new("single_pattern", size),
-            &store,
-            |b, store| {
+            &dataset,
+            |b, dataset| {
                 let query = "SELECT ?s ?o WHERE { ?s <http://example.org/p> ?o }";
+                let mut parser = QueryParser::new();
+                let query_ast = parser.parse(query).unwrap();
+                let algebra = query_ast.where_clause;
+
                 b.iter(|| {
-                    let executor = QueryExecutor::new(store.clone());
-                    black_box(executor.execute_query(query).unwrap());
+                    let mut executor = QueryExecutor::new();
+                    black_box(executor.execute(&algebra, dataset).unwrap());
                 });
             },
         );
@@ -79,29 +87,34 @@ fn bench_join_operations(c: &mut Criterion) {
 
     for size in sizes {
         let store = setup_test_store(size);
+        let dataset = ConcreteStoreDataset::new(store);
 
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(
             BenchmarkId::new("two_way_join", size),
-            &store,
-            |b, store| {
+            &dataset,
+            |b, dataset| {
                 let query = r#"
                     SELECT ?s ?name ?email WHERE {
                         ?s <http://xmlns.com/foaf/0.1/name> ?name .
                         ?s <http://xmlns.com/foaf/0.1/mbox> ?email
                     }
                 "#;
+                let mut parser = QueryParser::new();
+                let query_ast = parser.parse(query).unwrap();
+                let algebra = query_ast.where_clause;
+
                 b.iter(|| {
-                    let executor = QueryExecutor::new(store.clone());
-                    black_box(executor.execute_query(query).unwrap());
+                    let mut executor = QueryExecutor::new();
+                    black_box(executor.execute(&algebra, dataset).unwrap());
                 });
             },
         );
 
         group.bench_with_input(
             BenchmarkId::new("three_way_join", size),
-            &store,
-            |b, store| {
+            &dataset,
+            |b, dataset| {
                 let query = r#"
                     SELECT ?s ?name ?email ?age WHERE {
                         ?s <http://xmlns.com/foaf/0.1/name> ?name .
@@ -109,9 +122,13 @@ fn bench_join_operations(c: &mut Criterion) {
                         ?s <http://xmlns.com/foaf/0.1/age> ?age
                     }
                 "#;
+                let mut parser = QueryParser::new();
+                let query_ast = parser.parse(query).unwrap();
+                let algebra = query_ast.where_clause;
+
                 b.iter(|| {
-                    let executor = QueryExecutor::new(store.clone());
-                    black_box(executor.execute_query(query).unwrap());
+                    let mut executor = QueryExecutor::new();
+                    black_box(executor.execute(&algebra, dataset).unwrap());
                 });
             },
         );
@@ -126,6 +143,7 @@ fn bench_filter_operations(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let store = setup_test_store(1_000);
+    let dataset = ConcreteStoreDataset::new(store);
 
     let filters = vec![
         (
@@ -148,9 +166,13 @@ fn bench_filter_operations(c: &mut Criterion) {
 
     for (name, query) in filters {
         group.bench_with_input(BenchmarkId::from_parameter(name), query, |b, query| {
+            let mut parser = QueryParser::new();
+            let query_ast = parser.parse(query).unwrap();
+            let algebra = query_ast.where_clause;
+
             b.iter(|| {
-                let executor = QueryExecutor::new(store.clone());
-                black_box(executor.execute_query(query).unwrap());
+                let mut executor = QueryExecutor::new();
+                black_box(executor.execute(&algebra, &dataset).unwrap());
             });
         });
     }
@@ -164,6 +186,7 @@ fn bench_optional_patterns(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let store = setup_test_store(1_000);
+    let dataset = ConcreteStoreDataset::new(store);
 
     group.bench_function("simple_optional", |b| {
         let query = r#"
@@ -172,9 +195,13 @@ fn bench_optional_patterns(c: &mut Criterion) {
                 OPTIONAL { ?s <http://xmlns.com/foaf/0.1/mbox> ?email }
             }
         "#;
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
@@ -188,9 +215,13 @@ fn bench_optional_patterns(c: &mut Criterion) {
                 }
             }
         "#;
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
@@ -203,6 +234,7 @@ fn bench_union_operations(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let store = setup_test_store(1_000);
+    let dataset = ConcreteStoreDataset::new(store);
 
     group.bench_function("simple_union", |b| {
         let query = r#"
@@ -212,9 +244,13 @@ fn bench_union_operations(c: &mut Criterion) {
                 { ?person a <http://schema.org/Person> }
             }
         "#;
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
@@ -228,9 +264,13 @@ fn bench_union_operations(c: &mut Criterion) {
                 { ?entity a <http://schema.org/Thing> }
             }
         "#;
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
@@ -243,6 +283,7 @@ fn bench_aggregation_operations(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let store = setup_test_store(10_000);
+    let dataset = ConcreteStoreDataset::new(store);
 
     let aggregations = vec![
         ("count", "SELECT (COUNT(?s) AS ?count) WHERE { ?s ?p ?o }"),
@@ -262,9 +303,13 @@ fn bench_aggregation_operations(c: &mut Criterion) {
 
     for (name, query) in aggregations {
         group.bench_with_input(BenchmarkId::from_parameter(name), query, |b, query| {
+            let mut parser = QueryParser::new();
+            let query_ast = parser.parse(query).unwrap();
+            let algebra = query_ast.where_clause;
+
             b.iter(|| {
-                let executor = QueryExecutor::new(store.clone());
-                black_box(executor.execute_query(query).unwrap());
+                let mut executor = QueryExecutor::new();
+                black_box(executor.execute(&algebra, &dataset).unwrap());
             });
         });
     }
@@ -278,20 +323,29 @@ fn bench_query_forms(c: &mut Criterion) {
     group.measurement_time(Duration::from_secs(10));
 
     let store = setup_test_store(1_000);
+    let dataset = ConcreteStoreDataset::new(store);
 
     group.bench_function("select", |b| {
         let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 100";
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
     group.bench_function("ask", |b| {
         let query = "ASK WHERE { ?s <http://xmlns.com/foaf/0.1/name> \"Alice\" }";
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
@@ -300,17 +354,25 @@ fn bench_query_forms(c: &mut Criterion) {
             CONSTRUCT { ?s <http://example.org/hasName> ?name }
             WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name }
         "#;
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
     group.bench_function("describe", |b| {
         let query = "DESCRIBE <http://example.org/Alice>";
+        let mut parser = QueryParser::new();
+        let query_ast = parser.parse(query).unwrap();
+        let algebra = query_ast.where_clause;
+
         b.iter(|| {
-            let executor = QueryExecutor::new(store.clone());
-            black_box(executor.execute_query(query).unwrap());
+            let mut executor = QueryExecutor::new();
+            black_box(executor.execute(&algebra, &dataset).unwrap());
         });
     });
 
@@ -326,24 +388,37 @@ fn bench_scalability(c: &mut Criterion) {
 
     for size in sizes {
         let store = setup_test_store(size);
+        let dataset = ConcreteStoreDataset::new(store);
 
         group.throughput(Throughput::Elements(size as u64));
-        group.bench_with_input(BenchmarkId::new("full_scan", size), &store, |b, store| {
-            let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
-            b.iter(|| {
-                let executor = QueryExecutor::new(store.clone());
-                black_box(executor.execute_query(query).unwrap());
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("full_scan", size),
+            &dataset,
+            |b, dataset| {
+                let query = "SELECT ?s ?p ?o WHERE { ?s ?p ?o }";
+                let mut parser = QueryParser::new();
+                let query_ast = parser.parse(query).unwrap();
+                let algebra = query_ast.where_clause;
+
+                b.iter(|| {
+                    let mut executor = QueryExecutor::new();
+                    black_box(executor.execute(&algebra, dataset).unwrap());
+                });
+            },
+        );
 
         group.bench_with_input(
             BenchmarkId::new("selective_query", size),
-            &store,
-            |b, store| {
+            &dataset,
+            |b, dataset| {
                 let query = "SELECT ?s ?name WHERE { ?s <http://xmlns.com/foaf/0.1/name> ?name . FILTER(?name = \"Alice0\") }";
+                let mut parser = QueryParser::new();
+                let query_ast = parser.parse(query).unwrap();
+                let algebra = query_ast.where_clause;
+
                 b.iter(|| {
-                    let executor = QueryExecutor::new(store.clone());
-                    black_box(executor.execute_query(query).unwrap());
+                    let mut executor = QueryExecutor::new();
+                    black_box(executor.execute(&algebra, dataset).unwrap());
                 });
             },
         );
@@ -354,7 +429,7 @@ fn bench_scalability(c: &mut Criterion) {
 
 /// Helper: Setup test store with data
 fn setup_test_store(size: usize) -> ConcreteStore {
-    let store = ConcreteStore::new();
+    let store = ConcreteStore::new().unwrap();
 
     for i in 0..size {
         // Add person with name
@@ -362,7 +437,11 @@ fn setup_test_store(size: usize) -> ConcreteStore {
         let name_pred = NamedNode::new("http://xmlns.com/foaf/0.1/name").unwrap();
         let name_obj = Literal::new(format!("Alice{i}"));
         store
-            .insert_quad(Quad::new(subject.clone(), name_pred, name_obj, None))
+            .insert_quad(Quad::new_default_graph(
+                subject.clone(),
+                name_pred,
+                name_obj,
+            ))
             .unwrap();
 
         // Add email (50% of entities)
@@ -370,7 +449,11 @@ fn setup_test_store(size: usize) -> ConcreteStore {
             let email_pred = NamedNode::new("http://xmlns.com/foaf/0.1/mbox").unwrap();
             let email_obj = Literal::new(format!("alice{i}@example.org"));
             store
-                .insert_quad(Quad::new(subject.clone(), email_pred, email_obj, None))
+                .insert_quad(Quad::new_default_graph(
+                    subject.clone(),
+                    email_pred,
+                    email_obj,
+                ))
                 .unwrap();
         }
 
@@ -379,7 +462,7 @@ fn setup_test_store(size: usize) -> ConcreteStore {
             let age_pred = NamedNode::new("http://xmlns.com/foaf/0.1/age").unwrap();
             let age_obj = Literal::new(format!("{}", 20 + (i % 50)));
             store
-                .insert_quad(Quad::new(subject.clone(), age_pred, age_obj, None))
+                .insert_quad(Quad::new_default_graph(subject.clone(), age_pred, age_obj))
                 .unwrap();
         }
 
@@ -391,7 +474,7 @@ fn setup_test_store(size: usize) -> ConcreteStore {
             NamedNode::new("http://schema.org/Person").unwrap()
         };
         store
-            .insert_quad(Quad::new(subject, type_pred, type_obj, None))
+            .insert_quad(Quad::new_default_graph(subject, type_pred, type_obj))
             .unwrap();
     }
 

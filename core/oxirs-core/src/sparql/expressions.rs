@@ -390,6 +390,204 @@ pub fn evaluate_expression(expr: &Expression, binding: &VariableBinding) -> Resu
                     };
                     Ok(Term::from(Literal::new(result.to_string())))
                 }
+                // ========================================
+                // SPARQL 1.2 RDF-star Built-in Functions
+                // ========================================
+                //
+                // These functions provide full support for RDF-star quoted triples,
+                // enabling meta-statements about statements.
+                //
+                // Specification: https://w3c.github.io/rdf-star/cg-spec/
+                // Performance: All operations are O(1)
+                //
+                // Functions:
+                // - TRIPLE(s, p, o) → Creates a quoted triple
+                // - SUBJECT(qt) → Extracts subject from quoted triple
+                // - PREDICATE(qt) → Extracts predicate from quoted triple
+                // - OBJECT(qt) → Extracts object from quoted triple
+                // - isTRIPLE(term) → Tests if term is a quoted triple
+                // ========================================
+
+                // TRIPLE(subject, predicate, object) → quoted triple
+                //
+                // Creates a quoted triple from three terms. Supports nested
+                // quoted triples for meta-meta-statements.
+                //
+                // Example SPARQL:
+                //   BIND(TRIPLE(?s, ?p, ?o) AS ?qt)
+                //   BIND(TRIPLE(TRIPLE(?s1, ?p1, ?o1), ?p2, ?o2) AS ?nested)
+                "TRIPLE" => {
+                    if args.len() != 3 {
+                        return Err(OxirsError::Query(
+                            "TRIPLE requires exactly three arguments (subject, predicate, object)"
+                                .to_string(),
+                        ));
+                    }
+                    let subject_term = evaluate_expression(&args[0], binding)?;
+                    let predicate_term = evaluate_expression(&args[1], binding)?;
+                    let object_term = evaluate_expression(&args[2], binding)?;
+
+                    // Convert Term to Subject/Predicate/Object
+                    use crate::model::{Object, Predicate, QuotedTriple, Subject, Triple};
+                    let subject: Subject = match subject_term {
+                        Term::NamedNode(n) => Subject::NamedNode(n),
+                        Term::BlankNode(b) => Subject::BlankNode(b),
+                        Term::Variable(v) => Subject::Variable(v),
+                        Term::QuotedTriple(qt) => Subject::QuotedTriple(qt),
+                        _ => {
+                            return Err(OxirsError::Query(
+                                "TRIPLE subject must be NamedNode, BlankNode, Variable, or QuotedTriple".to_string(),
+                            ))
+                        }
+                    };
+
+                    let predicate: Predicate = match predicate_term {
+                        Term::NamedNode(n) => Predicate::NamedNode(n),
+                        Term::Variable(v) => Predicate::Variable(v),
+                        _ => {
+                            return Err(OxirsError::Query(
+                                "TRIPLE predicate must be NamedNode or Variable".to_string(),
+                            ))
+                        }
+                    };
+
+                    let object: Object = match object_term {
+                        Term::NamedNode(n) => Object::NamedNode(n),
+                        Term::BlankNode(b) => Object::BlankNode(b),
+                        Term::Literal(l) => Object::Literal(l),
+                        Term::Variable(v) => Object::Variable(v),
+                        Term::QuotedTriple(qt) => Object::QuotedTriple(qt),
+                    };
+
+                    // Create a Triple and wrap in QuotedTriple
+                    let triple = Triple::new(subject, predicate, object);
+                    let quoted = QuotedTriple::new(triple);
+                    Ok(Term::QuotedTriple(Box::new(quoted)))
+                }
+                // SUBJECT(quotedTriple) → term
+                //
+                // Extracts the subject from a quoted triple.
+                //
+                // Example SPARQL:
+                //   SELECT * WHERE {
+                //     ?qt a ex:Statement .
+                //     BIND(SUBJECT(?qt) AS ?subj)
+                //   }
+                "SUBJECT" => {
+                    if args.len() != 1 {
+                        return Err(OxirsError::Query(
+                            "SUBJECT requires exactly one argument (a quoted triple)".to_string(),
+                        ));
+                    }
+                    let term = evaluate_expression(&args[0], binding)?;
+                    match term {
+                        Term::QuotedTriple(triple) => {
+                            // Convert Subject to Term
+                            use crate::model::Subject;
+                            let subject = triple.subject();
+                            let term = match subject {
+                                Subject::NamedNode(n) => Term::NamedNode(n.clone()),
+                                Subject::BlankNode(b) => Term::BlankNode(b.clone()),
+                                Subject::Variable(v) => Term::Variable(v.clone()),
+                                Subject::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+                            };
+                            Ok(term)
+                        }
+                        _ => Err(OxirsError::Query(
+                            "SUBJECT function requires a quoted triple argument".to_string(),
+                        )),
+                    }
+                }
+                // PREDICATE(quotedTriple) → term
+                //
+                // Extracts the predicate from a quoted triple.
+                //
+                // Example SPARQL:
+                //   SELECT ?qt WHERE {
+                //     ?qt ?p ?o .
+                //     FILTER(PREDICATE(?qt) = ex:hasAge)
+                //   }
+                "PREDICATE" => {
+                    if args.len() != 1 {
+                        return Err(OxirsError::Query(
+                            "PREDICATE requires exactly one argument (a quoted triple)".to_string(),
+                        ));
+                    }
+                    let term = evaluate_expression(&args[0], binding)?;
+                    match term {
+                        Term::QuotedTriple(triple) => {
+                            // Convert Predicate to Term
+                            use crate::model::Predicate;
+                            let predicate = triple.predicate();
+                            let term = match predicate {
+                                Predicate::NamedNode(n) => Term::NamedNode(n.clone()),
+                                Predicate::Variable(v) => Term::Variable(v.clone()),
+                            };
+                            Ok(term)
+                        }
+                        _ => Err(OxirsError::Query(
+                            "PREDICATE function requires a quoted triple argument".to_string(),
+                        )),
+                    }
+                }
+                // OBJECT(quotedTriple) → term
+                //
+                // Extracts the object from a quoted triple.
+                //
+                // Example SPARQL:
+                //   SELECT ?qt WHERE {
+                //     ?qt ?p ?confidence .
+                //     FILTER(OBJECT(?qt) = "high"^^xsd:string)
+                //   }
+                "OBJECT" => {
+                    if args.len() != 1 {
+                        return Err(OxirsError::Query(
+                            "OBJECT requires exactly one argument (a quoted triple)".to_string(),
+                        ));
+                    }
+                    let term = evaluate_expression(&args[0], binding)?;
+                    match term {
+                        Term::QuotedTriple(triple) => {
+                            // Convert Object to Term
+                            use crate::model::Object;
+                            let object = triple.object();
+                            let term = match object {
+                                Object::NamedNode(n) => Term::NamedNode(n.clone()),
+                                Object::BlankNode(b) => Term::BlankNode(b.clone()),
+                                Object::Literal(l) => Term::Literal(l.clone()),
+                                Object::Variable(v) => Term::Variable(v.clone()),
+                                Object::QuotedTriple(qt) => Term::QuotedTriple(qt.clone()),
+                            };
+                            Ok(term)
+                        }
+                        _ => Err(OxirsError::Query(
+                            "OBJECT function requires a quoted triple argument".to_string(),
+                        )),
+                    }
+                }
+                // isTRIPLE(term) → boolean
+                //
+                // Tests whether a term is a quoted triple.
+                //
+                // Example SPARQL:
+                //   SELECT * WHERE {
+                //     ?x ?p ?o .
+                //     FILTER(isTRIPLE(?x))
+                //   }
+                "ISTRIPLE" => {
+                    if args.len() != 1 {
+                        return Err(OxirsError::Query(
+                            "isTRIPLE requires exactly one argument".to_string(),
+                        ));
+                    }
+                    let term = evaluate_expression(&args[0], binding)?;
+                    let result = if matches!(term, Term::QuotedTriple(_)) {
+                        "true"
+                    } else {
+                        "false"
+                    };
+                    Ok(Term::from(Literal::new(result.to_string())))
+                }
                 _ => Err(OxirsError::Query(format!("Unsupported function: {}", name))),
             }
         }
@@ -449,4 +647,304 @@ pub fn apply_bind_expressions(
     }
 
     Ok(new_results)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::{Literal, NamedNode, Object, Predicate, Subject, Triple};
+
+    #[test]
+    fn test_sparql_12_triple_function() {
+        // Test TRIPLE() function - creates a quoted triple
+        let mut binding = VariableBinding::new();
+
+        // Set up test data
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let knows = Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
+        let bob = Term::NamedNode(NamedNode::new("http://example.org/bob").unwrap());
+
+        binding.bind("s".to_string(), alice.clone());
+        binding.bind("p".to_string(), knows.clone());
+        binding.bind("o".to_string(), bob.clone());
+
+        // Create TRIPLE(?s, ?p, ?o) expression
+        let expr = Expression::FunctionCall {
+            name: "TRIPLE".to_string(),
+            args: vec![
+                Expression::Variable("?s".to_string()),
+                Expression::Variable("?p".to_string()),
+                Expression::Variable("?o".to_string()),
+            ],
+        };
+
+        let result = evaluate_expression(&expr, &binding);
+        assert!(result.is_ok());
+
+        if let Ok(Term::QuotedTriple(qt)) = result {
+            assert_eq!(
+                qt.subject(),
+                &Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap())
+            );
+            assert_eq!(
+                qt.predicate(),
+                &Predicate::NamedNode(NamedNode::new("http://example.org/knows").unwrap())
+            );
+        } else {
+            panic!("Expected QuotedTriple");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_subject_function() {
+        // Test SUBJECT() function - extracts subject from quoted triple
+        let mut binding = VariableBinding::new();
+
+        // Create a quoted triple
+        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let object = Object::Literal(Literal::new("30"));
+
+        let triple = Triple::new(subject, predicate, object);
+        let quoted = crate::model::QuotedTriple::new(triple);
+
+        binding.bind("qt".to_string(), Term::QuotedTriple(Box::new(quoted)));
+
+        // Create SUBJECT(?qt) expression
+        let expr = Expression::FunctionCall {
+            name: "SUBJECT".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+
+        let result = evaluate_expression(&expr, &binding);
+        assert!(result.is_ok());
+
+        if let Ok(Term::NamedNode(n)) = result {
+            assert_eq!(n.as_str(), "http://example.org/alice");
+        } else {
+            panic!("Expected NamedNode");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_predicate_function() {
+        // Test PREDICATE() function - extracts predicate from quoted triple
+        let mut binding = VariableBinding::new();
+
+        // Create a quoted triple
+        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let object = Object::Literal(Literal::new("30"));
+
+        let triple = Triple::new(subject, predicate, object);
+        let quoted = crate::model::QuotedTriple::new(triple);
+
+        binding.bind("qt".to_string(), Term::QuotedTriple(Box::new(quoted)));
+
+        // Create PREDICATE(?qt) expression
+        let expr = Expression::FunctionCall {
+            name: "PREDICATE".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+
+        let result = evaluate_expression(&expr, &binding);
+        assert!(result.is_ok());
+
+        if let Ok(Term::NamedNode(n)) = result {
+            assert_eq!(n.as_str(), "http://example.org/age");
+        } else {
+            panic!("Expected NamedNode");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_object_function() {
+        // Test OBJECT() function - extracts object from quoted triple
+        let mut binding = VariableBinding::new();
+
+        // Create a quoted triple
+        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let object = Object::Literal(Literal::new("30"));
+
+        let triple = Triple::new(subject, predicate, object);
+        let quoted = crate::model::QuotedTriple::new(triple);
+
+        binding.bind("qt".to_string(), Term::QuotedTriple(Box::new(quoted)));
+
+        // Create OBJECT(?qt) expression
+        let expr = Expression::FunctionCall {
+            name: "OBJECT".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+
+        let result = evaluate_expression(&expr, &binding);
+        assert!(result.is_ok());
+
+        if let Ok(Term::Literal(lit)) = result {
+            assert_eq!(lit.value(), "30");
+        } else {
+            panic!("Expected Literal");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_istriple_function_true() {
+        // Test isTRIPLE() function - returns true for quoted triple
+        let mut binding = VariableBinding::new();
+
+        // Create a quoted triple
+        let subject = Subject::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let predicate = Predicate::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let object = Object::Literal(Literal::new("30"));
+
+        let triple = Triple::new(subject, predicate, object);
+        let quoted = crate::model::QuotedTriple::new(triple);
+
+        binding.bind("qt".to_string(), Term::QuotedTriple(Box::new(quoted)));
+
+        // Create isTRIPLE(?qt) expression
+        let expr = Expression::FunctionCall {
+            name: "ISTRIPLE".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+
+        let result = evaluate_expression(&expr, &binding);
+        assert!(result.is_ok());
+
+        if let Ok(Term::Literal(lit)) = result {
+            assert_eq!(lit.value(), "true");
+        } else {
+            panic!("Expected true Literal");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_istriple_function_false() {
+        // Test isTRIPLE() function - returns false for non-quoted triple
+        let mut binding = VariableBinding::new();
+
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        binding.bind("n".to_string(), alice);
+
+        // Create isTRIPLE(?n) expression
+        let expr = Expression::FunctionCall {
+            name: "ISTRIPLE".to_string(),
+            args: vec![Expression::Variable("?n".to_string())],
+        };
+
+        let result = evaluate_expression(&expr, &binding);
+        assert!(result.is_ok());
+
+        if let Ok(Term::Literal(lit)) = result {
+            assert_eq!(lit.value(), "false");
+        } else {
+            panic!("Expected false Literal");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_nested_quoted_triples() {
+        // Test nested quoted triples: TRIPLE(TRIPLE(?s, ?p, ?o), ?p2, ?o2)
+        let mut binding = VariableBinding::new();
+
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let age = Term::NamedNode(NamedNode::new("http://example.org/age").unwrap());
+        let thirty = Term::Literal(Literal::new("30"));
+        let confidence = Term::NamedNode(NamedNode::new("http://example.org/confidence").unwrap());
+        let high = Term::Literal(Literal::new("high"));
+
+        binding.bind("s".to_string(), alice);
+        binding.bind("p".to_string(), age);
+        binding.bind("o".to_string(), thirty);
+        binding.bind("p2".to_string(), confidence);
+        binding.bind("o2".to_string(), high);
+
+        // Create inner TRIPLE(?s, ?p, ?o)
+        let inner_expr = Expression::FunctionCall {
+            name: "TRIPLE".to_string(),
+            args: vec![
+                Expression::Variable("?s".to_string()),
+                Expression::Variable("?p".to_string()),
+                Expression::Variable("?o".to_string()),
+            ],
+        };
+
+        // Create outer TRIPLE(inner_triple, ?p2, ?o2)
+        let outer_expr = Expression::FunctionCall {
+            name: "TRIPLE".to_string(),
+            args: vec![
+                inner_expr,
+                Expression::Variable("?p2".to_string()),
+                Expression::Variable("?o2".to_string()),
+            ],
+        };
+
+        let result = evaluate_expression(&outer_expr, &binding);
+        assert!(result.is_ok());
+
+        // The result should be a quoted triple with a quoted triple as subject
+        if let Ok(Term::QuotedTriple(outer_qt)) = result {
+            assert!(matches!(outer_qt.subject(), Subject::QuotedTriple(_)));
+        } else {
+            panic!("Expected nested QuotedTriple");
+        }
+    }
+
+    #[test]
+    fn test_sparql_12_rdf_star_composition() {
+        // Test: Create a triple, then extract its parts
+        let mut binding = VariableBinding::new();
+
+        let alice = Term::NamedNode(NamedNode::new("http://example.org/alice").unwrap());
+        let knows = Term::NamedNode(NamedNode::new("http://example.org/knows").unwrap());
+        let bob = Term::NamedNode(NamedNode::new("http://example.org/bob").unwrap());
+
+        binding.bind("s".to_string(), alice.clone());
+        binding.bind("p".to_string(), knows.clone());
+        binding.bind("o".to_string(), bob.clone());
+
+        // Create TRIPLE(?s, ?p, ?o)
+        let triple_expr = Expression::FunctionCall {
+            name: "TRIPLE".to_string(),
+            args: vec![
+                Expression::Variable("?s".to_string()),
+                Expression::Variable("?p".to_string()),
+                Expression::Variable("?o".to_string()),
+            ],
+        };
+
+        let quoted_triple = evaluate_expression(&triple_expr, &binding).unwrap();
+        binding.bind("qt".to_string(), quoted_triple);
+
+        // Extract subject
+        let subject_expr = Expression::FunctionCall {
+            name: "SUBJECT".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+        let extracted_subject = evaluate_expression(&subject_expr, &binding).unwrap();
+
+        // Verify subject matches original
+        assert_eq!(extracted_subject, alice);
+
+        // Extract predicate
+        let predicate_expr = Expression::FunctionCall {
+            name: "PREDICATE".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+        let extracted_predicate = evaluate_expression(&predicate_expr, &binding).unwrap();
+
+        // Verify predicate matches original
+        assert_eq!(extracted_predicate, knows);
+
+        // Extract object
+        let object_expr = Expression::FunctionCall {
+            name: "OBJECT".to_string(),
+            args: vec![Expression::Variable("?qt".to_string())],
+        };
+        let extracted_object = evaluate_expression(&object_expr, &binding).unwrap();
+
+        // Verify object matches original
+        assert_eq!(extracted_object, bob);
+    }
 }

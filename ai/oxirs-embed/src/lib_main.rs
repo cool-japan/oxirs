@@ -231,7 +231,7 @@ pub trait EmbeddingModel: Send + Sync {
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector>;
     
     /// Get embedding for a relation
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector>;
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector>;
     
     /// Score a triple (higher score means more likely to be true)
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64>;

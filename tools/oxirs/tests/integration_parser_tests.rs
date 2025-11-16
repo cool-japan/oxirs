@@ -300,7 +300,7 @@ fn test_parser_error_resilience() {
 
     // In lenient mode, should parse valid triples and skip invalid ones
     assert!(
-        quads.len() >= 1,
+        !quads.is_empty(),
         "Should parse at least some valid triples in lenient mode"
     );
 }

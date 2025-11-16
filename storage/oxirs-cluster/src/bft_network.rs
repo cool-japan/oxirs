@@ -7,7 +7,7 @@ use crate::bft::{BftConsensus, BftMessage};
 use crate::network::{NetworkService, RpcMessage};
 use crate::{ClusterError, Result};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use rand::rngs::OsRng; // Required by ed25519-dalek for key generation
+// Note: OsRng used via fully qualified path to avoid scirs2-core re-export conflict
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -124,10 +124,8 @@ impl BftNetworkService {
 
         // Generate a new Ed25519 keypair for this node
         // Note: ed25519-dalek 2.x doesn't have generate() method, use from_bytes
-        let mut csprng = OsRng;
-        let mut seed_bytes = [0u8; 32];
-        use rand::RngCore;
-        csprng.fill_bytes(&mut seed_bytes);
+        // Use rand::random() to avoid scirs2-core OsRng re-export conflict
+        let seed_bytes: [u8; 32] = rand::random();
         let keypair = SigningKey::from_bytes(&seed_bytes);
 
         BftNetworkService {

@@ -392,8 +392,12 @@ impl TermInterner {
                 .iter()
                 .map(|(id, term)| (*id, term.clone()))
                 .collect();
-            bincode::serialize_into(&mut writer, &subject_data)
-                .context("Failed to serialize subjects")?;
+            bincode::serde::encode_into_std_write(
+                &subject_data,
+                &mut writer,
+                bincode::config::standard(),
+            )
+            .map_err(|e| anyhow::anyhow!("Failed to serialize subjects: {}", e))?;
         }
 
         // Save predicates
@@ -403,8 +407,12 @@ impl TermInterner {
                 .iter()
                 .map(|(id, iri)| (*id, iri.clone()))
                 .collect();
-            bincode::serialize_into(&mut writer, &predicate_data)
-                .context("Failed to serialize predicates")?;
+            bincode::serde::encode_into_std_write(
+                &predicate_data,
+                &mut writer,
+                bincode::config::standard(),
+            )
+            .map_err(|e| anyhow::anyhow!("Failed to serialize predicates: {}", e))?;
         }
 
         // Save objects
@@ -414,8 +422,12 @@ impl TermInterner {
                 .iter()
                 .map(|(id, term)| (*id, term.clone()))
                 .collect();
-            bincode::serialize_into(&mut writer, &object_data)
-                .context("Failed to serialize objects")?;
+            bincode::serde::encode_into_std_write(
+                &object_data,
+                &mut writer,
+                bincode::config::standard(),
+            )
+            .map_err(|e| anyhow::anyhow!("Failed to serialize objects: {}", e))?;
         }
 
         // Save next IDs
@@ -423,9 +435,21 @@ impl TermInterner {
         let next_predicate_id = *self.next_predicate_id.read().unwrap();
         let next_object_id = *self.next_object_id.read().unwrap();
 
-        bincode::serialize_into(&mut writer, &next_subject_id)?;
-        bincode::serialize_into(&mut writer, &next_predicate_id)?;
-        bincode::serialize_into(&mut writer, &next_object_id)?;
+        bincode::serde::encode_into_std_write(
+            next_subject_id,
+            &mut writer,
+            bincode::config::standard(),
+        )?;
+        bincode::serde::encode_into_std_write(
+            next_predicate_id,
+            &mut writer,
+            bincode::config::standard(),
+        )?;
+        bincode::serde::encode_into_std_write(
+            next_object_id,
+            &mut writer,
+            bincode::config::standard(),
+        )?;
 
         writer.flush()?;
         Ok(())
@@ -438,7 +462,8 @@ impl TermInterner {
 
         // Load subjects
         let subject_data: Vec<(u32, SubjectTerm)> =
-            bincode::deserialize_from(&mut reader).context("Failed to deserialize subjects")?;
+            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize subjects: {}", e))?;
         let mut subjects = BiMap::new();
         for (id, term) in subject_data {
             subjects.insert(id, term);
@@ -446,7 +471,8 @@ impl TermInterner {
 
         // Load predicates
         let predicate_data: Vec<(u32, String)> =
-            bincode::deserialize_from(&mut reader).context("Failed to deserialize predicates")?;
+            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize predicates: {}", e))?;
         let mut predicates = BiMap::new();
         for (id, iri) in predicate_data {
             predicates.insert(id, iri);
@@ -454,16 +480,20 @@ impl TermInterner {
 
         // Load objects
         let object_data: Vec<(u32, ObjectTerm)> =
-            bincode::deserialize_from(&mut reader).context("Failed to deserialize objects")?;
+            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())
+                .map_err(|e| anyhow::anyhow!("Failed to deserialize objects: {}", e))?;
         let mut objects = BiMap::new();
         for (id, term) in object_data {
             objects.insert(id, term);
         }
 
         // Load next IDs
-        let next_subject_id: u32 = bincode::deserialize_from(&mut reader)?;
-        let next_predicate_id: u32 = bincode::deserialize_from(&mut reader)?;
-        let next_object_id: u32 = bincode::deserialize_from(&mut reader)?;
+        let next_subject_id: u32 =
+            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())?;
+        let next_predicate_id: u32 =
+            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())?;
+        let next_object_id: u32 =
+            bincode::serde::decode_from_std_read(&mut reader, bincode::config::standard())?;
 
         // Calculate stats
         let stats = InternerStats {

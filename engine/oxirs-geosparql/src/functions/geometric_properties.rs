@@ -91,26 +91,26 @@ pub fn signed_area(geom: &Geometry) -> Result<f64> {
 /// For Polygon and MultiPolygon: returns the perimeter
 /// For other types: returns 0.0
 pub fn length(geom: &Geometry) -> Result<f64> {
-    use geo::{Euclidean, Length};
+    use geo::EuclideanLength;
 
     let len = match &geom.geom {
-        GeoGeometry::Line(l) => Euclidean.length(l),
-        GeoGeometry::LineString(ls) => Euclidean.length(ls),
-        GeoGeometry::MultiLineString(mls) => Euclidean.length(mls),
+        GeoGeometry::Line(l) => l.euclidean_length(),
+        GeoGeometry::LineString(ls) => ls.euclidean_length(),
+        GeoGeometry::MultiLineString(mls) => mls.euclidean_length(),
         GeoGeometry::Polygon(p) => {
             // Perimeter = exterior + all interiors
-            let mut total = Euclidean.length(p.exterior());
+            let mut total = p.exterior().euclidean_length();
             for interior in p.interiors() {
-                total += Euclidean.length(interior);
+                total += interior.euclidean_length();
             }
             total
         }
         GeoGeometry::MultiPolygon(mp) => {
             let mut total = 0.0;
             for poly in &mp.0 {
-                total += Euclidean.length(poly.exterior());
+                total += poly.exterior().euclidean_length();
                 for interior in poly.interiors() {
-                    total += Euclidean.length(interior);
+                    total += interior.euclidean_length();
                 }
             }
             total
@@ -438,6 +438,248 @@ pub fn interior_ring_n(geom: &Geometry, n: usize) -> Result<Option<Geometry>> {
             geom.geometry_type()
         ))),
     }
+}
+
+/// Calculate the volume of a 3D geometry
+///
+/// For 3D Polygons, calculates the volume as if it's a vertical prism (extrusion).
+/// For other geometries, returns an error or 0.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_geosparql::geometry::Geometry;
+/// use oxirs_geosparql::functions::geometric_properties::volume_3d;
+///
+/// // Volume of a cube: base 10x10 at Z=0, height 10
+/// let cube = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 0, 0 10 0, 0 0 0))").unwrap();
+/// // This calculates base area * average height
+/// ```
+pub fn volume_3d(geom: &Geometry) -> Result<f64> {
+    if !geom.is_3d() {
+        return Err(GeoSparqlError::UnsupportedOperation(
+            "Geometry must have Z coordinates for volume calculation".to_string(),
+        ));
+    }
+
+    match &geom.geom {
+        GeoGeometry::Polygon(p) => {
+            // Calculate volume using signed area and average Z coordinate
+            let coords: Vec<_> = p.exterior().coords().collect();
+            if coords.len() < 4 {
+                return Ok(0.0);
+            }
+
+            // Calculate base area (2D projection)
+            use geo::Area;
+            let base_area = p.unsigned_area();
+
+            // Calculate average Z coordinate
+            let mut z_sum = 0.0;
+            let mut count = 0;
+            for (i, _coord) in coords.iter().enumerate() {
+                if let Some(z) = geom.coord3d.z_at(i) {
+                    z_sum += z;
+                    count += 1;
+                }
+            }
+
+            if count == 0 {
+                return Ok(0.0);
+            }
+
+            let avg_z = z_sum / count as f64;
+
+            // Volume = base_area * average_height
+            // This works for simple prisms or extruded shapes
+            Ok(base_area * avg_z)
+        }
+        GeoGeometry::MultiPolygon(mp) => {
+            // Sum volumes of all polygons
+            let mut total_volume = 0.0;
+            let mut coord_offset = 0;
+
+            for poly in &mp.0 {
+                // Create temporary geometry for this polygon
+                let mut poly_geom = Geometry::new(GeoGeometry::Polygon(poly.clone()));
+
+                // Extract Z coordinates for this polygon
+                let poly_coord_count = poly.exterior().coords().count()
+                    + poly
+                        .interiors()
+                        .iter()
+                        .map(|r| r.coords().count())
+                        .sum::<usize>();
+
+                // Copy Z coordinates
+                if let Some(ref z_coords) = geom.coord3d.z_coords {
+                    let poly_z_values: Vec<f64> =
+                        z_coords.values[coord_offset..coord_offset + poly_coord_count].to_vec();
+                    poly_geom.coord3d = crate::geometry::coord3d::Coord3D::xyz(poly_z_values);
+                }
+
+                total_volume += volume_3d(&poly_geom)?;
+                coord_offset += poly_coord_count;
+            }
+
+            Ok(total_volume)
+        }
+        _ => Err(GeoSparqlError::UnsupportedOperation(format!(
+            "Volume calculation not supported for geometry type: {}",
+            geom.geometry_type()
+        ))),
+    }
+}
+
+/// Calculate volume of a convex polyhedron defined by vertices
+///
+/// Uses the divergence theorem to calculate volume from triangulated faces.
+/// Vertices must form a closed, convex polyhedron.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_geosparql::functions::geometric_properties::volume_convex_hull_3d;
+///
+/// // Volume of a tetrahedron
+/// let vertices = vec![
+///     (0.0, 0.0, 0.0),
+///     (1.0, 0.0, 0.0),
+///     (0.0, 1.0, 0.0),
+///     (0.0, 0.0, 1.0),
+/// ];
+/// let vol = volume_convex_hull_3d(&vertices).unwrap();
+/// // Volume should be 1/6 (tetrahedron formula)
+/// ```
+pub fn volume_convex_hull_3d(vertices: &[(f64, f64, f64)]) -> Result<f64> {
+    if vertices.len() < 4 {
+        return Ok(0.0);
+    }
+
+    // Use the shoelace/divergence theorem for convex hulls
+    // For a tetrahedron (simplest case), volume = |det(v1-v0, v2-v0, v3-v0)| / 6
+    // For general convex hull, we'd need to triangulate faces
+
+    // Simplified: Calculate volume of tetrahedron formed by first 4 vertices
+    if vertices.len() == 4 {
+        let v0 = vertices[0];
+        let v1 = vertices[1];
+        let v2 = vertices[2];
+        let v3 = vertices[3];
+
+        // Vectors from v0 to other vertices
+        let a = (v1.0 - v0.0, v1.1 - v0.1, v1.2 - v0.2);
+        let b = (v2.0 - v0.0, v2.1 - v0.1, v2.2 - v0.2);
+        let c = (v3.0 - v0.0, v3.1 - v0.1, v3.2 - v0.2);
+
+        // Calculate scalar triple product (determinant)
+        let det = a.0 * (b.1 * c.2 - b.2 * c.1) - a.1 * (b.0 * c.2 - b.2 * c.0)
+            + a.2 * (b.0 * c.1 - b.1 * c.0);
+
+        // Volume = |det| / 6
+        Ok(det.abs() / 6.0)
+    } else {
+        // For more complex convex hulls, this is a placeholder
+        // A full implementation would require convex hull triangulation
+        Err(GeoSparqlError::UnsupportedOperation(
+            "Volume calculation for complex convex hulls not yet implemented".to_string(),
+        ))
+    }
+}
+
+/// Calculate surface area of a 3D polygon
+///
+/// Calculates the actual 3D surface area including the Z dimension.
+///
+/// # Examples
+///
+/// ```
+/// use oxirs_geosparql::geometry::Geometry;
+/// use oxirs_geosparql::functions::geometric_properties::surface_area_3d;
+///
+/// // Inclined square (tilted plane)
+/// let tilted = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").unwrap();
+/// let area = surface_area_3d(&tilted).unwrap();
+/// ```
+pub fn surface_area_3d(geom: &Geometry) -> Result<f64> {
+    if !geom.is_3d() {
+        return Err(GeoSparqlError::UnsupportedOperation(
+            "Geometry must have Z coordinates for 3D surface area".to_string(),
+        ));
+    }
+
+    match &geom.geom {
+        GeoGeometry::Polygon(p) => {
+            let coords: Vec<_> = p.exterior().coords().collect();
+            if coords.len() < 4 {
+                return Ok(0.0);
+            }
+
+            // Calculate 3D area using triangulation
+            let mut total_area = 0.0;
+
+            // Triangulate polygon from first vertex
+            let v0 = coords[0];
+            let z0 = geom.coord3d.z_at(0).unwrap_or(0.0);
+
+            for i in 1..coords.len() - 2 {
+                let v1 = coords[i];
+                let v2 = coords[i + 1];
+                let z1 = geom.coord3d.z_at(i).unwrap_or(0.0);
+                let z2 = geom.coord3d.z_at(i + 1).unwrap_or(0.0);
+
+                // Calculate area of 3D triangle
+                let area = triangle_area_3d((v0.x, v0.y, z0), (v1.x, v1.y, z1), (v2.x, v2.y, z2));
+
+                total_area += area;
+            }
+
+            Ok(total_area)
+        }
+        GeoGeometry::MultiPolygon(mp) => {
+            let mut total_area = 0.0;
+            let mut coord_offset = 0;
+
+            for poly in &mp.0 {
+                let mut poly_geom = Geometry::new(GeoGeometry::Polygon(poly.clone()));
+
+                let poly_coord_count = poly.exterior().coords().count();
+
+                if let Some(ref z_coords) = geom.coord3d.z_coords {
+                    let poly_z_values: Vec<f64> =
+                        z_coords.values[coord_offset..coord_offset + poly_coord_count].to_vec();
+                    poly_geom.coord3d = crate::geometry::coord3d::Coord3D::xyz(poly_z_values);
+                }
+
+                total_area += surface_area_3d(&poly_geom)?;
+                coord_offset += poly_coord_count;
+            }
+
+            Ok(total_area)
+        }
+        _ => Err(GeoSparqlError::UnsupportedOperation(format!(
+            "Surface area calculation not supported for geometry type: {}",
+            geom.geometry_type()
+        ))),
+    }
+}
+
+/// Helper: Calculate area of a 3D triangle using cross product
+fn triangle_area_3d(v0: (f64, f64, f64), v1: (f64, f64, f64), v2: (f64, f64, f64)) -> f64 {
+    // Vectors from v0 to v1 and v0 to v2
+    let a = (v1.0 - v0.0, v1.1 - v0.1, v1.2 - v0.2);
+    let b = (v2.0 - v0.0, v2.1 - v0.1, v2.2 - v0.2);
+
+    // Cross product
+    let cross = (
+        a.1 * b.2 - a.2 * b.1,
+        a.2 * b.0 - a.0 * b.2,
+        a.0 * b.1 - a.1 * b.0,
+    );
+
+    // Magnitude of cross product / 2 = area
+    let mag = (cross.0 * cross.0 + cross.1 * cross.1 + cross.2 * cross.2).sqrt();
+    mag / 2.0
 }
 
 #[cfg(test)]
@@ -898,5 +1140,146 @@ mod tests {
         let point = Geometry::new(GeoGeometry::Point(Point::new(1.0, 2.0)));
         assert!(num_interior_rings(&point).is_err());
         assert!(interior_ring_n(&point, 0).is_err());
+    }
+
+    // ============ Volume and Surface Area Tests ============
+
+    #[test]
+    fn test_volume_3d_cube() {
+        // Square base 10x10 at Z=10 (average height)
+        let cube =
+            Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))").unwrap();
+
+        let vol = volume_3d(&cube).unwrap();
+
+        // Base area = 100, average Z = 10, volume = 1000
+        assert!((vol - 1000.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_volume_3d_reject_2d() {
+        let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
+
+        let result = volume_3d(&square);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_volume_3d_varying_heights() {
+        // Polygon with varying Z coordinates (like a sloped roof)
+        let sloped =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").unwrap();
+
+        let vol = volume_3d(&sloped).unwrap();
+
+        // Base area = 100, average Z = (0+0+10+10+0)/5 = 4, volume = 400
+        assert!((vol - 400.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_volume_convex_hull_tetrahedron() {
+        // Unit tetrahedron
+        let vertices = vec![
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+        ];
+
+        let vol = volume_convex_hull_3d(&vertices).unwrap();
+
+        // Volume of unit tetrahedron = 1/6
+        assert!((vol - 0.16666).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_volume_convex_hull_scaled_tetrahedron() {
+        // Scaled tetrahedron (all coordinates * 2)
+        let vertices = vec![
+            (0.0, 0.0, 0.0),
+            (2.0, 0.0, 0.0),
+            (0.0, 2.0, 0.0),
+            (0.0, 0.0, 2.0),
+        ];
+
+        let vol = volume_convex_hull_3d(&vertices).unwrap();
+
+        // Volume scales with cube of linear dimension: (2^3) * (1/6) = 8/6 ≈ 1.333
+        assert!((vol - 1.333).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_volume_convex_hull_insufficient_vertices() {
+        let vertices = vec![(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)];
+
+        let vol = volume_convex_hull_3d(&vertices).unwrap();
+        assert_eq!(vol, 0.0);
+    }
+
+    #[test]
+    fn test_surface_area_3d_flat_square() {
+        // Flat square at Z=10 (parallel to XY plane)
+        let flat =
+            Geometry::from_wkt("POLYGON Z((0 0 10, 10 0 10, 10 10 10, 0 10 10, 0 0 10))").unwrap();
+
+        let area = surface_area_3d(&flat).unwrap();
+
+        // Surface area should be same as 2D area = 100
+        assert!((area - 100.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_surface_area_3d_tilted_square() {
+        // Tilted square: bottom edge at Z=0, top edge at Z=10
+        let tilted =
+            Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 10 10 10, 0 10 10, 0 0 0))").unwrap();
+
+        let area = surface_area_3d(&tilted).unwrap();
+
+        // Surface area should be larger than 2D projection (100)
+        // due to the tilt
+        assert!(area > 100.0);
+        assert!(area < 150.0); // Reasonable upper bound
+    }
+
+    #[test]
+    fn test_surface_area_3d_triangle() {
+        // Simple 3D triangle
+        let triangle = Geometry::from_wkt("POLYGON Z((0 0 0, 10 0 0, 5 5 10, 0 0 0))").unwrap();
+
+        let area = surface_area_3d(&triangle).unwrap();
+
+        // Should be > 0
+        assert!(area > 0.0);
+    }
+
+    #[test]
+    fn test_surface_area_3d_reject_2d() {
+        let square = Geometry::from_wkt("POLYGON((0 0, 10 0, 10 10, 0 10, 0 0))").unwrap();
+
+        let result = surface_area_3d(&square);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_triangle_area_3d() {
+        // Right triangle in 3D space
+        // Base: (0,0,0) to (3,0,0) = 3 units
+        // Height: (0,0,0) to (0,4,0) = 4 units
+        // Z doesn't affect this flat triangle
+        let area = triangle_area_3d((0.0, 0.0, 0.0), (3.0, 0.0, 0.0), (0.0, 4.0, 0.0));
+
+        // Area of right triangle = (base * height) / 2 = (3 * 4) / 2 = 6
+        assert!((area - 6.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_triangle_area_3d_tilted() {
+        // Triangle tilted in Z direction
+        let area = triangle_area_3d((0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 1.0));
+
+        // Should be larger than flat triangle due to Z component
+        // Flat area would be 0.5, actual area includes the tilt
+        assert!(area > 0.5);
     }
 }

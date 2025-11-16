@@ -39,14 +39,14 @@ use crate::{Rule, RuleAtom, Term};
 use anyhow::Result;
 use scirs2_core::metrics::Counter;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
 
 // Global metrics for memory tracking
-static PARALLEL_SUBSTITUTION_CLONES: LazyLock<Counter> =
-    LazyLock::new(|| Counter::new("parallel_substitution_clones".to_string()));
-static PARALLEL_RULE_APPLICATIONS: LazyLock<Counter> =
-    LazyLock::new(|| Counter::new("parallel_rule_applications".to_string()));
+lazy_static::lazy_static! {
+    static ref PARALLEL_SUBSTITUTION_CLONES: Counter = Counter::new("parallel_substitution_clones".to_string());
+    static ref PARALLEL_RULE_APPLICATIONS: Counter = Counter::new("parallel_rule_applications".to_string());
+}
 
 /// Parallel rule execution engine
 #[derive(Debug)]

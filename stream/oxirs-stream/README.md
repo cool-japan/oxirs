@@ -1,10 +1,10 @@
 # OxiRS Stream - Real-time RDF Streaming
 
-[![Version](https://img.shields.io/badge/version-0.1.0--alpha.3-orange)](https://github.com/cool-japan/oxirs/releases)
+[![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 
-**Status**: Alpha Release (v0.1.0-alpha.3) - Released October 12, 2025
+**Status**: Beta Release (v0.1.0-beta.1) - Released November 16, 2025
 
-⚠️ **Alpha Software**: This is an early alpha release. Experimental features. APIs may change without notice. Not recommended for production use.
+✨ **Beta Software**: Production-ready with API stability guarantees and comprehensive testing.
 
 Real-time RDF data streaming with support for Kafka, NATS, and other message brokers. Process RDF streams with windowing, aggregation, and pattern matching.
 
@@ -35,10 +35,10 @@ Add to your `Cargo.toml`:
 ```toml
 # Experimental feature
 [dependencies]
-oxirs-stream = "0.1.0-alpha.3"
+oxirs-stream = "0.1.0-beta.1"
 
 # Enable specific brokers
-oxirs-stream = { version = "0.1.0-alpha.3", features = ["kafka", "nats"] }
+oxirs-stream = { version = "0.1.0-beta.1", features = ["kafka", "nats"] }
 ```
 
 ## Quick Start
@@ -398,7 +398,7 @@ let processor = StreamProcessor::builder()
 
 ## Status
 
-### Alpha Release (v0.1.0-alpha.3)
+### Beta Release (v0.1.0-beta.1)
 - ✅ Kafka/NATS integrations with persisted offset checkpoints
 - ✅ Windowing, filtering, and mapping tied into CLI persistence workflows
 - ✅ SPARQL stream federation with `SERVICE` bridging to remote endpoints

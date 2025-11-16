@@ -1,7 +1,7 @@
 //! Core SPARQL Protocol implementation
 //!
 //! This module implements the SPARQL 1.1 Protocol for RDF as defined by W3C:
-//! https://www.w3.org/TR/sparql11-protocol/
+//! <https://www.w3.org/TR/sparql11-protocol/>
 //! With SPARQL 1.2 enhancements and advanced optimizations
 
 use crate::{

@@ -300,6 +300,9 @@ impl SparqlParser {
             AlgebraTermPattern::BlankNode(b) => TermPattern::BlankNode(b.clone()),
             AlgebraTermPattern::Literal(l) => TermPattern::Literal(l.clone()),
             AlgebraTermPattern::Variable(v) => TermPattern::Variable(v.clone()),
+            AlgebraTermPattern::QuotedTriple(_) => {
+                panic!("RDF-star quoted triples not yet supported in SPARQL algebra conversion")
+            }
         }
     }
 
@@ -313,6 +316,7 @@ impl SparqlParser {
     }
 
     /// Convert sparql_algebra TermPattern back to algebra TermPattern
+    #[allow(clippy::only_used_in_recursion)]
     fn convert_term_pattern_back(&self, term: &TermPattern) -> AlgebraTermPattern {
         match term {
             TermPattern::NamedNode(n) => AlgebraTermPattern::NamedNode(n.clone()),
@@ -320,9 +324,18 @@ impl SparqlParser {
             TermPattern::Literal(l) => AlgebraTermPattern::Literal(l.clone()),
             TermPattern::Variable(v) => AlgebraTermPattern::Variable(v.clone()),
             #[cfg(feature = "sparql-12")]
-            TermPattern::Triple(_) => {
-                // Triple patterns in term position are not yet supported
-                todo!("Triple patterns in term position are not yet fully implemented")
+            TermPattern::Triple(triple_pattern) => {
+                // RDF-star: Triple patterns in term position (quoted triples)
+                // Convert the nested triple pattern recursively
+                let subject = self.convert_term_pattern_back(&triple_pattern.subject);
+                let predicate = self.convert_term_pattern_back(&triple_pattern.predicate);
+                let object = self.convert_term_pattern_back(&triple_pattern.object);
+
+                // Create a quoted triple pattern (RDF-star feature)
+                // This represents a triple that appears as a term in another triple
+                AlgebraTermPattern::QuotedTriple(Box::new(crate::query::AlgebraTriplePattern::new(
+                    subject, predicate, object,
+                )))
             }
         }
     }

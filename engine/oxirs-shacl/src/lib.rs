@@ -1,10 +1,10 @@
 //! # OxiRS SHACL - RDF Validation Engine
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-shacl/badge.svg)](https://docs.rs/oxirs-shacl)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! SHACL (Shapes Constraint Language) validation engine for RDF data.
 //! Provides comprehensive constraint validation with SHACL Core and SHACL-SPARQL support.
@@ -67,11 +67,13 @@ use oxirs_core::OxirsError;
 
 pub use crate::optimization::integration::ValidationStrategy;
 
+pub mod advanced_features;
 pub mod analytics;
 pub mod builders;
 pub mod constraints;
 pub mod custom_components;
 pub mod federated_validation;
+pub mod incremental;
 pub mod iri_resolver;
 pub mod optimization;
 pub mod paths;
@@ -90,6 +92,13 @@ pub mod w3c_test_suite;
 pub mod w3c_test_suite_enhanced;
 
 // Re-export key types for convenience - avoiding ambiguous glob re-exports
+pub use advanced_features::{
+    AdvancedTarget, AdvancedTargetSelector, ConditionalConstraint, ConditionalEvaluator,
+    ConditionalResult, FunctionInvocation, FunctionParameter, FunctionRegistry, FunctionResult,
+    InferenceStrategy, InferredShape, ParameterType, ReturnType, RuleEngine, RuleEngineStats,
+    RuleExecutionResult, ShaclFunction, ShaclRule, ShapeInferenceConfig, ShapeInferenceEngine,
+    ShapeRegistry,
+};
 pub use analytics::ValidationAnalytics;
 pub use builders::*;
 pub use constraints::{Constraint, ConstraintContext, ConstraintEvaluationResult};
@@ -98,6 +107,9 @@ pub use custom_components::{
     RangeConstraintComponent, RegexConstraintComponent,
 };
 pub use federated_validation::*;
+pub use incremental::{
+    Changeset, GraphChange, IncrementalConfig, IncrementalStats, IncrementalValidator,
+};
 pub use iri_resolver::*;
 pub use optimization::{
     NegationOptimizer, OptimizationConfig, OptimizationResult, OptimizationStrategy,

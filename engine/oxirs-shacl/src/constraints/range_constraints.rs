@@ -60,6 +60,7 @@ use oxirs_core::{
     model::{Literal, Term},
     Store,
 };
+use std::cmp::Ordering;
 
 use super::{
     ConstraintContext, ConstraintEvaluationResult, ConstraintEvaluator, ConstraintValidator,
@@ -142,9 +143,7 @@ impl ConstraintEvaluator for MinExclusiveConstraint {
 
 impl MinExclusiveConstraint {
     fn compare_values_gt(&self, value: &Literal, min_value: &Literal) -> Result<bool> {
-        // Basic comparison - for now just compare string representations
-        // TODO: Implement proper typed comparison for numbers, dates, etc.
-        Ok(value.value() > min_value.value())
+        compare_literals(value, min_value).map(|ord| ord == Ordering::Greater)
     }
 }
 
@@ -223,9 +222,7 @@ impl ConstraintEvaluator for MaxExclusiveConstraint {
 
 impl MaxExclusiveConstraint {
     fn compare_values_lt(&self, value: &Literal, max_value: &Literal) -> Result<bool> {
-        // Basic comparison - for now just compare string representations
-        // TODO: Implement proper typed comparison for numbers, dates, etc.
-        Ok(value.value() < max_value.value())
+        compare_literals(value, max_value).map(|ord| ord == Ordering::Less)
     }
 }
 
@@ -304,9 +301,7 @@ impl ConstraintEvaluator for MinInclusiveConstraint {
 
 impl MinInclusiveConstraint {
     fn compare_values_gte(&self, value: &Literal, min_value: &Literal) -> Result<bool> {
-        // Basic comparison - for now just compare string representations
-        // TODO: Implement proper typed comparison for numbers, dates, etc.
-        Ok(value.value() >= min_value.value())
+        compare_literals(value, min_value).map(|ord| ord != Ordering::Less)
     }
 }
 
@@ -385,8 +380,81 @@ impl ConstraintEvaluator for MaxInclusiveConstraint {
 
 impl MaxInclusiveConstraint {
     fn compare_values_lte(&self, value: &Literal, max_value: &Literal) -> Result<bool> {
-        // Basic comparison - for now just compare string representations
-        // TODO: Implement proper typed comparison for numbers, dates, etc.
-        Ok(value.value() <= max_value.value())
+        compare_literals(value, max_value).map(|ord| ord != Ordering::Greater)
     }
+}
+
+/// Compare two literals with proper type handling
+fn compare_literals(left: &Literal, right: &Literal) -> Result<Ordering> {
+    use oxirs_core::vocab::xsd;
+
+    let left_datatype = left.datatype();
+    let right_datatype = right.datatype();
+
+    // Both literals should have the same datatype for meaningful comparison
+    if left_datatype != right_datatype {
+        // Fall back to lexical comparison if datatypes differ
+        return Ok(left.value().cmp(right.value()));
+    }
+
+    // Handle numeric types
+    if left_datatype == *xsd::INTEGER
+        || left_datatype == *xsd::INT
+        || left_datatype == *xsd::LONG
+        || left_datatype == *xsd::SHORT
+        || left_datatype == *xsd::BYTE
+    {
+        // Integer comparison
+        let left_val = left.value().parse::<i64>().map_err(|e| {
+            crate::ShaclError::ConstraintValidation(format!("Invalid integer value: {}", e))
+        })?;
+        let right_val = right.value().parse::<i64>().map_err(|e| {
+            crate::ShaclError::ConstraintValidation(format!("Invalid integer value: {}", e))
+        })?;
+        return Ok(left_val.cmp(&right_val));
+    }
+
+    if left_datatype == *xsd::DECIMAL
+        || left_datatype == *xsd::DOUBLE
+        || left_datatype == *xsd::FLOAT
+    {
+        // Floating point comparison
+        let left_val = left.value().parse::<f64>().map_err(|e| {
+            crate::ShaclError::ConstraintValidation(format!("Invalid decimal value: {}", e))
+        })?;
+        let right_val = right.value().parse::<f64>().map_err(|e| {
+            crate::ShaclError::ConstraintValidation(format!("Invalid decimal value: {}", e))
+        })?;
+
+        // Handle NaN and infinity
+        if left_val.is_nan() || right_val.is_nan() {
+            return Err(crate::ShaclError::ConstraintValidation(
+                "Cannot compare NaN values".to_string(),
+            ));
+        }
+
+        return Ok(left_val.partial_cmp(&right_val).unwrap_or(Ordering::Equal));
+    }
+
+    if left_datatype == *xsd::BOOLEAN {
+        // Boolean comparison (false < true)
+        let left_val = left.value().parse::<bool>().map_err(|e| {
+            crate::ShaclError::ConstraintValidation(format!("Invalid boolean value: {}", e))
+        })?;
+        let right_val = right.value().parse::<bool>().map_err(|e| {
+            crate::ShaclError::ConstraintValidation(format!("Invalid boolean value: {}", e))
+        })?;
+        return Ok(left_val.cmp(&right_val));
+    }
+
+    if left_datatype == *xsd::DATE
+        || left_datatype == *xsd::DATE_TIME
+        || left_datatype == *xsd::TIME
+    {
+        // Date/time comparison - use lexical ordering which works for ISO 8601 format
+        return Ok(left.value().cmp(right.value()));
+    }
+
+    // Default: lexical comparison for strings and other types
+    Ok(left.value().cmp(right.value()))
 }

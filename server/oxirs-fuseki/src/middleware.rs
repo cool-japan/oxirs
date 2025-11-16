@@ -1,13 +1,19 @@
 //! Production-grade middleware for security, tracing, and observability
 
+use crate::auth::{
+    permissions::PermissionChecker,
+    policy_engine::{AuthorizationContext, UnifiedPolicyEngine},
+    types::{Permission, User},
+};
 use axum::{
     extract::Request,
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderValue, Method, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
 };
+use std::sync::Arc;
 use std::time::Instant;
-use tracing::{debug, info, Span};
+use tracing::{debug, info, warn, Span};
 use uuid::Uuid;
 
 /// Security headers middleware for production deployment
@@ -134,6 +140,357 @@ pub async fn request_correlation_id(mut request: Request, next: Next) -> Respons
 /// Correlation ID extractor for handlers
 #[derive(Clone, Debug)]
 pub struct CorrelationId(pub String);
+
+/// Authenticated user extractor for handlers
+#[derive(Clone, Debug)]
+pub struct AuthenticatedUser(pub Arc<User>);
+
+/// RBAC (Role-Based Access Control) middleware
+///
+/// Enforces permission checks on protected endpoints
+/// - Extracts authenticated user from request extensions
+/// - Checks if user has required permission
+/// - Returns 401 Unauthorized if no user present
+/// - Returns 403 Forbidden if user lacks permission
+/// - Allows request to proceed if permission granted
+pub async fn rbac_check(
+    permission: Permission,
+) -> impl Fn(Request, Next) -> std::pin::Pin<Box<dyn std::future::Future<Output = Response> + Send>>
+       + Clone {
+    move |request: Request, next: Next| {
+        let required_permission = permission.clone();
+        Box::pin(async move {
+            // Extract authenticated user from request extensions
+            let user = request.extensions().get::<AuthenticatedUser>().cloned();
+
+            match user {
+                Some(AuthenticatedUser(user_arc)) => {
+                    let user_ref = &*user_arc;
+
+                    // Check if user has the required permission
+                    if PermissionChecker::has_permission(user_ref, &required_permission) {
+                        debug!(
+                            user = %user_ref.username,
+                            permission = ?required_permission,
+                            "Permission granted"
+                        );
+                        next.run(request).await
+                    } else {
+                        warn!(
+                            user = %user_ref.username,
+                            permission = ?required_permission,
+                            "Permission denied"
+                        );
+                        (
+                            StatusCode::FORBIDDEN,
+                            format!(
+                                "Access denied: User '{}' does not have required permission: {:?}",
+                                user_ref.username, required_permission
+                            ),
+                        )
+                            .into_response()
+                    }
+                }
+                None => {
+                    warn!(
+                        permission = ?required_permission,
+                        "Authentication required but no user present"
+                    );
+                    (StatusCode::UNAUTHORIZED, "Authentication required").into_response()
+                }
+            }
+        })
+    }
+}
+
+/// Route-specific RBAC middleware with automatic permission mapping
+///
+/// Maps HTTP methods and routes to required permissions:
+/// - GET /sparql -> Permission::QueryExecute
+/// - POST /sparql (query) -> Permission::QueryExecute
+/// - POST /update -> Permission::UpdateExecute
+/// - PUT/POST/DELETE /graph -> Permission::GraphStore
+/// - POST /upload -> Permission::Upload
+/// - GET /$/stats -> Permission::Monitor
+/// - POST /$/datasets -> Permission::DatasetCreate
+pub async fn route_based_rbac(request: Request, next: Next) -> Response {
+    // Skip RBAC for public endpoints
+    let path = request.uri().path();
+    let public_endpoints = [
+        "/health",
+        "/health/live",
+        "/health/ready",
+        "/metrics", // Public metrics endpoint
+    ];
+
+    if public_endpoints.contains(&path) {
+        return next.run(request).await;
+    }
+
+    // Extract authenticated user
+    let user = request.extensions().get::<AuthenticatedUser>().cloned();
+
+    let user_arc = match user {
+        Some(AuthenticatedUser(user)) => user,
+        None => {
+            // No authentication required for now - can be made strict later
+            debug!(path = %path, "No authentication present, allowing request");
+            return next.run(request).await;
+        }
+    };
+
+    // Determine required permission based on route and method
+    let method = request.method();
+    let required_permission = match (method, path) {
+        // SPARQL query endpoints
+        (_, "/sparql") if method == Method::GET || method == Method::POST => {
+            Some(Permission::QueryExecute)
+        }
+
+        // SPARQL update endpoints
+        (_, "/update") if method == Method::POST => Some(Permission::UpdateExecute),
+
+        // Graph Store Protocol
+        (_, p) if p.starts_with("/graph") || p == "/data" => match *method {
+            Method::GET | Method::HEAD => Some(Permission::Read),
+            Method::PUT | Method::POST | Method::DELETE => Some(Permission::GraphStore),
+            _ => Some(Permission::Read),
+        },
+
+        // Upload endpoints
+        (_, "/upload") if method == Method::POST => Some(Permission::Upload),
+
+        // SHACL validation
+        (_, "/shacl") if method == Method::POST => Some(Permission::QueryExecute),
+
+        // Patch operations
+        (_, "/patch") if method == Method::POST => Some(Permission::Write),
+
+        // Dataset management
+        (_, p) if p.starts_with("/$/datasets") => match *method {
+            Method::GET => Some(Permission::Read),
+            Method::POST => Some(Permission::DatasetCreate),
+            Method::DELETE => Some(Permission::DatasetDelete),
+            Method::PUT => Some(Permission::DatasetManage),
+            _ => Some(Permission::Admin),
+        },
+
+        // Admin endpoints
+        (_, p) if p.starts_with("/$/admin") => Some(Permission::Admin),
+
+        // Monitoring endpoints
+        (_, p) if p.starts_with("/$/stats") || p.starts_with("/$/logs") => {
+            Some(Permission::Monitor)
+        }
+
+        // Task management
+        (_, p) if p.starts_with("/$/tasks") => match *method {
+            Method::GET => Some(Permission::Monitor),
+            _ => Some(Permission::Admin),
+        },
+
+        // Federation management
+        (_, p) if p.starts_with("/$/federation") => Some(Permission::FederationManage),
+
+        // Cluster management
+        (_, p) if p.starts_with("/$/cluster") => Some(Permission::ClusterManage),
+
+        // User management
+        (_, p) if p.starts_with("/$/users") => Some(Permission::UserManage),
+
+        // System configuration
+        (_, p) if p.starts_with("/$/config") => Some(Permission::SystemConfig),
+
+        // Backup/restore
+        (_, "/$/backup") if method == Method::POST => Some(Permission::Backup),
+        (_, "/$/restore") if method == Method::POST => Some(Permission::Restore),
+
+        // Default: require read permission for all other endpoints
+        _ => Some(Permission::Read),
+    };
+
+    // Check permission
+    if let Some(permission) = required_permission {
+        let user_ref = &*user_arc;
+
+        if PermissionChecker::has_permission(user_ref, &permission) {
+            debug!(
+                user = %user_ref.username,
+                path = %path,
+                method = %method,
+                permission = ?permission,
+                "RBAC check passed"
+            );
+            next.run(request).await
+        } else {
+            warn!(
+                user = %user_ref.username,
+                path = %path,
+                method = %method,
+                permission = ?permission,
+                "RBAC check failed - permission denied"
+            );
+            (
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Access denied: User '{}' does not have required permission {:?} for {} {}",
+                    user_ref.username, permission, method, path
+                ),
+            )
+                .into_response()
+        }
+    } else {
+        // No specific permission required
+        next.run(request).await
+    }
+}
+
+/// ReBAC (Relationship-Based Access Control) middleware
+///
+/// Provides fine-grained authorization based on relationships between users and resources.
+/// Works alongside RBAC to enable:
+/// - Dataset-level permissions (can_read, can_write on specific datasets)
+/// - Graph-level permissions (access to specific named graphs)
+/// - Hierarchical permissions (parent dataset permissions inherit to graphs)
+/// - Dynamic policies (organization membership, ownership)
+///
+/// Usage:
+/// ```ignore
+/// let app = Router::new()
+///     .route("/dataset/:name", get(handler))
+///     .layer(from_fn_with_state(policy_engine.clone(), rebac_middleware));
+/// ```
+pub async fn rebac_middleware(
+    axum::extract::State(policy_engine): axum::extract::State<Arc<UnifiedPolicyEngine>>,
+    request: Request,
+    next: Next,
+) -> Response {
+    // Skip ReBAC for public endpoints
+    let path = request.uri().path();
+    let public_endpoints = ["/health", "/health/live", "/health/ready", "/metrics"];
+
+    if public_endpoints.contains(&path) {
+        return next.run(request).await;
+    }
+
+    // Extract authenticated user
+    let user = match request.extensions().get::<AuthenticatedUser>().cloned() {
+        Some(AuthenticatedUser(user)) => user,
+        None => {
+            // No user present, allow (assuming RBAC middleware will handle auth)
+            return next.run(request).await;
+        }
+    };
+
+    // Extract dataset/resource from path
+    let (action, resource) = extract_action_and_resource(&request);
+
+    // Create authorization context
+    let context = AuthorizationContext::new((*user).clone(), action.clone(), resource.clone());
+
+    // Check authorization using unified policy engine
+    match policy_engine.authorize(&context).await {
+        Ok(response) if response.allowed => {
+            debug!(
+                user = %user.username,
+                action = %action,
+                resource = %resource,
+                "ReBAC authorization granted"
+            );
+            next.run(request).await
+        }
+        Ok(response) => {
+            warn!(
+                user = %user.username,
+                action = %action,
+                resource = %resource,
+                reason = ?response.reason,
+                "ReBAC authorization denied"
+            );
+            (
+                StatusCode::FORBIDDEN,
+                format!(
+                    "Access denied: {}",
+                    response
+                        .reason
+                        .unwrap_or_else(|| "Insufficient permissions".to_string())
+                ),
+            )
+                .into_response()
+        }
+        Err(e) => {
+            warn!(
+                user = %user.username,
+                action = %action,
+                resource = %resource,
+                error = %e,
+                "ReBAC authorization error"
+            );
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Authorization error: {}", e),
+            )
+                .into_response()
+        }
+    }
+}
+
+/// Extract action and resource from HTTP request
+///
+/// Maps HTTP methods and paths to ReBAC (action, resource) pairs:
+/// - GET /dataset/foo → ("can_read", "dataset:foo")
+/// - POST /dataset/foo/update → ("can_write", "dataset:foo")
+/// - PUT /dataset/foo/graph?graph=http://example.org/g1 → ("can_write", "graph:http://example.org/g1")
+fn extract_action_and_resource(request: &Request) -> (String, String) {
+    let method = request.method();
+    let path = request.uri().path();
+    let query = request.uri().query();
+
+    // Parse dataset name from path
+    let dataset = if let Some(ds) = path.strip_prefix("/dataset/") {
+        let ds_name = ds.split('/').next().unwrap_or("default");
+        ds_name.to_string()
+    } else {
+        "default".to_string()
+    };
+
+    // Check for graph parameter
+    if let Some(query_str) = query {
+        if let Some(graph_uri) = extract_graph_from_query(query_str) {
+            let action = match method {
+                &Method::GET | &Method::HEAD => "can_read",
+                &Method::POST | &Method::PUT | &Method::DELETE => "can_write",
+                _ => "can_read",
+            };
+            return (action.to_string(), format!("graph:{}", graph_uri));
+        }
+    }
+
+    // Determine action from method and path
+    let action = match (method, path) {
+        (&Method::GET, _) | (&Method::HEAD, _) => "can_read",
+        (&Method::POST, p) if p.contains("/sparql") || p.contains("/query") => "can_execute_query",
+        (&Method::POST, p) if p.contains("/update") => "can_execute_update",
+        (&Method::POST, _) | (&Method::PUT, _) | (&Method::PATCH, _) | (&Method::DELETE, _) => {
+            "can_write"
+        }
+        _ => "can_read",
+    };
+
+    (action.to_string(), format!("dataset:{}", dataset))
+}
+
+/// Extract graph URI from query string
+fn extract_graph_from_query(query: &str) -> Option<String> {
+    for pair in query.split('&') {
+        if let Some((key, value)) = pair.split_once('=') {
+            if key == "graph" || key == "default" {
+                return Some(urlencoding::decode(value).ok()?.into_owned());
+            }
+        }
+    }
+    None
+}
 
 /// Request timing middleware
 ///

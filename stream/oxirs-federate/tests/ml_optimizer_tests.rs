@@ -149,7 +149,7 @@ async fn test_source_selection_learning() {
     let optimizer = MLOptimizer::new();
 
     // Create test services
-    let services = vec![
+    let services = [
         FederatedService::new_sparql(
             "fast-service".to_string(),
             "Fast SPARQL Service".to_string(),
@@ -245,7 +245,7 @@ async fn test_join_order_optimization() {
     let optimizer = MLOptimizer::new();
 
     // Create test patterns for join optimization
-    let patterns = vec![
+    let patterns = [
         TriplePattern {
             subject: Some("?person".to_string()),
             predicate: Some("rdf:type".to_string()),

@@ -156,6 +156,20 @@ pub enum ExplanationLevel {
     Expert,
 }
 
+/// Query intent classification
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QueryIntent {
+    Select,
+    Count,
+    Ask,
+    List,
+    Describe,
+    Compare,
+    Filter,
+    Aggregate,
+    Unknown,
+}
+
 /// SPARQL query generation result
 #[derive(Debug, Clone)]
 pub struct SPARQLGenerationResult {

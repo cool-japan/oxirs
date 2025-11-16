@@ -652,6 +652,14 @@ impl PersistentCache {
 
     /// Deserialize cache entry from bytes
     fn deserialize_entry(&self, data: &[u8]) -> Result<CacheEntry> {
+        // Check if data is empty or too small
+        if data.len() < 4 {
+            return Err(anyhow::anyhow!(
+                "Invalid cache entry data: too small (expected at least 4 bytes, got {})",
+                data.len()
+            ));
+        }
+
         let mut offset = 0;
 
         // Deserialize vector data
@@ -1280,10 +1288,16 @@ impl BackgroundCacheWorker {
         let shutdown_signal = Arc::clone(&self.shutdown_signal);
 
         let handle = thread::spawn(move || {
-            while !*shutdown_signal.read().unwrap() {
+            while let Ok(shutdown) = shutdown_signal.read() {
+                if *shutdown {
+                    break;
+                }
+                drop(shutdown); // Release the lock before sleeping
+
                 // Perform maintenance tasks
                 if let Err(e) = Self::perform_maintenance(&cache, &invalidator) {
-                    eprintln!("Background cache maintenance error: {e}");
+                    // Log error but continue running
+                    tracing::warn!("Background cache maintenance error: {}", e);
                 }
 
                 // Sleep for the configured interval

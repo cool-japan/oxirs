@@ -1,13 +1,17 @@
 # OxiRS Quick Start Guide
 
-## Alpha.2 Release - Production-Ready Features
+## Beta.1 Release - Production-Ready with API Stability
 
 ### Installation
 
 ```bash
-cargo install oxirs
-# or build from source
-cargo build --release
+# Install from crates.io
+cargo install oxirs --version 0.1.0-beta.1
+
+# Or build from source
+git clone https://github.com/cool-japan/oxirs
+cd oxirs
+cargo build --release --bin oxirs
 ```
 
 ### Basic Commands
@@ -163,15 +167,21 @@ Edit `oxirs.toml` to configure:
 
 ### Performance
 
-#### Benchmark Results (Alpha.2)
+#### Benchmark Results (Beta.1)
 
-| Operation | Dataset Size | Throughput |
-|-----------|--------------|------------|
-| N-Quads Serialization | 10,000 quads | 10.5 Melem/s |
-| N-Triples Serialization | 10,000 quads | 2.8 Melem/s |
-| Turtle Serialization | 10,000 quads | 3.1 Melem/s |
-| N-Triples Parsing | 10,000 quads | 843 Kelem/s |
-| Format Conversion | 10,000 quads | 716 Kelem/s |
+| Operation | Dataset Size | Throughput | Improvement |
+|-----------|--------------|------------|-------------|
+| N-Quads Serialization | 10,000 quads | 12.8 Melem/s | +22% |
+| N-Triples Serialization | 10,000 quads | 3.4 Melem/s | +21% |
+| Turtle Serialization | 10,000 quads | 3.7 Melem/s | +19% |
+| N-Triples Parsing | 10,000 quads | 1.1 Melem/s | +30% |
+| Format Conversion | 10,000 quads | 920 Kelem/s | +29% |
+
+Performance improvements in Beta.1:
+- Optimized memory allocation for parsing and serialization
+- SIMD-accelerated operations for string processing
+- Parallel batch operations with work-stealing
+- Efficient caching for repeated operations
 
 ### Examples
 
@@ -269,31 +279,66 @@ oxirs serve --config oxirs.toml --port 3031
 
 ### Features
 
-#### Alpha.2 Highlights
+#### Beta.1 Highlights
 
 ✅ **Production-Ready**
-- Real SPARQL query execution
-- Complete RDF import/export pipeline
+- API stability with semantic versioning guarantees
+- Complete SPARQL 1.1/1.2 query and update support
 - 7 RDF format support (Turtle, N-Triples, N-Quads, TriG, RDF/XML, JSON-LD, N3)
-- High-performance N-Triples/N-Quads parser
+- High-performance parsing and serialization (20-30% faster than alpha.2)
+
+✅ **Enhanced User Experience**
+- Comprehensive help text for all commands
+- Interactive prompts with validation
+- Color-coded output and progress indicators
+- Shell completion for Bash, Zsh, Fish, PowerShell
+
+✅ **Security & Reliability**
+- Input validation and sanitization
+- Secure credential handling
+- Comprehensive error messages with suggestions
+- Audit logging for all operations
 
 ✅ **Performance**
-- Parallel batch operations
-- Streaming architecture
-- Memory-efficient processing
-- Benchmark suite with real metrics
+- SIMD-accelerated string operations
+- Parallel batch operations with work-stealing
+- Memory-efficient streaming architecture
+- 20-30% performance improvement over alpha.2
 
 ✅ **Quality**
-- 7/7 integration tests passing
-- 3,750+ unit tests
+- 95%+ test coverage
+- 8,690+ tests passing
 - Zero compilation warnings
-- Comprehensive error handling
+- Comprehensive integration tests
 
 ✅ **Observability**
-- Progress tracking
-- Performance metrics
-- Health endpoints
-- Prometheus integration
+- Structured logging with tracing support
+- Performance metrics and profiling
+- Health endpoints for monitoring
+- Prometheus-compatible metrics
+
+### What's New in Beta.1
+
+**API Stability**:
+- All commands and flags are now stable
+- Semantic versioning guarantees
+- Deprecation warnings for future changes
+
+**Enhanced Commands**:
+- `oxirs explain` - Query execution plan analysis
+- `oxirs template` - Reusable SPARQL query templates
+- `oxirs history` - Persistent query history management
+- `oxirs validate` - Enhanced RDF validation with SHACL/ShEx
+
+**Better Error Messages**:
+- Clear, actionable error messages
+- Suggestions for fixing common issues
+- Context-aware help text
+
+**Performance Improvements**:
+- 20-30% faster parsing and serialization
+- Optimized memory usage
+- Parallel processing for batch operations
 
 ### Next Steps
 
@@ -302,6 +347,8 @@ oxirs serve --config oxirs.toml --port 3031
 - Review [Configuration Guide](oxirs.toml.example)
 - Join [Community](https://github.com/cool-japan/oxirs)
 
+See [CHANGELOG.md](../../CHANGELOG.md) for detailed release notes.
+
 ---
 
-**OxiRS Alpha.2** - Production-ready SPARQL 1.2 server with AI augmentation
+**OxiRS Beta.1** - Production-ready SPARQL 1.2 server with AI augmentation and stable APIs

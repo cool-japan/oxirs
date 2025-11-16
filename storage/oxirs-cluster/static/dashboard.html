@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OxiRS Cluster Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem 2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            opacity: 0.9;
+            margin-top: 0.25rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .metric-unit {
+            font-size: 1rem;
+            color: #999;
+            margin-left: 0.25rem;
+        }
+
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #555;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status.healthy {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status.leader {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .alert-item {
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            border-left: 4px solid #667eea;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+
+        .alert-item.critical {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+
+        .alert-item.warning {
+            border-left-color: #ffc107;
+            background: #fffef5;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .alert-time {
+            font-size: 0.875rem;
+            color: #666;
+        }
+
+        .refresh-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #28a745;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            color: #999;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1rem 0;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>OxiRS Cluster Dashboard</h1>
+        <p class="subtitle">Real-time monitoring and management | <span class="refresh-indicator"></span> Auto-refresh enabled</p>
+    </header>
+
+    <div class="container">
+        <div class="metrics-grid" id="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Nodes</div>
+                <div class="metric-value" id="total-nodes">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Healthy Nodes</div>
+                <div class="metric-value" id="healthy-nodes">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Triples</div>
+                <div class="metric-value" id="total-triples">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Queries/sec</div>
+                <div class="metric-value" id="qps">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Avg Latency</div>
+                <div class="metric-value" id="latency">-<span class="metric-unit">ms</span></div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Active Alerts</div>
+                <div class="metric-value" id="active-alerts">-</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Cluster Nodes</h2>
+            <table id="nodes-table">
+                <thead>
+                    <tr>
+                        <th>Node ID</th>
+                        <th>Address</th>
+                        <th>Status</th>
+                        <th>Triples</th>
+                        <th>CPU</th>
+                        <th>Memory</th>
+                        <th>Uptime</th>
+                    </tr>
+                </thead>
+                <tbody id="nodes-tbody">
+                    <tr>
+                        <td colspan="7" class="loading">Loading nodes...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2 class="section-title">Recent Alerts</h2>
+            <div id="alerts-container">
+                <div class="loading">Loading alerts...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api';
+        const REFRESH_INTERVAL = 2000; // 2 seconds
+
+        // Format large numbers
+        function formatNumber(num) {
+            if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+            if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+            return num.toString();
+        }
+
+        // Format bytes
+        function formatBytes(bytes) {
+            if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+            if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+            if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return bytes + ' B';
+        }
+
+        // Format uptime
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
+        }
+
+        // Fetch and update metrics
+        async function updateMetrics() {
+            try {
+                const response = await fetch(`${API_BASE}/metrics`);
+                const metrics = await response.json();
+
+                document.getElementById('total-nodes').textContent = metrics.total_nodes;
+                document.getElementById('healthy-nodes').textContent = metrics.healthy_nodes;
+                document.getElementById('total-triples').textContent = formatNumber(metrics.total_triples);
+                document.getElementById('qps').textContent = metrics.queries_per_second.toFixed(1);
+                document.getElementById('latency').textContent = metrics.avg_query_latency_ms.toFixed(1);
+                document.getElementById('active-alerts').textContent = metrics.active_alerts;
+            } catch (error) {
+                console.error('Failed to fetch metrics:', error);
+            }
+        }
+
+        // Fetch and update nodes
+        async function updateNodes() {
+            try {
+                const response = await fetch(`${API_BASE}/nodes`);
+                const nodes = await response.json();
+
+                const tbody = document.getElementById('nodes-tbody');
+                tbody.innerHTML = '';
+
+                if (nodes.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="loading">No nodes available</td></tr>';
+                    return;
+                }
+
+                nodes.forEach(node => {
+                    const row = document.createElement('tr');
+
+                    const statusClass = node.is_leader ? 'leader' : 'healthy';
+                    const statusText = node.is_leader ? 'Leader' : 'Follower';
+
+                    row.innerHTML = `
+                        <td>${node.node_id}</td>
+                        <td>${node.address}</td>
+                        <td><span class="status ${statusClass}">${statusText}</span></td>
+                        <td>${formatNumber(node.triple_count)}</td>
+                        <td>${node.cpu_percent.toFixed(1)}%</td>
+                        <td>${formatBytes(node.memory_bytes)}</td>
+                        <td>${formatUptime(node.uptime_seconds)}</td>
+                    `;
+
+                    tbody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Failed to fetch nodes:', error);
+            }
+        }
+
+        // Fetch and update alerts
+        async function updateAlerts() {
+            try {
+                const response = await fetch(`${API_BASE}/alerts`);
+                const alerts = await response.json();
+
+                const container = document.getElementById('alerts-container');
+                container.innerHTML = '';
+
+                if (alerts.length === 0) {
+                    container.innerHTML = '<div class="loading">No alerts</div>';
+                    return;
+                }
+
+                // Show only the 5 most recent alerts
+                const recentAlerts = alerts.slice(-5).reverse();
+
+                recentAlerts.forEach(alert => {
+                    const alertDiv = document.createElement('div');
+                    alertDiv.className = `alert-item ${alert.severity.toLowerCase()}`;
+
+                    const timestamp = new Date(alert.timestamp).toLocaleString();
+
+                    alertDiv.innerHTML = `
+                        <div class="alert-title">[${alert.severity}] ${alert.title}</div>
+                        <div>${alert.message}</div>
+                        <div class="alert-time">${timestamp}</div>
+                    `;
+
+                    container.appendChild(alertDiv);
+                });
+            } catch (error) {
+                console.error('Failed to fetch alerts:', error);
+            }
+        }
+
+        // Refresh all data
+        function refreshAll() {
+            updateMetrics();
+            updateNodes();
+            updateAlerts();
+        }
+
+        // Initial load
+        refreshAll();
+
+        // Set up auto-refresh
+        setInterval(refreshAll, REFRESH_INTERVAL);
+    </script>
+</body>
+</html>

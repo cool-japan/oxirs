@@ -1,5 +1,6 @@
 //! Main HNSW index implementation
 
+use crate::hnsw::query_cache::{QueryCache, QueryCacheConfig};
 use crate::hnsw::{HnswConfig, HnswPerformanceStats, Node};
 use crate::{Vector, VectorIndex};
 use anyhow::Result;
@@ -23,6 +24,8 @@ pub struct HnswIndex {
     stats: HnswPerformanceStats,
     /// Distance calculation count (for metrics)
     distance_calculations: AtomicU64,
+    /// Query result cache for improved performance
+    query_cache: Option<QueryCache>,
     /// GPU accelerator for CUDA-accelerated operations
     #[cfg(feature = "gpu")]
     gpu_accelerator: Option<Arc<GpuAccelerator>>,
@@ -57,6 +60,9 @@ impl HnswIndex {
             (None, Vec::new())
         };
 
+        // Initialize query cache with default configuration
+        let query_cache = Some(QueryCache::new(QueryCacheConfig::default()));
+
         Ok(Self {
             config,
             nodes: Vec::new(),
@@ -66,6 +72,7 @@ impl HnswIndex {
             rng_state: 42, // Simple deterministic seed
             stats: HnswPerformanceStats::default(),
             distance_calculations: AtomicU64::new(0),
+            query_cache,
             #[cfg(feature = "gpu")]
             gpu_accelerator,
             #[cfg(feature = "gpu")]
@@ -79,6 +86,9 @@ impl HnswIndex {
         cpu_config.enable_gpu = false;
         cpu_config.enable_multi_gpu = false;
 
+        // Initialize query cache with default configuration
+        let query_cache = Some(QueryCache::new(QueryCacheConfig::default()));
+
         Self {
             config: cpu_config,
             nodes: Vec::new(),
@@ -88,11 +98,39 @@ impl HnswIndex {
             rng_state: 42,
             stats: HnswPerformanceStats::default(),
             distance_calculations: AtomicU64::new(0),
+            query_cache,
             #[cfg(feature = "gpu")]
             gpu_accelerator: None,
             #[cfg(feature = "gpu")]
             multi_gpu_accelerators: Vec::new(),
         }
+    }
+
+    /// Enable query result caching with custom configuration
+    pub fn enable_query_cache(&mut self, config: QueryCacheConfig) {
+        self.query_cache = Some(QueryCache::new(config));
+    }
+
+    /// Disable query result caching
+    pub fn disable_query_cache(&mut self) {
+        self.query_cache = None;
+    }
+
+    /// Get query cache statistics if caching is enabled
+    pub fn get_query_cache_stats(&self) -> Option<crate::hnsw::query_cache::QueryCacheStats> {
+        self.query_cache.as_ref().map(|cache| cache.get_stats())
+    }
+
+    /// Clear query cache if caching is enabled
+    pub fn clear_query_cache(&self) {
+        if let Some(ref cache) = self.query_cache {
+            cache.clear();
+        }
+    }
+
+    /// Get reference to query cache
+    pub(crate) fn query_cache(&self) -> &Option<QueryCache> {
+        &self.query_cache
     }
 
     /// Get the URI to ID mapping
@@ -150,7 +188,7 @@ impl HnswIndex {
     /// Get GPU performance statistics
     #[cfg(feature = "gpu")]
     pub fn get_gpu_stats(&self) -> Option<crate::gpu::GpuPerformanceStats> {
-        if let Some(ref accelerator) = self.gpu_accelerator {
+        if let Some(ref _accelerator) = self.gpu_accelerator {
             // Would need to implement stats retrieval in GpuAccelerator
             None // Placeholder
         } else {
@@ -210,52 +248,15 @@ impl VectorIndex for HnswIndex {
     }
 
     fn search_knn(&self, query: &Vector, k: usize) -> Result<Vec<(String, f32)>> {
-        if self.nodes.is_empty() || self.entry_point.is_none() {
-            return Ok(Vec::new());
-        }
-
-        // Simple brute force search for now (placeholder)
-        // TODO: Implement proper HNSW search algorithm
-        let mut results = Vec::new();
-
-        for (uri, &node_id) in &self.uri_to_id {
-            if let Some(node) = self.nodes.get(node_id) {
-                // Calculate distance using configured metric
-                let distance = self.config.metric.distance(query, &node.vector)?;
-                results.push((uri.clone(), distance));
-            }
-        }
-
-        // Sort by distance and take k closest
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        results.truncate(k);
-
-        Ok(results)
+        // Use the proper HNSW search algorithm from search.rs
+        // This implements hierarchical navigable small world graph traversal
+        HnswIndex::search_knn(self, query, k)
     }
 
     fn search_threshold(&self, query: &Vector, threshold: f32) -> Result<Vec<(String, f32)>> {
-        if self.nodes.is_empty() || self.entry_point.is_none() {
-            return Ok(Vec::new());
-        }
-
-        // Simple brute force threshold search for now
-        // TODO: Implement proper HNSW range search algorithm
-        let mut results = Vec::new();
-
-        for (uri, &node_id) in &self.uri_to_id {
-            if let Some(node) = self.nodes.get(node_id) {
-                // Calculate distance using configured metric
-                let distance = self.config.metric.distance(query, &node.vector)?;
-                if distance <= threshold {
-                    results.push((uri.clone(), distance));
-                }
-            }
-        }
-
-        // Sort by distance
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        Ok(results)
+        // Use the proper HNSW range search algorithm from search.rs
+        // This implements distance-based filtering with graph traversal
+        HnswIndex::range_search(self, query, threshold)
     }
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {

@@ -1,0 +1,45 @@
+# OxiRS Fuseki Production Inventory
+
+[fuseki_servers]
+# Primary SPARQL servers
+fuseki-prod-01 ansible_host=10.0.1.10 environment=production datacenter=us-east-1a
+fuseki-prod-02 ansible_host=10.0.1.11 environment=production datacenter=us-east-1b
+fuseki-prod-03 ansible_host=10.0.1.12 environment=production datacenter=us-east-1c
+
+[fuseki_servers:vars]
+oxirs_version=0.1.0-beta.2
+oxirs_http_port=3030
+oxirs_https_port=3031
+enable_tls=true
+enable_auth=true
+enable_metrics=true
+enable_clustering=true
+max_memory=8192m
+max_threads=8
+
+[load_balancers]
+lb-prod-01 ansible_host=10.0.2.10 environment=production
+lb-prod-02 ansible_host=10.0.2.11 environment=production
+
+[load_balancers:vars]
+load_balancer_type=nginx
+backend_servers=fuseki-prod-01,fuseki-prod-02,fuseki-prod-03
+
+[monitoring_servers]
+mon-prod-01 ansible_host=10.0.3.10 environment=production
+
+[monitoring_servers:vars]
+enable_prometheus=true
+enable_grafana=true
+grafana_admin_password=changeme
+
+[production:children]
+fuseki_servers
+load_balancers
+monitoring_servers
+
+[production:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=~/.ssh/oxirs-production.pem
+ansible_python_interpreter=/usr/bin/python3
+environment=production

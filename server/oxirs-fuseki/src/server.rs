@@ -2,17 +2,36 @@
 
 use crate::{
     auth::AuthService,
-    config::ServerConfig,
+    batch_execution::{BatchConfig, BatchExecutor},
+    concurrent::{ConcurrencyConfig, ConcurrencyManager},
+    config::{ServerConfig, TlsConfig},
+    dataset_management::{DatasetConfig, DatasetManager},
     error::{FusekiError, FusekiResult},
     federation::{FederationConfig, FederationManager},
     handlers,
+    memory_pool::{MemoryManager, MemoryPoolConfig},
     metrics::{MetricsService, RequestMetrics},
     optimization::QueryOptimizer,
     performance::PerformanceService,
     store::Store,
     streaming::{StreamingConfig, StreamingManager},
+    streaming_results::{StreamConfig, StreamManager},
+    tls::TlsManager,
     websocket::{SubscriptionManager, WebSocketConfig},
 };
+
+// RC.1 modules - optional imports
+use crate::backup::{BackupConfig, BackupManager};
+use crate::ddos_protection::{DDoSProtectionConfig, DDoSProtectionManager};
+use crate::disaster_recovery::{DisasterRecoveryConfig, DisasterRecoveryManager};
+use crate::edge_caching::{EdgeCacheConfig, EdgeCacheManager};
+use crate::http_protocol::{Http2Manager, Http3Manager, HttpProtocolConfig};
+use crate::load_balancing::{LoadBalancer, LoadBalancerConfig};
+use crate::performance_profiler::{PerformanceProfiler, ProfilerConfig};
+use crate::realtime_notifications::NotificationManager;
+use crate::recovery::{RecoveryConfig, RecoveryManager};
+use crate::security_audit::{SecurityAuditConfig, SecurityAuditManager};
+use crate::tls_rotation::CertificateRotation;
 use axum::{
     extract::{Path, Query, Request, State},
     http::StatusCode,
@@ -50,6 +69,27 @@ pub struct Runtime {
     subscription_manager: Option<Arc<SubscriptionManager>>,
     federation_manager: Option<Arc<FederationManager>>,
     streaming_manager: Option<Arc<StreamingManager>>,
+    // Beta.2 Performance & Scalability Features
+    concurrency_manager: Option<Arc<ConcurrencyManager>>,
+    memory_manager: Option<Arc<MemoryManager>>,
+    batch_executor: Option<Arc<BatchExecutor>>,
+    stream_manager: Option<Arc<StreamManager>>,
+    dataset_manager: Option<Arc<DatasetManager>>,
+    // RC.1 Production & Advanced Features
+    security_auditor: Option<Arc<SecurityAuditManager>>,
+    ddos_protector: Option<Arc<DDoSProtectionManager>>,
+    load_balancer: Option<Arc<LoadBalancer>>,
+    edge_cache_manager: Option<Arc<EdgeCacheManager>>,
+    performance_profiler: Option<Arc<PerformanceProfiler>>,
+    notification_manager: Option<Arc<NotificationManager>>,
+    backup_manager: Option<Arc<BackupManager>>,
+    recovery_manager: Option<Arc<RecoveryManager>>,
+    disaster_recovery: Option<Arc<DisasterRecoveryManager>>,
+    certificate_rotation: Option<Arc<CertificateRotation>>,
+    http2_manager: Option<Arc<Http2Manager>>,
+    http3_manager: Option<Arc<Http3Manager>>,
+    // ReBAC (Relationship-Based Access Control)
+    rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
     #[cfg(feature = "rate-limit")]
     rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
     #[cfg(feature = "hot-reload")]
@@ -70,6 +110,26 @@ impl Runtime {
             subscription_manager: None,
             federation_manager: None,
             streaming_manager: None,
+            // Beta.2 modules - initialized in initialize_services()
+            concurrency_manager: None,
+            memory_manager: None,
+            batch_executor: None,
+            stream_manager: None,
+            dataset_manager: None,
+            // RC.1 modules - initialized in initialize_services()
+            security_auditor: None,
+            ddos_protector: None,
+            load_balancer: None,
+            edge_cache_manager: None,
+            performance_profiler: None,
+            notification_manager: None,
+            backup_manager: None,
+            recovery_manager: None,
+            disaster_recovery: None,
+            certificate_rotation: None,
+            http2_manager: None,
+            http3_manager: None,
+            rebac_manager: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
             #[cfg(feature = "hot-reload")]
@@ -87,6 +147,11 @@ impl Runtime {
             let auth_service = AuthService::new(self.config.security.clone()).await?;
             self.auth_service = Some(auth_service);
         }
+
+        // Initialize ReBAC manager for relationship-based access control
+        info!("Initializing ReBAC manager");
+        let rebac_manager = Arc::new(crate::auth::rebac::InMemoryRebacManager::new());
+        self.rebac_manager = Some(rebac_manager as Arc<dyn crate::auth::rebac::RebacEvaluator>);
 
         // Initialize metrics service
         if self.config.monitoring.metrics.enabled {
@@ -142,6 +207,230 @@ impl Runtime {
         streaming_manager.initialize().await?;
         self.streaming_manager = Some(Arc::new(streaming_manager));
 
+        // ========== Beta.2 Performance & Scalability Features ==========
+
+        // Initialize memory manager (used by other Beta.2 components)
+        info!("Initializing Beta.2 Memory Manager");
+        let memory_config = MemoryPoolConfig {
+            enabled: true,
+            max_memory_bytes: 4_294_967_296, // 4GB
+            pressure_threshold: 0.85,
+            query_context_pool_size: 500,
+            result_buffer_pool_size: 200,
+            small_buffer_size: 4 * 1024,
+            medium_buffer_size: 64 * 1024,
+            large_buffer_size: 1024 * 1024,
+            chunk_size_bytes: 512 * 1024,
+            enable_profiling: true,
+            gc_interval_secs: 60,
+        };
+        let memory_manager = MemoryManager::new(memory_config)?;
+        self.memory_manager = Some(memory_manager.clone());
+
+        // Initialize concurrency manager for advanced request handling
+        info!("Initializing Beta.2 Concurrency Manager");
+        let concurrency_config = ConcurrencyConfig {
+            max_global_concurrent: 200,
+            max_per_dataset_concurrent: 50,
+            max_per_user_concurrent: 10,
+            enable_work_stealing: true,
+            max_queue_size: 10_000,
+            queue_timeout_secs: 300,
+            enable_load_shedding: true,
+            load_shedding_threshold: 0.9,
+            worker_threads: num_cpus::get(),
+            enable_fair_scheduling: true,
+        };
+        let concurrency_manager = ConcurrencyManager::new(concurrency_config);
+        self.concurrency_manager = Some(concurrency_manager.clone());
+
+        // Initialize batch executor for query batching
+        info!("Initializing Beta.2 Batch Executor");
+        let batch_config = BatchConfig {
+            enabled: true,
+            max_batch_size: 100,
+            min_batch_size: 10,
+            max_wait_time_ms: 100,
+            adaptive_sizing: true,
+            max_parallel_batches: 4,
+            analyze_dependencies: true,
+            max_parallel_queries: 20,
+        };
+        let batch_executor = BatchExecutor::new(batch_config);
+        self.batch_executor = Some(batch_executor.clone());
+
+        // Initialize stream manager for efficient result streaming
+        info!("Initializing Beta.2 Stream Manager");
+        let stream_config = StreamConfig {
+            chunk_size: 64 * 1024,
+            buffer_size: 16,
+            adaptive_chunking: true,
+            max_memory_per_stream: 16 * 1024 * 1024,
+            compression: crate::streaming_results::Compression::None,
+            compression_level: 6,
+            backpressure_threshold: 0.8,
+        };
+        let stream_manager = StreamManager::new(stream_config, Some(memory_manager.clone()));
+        self.stream_manager = Some(stream_manager);
+
+        // Initialize dataset manager
+        info!("Initializing Beta.2 Dataset Manager");
+        let dataset_config = DatasetConfig {
+            base_path: std::path::PathBuf::from("./data/datasets"),
+            enable_versioning: true,
+            max_snapshots: 10,
+            auto_backup: false,
+            backup_interval_secs: 3600,
+            max_concurrent_ops: 5,
+        };
+        let dataset_manager = DatasetManager::new(dataset_config).await?;
+        self.dataset_manager = Some(dataset_manager);
+
+        info!("Beta.2 Performance & Scalability modules initialized successfully");
+        // ========== End Beta.2 Features ==========
+
+        // ========== RC.1 Production & Advanced Features ==========
+
+        // Initialize security auditor
+        info!("Initializing RC.1 Security Auditor");
+        let audit_config = SecurityAuditConfig {
+            enabled: true,
+            vulnerability_scanning: true,
+            scan_interval_hours: 24,
+            owasp_checks: true,
+            compliance_checks: true,
+            max_log_entries: 10_000,
+        };
+        let security_auditor = SecurityAuditManager::new(audit_config);
+        self.security_auditor = Some(Arc::new(security_auditor));
+
+        // Initialize DDoS protector
+        info!("Initializing RC.1 DDoS Protector");
+        let ddos_config = DDoSProtectionConfig {
+            enabled: true,
+            requests_per_second: 100, // 100 requests per second
+            burst_size: 50,
+            block_duration_secs: 600,
+            auto_block: true,
+            enable_challenge: false,
+            max_connections_per_ip: 20,
+            enable_traffic_analysis: true,
+        };
+        let ddos_protector = DDoSProtectionManager::new(ddos_config);
+        self.ddos_protector = Some(Arc::new(ddos_protector));
+
+        // Initialize load balancer
+        info!("Initializing RC.1 Load Balancer");
+        let load_balancer_config = LoadBalancerConfig::default();
+        let load_balancer = LoadBalancer::new(load_balancer_config);
+        self.load_balancer = Some(Arc::new(load_balancer));
+
+        // Initialize edge cache manager
+        info!("Initializing RC.1 Edge Cache Manager");
+        let edge_cache_config = EdgeCacheConfig::default();
+        let edge_cache_manager = EdgeCacheManager::new(edge_cache_config);
+        self.edge_cache_manager = Some(Arc::new(edge_cache_manager));
+
+        // Initialize performance profiler
+        info!("Initializing RC.1 Performance Profiler");
+        let profiler_config = ProfilerConfig {
+            enabled: true,
+            sampling_rate: 0.1,
+            max_profiles: 10_000,
+            detailed_tracing: true,
+            metrics_retention_duration: Duration::from_secs(24 * 3600),
+        };
+        let performance_profiler = PerformanceProfiler::new(profiler_config);
+        self.performance_profiler = Some(Arc::new(performance_profiler));
+
+        // Initialize notification manager
+        info!("Initializing RC.1 Notification Manager");
+        let notification_manager = NotificationManager::new();
+        self.notification_manager = Some(Arc::new(notification_manager));
+
+        // Initialize backup manager
+        info!("Initializing RC.1 Backup Manager");
+        let backup_config = BackupConfig {
+            enabled: true,
+            interval_hours: 1,
+            backup_dir: std::path::PathBuf::from("./data/backups"),
+            max_backups: 30,
+            compression: true,
+            include_indexes: true,
+            strategy: crate::backup::BackupStrategy::Full,
+        };
+        let store_arc = Arc::new(self.store.clone());
+        let backup_manager = Arc::new(BackupManager::new(store_arc.clone(), backup_config));
+        self.backup_manager = Some(backup_manager.clone());
+
+        // Initialize recovery manager
+        info!("Initializing RC.1 Recovery Manager");
+        let recovery_config = RecoveryConfig {
+            enabled: true,
+            health_check_interval: Duration::from_secs(30),
+            max_restart_attempts: 3,
+            restart_backoff_multiplier: 2.0,
+            memory_threshold_mb: 1024,
+            connection_pool_recovery: true,
+        };
+        let recovery_manager = RecoveryManager::new(store_arc.clone(), recovery_config);
+        self.recovery_manager = Some(Arc::new(recovery_manager));
+
+        // Initialize disaster recovery manager
+        info!("Initializing RC.1 Disaster Recovery Manager");
+        let disaster_recovery_config = DisasterRecoveryConfig {
+            enabled: true,
+            rpo_minutes: 60,
+            rto_minutes: 15,
+            auto_failover: true,
+            replication_targets: vec![],
+            health_check_interval_secs: 60,
+            enable_recovery_testing: false,
+            recovery_test_interval_days: 30,
+        };
+        let disaster_recovery = DisasterRecoveryManager::new(
+            store_arc.clone(),
+            backup_manager.clone(),
+            disaster_recovery_config,
+        );
+        self.disaster_recovery = Some(Arc::new(disaster_recovery));
+
+        // Initialize TLS rotation manager (if TLS is configured)
+        // Note: TLS rotation requires TlsManager initialization, which is complex
+        // For now, certificate rotation is available but not automatically enabled
+        if self.config.server.tls.is_some() {
+            info!("TLS certificate rotation available (manual configuration required)");
+            // TODO: Initialize CertificateRotation with proper TlsManager
+            self.certificate_rotation = None;
+        }
+
+        // Initialize HTTP/2 manager
+        info!("Initializing RC.1 HTTP/2 Manager");
+        let http_protocol_config = HttpProtocolConfig {
+            http2_enabled: true,
+            http3_enabled: false, // HTTP/3 requires additional setup
+            http2_initial_connection_window_size: 1024 * 1024,
+            http2_initial_stream_window_size: 512 * 1024,
+            http2_max_concurrent_streams: 100,
+            http2_max_frame_size: 16384,
+            http2_keep_alive_interval: Duration::from_secs(60),
+            http2_keep_alive_timeout: Duration::from_secs(20),
+            enable_server_push: false,
+            enable_header_compression: true,
+        };
+        let http2_manager = Http2Manager::new(http_protocol_config.clone());
+        self.http2_manager = Some(Arc::new(http2_manager));
+
+        // Initialize HTTP/3 manager (if enabled)
+        if http_protocol_config.http3_enabled {
+            info!("Initializing RC.1 HTTP/3 Manager");
+            let http3_manager = Http3Manager::new(http_protocol_config.clone());
+            self.http3_manager = Some(Arc::new(http3_manager));
+        }
+
+        info!("All RC.1 Production & Advanced modules initialized successfully");
+        // ========== End RC.1 Features ==========
+
         // Initialize rate limiter
         #[cfg(feature = "rate-limit")]
         {
@@ -189,9 +478,35 @@ impl Runtime {
             subscription_manager: self.subscription_manager.clone(),
             federation_manager: self.federation_manager.clone(),
             streaming_manager: self.streaming_manager.clone(),
+            // Beta.2 Performance & Scalability Features
+            concurrency_manager: self.concurrency_manager.clone(),
+            memory_manager: self.memory_manager.clone(),
+            batch_executor: self.batch_executor.clone(),
+            stream_manager: self.stream_manager.clone(),
+            dataset_manager: self.dataset_manager.clone(),
+            // RC.1 Production & Advanced Features
+            security_auditor: self.security_auditor.clone(),
+            ddos_protector: self.ddos_protector.clone(),
+            load_balancer: self.load_balancer.clone(),
+            edge_cache_manager: self.edge_cache_manager.clone(),
+            performance_profiler: self.performance_profiler.clone(),
+            notification_manager: self.notification_manager.clone(),
+            backup_manager: self.backup_manager.clone(),
+            recovery_manager: self.recovery_manager.clone(),
+            disaster_recovery: self.disaster_recovery.clone(),
+            certificate_rotation: self.certificate_rotation.clone(),
+            http2_manager: self.http2_manager.clone(),
+            http3_manager: self.http3_manager.clone(),
+            // ReBAC (Relationship-Based Access Control)
+            rebac_manager: self.rebac_manager.clone(),
+            // Stores and managers
             prefix_store: Arc::new(handlers::PrefixStore::new()),
             task_manager: Arc::new(handlers::TaskManager::new()),
             request_logger: Arc::new(handlers::RequestLogger::new()),
+            // Track server startup time
+            startup_time: Instant::now(),
+            // System monitoring for CPU/memory stats
+            system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
             #[cfg(feature = "rate-limit")]
             rate_limiter: self.rate_limiter.clone(),
         };
@@ -208,18 +523,27 @@ impl Runtime {
         info!("Starting OxiRS Fuseki server on {}", addr);
         info!("Server configuration: {:#?}", config.server);
 
-        // Start the server
-        let listener = tokio::net::TcpListener::bind(addr)
-            .await
-            .map_err(|e| FusekiError::internal(format!("Failed to bind to {addr}: {e}")))?;
-
         let graceful_shutdown =
             Self::create_graceful_shutdown(config.server.graceful_shutdown_timeout_secs);
 
-        axum::serve(listener, app)
-            .with_graceful_shutdown(graceful_shutdown)
-            .await
-            .map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
+        // Start the server with TLS if configured
+        #[cfg(feature = "tls")]
+        if let Some(tls_config) = &config.server.tls {
+            info!("TLS enabled - starting HTTPS server");
+            self.run_tls_server(addr, app, tls_config.clone(), graceful_shutdown)
+                .await?;
+        } else {
+            info!("TLS disabled - starting HTTP server");
+            self.run_http_server(addr, app, graceful_shutdown).await?;
+        }
+
+        #[cfg(not(feature = "tls"))]
+        {
+            if config.server.tls.is_some() {
+                warn!("TLS configured but TLS feature not enabled. Starting HTTP server.");
+            }
+            self.run_http_server(addr, app, graceful_shutdown).await?;
+        }
 
         info!("Server shutdown complete");
         Ok(())
@@ -293,19 +617,88 @@ impl Runtime {
             .route("/$/stats", get(stats_server_handler))
             .route("/$/stats/:dataset", get(stats_dataset_handler));
 
-        // TODO: Re-enable update route after fixing handler signatures
-        // .route("/update", post(handlers::sparql::update_handler))
+        // Beta.2 Performance Monitoring endpoints
+        app = app
+            .route(
+                "/$/performance/stats",
+                get(handlers::performance::get_performance_stats),
+            )
+            .route(
+                "/$/performance/memory",
+                get(handlers::performance::get_memory_stats),
+            )
+            .route(
+                "/$/performance/concurrency",
+                get(handlers::performance::get_concurrency_stats),
+            )
+            .route(
+                "/$/performance/memory/gc",
+                post(handlers::performance::trigger_gc),
+            )
+            .route(
+                "/$/performance/health",
+                get(handlers::performance::beta2_health_check),
+            );
 
-        // TODO: Re-enable these routes after fixing handler signatures
-        // Dataset management routes
-        // app = app
-        //     .route("/$/datasets", get(handlers::admin::list_datasets))
-        //     .route(
-        //         "/$/datasets/:name",
-        //         get(handlers::admin::get_dataset)
-        //             .post(handlers::admin::create_dataset)
-        //             .delete(handlers::admin::delete_dataset),
-        //     );
+        // RC.1 Performance Profiler endpoints
+        app = app
+            .route(
+                "/$/profiler/report",
+                get(handlers::performance::profiler_report_handler),
+            )
+            .route(
+                "/$/profiler/query-stats",
+                get(handlers::performance::profiler_query_stats_handler),
+            )
+            .route(
+                "/$/profiler/reset",
+                post(handlers::performance::profiler_reset_handler),
+            );
+
+        // API Key Management endpoints
+        app = app
+            .route(
+                "/$/api-keys",
+                get(handlers::api_keys::list_api_keys).post(handlers::api_keys::create_api_key),
+            )
+            .route(
+                "/$/api-keys/:key_id",
+                get(handlers::api_keys::get_api_key)
+                    .put(handlers::api_keys::update_api_key)
+                    .delete(handlers::api_keys::revoke_api_key),
+            )
+            .route(
+                "/$/api-keys/:key_id/usage",
+                get(handlers::api_keys::get_api_key_usage),
+            );
+
+        // SPARQL Update endpoint
+        app = app.route("/update", post(handlers::sparql::update_handler));
+
+        // Dataset management API
+        app = app
+            .route("/$/datasets", get(handlers::admin::list_datasets))
+            .route(
+                "/$/datasets/:name",
+                get(handlers::admin::get_dataset)
+                    .post(handlers::admin::create_dataset)
+                    .delete(handlers::admin::delete_dataset),
+            );
+
+        // ReBAC (Relationship-Based Access Control) API routes
+        info!("Enabling ReBAC management API routes");
+        app = app
+            .route("/$/rebac/check", post(handlers::check_permission))
+            .route(
+                "/$/rebac/batch-check",
+                post(handlers::batch_check_permissions),
+            )
+            .route(
+                "/$/rebac/tuples",
+                get(handlers::list_tuples)
+                    .post(handlers::add_tuple)
+                    .delete(handlers::remove_tuple),
+            );
 
         // Server management routes
         app = app.route("/$/ping", get(ping_handler));
@@ -409,12 +802,11 @@ impl Runtime {
         //         );
         // }
 
-        // TODO: Re-enable health and monitoring routes after fixing handler signatures
         // Health check routes
-        // app = app
-        //     .route("/health", get(health_handler))
-        //     .route("/health/live", get(liveness_handler))
-        //     .route("/health/ready", get(readiness_handler));
+        app = app
+            .route("/health", get(crate::health::health_handler))
+            .route("/health/live", get(crate::health::liveness_handler))
+            .route("/health/ready", get(crate::health::readiness_handler));
 
         // Metrics routes (if enabled)
         // if state.metrics_service.is_some() {
@@ -445,15 +837,35 @@ impl Runtime {
         //         );
         // }
 
-        // TODO: Re-enable WebSocket and admin UI routes after fixing handler signatures
         // WebSocket routes for live query subscriptions
-        // app = app.route("/ws", get(crate::websocket::websocket_handler));
-        // app = app.route("/subscribe", get(crate::websocket::websocket_handler));
+        app = app
+            .route("/$/ws", get(handlers::websocket_handler))
+            .route("/$/subscribe", get(handlers::websocket_handler));
+
+        // ========== RC.1 Advanced API Routes ==========
+
+        // GraphQL API (RC.1) - Modern GraphQL interface for RDF data
+        info!("Enabling GraphQL API routes");
+        app = app
+            .route(
+                "/graphql",
+                post(crate::graphql_integration::graphql_handler),
+            )
+            .route(
+                "/graphql/playground",
+                get(crate::graphql_integration::graphql_playground),
+            );
+
+        // REST API v2 (RC.1) - OpenAPI documented RESTful endpoints
+        // Note: REST API v2 handlers are defined in rest_api_v2.rs but need router registration
+        // TODO: Implement REST API v2 router registration method
+        // app = crate::rest_api_v2::register_routes(app);
 
         // Admin UI route (if enabled)
-        // if self.config.server.admin_ui {
-        //     app = app.route("/", get(handlers::admin::ui_handler));
-        // }
+        #[cfg(feature = "admin-ui")]
+        if self.config.server.admin_ui {
+            app = app.route("/", get(handlers::ui_handler));
+        }
 
         // Apply middleware stack in correct order
         app = self.apply_middleware_stack(app, state.clone()).await?;
@@ -466,11 +878,11 @@ impl Runtime {
     async fn apply_middleware_stack(
         &self,
         mut app: Router<Arc<AppState>>,
-        _state: Arc<AppState>,
+        state: Arc<AppState>,
     ) -> FusekiResult<Router<Arc<AppState>>> {
         use crate::middleware::{
             api_version, health_check_bypass, https_security_headers, request_correlation_id,
-            request_timing, security_headers,
+            request_timing, route_based_rbac, security_headers,
         };
         use tower_http::{
             cors::CorsLayer, request_id::SetRequestIdLayer, timeout::TimeoutLayer,
@@ -480,35 +892,98 @@ impl Runtime {
         // Layer 1: Health check bypass (outermost - first to execute)
         app = app.layer(axum::middleware::from_fn(health_check_bypass));
 
-        // Layer 2: Security headers for all requests
+        // Layer 2: DDoS protection (RC.1) - rate limiting and IP blocking
+        if let Some(ddos_protector) = &state.ddos_protector {
+            let ddos = ddos_protector.clone();
+            app = app.layer(axum::middleware::from_fn(
+                move |req: Request, next: Next| {
+                    let ddos = ddos.clone();
+                    async move {
+                        // Extract client IP from request
+                        let client_ip = req
+                            .headers()
+                            .get("x-forwarded-for")
+                            .and_then(|v| v.to_str().ok())
+                            .and_then(|s| s.split(',').next())
+                            .and_then(|s| s.parse::<std::net::IpAddr>().ok())
+                            .unwrap_or_else(|| "127.0.0.1".parse().unwrap());
+
+                        // Check if request is allowed
+                        match ddos.check_request(client_ip).await {
+                            Ok(crate::ddos_protection::RequestDecision::Allow) => {
+                                // Request allowed, register connection
+                                ddos.register_connection(client_ip).await;
+                                let response = next.run(req).await;
+                                ddos.unregister_connection(client_ip).await;
+                                response
+                            }
+                            Ok(crate::ddos_protection::RequestDecision::RateLimit { .. })
+                            | Ok(crate::ddos_protection::RequestDecision::Block { .. }) => {
+                                axum::response::Response::builder()
+                                    .status(axum::http::StatusCode::TOO_MANY_REQUESTS)
+                                    .body(axum::body::Body::from("Rate limit exceeded"))
+                                    .unwrap()
+                            }
+                            Ok(crate::ddos_protection::RequestDecision::Challenge { .. }) => {
+                                // For now, just block challenged requests
+                                // TODO: Implement challenge-response handling
+                                axum::response::Response::builder()
+                                    .status(axum::http::StatusCode::TOO_MANY_REQUESTS)
+                                    .body(axum::body::Body::from("Please solve challenge"))
+                                    .unwrap()
+                            }
+                            Err(_) => next.run(req).await,
+                        }
+                    }
+                },
+            ));
+            info!("DDoS protection middleware enabled");
+        }
+
+        // Layer 3: Security audit (RC.1) - log security events
+        if let Some(_security_auditor) = &state.security_auditor {
+            // TODO: Implement security audit middleware when audit_request/audit_response methods are available
+            // For now, security auditing is available but middleware integration is pending
+            info!("Security audit module initialized (middleware integration pending)");
+        }
+
+        // Layer 4: Security headers for all requests
         app = app.layer(axum::middleware::from_fn(security_headers));
 
-        // Layer 3: HTTPS-specific security headers if TLS is enabled
+        // Layer 5: HTTPS-specific security headers if TLS is enabled
         if self.config.server.tls.is_some() {
             app = app.layer(axum::middleware::from_fn(https_security_headers));
         }
 
-        // Layer 4: Request correlation ID for distributed tracing
+        // Layer 6: Request correlation ID for distributed tracing
         app = app.layer(axum::middleware::from_fn(request_correlation_id));
 
-        // Layer 5: Request timing for performance monitoring
+        // Layer 7: Request timing for performance monitoring
         app = app.layer(axum::middleware::from_fn(request_timing));
 
-        // Layer 6: API version header
+        // Layer 8: API version header
         app = app.layer(axum::middleware::from_fn(api_version));
 
-        // Layer 7: Request ID generation (tower-http)
+        // Layer 9: RBAC (Role-Based Access Control) - only if auth is enabled
+        if self.config.security.auth_required {
+            info!("RBAC middleware enabled - enforcing role-based access control");
+            app = app.layer(axum::middleware::from_fn(route_based_rbac));
+        } else {
+            debug!("RBAC middleware disabled - authentication not required");
+        }
+
+        // Layer 8: Request ID generation (tower-http)
         app = app.layer(SetRequestIdLayer::x_request_id(RequestIdGenerator));
 
-        // Layer 8: Request tracing and logging
+        // Layer 9: Request tracing and logging
         app = app.layer(TraceLayer::new_for_http());
 
-        // Layer 9: Timeout middleware
+        // Layer 10: Timeout middleware
         app = app.layer(TimeoutLayer::new(Duration::from_secs(
             self.config.server.request_timeout_secs,
         )));
 
-        // Layer 10: CORS configuration if enabled
+        // Layer 11: CORS configuration if enabled
         if self.config.server.cors {
             let cors = CorsLayer::new()
                 .allow_origin(tower_http::cors::Any)
@@ -531,6 +1006,75 @@ impl Runtime {
         info!("Middleware stack configured: security, tracing, timing, CORS");
 
         Ok(app)
+    }
+
+    /// Run HTTP server (without TLS)
+    async fn run_http_server<F>(
+        &self,
+        addr: SocketAddr,
+        app: Router,
+        graceful_shutdown: F,
+    ) -> FusekiResult<()>
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        let listener = tokio::net::TcpListener::bind(addr)
+            .await
+            .map_err(|e| FusekiError::internal(format!("Failed to bind to {addr}: {e}")))?;
+
+        axum::serve(listener, app)
+            .with_graceful_shutdown(graceful_shutdown)
+            .await
+            .map_err(|e| FusekiError::internal(format!("Server error: {e}")))?;
+
+        Ok(())
+    }
+
+    /// Run HTTPS server with TLS
+    #[cfg(feature = "tls")]
+    async fn run_tls_server<F>(
+        &self,
+        addr: SocketAddr,
+        app: Router,
+        tls_config: TlsConfig,
+        graceful_shutdown: F,
+    ) -> FusekiResult<()>
+    where
+        F: std::future::Future<Output = ()> + Send + 'static,
+    {
+        use axum_server::tls_rustls::RustlsConfig;
+
+        // Create TLS manager and build rustls config
+        let tls_manager = TlsManager::new(tls_config.clone());
+        tls_manager.validate()?;
+
+        let rustls_config = tls_manager.build_server_config()?;
+
+        // Create axum-server TLS config from rustls ServerConfig
+        let axum_tls_config = RustlsConfig::from_config(rustls_config);
+
+        info!("TLS certificates loaded successfully");
+        info!("Starting HTTPS server on https://{}", addr);
+
+        // Use axum-server for TLS support with HTTP/2 and graceful shutdown
+        let handle = axum_server::Handle::new();
+
+        // Spawn graceful shutdown task
+        tokio::spawn({
+            let handle = handle.clone();
+            async move {
+                graceful_shutdown.await;
+                handle.graceful_shutdown(Some(Duration::from_secs(30)));
+            }
+        });
+
+        axum_server::bind_rustls(addr, axum_tls_config)
+            .handle(handle)
+            .serve(app.into_make_service())
+            .await
+            .map_err(|e| FusekiError::internal(format!("TLS server error: {e}")))?;
+
+        Ok(())
     }
 
     /// Graceful shutdown with configurable timeout
@@ -585,9 +1129,35 @@ pub struct AppState {
     pub subscription_manager: Option<Arc<SubscriptionManager>>,
     pub federation_manager: Option<Arc<FederationManager>>,
     pub streaming_manager: Option<Arc<StreamingManager>>,
+    // Beta.2 Performance & Scalability Features
+    pub concurrency_manager: Option<Arc<ConcurrencyManager>>,
+    pub memory_manager: Option<Arc<MemoryManager>>,
+    pub batch_executor: Option<Arc<BatchExecutor>>,
+    pub stream_manager: Option<Arc<StreamManager>>,
+    pub dataset_manager: Option<Arc<DatasetManager>>,
+    // RC.1 Production & Advanced Features
+    pub security_auditor: Option<Arc<SecurityAuditManager>>,
+    pub ddos_protector: Option<Arc<DDoSProtectionManager>>,
+    pub load_balancer: Option<Arc<LoadBalancer>>,
+    pub edge_cache_manager: Option<Arc<EdgeCacheManager>>,
+    pub performance_profiler: Option<Arc<PerformanceProfiler>>,
+    pub notification_manager: Option<Arc<NotificationManager>>,
+    pub backup_manager: Option<Arc<BackupManager>>,
+    pub recovery_manager: Option<Arc<RecoveryManager>>,
+    pub disaster_recovery: Option<Arc<DisasterRecoveryManager>>,
+    pub certificate_rotation: Option<Arc<CertificateRotation>>,
+    pub http2_manager: Option<Arc<Http2Manager>>,
+    pub http3_manager: Option<Arc<Http3Manager>>,
+    // ReBAC (Relationship-Based Access Control)
+    pub rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
+    // Stores and managers
     pub prefix_store: Arc<handlers::PrefixStore>,
     pub task_manager: Arc<handlers::TaskManager>,
     pub request_logger: Arc<handlers::RequestLogger>,
+    // Server startup time for uptime tracking
+    pub startup_time: Instant,
+    // System monitoring for CPU and memory stats
+    pub system_monitor: Arc<parking_lot::Mutex<sysinfo::System>>,
     #[cfg(feature = "rate-limit")]
     pub rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
 }
@@ -1192,9 +1762,32 @@ mod tests {
             subscription_manager: None,
             federation_manager: None,
             streaming_manager: None,
+            // Beta.2 Performance & Scalability Features
+            concurrency_manager: None,
+            memory_manager: None,
+            batch_executor: None,
+            stream_manager: None,
+            dataset_manager: None,
+            // RC.1 Production & Advanced Features
+            security_auditor: None,
+            ddos_protector: None,
+            load_balancer: None,
+            edge_cache_manager: None,
+            performance_profiler: None,
+            notification_manager: None,
+            backup_manager: None,
+            recovery_manager: None,
+            disaster_recovery: None,
+            certificate_rotation: None,
+            http2_manager: None,
+            http3_manager: None,
+            rebac_manager: None,
+            // Stores and managers
             prefix_store: Arc::new(handlers::PrefixStore::new()),
             task_manager: Arc::new(handlers::TaskManager::new()),
             request_logger: Arc::new(handlers::RequestLogger::new()),
+            startup_time: Instant::now(),
+            system_monitor: Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
         };

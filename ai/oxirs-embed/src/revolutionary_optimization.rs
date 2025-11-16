@@ -1029,7 +1029,7 @@ impl RevolutionaryEmbeddingOptimizerFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use scirs2_autograd::ndarray::array;
+    use scirs2_core::ndarray_ext::array;
 
     #[tokio::test]
     async fn test_revolutionary_embedding_optimizer_creation() {

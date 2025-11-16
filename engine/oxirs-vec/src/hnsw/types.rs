@@ -56,6 +56,8 @@ pub struct Node {
     pub vector_data_f32: Vec<f32>,
     /// Node access frequency (for cache optimization)
     pub access_count: u64,
+    /// Metadata for filtered search
+    pub metadata: std::collections::HashMap<String, String>,
 }
 
 impl Node {
@@ -67,6 +69,25 @@ impl Node {
             connections: vec![HashSet::new(); max_level + 1],
             vector_data_f32,
             access_count: 0,
+            metadata: std::collections::HashMap::new(),
+        }
+    }
+
+    /// Create a new node with metadata
+    pub fn with_metadata(
+        uri: String,
+        vector: Vector,
+        max_level: usize,
+        metadata: std::collections::HashMap<String, String>,
+    ) -> Self {
+        let vector_data_f32 = vector.as_f32();
+        Self {
+            vector,
+            uri,
+            connections: vec![HashSet::new(); max_level + 1],
+            vector_data_f32,
+            access_count: 0,
+            metadata,
         }
     }
 

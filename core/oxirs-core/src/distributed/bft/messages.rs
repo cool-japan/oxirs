@@ -76,7 +76,8 @@ impl BftMessage {
     /// Get the digest of a message for verification
     pub fn digest(&self) -> Vec<u8> {
         use sha2::{Digest, Sha256};
-        let serialized = bincode::serialize(self).unwrap_or_default();
+        let serialized =
+            bincode::serde::encode_to_vec(self, bincode::config::standard()).unwrap_or_default();
         Sha256::digest(&serialized).to_vec()
     }
 

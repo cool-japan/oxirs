@@ -11,7 +11,7 @@ use std::io::Cursor;
 fn generate_sample_quads(count: usize) -> Vec<Quad> {
     (0..count)
         .map(|i| {
-            let subject = NamedNode::new(&format!("http://example.org/subject{}", i)).unwrap();
+            let subject = NamedNode::new(format!("http://example.org/subject{}", i)).unwrap();
             let predicate = NamedNode::new("http://example.org/predicate").unwrap();
             let object = Term::Literal(oxirs_core::model::Literal::new(format!("Value {}", i)));
 

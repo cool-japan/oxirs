@@ -255,6 +255,8 @@ pub enum TermPattern {
     BlankNode(BlankNode),
     Literal(Literal),
     Variable(Variable),
+    /// Quoted triple pattern for RDF-star support
+    QuotedTriple(Box<AlgebraTriplePattern>),
 }
 
 impl From<Variable> for TermPattern {
@@ -294,6 +296,15 @@ impl TermPattern {
             TermPattern::BlankNode(node) => write!(f, "{node}"),
             TermPattern::Literal(literal) => write!(f, "{literal}"),
             TermPattern::Variable(var) => write!(f, "{var}"),
+            TermPattern::QuotedTriple(triple) => {
+                write!(f, "<<")?;
+                triple.subject.fmt_sse(f)?;
+                write!(f, " ")?;
+                triple.predicate.fmt_sse(f)?;
+                write!(f, " ")?;
+                triple.object.fmt_sse(f)?;
+                write!(f, ">>")
+            }
         }
     }
 }
@@ -305,6 +316,13 @@ impl fmt::Display for TermPattern {
             TermPattern::BlankNode(b) => write!(f, "{b}"),
             TermPattern::Literal(l) => write!(f, "{l}"),
             TermPattern::Variable(v) => write!(f, "{v}"),
+            TermPattern::QuotedTriple(triple) => {
+                write!(
+                    f,
+                    "<<{} {} {}>>",
+                    triple.subject, triple.predicate, triple.object
+                )
+            }
         }
     }
 }

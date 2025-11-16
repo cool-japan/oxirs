@@ -83,6 +83,24 @@ pub struct ResourceUsage {
     pub last_measured: Instant,
 }
 
+/// Cache statistics
+#[derive(Debug, Clone, Serialize)]
+pub struct CacheStatistics {
+    pub query_cache_size: usize,
+    pub query_cache_capacity: usize,
+    pub query_cache_hit_ratio: f64,
+    pub prepared_cache: PreparedCacheStatistics,
+    pub cache_enabled: bool,
+}
+
+/// Prepared query cache statistics
+#[derive(Debug, Clone, Serialize)]
+pub struct PreparedCacheStatistics {
+    pub size: usize,
+    pub capacity: usize,
+    pub total_hits: u64,
+}
+
 /// Performance service managing all optimization features
 #[derive(Clone, Debug)]
 pub struct PerformanceService {
@@ -298,6 +316,31 @@ impl PerformanceService {
     }
 
     /// Check if query should be cached based on configuration
+    /// Get cache statistics
+    pub async fn get_cache_statistics(&self) -> CacheStatistics {
+        let query_cache_size = self.query_cache.entry_count();
+        let query_cache_capacity = self.config.caching.max_size;
+
+        let prepared_cache_stats = {
+            let cache = self.prepared_cache.read().await;
+            PreparedCacheStatistics {
+                size: cache.len(),
+                capacity: cache.cap().get(),
+                total_hits: 0, // Would need to track separately
+            }
+        };
+
+        let metrics = self.metrics.read().await;
+
+        CacheStatistics {
+            query_cache_size: query_cache_size as usize,
+            query_cache_capacity,
+            query_cache_hit_ratio: metrics.cache_hit_ratio,
+            prepared_cache: prepared_cache_stats,
+            cache_enabled: self.config.caching.enabled,
+        }
+    }
+
     pub fn should_cache_query(&self, query: &str, execution_time_ms: u64) -> bool {
         let cache_config = &self.config.caching;
         if cache_config.enabled {

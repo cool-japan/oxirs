@@ -444,7 +444,7 @@ impl NodeStatusTracker {
                     let state_name = format!("{:?}", transition.from_state);
                     state_durations
                         .entry(state_name)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(duration.as_secs());
                 }
             }

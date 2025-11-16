@@ -1,12 +1,12 @@
 # OxiRS ARQ - TODO
 
-*Last Updated: October 12, 2025*
+*Last Updated: November 15, 2025*
 
 ## ✅ Current Status: v0.1.0-alpha.3 Production-Ready - **Beta.1 Features Complete!** 🎉
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
 
-### Alpha.3 Release Status (October 12, 2025) - **Beta.1 Features Complete!** 🎉
+### Beta.1 Release Status (November 15, 2025) - **Beta.1 Features Complete!** 🎉
 - **228 tests** (unit + integration) passing with zero failures
 - **SPARQL 1.1/1.2 support** with persisted dataset awareness
 - **Federation (`SERVICE`)** with retries, failover, and JSON result merging
@@ -18,7 +18,7 @@
 - **✨ NEW: SPARQL stress testing suite** (10 comprehensive tests for edge cases and high load)
 - **✨ NEW: Production hardening** (Query circuit breakers, SPARQL performance monitoring, resource quotas, health checks)
 
-### 🎉 Alpha.3 Achievements
+### 🎉 Beta.1 Achievements
 
 #### Federation & Tooling ✅
 - ✅ **Query Command Integration**: Full SPARQL execution via CLI & REPL with streaming output
@@ -26,7 +26,7 @@
 - ✅ **Instrumentation**: Exposed metrics and tracing hooks through SciRS2
 - ✅ **Production Testing**: Validated with 7 integration tests plus federation smoke tests
 
-#### Beta.1 Production Features ✅ (Complete in Alpha.3)
+#### Beta.1 Production Features ✅ (Complete in Beta.1)
 - ✅ **Comprehensive SPARQL Benchmarking** (comprehensive_sparql_bench.rs - 9 benchmark groups)
   - Query parsing performance
   - Pattern matching scalability (100 → 10K triples)
@@ -74,36 +74,43 @@
     - Scalability testing with increasing nesting depth (1-4 levels)
     - Benchmark coverage: 100-10K triples, nesting depths 1-4
 
-## 🎯 Post-Alpha Development Roadmap
+## 🎯 v0.1.0 Complete Feature Roadmap
 
-### Beta Release Targets (v0.1.0-beta.1 - December 2025)
+### v0.1.0-beta.1 Target (November 2025) - ALL FEATURES
 
-#### Query Optimization
-- [ ] Cost-based optimization
-- [ ] Advanced join ordering
-- [ ] Filter pushdown improvements
-- [ ] Statistics-based cardinality estimation
+#### Query Optimization (Target: v0.1.0)
+- [x] Cost-based optimization ✅ (Implemented)
+- [x] Advanced join ordering ✅ (Implemented)
+- [x] Filter pushdown improvements ✅ (Implemented)
+- [x] Statistics-based cardinality estimation ✅ (cardinality_estimator.rs - Full SciRS2 integration with Bayesian learning)
+- [x] Advanced query rewriting ✅ (query_rewriter.rs - Constant folding, CSE, dead code elimination, filter pushdown)
+- [x] Adaptive query execution ✅ (adaptive_execution.rs - Runtime statistics, re-optimization, adaptive learning)
+- [x] Query result materialization strategies ✅ (materialization.rs - Implemented)
 
-#### SPARQL Compliance
-- [x] Complete SPARQL 1.2 / SPARQL-star support ✨ (Alpha.3)
-- [ ] Additional aggregate functions
-- [ ] Property path optimization
-- [ ] Federated query improvements
+#### SPARQL Compliance (Target: v0.1.0)
+- [x] Complete SPARQL 1.2 / SPARQL-star support ✅
+- [x] Additional aggregate functions ✅ (13 statistical functions with SciRS2: MEDIAN, MODE, STDEV, VARIANCE, PERCENTILE, RANGE, DISTINCT_COUNT, PRODUCT, GEOMETRIC_MEAN, HARMONIC_MEAN, SKEWNESS, KURTOSIS, QUANTILE)
+- [x] Property path optimization ✅ (Cost-based path optimizer with adaptive learning, multiple evaluation strategies: ForwardBFS, BackwardBFS, BidirectionalBFS, IndexLookup)
+- [x] Federated query improvements ✅ (federation.rs - Connection pooling, retry logic with exponential backoff, result caching, endpoint health monitoring, load balancing, query decomposition, parallel execution)
+- [x] Full SPARQL 1.2 Update conformance ✅ (update.rs - Complete implementation of INSERT/DELETE DATA, DELETE/INSERT WHERE, CLEAR, DROP, CREATE, COPY, MOVE, ADD, LOAD with batching and validation)
 
-#### Performance
-- [ ] Parallel query execution
-- [ ] Query result streaming
-- [ ] Memory-efficient processing
-- [ ] Query plan caching
+#### Performance (Target: v0.1.0)
+- [x] Parallel query execution ✅ (parallel.rs - Implemented)
+- [x] Query result streaming ✅ (streaming.rs - Implemented)
+- [x] Memory-efficient processing ✅ (materialization.rs - Implemented)
+- [x] Query plan caching ✅ (query_plan_cache.rs - LRU eviction, TTL-based expiration, statistics-aware invalidation, parameterized query support)
+- [x] JIT compilation for queries ✅ (jit_compiler.rs - Query plan compilation, code specialization, adaptive optimization, pattern-specific optimization)
+- [x] SIMD-accelerated operations ✅ (simd_query_ops.rs - Implemented)
 
-#### Developer Experience
-- [x] Query explain and profiling ✨ (Alpha.3)
-- [ ] Better error messages
-- [ ] Query validation tools
-- [ ] Debugging utilities
+#### Developer Experience (Target: v0.1.0)
+- [x] Query explain and profiling ✅
+- [x] Better error messages ✅ (ValidationError with suggestions, context, and location information)
+- [x] Query validation tools ✅ (query_validator.rs - Comprehensive validation: variable bindings, aggregates, cartesian products, complexity, performance, security, type consistency with 9 tests)
+- [x] Debugging utilities ✅ (debug_utilities.rs - Query inspection, execution tracing, breakpoints, variable tracking, plan visualization with Text/DOT/Mermaid formats, 9 tests)
+- [x] Interactive query builder ✅ (interactive_query_builder.rs - Fluent API for building SPARQL queries programmatically: SELECT/ASK/CONSTRUCT/DESCRIBE, patterns, filters, optionals, unions, bindings, ordering, grouping, limits, prefixes with 9 tests)
 
-### v0.2.0 Targets (Q1 2026)
-- [ ] Advanced query rewriting
-- [ ] Adaptive query execution
-- [ ] Query result materialization strategies
-- [ ] Integration with distributed storage
+#### Integration (Target: v0.1.0)
+- [x] Integration with distributed storage ✅ (distributed.rs - Distributed query processing with load balancing, fault tolerance, workload distribution)
+- [x] GraphQL query translation ✅ (graphql_translator.rs - Comprehensive translation with schema mapping, directives, fragments, 13 tests)
+- [ ] REST API endpoints (Handled by oxirs-fuseki)
+- [x] WebSocket streaming support ✅ (websocket_streaming.rs - Real-time SPARQL result streaming with query cancellation, backpressure handling, connection management, 4 tests)

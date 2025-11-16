@@ -1,10 +1,10 @@
 //! # OxiRS Vector Search
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-vec/badge.svg)](https://docs.rs/oxirs-vec)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! Vector index abstractions for semantic similarity and AI-augmented SPARQL querying.
 //!
@@ -73,6 +73,7 @@ pub mod compression;
 pub mod content_processing;
 pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
+pub mod distance_metrics;
 pub mod distributed_vector_search;
 pub mod embedding_pipeline;
 pub mod embeddings;
@@ -83,6 +84,7 @@ pub mod faiss_integration;
 pub mod faiss_migration_tools;
 pub mod faiss_native_integration;
 pub mod federated_search;
+pub mod filtered_search;
 pub mod gnn_embeddings;
 pub mod gpu;
 pub mod graph_aware_search;
@@ -100,6 +102,7 @@ pub mod mmap_index;
 pub mod opq;
 pub mod oxirs_arq_integration;
 pub mod performance_insights;
+pub mod persistence;
 pub mod pq;
 pub mod pytorch;
 pub mod quantum_search;
@@ -119,6 +122,7 @@ pub mod store_integration;
 pub mod structured_vectors;
 pub mod tensorflow;
 pub mod tree_indices;
+pub mod validation;
 pub mod word2vec;
 
 // Python bindings module

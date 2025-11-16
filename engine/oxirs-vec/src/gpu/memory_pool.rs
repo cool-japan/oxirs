@@ -1,11 +1,14 @@
 //! GPU memory pool management for efficient allocation and reuse
+//!
+//! Enhanced with leak detection, metrics tracking, and adaptive sizing
 
 use super::{GpuBuffer, GpuConfig};
 use anyhow::{anyhow, Result};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-/// GPU memory pool for efficient buffer management
+/// GPU memory pool for efficient buffer management with advanced tracking
 #[derive(Debug)]
 pub struct GpuMemoryPool {
     device_id: i32,
@@ -15,10 +18,18 @@ pub struct GpuMemoryPool {
     used_memory: usize,
     buffer_size: usize,
     max_buffers: usize,
+    /// Allocation tracking for leak detection
+    allocation_times: Arc<Mutex<Vec<(usize, Instant)>>>,
+    /// Performance operation timings
+    operation_timings: Arc<Mutex<HashMap<String, Vec<Duration>>>>,
+    /// Performance metrics
+    allocation_count: usize,
+    deallocation_count: usize,
+    peak_memory_usage: usize,
 }
 
 impl GpuMemoryPool {
-    /// Create a new GPU memory pool
+    /// Create a new GPU memory pool with advanced metrics and leak detection
     pub fn new(config: &GpuConfig, buffer_size: usize) -> Result<Self> {
         let max_buffers = config.memory_pool_size / (buffer_size * std::mem::size_of::<f32>());
 
@@ -30,11 +41,18 @@ impl GpuMemoryPool {
             used_memory: 0,
             buffer_size,
             max_buffers,
+            allocation_times: Arc::new(Mutex::new(Vec::new())),
+            operation_timings: Arc::new(Mutex::new(HashMap::new())),
+            allocation_count: 0,
+            deallocation_count: 0,
+            peak_memory_usage: 0,
         })
     }
 
-    /// Get a buffer from the pool or allocate a new one
+    /// Get a buffer from the pool or allocate a new one (with performance tracking)
     pub fn get_buffer(&mut self) -> Result<GpuBuffer> {
+        let start_time = Instant::now();
+
         // Try to get a buffer from the available pool
         {
             let mut available = self
@@ -43,26 +61,71 @@ impl GpuMemoryPool {
                 .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?;
 
             if let Some(buffer) = available.pop_front() {
-                // Return the buffer directly
+                // Track timing
+                let elapsed = start_time.elapsed();
+                self.record_operation_time("buffer_acquire_reuse", elapsed);
+
+                // Track allocation for leak detection
+                let ptr_value = buffer.ptr() as usize;
+                self.allocation_times
+                    .lock()
+                    .unwrap()
+                    .push((ptr_value, Instant::now()));
+
                 return Ok(buffer);
             }
         }
 
         // No available buffers, check if we can allocate a new one
         if self.allocated_buffers.lock().unwrap().len() >= self.max_buffers {
+            let elapsed = start_time.elapsed();
+            self.record_operation_time("buffer_acquire_failed", elapsed);
             return Err(anyhow!("Memory pool exhausted"));
         }
 
         // Allocate a new buffer
+        let alloc_start = Instant::now();
         let buffer = GpuBuffer::new(self.buffer_size, self.device_id)?;
-        self.used_memory += self.buffer_size * std::mem::size_of::<f32>();
+        let alloc_elapsed = alloc_start.elapsed();
+        self.record_operation_time("buffer_alloc", alloc_elapsed);
 
-        // Return the newly allocated buffer directly
+        // Update metrics
+        self.used_memory += self.buffer_size * std::mem::size_of::<f32>();
+        self.allocation_count += 1;
+        if self.used_memory > self.peak_memory_usage {
+            self.peak_memory_usage = self.used_memory;
+        }
+
+        // Track allocation for leak detection
+        let ptr_value = buffer.ptr() as usize;
+        self.allocation_times
+            .lock()
+            .unwrap()
+            .push((ptr_value, Instant::now()));
+
+        // Record total acquisition time
+        let total_elapsed = start_time.elapsed();
+        self.record_operation_time("buffer_acquire_new", total_elapsed);
+
         Ok(buffer)
     }
 
-    /// Return a buffer to the pool
+    /// Record timing for an operation
+    fn record_operation_time(&self, operation: &str, duration: Duration) {
+        if let Ok(mut timings) = self.operation_timings.lock() {
+            timings
+                .entry(operation.to_string())
+                .or_insert_with(Vec::new)
+                .push(duration);
+        }
+    }
+
+    /// Return a buffer to the pool (with performance tracking)
     pub fn return_buffer(&mut self, buffer: GpuBuffer) -> Result<()> {
+        let start_time = Instant::now();
+
+        let ptr_value = buffer.ptr() as usize;
+
         // Remove from allocated buffers
         {
             let mut allocated = self
@@ -70,15 +133,28 @@ impl GpuMemoryPool {
                 .lock()
                 .map_err(|e| anyhow!("Failed to lock allocated buffers: {}", e))?;
 
-            // Find and remove the buffer (simplified - in practice would use better identification)
+            // Find and remove the buffer
             allocated.retain(|b| b.ptr() != buffer.ptr());
         }
+
+        // Remove from allocation tracking
+        {
+            let mut alloc_times = self.allocation_times.lock().unwrap();
+            alloc_times.retain(|(ptr, _)| *ptr != ptr_value);
+        }
+
+        // Update metrics
+        self.deallocation_count += 1;
 
         // Add to available buffers
         self.available_buffers
             .lock()
             .map_err(|e| anyhow!("Failed to lock available buffers: {}", e))?
             .push_back(buffer);
+
+        // Record timing
+        let elapsed = start_time.elapsed();
+        self.record_operation_time("buffer_return", elapsed);
 
         Ok(())
     }
@@ -151,6 +227,8 @@ impl GpuMemoryPool {
 
     /// Defragment the pool by compacting available buffers
     pub fn defragment(&mut self) -> Result<()> {
+        let start_time = Instant::now();
+
         // In a real implementation, this might involve more sophisticated memory management
         // For now, we'll just ensure all available buffers are contiguous in the queue
         let mut available = self
@@ -166,7 +244,174 @@ impl GpuMemoryPool {
             available.push_back(buffer);
         }
 
+        // Record timing
+        let elapsed = start_time.elapsed();
+        self.record_operation_time("pool_defrag", elapsed);
+
         Ok(())
+    }
+
+    /// Detect memory leaks (buffers held for too long)
+    pub fn detect_leaks(&self, threshold_secs: u64) -> Vec<MemoryLeak> {
+        let mut leaks = Vec::new();
+        let now = Instant::now();
+        let alloc_times = self.allocation_times.lock().unwrap();
+
+        for (ptr, alloc_time) in alloc_times.iter() {
+            let duration = now.duration_since(*alloc_time);
+            if duration.as_secs() > threshold_secs {
+                leaks.push(MemoryLeak {
+                    ptr_address: *ptr,
+                    allocated_for_secs: duration.as_secs(),
+                    buffer_size: self.buffer_size,
+                });
+            }
+        }
+
+        leaks
+    }
+
+    /// Get profiling report for memory operations
+    pub fn profiling_report(&self) -> String {
+        let timings = self.operation_timings.lock().unwrap();
+        let mut report = String::from("GPU Memory Pool Performance Report:\n");
+
+        for (operation, durations) in timings.iter() {
+            if !durations.is_empty() {
+                let total: Duration = durations.iter().sum();
+                let avg = total / durations.len() as u32;
+                let min = durations.iter().min().unwrap();
+                let max = durations.iter().max().unwrap();
+
+                report.push_str(&format!(
+                    "  {}: {} calls, avg={:.2}µs, min={:.2}µs, max={:.2}µs\n",
+                    operation,
+                    durations.len(),
+                    avg.as_micros(),
+                    min.as_micros(),
+                    max.as_micros()
+                ));
+            }
+        }
+
+        report
+    }
+
+    /// Get comprehensive metrics
+    pub fn get_metrics(&self) -> PoolMetrics {
+        PoolMetrics {
+            allocation_count: self.allocation_count,
+            deallocation_count: self.deallocation_count,
+            peak_memory_usage: self.peak_memory_usage,
+            current_memory_usage: self.used_memory,
+            memory_efficiency: if self.allocation_count > 0 {
+                self.deallocation_count as f64 / self.allocation_count as f64
+            } else {
+                0.0
+            },
+            active_allocations: self.allocation_times.lock().unwrap().len(),
+        }
+    }
+
+    /// Adaptive buffer sizing based on usage patterns
+    pub fn suggest_optimal_buffer_size(&self) -> usize {
+        let metrics = self.get_metrics();
+
+        // If we're frequently allocating/deallocating, suggest smaller buffers
+        if metrics.memory_efficiency > 0.95 && self.utilization() < 0.5 {
+            self.buffer_size / 2
+        }
+        // If we're holding memory for long periods, suggest larger buffers
+        else if metrics.memory_efficiency < 0.7 && self.utilization() > 0.8 {
+            self.buffer_size * 2
+        } else {
+            self.buffer_size
+        }
+    }
+
+    /// Reset profiling statistics
+    pub fn reset_profiling(&mut self) {
+        if let Ok(mut timings) = self.operation_timings.lock() {
+            timings.clear();
+        }
+    }
+
+    /// Get average operation time for specific operation (in microseconds)
+    pub fn get_avg_operation_time(&self, operation: &str) -> Option<f64> {
+        let timings = self.operation_timings.lock().ok()?;
+        let durations = timings.get(operation)?;
+
+        if durations.is_empty() {
+            return None;
+        }
+
+        let total: Duration = durations.iter().sum();
+        let avg = total / durations.len() as u32;
+        Some(avg.as_micros() as f64)
+    }
+}
+
+/// Memory leak detection result
+#[derive(Debug, Clone)]
+pub struct MemoryLeak {
+    /// Pointer address of the leaked buffer
+    pub ptr_address: usize,
+    /// How long the buffer has been allocated (seconds)
+    pub allocated_for_secs: u64,
+    /// Size of the leaked buffer
+    pub buffer_size: usize,
+}
+
+impl MemoryLeak {
+    /// Get formatted description of the leak
+    pub fn description(&self) -> String {
+        format!(
+            "Memory leak at 0x{:x}: {} bytes held for {} seconds",
+            self.ptr_address, self.buffer_size, self.allocated_for_secs
+        )
+    }
+}
+
+/// Comprehensive pool metrics for performance analysis
+#[derive(Debug, Clone)]
+pub struct PoolMetrics {
+    /// Total number of allocations performed
+    pub allocation_count: usize,
+    /// Total number of deallocations performed
+    pub deallocation_count: usize,
+    /// Peak memory usage reached
+    pub peak_memory_usage: usize,
+    /// Current memory usage
+    pub current_memory_usage: usize,
+    /// Memory efficiency (deallocations / allocations)
+    pub memory_efficiency: f64,
+    /// Number of currently active allocations
+    pub active_allocations: usize,
+}
+
+impl PoolMetrics {
+    /// Check if there might be a memory leak
+    pub fn has_potential_leak(&self) -> bool {
+        self.memory_efficiency < 0.5 && self.active_allocations > 100
+    }
+
+    /// Get formatted metrics report
+    pub fn report(&self) -> String {
+        format!(
+            "Pool Metrics:\n\
+             - Allocations: {}\n\
+             - Deallocations: {}\n\
+             - Active: {}\n\
+             - Peak memory: {:.2} MB\n\
+             - Current memory: {:.2} MB\n\
+             - Efficiency: {:.1}%",
+            self.allocation_count,
+            self.deallocation_count,
+            self.active_allocations,
+            self.peak_memory_usage as f64 / 1024.0 / 1024.0,
+            self.current_memory_usage as f64 / 1024.0 / 1024.0,
+            self.memory_efficiency * 100.0
+        )
     }
 }
 

@@ -1,10 +1,10 @@
 //! # OxiRS Embed: Advanced Knowledge Graph Embeddings
 //!
-//! [![Version](https://img.shields.io/badge/version-0.1.0--alpha.2-orange)](https://github.com/cool-japan/oxirs/releases)
+//! [![Version](https://img.shields.io/badge/version-0.1.0--beta.1-blue)](https://github.com/cool-japan/oxirs/releases)
 //! [![docs.rs](https://docs.rs/oxirs-embed/badge.svg)](https://docs.rs/oxirs-embed)
 //!
-//! **Status**: Alpha Release (v0.1.0-alpha.3)
-//! ⚠️ APIs may change. Not recommended for production use.
+//! **Status**: Beta Release (v0.1.0-beta.1)
+//! **Stability**: Public APIs are stable. Production-ready with comprehensive testing.
 //!
 //! State-of-the-art knowledge graph embedding methods including TransE, DistMult, ComplEx,
 //! and RotatE models, enhanced with biomedical AI, GPU acceleration, and specialized text processing.
@@ -132,6 +132,8 @@ pub mod biomedical_embeddings;
 pub mod caching;
 pub mod causal_representation_learning;
 pub mod cloud_integration;
+pub mod clustering;
+pub mod community_detection;
 pub mod compression;
 pub mod consciousness_aware_embeddings;
 // pub mod contextual;
@@ -141,13 +143,17 @@ pub mod cross_module_performance;
 pub mod delta;
 pub mod diffusion_embeddings;
 pub mod enterprise_knowledge;
+pub mod entity_linking;
 pub mod evaluation;
 pub mod federated_learning;
 pub mod gpu_acceleration;
 pub mod graphql_api;
 pub mod inference;
 pub mod integration;
+pub mod interpretability;
+pub mod link_prediction;
 pub mod mamba_attention;
+pub mod mixed_precision;
 pub mod model_registry;
 pub mod models;
 pub mod monitoring;
@@ -156,6 +162,7 @@ pub mod neural_symbolic_integration;
 pub mod neuro_evolution;
 pub mod novel_architectures;
 pub mod persistence;
+pub mod quantization;
 pub mod quantum_circuits;
 pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
@@ -163,7 +170,9 @@ pub mod research_networks;
 // pub mod revolutionary_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
 pub mod training;
 pub mod utils;
+pub mod vector_search;
 pub mod vision_language_graph;
+pub mod visualization;
 
 // Import Vector from oxirs-vec for type compatibility across the ecosystem
 pub use oxirs_vec::Vector as VecVector;
@@ -503,7 +512,7 @@ pub trait EmbeddingModel: Send + Sync {
     fn add_triple(&mut self, triple: Triple) -> Result<()>;
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats>;
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector>;
-    fn getrelation_embedding(&self, relation: &str) -> Result<Vector>;
+    fn get_relation_embedding(&self, relation: &str) -> Result<Vector>;
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64>;
     fn predict_objects(
         &self,
@@ -634,9 +643,12 @@ pub use graphql_api::{
     ModelInfo, ModelType, SimilarityResult, SimilaritySearchInput,
 };
 pub use models::{
-    AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, PoolingStrategy, RotatE,
-    TransE, TransformerConfig, TransformerEmbedding, TransformerType,
+    AggregationType, ComplEx, DistMult, GNNConfig, GNNEmbedding, GNNType, HoLE, HoLEConfig,
+    PoolingStrategy, RotatE, TransE, TransformerConfig, TransformerEmbedding, TransformerType,
 };
+
+#[cfg(feature = "conve")]
+pub use models::{ConvE, ConvEConfig};
 pub use monitoring::{
     Alert, AlertSeverity, AlertThresholds, AlertType, CacheMetrics, ConsoleAlertHandler,
     DriftMetrics, ErrorEvent, ErrorMetrics, ErrorSeverity, LatencyMetrics, MonitoringConfig,

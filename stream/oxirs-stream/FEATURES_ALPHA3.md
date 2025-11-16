@@ -4,7 +4,7 @@
 
 ## Overview
 
-Alpha.3 delivers enterprise-grade stream processing capabilities originally planned for Beta release (December 2025), advancing the roadmap by 3 months with comprehensive features implemented with humility and highest possible performance.
+Alpha.3 delivers enterprise-grade stream processing capabilities originally planned for Beta release (November 2025), advancing the roadmap by 3 months with comprehensive features implemented with humility and highest possible performance.
 
 ---
 

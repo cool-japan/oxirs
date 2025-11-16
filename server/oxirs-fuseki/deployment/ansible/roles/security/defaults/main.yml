@@ -1,0 +1,21 @@
+---
+# Security role default variables
+
+security_packages:
+  - fail2ban
+  - ufw
+  - iptables
+  - openssl
+  - ca-certificates
+
+services_to_disable:
+  - avahi-daemon
+  - cups
+  - bluetooth
+
+auto_security_updates: true
+harden_ssh: true
+configure_firewall: true
+install_aide: false
+install_rootkit_detection: false
+enable_security_scans: false

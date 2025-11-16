@@ -163,7 +163,7 @@ fn test_topological_relations_scenario() -> Result<()> {
 #[test]
 fn test_distance_calculations_scenario() -> Result<()> {
     // Create a set of points
-    let points = vec![
+    let points = [
         Geometry::from_wkt("POINT(0 0)")?,
         Geometry::from_wkt("POINT(3 4)")?,
         Geometry::from_wkt("POINT(6 8)")?,

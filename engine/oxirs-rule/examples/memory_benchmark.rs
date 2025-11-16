@@ -7,16 +7,16 @@
 //!
 //! Run with: cargo run --example memory_benchmark --release
 
+use once_cell::sync::Lazy;
 use oxirs_rule::forward::ForwardChainer;
 use oxirs_rule::{Rule, RuleAtom, Term};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::LazyLock;
 use std::time::Instant;
 
 // Global metrics for tracking (using atomic counters for simplicity)
-static SUBSTITUTION_CLONES: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(0));
-static FACT_SET_CLONES: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(0));
-static ACTIVE_SUBSTITUTIONS: LazyLock<AtomicU64> = LazyLock::new(|| AtomicU64::new(0));
+static SUBSTITUTION_CLONES: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+static FACT_SET_CLONES: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
+static ACTIVE_SUBSTITUTIONS: Lazy<AtomicU64> = Lazy::new(|| AtomicU64::new(0));
 
 fn main() {
     println!("═══════════════════════════════════════════════════════════");

@@ -91,10 +91,20 @@ pub fn transform(geom: &Geometry, target_crs: &Crs) -> Result<Geometry> {
     // Transform coordinates
     let transformed_geom = geom.geom.map_coords(|coord| {
         // PROJ expects (longitude, latitude) order for geographic CRS
-        let (x, y) = proj
-            .convert((coord.x, coord.y))
-            .unwrap_or((coord.x, coord.y)); // Fallback to original on error
-        geo_types::Coord { x, y }
+        let point: (f64, f64) = proj.convert((coord.x, coord.y)).unwrap_or_else(|e| {
+            // Log error but fallback to original coordinates
+            tracing::warn!(
+                "PROJ conversion failed for ({}, {}): {}. Using original coordinates.",
+                coord.x,
+                coord.y,
+                e
+            );
+            (coord.x, coord.y)
+        });
+        geo_types::Coord {
+            x: point.0,
+            y: point.1,
+        }
     });
 
     Ok(Geometry::with_crs(transformed_geom, target_crs.clone()))
@@ -190,10 +200,19 @@ pub fn transform_batch(geometries: &[Geometry], target_crs: &Crs) -> Result<Vec<
         .iter()
         .map(|geom| {
             let transformed_geom = geom.geom.map_coords(|coord| {
-                let (x, y) = proj
-                    .convert((coord.x, coord.y))
-                    .unwrap_or((coord.x, coord.y));
-                geo_types::Coord { x, y }
+                let point: (f64, f64) = proj.convert((coord.x, coord.y)).unwrap_or_else(|e| {
+                    tracing::warn!(
+                        "PROJ conversion failed for ({}, {}): {}. Using original coordinates.",
+                        coord.x,
+                        coord.y,
+                        e
+                    );
+                    (coord.x, coord.y)
+                });
+                geo_types::Coord {
+                    x: point.0,
+                    y: point.1,
+                }
             });
             Ok(Geometry::with_crs(transformed_geom, target_crs.clone()))
         })

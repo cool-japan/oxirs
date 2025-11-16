@@ -22,6 +22,8 @@ pub mod rupdate;
 pub mod uparse;
 
 // === Storage Tools ===
+pub mod backup_encryption;
+pub mod pitr;
 pub mod tdbbackup;
 pub mod tdbcompact;
 pub mod tdbdump;

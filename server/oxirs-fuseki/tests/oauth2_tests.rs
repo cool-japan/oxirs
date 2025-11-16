@@ -108,9 +108,32 @@ async fn test_oauth2_handler_authorization_flow() {
         subscription_manager: None,
         federation_manager: None,
         streaming_manager: None,
+        // Beta.2 Performance & Scalability Features
+        concurrency_manager: None,
+        memory_manager: None,
+        batch_executor: None,
+        stream_manager: None,
+        dataset_manager: None,
+        // RC.1 Production & Advanced Features
+        security_auditor: None,
+        ddos_protector: None,
+        load_balancer: None,
+        edge_cache_manager: None,
+        performance_profiler: None,
+        notification_manager: None,
+        backup_manager: None,
+        recovery_manager: None,
+        disaster_recovery: None,
+        certificate_rotation: None,
+        http2_manager: None,
+        http3_manager: None,
+        // ReBAC (Relationship-Based Access Control)
+        rebac_manager: None,
         prefix_store: std::sync::Arc::new(oxirs_fuseki::handlers::PrefixStore::new()),
         task_manager: std::sync::Arc::new(oxirs_fuseki::handlers::TaskManager::new()),
         request_logger: std::sync::Arc::new(oxirs_fuseki::handlers::RequestLogger::new()),
+        startup_time: std::time::Instant::now(),
+        system_monitor: std::sync::Arc::new(parking_lot::Mutex::new(sysinfo::System::new_all())),
         #[cfg(feature = "rate-limit")]
         rate_limiter: None,
     };

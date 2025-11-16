@@ -430,22 +430,262 @@ impl ClusteringEngine {
         })
     }
 
-    /// Placeholder for spectral clustering
+    /// Spectral clustering with eigenvalue decomposition using SciRS2
     fn spectral_clustering(&self, resources: &[(String, Vector)]) -> Result<ClusteringResult> {
-        // For now, fall back to k-means
-        // TODO: Implement proper spectral clustering with eigenvalue decomposition
-        println!("Spectral clustering not yet fully implemented, falling back to k-means");
-        self.kmeans_clustering(resources)
+        use scirs2_core::ndarray_ext::Array2;
+
+        let n = resources.len();
+        let k = self.config.num_clusters.unwrap_or(3);
+
+        if k >= n {
+            return Err(anyhow!(
+                "Number of clusters must be less than number of resources"
+            ));
+        }
+
+        // Step 1: Build similarity matrix (affinity matrix)
+        let mut similarity_matrix_data = vec![0.0; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                if i == j {
+                    similarity_matrix_data[i * n + j] = 1.0;
+                } else {
+                    let sim = self.calculate_similarity(&resources[i].1, &resources[j].1)?;
+                    similarity_matrix_data[i * n + j] = sim as f64;
+                }
+            }
+        }
+
+        let similarity_matrix = Array2::from_shape_vec((n, n), similarity_matrix_data)
+            .map_err(|e| anyhow!("Failed to create similarity matrix: {}", e))?;
+
+        // Step 2: Compute degree matrix
+        let degrees: Vec<f64> = (0..n)
+            .map(|i| (0..n).map(|j| similarity_matrix[[i, j]]).sum::<f64>())
+            .collect();
+
+        // Step 3: Compute normalized Laplacian matrix: L = I - D^(-1/2) * W * D^(-1/2)
+        let mut laplacian_data = vec![0.0; n * n];
+        for i in 0..n {
+            let d_i_sqrt = degrees[i].sqrt();
+            for j in 0..n {
+                let d_j_sqrt = degrees[j].sqrt();
+
+                if i == j {
+                    laplacian_data[i * n + j] = 1.0;
+                } else if d_i_sqrt > 1e-10 && d_j_sqrt > 1e-10 {
+                    laplacian_data[i * n + j] = -similarity_matrix[[i, j]] / (d_i_sqrt * d_j_sqrt);
+                }
+            }
+        }
+
+        let laplacian = Array2::from_shape_vec((n, n), laplacian_data)
+            .map_err(|e| anyhow!("Failed to create Laplacian matrix: {}", e))?;
+
+        // Step 4: Compute eigenvalues and eigenvectors using SciRS2
+        // Use eigh for symmetric matrix (Laplacian is symmetric)
+        let (eigenvalues, eigenvectors) = scirs2_linalg::eigen::eigh(&laplacian.view(), None)
+            .map_err(|e| anyhow!("Eigenvalue decomposition failed: {}", e))?;
+
+        // Step 5: Select k eigenvectors corresponding to k smallest eigenvalues
+        let mut eigen_pairs: Vec<(f64, usize)> = eigenvalues
+            .iter()
+            .enumerate()
+            .map(|(idx, &val)| (val, idx))
+            .collect();
+
+        // Sort by eigenvalue (ascending)
+        eigen_pairs.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        // Take k smallest eigenvectors
+        let selected_indices: Vec<usize> =
+            eigen_pairs.iter().take(k).map(|(_, idx)| *idx).collect();
+
+        // Step 6: Create embedding matrix (n x k)
+        let mut embedding_data = Vec::with_capacity(n * k);
+        for i in 0..n {
+            for &col_idx in &selected_indices {
+                embedding_data.push(eigenvectors[[i, col_idx]]);
+            }
+        }
+
+        // Step 7: Normalize rows of embedding matrix
+        for row_idx in 0..n {
+            let row_start = row_idx * k;
+            let row_end = row_start + k;
+            let row_slice = &embedding_data[row_start..row_end];
+
+            let norm: f64 = row_slice.iter().map(|x| x * x).sum::<f64>().sqrt();
+
+            if norm > 1e-10 {
+                for val in &mut embedding_data[row_start..row_end] {
+                    *val /= norm;
+                }
+            }
+        }
+
+        // Step 8: Apply k-means clustering on the embedding
+        let embedded_resources: Vec<(String, Vector)> = resources
+            .iter()
+            .enumerate()
+            .map(|(i, (id, _))| {
+                let row_start = i * k;
+                let row_end = row_start + k;
+                let embedding: Vec<f32> = embedding_data[row_start..row_end]
+                    .iter()
+                    .map(|&x| x as f32)
+                    .collect();
+                (id.clone(), Vector::new(embedding))
+            })
+            .collect();
+
+        // Create temporary k-means clustering engine
+        let kmeans_config = ClusteringConfig {
+            algorithm: ClusteringAlgorithm::KMeans,
+            num_clusters: Some(k),
+            ..self.config.clone()
+        };
+
+        let kmeans_engine = ClusteringEngine::new(kmeans_config);
+        let mut result = kmeans_engine.kmeans_clustering(&embedded_resources)?;
+
+        // Update algorithm in result
+        result.algorithm = ClusteringAlgorithm::Spectral;
+
+        Ok(result)
     }
 
-    /// Placeholder for community detection
+    /// Community detection using Louvain algorithm
     fn community_detection(&self, resources: &[(String, Vector)]) -> Result<ClusteringResult> {
-        // For now, fall back to similarity clustering
-        // TODO: Implement graph-based community detection algorithms like Louvain
-        println!(
-            "Community detection not yet fully implemented, falling back to similarity clustering"
-        );
-        self.similarity_clustering(resources)
+        use std::collections::HashMap;
+
+        let n = resources.len();
+        let threshold = self.config.similarity_threshold;
+
+        // Step 1: Build adjacency matrix based on similarity threshold
+        let mut graph: Vec<Vec<(usize, f32)>> = vec![Vec::new(); n];
+        let mut total_weight = 0.0;
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let similarity = self.calculate_similarity(&resources[i].1, &resources[j].1)?;
+                if similarity >= threshold {
+                    graph[i].push((j, similarity));
+                    graph[j].push((i, similarity));
+                    total_weight += similarity * 2.0; // Count both directions
+                }
+            }
+        }
+
+        // Step 2: Initialize each node in its own community
+        let mut node_to_community: Vec<usize> = (0..n).collect();
+        let mut community_weights: HashMap<usize, f32> = HashMap::new();
+
+        // Calculate initial community weights
+        for (i, neighbors) in graph.iter().enumerate().take(n) {
+            let weight: f32 = neighbors.iter().map(|(_, w)| w).sum();
+            community_weights.insert(i, weight);
+        }
+
+        // Step 3: Louvain modularity optimization
+        let mut improved = true;
+        let mut iteration = 0;
+        let max_iterations = self.config.max_iterations;
+
+        while improved && iteration < max_iterations {
+            improved = false;
+            iteration += 1;
+
+            for node in 0..n {
+                let current_community = node_to_community[node];
+
+                // Calculate modularity gain for moving to each neighbor's community
+                let mut best_community = current_community;
+                let mut best_gain = 0.0;
+
+                // Get neighboring communities
+                let mut neighbor_communities: HashMap<usize, f32> = HashMap::new();
+                for &(neighbor, weight) in &graph[node] {
+                    let neighbor_comm = node_to_community[neighbor];
+                    *neighbor_communities.entry(neighbor_comm).or_insert(0.0) += weight;
+                }
+
+                // Try moving to each neighboring community
+                for (&neighbor_comm, &edge_weight) in &neighbor_communities {
+                    if neighbor_comm == current_community {
+                        continue;
+                    }
+
+                    // Calculate modularity gain using simplified formula
+                    let k_i = graph[node].iter().map(|(_, w)| w).sum::<f32>();
+                    let sigma_tot = community_weights
+                        .get(&neighbor_comm)
+                        .copied()
+                        .unwrap_or(0.0);
+
+                    let gain = edge_weight - (k_i * sigma_tot) / (2.0 * total_weight);
+
+                    if gain > best_gain {
+                        best_gain = gain;
+                        best_community = neighbor_comm;
+                    }
+                }
+
+                // Move node to best community if improvement found
+                if best_community != current_community && best_gain > self.config.tolerance {
+                    // Update community weights
+                    let node_weight = graph[node].iter().map(|(_, w)| w).sum::<f32>();
+                    *community_weights.entry(current_community).or_insert(0.0) -= node_weight;
+                    *community_weights.entry(best_community).or_insert(0.0) += node_weight;
+
+                    node_to_community[node] = best_community;
+                    improved = true;
+                }
+            }
+        }
+
+        // Step 4: Build clusters from communities
+        let mut communities: HashMap<usize, Vec<usize>> = HashMap::new();
+        for (node, &community) in node_to_community.iter().enumerate() {
+            communities.entry(community).or_default().push(node);
+        }
+
+        let mut clusters = Vec::new();
+        for (cluster_id, (_, members_idx)) in communities.iter().enumerate() {
+            let members: Vec<String> = members_idx
+                .iter()
+                .map(|&idx| resources[idx].0.clone())
+                .collect();
+
+            let cluster_vectors: Vec<&Vector> =
+                members_idx.iter().map(|&idx| &resources[idx].1).collect();
+
+            let stats = self.compute_cluster_stats(&cluster_vectors)?;
+
+            // Compute centroid
+            let centroid = if !cluster_vectors.is_empty() {
+                Some(self.compute_centroid(&cluster_vectors)?)
+            } else {
+                None
+            };
+
+            clusters.push(Cluster {
+                id: cluster_id,
+                members,
+                centroid,
+                stats,
+            });
+        }
+
+        let quality_metrics = self.compute_quality_metrics(resources, &clusters)?;
+
+        Ok(ClusteringResult {
+            clusters,
+            noise: Vec::new(),
+            quality_metrics,
+            algorithm: ClusteringAlgorithm::Community,
+            config: self.config.clone(),
+        })
     }
 
     /// Simple similarity-based clustering

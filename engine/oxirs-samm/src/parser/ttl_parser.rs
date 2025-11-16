@@ -1,11 +1,11 @@
 //! Turtle Parser for SAMM Models
 
-use crate::error::{Result, SammError};
+use crate::error::{Result, SammError, SourceLocation};
 use crate::metamodel::{
     Aspect, Characteristic, CharacteristicKind, ElementMetadata, Entity, Event, ModelElement,
     Operation, Property,
 };
-use oxrdf::{Graph, NamedNode, NamedNodeRef, Subject, SubjectRef, Term, TermRef};
+use oxrdf::{Graph, NamedNode, NamedNodeRef, NamedOrBlankNode, NamedOrBlankNodeRef, Term, TermRef};
 use oxttl::TurtleParser;
 use std::collections::HashMap;
 use std::path::Path;
@@ -34,6 +34,9 @@ pub struct SammTurtleParser {
 
     /// Detected SAMM entity namespace
     samm_e_ns: Option<String>,
+
+    /// Current source being parsed (file path or description)
+    current_source: Option<String>,
 }
 
 /// Cached parsed element
@@ -55,12 +58,16 @@ impl SammTurtleParser {
             samm_ns: None,
             samm_c_ns: None,
             samm_e_ns: None,
+            current_source: None,
         }
     }
 
     /// Parse a SAMM model from a Turtle file
     pub async fn parse_file(&mut self, path: &Path) -> Result<Aspect> {
         tracing::info!("Parsing SAMM model from file: {:?}", path);
+
+        // Set current source for error reporting
+        self.current_source = Some(path.display().to_string());
 
         // Read file content
         let content = tokio::fs::read_to_string(path)
@@ -78,11 +85,20 @@ impl SammTurtleParser {
 
         // Parse Turtle into RDF graph
         let parser = TurtleParser::new().with_base_iri(base_uri).map_err(|e| {
-            SammError::ParseError(format!("Invalid base URI '{}': {}", base_uri, e))
+            self.create_parse_error(
+                &format!("Invalid base URI '{}': {}", base_uri, e),
+                None,
+                None,
+            )
         })?;
 
         for result in parser.for_reader(content.as_bytes()) {
-            let triple = result.map_err(|e| SammError::ParseError(e.to_string()))?;
+            let triple = result.map_err(|e| {
+                // Try to extract line number from error message if available
+                let error_msg = e.to_string();
+                let (line, col) = Self::extract_line_col_from_error(&error_msg);
+                self.create_parse_error(&error_msg, line, col)
+            })?;
             self.graph.insert(&triple);
         }
 
@@ -95,13 +111,53 @@ impl SammTurtleParser {
         self.find_and_parse_aspect()
     }
 
+    /// Create a parse error with source location
+    fn create_parse_error(
+        &self,
+        message: &str,
+        line: Option<usize>,
+        column: Option<usize>,
+    ) -> SammError {
+        SammError::ParseErrorWithLocation {
+            message: message.to_string(),
+            location: SourceLocation {
+                line,
+                column,
+                source: self.current_source.clone(),
+            },
+        }
+    }
+
+    /// Try to extract line and column numbers from error message
+    /// Many parsers include this info in format like "at line 5, column 10"
+    fn extract_line_col_from_error(error_msg: &str) -> (Option<usize>, Option<usize>) {
+        // Try to find patterns like "line 5" or "line:5" or "@5:10"
+        let line = error_msg.split_whitespace().find_map(|word| {
+            if word.starts_with("line") || word.starts_with("Line") {
+                word.split(':').next_back()?.parse().ok()
+            } else {
+                None
+            }
+        });
+
+        let column = error_msg.split_whitespace().find_map(|word| {
+            if word.starts_with("column") || word.starts_with("Column") {
+                word.split(':').next_back()?.parse().ok()
+            } else {
+                None
+            }
+        });
+
+        (line, column)
+    }
+
     /// Detect and set the SAMM namespaces used in the graph
     fn detect_and_set_namespaces(&mut self) {
         // Try to find any SAMM namespace in the graph
         let mut detected_version = None;
 
         for triple in self.graph.iter() {
-            if let SubjectRef::NamedNode(s) = triple.subject {
+            if let NamedOrBlankNodeRef::NamedNode(s) = triple.subject {
                 let s_str = s.as_str();
                 for version in SAMM_VERSIONS {
                     if s_str.contains(&format!("{}{}#", SAMM_NS_BASE, version)) {
@@ -186,7 +242,7 @@ impl SammTurtleParser {
         // Get the Aspect subject
         let aspect_subject = aspects[0].subject;
         let aspect_urn = match aspect_subject {
-            SubjectRef::NamedNode(node) => node.as_str().to_string(),
+            NamedOrBlankNodeRef::NamedNode(node) => node.as_str().to_string(),
             _ => {
                 return Err(SammError::ParseError(
                     "Aspect must be a named node".to_string(),
@@ -380,9 +436,9 @@ impl SammTurtleParser {
 
     /// Determine the kind of characteristic from its type
     fn determine_characteristic_kind(
-        &self,
+        &mut self,
         type_str: &str,
-        _subject: &NamedNode,
+        subject: &NamedNode,
     ) -> Result<CharacteristicKind> {
         // Extract the local name from the type URI
         let local_name = type_str
@@ -394,20 +450,24 @@ impl SammTurtleParser {
         match local_name.as_str() {
             "Trait" | "Characteristic" => Ok(CharacteristicKind::Trait),
             "Measurement" => {
-                // TODO: Parse unit from the graph
+                // Parse unit from the graph
+                let unit = self.parse_unit_from_characteristic(subject)?;
                 Ok(CharacteristicKind::Measurement {
-                    unit: "unit:one".to_string(),
+                    unit: unit.unwrap_or_else(|| "unit:one".to_string()),
                 })
             }
             "Enumeration" => {
-                // TODO: Parse values from the graph
-                Ok(CharacteristicKind::Enumeration { values: vec![] })
+                // Parse enumeration values from the graph
+                let values = self.parse_enumeration_values(subject)?;
+                Ok(CharacteristicKind::Enumeration { values })
             }
             "State" => {
-                // TODO: Parse values and default from the graph
+                // Parse state values and default value from the graph
+                let values = self.parse_enumeration_values(subject)?;
+                let default_value = self.parse_default_value(subject)?;
                 Ok(CharacteristicKind::State {
-                    values: vec![],
-                    default_value: None,
+                    values,
+                    default_value,
                 })
             }
             "List" => Ok(CharacteristicKind::List {
@@ -429,6 +489,54 @@ impl SammTurtleParser {
         }
     }
 
+    /// Parse unit from a Measurement characteristic
+    fn parse_unit_from_characteristic(&self, subject: &NamedNode) -> Result<Option<String>> {
+        // Try both samm-c:unit and samm:unit predicates
+        let unit_pred_c = NamedNode::new(format!("{}unit", self.samm_c_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+        let unit_pred = NamedNode::new(format!("{}unit", self.samm_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        // Try samm-c:unit first
+        if let Some(unit_term) = self.get_object(subject, &unit_pred_c) {
+            return Ok(Some(self.term_to_string(&unit_term)?));
+        }
+
+        // Try samm:unit
+        if let Some(unit_term) = self.get_object(subject, &unit_pred) {
+            return Ok(Some(self.term_to_string(&unit_term)?));
+        }
+
+        Ok(None)
+    }
+
+    /// Parse enumeration values from the graph
+    fn parse_enumeration_values(&self, subject: &NamedNode) -> Result<Vec<String>> {
+        // Parse samm-c:values predicate (RDF list of values)
+        let values_pred = NamedNode::new(format!("{}values", self.samm_c_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(values_term) = self.get_object(subject, &values_pred) {
+            // Parse the RDF list
+            return self.parse_rdf_list(&values_term);
+        }
+
+        Ok(vec![])
+    }
+
+    /// Parse default value from a State characteristic
+    fn parse_default_value(&self, subject: &NamedNode) -> Result<Option<String>> {
+        let default_pred =
+            NamedNode::new(format!("{}defaultValue", self.samm_c_ns.as_ref().unwrap()))
+                .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(default_term) = self.get_object(subject, &default_pred) {
+            return Ok(Some(self.term_to_string(&default_term)?));
+        }
+
+        Ok(None)
+    }
+
     /// Parse an Operation from the graph
     fn parse_operation(&mut self, urn: &str) -> Result<Operation> {
         let subject = NamedNode::new(urn)
@@ -439,7 +547,37 @@ impl SammTurtleParser {
         // Parse metadata
         self.parse_element_metadata(&subject, &mut operation.metadata)?;
 
-        // TODO: Parse input and output
+        // Parse input parameters (RDF list)
+        let input_pred = NamedNode::new(format!("{}input", self.samm_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(input_term) = self.get_object(&subject, &input_pred) {
+            let input_urns = self.parse_rdf_list(&input_term)?;
+            for input_urn in input_urns {
+                match self.parse_property(&input_urn) {
+                    Ok(property) => operation.add_input(property),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse input property '{}': {}", input_urn, e);
+                    }
+                }
+            }
+        }
+
+        // Parse output (single property)
+        let output_pred = NamedNode::new(format!("{}output", self.samm_ns.as_ref().unwrap()))
+            .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(output_term) = self.get_object(&subject, &output_pred) {
+            let output_urn = self.term_to_string(&output_term)?;
+            match self.parse_property(&output_urn) {
+                Ok(property) => {
+                    operation.output = Some(property);
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to parse output property '{}': {}", output_urn, e);
+                }
+            }
+        }
 
         Ok(operation)
     }
@@ -454,7 +592,22 @@ impl SammTurtleParser {
         // Parse metadata
         self.parse_element_metadata(&subject, &mut event.metadata)?;
 
-        // TODO: Parse parameters
+        // Parse parameters (RDF list)
+        let parameters_pred =
+            NamedNode::new(format!("{}parameters", self.samm_ns.as_ref().unwrap()))
+                .map_err(|e| SammError::ParseError(e.to_string()))?;
+
+        if let Some(parameters_term) = self.get_object(&subject, &parameters_pred) {
+            let parameter_urns = self.parse_rdf_list(&parameters_term)?;
+            for param_urn in parameter_urns {
+                match self.parse_property(&param_urn) {
+                    Ok(property) => event.add_parameter(property),
+                    Err(e) => {
+                        tracing::warn!("Failed to parse event parameter '{}': {}", param_urn, e);
+                    }
+                }
+            }
+        }
 
         Ok(event)
     }
@@ -471,7 +624,7 @@ impl SammTurtleParser {
                 .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
-            if let SubjectRef::NamedNode(s) = t.subject {
+            if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
                 s == subject.as_ref() && t.predicate == pref_name_pred.as_ref()
             } else {
                 false
@@ -488,7 +641,7 @@ impl SammTurtleParser {
             .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
-            if let SubjectRef::NamedNode(s) = t.subject {
+            if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
                 s == subject.as_ref() && t.predicate == desc_pred.as_ref()
             } else {
                 false
@@ -505,7 +658,7 @@ impl SammTurtleParser {
             .map_err(|e| SammError::ParseError(e.to_string()))?;
 
         for triple in self.graph.iter().filter(|t| {
-            if let SubjectRef::NamedNode(s) = t.subject {
+            if let NamedOrBlankNodeRef::NamedNode(s) = t.subject {
                 s == subject.as_ref() && t.predicate == see_pred.as_ref()
             } else {
                 false
@@ -524,7 +677,7 @@ impl SammTurtleParser {
         self.graph
             .iter()
             .find(|triple| {
-                if let SubjectRef::NamedNode(s) = triple.subject {
+                if let NamedOrBlankNodeRef::NamedNode(s) = triple.subject {
                     s == subject.as_ref() && triple.predicate == predicate.as_ref()
                 } else {
                     false
@@ -563,8 +716,12 @@ impl SammTurtleParser {
                     // Find the rdf:first triple for this subject
                     let first_obj = self.graph.iter().find_map(|triple| {
                         let subject_matches = match (&current, triple.subject) {
-                            (Term::NamedNode(n), SubjectRef::NamedNode(s)) => n.as_ref() == s,
-                            (Term::BlankNode(b), SubjectRef::BlankNode(s)) => b.as_ref() == s,
+                            (Term::NamedNode(n), NamedOrBlankNodeRef::NamedNode(s)) => {
+                                n.as_ref() == s
+                            }
+                            (Term::BlankNode(b), NamedOrBlankNodeRef::BlankNode(s)) => {
+                                b.as_ref() == s
+                            }
                             _ => false,
                         };
 
@@ -582,8 +739,12 @@ impl SammTurtleParser {
                     // Find the rdf:rest triple for this subject
                     let rest_obj = self.graph.iter().find_map(|triple| {
                         let subject_matches = match (&current, triple.subject) {
-                            (Term::NamedNode(n), SubjectRef::NamedNode(s)) => n.as_ref() == s,
-                            (Term::BlankNode(b), SubjectRef::BlankNode(s)) => b.as_ref() == s,
+                            (Term::NamedNode(n), NamedOrBlankNodeRef::NamedNode(s)) => {
+                                n.as_ref() == s
+                            }
+                            (Term::BlankNode(b), NamedOrBlankNodeRef::BlankNode(s)) => {
+                                b.as_ref() == s
+                            }
                             _ => false,
                         };
 
