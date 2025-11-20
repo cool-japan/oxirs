@@ -10,12 +10,31 @@ pub mod graphql_integration;
 pub mod fuseki_integration;
 pub mod stream_integration;
 pub mod ai_integration;
+pub mod cicd;
+pub mod shex_migration;
+pub mod rule_engine;
 
 // Re-export public API
 pub use graphql_integration::*;
 pub use fuseki_integration::*;
 pub use stream_integration::*;
 pub use ai_integration::*;
+pub use cicd::{
+    CiCdConfig, CiCdEngine, CiCdResult, CiSystem, EnvironmentConfig, ExitCodeConfig,
+    OutputFormat, RegressionAnalysis, ThresholdConfig, ThresholdResults,
+};
+pub use shex_migration::{
+    AnnotationHandling, ClosedHandling, ExtraHandling, ImportHandling, MigrationConfig,
+    MigrationConfigBuilder, MigrationError, MigrationReport, MigrationResult, MigrationStatistics,
+    MigrationWarning, NodeConstraint, NumericFacets, SemanticAction, SemanticMappingConfig,
+    ShexAnnotation, ShexExpression, ShexMigrationEngine, ShexSchema, ShexShape, StringFacets,
+    TripleConstraint, UnmappedFeature, ValueSetHandling, ValueSetValue,
+};
+pub use rule_engine::{
+    CacheStats, ConstraintGenerator, ConstraintPattern, ConstraintRule, ReasoningBridge,
+    ReasoningResult, ReasoningStrategy, RefinementAction, RuleBasedValidator,
+    RuleBasedValidatorBuilder, RuleEngineConfig, ShapeRefinementRule, ViolationPattern,
+};
 
 use crate::{Result, ShaclError, ValidationReport, Validator};
 use oxirs_core::Store;

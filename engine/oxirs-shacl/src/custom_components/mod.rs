@@ -7,7 +7,10 @@
 #![allow(dead_code)]
 
 pub mod constraints;
+pub mod dsl;
 pub mod js_wasm;
+pub mod library;
+pub mod marketplace;
 pub mod metadata;
 pub mod performance;
 pub mod registry;
@@ -18,8 +21,57 @@ pub mod standard;
 pub use constraints::{
     ComponentExecutionResult, CompositeConstraint, CompositionType, CustomConstraint,
 };
+pub use dsl::{
+    namespaces, patterns, xsd, ConstraintSpec, ConstraintTemplate, ParameterDef, ParameterType,
+    ShapeDSL, TemplateLibrary,
+};
 pub use js_wasm::{
     interop, ExternalValidatorBuilder, JavaScriptValidator, RuntimeConfig, WasmValidator,
+};
+pub use library::{
+    AgeRangeValidator,
+    BicValidator,
+    BoundingBoxValidator,
+    BusinessHoursValidator,
+    ChemicalFormulaValidator,
+    // Semantic validators
+    ClassHierarchyValidator,
+    ConstraintLibrary,
+    // Geospatial validators
+    CoordinatesValidator,
+    CountryCodeValidator,
+    CreditCardValidator,
+    // Financial validators
+    CurrencyValidator,
+    // Temporal validators
+    DateRangeValidator,
+    DoiValidator,
+    DurationValidator,
+    GeoJsonValidator,
+    IbanValidator,
+    IriValidator,
+    IsbnValidator,
+    LibraryMetadata,
+    NamePatternValidator,
+    OntologyConsistencyValidator,
+    OrcidValidator,
+    // Personal validators
+    PhoneNumberValidator,
+    PostalCodeValidator,
+    PropertyDomainRangeValidator,
+    ScientificNotationValidator,
+    TimezoneValidator,
+    // Scientific validators
+    UnitValidator,
+    // Identity validators
+    UuidValidator,
+};
+pub use marketplace::{
+    AccessLevel, Author, Category, ComponentStats, ComponentVersion, ConstraintMarketplace,
+    Dependency, InstallOptions, InstallResult, MarketplaceCache, MarketplaceComponent,
+    MarketplaceConfig, MarketplaceIndex, MarketplaceStatistics, Permission, PublishOptions,
+    PublishResult, Review, SearchQuery, SearchQueryBuilder, SearchResults, SortBy, SortOrder,
+    UpdateInfo, UserSession,
 };
 pub use metadata::{
     ComponentLibrary, ComponentMetadata, ParameterConstraint, ParameterDefinition,

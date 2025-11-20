@@ -17,6 +17,7 @@
 
 pub mod advanced_targets;
 pub mod conditional;
+pub mod defeasible;
 pub mod functions;
 pub mod parameterized_constraints;
 pub mod qualified_shapes;
@@ -45,6 +46,11 @@ pub use advanced_targets::{
 
 pub use conditional::{
     ConditionalConstraint, ConditionalEvaluator, ConditionalResult, ShapeRegistry,
+};
+
+pub use defeasible::{
+    ConflictResolutionStrategy, DefeasibleEngine, DefeasibleEngineBuilder, DefeasibleRule,
+    DefeasibleRuleType, DefeasibleStats, RuleAction, RuleCondition,
 };
 
 pub use shape_evolution::{
