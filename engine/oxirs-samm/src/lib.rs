@@ -187,6 +187,7 @@ pub mod parser;
 pub mod performance;
 pub mod production;
 pub mod query;
+pub mod query_cache;
 pub mod serializer;
 pub mod simd_ops;
 pub mod templates;
@@ -195,6 +196,10 @@ pub mod utils;
 pub mod validator;
 
 // Re-exports for convenience
+pub use cache::{
+    AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
+    PropertyCache, TtlCache, TtlCacheStatistics,
+};
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
 pub use error::{ErrorCategory, Result, SammError, SourceLocation};
 pub use generators::{GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout};
@@ -207,7 +212,14 @@ pub use production::{
     ProductionConfig,
 };
 pub use query::{ComplexityMetrics, Dependency, ModelQuery};
+pub use query_cache::{CacheStatistics as QueryCacheStatistics, CachedModelQuery};
+pub use serializer::{
+    serialize_aspect_to_file, serialize_aspect_to_jsonld_file, serialize_aspect_to_jsonld_string,
+    serialize_aspect_to_rdfxml_file, serialize_aspect_to_rdfxml_string, serialize_aspect_to_string,
+    JsonLdSerializer, RdfXmlSerializer, TurtleSerializer,
+};
 pub use templates::{
+    scaffolding::{ModelTemplate, TemplateBuilder, TemplateRegistry},
     PostRenderHook, PreRenderHook, TemplateContext, TemplateEngine, ValidationHook,
 };
 pub use transformation::{ModelTransformation, TransformationRule};

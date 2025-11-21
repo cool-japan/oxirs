@@ -172,24 +172,6 @@ pub enum RecommendationType {
     ReduceComplexity,
 }
 
-/// Advanced neural network model for performance prediction
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NeuralNetworkModel {
-    pub layers: Vec<Layer>,
-    pub learning_rate: f64,
-    pub training_iterations: usize,
-    pub accuracy: f64,
-    pub last_trained: SystemTime,
-}
-
-/// Neural network layer
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Layer {
-    pub weights: Vec<Vec<f64>>,
-    pub biases: Vec<f64>,
-    pub activation: ActivationFunction,
-}
-
 /// Activation functions for neural network
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ActivationFunction {
@@ -325,6 +307,24 @@ impl LinearRegressionModel {
             valid_samples.len()
         );
     }
+
+    /// Get confidence score based on training samples
+    pub fn get_confidence(&self) -> f64 {
+        if self.training_samples < 10 {
+            0.1
+        } else if self.training_samples < 100 {
+            0.3
+        } else if self.training_samples < 1000 {
+            0.6
+        } else {
+            0.8
+        }
+    }
+
+    /// Get the number of training samples (alias for compatibility)
+    pub fn sample_count(&self) -> usize {
+        self.training_samples
+    }
 }
 
 /// ML-enhanced query optimizer
@@ -416,21 +416,357 @@ impl FeatureStatistics {
     }
 }
 
-// Advanced ML model placeholder
-// Note: Can be implemented using SciRS2-Core ML Pipeline when ml_pipeline feature is enabled:
-//
-// pub struct AdvancedMLModel {
-//     pipeline: MLPipeline,
-//     feature_transformer: FeatureTransformer,
-//     predictor: ModelPredictor,
-//     profiler: Profiler,
-// }
-//
-// impl AdvancedMLModel {
-//     pub fn new() -> Self { ... }
-//     pub fn train_with_auto_tuning(&mut self, samples: &[TrainingSample]) -> Result<()> { ... }
-//     pub fn predict_with_confidence(&self, features: &[f64]) -> Result<(f64, f64)> { ... }
-// }
+/// Advanced Neural Network ML Model using SciRS2-Core
+/// Provides improved prediction accuracy through multi-layer perceptron architecture
+pub struct NeuralNetworkModel {
+    /// Weights for each layer
+    weights: Vec<Array2<f64>>,
+    /// Biases for each layer
+    biases: Vec<Array1<f64>>,
+    /// Layer sizes
+    layer_sizes: Vec<usize>,
+    /// Learning rate
+    learning_rate: f64,
+    /// L2 regularization strength
+    l2_lambda: f64,
+    /// Number of training iterations
+    training_iterations: usize,
+    /// Training loss history
+    loss_history: Vec<f64>,
+}
+
+impl NeuralNetworkModel {
+    /// Create a new neural network model
+    pub fn new(layer_sizes: Vec<usize>, learning_rate: f64) -> Self {
+        let mut weights = Vec::new();
+        let mut biases = Vec::new();
+        let mut rng = Random::seed(42);
+
+        // Initialize weights and biases for each layer
+        for i in 0..layer_sizes.len() - 1 {
+            let input_size = layer_sizes[i];
+            let output_size = layer_sizes[i + 1];
+
+            // Xavier/Glorot initialization: scale by sqrt(2 / (input + output))
+            let scale = (2.0 / (input_size + output_size) as f64).sqrt();
+
+            // Initialize weights with scaled normal distribution
+            let weight_data: Vec<f64> = (0..input_size * output_size)
+                .map(|_| rng.gen_range(-1.0..1.0) * scale)
+                .collect();
+            let weight_matrix =
+                Array2::from_shape_vec((input_size, output_size), weight_data).unwrap();
+            weights.push(weight_matrix);
+
+            // Initialize biases to zero
+            let bias_data: Vec<f64> = vec![0.0; output_size];
+            biases.push(Array1::from_vec(bias_data));
+        }
+
+        Self {
+            weights,
+            biases,
+            layer_sizes,
+            learning_rate,
+            l2_lambda: 0.001, // Default L2 regularization
+            training_iterations: 0,
+            loss_history: Vec::new(),
+        }
+    }
+
+    /// ReLU activation function
+    fn relu(x: f64) -> f64 {
+        x.max(0.0)
+    }
+
+    /// ReLU derivative
+    fn relu_derivative(x: f64) -> f64 {
+        if x > 0.0 {
+            1.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Forward pass through the network
+    pub fn forward(&self, input: &[f64]) -> (Vec<Array1<f64>>, f64) {
+        let mut activations = vec![Array1::from_vec(input.to_vec())];
+
+        for i in 0..self.weights.len() {
+            let current = &activations[i];
+
+            // Linear transformation: z = Wx + b
+            let z = current.dot(&self.weights[i]) + &self.biases[i];
+
+            // Apply activation (ReLU for hidden layers, linear for output)
+            let activation = if i < self.weights.len() - 1 {
+                z.mapv(Self::relu)
+            } else {
+                z // Linear output for regression
+            };
+
+            activations.push(activation);
+        }
+
+        // Return activations and final output
+        let output = activations.last().unwrap()[0];
+        (activations, output)
+    }
+
+    /// Train the model using gradient descent
+    pub fn train(&mut self, samples: &[TrainingSample], epochs: usize) {
+        for _epoch in 0..epochs {
+            let mut total_loss = 0.0;
+
+            for sample in samples {
+                let features = sample.features.to_vector();
+                let target = sample.execution_time_ms;
+
+                // Forward pass
+                let (activations, prediction) = self.forward(&features);
+
+                // Compute loss (MSE)
+                let error = prediction - target;
+                total_loss += error * error;
+
+                // Backward pass (gradient descent)
+                self.backward(&activations, error);
+            }
+
+            // Record average loss
+            let avg_loss = total_loss / samples.len() as f64;
+            self.loss_history.push(avg_loss);
+            self.training_iterations += 1;
+        }
+    }
+
+    /// Backward pass for gradient computation and weight updates
+    fn backward(&mut self, activations: &[Array1<f64>], error: f64) {
+        // Output layer gradient
+        let mut delta = Array1::from_vec(vec![error]);
+
+        // Backpropagate through layers
+        for i in (0..self.weights.len()).rev() {
+            let input_activation = &activations[i];
+
+            // Compute gradients
+            let grad_w = input_activation
+                .view()
+                .insert_axis(scirs2_core::ndarray_ext::Axis(1))
+                .dot(&delta.view().insert_axis(scirs2_core::ndarray_ext::Axis(0)));
+
+            // Update weights with L2 regularization
+            let regularization = &self.weights[i] * self.l2_lambda;
+            self.weights[i] = &self.weights[i] - &(&grad_w * self.learning_rate + &regularization);
+
+            // Update biases
+            self.biases[i] = &self.biases[i] - &(&delta * self.learning_rate);
+
+            // Compute delta for previous layer
+            if i > 0 {
+                let pre_activation = activations[i]
+                    .iter()
+                    .map(|&x| Self::relu_derivative(x))
+                    .collect::<Vec<_>>();
+
+                delta = self.weights[i]
+                    .dot(&delta)
+                    .iter()
+                    .zip(pre_activation.iter())
+                    .map(|(d, &r)| d * r)
+                    .collect::<Vec<_>>()
+                    .into();
+            }
+        }
+    }
+
+    /// Predict with confidence interval
+    pub fn predict_with_confidence(&self, features: &[f64]) -> (f64, f64) {
+        let (_, prediction) = self.forward(features);
+
+        // Estimate confidence based on training history
+        let confidence = if self.training_iterations < 100 {
+            0.3 // Low confidence with few iterations
+        } else if self.training_iterations < 1000 {
+            0.6
+        } else {
+            // Use recent loss trend to estimate confidence
+            let recent_loss = self.loss_history.iter().rev().take(10).sum::<f64>() / 10.0;
+            (1.0 / (1.0 + recent_loss.sqrt())).min(0.95)
+        };
+
+        (prediction, confidence)
+    }
+
+    /// Get feature importance scores
+    pub fn get_feature_importance(&self) -> Vec<f64> {
+        if self.weights.is_empty() {
+            return Vec::new();
+        }
+
+        // Use first layer weights to compute importance
+        let first_layer = &self.weights[0];
+        let mut importance: Vec<f64> = Vec::with_capacity(first_layer.nrows());
+
+        for i in 0..first_layer.nrows() {
+            let row_sum: f64 = first_layer.row(i).iter().map(|w| w.abs()).sum();
+            importance.push(row_sum);
+        }
+
+        // Normalize
+        let total: f64 = importance.iter().sum();
+        if total > 0.0 {
+            importance.iter_mut().for_each(|x| *x /= total);
+        }
+
+        importance
+    }
+
+    /// Get model statistics
+    pub fn get_stats(&self) -> ModelStats {
+        ModelStats {
+            training_iterations: self.training_iterations,
+            final_loss: self.loss_history.last().copied().unwrap_or(0.0),
+            layer_sizes: self.layer_sizes.clone(),
+            total_parameters: self.weights.iter().map(|w| w.len()).sum(),
+        }
+    }
+}
+
+/// Model statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelStats {
+    pub training_iterations: usize,
+    pub final_loss: f64,
+    pub layer_sizes: Vec<usize>,
+    pub total_parameters: usize,
+}
+
+/// Ensemble model combining linear regression and neural network
+pub struct EnsembleModel {
+    linear_model: LinearRegressionModel,
+    neural_model: Option<NeuralNetworkModel>,
+    linear_weight: f64,
+    neural_weight: f64,
+}
+
+impl EnsembleModel {
+    /// Create a new ensemble model
+    pub fn new(feature_count: usize, layer_sizes: Option<Vec<usize>>, learning_rate: f64) -> Self {
+        let neural_model = layer_sizes.map(|sizes| {
+            let mut full_sizes = vec![feature_count];
+            full_sizes.extend(sizes);
+            full_sizes.push(1); // Single output
+            NeuralNetworkModel::new(full_sizes, learning_rate)
+        });
+
+        Self {
+            linear_model: LinearRegressionModel::new(feature_count),
+            neural_model,
+            linear_weight: 0.5,
+            neural_weight: 0.5,
+        }
+    }
+
+    /// Train the ensemble
+    pub fn train(&mut self, samples: &[TrainingSample], epochs: usize) {
+        // Train linear model with default learning rate and iterations
+        self.linear_model.train(samples, 0.01, 100);
+
+        // Train neural model if available
+        if let Some(ref mut neural) = self.neural_model {
+            neural.train(samples, epochs);
+        }
+
+        // Adjust weights based on performance
+        self.adjust_weights(samples);
+    }
+
+    /// Adjust ensemble weights based on validation performance
+    fn adjust_weights(&mut self, samples: &[TrainingSample]) {
+        if samples.is_empty() {
+            return;
+        }
+
+        // If no neural model, keep default weights
+        if self.neural_model.is_none() {
+            return;
+        }
+
+        let mut linear_error = 0.0;
+        let mut neural_error = 0.0;
+
+        for sample in samples {
+            let features = sample.features.to_vector();
+            let target = sample.execution_time_ms;
+
+            let linear_pred = self.linear_model.predict(&features);
+            linear_error += (linear_pred - target).abs();
+
+            if let Some(ref neural) = self.neural_model {
+                let (neural_pred, _) = neural.predict_with_confidence(&features);
+                neural_error += (neural_pred - target).abs();
+            }
+        }
+
+        // Inverse error weighting - models with lower error get higher weight
+        // Add small epsilon to avoid division by zero
+        let epsilon = 1e-6;
+        let linear_inv = 1.0 / (linear_error + epsilon);
+        let neural_inv = 1.0 / (neural_error + epsilon);
+        let total_inv = linear_inv + neural_inv;
+
+        // Normalize to get weights that sum to 1.0
+        self.linear_weight = linear_inv / total_inv;
+        self.neural_weight = neural_inv / total_inv;
+    }
+
+    /// Predict using ensemble
+    pub fn predict(&self, features: &[f64]) -> f64 {
+        let linear_pred = self.linear_model.predict(features);
+
+        if let Some(ref neural) = self.neural_model {
+            let (neural_pred, _) = neural.predict_with_confidence(features);
+            linear_pred * self.linear_weight + neural_pred * self.neural_weight
+        } else {
+            linear_pred
+        }
+    }
+
+    /// Predict with confidence
+    pub fn predict_with_confidence(&self, features: &[f64]) -> (f64, f64) {
+        let prediction = self.predict(features);
+
+        let confidence = if let Some(ref neural) = self.neural_model {
+            let (_, neural_conf) = neural.predict_with_confidence(features);
+            let linear_conf = self.linear_model.get_confidence();
+            linear_conf * self.linear_weight + neural_conf * self.neural_weight
+        } else {
+            self.linear_model.get_confidence()
+        };
+
+        (prediction, confidence)
+    }
+
+    /// Get ensemble statistics
+    pub fn get_stats(&self) -> EnsembleStats {
+        EnsembleStats {
+            linear_weight: self.linear_weight,
+            neural_weight: self.neural_weight,
+            linear_sample_count: self.linear_model.sample_count(),
+            neural_stats: self.neural_model.as_ref().map(|n| n.get_stats()),
+        }
+    }
+}
+
+/// Ensemble model statistics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EnsembleStats {
+    pub linear_weight: f64,
+    pub neural_weight: f64,
+    pub linear_sample_count: usize,
+    pub neural_stats: Option<ModelStats>,
+}
 
 impl MLQueryOptimizer {
     /// Create a new ML-enhanced query optimizer
@@ -937,5 +1273,204 @@ mod tests {
         let features = optimizer.extract_features(&document).unwrap();
         assert!(features.field_count > 0.0);
         assert!(features.max_depth > 0.0);
+    }
+
+    #[test]
+    fn test_neural_network_model_creation() {
+        let layer_sizes = vec![12, 8, 4, 1];
+        let model = NeuralNetworkModel::new(layer_sizes.clone(), 0.01);
+
+        assert_eq!(model.layer_sizes, layer_sizes);
+        assert_eq!(model.weights.len(), 3); // 3 weight matrices for 4 layers
+        assert_eq!(model.biases.len(), 3);
+        assert_eq!(model.training_iterations, 0);
+    }
+
+    #[test]
+    fn test_neural_network_forward_pass() {
+        let layer_sizes = vec![3, 2, 1];
+        let model = NeuralNetworkModel::new(layer_sizes, 0.01);
+
+        let input = vec![1.0, 2.0, 3.0];
+        let (activations, output) = model.forward(&input);
+
+        assert_eq!(activations.len(), 3); // Input + 2 hidden layers
+        assert_eq!(activations[0].len(), 3); // Input size
+        assert!(!output.is_nan());
+    }
+
+    #[test]
+    fn test_neural_network_training() {
+        let layer_sizes = vec![12, 4, 1];
+        let mut model = NeuralNetworkModel::new(layer_sizes, 0.01);
+
+        // Create synthetic training samples
+        let samples: Vec<TrainingSample> = (0..10)
+            .map(|i| {
+                let features = QueryFeatures {
+                    field_count: i as f64,
+                    max_depth: (i % 5) as f64,
+                    complexity_score: i as f64 * 2.0,
+                    selection_count: i as f64,
+                    has_fragments: 0.0,
+                    has_variables: 1.0,
+                    operation_type: 0.0,
+                    unique_field_types: 3.0,
+                    nested_list_count: 0.0,
+                    argument_count: i as f64,
+                    directive_count: 0.0,
+                    estimated_result_size: 100.0,
+                };
+                TrainingSample {
+                    features,
+                    execution_time_ms: (i as f64 * 10.0).max(1.0),
+                    memory_usage_mb: 1.0,
+                    cache_hit: false,
+                    error_occurred: false,
+                    timestamp: std::time::SystemTime::now(),
+                }
+            })
+            .collect();
+
+        model.train(&samples, 10);
+
+        assert_eq!(model.training_iterations, 10);
+        assert_eq!(model.loss_history.len(), 10);
+    }
+
+    #[test]
+    fn test_neural_network_predict_with_confidence() {
+        let layer_sizes = vec![12, 4, 1];
+        let model = NeuralNetworkModel::new(layer_sizes, 0.01);
+
+        let features = vec![1.0; 12];
+        let (prediction, confidence) = model.predict_with_confidence(&features);
+
+        assert!(!prediction.is_nan());
+        assert!((0.0..=1.0).contains(&confidence));
+    }
+
+    #[test]
+    fn test_neural_network_feature_importance() {
+        let layer_sizes = vec![12, 4, 1];
+        let model = NeuralNetworkModel::new(layer_sizes, 0.01);
+
+        let importance = model.get_feature_importance();
+
+        assert_eq!(importance.len(), 12);
+        // Importance should sum to approximately 1.0
+        let total: f64 = importance.iter().sum();
+        assert!((total - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_neural_network_stats() {
+        let layer_sizes = vec![12, 8, 4, 1];
+        let model = NeuralNetworkModel::new(layer_sizes.clone(), 0.01);
+
+        let stats = model.get_stats();
+
+        assert_eq!(stats.training_iterations, 0);
+        assert_eq!(stats.final_loss, 0.0);
+        assert_eq!(stats.layer_sizes, layer_sizes);
+        assert!(stats.total_parameters > 0);
+    }
+
+    #[test]
+    fn test_ensemble_model_creation() {
+        let model = EnsembleModel::new(12, Some(vec![8, 4]), 0.01);
+
+        assert_eq!(model.linear_weight, 0.5);
+        assert_eq!(model.neural_weight, 0.5);
+    }
+
+    #[test]
+    fn test_ensemble_model_prediction() {
+        let model = EnsembleModel::new(12, Some(vec![4]), 0.01);
+
+        let features = vec![1.0; 12];
+        let prediction = model.predict(&features);
+
+        assert!(!prediction.is_nan());
+    }
+
+    #[test]
+    fn test_ensemble_model_predict_with_confidence() {
+        let model = EnsembleModel::new(12, Some(vec![4]), 0.01);
+
+        let features = vec![1.0; 12];
+        let (prediction, confidence) = model.predict_with_confidence(&features);
+
+        assert!(!prediction.is_nan());
+        assert!((0.0..=1.0).contains(&confidence));
+    }
+
+    #[test]
+    fn test_ensemble_model_training() {
+        // Test ensemble without neural network component (simpler case)
+        let mut model = EnsembleModel::new(12, None, 0.01);
+
+        // Create synthetic training samples
+        let samples: Vec<TrainingSample> = (0..5)
+            .map(|i| {
+                let features = QueryFeatures {
+                    field_count: (i + 1) as f64,
+                    max_depth: 2.0,
+                    complexity_score: (i + 1) as f64 * 2.0,
+                    selection_count: (i + 1) as f64,
+                    has_fragments: 0.0,
+                    has_variables: 1.0,
+                    operation_type: 0.0,
+                    unique_field_types: 3.0,
+                    nested_list_count: 0.0,
+                    argument_count: (i + 1) as f64,
+                    directive_count: 0.0,
+                    estimated_result_size: 100.0,
+                };
+                TrainingSample {
+                    features,
+                    execution_time_ms: ((i + 1) as f64 * 10.0),
+                    memory_usage_mb: 1.0,
+                    cache_hit: false,
+                    error_occurred: false,
+                    timestamp: std::time::SystemTime::now(),
+                }
+            })
+            .collect();
+
+        model.train(&samples, 5);
+
+        // Weights should remain at default when no neural network
+        let stats = model.get_stats();
+        assert_eq!(stats.linear_weight, 0.5);
+        assert_eq!(stats.neural_weight, 0.5);
+        assert!(stats.neural_stats.is_none());
+    }
+
+    #[test]
+    fn test_ensemble_stats() {
+        let model = EnsembleModel::new(12, Some(vec![8, 4]), 0.01);
+
+        let stats = model.get_stats();
+
+        assert_eq!(stats.linear_weight, 0.5);
+        assert_eq!(stats.neural_weight, 0.5);
+        assert_eq!(stats.linear_sample_count, 0);
+        assert!(stats.neural_stats.is_some());
+    }
+
+    #[test]
+    fn test_linear_regression_confidence() {
+        let mut model = LinearRegressionModel::new(12);
+
+        // Initial confidence should be low
+        assert!(model.get_confidence() < 0.3);
+
+        // Simulate training samples
+        model.training_samples = 500;
+        assert!(model.get_confidence() > 0.5);
+
+        model.training_samples = 2000;
+        assert!(model.get_confidence() >= 0.8);
     }
 }

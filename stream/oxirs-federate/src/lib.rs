@@ -67,7 +67,9 @@ pub mod advanced_consensus;
 pub mod advanced_enterprise_features;
 pub mod advanced_ml_optimizer;
 pub mod advanced_query_optimizer;
+pub mod advanced_security_hardening;
 pub mod advanced_semantic_features;
+pub mod advanced_visualization;
 pub mod anomaly_detection;
 pub mod auth;
 pub mod auto_discovery;
@@ -83,6 +85,7 @@ pub mod distributed_ml_trainer;
 pub mod distributed_tracing;
 pub mod distributed_transactions;
 pub mod executor;
+pub mod external_ml_integration;
 pub mod gpu_accelerated_query;
 pub mod graph_algorithms;
 pub mod graphql;
@@ -170,6 +173,28 @@ pub use advanced_enterprise_features::{
     MultiTenancyManager, PrivacyPreservingFederation, QuantumResistantSecurity, ResourceQuota,
     ResourceUsage, Tenant,
 };
+// Advanced Security Hardening (v0.2.0 Phase 3)
+pub use advanced_security_hardening::{
+    AdvancedRateLimiter, AdvancedSecurityHardening, AuditConfig, AuditEvent, AuditEventType,
+    AuthMethod, AuthSession, AuthenticationManager, ComplianceChecker, ComplianceFramework,
+    ComplianceStatus, EncryptionConfig, EncryptionKey, EncryptionManager, IdsConfig, IdsResult,
+    IntrusionDetectionSystem, MtlsCertificate, OAuth2Provider, OidcProvider, RateLimitConfig,
+    SecurityAlert, SecurityCheckResult, SecurityConfig, SecurityContext, ThreatCategory,
+    ThreatSeverity, ThreatSignature, TrustScore, UserInfo, Vulnerability, VulnerabilityScanResult,
+    VulnerabilityScanner, VulnerabilitySeverity, ZeroTrustConfig, ZeroTrustController,
+};
+// Advanced Visualization & Dashboarding (v0.2.0 Phase 3)
+pub use advanced_visualization::{
+    AdvancedVisualization, AggregationType, Alert, AlertGrouping, AlertSeverity, AlertTimeline,
+    AlertVisualizer, ChartData, ChartGenerator, ChartSeries, ChartTheme, ColorScale, CustomTheme,
+    Dashboard, DashboardLayout, DataSource, EdgeType, ExportFormat, HeatmapCell, HeatmapData,
+    LayoutAlgorithm, MetricAggregation, MetricsCollector, NodeStatus, NodeType, PieChartData,
+    PieSlice, PositionedNode, TimeSeries, TopologyEdge, TopologyNode, TopologyVisualization,
+    TopologyVisualizer, VisualizationConfig, VisualizationType, Widget, WidgetConfig,
+    WidgetPosition, WidgetSize, WidgetType,
+};
+// Re-export DataPoint from advanced_visualization as VizDataPoint to avoid conflict
+pub use advanced_visualization::DataPoint as VizDataPoint;
 // v0.2.0 Performance & Scalability Features
 pub use anomaly_detection::{
     AnomalyAlert, AnomalyDetector, AnomalyDetectorConfig, DataPoint, Severity, Trend, TrendAnalysis,
@@ -196,6 +221,14 @@ pub use distributed_transactions::{
     TransactionConfig, TransactionProtocol, TransactionResult, TransactionState,
 };
 pub use executor::ExecutionStatus; // ExecutionMetrics not exported from executor
+                                   // External ML Frameworks Integration (v0.2.0 Phase 3)
+pub use external_ml_integration::{
+    ConversionResult, DataType, ExternalMLIntegration, FrameworkAdapter, FrameworkCapabilities,
+    HuggingFaceAdapter, InferenceBackend, InferenceEngine, MLFramework, MLIntegrationConfig,
+    MLModel, MLTaskType, MockModel, ModelConverter, ModelFormat, ModelMetadata, ModelRegistry,
+    ModelVersion, ONNXAdapter, OptimizationConfig, OptimizationResult, PerformanceMetrics,
+    PyTorchAdapter, RegisteredModel, TensorFlowAdapter, TensorSpec,
+};
 pub use gpu_accelerated_query::{
     FilterCondition, FilterOperator, GpuAccelerationConfig, GpuBackendType, GpuJoinProcessor,
     GpuProcessingResult, GpuProcessingStats, GpuQueryProcessor, QueryBatch,
@@ -210,8 +243,10 @@ pub use jit_query_compiler::{
 };
 pub use ml_model_serving::{
     ABTestConfig, ABTestResults, MLModelServing, ModelMetrics, ModelServingConfig, ModelStatus,
-    ModelType, ModelVersion, QueryTransformerModel, TransformerConfig,
+    ModelType, QueryTransformerModel, TransformerConfig,
 };
+// Re-export ModelVersion from ml_model_serving as MLModelVersion to avoid conflict
+pub use ml_model_serving::ModelVersion as MLModelVersion;
 pub use simd_optimized_joins::{JoinAlgorithm, JoinStatistics, SimdJoinConfig, SimdJoinProcessor};
 // Import from graphql module - minimal types to avoid conflicts
 // pub use graphql::GraphQLFederation;

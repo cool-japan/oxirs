@@ -1,10 +1,98 @@
 //! Streaming support for memory-efficient parsing of large RDF files
+//!
+//! This module provides streaming parsers that can process very large RDF files
+//! (>1GB) with minimal memory usage by parsing in batches.
+//!
+//! # Features
+//!
+//! - **Batch Processing**: Process triples in configurable batch sizes
+//! - **Memory Efficient**: Stream files larger than available RAM
+//! - **Progress Tracking**: Monitor parsing progress
+//! - **Error Recovery**: Optional lenient mode to skip errors
+//! - **Prefix Preservation**: Maintains prefix declarations across batches
+//!
+//! # Example: Basic Streaming
+//!
+//! ```rust
+//! use oxirs_ttl::{StreamingParser, StreamingConfig};
+//! use std::io::Cursor;
+//!
+//! let data = Cursor::new(b"<http://s> <http://p> <http://o> .");
+//! let parser = StreamingParser::new(data);
+//!
+//! let mut total = 0;
+//! for batch in parser.batches() {
+//!     let triples = batch?;
+//!     total += triples.len();
+//! }
+//! assert_eq!(total, 1);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Example: Custom Batch Size
+//!
+//! ```rust
+//! use oxirs_ttl::{StreamingParser, StreamingConfig};
+//! use std::io::Cursor;
+//!
+//! let config = StreamingConfig::default()
+//!     .with_batch_size(5000)  // 5K triples per batch
+//!     .with_max_buffer_size(50 * 1024 * 1024);  // 50MB buffer
+//!
+//! let data = Cursor::new(b"<http://s> <http://p> <http://o> .");
+//! let parser = StreamingParser::with_config(data, config);
+//!
+//! for batch in parser.batches() {
+//!     let triples = batch?;
+//!     // Process batch
+//! }
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! # Example: Processing Large Files
+//!
+//! ```rust,no_run
+//! use oxirs_ttl::{StreamingParser, StreamingConfig};
+//! use std::fs::File;
+//!
+//! let config = StreamingConfig::default()
+//!     .with_batch_size(10_000);
+//!
+//! let file = File::open("large_dataset.ttl")?;
+//! let parser = StreamingParser::with_config(file, config);
+//!
+//! let mut total = 0;
+//! for batch in parser.batches() {
+//!     let triples = batch?;
+//!     total += triples.len();
+//!
+//!     // Process each batch (e.g., insert into database)
+//!     if total % 100_000 == 0 {
+//!         println!("Processed {} triples", total);
+//!     }
+//! }
+//! println!("Total: {} triples", total);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use crate::error::{TurtleParseError, TurtleResult};
 use oxirs_core::model::Triple;
 use std::io::{BufRead, BufReader, Read};
 
 /// Configuration for streaming parser
+///
+/// Controls batch size, memory limits, and error handling for streaming parsers.
+///
+/// # Example
+///
+/// ```rust
+/// use oxirs_ttl::StreamingConfig;
+///
+/// let config = StreamingConfig::default()
+///     .with_batch_size(5000)
+///     .lenient(true)
+///     .with_max_buffer_size(100 * 1024 * 1024);
+/// ```
 #[derive(Debug, Clone)]
 pub struct StreamingConfig {
     /// Number of triples to buffer before yielding

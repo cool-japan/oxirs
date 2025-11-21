@@ -71,6 +71,7 @@ pub mod k8s_operator; // Kubernetes operator for managing Fuseki instances
 pub mod memory_pool; // Memory pooling and optimization
 pub mod metrics;
 pub mod middleware;
+pub mod middleware_integration; // Integrated middleware for production features (RC.1)
 pub mod optimization;
 pub mod performance;
 pub mod performance_profiler; // Performance profiling tools (Beta.2/RC.1)

@@ -19,7 +19,7 @@ use tracing::{debug, info};
 use uuid::Uuid;
 
 /// TransE embedding model
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TransE {
     /// Base model functionality
     base: BaseModel,

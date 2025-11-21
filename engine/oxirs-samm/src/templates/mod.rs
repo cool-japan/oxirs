@@ -34,6 +34,8 @@
 //! # }
 //! ```
 
+pub mod scaffolding;
+
 use crate::error::{Result, SammError};
 use crate::metamodel::{Aspect, Characteristic, Entity, ModelElement, Operation, Property};
 use serde_json::json;

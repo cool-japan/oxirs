@@ -222,6 +222,7 @@ lru = "0.16.2"
 sha2 = { version = "0.10.9", features = ["oid"] }
 hmac = "0.12.1"
 hex = "0.4.3"
+base64 = "0.22"
 
 # OpenTelemetry for observability
 opentelemetry = { version = "0.31", features = ["trace", "metrics"] }

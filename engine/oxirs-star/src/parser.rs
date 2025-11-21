@@ -6,8 +6,10 @@
 //! - TriG-star (*.trigs)
 //! - N-Quads-star (*.nqs)
 
-use std::collections::HashMap;
-use std::fmt;
+// Internal parser submodules
+#[path = "parser/context.rs"]
+mod context;
+
 use std::io::{BufRead, BufReader, Read};
 use std::str::FromStr;
 
@@ -16,6 +18,12 @@ use tracing::{debug, span, Level};
 
 use crate::model::{BlankNode, Literal, NamedNode, StarGraph, StarQuad, StarTerm, StarTriple};
 use crate::{StarConfig, StarError, StarResult};
+
+// Import parser context types
+use context::{ErrorSeverity, ParseContext, TrigParserState};
+
+// Re-export public error types
+pub use context::{ErrorSeverity as PublicErrorSeverity, ParseError as PublicParseError};
 
 /// RDF-star format types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -32,53 +40,7 @@ pub enum StarFormat {
     JsonLdStar,
 }
 
-/// Enhanced state tracking for TriG-star parsing
-#[derive(Debug, Default)]
-struct TrigParserState {
-    /// Current graph context
-    current_graph: Option<StarTerm>,
-    /// Nesting level (for tracking braces)
-    brace_depth: usize,
-    /// Whether we're inside a graph block
-    in_graph_block: bool,
-    /// Buffer for accumulating multi-line graph names
-    graph_name_buffer: String,
-    /// Whether we're parsing a graph name declaration
-    parsing_graph_name: bool,
-}
-
-impl TrigParserState {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    fn reset_graph_context(&mut self) {
-        self.current_graph = None;
-        self.in_graph_block = false;
-        self.brace_depth = 0;
-        self.graph_name_buffer.clear();
-        self.parsing_graph_name = false;
-    }
-
-    fn enter_graph_block(&mut self, graph: Option<StarTerm>) {
-        self.current_graph = graph;
-        self.in_graph_block = true;
-        self.brace_depth += 1;
-        self.parsing_graph_name = false;
-        self.graph_name_buffer.clear();
-    }
-
-    fn exit_graph_block(&mut self) -> bool {
-        if self.brace_depth > 0 {
-            self.brace_depth -= 1;
-            if self.brace_depth == 0 {
-                self.reset_graph_context();
-                return true;
-            }
-        }
-        false
-    }
-}
+// TrigParserState has been moved to parser/context.rs
 
 impl FromStr for StarFormat {
     type Err = StarError;
@@ -95,188 +57,7 @@ impl FromStr for StarFormat {
     }
 }
 
-/// Parser context for maintaining state during parsing
-#[derive(Debug, Default)]
-struct ParseContext {
-    /// Namespace prefixes
-    prefixes: HashMap<String, String>,
-    /// Current base IRI
-    base_iri: Option<String>,
-    /// Current graph name (for TriG/N-Quads)
-    #[allow(dead_code)]
-    current_graph: Option<StarTerm>,
-    /// Blank node counter
-    blank_node_counter: usize,
-    /// Current line number for error reporting
-    line_number: usize,
-    /// Current column position for error reporting
-    column_position: usize,
-    /// Strict parsing mode (reject any malformed input)
-    strict_mode: bool,
-    /// Error recovery mode (try to continue parsing after errors)
-    error_recovery: bool,
-    /// Accumulated parsing errors for batch reporting
-    parsing_errors: Vec<ParseError>,
-}
-
-/// Enhanced error information for parser errors
-#[derive(Debug, Clone)]
-pub struct ParseError {
-    /// Error message
-    pub message: String,
-    /// Line number where error occurred
-    pub line: usize,
-    /// Column position where error occurred
-    pub column: usize,
-    /// Context around the error (nearby text)
-    pub context: String,
-    /// Severity level
-    pub severity: ErrorSeverity,
-}
-
-/// Error severity levels
-#[derive(Debug, Clone, PartialEq)]
-pub enum ErrorSeverity {
-    /// Warning - parsing can continue
-    Warning,
-    /// Error - current statement failed but parsing can continue
-    Error,
-    /// Fatal - parsing must stop
-    Fatal,
-}
-
-impl fmt::Display for ErrorSeverity {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ErrorSeverity::Warning => write!(f, "Warning"),
-            ErrorSeverity::Error => write!(f, "Error"),
-            ErrorSeverity::Fatal => write!(f, "Fatal"),
-        }
-    }
-}
-
-impl ParseContext {
-    fn new() -> Self {
-        Self::default()
-    }
-
-    /// Create context with configuration
-    fn with_config(strict_mode: bool, error_recovery: bool) -> Self {
-        Self {
-            strict_mode,
-            error_recovery,
-            ..Default::default()
-        }
-    }
-
-    /// Update position tracking
-    fn update_position(&mut self, line: usize, column: usize) {
-        self.line_number = line;
-        self.column_position = column;
-    }
-
-    /// Add a parsing error with context
-    fn add_error(&mut self, message: String, context: String, severity: ErrorSeverity) {
-        let error = ParseError {
-            message,
-            line: self.line_number,
-            column: self.column_position,
-            context,
-            severity,
-        };
-        self.parsing_errors.push(error);
-    }
-
-    /// Check if fatal errors occurred
-    fn has_fatal_errors(&self) -> bool {
-        self.parsing_errors
-            .iter()
-            .any(|e| e.severity == ErrorSeverity::Fatal)
-    }
-
-    /// Get all errors
-    fn get_errors(&self) -> &[ParseError] {
-        &self.parsing_errors
-    }
-
-    /// Clear errors
-    #[allow(dead_code)]
-    fn clear_errors(&mut self) {
-        self.parsing_errors.clear();
-    }
-
-    /// Generate a new blank node identifier
-    fn next_blank_node(&mut self) -> String {
-        self.blank_node_counter += 1;
-        let counter = self.blank_node_counter;
-        format!("_:b{counter}")
-    }
-
-    /// Resolve a prefixed name to full IRI with enhanced error reporting
-    fn resolve_prefix(&mut self, prefixed: &str) -> StarResult<String> {
-        if let Some(colon_pos) = prefixed.find(':') {
-            let prefix = &prefixed[..colon_pos];
-            let local = &prefixed[colon_pos + 1..];
-
-            if let Some(namespace) = self.prefixes.get(prefix) {
-                Ok(format!("{namespace}{local}"))
-            } else {
-                let error_msg = format!("Unknown prefix: '{prefix}'");
-                let context = format!("in prefixed name '{prefixed}'");
-
-                if self.strict_mode {
-                    self.add_error(error_msg.clone(), context, ErrorSeverity::Fatal);
-                    Err(StarError::parse_error(error_msg))
-                } else {
-                    self.add_error(error_msg.clone(), context, ErrorSeverity::Warning);
-                    // In non-strict mode, return the prefixed name as-is
-                    Ok(prefixed.to_string())
-                }
-            }
-        } else {
-            let error_msg = format!("Invalid prefixed name: '{prefixed}'");
-            self.add_error(
-                error_msg.clone(),
-                prefixed.to_string(),
-                ErrorSeverity::Error,
-            );
-            Err(StarError::parse_error(error_msg))
-        }
-    }
-
-    /// Resolve relative IRI against base
-    fn resolve_relative(&self, iri: &str) -> String {
-        if let Some(ref base) = self.base_iri {
-            // Simple relative IRI resolution (not fully RFC compliant)
-            if iri.starts_with('#') {
-                format!("{base}{iri}")
-            } else {
-                iri.to_string()
-            }
-        } else {
-            iri.to_string()
-        }
-    }
-
-    /// Try to recover from parsing error
-    fn try_recover_from_error(&mut self, error_context: &str) -> bool {
-        if !self.error_recovery {
-            return false;
-        }
-
-        // Add recovery attempt to error log
-        let recovery_msg = format!("Attempting error recovery from: {error_context}");
-        self.add_error(
-            recovery_msg,
-            error_context.to_string(),
-            ErrorSeverity::Warning,
-        );
-
-        // Simple recovery strategies could be implemented here
-        // For now, just indicate that recovery is possible
-        true
-    }
-}
+// ParseContext, ParseError, and ErrorSeverity have been moved to parser/context.rs
 
 /// RDF-star parser with support for multiple formats
 pub struct StarParser {

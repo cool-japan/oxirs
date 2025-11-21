@@ -27,6 +27,10 @@ pub struct CertificateRotation {
     rotation_threshold_days: u64,
     /// Last certificate check time
     last_check: Arc<RwLock<Option<SystemTime>>>,
+    /// Certificate renewal provider
+    provider: Option<Arc<dyn CertificateRenewalProvider>>,
+    /// Domain name for certificate
+    domain: String,
 }
 
 impl CertificateRotation {
@@ -45,7 +49,37 @@ impl CertificateRotation {
             check_interval,
             rotation_threshold_days,
             last_check: Arc::new(RwLock::new(None)),
+            provider: None,
+            domain: "localhost".to_string(),
         }
+    }
+
+    /// Create with a certificate renewal provider
+    pub fn with_provider(
+        tls_manager: Arc<RwLock<TlsManager>>,
+        cert_path: PathBuf,
+        key_path: PathBuf,
+        check_interval: Duration,
+        rotation_threshold_days: u64,
+        provider: Arc<dyn CertificateRenewalProvider>,
+        domain: String,
+    ) -> Self {
+        Self {
+            tls_manager,
+            cert_path,
+            key_path,
+            check_interval,
+            rotation_threshold_days,
+            last_check: Arc::new(RwLock::new(None)),
+            provider: Some(provider),
+            domain,
+        }
+    }
+
+    /// Set the certificate renewal provider
+    pub fn set_provider(&mut self, provider: Arc<dyn CertificateRenewalProvider>, domain: String) {
+        self.provider = Some(provider);
+        self.domain = domain;
     }
 
     /// Start certificate rotation monitoring
@@ -135,15 +169,40 @@ impl CertificateRotation {
     async fn rotate_certificate(&self) -> FusekiResult<()> {
         info!("Rotating TLS certificate");
 
-        // In a real implementation, this would:
-        // 1. Request a new certificate from Let's Encrypt or other CA
-        // 2. Verify the new certificate
-        // 3. Write the new certificate and key
-        // 4. Reload the TLS configuration
-        // 5. Gracefully restart the TLS listener
+        // If we have a provider, use it to renew the certificate
+        if let Some(provider) = &self.provider {
+            info!("Using certificate provider for renewal");
 
-        // For now, we'll just reload the existing certificate
-        warn!("Certificate rotation is a placeholder - implement certificate renewal");
+            // Request new certificate from provider
+            let (cert_pem, key_pem) = provider.renew_certificate(&self.domain).await?;
+
+            // Backup existing certificates
+            let backup_cert = self.cert_path.with_extension("pem.bak");
+            let backup_key = self.key_path.with_extension("pem.bak");
+
+            if self.cert_path.exists() {
+                fs::copy(&self.cert_path, &backup_cert).await.map_err(|e| {
+                    FusekiError::internal(format!("Failed to backup certificate: {}", e))
+                })?;
+            }
+            if self.key_path.exists() {
+                fs::copy(&self.key_path, &backup_key)
+                    .await
+                    .map_err(|e| FusekiError::internal(format!("Failed to backup key: {}", e)))?;
+            }
+
+            // Write new certificate and key
+            fs::write(&self.cert_path, &cert_pem).await.map_err(|e| {
+                FusekiError::internal(format!("Failed to write certificate: {}", e))
+            })?;
+            fs::write(&self.key_path, &key_pem)
+                .await
+                .map_err(|e| FusekiError::internal(format!("Failed to write key: {}", e)))?;
+
+            info!("New certificate written to {:?}", self.cert_path);
+        } else {
+            warn!("No certificate provider configured - manual certificate rotation required");
+        }
 
         // Reload TLS manager with new certificate
         let manager = self.tls_manager.write().await;

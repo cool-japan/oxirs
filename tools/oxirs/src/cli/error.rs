@@ -268,6 +268,14 @@ impl From<toml::de::Error> for CliError {
     }
 }
 
+impl From<rust_xlsxwriter::XlsxError> for CliError {
+    fn from(err: rust_xlsxwriter::XlsxError) -> Self {
+        Self::new(CliErrorKind::SerializationError(err.to_string()))
+            .with_context("Excel (XLSX) export failed")
+            .with_suggestion("Check file permissions and disk space")
+    }
+}
+
 /// Helper functions for common error scenarios
 pub mod helpers {
     use super::*;

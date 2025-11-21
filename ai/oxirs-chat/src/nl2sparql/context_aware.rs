@@ -198,23 +198,53 @@ impl ContextAwareGenerator {
         context.history.retain(|m| m.relevance > 0.1);
     }
 
-    /// Extract entities from query
+    /// Extract entities from query (enhanced with NLP integration)
     fn extract_entities(&self, query: &str) -> Result<Vec<String>> {
-        // Simplified entity extraction - capitalize words excluding question words
+        // TODO: Integrate with NLP entity extractor when available in context
+        // For now, use improved heuristic-based extraction
+
         let question_words = [
             "How", "What", "Where", "When", "Who", "Which", "Why", "Is", "Are", "Do", "Does",
-            "Did", "Can", "Could", "Would", "Should", "Will", "The", "A", "An",
+            "Did", "Can", "Could", "Would", "Should", "Will", "The", "A", "An", "Of", "In", "On",
         ];
 
-        let entities: Vec<String> = query
+        // Extract capitalized words (potential entities)
+        let mut entities: Vec<String> = query
             .split_whitespace()
             .filter(|w| {
-                let is_capitalized = w.chars().next().map(|c| c.is_uppercase()).unwrap_or(false);
-                is_capitalized
-                    && !question_words.contains(&w.trim_end_matches(|c: char| !c.is_alphanumeric()))
+                let cleaned = w.trim_end_matches(|c: char| !c.is_alphanumeric());
+                let is_capitalized = cleaned
+                    .chars()
+                    .next()
+                    .map(|c| c.is_uppercase())
+                    .unwrap_or(false);
+                is_capitalized && !question_words.contains(&cleaned) && cleaned.len() > 1
             })
-            .map(String::from)
+            .map(|w| {
+                w.trim_end_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .collect();
+
+        // Extract URI-like patterns
+        let uri_pattern = regex::Regex::new(r"<([^>]+)>").unwrap();
+        for capture in uri_pattern.captures_iter(query) {
+            if let Some(uri) = capture.get(1) {
+                entities.push(uri.as_str().to_string());
+            }
+        }
+
+        // Extract prefixed names (e.g., schema:Person, foaf:Person)
+        let prefixed_pattern = regex::Regex::new(r"\b([a-z]+):([A-Za-z0-9_-]+)\b").unwrap();
+        for capture in prefixed_pattern.captures_iter(query) {
+            if let Some(full_match) = capture.get(0) {
+                entities.push(full_match.as_str().to_string());
+            }
+        }
+
+        // Deduplicate
+        entities.sort();
+        entities.dedup();
 
         Ok(entities)
     }

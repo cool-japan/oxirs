@@ -1,0 +1,17 @@
+# Sample N-Triples File for Testing
+# OxiRS TTL Parser Test Data
+
+<http://example.org/alice> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/name> "Alice Smith" .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/age> "30"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/mbox> <mailto:alice@example.org> .
+<http://example.org/alice> <http://xmlns.com/foaf/0.1/knows> <http://example.org/bob> .
+<http://example.org/bob> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/name> "Bob Jones" .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/age> "25"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/knows> <http://example.org/alice> .
+<http://example.org/bob> <http://xmlns.com/foaf/0.1/knows> <http://example.org/charlie> .
+<http://example.org/charlie> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://xmlns.com/foaf/0.1/Person> .
+<http://example.org/charlie> <http://xmlns.com/foaf/0.1/name> "Charlie Brown"@en .
+<http://example.org/charlie> <http://xmlns.com/foaf/0.1/name> "\u30C1\u30E3\u30FC\u30EA\u30FC\u30FB\u30D6\u30E9\u30A6\u30F3"@ja .
+<http://example.org/charlie> <http://xmlns.com/foaf/0.1/age> "28"^^<http://www.w3.org/2001/XMLSchema#integer> .

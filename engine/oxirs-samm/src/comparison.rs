@@ -877,6 +877,227 @@ impl ModelComparison {
 
         Ok(mermaid)
     }
+
+    /// Export comparison as JSON
+    ///
+    /// Returns a JSON representation of the comparison result for programmatic processing.
+    ///
+    /// # Returns
+    ///
+    /// JSON string containing all changes
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use oxirs_samm::comparison::ModelComparison;
+    /// # use oxirs_samm::metamodel::Aspect;
+    /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let aspect1 = Aspect::new("test1".to_string());
+    /// # let aspect2 = Aspect::new("test2".to_string());
+    /// let comparison = ModelComparison::compare(&aspect1, &aspect2);
+    /// let json = comparison.export_json()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn export_json(&self) -> Result<String, crate::error::SammError> {
+        use serde_json::json;
+
+        let property_changes: Vec<_> = self
+            .properties_modified
+            .iter()
+            .map(|(urn, change)| {
+                json!({
+                    "urn": urn,
+                    "optional_changed": change.optional_changed,
+                    "old_optional": change.old_optional,
+                    "new_optional": change.new_optional,
+                    "characteristic_changed": change.characteristic_changed,
+                    "characteristic_change_description": change.characteristic_change_description,
+                    "metadata_changes": change.metadata_changes,
+                })
+            })
+            .collect();
+
+        let metadata_changes: Vec<_> = self
+            .metadata_changes
+            .iter()
+            .map(|change| {
+                json!({
+                    "element_urn": change.element_urn,
+                    "change_type": format!("{:?}", change.change_type),
+                    "description": change.description,
+                })
+            })
+            .collect();
+
+        let result = json!({
+            "has_changes": self.has_changes(),
+            "properties_added": self.properties_added,
+            "properties_removed": self.properties_removed,
+            "property_changes": property_changes,
+            "metadata_changes": metadata_changes,
+            "operations_added": self.operations_added,
+            "operations_removed": self.operations_removed,
+            "summary": self.summary,
+        });
+
+        serde_json::to_string_pretty(&result)
+            .map_err(|e| crate::error::SammError::ParseError(format!("JSON export error: {}", e)))
+    }
+
+    /// Export comparison as Markdown table
+    ///
+    /// Returns a Markdown-formatted table of all changes for documentation.
+    ///
+    /// # Returns
+    ///
+    /// Markdown string with change summary
+    pub fn export_markdown_table(&self) -> String {
+        let mut md = String::new();
+
+        md.push_str("# Model Comparison\n\n");
+
+        if !self.has_changes() {
+            md.push_str("*No changes detected*\n");
+            return md;
+        }
+
+        // Property changes
+        if !self.properties_added.is_empty()
+            || !self.properties_removed.is_empty()
+            || !self.properties_modified.is_empty()
+        {
+            md.push_str("## Property Changes\n\n");
+            md.push_str("| Property | Change Type | Details |\n");
+            md.push_str("|----------|-------------|----------|\n");
+
+            for prop_urn in &self.properties_added {
+                md.push_str(&format!("| `{}` | ✅ Added | New property |\n", prop_urn));
+            }
+
+            for prop_urn in &self.properties_removed {
+                md.push_str(&format!(
+                    "| `{}` | ❌ Removed | Deleted property |\n",
+                    prop_urn
+                ));
+            }
+
+            for (urn, change) in &self.properties_modified {
+                let mut details = Vec::new();
+                if change.optional_changed {
+                    details.push(format!(
+                        "optional: {} → {}",
+                        change.old_optional, change.new_optional
+                    ));
+                }
+                if change.characteristic_changed {
+                    if let Some(desc) = &change.characteristic_change_description {
+                        details.push(format!("characteristic: {}", desc));
+                    }
+                }
+                let details_str = if details.is_empty() {
+                    "Modified".to_string()
+                } else {
+                    details.join(", ")
+                };
+                md.push_str(&format!("| `{}` | 🔄 Modified | {} |\n", urn, details_str));
+            }
+
+            md.push('\n');
+        }
+
+        // Metadata changes
+        if !self.metadata_changes.is_empty() {
+            md.push_str("## Metadata Changes\n\n");
+            md.push_str("| Element | Type | Description |\n");
+            md.push_str("|---------|------|-------------|\n");
+
+            for change in &self.metadata_changes {
+                md.push_str(&format!(
+                    "| `{}` | {:?} | {} |\n",
+                    change.element_urn, change.change_type, change.description
+                ));
+            }
+
+            md.push('\n');
+        }
+
+        // Operations
+        if !self.operations_added.is_empty() || !self.operations_removed.is_empty() {
+            md.push_str("## Operation Changes\n\n");
+            md.push_str("| Operation | Change Type |\n");
+            md.push_str("|-----------|-------------|\n");
+
+            for op in &self.operations_added {
+                md.push_str(&format!("| `{}` | ✅ Added |\n", op));
+            }
+
+            for op in &self.operations_removed {
+                md.push_str(&format!("| `{}` | ❌ Removed |\n", op));
+            }
+
+            md.push('\n');
+        }
+
+        md
+    }
+
+    /// Export comparison as CSV
+    ///
+    /// Returns a CSV representation for import into spreadsheet tools.
+    ///
+    /// # Returns
+    ///
+    /// CSV string with all changes
+    pub fn export_csv(&self) -> String {
+        let mut csv = String::new();
+
+        csv.push_str("Element Type,Element URN,Change Type,Field,Old Value,New Value\n");
+
+        for prop_urn in &self.properties_added {
+            csv.push_str(&format!("Property,{},Added,,,\n", prop_urn));
+        }
+
+        for prop_urn in &self.properties_removed {
+            csv.push_str(&format!("Property,{},Removed,,,\n", prop_urn));
+        }
+
+        for (urn, change) in &self.properties_modified {
+            if change.optional_changed {
+                csv.push_str(&format!(
+                    "Property,{},Modified,optional,{},{}\n",
+                    urn, change.old_optional, change.new_optional
+                ));
+            }
+            if change.characteristic_changed {
+                csv.push_str(&format!(
+                    "Property,{},Modified,characteristic,,{}\n",
+                    urn,
+                    change
+                        .characteristic_change_description
+                        .as_deref()
+                        .unwrap_or("")
+                ));
+            }
+        }
+
+        for change in &self.metadata_changes {
+            csv.push_str(&format!(
+                "Metadata,{},{:?},,{},\n",
+                change.element_urn, change.change_type, change.description
+            ));
+        }
+
+        for op in &self.operations_added {
+            csv.push_str(&format!("Operation,{},Added,,,\n", op));
+        }
+
+        for op in &self.operations_removed {
+            csv.push_str(&format!("Operation,{},Removed,,,\n", op));
+        }
+
+        csv
+    }
 }
 
 fn sanitize_id(urn: &str) -> String {
@@ -1144,5 +1365,40 @@ mod tests {
         assert!(html_content.contains("comparison-grid"));
         assert!(html_content.contains("stat-card"));
         assert!(html_content.contains("mermaid.initialize"));
+    }
+
+    #[test]
+    fn test_export_json() {
+        let mut aspect1 = Aspect::new("urn:samm:test:1.0.0#Aspect1".to_string());
+        let mut prop1 = Property::new("urn:samm:test:1.0.0#prop1".to_string());
+        prop1.optional = false;
+        aspect1.add_property(prop1);
+
+        let mut aspect2 = Aspect::new("urn:samm:test:1.0.0#Aspect2".to_string());
+        let mut prop2 = Property::new("urn:samm:test:1.0.0#prop2".to_string());
+        prop2.optional = true;
+        aspect2.add_property(prop2);
+
+        let comparison = ModelComparison::compare(&aspect1, &aspect2);
+        let json = comparison.export_json().unwrap();
+
+        assert!(json.contains("property_changes"));
+        assert!(json.contains("metadata_changes"));
+    }
+
+    #[test]
+    fn test_export_markdown_table() {
+        let mut aspect1 = Aspect::new("urn:samm:test:1.0.0#Aspect1".to_string());
+        let prop1 = Property::new("urn:samm:test:1.0.0#prop1".to_string());
+        aspect1.add_property(prop1);
+
+        let aspect2 = Aspect::new("urn:samm:test:1.0.0#Aspect2".to_string());
+
+        let comparison = ModelComparison::compare(&aspect1, &aspect2);
+        let markdown = comparison.export_markdown_table();
+
+        assert!(markdown.contains("Property"));
+        assert!(markdown.contains("Change Type"));
+        assert!(markdown.contains("|"));
     }
 }

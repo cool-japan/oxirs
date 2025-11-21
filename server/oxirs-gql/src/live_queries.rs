@@ -15,7 +15,8 @@
 //! - **Memory Efficient**: Track dependencies without storing all data
 
 use crate::ast::Document;
-use crate::execution::ExecutionContext;
+use crate::execution::{ExecutionContext, ExecutionResult, QueryExecutor};
+use crate::types::Schema;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -274,6 +275,7 @@ pub struct LiveQueryManager {
     queries: Arc<RwLock<HashMap<String, LiveQuery>>>,
     query_senders: Arc<RwLock<HashMap<String, mpsc::Sender<LiveQueryUpdate>>>>,
     change_queue: Arc<RwLock<Vec<RdfChange>>>,
+    executor: Arc<RwLock<Option<QueryExecutor>>>,
 }
 
 impl LiveQueryManager {
@@ -284,7 +286,31 @@ impl LiveQueryManager {
             queries: Arc::new(RwLock::new(HashMap::new())),
             query_senders: Arc::new(RwLock::new(HashMap::new())),
             change_queue: Arc::new(RwLock::new(Vec::new())),
+            executor: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Create live query manager with a schema
+    pub fn with_schema(config: LiveQueryConfig, schema: Schema) -> Self {
+        Self {
+            config,
+            queries: Arc::new(RwLock::new(HashMap::new())),
+            query_senders: Arc::new(RwLock::new(HashMap::new())),
+            change_queue: Arc::new(RwLock::new(Vec::new())),
+            executor: Arc::new(RwLock::new(Some(QueryExecutor::new(schema)))),
+        }
+    }
+
+    /// Set the query executor
+    pub async fn set_executor(&self, executor: QueryExecutor) {
+        let mut guard = self.executor.write().await;
+        *guard = Some(executor);
+    }
+
+    /// Set the schema for query execution
+    pub async fn set_schema(&self, schema: Schema) {
+        let mut guard = self.executor.write().await;
+        *guard = Some(QueryExecutor::new(schema));
     }
 
     /// Register a new live query
@@ -405,63 +431,255 @@ impl LiveQueryManager {
     pub async fn execute_pending_updates(&self) -> Result<usize> {
         let mut updated_count = 0;
 
+        // Collect queries that need updates
         let queries = self.queries.read().await;
-        let query_senders = self.query_senders.read().await;
+        let pending_query_ids: Vec<String> = queries
+            .iter()
+            .filter(|(_, q)| {
+                q.pending_update
+                    && q.last_executed.elapsed()
+                        >= Duration::from_millis(self.config.throttle_interval_ms)
+            })
+            .map(|(id, _)| id.clone())
+            .collect();
+        drop(queries);
 
-        for (query_id, query) in queries.iter() {
-            if !query.pending_update {
-                continue;
-            }
+        // Process each pending query
+        for query_id in pending_query_ids {
+            let queries = self.queries.read().await;
+            let query = match queries.get(&query_id) {
+                Some(q) => q.clone(),
+                None => continue,
+            };
+            drop(queries);
 
-            // Check throttling
-            if query.last_executed.elapsed()
-                < Duration::from_millis(self.config.throttle_interval_ms)
-            {
-                continue;
-            }
+            // Execute query
+            let new_result = match self.execute_query(&query).await {
+                Ok(result) => result,
+                Err(e) => {
+                    warn!("Failed to execute live query {}: {}", query_id, e);
+                    // Send error update
+                    let query_senders = self.query_senders.read().await;
+                    if let Some(sender) = query_senders.get(&query_id) {
+                        let error_update = LiveQueryUpdate {
+                            query_id: query_id.clone(),
+                            update_type: UpdateType::Error,
+                            data: serde_json::json!({
+                                "errors": [{
+                                    "message": e.to_string()
+                                }]
+                            }),
+                            timestamp: chrono::Utc::now().to_rfc3339(),
+                        };
+                        let _ = sender.send(error_update).await;
+                    }
+                    continue;
+                }
+            };
 
-            // Execute query (simplified - in real implementation, would use QueryExecutor)
-            let result = self.execute_query(query).await?;
+            // Determine update type and data
+            let (update_type, update_data) = if let Some(ref last_result) = query.last_result {
+                // Try to compute diff
+                if let Some(diff) = self.compute_diff(last_result, &new_result) {
+                    // Check if diff is significantly smaller than full result
+                    let diff_size = diff.to_string().len();
+                    let full_size = new_result.to_string().len();
+
+                    if diff_size < full_size / 2 {
+                        (UpdateType::Diff, diff)
+                    } else {
+                        (UpdateType::Full, new_result.clone())
+                    }
+                } else {
+                    // No diff means no changes, skip this update
+                    continue;
+                }
+            } else {
+                // First execution, send full result
+                (UpdateType::Full, new_result.clone())
+            };
 
             // Send update
-            if let Some(sender) = query_senders.get(query_id) {
+            let query_senders = self.query_senders.read().await;
+            if let Some(sender) = query_senders.get(&query_id) {
                 let update = LiveQueryUpdate {
                     query_id: query_id.clone(),
-                    update_type: UpdateType::Full,
-                    data: result,
+                    update_type,
+                    data: update_data,
                     timestamp: chrono::Utc::now().to_rfc3339(),
                 };
 
                 if sender.send(update).await.is_ok() {
                     updated_count += 1;
+
+                    // Update query state
+                    let mut queries_mut = self.queries.write().await;
+                    if let Some(query) = queries_mut.get_mut(&query_id) {
+                        query.pending_update = false;
+                        query.last_executed = Instant::now();
+                        query.execution_count += 1;
+                        query.last_result = Some(new_result);
+                    }
                 }
-            }
-        }
-
-        // Clear pending flags
-        drop(queries);
-        drop(query_senders);
-
-        let mut queries_mut = self.queries.write().await;
-        for query in queries_mut.values_mut() {
-            if query.pending_update {
-                query.pending_update = false;
-                query.last_executed = Instant::now();
-                query.execution_count += 1;
             }
         }
 
         Ok(updated_count)
     }
 
-    /// Execute a query (placeholder - real implementation would use QueryExecutor)
-    async fn execute_query(&self, _query: &LiveQuery) -> Result<serde_json::Value> {
-        // Placeholder - in real implementation, would execute GraphQL query
-        Ok(serde_json::json!({
-            "data": {
-                "result": "updated"
+    /// Execute a live query and return the result
+    async fn execute_query(&self, query: &LiveQuery) -> Result<serde_json::Value> {
+        // Try to get the executor
+        let executor_guard = self.executor.read().await;
+
+        if let Some(ref executor) = *executor_guard {
+            // Execute the query using the QueryExecutor
+            let result = executor.execute(&query.document, &query.context).await?;
+
+            // Convert ExecutionResult to JSON
+            let json_result = self.execution_result_to_json(&result);
+
+            debug!(
+                "Executed live query {}: success={}",
+                query.id,
+                !result.has_errors()
+            );
+
+            Ok(json_result)
+        } else {
+            // No executor configured - return a basic result structure
+            // This allows the system to function in test environments
+            debug!(
+                "No executor configured for live query {}, returning placeholder",
+                query.id
+            );
+
+            Ok(serde_json::json!({
+                "data": null,
+                "errors": [{
+                    "message": "Query executor not configured"
+                }]
+            }))
+        }
+    }
+
+    /// Convert ExecutionResult to JSON format
+    fn execution_result_to_json(&self, result: &ExecutionResult) -> serde_json::Value {
+        let mut json = serde_json::json!({});
+
+        // Add data if present
+        if let Some(ref data) = result.data {
+            json["data"] = data.clone();
+        } else {
+            json["data"] = serde_json::Value::Null;
+        }
+
+        // Add errors if present
+        if !result.errors.is_empty() {
+            let errors: Vec<serde_json::Value> = result
+                .errors
+                .iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "message": e.message,
+                        "path": e.path,
+                        "locations": e.locations.iter().map(|l| {
+                            serde_json::json!({
+                                "line": l.line,
+                                "column": l.column
+                            })
+                        }).collect::<Vec<_>>(),
+                        "extensions": e.extensions
+                    })
+                })
+                .collect();
+            json["errors"] = serde_json::json!(errors);
+        }
+
+        json
+    }
+
+    /// Compare two results and generate a diff
+    fn compute_diff(
+        &self,
+        old_result: &serde_json::Value,
+        new_result: &serde_json::Value,
+    ) -> Option<serde_json::Value> {
+        // If results are the same, no update needed
+        if old_result == new_result {
+            return None;
+        }
+
+        // If diffing is disabled or results are too large, return full result
+        if !self.config.enable_diffing {
+            return Some(new_result.clone());
+        }
+
+        // Check size for diffing
+        let old_size = old_result.to_string().len();
+        let new_size = new_result.to_string().len();
+
+        if old_size > self.config.max_diff_size || new_size > self.config.max_diff_size {
+            return Some(new_result.clone());
+        }
+
+        // Compute JSON patch diff
+        self.compute_json_diff(old_result, new_result)
+    }
+
+    /// Compute JSON diff between two values
+    #[allow(clippy::only_used_in_recursion)]
+    fn compute_json_diff(
+        &self,
+        old: &serde_json::Value,
+        new: &serde_json::Value,
+    ) -> Option<serde_json::Value> {
+        use serde_json::Value;
+
+        match (old, new) {
+            // If both are objects, compute object diff
+            (Value::Object(old_obj), Value::Object(new_obj)) => {
+                let mut diff = serde_json::Map::new();
+                let mut has_changes = false;
+
+                // Check for added or changed keys
+                for (key, new_val) in new_obj {
+                    if let Some(old_val) = old_obj.get(key) {
+                        if old_val != new_val {
+                            if let Some(nested_diff) = self.compute_json_diff(old_val, new_val) {
+                                diff.insert(key.clone(), nested_diff);
+                                has_changes = true;
+                            }
+                        }
+                    } else {
+                        diff.insert(key.clone(), new_val.clone());
+                        has_changes = true;
+                    }
+                }
+
+                // Check for removed keys
+                for key in old_obj.keys() {
+                    if !new_obj.contains_key(key) {
+                        diff.insert(key.clone(), Value::Null);
+                        has_changes = true;
+                    }
+                }
+
+                if has_changes {
+                    Some(Value::Object(diff))
+                } else {
+                    None
+                }
             }
-        }))
+            // For arrays and primitives, return new value if different
+            _ => {
+                if old != new {
+                    Some(new.clone())
+                } else {
+                    None
+                }
+            }
+        }
     }
 
     /// Cleanup stale queries
@@ -786,5 +1004,150 @@ mod tests {
     fn test_change_type() {
         assert_eq!(ChangeType::Insert, ChangeType::Insert);
         assert_ne!(ChangeType::Insert, ChangeType::Delete);
+    }
+
+    #[test]
+    fn test_live_query_manager_with_schema() {
+        use crate::types::Schema;
+
+        let config = LiveQueryConfig::default();
+        let schema = Schema::new();
+        let manager = LiveQueryManager::with_schema(config, schema);
+
+        // Verify the manager is created with executor
+        assert!(manager.config.enabled);
+    }
+
+    #[test]
+    fn test_compute_json_diff_same_values() {
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"a": 1, "b": 2});
+        let new = serde_json::json!({"a": 1, "b": 2});
+
+        let diff = manager.compute_diff(&old, &new);
+        assert!(diff.is_none()); // No diff for same values
+    }
+
+    #[test]
+    fn test_compute_json_diff_changed_value() {
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"a": 1, "b": 2});
+        let new = serde_json::json!({"a": 1, "b": 3});
+
+        let diff = manager.compute_diff(&old, &new);
+        assert!(diff.is_some());
+
+        let diff_value = diff.unwrap();
+        assert_eq!(diff_value["b"], 3);
+    }
+
+    #[test]
+    fn test_compute_json_diff_added_key() {
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"a": 1});
+        let new = serde_json::json!({"a": 1, "b": 2});
+
+        let diff = manager.compute_diff(&old, &new);
+        assert!(diff.is_some());
+
+        let diff_value = diff.unwrap();
+        assert_eq!(diff_value["b"], 2);
+    }
+
+    #[test]
+    fn test_compute_json_diff_removed_key() {
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"a": 1, "b": 2});
+        let new = serde_json::json!({"a": 1});
+
+        let diff = manager.compute_diff(&old, &new);
+        assert!(diff.is_some());
+
+        let diff_value = diff.unwrap();
+        assert!(diff_value["b"].is_null());
+    }
+
+    #[test]
+    fn test_compute_json_diff_nested_change() {
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"a": {"b": 1}});
+        let new = serde_json::json!({"a": {"b": 2}});
+
+        let diff = manager.compute_diff(&old, &new);
+        assert!(diff.is_some());
+
+        let diff_value = diff.unwrap();
+        assert_eq!(diff_value["a"]["b"], 2);
+    }
+
+    #[test]
+    fn test_compute_json_diff_array_change() {
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"items": [1, 2, 3]});
+        let new = serde_json::json!({"items": [1, 2, 4]});
+
+        let diff = manager.compute_diff(&old, &new);
+        assert!(diff.is_some());
+    }
+
+    #[test]
+    fn test_diffing_disabled() {
+        let config = LiveQueryConfig {
+            enable_diffing: false,
+            ..Default::default()
+        };
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"a": 1});
+        let new = serde_json::json!({"a": 2});
+
+        let diff = manager.compute_diff(&old, &new);
+        // When diffing is disabled, should return the full new value
+        assert!(diff.is_some());
+        assert_eq!(diff.unwrap(), new);
+    }
+
+    #[test]
+    fn test_max_diff_size() {
+        let config = LiveQueryConfig {
+            enable_diffing: true,
+            max_diff_size: 10, // Very small limit
+            ..Default::default()
+        };
+        let manager = LiveQueryManager::new(config);
+
+        let old = serde_json::json!({"key": "old_value_that_is_quite_long"});
+        let new = serde_json::json!({"key": "new_value_that_is_also_long"});
+
+        let diff = manager.compute_diff(&old, &new);
+        // Should return full result since it exceeds max_diff_size
+        assert!(diff.is_some());
+        assert_eq!(diff.unwrap(), new);
+    }
+
+    #[tokio::test]
+    async fn test_set_schema() {
+        use crate::types::Schema;
+
+        let config = LiveQueryConfig::default();
+        let manager = LiveQueryManager::new(config);
+
+        let schema = Schema::new();
+        manager.set_schema(schema).await;
+
+        // The manager should now have an executor
+        // We can't directly test this, but we can verify it doesn't panic
     }
 }

@@ -89,6 +89,10 @@ harness = false
 name = "simd_benchmarks"
 harness = false
 
+[[bench]]
+name = "large_model_benchmarks"
+harness = false
+
 [features]
 default = []
 codegen = []  # Code generation support (GraphQL, TypeScript)

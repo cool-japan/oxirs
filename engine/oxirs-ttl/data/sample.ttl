@@ -1,0 +1,51 @@
+# Sample Turtle File for Testing
+# OxiRS TTL Parser Test Data
+
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix foaf: <http://xmlns.com/foaf/0.1/> .
+@prefix ex: <http://example.org/> .
+
+# Basic triples
+ex:alice a foaf:Person ;
+    foaf:name "Alice Smith" ;
+    foaf:age 30 ;
+    foaf:mbox <mailto:alice@example.org> ;
+    foaf:knows ex:bob .
+
+ex:bob a foaf:Person ;
+    foaf:name "Bob Jones" ;
+    foaf:age 25 ;
+    foaf:knows ex:alice , ex:charlie .
+
+ex:charlie a foaf:Person ;
+    foaf:name "Charlie Brown"@en ,
+              "チャーリー・ブラウン"@ja ;
+    foaf:age "28"^^xsd:integer .
+
+# Collections
+ex:list rdf:value (ex:item1 ex:item2 ex:item3) .
+
+# Blank nodes
+ex:document foaf:maker [
+    rdf:type foaf:Person ;
+    foaf:name "Anonymous Author" ;
+    foaf:mbox <mailto:anon@example.org>
+] .
+
+# Multi-line string literals
+ex:poem rdfs:comment """
+This is a multi-line
+string literal that spans
+multiple lines.
+""" .
+
+# Numeric shortcuts
+ex:measurement ex:value 42 ;
+    ex:decimal 3.14 ;
+    ex:scientific 6.022e23 .
+
+# Boolean literals
+ex:feature ex:enabled true ;
+    ex:deprecated false .

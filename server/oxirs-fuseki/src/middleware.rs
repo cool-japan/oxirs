@@ -5,6 +5,9 @@ use crate::auth::{
     policy_engine::{AuthorizationContext, UnifiedPolicyEngine},
     types::{Permission, User},
 };
+use crate::security_audit::{
+    AuditEventType, AuditLogEntry, AuditResult, SecurityAuditManager, Severity,
+};
 use axum::{
     extract::Request,
     http::{header, HeaderValue, Method, StatusCode},
@@ -15,6 +18,93 @@ use std::sync::Arc;
 use std::time::Instant;
 use tracing::{debug, info, warn, Span};
 use uuid::Uuid;
+
+/// Security audit middleware
+///
+/// Logs all incoming requests to the security audit system for compliance and monitoring.
+/// Records method, path, IP address, and response status.
+pub async fn security_audit_middleware(
+    security_auditor: Arc<SecurityAuditManager>,
+    request: Request,
+    next: Next,
+) -> Response {
+    let method = request.method().clone();
+    let uri = request.uri().clone();
+    let path = uri.path().to_string();
+
+    // Extract IP address from request headers or connection info
+    let ip_address = request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+        .or_else(|| {
+            request
+                .headers()
+                .get("x-real-ip")
+                .and_then(|h| h.to_str().ok())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string());
+
+    // Process request
+    let response = next.run(request).await;
+    let status = response.status();
+
+    // Determine audit event type based on method
+    let event_type = match method {
+        Method::GET | Method::HEAD | Method::OPTIONS => AuditEventType::DataAccess,
+        Method::POST | Method::PUT | Method::PATCH | Method::DELETE => {
+            AuditEventType::DataModification
+        }
+        _ => AuditEventType::SecurityEvent,
+    };
+
+    // Determine severity based on status code
+    let severity = if status.is_success() {
+        Severity::Info
+    } else if status.is_client_error() {
+        Severity::Low
+    } else if status.is_server_error() {
+        Severity::Medium
+    } else {
+        Severity::Info
+    };
+
+    // Determine result based on status
+    let result = if status.is_success() {
+        AuditResult::Success
+    } else if status == StatusCode::UNAUTHORIZED || status == StatusCode::FORBIDDEN {
+        AuditResult::Denied
+    } else if status.is_client_error() || status.is_server_error() {
+        AuditResult::Failure
+    } else {
+        AuditResult::Success
+    };
+
+    // Log the audit event
+    let entry = AuditLogEntry {
+        timestamp: chrono::Utc::now(),
+        event_type,
+        severity,
+        user: None, // Would be extracted from auth context if available
+        ip_address: Some(ip_address),
+        resource: path,
+        action: method.to_string(),
+        result,
+        details: Some(format!("Status: {}", status.as_u16())),
+    };
+
+    // Fire and forget - don't block the response
+    let auditor = security_auditor.clone();
+    tokio::spawn(async move {
+        if let Err(e) = auditor.log_event(entry).await {
+            warn!("Failed to log security audit event: {}", e);
+        }
+    });
+
+    response
+}
 
 /// Security headers middleware for production deployment
 ///

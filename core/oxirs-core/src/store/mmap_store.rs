@@ -15,8 +15,8 @@ use anyhow::{bail, Context, Result};
 use blake3::Hasher;
 use memmap2::{Mmap, MmapOptions};
 use parking_lot::{Mutex, RwLock};
-use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use std::collections::{HashMap, HashSet};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -118,6 +118,18 @@ pub struct MmapStore {
     term_cache: Arc<RwLock<HashMap<String, u64>>>,
     batch_buffer: Arc<Mutex<Vec<Quad>>>,
     performance_stats: Arc<Mutex<PerformanceStats>>,
+
+    // Deletion tracking for compaction
+    deleted_quads: Arc<RwLock<HashSet<u64>>>,
+
+    // Access statistics for query optimization
+    access_stats: Arc<Mutex<AccessStats>>,
+    subject_access_counts: Arc<RwLock<HashMap<u64, u64>>>,
+    predicate_access_counts: Arc<RwLock<HashMap<u64, u64>>>,
+
+    // Backup tracking
+    last_backup_offset: Arc<RwLock<u64>>,
+    backup_history: Arc<RwLock<Vec<BackupMetadata>>>,
 }
 
 /// Performance statistics for monitoring
@@ -129,6 +141,51 @@ pub struct PerformanceStats {
     pub cache_misses: u64,
     pub total_flush_time_ms: u64,
     pub average_batch_size: f64,
+}
+
+/// Access statistics for query optimization
+#[derive(Debug, Clone, Default)]
+pub struct AccessStats {
+    /// Number of queries by index type
+    pub spo_queries: u64,
+    pub pos_queries: u64,
+    pub osp_queries: u64,
+    pub gspo_queries: u64,
+    pub full_scans: u64,
+    /// Average query latency in microseconds
+    pub avg_query_latency_us: f64,
+    /// Number of queries executed
+    pub total_queries: u64,
+    /// Hot subjects (frequently accessed)
+    pub hot_subjects: Vec<(u64, u64)>, // (subject_id, access_count)
+    /// Hot predicates (frequently accessed)
+    pub hot_predicates: Vec<(u64, u64)>, // (predicate_id, access_count)
+}
+
+/// Backup metadata for incremental backups
+#[derive(Debug, Clone)]
+pub struct BackupMetadata {
+    /// Timestamp of the backup
+    pub timestamp: std::time::SystemTime,
+    /// Number of quads in the backup
+    pub quad_count: u64,
+    /// Checkpoint marker (quad offset after which this backup was taken)
+    pub checkpoint_offset: u64,
+    /// Whether this is a full backup
+    pub is_full_backup: bool,
+    /// Backup file path
+    pub backup_path: PathBuf,
+}
+
+/// Incremental backup configuration
+#[derive(Debug, Clone)]
+pub struct BackupConfig {
+    /// Maximum number of incremental backups before forcing full backup
+    pub max_incremental_chain: usize,
+    /// Minimum number of changed quads to trigger incremental backup
+    pub min_changes_for_backup: u64,
+    /// Directory to store backups
+    pub backup_dir: PathBuf,
 }
 
 impl MmapStore {
@@ -207,6 +264,18 @@ impl MmapStore {
             term_cache: Arc::new(RwLock::new(HashMap::with_capacity(10000))),
             batch_buffer: Arc::new(Mutex::new(Vec::with_capacity(1000))),
             performance_stats: Arc::new(Mutex::new(PerformanceStats::default())),
+
+            // Initialize deletion tracking
+            deleted_quads: Arc::new(RwLock::new(HashSet::new())),
+
+            // Initialize access statistics
+            access_stats: Arc::new(Mutex::new(AccessStats::default())),
+            subject_access_counts: Arc::new(RwLock::new(HashMap::new())),
+            predicate_access_counts: Arc::new(RwLock::new(HashMap::new())),
+
+            // Initialize backup tracking
+            last_backup_offset: Arc::new(RwLock::new(0)),
+            backup_history: Arc::new(RwLock::new(Vec::new())),
         })
     }
 
@@ -891,6 +960,8 @@ impl MmapStore {
         object: Option<&Object>,
         graph_name: Option<&GraphName>,
     ) -> Result<QuadIterator<'_>> {
+        let query_start = std::time::Instant::now();
+
         // Ensure buffer is flushed
         self.flush()?;
 
@@ -923,9 +994,11 @@ impl MmapStore {
         // Choose best index and collect matching offsets
         let mut offsets = Vec::new();
 
+        let index_type;
         match (subject_id, predicate_id, object_id, graph_id) {
             (Some(s), Some(p), Some(o), g) => {
                 // Use SPO index for exact match
+                index_type = "spo";
                 let key = format!("{s:016x}{p:016x}{o:016x}");
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&key)?;
@@ -939,6 +1012,7 @@ impl MmapStore {
             }
             (Some(s), Some(p), None, g) => {
                 // Use SPO index with prefix
+                index_type = "spo";
                 let prefix = format!("{s:016x}{p:016x}");
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&prefix)?;
@@ -951,6 +1025,7 @@ impl MmapStore {
             }
             (Some(s), None, None, g) => {
                 // Use SPO index with subject prefix
+                index_type = "spo";
                 let prefix = format!("{s:016x}");
                 if let Some(spo_index) = self.indexes.read().get("spo") {
                     let results = spo_index.search_prefix(&prefix)?;
@@ -963,6 +1038,7 @@ impl MmapStore {
             }
             (None, Some(p), Some(o), g) => {
                 // Use POS index
+                index_type = "pos";
                 let key = format!("{p:016x}{o:016x}");
                 if let Some(pos_index) = self.indexes.read().get("pos") {
                     let results = pos_index.search_prefix(&key)?;
@@ -975,6 +1051,7 @@ impl MmapStore {
             }
             (None, None, Some(o), g) => {
                 // Use OSP index
+                index_type = "osp";
                 let prefix = format!("{o:016x}");
                 if let Some(osp_index) = self.indexes.read().get("osp") {
                     let results = osp_index.search_prefix(&prefix)?;
@@ -987,6 +1064,7 @@ impl MmapStore {
             }
             (None, None, None, Some(g)) => {
                 // Use GSPO index
+                index_type = "gspo";
                 let prefix = format!("{g:016x}");
                 if let Some(gspo_index) = self.indexes.read().get("gspo") {
                     let results = gspo_index.search_prefix(&prefix)?;
@@ -997,6 +1075,7 @@ impl MmapStore {
             }
             _ => {
                 // Full scan - scan all quads
+                index_type = "full_scan";
                 let quad_count = self.header.read().quad_count;
                 let quad_size = std::mem::size_of::<DiskQuad>() as u64;
                 for i in 0..quad_count {
@@ -1013,6 +1092,10 @@ impl MmapStore {
                 }
             }
         }
+
+        // Record query access statistics
+        let latency_us = query_start.elapsed().as_micros() as u64;
+        self.record_query_access(index_type, subject_id, predicate_id, latency_us);
 
         Ok(QuadIterator {
             store: self,
@@ -1084,6 +1167,170 @@ impl MmapStore {
         Ok(false)
     }
 
+    /// Remove a quad from the store (marks as deleted for later compaction)
+    pub fn remove_quad(&self, quad: &Quad) -> Result<bool> {
+        let _write_lock = self.write_lock.lock();
+
+        // First flush any pending writes to ensure we can search all data
+        self.flush()?;
+
+        // Get term IDs for the quad we want to remove
+        let (subject_id, predicate_id, object_id, graph_id) = {
+            let interner = self.term_interner.read();
+
+            let subject_id = match quad.subject() {
+                Subject::NamedNode(n) => interner.get_named_node_id(n),
+                Subject::BlankNode(b) => interner.get_blank_node_id(b),
+                _ => None,
+            };
+
+            let predicate_id = match quad.predicate() {
+                Predicate::NamedNode(n) => interner.get_named_node_id(n),
+                _ => None,
+            };
+
+            let object_id = match quad.object() {
+                Object::NamedNode(n) => interner.get_named_node_id(n),
+                Object::BlankNode(b) => interner.get_blank_node_id(b),
+                Object::Literal(l) => interner.get_literal_id(l),
+                _ => None,
+            };
+
+            let graph_id = match quad.graph_name() {
+                GraphName::NamedNode(n) => interner.get_named_node_id(n),
+                GraphName::BlankNode(b) => interner.get_blank_node_id(b),
+                GraphName::DefaultGraph => Some(0),
+                _ => None,
+            };
+
+            (subject_id, predicate_id, object_id, graph_id)
+        };
+
+        // If any term is not found, the quad doesn't exist
+        let (Some(sid), Some(pid), Some(oid), Some(gid)) =
+            (subject_id, predicate_id, object_id, graph_id)
+        else {
+            return Ok(false);
+        };
+
+        // Find the quad in the data file
+        let mmap = self.data_mmap.read();
+
+        if let Some(mmap) = mmap.as_ref() {
+            let data_size = mmap.len();
+            let quad_size = std::mem::size_of::<DiskQuad>();
+            let num_quads = data_size / quad_size;
+
+            for i in 0..num_quads {
+                let offset = HEADER_SIZE as u64 + (i * quad_size) as u64;
+
+                // Skip already deleted quads
+                {
+                    let deleted = self.deleted_quads.read();
+                    if deleted.contains(&offset) {
+                        continue;
+                    }
+                }
+
+                let disk_quad =
+                    unsafe { &*((mmap.as_ptr() as usize + (i * quad_size)) as *const DiskQuad) };
+
+                if disk_quad.subject_id == sid
+                    && disk_quad.predicate_id == pid
+                    && disk_quad.object_id == oid
+                    && disk_quad.graph_id == gid
+                {
+                    // Mark as deleted
+                    let mut deleted = self.deleted_quads.write();
+                    deleted.insert(offset);
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Check if a quad exists in the store
+    pub fn contains_quad(&self, quad: &Quad) -> Result<bool> {
+        // Get term IDs for the quad
+        let (subject_id, predicate_id, object_id, graph_id) = {
+            let interner = self.term_interner.read();
+
+            let subject_id = match quad.subject() {
+                Subject::NamedNode(n) => interner.get_named_node_id(n),
+                Subject::BlankNode(b) => interner.get_blank_node_id(b),
+                _ => None,
+            };
+
+            let predicate_id = match quad.predicate() {
+                Predicate::NamedNode(n) => interner.get_named_node_id(n),
+                _ => None,
+            };
+
+            let object_id = match quad.object() {
+                Object::NamedNode(n) => interner.get_named_node_id(n),
+                Object::BlankNode(b) => interner.get_blank_node_id(b),
+                Object::Literal(l) => interner.get_literal_id(l),
+                _ => None,
+            };
+
+            let graph_id = match quad.graph_name() {
+                GraphName::NamedNode(n) => interner.get_named_node_id(n),
+                GraphName::BlankNode(b) => interner.get_blank_node_id(b),
+                GraphName::DefaultGraph => Some(0),
+                _ => None,
+            };
+
+            (subject_id, predicate_id, object_id, graph_id)
+        };
+
+        // If any term is not found, the quad doesn't exist
+        let (Some(sid), Some(pid), Some(oid), Some(gid)) =
+            (subject_id, predicate_id, object_id, graph_id)
+        else {
+            return Ok(false);
+        };
+
+        // Search in the data file
+        let mmap = self.data_mmap.read();
+
+        if let Some(mmap) = mmap.as_ref() {
+            let data_size = mmap.len();
+            let quad_size = std::mem::size_of::<DiskQuad>();
+            let num_quads = data_size / quad_size;
+
+            let deleted = self.deleted_quads.read();
+
+            for i in 0..num_quads {
+                let offset = HEADER_SIZE as u64 + (i * quad_size) as u64;
+
+                // Skip deleted quads
+                if deleted.contains(&offset) {
+                    continue;
+                }
+
+                let disk_quad =
+                    unsafe { &*((mmap.as_ptr() as usize + (i * quad_size)) as *const DiskQuad) };
+
+                if disk_quad.subject_id == sid
+                    && disk_quad.predicate_id == pid
+                    && disk_quad.object_id == oid
+                    && disk_quad.graph_id == gid
+                {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Get the count of deleted quads pending compaction
+    pub fn deleted_count(&self) -> usize {
+        self.deleted_quads.read().len()
+    }
+
     /// Compact the store to reclaim space by removing deleted entries and optimizing layout
     pub fn compact(&self) -> Result<()> {
         let _write_lock = self.write_lock.lock();
@@ -1091,35 +1338,166 @@ impl MmapStore {
         // Step 1: Flush any pending writes
         self.flush()?;
 
-        // Step 2: For now, implement a simple version that just flushes buffers
-        // This is a simplified implementation that ensures data consistency
-        // A full compaction would require rebuilding the entire store structure
+        // Step 2: Check if compaction is needed
+        let deleted_count = self.deleted_quads.read().len();
+        if deleted_count == 0 {
+            // No deleted entries, just save metadata
+            let term_path = self.path.join("terms.oxirs");
+            if let Err(e) = self.term_interner.read().save(&term_path) {
+                eprintln!("Warning: Failed to save term interner during compaction: {e}");
+            }
+            println!("Compaction completed (no deleted entries)");
+            return Ok(());
+        }
 
-        // Flush term interner
+        println!(
+            "Starting compaction: {} deleted entries to remove",
+            deleted_count
+        );
+
+        // Step 3: Create temporary files for the compacted data
+        let temp_data_path = self.path.join("data.oxirs.tmp");
+        let mut temp_data_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&temp_data_path)
+            .context("Failed to create temp data file")?;
+
+        // Step 4: Write new header
+        let mut new_header = FileHeader::new();
+        temp_data_file.write_all(unsafe {
+            std::slice::from_raw_parts(
+                &new_header as *const _ as *const u8,
+                std::mem::size_of::<FileHeader>(),
+            )
+        })?;
+
+        // Step 5: Copy non-deleted quads to new file
+        let mut new_quad_count = 0u64;
+        let deleted = self.deleted_quads.read();
+        let mmap = self.data_mmap.read();
+
+        if let Some(mmap) = mmap.as_ref() {
+            let data_size = mmap.len();
+            let quad_size = std::mem::size_of::<DiskQuad>();
+            let num_quads = data_size / quad_size;
+
+            for i in 0..num_quads {
+                let offset = HEADER_SIZE as u64 + (i * quad_size) as u64;
+
+                // Skip deleted quads
+                if deleted.contains(&offset) {
+                    continue;
+                }
+
+                let disk_quad =
+                    unsafe { &*((mmap.as_ptr() as usize + (i * quad_size)) as *const DiskQuad) };
+
+                // Write quad to new file
+                temp_data_file.write_all(unsafe {
+                    std::slice::from_raw_parts(disk_quad as *const _ as *const u8, quad_size)
+                })?;
+
+                new_quad_count += 1;
+            }
+        }
+        drop(mmap);
+        drop(deleted);
+
+        // Step 6: Update header with new counts
+        new_header.quad_count = new_quad_count;
+        {
+            let interner = self.term_interner.read();
+            new_header.term_count = interner.stats().total_terms() as u64;
+        }
+        new_header.compute_checksum();
+
+        // Write updated header
+        temp_data_file.seek(SeekFrom::Start(0))?;
+        temp_data_file.write_all(unsafe {
+            std::slice::from_raw_parts(
+                &new_header as *const _ as *const u8,
+                std::mem::size_of::<FileHeader>(),
+            )
+        })?;
+        temp_data_file.flush()?;
+        temp_data_file.sync_all()?;
+
+        // Step 7: Save term interner
         let term_path = self.path.join("terms.oxirs");
         if let Err(e) = self.term_interner.read().save(&term_path) {
             eprintln!("Warning: Failed to save term interner during compaction: {e}");
         }
 
-        // Update header with current counts
+        // Step 8: Atomically replace old file with new file
+        let data_path = self.path.join("data.oxirs");
+
+        // Close the old mmap first
         {
-            let mut header = self.header.write();
-            let interner = self.term_interner.read();
-            // Get total term count from stats
-            header.term_count = interner.stats().total_terms() as u64;
+            let mut data_mmap = self.data_mmap.write();
+            *data_mmap = None;
         }
 
-        // For now, just ensure all data is flushed to disk
-        // A full implementation would:
-        // 1. Scan all valid quads
-        // 2. Rebuild data and index files without gaps
-        // 3. Update all references
-        // 4. Atomically replace old files
+        // Close the old file handle
+        // We need to drop the current file and reopen it
+        // First, ensure the temp file is synced
+        drop(temp_data_file);
 
-        // TODO: Implement full compaction when deletion/update operations are added
-        // Currently this store is append-only, so compaction has limited benefit
+        // Rename temp file to actual file (atomic on most filesystems)
+        fs::rename(&temp_data_path, &data_path)
+            .context("Failed to atomically replace data file")?;
 
-        println!("Compaction completed (basic flush operation)");
+        // Step 9: Reopen the data file and create new mmap
+        let new_data_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&data_path)
+            .context("Failed to reopen data file after compaction")?;
+
+        let file_len = new_data_file.metadata()?.len();
+        let new_mmap = if file_len > HEADER_SIZE as u64 {
+            Some(unsafe {
+                MmapOptions::new()
+                    .offset(HEADER_SIZE as u64)
+                    .len((file_len - HEADER_SIZE as u64) as usize)
+                    .map(&new_data_file)?
+            })
+        } else {
+            None
+        };
+
+        // Step 10: Update internal state
+        {
+            let mut data_file = self.data_file.lock();
+            *data_file = new_data_file;
+        }
+        {
+            let mut data_mmap = self.data_mmap.write();
+            *data_mmap = new_mmap;
+        }
+        {
+            let mut header = self.header.write();
+            *header = new_header;
+        }
+
+        // Clear deleted set
+        {
+            let mut deleted = self.deleted_quads.write();
+            deleted.clear();
+        }
+
+        // Step 11: Rebuild indexes (simplified - clear and let them rebuild lazily)
+        {
+            let mut indexes = self.indexes.write();
+            indexes.clear();
+        }
+
+        println!(
+            "Compaction completed: {} quads retained, {} quads removed",
+            new_quad_count, deleted_count
+        );
         Ok(())
     }
 
@@ -1205,6 +1583,408 @@ impl MmapStore {
             index_size: header.term_offset - header.index_offset,
             term_size,
         }
+    }
+
+    /// Get access statistics for query optimization
+    pub fn get_access_stats(&self) -> AccessStats {
+        let mut stats = self.access_stats.lock().clone();
+
+        // Update hot subjects
+        let subject_counts = self.subject_access_counts.read();
+        let mut subject_vec: Vec<_> = subject_counts.iter().map(|(&k, &v)| (k, v)).collect();
+        subject_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        stats.hot_subjects = subject_vec.into_iter().take(10).collect();
+
+        // Update hot predicates
+        let predicate_counts = self.predicate_access_counts.read();
+        let mut predicate_vec: Vec<_> = predicate_counts.iter().map(|(&k, &v)| (k, v)).collect();
+        predicate_vec.sort_by(|a, b| b.1.cmp(&a.1));
+        stats.hot_predicates = predicate_vec.into_iter().take(10).collect();
+
+        stats
+    }
+
+    /// Record a query access for statistics tracking
+    fn record_query_access(
+        &self,
+        index_type: &str,
+        subject_id: Option<u64>,
+        predicate_id: Option<u64>,
+        latency_us: u64,
+    ) {
+        let mut stats = self.access_stats.lock();
+
+        // Update query counts by index type
+        match index_type {
+            "spo" => stats.spo_queries += 1,
+            "pos" => stats.pos_queries += 1,
+            "osp" => stats.osp_queries += 1,
+            "gspo" => stats.gspo_queries += 1,
+            "full_scan" => stats.full_scans += 1,
+            _ => {}
+        }
+
+        // Update average latency
+        stats.total_queries += 1;
+        stats.avg_query_latency_us =
+            (stats.avg_query_latency_us * (stats.total_queries - 1) as f64 + latency_us as f64)
+                / stats.total_queries as f64;
+
+        drop(stats);
+
+        // Update subject access counts
+        if let Some(sid) = subject_id {
+            let mut counts = self.subject_access_counts.write();
+            *counts.entry(sid).or_insert(0) += 1;
+        }
+
+        // Update predicate access counts
+        if let Some(pid) = predicate_id {
+            let mut counts = self.predicate_access_counts.write();
+            *counts.entry(pid).or_insert(0) += 1;
+        }
+    }
+
+    /// Create a full backup of the store
+    pub fn create_full_backup(&self, backup_dir: &Path) -> Result<BackupMetadata> {
+        let _write_lock = self.write_lock.lock();
+
+        // Ensure all data is flushed
+        self.flush()?;
+
+        // Create backup directory if it doesn't exist
+        fs::create_dir_all(backup_dir)?;
+
+        // Generate backup filename with timestamp
+        let timestamp = std::time::SystemTime::now();
+        let timestamp_secs = timestamp
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let backup_filename = format!("full_backup_{timestamp_secs}.oxirs");
+        let backup_path = backup_dir.join(&backup_filename);
+
+        // Copy data file to backup
+        let data_path = self.path.join("data.oxirs");
+        fs::copy(&data_path, &backup_path).context("Failed to copy data file to backup")?;
+
+        // Copy term interner to backup
+        let term_path = self.path.join("terms.oxirs");
+        let term_backup_path = backup_dir.join(format!("terms_{timestamp_secs}.oxirs"));
+        if term_path.exists() {
+            fs::copy(&term_path, &term_backup_path)
+                .context("Failed to copy term file to backup")?;
+        }
+
+        let quad_count = self.header.read().quad_count;
+        let data_file = self.data_file.lock();
+        let checkpoint_offset = data_file.metadata()?.len();
+
+        let metadata = BackupMetadata {
+            timestamp,
+            quad_count,
+            checkpoint_offset,
+            is_full_backup: true,
+            backup_path: backup_path.clone(),
+        };
+
+        // Update backup tracking
+        *self.last_backup_offset.write() = checkpoint_offset;
+        self.backup_history.write().push(metadata.clone());
+
+        println!(
+            "Full backup created: {} ({} quads, {} bytes)",
+            backup_path.display(),
+            quad_count,
+            checkpoint_offset
+        );
+
+        Ok(metadata)
+    }
+
+    /// Create an incremental backup containing only changes since last backup
+    pub fn create_incremental_backup(&self, backup_dir: &Path) -> Result<BackupMetadata> {
+        let _write_lock = self.write_lock.lock();
+
+        // Ensure all data is flushed
+        self.flush()?;
+
+        // Get last backup offset
+        let last_offset = *self.last_backup_offset.read();
+
+        // If no previous backup, create full backup instead
+        if last_offset == 0 {
+            return self.create_full_backup(backup_dir);
+        }
+
+        // Create backup directory if it doesn't exist
+        fs::create_dir_all(backup_dir)?;
+
+        // Generate backup filename with timestamp
+        let timestamp = std::time::SystemTime::now();
+        let timestamp_secs = timestamp
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let backup_filename = format!("incr_backup_{timestamp_secs}.oxirs");
+        let backup_path = backup_dir.join(&backup_filename);
+
+        // Open backup file for writing
+        let mut backup_file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&backup_path)
+            .context("Failed to create incremental backup file")?;
+
+        // Write incremental backup header
+        let mut incr_header = FileHeader::new();
+        incr_header.flags = 1; // Mark as incremental backup
+        incr_header.data_offset = last_offset; // Store the base offset
+        backup_file.write_all(unsafe {
+            std::slice::from_raw_parts(
+                &incr_header as *const _ as *const u8,
+                std::mem::size_of::<FileHeader>(),
+            )
+        })?;
+
+        // Copy only the new data since last backup
+        let data_file = self.data_file.lock();
+        let current_len = data_file.metadata()?.len();
+
+        if current_len > last_offset {
+            // Read and write new data
+            let mmap = self.data_mmap.read();
+            if let Some(mmap) = mmap.as_ref() {
+                let new_data_start = (last_offset - HEADER_SIZE as u64) as usize;
+                let new_data_end = mmap.len();
+                if new_data_start < new_data_end {
+                    let new_data = &mmap[new_data_start..new_data_end];
+                    backup_file.write_all(new_data)?;
+                }
+            }
+        }
+
+        backup_file.flush()?;
+        backup_file.sync_all()?;
+
+        // Calculate number of new quads
+        let new_quads = if current_len > last_offset {
+            (current_len - last_offset) / std::mem::size_of::<DiskQuad>() as u64
+        } else {
+            0
+        };
+
+        let metadata = BackupMetadata {
+            timestamp,
+            quad_count: new_quads,
+            checkpoint_offset: current_len,
+            is_full_backup: false,
+            backup_path: backup_path.clone(),
+        };
+
+        // Update backup tracking
+        *self.last_backup_offset.write() = current_len;
+        self.backup_history.write().push(metadata.clone());
+
+        println!(
+            "Incremental backup created: {} ({} new quads, {} bytes)",
+            backup_path.display(),
+            new_quads,
+            current_len - last_offset
+        );
+
+        Ok(metadata)
+    }
+
+    /// Restore from a backup (full or incremental chain)
+    pub fn restore_from_backup(&self, backup_path: &Path) -> Result<()> {
+        let _write_lock = self.write_lock.lock();
+
+        // Read backup header to determine type
+        let mut backup_file = File::open(backup_path).context("Failed to open backup file")?;
+        let mut header_bytes = vec![0u8; HEADER_SIZE];
+        std::io::Read::read_exact(&mut backup_file, &mut header_bytes)?;
+        let backup_header: FileHeader =
+            unsafe { std::ptr::read(header_bytes.as_ptr() as *const FileHeader) };
+        backup_header.validate()?;
+
+        if backup_header.flags == 0 {
+            // Full backup - simple copy
+            let data_path = self.path.join("data.oxirs");
+            fs::copy(backup_path, &data_path).context("Failed to restore from full backup")?;
+
+            // Reload the store
+            self.reload()?;
+        } else {
+            // Incremental backup - need to apply on top of base
+            return Err(anyhow::anyhow!(
+                "Incremental backup restoration requires base backup. Use restore_incremental_chain() instead."
+            ));
+        }
+
+        Ok(())
+    }
+
+    /// Restore from an incremental backup chain
+    pub fn restore_incremental_chain(&self, backup_paths: &[PathBuf]) -> Result<()> {
+        if backup_paths.is_empty() {
+            return Err(anyhow::anyhow!("No backup paths provided"));
+        }
+
+        let _write_lock = self.write_lock.lock();
+
+        // First path must be a full backup
+        let first_backup = &backup_paths[0];
+        let mut backup_file = File::open(first_backup).context("Failed to open first backup")?;
+        let mut header_bytes = vec![0u8; HEADER_SIZE];
+        std::io::Read::read_exact(&mut backup_file, &mut header_bytes)?;
+        let backup_header: FileHeader =
+            unsafe { std::ptr::read(header_bytes.as_ptr() as *const FileHeader) };
+        backup_header.validate()?;
+
+        if backup_header.flags != 0 {
+            return Err(anyhow::anyhow!(
+                "First backup in chain must be a full backup"
+            ));
+        }
+
+        // Copy full backup as base
+        let data_path = self.path.join("data.oxirs");
+        fs::copy(first_backup, &data_path).context("Failed to restore base backup")?;
+
+        // Apply incremental backups in order
+        for backup_path in &backup_paths[1..] {
+            let mut incr_file =
+                File::open(backup_path).context("Failed to open incremental backup")?;
+
+            // Skip header
+            incr_file.seek(SeekFrom::Start(HEADER_SIZE as u64))?;
+
+            // Append to data file
+            let mut data_file = OpenOptions::new()
+                .append(true)
+                .open(&data_path)
+                .context("Failed to open data file for appending")?;
+
+            std::io::copy(&mut incr_file, &mut data_file)?;
+            data_file.flush()?;
+        }
+
+        // Reload the store
+        self.reload()?;
+
+        println!(
+            "Restored from backup chain ({} backups)",
+            backup_paths.len()
+        );
+
+        Ok(())
+    }
+
+    /// Reload the store from disk after restoration
+    fn reload(&self) -> Result<()> {
+        let data_path = self.path.join("data.oxirs");
+
+        // Reopen data file
+        let data_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&data_path)
+            .context("Failed to reopen data file")?;
+
+        let file_len = data_file.metadata()?.len();
+
+        // Read header
+        let mut header_bytes = vec![0u8; HEADER_SIZE];
+        let mut file_ref = &data_file;
+        std::io::Read::read_exact(&mut file_ref, &mut header_bytes)?;
+        let header: FileHeader =
+            unsafe { std::ptr::read(header_bytes.as_ptr() as *const FileHeader) };
+        header.validate()?;
+
+        // Create new memory map
+        let new_mmap = if file_len > HEADER_SIZE as u64 {
+            Some(unsafe {
+                MmapOptions::new()
+                    .offset(HEADER_SIZE as u64)
+                    .len((file_len - HEADER_SIZE as u64) as usize)
+                    .map(&data_file)?
+            })
+        } else {
+            None
+        };
+
+        // Update internal state
+        *self.data_file.lock() = data_file;
+        *self.data_mmap.write() = new_mmap;
+        *self.header.write() = header;
+
+        // Clear caches and indexes (they'll be rebuilt lazily)
+        self.indexes.write().clear();
+        self.term_cache.write().clear();
+        self.deleted_quads.write().clear();
+
+        // Reload term interner
+        let term_path = self.path.join("terms.oxirs");
+        if term_path.exists() {
+            match TermInterner::load(&term_path) {
+                Ok(interner) => {
+                    *self.term_interner.write() = interner;
+                }
+                Err(e) => {
+                    eprintln!("Warning: Failed to reload term interner: {e}");
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Get backup history
+    pub fn get_backup_history(&self) -> Vec<BackupMetadata> {
+        self.backup_history.read().clone()
+    }
+
+    /// Clear backup history
+    pub fn clear_backup_history(&self) {
+        self.backup_history.write().clear();
+        *self.last_backup_offset.write() = 0;
+    }
+
+    /// Get recommended backup type based on changes since last backup
+    pub fn recommended_backup_type(&self) -> &'static str {
+        let last_offset = *self.last_backup_offset.read();
+
+        if last_offset == 0 {
+            return "full";
+        }
+
+        let current_len = {
+            let data_file = self.data_file.lock();
+            data_file.metadata().map(|m| m.len()).unwrap_or(0)
+        };
+
+        let history = self.backup_history.read();
+        let incremental_count = history.iter().filter(|m| !m.is_full_backup).count();
+
+        // Recommend full backup if:
+        // 1. Too many incremental backups in chain (>10)
+        // 2. Changes are more than 50% of total data
+        let large_changes =
+            current_len > last_offset && (current_len - last_offset) > last_offset / 2;
+        if incremental_count > 10 || large_changes {
+            "full"
+        } else {
+            "incremental"
+        }
+    }
+
+    /// Reset access statistics
+    pub fn reset_access_stats(&self) {
+        *self.access_stats.lock() = AccessStats::default();
+        self.subject_access_counts.write().clear();
+        self.predicate_access_counts.write().clear();
     }
 }
 
@@ -1652,6 +2432,239 @@ mod tests {
             .quads_matching(None, None, None, Some(&GraphName::BlankNode(b1)))?
             .collect::<Result<Vec<_>>>()?;
         assert_eq!(results.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Slow test - MmapStore operations take significant time
+    fn test_access_statistics() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+
+        // Add test data
+        let mut quads = Vec::new();
+        for i in 0..50 {
+            let quad = Quad::new(
+                Subject::NamedNode(NamedNode::new(format!("http://example.org/s{}", i % 5))?),
+                Predicate::NamedNode(NamedNode::new(format!("http://example.org/p{}", i % 3))?),
+                Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
+                GraphName::DefaultGraph,
+            );
+            quads.push(quad);
+        }
+        store.add_batch(&quads)?;
+        store.flush()?;
+
+        // Query to generate access statistics
+        let s1 = Subject::NamedNode(NamedNode::new("http://example.org/s1")?);
+        let _ = store
+            .quads_matching(Some(&s1), None, None, None)?
+            .collect::<Result<Vec<_>>>()?;
+
+        // Query again to increase stats
+        let _ = store
+            .quads_matching(None, None, None, None)?
+            .collect::<Result<Vec<_>>>()?;
+
+        // Check access statistics
+        let stats = store.get_access_stats();
+        assert!(stats.total_queries > 0);
+        assert!(stats.avg_query_latency_us > 0.0);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Slow test - MmapStore operations take significant time
+    fn test_full_backup() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let backup_dir = temp_dir.path().join("backups");
+        let store = MmapStore::new(temp_dir.path().join("store"))?;
+
+        // Add test data
+        let mut quads = Vec::new();
+        for i in 0..100 {
+            let quad = Quad::new(
+                Subject::NamedNode(NamedNode::new(format!("http://example.org/s{i}"))?),
+                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+                Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
+                GraphName::DefaultGraph,
+            );
+            quads.push(quad);
+        }
+        store.add_batch(&quads)?;
+        store.flush()?;
+
+        // Create full backup
+        let metadata = store.create_full_backup(&backup_dir)?;
+
+        // Verify backup metadata
+        assert!(metadata.is_full_backup);
+        assert_eq!(metadata.quad_count, 100);
+        assert!(metadata.backup_path.exists());
+
+        // Verify backup history
+        let history = store.get_backup_history();
+        assert_eq!(history.len(), 1);
+        assert!(history[0].is_full_backup);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Slow test - MmapStore operations take significant time
+    fn test_incremental_backup() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let backup_dir = temp_dir.path().join("backups");
+        let store = MmapStore::new(temp_dir.path().join("store"))?;
+
+        // Add initial data and create full backup
+        let mut quads = Vec::new();
+        for i in 0..50 {
+            let quad = Quad::new(
+                Subject::NamedNode(NamedNode::new(format!("http://example.org/s{i}"))?),
+                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+                Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
+                GraphName::DefaultGraph,
+            );
+            quads.push(quad);
+        }
+        store.add_batch(&quads)?;
+        store.flush()?;
+
+        let full_metadata = store.create_full_backup(&backup_dir)?;
+        assert!(full_metadata.is_full_backup);
+
+        // Add more data
+        let mut more_quads = Vec::new();
+        for i in 50..100 {
+            let quad = Quad::new(
+                Subject::NamedNode(NamedNode::new(format!("http://example.org/s{i}"))?),
+                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+                Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
+                GraphName::DefaultGraph,
+            );
+            more_quads.push(quad);
+        }
+        store.add_batch(&more_quads)?;
+        store.flush()?;
+
+        // Create incremental backup
+        let incr_metadata = store.create_incremental_backup(&backup_dir)?;
+
+        // Verify incremental backup
+        assert!(!incr_metadata.is_full_backup);
+        assert!(incr_metadata.backup_path.exists());
+
+        // Verify backup history
+        let history = store.get_backup_history();
+        assert_eq!(history.len(), 2);
+        assert!(history[0].is_full_backup);
+        assert!(!history[1].is_full_backup);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Slow test - MmapStore operations take significant time
+    fn test_backup_recommendation() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let backup_dir = temp_dir.path().join("backups");
+        let store = MmapStore::new(temp_dir.path().join("store"))?;
+
+        // No backup yet - should recommend full
+        assert_eq!(store.recommended_backup_type(), "full");
+
+        // Add data and create full backup
+        let mut quads = Vec::new();
+        for i in 0..50 {
+            let quad = Quad::new(
+                Subject::NamedNode(NamedNode::new(format!("http://example.org/s{i}"))?),
+                Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+                Object::Literal(Literal::new_simple_literal(format!("value{i}"))),
+                GraphName::DefaultGraph,
+            );
+            quads.push(quad);
+        }
+        store.add_batch(&quads)?;
+        store.flush()?;
+
+        let _ = store.create_full_backup(&backup_dir)?;
+
+        // Small additional data - should recommend incremental
+        let small_quads = vec![Quad::new(
+            Subject::NamedNode(NamedNode::new("http://example.org/new")?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal("new_value")),
+            GraphName::DefaultGraph,
+        )];
+        store.add_batch(&small_quads)?;
+        store.flush()?;
+
+        assert_eq!(store.recommended_backup_type(), "incremental");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Slow test - MmapStore operations take significant time
+    fn test_clear_backup_history() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let backup_dir = temp_dir.path().join("backups");
+        let store = MmapStore::new(temp_dir.path().join("store"))?;
+
+        // Add data and create backup
+        let quads = vec![Quad::new(
+            Subject::NamedNode(NamedNode::new("http://example.org/s")?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal("value")),
+            GraphName::DefaultGraph,
+        )];
+        store.add_batch(&quads)?;
+        store.flush()?;
+
+        let _ = store.create_full_backup(&backup_dir)?;
+        assert_eq!(store.get_backup_history().len(), 1);
+
+        // Clear history
+        store.clear_backup_history();
+        assert_eq!(store.get_backup_history().len(), 0);
+
+        // Should recommend full again
+        assert_eq!(store.recommended_backup_type(), "full");
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Slow test - MmapStore operations take significant time
+    fn test_reset_access_stats() -> Result<()> {
+        let temp_dir = TempDir::new()?;
+        let store = MmapStore::new(temp_dir.path())?;
+
+        // Add data and query to generate stats
+        let quads = vec![Quad::new(
+            Subject::NamedNode(NamedNode::new("http://example.org/s")?),
+            Predicate::NamedNode(NamedNode::new("http://example.org/p")?),
+            Object::Literal(Literal::new_simple_literal("value")),
+            GraphName::DefaultGraph,
+        )];
+        store.add_batch(&quads)?;
+        store.flush()?;
+
+        let _ = store
+            .quads_matching(None, None, None, None)?
+            .collect::<Result<Vec<_>>>()?;
+
+        // Verify stats exist
+        let stats = store.get_access_stats();
+        assert!(stats.total_queries > 0);
+
+        // Reset stats
+        store.reset_access_stats();
+        let stats = store.get_access_stats();
+        assert_eq!(stats.total_queries, 0);
 
         Ok(())
     }

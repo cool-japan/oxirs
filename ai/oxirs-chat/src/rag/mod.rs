@@ -31,6 +31,7 @@
 //! ```
 
 pub mod advanced_reasoning;
+pub mod advanced_retrieval; // NEW: Advanced retrieval strategies (DPR, ColBERT, BM25+, LTR)
 pub mod consciousness;
 pub mod consciousness_types;
 pub mod context;

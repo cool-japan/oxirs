@@ -16,9 +16,12 @@ pub mod lock_manager;
 pub mod txn_context;
 /// Write-Ahead Log for durability
 pub mod wal;
+/// WAL optimizer with batching, compression, and group commit
+pub mod wal_optimizer;
 
 pub use conflict::{ConflictManager, ConflictStrategy, DeadlockDetection};
 pub use group_commit::{GroupCommitConfig, GroupCommitCoordinator, GroupCommitStats};
 pub use lock_manager::{LockManager, LockMode};
 pub use txn_context::{Transaction, TransactionManager, TxnState};
 pub use wal::{LogEntry, LogRecord, Lsn, TxnId, WriteAheadLog};
+pub use wal_optimizer::{WalOptimizer, WalOptimizerConfig, WalOptimizerStats};

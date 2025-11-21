@@ -4,13 +4,15 @@
 //! Provides comprehensive CRUD operations for datasets, queries, and administration.
 
 use crate::config::DatasetConfig;
+use crate::server::AppState;
 use crate::store_ext::StoreExt;
 use anyhow::{Context, Result};
 use axum::{
     extract::{Path, Query as AxumQuery, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
+    routing::{delete, get, post},
+    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -415,8 +417,9 @@ pub async fn get_api_info() -> Result<Json<ApiInfo>, ApiError> {
     tag = "datasets"
 )]
 pub async fn list_datasets(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<DatasetList>, ApiError> {
+    let store = &state.store;
     let datasets = store
         .list_datasets()
         .map_err(|e| ApiError::InternalError(e.into()))?;
@@ -459,9 +462,10 @@ pub async fn list_datasets(
     tag = "datasets"
 )]
 pub async fn get_dataset(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<Json<Dataset>, ApiError> {
+    let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
@@ -492,9 +496,10 @@ pub async fn get_dataset(
     tag = "datasets"
 )]
 pub async fn create_dataset(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Json(request): Json<CreateDatasetRequest>,
 ) -> Result<(StatusCode, Json<Dataset>), ApiError> {
+    let store = &state.store;
     if store.dataset_exists(&request.name) {
         return Err(ApiError::BadRequest(format!(
             "Dataset '{}' already exists",
@@ -547,9 +552,10 @@ pub async fn create_dataset(
     tag = "datasets"
 )]
 pub async fn delete_dataset(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
 ) -> Result<StatusCode, ApiError> {
+    let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
@@ -581,10 +587,11 @@ pub async fn delete_dataset(
     tag = "queries"
 )]
 pub async fn execute_query(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Json(request): Json<QueryRequest>,
 ) -> Result<Json<QueryResponse>, ApiError> {
+    let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
@@ -650,10 +657,11 @@ pub async fn execute_query(
     tag = "triples"
 )]
 pub async fn get_triples(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     AxumQuery(pagination): AxumQuery<PaginationParams>,
 ) -> Result<Json<TripleList>, ApiError> {
+    let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
@@ -709,10 +717,11 @@ pub async fn get_triples(
     tag = "triples"
 )]
 pub async fn insert_triple(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Json(request): Json<InsertTripleRequest>,
 ) -> Result<StatusCode, ApiError> {
+    let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
@@ -758,10 +767,11 @@ pub async fn insert_triple(
     tag = "triples"
 )]
 pub async fn delete_triple(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
     Path(name): Path<String>,
     Json(request): Json<DeleteTripleRequest>,
 ) -> Result<StatusCode, ApiError> {
+    let store = &state.store;
     if !store.dataset_exists(&name) {
         return Err(ApiError::NotFound(format!("Dataset '{}' not found", name)));
     }
@@ -794,8 +804,9 @@ pub async fn delete_triple(
     tag = "statistics"
 )]
 pub async fn get_statistics(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<Statistics>, ApiError> {
+    let store = &state.store;
     let datasets = store.list_datasets().unwrap_or_default();
     let total_triples: usize = datasets.iter().map(|ds| store.count_triples(ds)).sum();
 
@@ -821,8 +832,9 @@ pub async fn get_statistics(
     tag = "health"
 )]
 pub async fn get_health(
-    State(store): State<Arc<crate::store::Store>>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<HealthStatus>, ApiError> {
+    let store = &state.store;
     let mut components = std::collections::HashMap::new();
 
     // Check store health
@@ -850,6 +862,31 @@ pub async fn get_health(
         timestamp: chrono::Utc::now(),
         components,
     }))
+}
+
+/// Register REST API v2 routes
+///
+/// Adds all REST API v2 endpoints to the provided router.
+pub fn register_routes(router: Router<Arc<AppState>>) -> Router<Arc<AppState>> {
+    router
+        // Info
+        .route("/api/v2", get(get_api_info))
+        // Datasets
+        .route("/api/v2/datasets", get(list_datasets).post(create_dataset))
+        .route(
+            "/api/v2/datasets/:name",
+            get(get_dataset).delete(delete_dataset),
+        )
+        // Queries
+        .route("/api/v2/datasets/:name/query", post(execute_query))
+        // Triples
+        .route(
+            "/api/v2/datasets/:name/triples",
+            get(get_triples).post(insert_triple).delete(delete_triple),
+        )
+        // Statistics and health
+        .route("/api/v2/statistics", get(get_statistics))
+        .route("/api/v2/health", get(get_health))
 }
 
 #[cfg(test)]

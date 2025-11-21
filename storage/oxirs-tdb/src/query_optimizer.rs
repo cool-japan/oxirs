@@ -290,50 +290,78 @@ impl QueryOptimizer {
     fn generate_plan(&self, pattern: &QueryPattern, index: IndexType) -> Result<QueryPlan> {
         let stats = self.statistics.export();
 
-        // Estimate cardinality based on statistics
-        let estimated_results = match index {
+        // Estimate cardinality using average statistics for better accuracy
+        let base_estimate = match index {
             IndexType::SPO => {
                 if pattern.subject.is_some() {
-                    // S bound: estimate based on subject cardinality
-                    (stats.total_triples / stats.distinct_subjects.max(1)) as usize
+                    // S bound: use average properties per subject
+                    stats.avg_properties_per_subject as usize
                 } else {
                     stats.total_triples as usize
                 }
             }
             IndexType::POS => {
                 if pattern.predicate.is_some() {
-                    // P bound: estimate based on predicate cardinality
-                    (stats.total_triples / stats.distinct_predicates.max(1)) as usize
+                    // P bound: use average objects per predicate
+                    stats.avg_objects_per_predicate as usize
                 } else {
                     stats.total_triples as usize
                 }
             }
             IndexType::OSP => {
                 if pattern.object.is_some() {
-                    // O bound: estimate based on object cardinality
-                    (stats.total_triples / stats.distinct_objects.max(1)) as usize
+                    // O bound: use average subjects per object
+                    stats.avg_subjects_per_object as usize
                 } else {
                     stats.total_triples as usize
                 }
             }
         };
 
-        // Refine estimate based on additional bound positions
+        // Refine estimate based on additional bound positions with more accurate factors
         let refined_estimate = match pattern.bound_count() {
-            3 => 1, // Exact match
-            2 => estimated_results / 10,
-            1 => estimated_results,
+            3 => 1, // Exact match - single triple
+            2 => {
+                // Two bound positions: estimate intersection selectivity
+                // Use geometric mean of two estimates for more accuracy
+                let factor = if base_estimate > 10 {
+                    (base_estimate as f64).sqrt() as usize
+                } else {
+                    base_estimate
+                };
+                factor.max(1)
+            }
+            1 => base_estimate.max(1),
             _ => stats.total_triples as usize,
         };
 
+        // Calculate confidence based on data distribution
+        let confidence = if stats.total_triples > 0 {
+            match pattern.bound_count() {
+                3 => 0.95, // High confidence for exact matches
+                2 => 0.85, // Good confidence with two bounds
+                1 => 0.70, // Moderate confidence with one bound
+                _ => 0.50, // Low confidence for full scans
+            }
+        } else {
+            0.30 // Low confidence with no data
+        };
+
         let explanation = format!(
-            "Cost-based selection: {:?} index with estimated {} results",
-            index, refined_estimate
+            "Cost-based selection: {:?} index with estimated {} results (avg={:.2}, confidence={:.0}%)",
+            index,
+            refined_estimate,
+            match index {
+                IndexType::SPO => stats.avg_properties_per_subject,
+                IndexType::POS => stats.avg_objects_per_predicate,
+                IndexType::OSP => stats.avg_subjects_per_object,
+            },
+            confidence * 100.0
         );
 
         Ok(QueryPlan::new(pattern.clone(), index, refined_estimate)
             .with_explanation(explanation)
-            .with_confidence(0.9))
+            .with_confidence(confidence))
     }
 
     /// Check if an index is viable for a query pattern

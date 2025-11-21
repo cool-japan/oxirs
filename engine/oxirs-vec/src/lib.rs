@@ -71,6 +71,7 @@ pub mod clustering;
 pub mod compression;
 #[cfg(feature = "content-processing")]
 pub mod content_processing;
+pub mod crash_recovery;
 pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
 pub mod distance_metrics;
@@ -123,6 +124,7 @@ pub mod structured_vectors;
 pub mod tensorflow;
 pub mod tree_indices;
 pub mod validation;
+pub mod wal;
 pub mod word2vec;
 
 // Python bindings module
@@ -183,6 +185,7 @@ pub use content_processing::{
     ContentProcessor, DocumentFormat, DocumentStructure, ExtractedContent, ExtractedImage,
     ExtractedLink, ExtractedTable, FormatHandler, Heading, ProcessingStats, TocEntry,
 };
+pub use crash_recovery::{CrashRecoveryManager, RecoveryConfig, RecoveryPolicy, RecoveryStats};
 pub use cross_modal_embeddings::{
     AttentionMechanism, AudioData, AudioEncoder, CrossModalConfig, CrossModalEncoder, FusionLayer,
     FusionStrategy, GraphData, GraphEncoder, ImageData, ImageEncoder, Modality, ModalityData,
@@ -322,6 +325,7 @@ pub use tensorflow::{
 pub use tree_indices::{
     BallTree, CoverTree, KdTree, RandomProjectionTree, TreeIndex, TreeIndexConfig, TreeType, VpTree,
 };
+pub use wal::{WalConfig, WalEntry, WalManager};
 pub use word2vec::{
     AggregationMethod, OovStrategy, Word2VecConfig, Word2VecEmbeddingGenerator, Word2VecFormat,
 };
@@ -848,7 +852,12 @@ impl Default for MemoryVectorIndex {
 
 impl VectorIndex for MemoryVectorIndex {
     fn insert(&mut self, uri: String, vector: Vector) -> Result<()> {
-        self.vectors.push((uri, vector));
+        // Check if vector already exists and update it
+        if let Some(pos) = self.vectors.iter().position(|(id, _)| id == &uri) {
+            self.vectors[pos] = (uri, vector);
+        } else {
+            self.vectors.push((uri, vector));
+        }
         Ok(())
     }
 
@@ -893,6 +902,24 @@ impl VectorIndex for MemoryVectorIndex {
 
     fn get_vector(&self, uri: &str) -> Option<&Vector> {
         self.vectors.iter().find(|(u, _)| u == uri).map(|(_, v)| v)
+    }
+
+    fn update_vector(&mut self, id: VectorId, vector: Vector) -> Result<()> {
+        if let Some(pos) = self.vectors.iter().position(|(uri, _)| uri == &id) {
+            self.vectors[pos] = (id, vector);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Vector with id '{}' not found", id))
+        }
+    }
+
+    fn remove_vector(&mut self, id: VectorId) -> Result<()> {
+        if let Some(pos) = self.vectors.iter().position(|(uri, _)| uri == &id) {
+            self.vectors.remove(pos);
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!("Vector with id '{}' not found", id))
+        }
     }
 }
 

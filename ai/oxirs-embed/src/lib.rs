@@ -146,6 +146,7 @@ pub mod enterprise_knowledge;
 pub mod entity_linking;
 pub mod evaluation;
 pub mod federated_learning;
+pub mod fine_tuning;
 pub mod gpu_acceleration;
 pub mod graphql_api;
 pub mod inference;

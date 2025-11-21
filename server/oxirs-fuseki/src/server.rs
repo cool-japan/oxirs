@@ -655,6 +655,81 @@ impl Runtime {
                 post(handlers::performance::profiler_reset_handler),
             );
 
+        // RC.1 Load Balancing Management endpoints
+        app = app
+            .route(
+                "/$/load-balancer/status",
+                get(handlers::production::load_balancer_status),
+            )
+            .route(
+                "/$/load-balancer/backends",
+                get(handlers::production::list_backends).post(handlers::production::add_backend),
+            )
+            .route(
+                "/$/load-balancer/backends/:id",
+                axum::routing::delete(handlers::production::remove_backend),
+            )
+            .route(
+                "/$/load-balancer/select",
+                post(handlers::production::select_backend),
+            );
+
+        // RC.1 Edge Caching Management endpoints
+        app = app
+            .route(
+                "/$/edge-cache/status",
+                get(handlers::production::edge_cache_status),
+            )
+            .route(
+                "/$/edge-cache/purge",
+                post(handlers::production::purge_cache),
+            )
+            .route(
+                "/$/edge-cache/headers",
+                post(handlers::production::get_cache_headers),
+            );
+
+        // RC.1 CDN Static Asset Support
+        app = app
+            .route("/$/cdn/config", get(handlers::production::cdn_config))
+            .route(
+                "/static/*path",
+                get(handlers::production::serve_static_asset),
+            );
+
+        // RC.1 Security Audit endpoints
+        app = app
+            .route(
+                "/$/security/audit/status",
+                get(handlers::production::security_audit_status),
+            )
+            .route(
+                "/$/security/audit/scan",
+                post(handlers::production::trigger_security_scan),
+            );
+
+        // RC.1 DDoS Protection endpoints
+        app = app
+            .route(
+                "/$/security/ddos/status",
+                get(handlers::production::ddos_status),
+            )
+            .route(
+                "/$/security/ddos/manage-ip",
+                post(handlers::production::manage_ip),
+            );
+
+        // RC.1 Disaster Recovery endpoints
+        app = app
+            .route(
+                "/$/recovery/status",
+                get(handlers::production::disaster_recovery_status),
+            )
+            .route(
+                "/$/recovery/create-point",
+                post(handlers::production::create_recovery_point),
+            );
+
         // API Key Management endpoints
         app = app
             .route(
@@ -708,15 +783,14 @@ impl Runtime {
         // .route("/$/compact/:name", post(handlers::admin::compact_dataset))
         // .route("/$/backup/:name", post(handlers::admin::backup_dataset));
 
-        // TODO: Re-enable authentication routes after fixing handler signatures
         // Authentication routes (if enabled)
-        // if self.config.security.auth_required {
-        //     app = app
-        //         .route("/$/login", post(handlers::auth::login_handler))
-        //         .route("/$/logout", post(handlers::auth::logout_handler))
-        //         .route("/$/user", get(handlers::auth::user_info_handler))
-        //         .route("/$/users", get(handlers::auth::list_users_handler));
-        // }
+        if self.config.security.auth_required {
+            app = app
+                .route("/$/login", post(handlers::auth::login_handler))
+                .route("/$/logout", post(handlers::auth::logout_handler))
+                .route("/$/user", get(handlers::auth::user_info_handler))
+                .route("/$/users", get(handlers::auth::list_users_handler));
+        }
 
         // OAuth2/OIDC authentication routes (if OAuth2 is configured)
         if self.config.security.oauth.is_some() {
@@ -857,9 +931,8 @@ impl Runtime {
             );
 
         // REST API v2 (RC.1) - OpenAPI documented RESTful endpoints
-        // Note: REST API v2 handlers are defined in rest_api_v2.rs but need router registration
-        // TODO: Implement REST API v2 router registration method
-        // app = crate::rest_api_v2::register_routes(app);
+        // REST API v2 routes
+        app = crate::rest_api_v2::register_routes(app);
 
         // Admin UI route (if enabled)
         #[cfg(feature = "admin-ui")]
@@ -941,10 +1014,13 @@ impl Runtime {
         }
 
         // Layer 3: Security audit (RC.1) - log security events
-        if let Some(_security_auditor) = &state.security_auditor {
-            // TODO: Implement security audit middleware when audit_request/audit_response methods are available
-            // For now, security auditing is available but middleware integration is pending
-            info!("Security audit module initialized (middleware integration pending)");
+        if let Some(security_auditor) = &state.security_auditor {
+            let auditor = security_auditor.clone();
+            app = app.layer(axum::middleware::from_fn(move |req, next| {
+                let auditor = auditor.clone();
+                crate::middleware::security_audit_middleware(auditor, req, next)
+            }));
+            info!("Security audit middleware enabled");
         }
 
         // Layer 4: Security headers for all requests
@@ -1180,7 +1256,7 @@ type MakeRequestUuid = RequestIdGenerator;
 
 /// Comprehensive error handling middleware
 async fn error_handling_middleware(
-    State(_state): State<AppState>,
+    State(_state): State<Arc<AppState>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -1197,7 +1273,11 @@ async fn error_handling_middleware(
 }
 
 /// Authentication middleware
-async fn auth_middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
+async fn auth_middleware(
+    State(state): State<Arc<AppState>>,
+    request: Request,
+    next: Next,
+) -> Response {
     // Skip authentication for health endpoints
     let path = request.uri().path();
     if path.starts_with("/health") || path == "/$/ping" {
@@ -1232,7 +1312,7 @@ async fn auth_middleware(State(state): State<AppState>, request: Request, next: 
 
 /// Metrics collection middleware
 async fn metrics_middleware(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     request: Request,
     next: Next,
 ) -> Response {
@@ -1294,7 +1374,7 @@ fn extract_client_identifier(request: &Request) -> String {
 }
 
 /// Enhanced health check with comprehensive status
-pub async fn health_handler(State(state): State<AppState>) -> Json<serde_json::Value> {
+pub async fn health_handler(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     if let Some(metrics_service) = &state.metrics_service {
         let health_status = metrics_service.get_health_status().await;
         Json(serde_json::to_value(health_status).unwrap_or_default())
@@ -1444,7 +1524,7 @@ pub async fn liveness_handler() -> StatusCode {
 }
 
 /// Kubernetes readiness probe with store check
-pub async fn readiness_handler(State(state): State<AppState>) -> StatusCode {
+pub async fn readiness_handler(State(state): State<Arc<AppState>>) -> StatusCode {
     // Check if store is ready
     match state.store.is_ready() {
         true => StatusCode::OK,
@@ -1465,7 +1545,7 @@ pub use readiness_handler as readiness_check;
 
 /// Server information handler
 pub async fn server_info_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Json<HashMap<String, serde_json::Value>> {
     let mut info = HashMap::new();
     info.insert("name".to_string(), serde_json::json!("OxiRS Fuseki"));
@@ -1503,7 +1583,7 @@ pub async fn server_info_handler(
 
 /// Performance information handler
 pub async fn performance_info_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         let metrics = performance_service.get_metrics().await;
@@ -1528,7 +1608,7 @@ pub async fn performance_info_handler(
 
 /// Cache statistics handler
 pub async fn cache_stats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<HashMap<String, serde_json::Value>>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         let stats = performance_service.get_cache_stats().await;
@@ -1542,7 +1622,7 @@ pub async fn cache_stats_handler(
 
 /// Clear cache handler
 pub async fn clear_cache_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(performance_service) = &state.performance_service {
         performance_service.clear_caches().await;
@@ -1561,7 +1641,7 @@ pub async fn clear_cache_handler(
 
 /// Query optimization statistics handler
 pub async fn optimization_stats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(query_optimizer) = &state.query_optimizer {
         let stats = query_optimizer.get_optimization_stats().await;
@@ -1589,7 +1669,7 @@ pub async fn optimization_stats_handler(
 
 /// Optimization plans handler
 pub async fn optimization_plans_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(_query_optimizer) = &state.query_optimizer {
         // Return sample optimization plan information
@@ -1615,7 +1695,7 @@ pub async fn optimization_plans_handler(
 
 /// Detailed optimization statistics handler
 pub async fn optimization_detailed_stats_handler(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     if let Some(query_optimizer) = &state.query_optimizer {
         let optimization_stats = query_optimizer.get_optimization_stats().await;
@@ -1652,7 +1732,7 @@ pub async fn optimization_detailed_stats_handler(
 }
 
 /// Metrics endpoint handler
-async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     if let Some(metrics_service) = &state.metrics_service {
         #[cfg(feature = "metrics")]
         {
@@ -1687,7 +1767,7 @@ async fn metrics_handler(State(state): State<AppState>) -> impl IntoResponse {
 }
 
 /// Metrics summary handler
-async fn metrics_summary_handler(State(state): State<AppState>) -> impl IntoResponse {
+async fn metrics_summary_handler(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     if let Some(metrics_service) = &state.metrics_service {
         let summary = metrics_service.get_summary().await;
         axum::Json(summary).into_response()
@@ -1797,11 +1877,11 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
 
         // Test readiness
-        let status = readiness_handler(State(state.clone())).await;
+        let status = readiness_handler(State(Arc::new(state.clone()))).await;
         assert_eq!(status, StatusCode::OK);
 
         // Test health
-        let health_response = health_handler(State(state)).await;
+        let health_response = health_handler(State(Arc::new(state))).await;
         assert!(health_response.0.get("status").is_some());
     }
 }

@@ -5,6 +5,7 @@
 
 use crate::error::{FusekiError, FusekiResult};
 use dashmap::DashMap;
+use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -331,10 +332,63 @@ impl EdgeCacheManager {
     }
 
     /// Extract graph URIs from query for cache tagging
-    fn extract_graph_uris(&self, _query: &str) -> Option<Vec<String>> {
-        // TODO: Implement proper SPARQL parsing to extract GRAPH clauses
-        // For now, return None
-        None
+    ///
+    /// Parses SPARQL queries to extract GRAPH clause URIs for targeted cache invalidation.
+    /// Supports patterns like:
+    /// - `GRAPH <http://example.org/graph> { ... }`
+    /// - `FROM NAMED <http://example.org/graph>`
+    fn extract_graph_uris(&self, query: &str) -> Option<Vec<String>> {
+        let mut graph_uris = Vec::new();
+
+        // Pattern 1: GRAPH <uri> { ... }
+        // Matches GRAPH keyword followed by a URI in angle brackets
+        let graph_pattern = Regex::new(r"(?i)\bGRAPH\s+<([^>]+)>").ok()?;
+        for cap in graph_pattern.captures_iter(query) {
+            if let Some(uri) = cap.get(1) {
+                graph_uris.push(uri.as_str().to_string());
+            }
+        }
+
+        // Pattern 2: FROM NAMED <uri>
+        // Matches named graphs specified in the query prologue
+        let from_named_pattern = Regex::new(r"(?i)\bFROM\s+NAMED\s+<([^>]+)>").ok()?;
+        for cap in from_named_pattern.captures_iter(query) {
+            if let Some(uri) = cap.get(1) {
+                let uri_str = uri.as_str().to_string();
+                if !graph_uris.contains(&uri_str) {
+                    graph_uris.push(uri_str);
+                }
+            }
+        }
+
+        // Pattern 3: WITH <uri> for SPARQL Update
+        // Matches graph context in UPDATE queries
+        let with_pattern = Regex::new(r"(?i)\bWITH\s+<([^>]+)>").ok()?;
+        for cap in with_pattern.captures_iter(query) {
+            if let Some(uri) = cap.get(1) {
+                let uri_str = uri.as_str().to_string();
+                if !graph_uris.contains(&uri_str) {
+                    graph_uris.push(uri_str);
+                }
+            }
+        }
+
+        // Pattern 4: INTO <uri> for INSERT DATA
+        let into_pattern = Regex::new(r"(?i)\bINTO\s+<([^>]+)>").ok()?;
+        for cap in into_pattern.captures_iter(query) {
+            if let Some(uri) = cap.get(1) {
+                let uri_str = uri.as_str().to_string();
+                if !graph_uris.contains(&uri_str) {
+                    graph_uris.push(uri_str);
+                }
+            }
+        }
+
+        if graph_uris.is_empty() {
+            None
+        } else {
+            Some(graph_uris)
+        }
     }
 
     /// Purge cache for a dataset
@@ -705,5 +759,146 @@ mod tests {
         let headers = manager.get_cache_headers(query, 50, 1024); // 50ms < 100ms threshold
 
         assert!(headers.is_none());
+    }
+
+    #[test]
+    fn test_extract_graph_uris_graph_pattern() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            SELECT * WHERE {
+                GRAPH <http://example.org/graph1> {
+                    ?s ?p ?o
+                }
+            }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        assert_eq!(uris.len(), 1);
+        assert!(uris.contains(&"http://example.org/graph1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_graph_uris_from_named_pattern() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            SELECT * FROM NAMED <http://example.org/named-graph>
+            WHERE { GRAPH ?g { ?s ?p ?o } }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        assert_eq!(uris.len(), 1);
+        assert!(uris.contains(&"http://example.org/named-graph".to_string()));
+    }
+
+    #[test]
+    fn test_extract_graph_uris_with_pattern() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            WITH <http://example.org/update-graph>
+            DELETE { ?s ?p ?o }
+            WHERE { ?s ?p ?o }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        assert_eq!(uris.len(), 1);
+        assert!(uris.contains(&"http://example.org/update-graph".to_string()));
+    }
+
+    #[test]
+    fn test_extract_graph_uris_into_pattern() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            INSERT DATA INTO <http://example.org/target-graph> {
+                <http://example.org/s> <http://example.org/p> <http://example.org/o>
+            }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        assert_eq!(uris.len(), 1);
+        assert!(uris.contains(&"http://example.org/target-graph".to_string()));
+    }
+
+    #[test]
+    fn test_extract_graph_uris_multiple_graphs() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            SELECT * FROM NAMED <http://example.org/graph1>
+            FROM NAMED <http://example.org/graph2>
+            WHERE {
+                GRAPH <http://example.org/graph3> {
+                    ?s ?p ?o
+                }
+            }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        assert_eq!(uris.len(), 3);
+        assert!(uris.contains(&"http://example.org/graph1".to_string()));
+        assert!(uris.contains(&"http://example.org/graph2".to_string()));
+        assert!(uris.contains(&"http://example.org/graph3".to_string()));
+    }
+
+    #[test]
+    fn test_extract_graph_uris_no_graphs() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = "SELECT * WHERE { ?s ?p ?o }";
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_none());
+    }
+
+    #[test]
+    fn test_extract_graph_uris_case_insensitive() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            SELECT * WHERE {
+                graph <http://example.org/lowercase>
+                { ?s ?p ?o }
+            }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        assert_eq!(uris.len(), 1);
+        assert!(uris.contains(&"http://example.org/lowercase".to_string()));
+    }
+
+    #[test]
+    fn test_extract_graph_uris_no_duplicates() {
+        let config = EdgeCacheConfig::default();
+        let manager = EdgeCacheManager::new(config);
+
+        let query = r#"
+            SELECT * FROM NAMED <http://example.org/same>
+            WHERE {
+                GRAPH <http://example.org/same> {
+                    ?s ?p ?o
+                }
+            }
+        "#;
+        let uris = manager.extract_graph_uris(query);
+        assert!(uris.is_some());
+        let uris = uris.unwrap();
+        // Should deduplicate
+        assert_eq!(uris.len(), 1);
+        assert!(uris.contains(&"http://example.org/same".to_string()));
     }
 }

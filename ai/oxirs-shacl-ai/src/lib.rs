@@ -412,6 +412,7 @@ use oxirs_core::{model::Term, OxirsError, Store};
 
 use oxirs_shacl::{ShapeId, ValidationConfig, ValidationReport};
 
+pub mod ab_testing;
 pub mod advanced_features;
 pub mod advanced_neural;
 pub mod advanced_pattern_mining;
@@ -429,6 +430,7 @@ pub mod consciousness_guided_neuroplasticity;
 pub mod consciousness_validation;
 pub mod constraint_generation;
 pub mod cosmic_scale_processing;
+pub mod crosslingual_transfer;
 pub mod deployment;
 pub mod edge_deployment;
 pub mod error_handling;
@@ -443,6 +445,7 @@ pub mod forecasting_models;
 pub mod hyperparameter_optimization;
 pub mod insights;
 pub mod integration_testing;
+pub mod interactive_labeling;
 pub mod knowledge_distillation;
 // Temporarily disabled problematic modules for compilation
 pub mod automated_retraining;
@@ -463,6 +466,7 @@ pub mod neuromorphic_validation;
 pub mod omniscient_validation;
 pub mod optimization;
 pub mod optimization_engine;
+pub mod owl_to_shacl;
 pub mod patterns;
 pub mod performance_analytics;
 pub mod performance_benchmarking;
@@ -496,6 +500,14 @@ pub mod validation_performance;
 pub mod version_control;
 
 // Re-export key types for convenience with explicit imports to avoid ambiguity
+// A/B Testing Framework (v0.1.0 Final - NEW)
+pub use ab_testing::{
+    ABTestConfig, ABTestFramework, Experiment as ABExperiment, ExperimentResults,
+    ExperimentStatus as ABExperimentStatus, MetricDefinition, MetricGoal, MetricSummary,
+    MetricType as ABMetricType, Recommendation, RecommendationAction, StatisticalTest,
+    StatisticalTestType, Variant,
+};
+
 // Advanced Features (v0.1.0-beta.1 - NEW)
 pub use advanced_features::{
     // Active Learning
@@ -631,6 +643,11 @@ pub use integration_testing::{
     RecommendationPriority, RecommendationType, ResourceUtilization, ScalabilityMetrics,
     TestComplexityLevel, TestRecommendation, TestResult, TestStatus, TestSummary, TestType,
     ValidationTestResults,
+};
+pub use interactive_labeling::{
+    Annotation, AnnotationTask, Annotator, AnnotatorStats, InteractiveLabelingInterface,
+    LabelingConfig, PriorityStrategy, QualityMetrics as LabelingQualityMetrics,
+    RdfData as LabelingRdfData, TaskStatistics, TaskStatus,
 };
 pub use knowledge_distillation::{
     AggregationMethod, CompressionMetrics, DistillationConfig, DistillationPerformanceTracker,
@@ -812,6 +829,10 @@ pub use cosmic_scale_processing::{
     CosmicValidationResult, CosmicValidationScope, GalaxyId, IntergalacticCoordinates,
     StellarCoordinates, StellarNodeId,
 };
+pub use crosslingual_transfer::{
+    CrosslingualConfig, CrosslingualShapeTransfer, CrosslingualStats, Language, TranslatedShape,
+    TranslationQuality,
+};
 pub use experiment_tracking::{
     Experiment, ExperimentConfig, ExperimentMetrics, ExperimentRun, ExperimentStatus,
     ExperimentTracker, Metric, MetricType, Parameter, ParameterType,
@@ -899,6 +920,10 @@ pub use omniscient_validation::{
     AbsoluteTruthValidator, InfiniteKnowledgeProcessor, OmniscientConfig, OmniscientMetrics,
     OmniscientValidation, OmniscientValidationResult, PerfectReasoningEngine,
     TranscendentConsciousnessValidator, UniversalKnowledgeOmniscience,
+};
+pub use owl_to_shacl::{
+    GeneratedShape, OwlClass, OwlConstructType, OwlProperty, OwlPropertyCharacteristic,
+    OwlRestriction, OwlRestrictionType, OwlToShaclConfig, OwlToShaclTransfer, TransferStats,
 };
 pub use reality_synthesis::{
     CrossRealityValidator, DimensionalConstructor, MultiDimensionalCoordinator,

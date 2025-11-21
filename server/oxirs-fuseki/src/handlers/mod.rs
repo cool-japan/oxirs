@@ -12,6 +12,7 @@ pub mod oauth2;
 pub mod patch; // RDF Patch
 pub mod performance; // Beta.2 Performance Monitoring
 pub mod prefixes; // Prefix Management
+pub mod production; // RC.1 Production Management (load balancing, edge caching, CDN)
 pub mod rebac; // ReBAC (Relationship-Based Access Control) API
 pub mod request_log; // Request Logging
 #[cfg(feature = "saml")]

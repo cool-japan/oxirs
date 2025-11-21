@@ -90,6 +90,7 @@ tower-http = { version = "0.6", features = ["cors", "compression-gzip"] }
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.23"
+proptest = "1.6"
 
 [features]
 default = []
@@ -97,8 +98,4 @@ raft = ["openraft"]
 bft = []
 test-support = []
 leak_detection = []
-
-[[bench]]
-name = "raft_profiling_benchmark"
-harness = false
 

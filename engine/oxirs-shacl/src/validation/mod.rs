@@ -15,6 +15,8 @@ pub mod async_engine;
 pub mod batch;
 pub mod cache;
 pub mod constraint_validators;
+#[cfg(feature = "async")]
+pub mod distributed;
 pub mod engine;
 pub mod error_recovery;
 pub mod ml_integration;
@@ -36,6 +38,12 @@ pub use async_engine::{
 pub use batch::*;
 pub use cache::*;
 pub use constraint_validators::*;
+#[cfg(feature = "async")]
+pub use distributed::{
+    ConsistencyLevel, DistributedError, DistributedStats, DistributedValidationConfig,
+    DistributedValidator, DistributedValidatorBuilder, LoadBalancingStrategy, PartitionResult,
+    ValidationPartition, WorkerInfo,
+};
 pub use engine::ValidationEngine;
 pub use error_recovery::*;
 pub use ml_integration::*;

@@ -760,6 +760,9 @@ pub enum Commands {
         /// Analysis mode (explain, analyze, full)
         #[arg(short, long, default_value = "explain")]
         mode: String,
+        /// Generate graphical query plan (Graphviz DOT format)
+        #[arg(short, long)]
+        graphviz: Option<PathBuf>,
     },
 
     /// SPARQL query template management
@@ -1935,6 +1938,7 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             query,
             file,
             mode,
+            graphviz,
         } => {
             let analysis_mode = match mode.to_lowercase().as_str() {
                 "explain" => commands::explain::AnalysisMode::Explain,
@@ -1948,9 +1952,15 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                     return Err("Invalid analysis mode".into());
                 }
             };
-            commands::explain::explain_query(dataset, query, file, analysis_mode)
-                .await
-                .map_err(|e| e.into())
+            commands::explain::explain_query_with_options(
+                dataset,
+                query,
+                file,
+                analysis_mode,
+                graphviz,
+            )
+            .await
+            .map_err(|e| e.into())
         }
         Commands::Template { action } => {
             use std::collections::HashMap;

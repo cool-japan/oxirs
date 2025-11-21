@@ -86,6 +86,7 @@ pub mod shape_versioning;
 pub mod shapes;
 pub mod sparql;
 pub mod targets;
+pub mod testing;
 pub mod validation;
 pub mod vocabulary;
 pub mod w3c_test_suite;
@@ -136,6 +137,10 @@ pub use sparql::*;
 // Import specific types from targets to avoid conflicts
 pub use targets::{
     Target, TargetCacheStats, TargetOptimizationConfig, TargetSelectionStats, TargetSelector,
+};
+pub use testing::{
+    ShapeTestSuite, TestAssertions, TestCase, TestExpectation, TestResult, TestStatus,
+    TestSuiteResult, TestSummary,
 };
 pub use validation::{ValidationEngine, ValidationViolation};
 pub use w3c_test_suite::*;

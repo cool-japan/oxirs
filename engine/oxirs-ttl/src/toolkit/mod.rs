@@ -12,6 +12,7 @@ pub mod buffer_manager;
 pub mod error;
 pub mod fast_scanner;
 pub mod format_detector;
+pub mod iri_validator;
 pub mod lazy_iri;
 pub mod lexer;
 pub mod parser;
@@ -25,6 +26,9 @@ pub use buffer_manager::{BufferManager, GlobalBufferManager};
 pub use error::*;
 pub use fast_scanner::FastScanner;
 pub use format_detector::{DetectionMethod, DetectionResult, FormatDetector, RdfFormat};
+pub use iri_validator::{
+    validate_iri, validate_iri_reference, IriValidationError, IriValidationResult,
+};
 pub use lazy_iri::{CachedIriResolver, IriResolutionError, LazyIri, ResolverStats};
 pub use lexer::*;
 pub use parser::*;

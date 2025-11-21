@@ -14,6 +14,7 @@ pub mod dataset_manager;
 pub mod error;
 pub mod formatters;
 pub mod fuzzy_history;
+pub mod graphviz_export;
 pub mod help;
 pub mod interactive;
 pub mod logging;
@@ -42,6 +43,10 @@ pub use formatters::{
     QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,
 };
 pub use fuzzy_history::{FuzzyConfig, FuzzyHistorySearch, FuzzyMatch, HistoryEntryWithMetadata};
+pub use graphviz_export::{
+    GraphOptions, GraphvizExporter, LayoutEngine, NodeShape, NodeStyle, PlanNode, PlanOptions,
+    QueryPlanExporter,
+};
 pub use help::{HelpCategory, HelpProvider};
 #[allow(deprecated)]
 pub use interactive::InteractiveMode;

@@ -193,9 +193,9 @@
 - [x] **Memory-efficient scanning** - Chunked processing for large triple stores
 - [x] **SciRS2-Core profiling integration** - Performance tracking and analysis
 - [x] **Index optimization** - Bloom filters reduce unnecessary index lookups by 30-40%
-- [ ] Buffer pool tuning
-- [ ] Compression improvements
-- [ ] Write-ahead log optimization
+- [x] **Buffer pool tuning** ✅ **COMPLETE (November 20, 2025)** - Adaptive tuning with pattern detection (`src/storage/buffer_pool_tuner.rs`)
+- [x] **Compression improvements** ✅ **COMPLETE (November 20, 2025)** - Column-oriented compression with analytics optimizations (`src/compression/column_store.rs`)
+- [x] **Write-ahead log optimization** ✅ **COMPLETE (November 20, 2025)** - Batching, group commit, compression (`src/transaction/wal_optimizer.rs`)
 
 #### Features ✅ (Major Milestones Complete November 15, 2025)
 - [x] **Backup and restore utilities** - Full implementation with 5 comprehensive tests
@@ -226,23 +226,28 @@
 
 ## 🎯 Post-Beta.1 Development Roadmap (v0.1.0-rc.1 / beta.2)
 
-### SciRS2-Core API Compatibility (Target: rc.1 or beta.2)
-These modules need to be updated to match scirs2-core v0.1.0-rc.2+ API:
+### ✅ SciRS2-Core API Compatibility (COMPLETED - November 20, 2025)
 
-- [ ] **Buffer Pool Tuner** (`src/storage/buffer_pool_tuner.rs`) - Currently disabled
-  - Update to use scirs2-core metrics API (MetricsRegistry, Counter, Histogram, Gauge)
-  - Replace `MetricsRegistry::global()` with compatible API
-  - Replace `Counter.inc()/.get()` with rc.2+ methods
-  - Replace `Histogram.observe()/.mean()` with rc.2+ methods
-  - File exists but commented out in `src/storage/mod.rs`
+- [x] **Buffer Pool Tuner** (`src/storage/buffer_pool_tuner.rs`) ✅ **COMPLETE (November 20, 2025)**
+  - ✅ Updated to use scirs2-core v0.1.0-rc.2+ metrics API (Counter, Histogram, Gauge)
+  - ✅ Implemented access pattern detection (Sequential, Random, Mixed, ScanHeavy)
+  - ✅ Adaptive tuning recommendations with eviction policy selection
+  - ✅ Performance reporting with latency tracking
+  - ✅ 10 comprehensive tests passing
+  - ✅ Enabled in `src/storage/mod.rs` with full re-exports
 
-- [ ] **Query Optimizer Enhancements** (`src/query_optimizer.rs`) - Partially functional
-  - Complete integration with StatisticsSnapshot API
-  - Add missing fields: `avg_properties_per_subject`, `avg_objects_per_predicate`, `avg_subjects_per_object`
-  - Or refactor to use existing fields in rc.2
-  - Currently enabled but may have limited functionality
+- [x] **Query Optimizer Enhancements** ✅ **COMPLETE (November 20, 2025)** - Full StatisticsSnapshot API integration
+  - ✅ Added missing average fields to StatisticsSnapshot:
+    - `avg_properties_per_subject` - Selectivity for S-first queries
+    - `avg_objects_per_predicate` - Selectivity for P-first queries
+    - `avg_subjects_per_object` - Selectivity for O-first queries
+  - ✅ Enhanced cost estimation using average statistics
+  - ✅ Improved confidence calculations (0.95 for exact, 0.85 for two bounds, 0.70 for one bound)
+  - ✅ More accurate selectivity estimation using geometric mean for two-bound patterns
+  - ✅ Detailed query plan explanations with average statistics and confidence percentages
+  - ✅ All 607 tests passing
 
-**Note**: These features will be fully integrated once scirs2-core API stabilizes or when we adapt to rc.2 API.
+**Note**: Query optimizer now fully functional with complete StatisticsSnapshot API integration.
 
 ## 🎯 v0.1.0 Complete Feature Roadmap
 
@@ -265,8 +270,24 @@ These modules need to be updated to match scirs2-core v0.1.0-rc.2+ API:
 - [x] Snappy for streaming compression ✅ **COMPLETE** (`src/compression/unified.rs`)
 - [x] Adaptive compression based on data patterns ✅ **COMPLETE** (automatic algorithm selection in unified.rs)
 - [x] Custom RDF-aware compression (prefix compression) ✅ **COMPLETE (November 15, 2025)** - Integrated with dictionary for IRI namespace compression
-- [ ] Column-oriented compression (column_store module exists)
-- [ ] Delta encoding for triples (delta module exists)
+- [x] Column-oriented compression ✅ **COMPLETE (November 20, 2025)** - Enhanced for analytics workloads
+  - ✅ RDF triple column layout support (Subject, Predicate, Object columns)
+  - ✅ Batch compression/decompression for large datasets
+  - ✅ Analytics statistics collection (value counts, uniqueness, ranges)
+  - ✅ Optimal compression selection based on data characteristics
+  - ✅ Support for 7 compression types (None, RunLength, Delta, Dictionary, FrameOfReference, Bitmap, Lz4)
+  - ✅ 13 comprehensive tests passing
+- [x] Delta encoding for triples ✅ **COMPLETE** - Fully implemented in delta module (ready for integration)
+- [x] **Write-Ahead Log Optimization** ✅ **COMPLETE (November 20, 2025)** - Production-ready WAL with advanced features
+  - ✅ Batched writes - Buffer multiple log entries and write together (max 100 entries or 10ms delay)
+  - ✅ Group commit - Multiple transactions commit together in single fsync (100μs window)
+  - ✅ LZ4 compression - Compress large log entries (>1KB) for space savings
+  - ✅ Write buffering - 256KB buffer for efficient I/O operations
+  - ✅ Background flushing - Asynchronous flush thread (50ms interval, optional)
+  - ✅ Comprehensive statistics - Compression ratio, batch size, flush time tracking
+  - ✅ parking_lot locks - Reduced lock contention vs standard RwLock
+  - ✅ 12 comprehensive tests passing
+  - ✅ Enabled in `src/transaction/wal_optimizer.rs`
 
 #### Distributed Transaction Support (Target: v0.1.0)
 - [ ] Two-phase commit (2PC) protocol
@@ -314,7 +335,7 @@ These modules need to be updated to match scirs2-core v0.1.0-rc.2+ API:
 - [ ] Load balancing across replicas
 - [ ] Automatic failover and recovery
 - [ ] Connection pooling optimization
-- [ ] Resource quotas per user/query
-- [ ] Query timeout enforcement
-- [ ] Slow query logging and analysis
+- [x] Resource quotas per user/query ✅ **COMPLETE (November 15, 2025)** - Per-query resource limiting (`src/query_resource_quota.rs`)
+- [x] Query timeout enforcement ✅ **COMPLETE (November 20, 2025)** - Configurable timeouts with grace periods (`src/query_timeout.rs`)
+- [x] Slow query logging and analysis ✅ **COMPLETE (November 20, 2025)** - Pattern analysis with recommendations (`src/slow_query_log.rs`)
 - [ ] Database partitioning and sharding

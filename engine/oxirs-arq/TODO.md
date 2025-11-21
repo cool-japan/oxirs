@@ -1,10 +1,44 @@
 # OxiRS ARQ - TODO
 
-*Last Updated: November 15, 2025*
+*Last Updated: November 20, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.3 Production-Ready - **Beta.1 Features Complete!** 🎉
+## ✅ Current Status: v0.1.0-beta.2 Production-Ready - **Beta.2 Features Complete!** 🎉
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
+
+### Beta.2 Release Status (November 20, 2025) - **Beta.2 Features Complete!** 🎉
+- **411 tests** (unit + integration) passing with zero failures (with --all-features)
+- **Beta.2 Advanced Query Management Features** ✨ NEW
+  - **Query Cancellation Support** - Cooperative cancellation with callbacks and child tokens
+  - **Query Timeout Management** - Soft/hard timeouts with configurable warning thresholds
+  - **Memory Usage Tracking** - Per-query memory limits, pressure detection, and throttling
+  - **Query Session Management** - Unified session lifecycle with integrated features
+  - **Query Rate Limiting** - Token bucket rate limiter with per-user tracking
+  - **Query Audit Trail** - Circular buffer audit logging for compliance and debugging
+- **Beta.2 Production Enhancements** ✨ **LATEST**
+  - **Query Priority System** - 5-level priority scheduler (Critical, High, Normal, Low, Batch)
+    - Priority-based query scheduling with aging to prevent starvation
+    - Per-priority concurrency limits and queue management
+    - Query cancellation and statistics tracking
+    - 4 comprehensive tests validating all priority features
+  - **Query Cost Estimator** - Proactive cost estimation for resource planning
+    - Pattern, join, filter, aggregate, and path cost analysis
+    - Query complexity scoring and recommendations (Lightweight → VeryExpensive)
+    - Historical cost tracking for continuous learning
+    - 4 comprehensive tests including limit optimization
+  - **Performance Baseline Tracker** - Automated regression detection
+    - Rolling window baseline establishment from historical data
+    - Regression detection with configurable thresholds (20% default)
+    - Performance trend analysis with statistical metrics
+    - Automatic baseline updates and pattern tracking
+    - 3 comprehensive tests including regression severity classification
+  - **Production Pipeline Example** - Complete integration demonstration
+    - `examples/production_pipeline_beta2.rs` - 450-line working example
+    - Demonstrates all three Beta.2 features working together
+    - Realistic production query processing scenario
+    - Cost-based priority adjustment and regression detection
+    - Comprehensive logging and statistics reporting
+- All Beta.1 features preserved and enhanced
 
 ### Beta.1 Release Status (November 15, 2025) - **Beta.1 Features Complete!** 🎉
 - **228 tests** (unit + integration) passing with zero failures

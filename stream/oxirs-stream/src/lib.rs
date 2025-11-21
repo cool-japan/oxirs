@@ -259,6 +259,80 @@ pub use zero_copy::{
     ZeroCopyBuffer, ZeroCopyConfig, ZeroCopyManager, ZeroCopyStats,
 };
 
+// New v0.1.0-rc.3 exports for developer experience and performance
+pub use numa_processing::{
+    CpuAffinityMode, HugePageSize, MemoryBandwidthMonitor, MemoryInterleavePolicy, NodeBufferStats,
+    NodeProcessorStats, NumaAllocationStrategy, NumaBuffer, NumaBufferPool, NumaBufferPoolConfig,
+    NumaBufferPoolStats, NumaConfig, NumaNode, NumaProcessorStats, NumaStreamProcessor,
+    NumaThreadPool, NumaThreadPoolStats, NumaTopology, NumaWorker, NumaWorkerStats,
+    WorkerDistributionStrategy,
+};
+pub use out_of_order::{
+    EmitStrategy, GapFillingStrategy, LateEventStrategy, OrderedEvent, OutOfOrderConfig,
+    OutOfOrderHandler, OutOfOrderHandlerBuilder, OutOfOrderStats, SequenceTracker, Watermark,
+};
+pub use performance_profiler::{
+    HistogramStats, LatencyHistogram, OperationTimer, PerformanceProfiler, PerformanceReport,
+    PerformanceSample, PerformanceWarning, ProfilerBuilder, ProfilerConfig, ProfilerStats,
+    Recommendation, RecommendationCategory, RecommendationEffort, RecommendationImpact, Span,
+    WarningSeverity, WarningThresholds, WarningType,
+};
+pub use stream_sql::{
+    AggregateFunction, BinaryOperator, ColumnDefinition, CreateStreamStatement, DataType,
+    Expression, FromClause, JoinType, Lexer, OrderByItem, Parser,
+    QueryResult as StreamSqlQueryResult, QueryType, ResultRow, SelectItem, SelectStatement,
+    SqlValue, StreamMetadata, StreamSqlConfig, StreamSqlEngine, StreamSqlStats, Token,
+    UnaryOperator, WindowSpec, WindowType as SqlWindowType,
+};
+pub use testing_framework::{
+    Assertion, AssertionType, CapturedEvent, EventGenerator, EventMatcher, GeneratorConfig,
+    GeneratorType, MockClock, PerformanceMetric, TestFixture, TestHarness, TestHarnessBuilder,
+    TestHarnessConfig, TestMetrics, TestReport, TestStatus,
+};
+
+// New v0.1.0-rc.4 exports for ML, versioning, and migration
+pub use anomaly_detection::{
+    Anomaly, AnomalyAlert, AnomalyConfig, AnomalyDetector as AdaptiveAnomalyDetector,
+    AnomalySeverity, AnomalyStats as AdaptiveAnomalyStats, DetectorType, MultiDimensionalDetector,
+};
+pub use migration_tools::{
+    APIMapping, ConceptMapping, GeneratedFile, GeneratedFileType, ManualReviewItem,
+    MigrationConfig, MigrationError, MigrationReport, MigrationSuggestion, MigrationTool,
+    MigrationWarning, QuickStart, ReviewPriority, SourcePlatform, SuggestionCategory,
+};
+pub use online_learning::{
+    ABTestConfig, ABTestResult, DriftDetection, ModelCheckpoint,
+    ModelMetrics as OnlineModelMetrics, ModelType as OnlineModelType, OnlineLearningConfig,
+    OnlineLearningModel as StreamOnlineLearningModel, OnlineLearningStats, Prediction, Sample,
+    StreamFeatureExtractor,
+};
+pub use stream_versioning::{
+    Branch, BranchId, Change, ChangeType, Changeset, Snapshot, StreamVersioning, TimeTravelQuery,
+    TimeTravelTarget, VersionDiff, VersionId, VersionMetadata, VersionedEvent, VersioningConfig,
+    VersioningStats,
+};
+
+// New v0.1.0 advanced ML exports
+pub use predictive_analytics::{
+    AccuracyMetrics, ForecastAlgorithm, ForecastResult, ForecastingConfig, PredictiveAnalytics,
+    PredictiveStats, SeasonalityType, TrendDirection,
+};
+pub use feature_engineering::{
+    Feature, FeatureExtractionConfig, FeatureMetadata, FeaturePipeline, FeatureSet, FeatureStore,
+    FeatureTransform, FeatureValue, ImputationStrategy, PipelineStats,
+};
+pub use automl_stream::{
+    Algorithm, AutoML, AutoMLConfig, AutoMLStats, HyperParameters, ModelPerformance, TaskType,
+    TrainedModel,
+};
+pub use reinforcement_learning::{
+    Action, Experience, RLAgent, RLAlgorithm, RLConfig, RLStats, State as RLState,
+};
+pub use neural_architecture_search::{
+    ActivationType, Architecture, ArchitecturePerformance, LayerType, NAS, NASConfig, NASStats,
+    ObjectiveWeights, SearchSpace, SearchStrategy,
+};
+
 pub mod backend;
 pub mod backend_optimizer;
 pub mod backpressure;
@@ -325,6 +399,26 @@ pub mod schema_evolution;
 pub mod stream_replay;
 pub mod transactional_processing;
 pub mod zero_copy;
+
+// New v0.1.0-rc.3 modules for developer experience and performance
+pub mod numa_processing;
+pub mod out_of_order;
+pub mod performance_profiler;
+pub mod stream_sql;
+pub mod testing_framework;
+
+// New v0.1.0-rc.4 modules for ML, versioning, and migration
+pub mod anomaly_detection;
+pub mod migration_tools;
+pub mod online_learning;
+pub mod stream_versioning;
+
+// Advanced ML modules for v0.1.0 completion
+pub mod predictive_analytics;
+pub mod feature_engineering;
+pub mod automl_stream;
+pub mod reinforcement_learning;
+pub mod neural_architecture_search;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

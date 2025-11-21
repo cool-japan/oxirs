@@ -16,6 +16,7 @@ pub mod plan;
 pub mod plan_cache;
 pub mod property_paths;
 pub mod query_profiler;
+pub mod result_cache;
 pub mod sparql_algebra;
 pub mod sparql_query;
 pub mod statistics;
@@ -59,6 +60,7 @@ pub use query_profiler::{
     ProfiledQuery, ProfilerConfig, ProfilingStatistics, QueryProfiler, QueryProfilingSession,
     QueryStatistics,
 };
+pub use result_cache::{CacheConfig as ResultCacheConfig, CacheStats, QueryResultCache};
 pub use statistics::{
     GraphStatistics, PredicateStatistics, QueryExecutionStats, SelectivityInfo, StatisticsSummary,
 };

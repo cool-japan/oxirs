@@ -128,6 +128,12 @@ pub mod query_optimizer;
 // Statistics collection for cost-based optimization
 pub mod statistics;
 
+// Slow query logging and analysis for production monitoring
+pub mod slow_query_log;
+
+// Query timeout enforcement for production safety
+pub mod query_timeout;
+
 // Query monitoring (timeout enforcement and slow query logging)
 pub mod query_monitor;
 

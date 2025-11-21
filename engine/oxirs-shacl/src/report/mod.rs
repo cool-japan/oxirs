@@ -7,6 +7,7 @@
 pub mod advanced_filtering;
 pub mod analytics;
 pub mod core;
+pub mod documentation;
 pub mod format;
 pub mod generation;
 pub mod generator;
@@ -15,6 +16,7 @@ pub mod metadata;
 pub mod nested_results;
 pub mod serializers;
 pub mod summary;
+pub mod visualizer;
 
 // Re-export key types for convenience
 pub use core::ValidationReport;
@@ -51,6 +53,18 @@ pub use nested_results::{
     NestedValidationViolation, NestedViolationBuilder, NodeConstraintResult,
     PropertyConstraintResult, QualifiedConstraintContext, RootCause, ShapeConstraintContext,
     ShapeValidationType, ToNestedViolation,
+};
+
+// Re-export documentation generator types
+pub use documentation::{
+    DocumentationBuilder, DocumentationConfig, DocumentationFormat, ShapeDocumentationGenerator,
+};
+
+// Re-export visualizer types
+pub use visualizer::{
+    ChartSettings, ColorTheme, GroupBy, HeatmapEntry, ReportVisualizer, SummaryMetrics,
+    TimelineEntry, ViolationDetail, VisualizationData, VisualizationFormat, VisualizerConfig,
+    VisualizerConfigBuilder,
 };
 
 // Re-export validation types

@@ -152,8 +152,15 @@ impl BallTree {
         indices: Vec<usize>,
         depth: usize,
     ) -> Result<BallNode> {
-        // Ultra-strict stack overflow prevention
-        if indices.len() <= self.config.max_leaf_size || indices.len() <= 1 || depth >= 3 {
+        // Reasonable stack overflow prevention with proper depth limit
+        // Using log2(n) * 2 as a reasonable maximum depth for balanced trees
+        let max_depth = if !self.data.is_empty() {
+            ((self.data.len() as f32).log2() * 2.0) as usize + 10
+        } else {
+            50
+        };
+
+        if indices.len() <= self.config.max_leaf_size || indices.len() <= 1 || depth >= max_depth {
             // Leaf node
             let center = self.compute_centroid(points, &indices);
             let radius = self.compute_radius(points, &indices, &center);
@@ -405,8 +412,14 @@ impl KdTree {
     }
 
     fn build_node(&self, points: &[Vec<f32>], indices: Vec<usize>, depth: usize) -> Result<KdNode> {
-        // Ultra-strict stack overflow prevention
-        if indices.len() <= self.config.max_leaf_size || indices.len() <= 1 || depth >= 3 {
+        // Reasonable stack overflow prevention with proper depth limit
+        let max_depth = if !self.data.is_empty() {
+            ((self.data.len() as f32).log2() * 2.0) as usize + 10
+        } else {
+            50
+        };
+
+        if indices.len() <= self.config.max_leaf_size || indices.len() <= 1 || depth >= max_depth {
             return Ok(KdNode {
                 split_dim: 0,
                 split_value: 0.0,
@@ -594,8 +607,15 @@ impl VpTree {
     ) -> Result<VpNode> {
         // Note: Using manual random selection instead of SliceRandom
 
-        // Ultra-strict stack overflow prevention
-        if indices.len() <= self.config.max_leaf_size || indices.len() <= 1 || depth >= 3 {
+        // CRITICAL: Extremely strict depth and size limits to prevent stack overflow
+        // For very small datasets or deep recursion, immediately create leaf nodes
+        let max_depth = 30; // Conservative depth limit
+
+        // Aggressive leaf node creation for small datasets
+        if indices.len() <= self.config.max_leaf_size
+            || indices.len() <= 2  // Changed from <= 1 to <= 2 for extra safety
+            || depth >= max_depth
+        {
             return Ok(VpNode {
                 vantage_point: if indices.is_empty() { 0 } else { indices[0] },
                 median_distance: 0.0,
@@ -605,15 +625,14 @@ impl VpTree {
             });
         }
 
-        // Choose random vantage point
-        let vp_idx = indices.len() - 1;
-        // Manually shuffle using Fisher-Yates algorithm
-        for i in (1..indices.len()).rev() {
-            let j = rng.gen_range(0..=i);
-            indices.swap(i, j);
-        }
+        // Choose random vantage point - simplified to avoid potential issues
+        let vp_idx = if indices.len() > 1 {
+            rng.gen_range(0..indices.len())
+        } else {
+            0
+        };
         let vantage_point = indices[vp_idx];
-        indices.truncate(vp_idx);
+        indices.remove(vp_idx);
 
         // Calculate distances from vantage point
         let vp_data = &self.data[vantage_point].1.as_f32();
@@ -1244,7 +1263,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[ignore = "Stack overflow issue - being investigated"]
+    #[ignore = "Investigating stack overflow with recursive tree construction"]
     fn test_ball_tree() {
         let config = TreeIndexConfig {
             tree_type: TreeType::BallTree,
@@ -1271,7 +1290,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Stack overflow issue - being investigated"]
+    #[ignore = "Investigating stack overflow with recursive tree construction"]
     fn test_kd_tree() {
         let config = TreeIndexConfig {
             tree_type: TreeType::KdTree,
@@ -1297,7 +1316,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "Stack overflow issue - being investigated"]
+    #[ignore = "Investigating stack overflow with recursive tree construction"]
     fn test_vp_tree() {
         let config = TreeIndexConfig {
             tree_type: TreeType::VpTree,
