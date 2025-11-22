@@ -14,6 +14,7 @@ use axum::{
     response::{IntoResponse, Json},
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::instrument;
 
@@ -542,4 +543,73 @@ fn detect_bottlenecks(phases: &[crate::performance_profiler::ExecutionPhase]) ->
     bottlenecks.truncate(5);
 
     bottlenecks
+}
+
+// ============================================================================
+// Query Optimization Endpoints
+// ============================================================================
+
+/// Query optimization statistics response
+#[derive(Debug, Serialize)]
+pub struct OptimizationStatsResponse {
+    pub cached_plans: usize,
+    pub total_triples: u64,
+    pub indexed_predicates: usize,
+    pub last_updated: String,
+}
+
+/// GET /$/optimization/stats - Get query optimization statistics
+#[instrument(skip(state))]
+pub async fn optimization_stats_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<HashMap<String, serde_json::Value>>, StatusCode> {
+    if let Some(ref optimizer) = state.query_optimizer {
+        let stats = optimizer.get_optimization_stats().await;
+        Ok(Json(stats))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
+/// GET /$/optimization/plans - Get all cached query plans
+#[instrument(skip(state))]
+pub async fn optimization_plans_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<Vec<crate::optimization::OptimizedQueryPlan>>, StatusCode> {
+    if let Some(ref optimizer) = state.query_optimizer {
+        let plans = optimizer.get_cached_plans().await;
+        Ok(Json(plans))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
+/// DELETE /$/optimization/cache - Clear the optimization plan cache
+#[instrument(skip(state))]
+pub async fn clear_optimization_cache_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    if let Some(ref optimizer) = state.query_optimizer {
+        let cleared_count = optimizer.clear_plan_cache().await;
+        Ok(Json(serde_json::json!({
+            "success": true,
+            "cleared_plans": cleared_count,
+            "message": format!("Cleared {} cached query plans", cleared_count)
+        })))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
+}
+
+/// GET /$/optimization/database - Get detailed database statistics
+#[instrument(skip(state))]
+pub async fn database_statistics_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<Json<crate::optimization::DatabaseStatistics>, StatusCode> {
+    if let Some(ref optimizer) = state.query_optimizer {
+        let stats = optimizer.get_database_statistics().await;
+        Ok(Json(stats))
+    } else {
+        Err(StatusCode::SERVICE_UNAVAILABLE)
+    }
 }

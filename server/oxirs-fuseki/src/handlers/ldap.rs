@@ -11,6 +11,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 /// LDAP login request
@@ -72,7 +73,7 @@ pub struct LdapGroupInfo {
 
 /// Handle LDAP login
 pub async fn ldap_login(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(request): Json<LdapLoginRequest>,
 ) -> Result<Response, StatusCode> {
     debug!("LDAP login attempt for user: {}", request.username);
@@ -207,7 +208,7 @@ pub async fn ldap_login(
 
 /// Test LDAP connection
 pub async fn test_ldap_connection(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(_params): Query<LdapTestParams>,
 ) -> Result<Response, StatusCode> {
     debug!("Testing LDAP connection");
@@ -273,7 +274,7 @@ pub async fn test_ldap_connection(
 
 /// Get user groups from LDAP
 pub async fn get_ldap_groups(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Query(params): Query<LdapGroupParams>,
 ) -> Result<Response, StatusCode> {
     debug!("Getting LDAP groups for user: {}", params.username);
@@ -332,7 +333,7 @@ pub async fn get_ldap_groups(
 }
 
 /// Get current LDAP configuration (without sensitive data)
-pub async fn get_ldap_config(State(state): State<AppState>) -> Result<Response, StatusCode> {
+pub async fn get_ldap_config(State(state): State<Arc<AppState>>) -> Result<Response, StatusCode> {
     debug!("Getting LDAP configuration");
 
     // Check if LDAP is configured

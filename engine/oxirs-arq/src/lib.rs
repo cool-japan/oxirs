@@ -58,6 +58,7 @@ pub mod executor;
 pub mod expression;
 pub mod extensions;
 pub mod federation; // Enhanced federated query execution (v0.1.0)
+pub mod gpu_accelerated_ops; // GPU-accelerated SPARQL operations (Beta.2+)
 pub mod graphql_translator; // GraphQL to SPARQL translation (v0.1.0)
 pub mod integrated_query_planner;
 pub mod interactive_query_builder; // Interactive SPARQL query builder (v0.1.0)
@@ -215,6 +216,7 @@ pub use federation::{
     EndpointCapabilities, EndpointCriteria, EndpointDiscovery, EndpointHealth, FederatedSubquery,
     FederationConfig, FederationExecutor, FederationStats, LoadBalancingStrategy,
 };
+pub use gpu_accelerated_ops::{DeviceSelection, GpuConfig, GpuOperationStats, GpuQueryEngine};
 pub use interactive_query_builder::{
     helpers as query_helpers, InteractiveQueryBuilder, PatternBuilder, QueryType,
 };

@@ -708,7 +708,7 @@ mod tests {
 
     #[test]
     fn test_property_characteristics() {
-        let characteristics = vec![
+        let characteristics = [
             OwlPropertyCharacteristic::Functional,
             OwlPropertyCharacteristic::Transitive,
             OwlPropertyCharacteristic::Symmetric,

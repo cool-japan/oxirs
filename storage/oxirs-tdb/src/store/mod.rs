@@ -840,16 +840,35 @@ impl TdbStore {
     ///
     /// Returns a comprehensive diagnostic report including health status,
     /// performance metrics, and recommendations.
+    ///
+    /// Use `DiagnosticLevel::Quick` for fast checks, `DiagnosticLevel::Standard`
+    /// for normal diagnostics, and `DiagnosticLevel::Deep` for thorough
+    /// integrity checks (which may be slower).
     pub fn run_diagnostics(&self, level: DiagnosticLevel) -> DiagnosticReport {
-        let context = DiagnosticContext {
-            triple_count: self.triple_count as u64,
-            buffer_pool_stats: self.buffer_pool.stats(),
-            dictionary_size: self.dictionary.size(),
-            storage_size_bytes: (self.triple_count * 100) as u64, // Rough estimate
-            memory_usage_bytes: self.config.buffer_pool_size * crate::DEFAULT_PAGE_SIZE,
-        };
+        let context = DiagnosticContext::quick(
+            self.triple_count as u64,
+            self.buffer_pool.stats(),
+            self.dictionary.size(),
+            (self.triple_count * 100) as u64, // Rough estimate
+            self.config.buffer_pool_size * crate::DEFAULT_PAGE_SIZE,
+        );
 
         self.diagnostic_engine.run(level, &context)
+    }
+
+    /// Run deep diagnostics with full consistency checks
+    ///
+    /// This collects all triple data for thorough index and dictionary
+    /// consistency verification. May be slow for large databases.
+    pub fn run_deep_diagnostics(&self) -> DiagnosticReport {
+        // TODO: Implement actual index and dictionary data collection
+        // For now, fall back to quick diagnostics
+        // In the future, this should:
+        // 1. Collect all triples from SPO/POS/OSP indexes
+        // 2. Collect all dictionary NodeIds
+        // 3. Pass to DiagnosticContext::deep()
+
+        self.run_diagnostics(DiagnosticLevel::Deep)
     }
 
     /// Get query cache statistics

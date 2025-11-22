@@ -37,7 +37,7 @@ use axum::{
     http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Json, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use std::collections::HashMap;
@@ -776,12 +776,12 @@ impl Runtime {
             );
 
         // Server management routes
-        app = app.route("/$/ping", get(ping_handler));
-        // TODO: Fix these handler signatures
-        // .route("/$/server", get(handlers::admin::server_info))
-        // .route("/$/stats", get(handlers::admin::server_stats))
-        // .route("/$/compact/:name", post(handlers::admin::compact_dataset))
-        // .route("/$/backup/:name", post(handlers::admin::backup_dataset));
+        app = app
+            .route("/$/ping", get(ping_handler))
+            .route("/$/server", get(handlers::admin::server_info))
+            .route("/$/stats", get(handlers::admin::server_stats))
+            .route("/$/compact/:name", post(handlers::admin::compact_dataset))
+            .route("/$/backup/:name", post(handlers::admin::backup_dataset));
 
         // Authentication routes (if enabled)
         if self.config.security.auth_required {
@@ -825,15 +825,15 @@ impl Runtime {
                 );
         }
 
-        // TODO: Re-enable LDAP and SAML routes after fixing handler signatures
         // LDAP/Active Directory authentication routes (if LDAP is configured)
-        // if self.config.security.ldap.is_some() {
-        //     app = app
-        //         .route("/auth/ldap/login", post(handlers::ldap::ldap_login))
-        //         .route("/auth/ldap/test", get(handlers::ldap::test_ldap_connection))
-        //         .route("/auth/ldap/groups", get(handlers::ldap::get_ldap_groups))
-        //         .route("/auth/ldap/config", get(handlers::ldap::get_ldap_config));
-        // }
+        #[cfg(feature = "ldap")]
+        if self.config.security.ldap.is_some() {
+            app = app
+                .route("/auth/ldap/login", post(handlers::ldap_login))
+                .route("/auth/ldap/test", get(handlers::test_ldap_connection))
+                .route("/auth/ldap/groups", get(handlers::get_ldap_groups))
+                .route("/auth/ldap/config", get(handlers::get_ldap_config));
+        }
 
         // SAML 2.0 authentication routes (if SAML is configured)
         // #[cfg(feature = "saml")]
@@ -855,26 +855,24 @@ impl Runtime {
         //         );
         // }
 
-        // Multi-Factor Authentication routes (disabled - MFA not yet implemented)
-        // TODO: Add MFA support to SecurityConfig
-        // if self.config.security.mfa.enabled {
-        //     app = app
-        //         .route("/auth/mfa/enroll", post(handlers::mfa::enroll_mfa))
-        //         .route(
-        //             "/auth/mfa/challenge/:type",
-        //             post(handlers::mfa::create_mfa_challenge),
-        //         )
-        //         .route("/auth/mfa/verify", post(handlers::mfa::verify_mfa))
-        //         .route("/auth/mfa/status", get(handlers::mfa::get_mfa_status))
-        //         .route(
-        //             "/auth/mfa/disable/:type",
-        //             delete(handlers::mfa::disable_mfa),
-        //         )
-        //         .route(
-        //             "/auth/mfa/backup-codes",
-        //             post(handlers::mfa::regenerate_backup_codes),
-        //         );
-        // }
+        // Multi-Factor Authentication routes
+        if let Some(mfa_config) = &self.config.security.mfa {
+            if mfa_config.enabled {
+                app = app
+                    .route("/auth/mfa/enroll", post(handlers::enroll_mfa))
+                    .route(
+                        "/auth/mfa/challenge/:type",
+                        post(handlers::create_mfa_challenge),
+                    )
+                    .route("/auth/mfa/verify", post(handlers::verify_mfa))
+                    .route("/auth/mfa/status", get(handlers::get_mfa_status))
+                    .route("/auth/mfa/disable/:type", delete(handlers::disable_mfa))
+                    .route(
+                        "/auth/mfa/backup-codes",
+                        post(handlers::regenerate_backup_codes),
+                    );
+            }
+        }
 
         // Health check routes
         app = app
@@ -882,34 +880,68 @@ impl Runtime {
             .route("/health/live", get(crate::health::liveness_handler))
             .route("/health/ready", get(crate::health::readiness_handler));
 
-        // Metrics routes (if enabled)
-        // if state.metrics_service.is_some() {
-        //     app = app
-        //         .route("/metrics", get(metrics_handler))
-        //         .route("/metrics/summary", get(metrics_summary_handler));
-        // }
+        // Metrics routes (Prometheus export)
+        if state.metrics_service.is_some() {
+            app = app.route("/metrics", get(handlers::production::metrics_handler));
+        }
 
-        // Performance monitoring routes (if enabled)
-        // if let Some(_performance_service) = &state.performance_service {
-        //     app = app
-        //         .route("/$/performance", get(performance_info_handler))
-        //         .route("/$/performance/cache", get(cache_stats_handler))
-        //         .route(
-        //             "/$/performance/cache",
-        //             axum::routing::delete(clear_cache_handler),
-        //         );
-        // }
+        // Beta.2 Performance monitoring routes
+        app = app
+            .route(
+                "/$/performance",
+                get(handlers::performance::get_performance_stats),
+            )
+            .route(
+                "/$/performance/memory",
+                get(handlers::performance::get_memory_stats),
+            )
+            .route(
+                "/$/performance/concurrency",
+                get(handlers::performance::get_concurrency_stats),
+            )
+            .route("/$/performance/gc", post(handlers::performance::trigger_gc))
+            .route(
+                "/$/performance/health",
+                get(handlers::performance::beta2_health_check),
+            );
 
-        // Query optimization routes (if enabled)
-        // if let Some(_query_optimizer) = &state.query_optimizer {
-        //     app = app
-        //         .route("/$/optimization", get(optimization_stats_handler))
-        //         .route("/$/optimization/plans", get(optimization_plans_handler))
-        //         .route(
-        //             "/$/optimization/stats",
-        //             get(optimization_detailed_stats_handler),
-        //         );
-        // }
+        // RC.1 Performance profiler routes
+        if state.performance_profiler.is_some() {
+            app = app
+                .route(
+                    "/$/profiler/report",
+                    get(handlers::performance::profiler_report_handler),
+                )
+                .route(
+                    "/$/profiler/query-stats",
+                    get(handlers::performance::profiler_query_stats_handler),
+                )
+                .route(
+                    "/$/profiler/reset",
+                    post(handlers::performance::profiler_reset_handler),
+                );
+        }
+
+        // Query optimization routes
+        if state.query_optimizer.is_some() {
+            app = app
+                .route(
+                    "/$/optimization/stats",
+                    get(handlers::performance::optimization_stats_handler),
+                )
+                .route(
+                    "/$/optimization/plans",
+                    get(handlers::performance::optimization_plans_handler),
+                )
+                .route(
+                    "/$/optimization/cache",
+                    delete(handlers::performance::clear_optimization_cache_handler),
+                )
+                .route(
+                    "/$/optimization/database",
+                    get(handlers::performance::database_statistics_handler),
+                );
+        }
 
         // WebSocket routes for live query subscriptions
         app = app

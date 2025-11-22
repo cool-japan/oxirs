@@ -48,10 +48,12 @@
 - [x] Comprehensive testing (361 tests passing, 99.0% pass rate)
 
 ## 🚧 Known Issues (Beta.2)
-- **Tree indices** (Ball Tree, KD-Tree, VP-Tree): Stack overflow under investigation
-  - Tests temporarily ignored
-  - Alternative: Use HNSW or IVF for production workloads
-  - Fix planned for Beta.3
+- **Tree indices** (Ball Tree, KD-Tree, VP-Tree): Marked as **EXPERIMENTAL**
+  - Conservative depth limits implemented (20 levels max)
+  - Best for moderate datasets (< 100K vectors)
+  - Tests remain ignored due to platform-specific stack size constraints
+  - **Recommendation**: Use HNSW, IVF, or LSH for production workloads
+  - Full iterative implementation deferred post-v0.1.0
 
 ## 🎯 v0.1.0 Final Release Roadmap (Target: December 2025)
 
@@ -122,28 +124,32 @@
 
 ## 🎯 Beta.3 Priorities (Target: November 30, 2025)
 
-### ✅ Completed (November 20, 2025)
+### ✅ Completed (November 20-21, 2025)
 1. ~~Enhance crash recovery~~ **DONE**
    - ✅ Write-ahead logging (WAL) implemented
    - ✅ Automatic recovery on restart
    - ✅ Transaction support
-   - ⚠️  Minor test edge case to fix
+   - ✅ Recovery test edge case FIXED (checkpoint filtering logic)
 
 ### 🔜 Remaining Priorities
 
-1. **Critical**: Fix tree indices stack overflow
-   - Implement iterative tree construction
-   - Or document as experimental with usage guidelines
+1. ~~**Critical**: Fix tree indices stack overflow~~ **COMPLETED**
+   - ✅ Documented as experimental with conservative depth limits
+   - ✅ Added comprehensive module documentation
+   - ✅ Iterative search implementation completed for BallTree
+   - ⏭️  Full iterative construction deferred post-v0.1.0
 
-2. **High**: Complete GPU kernel implementations
+2. ~~**High**: Refine WAL implementation~~ **COMPLETED**
+   - ✅ Fixed recovery test edge case (checkpoint filtering at seq=0)
+   - ✅ Robust error handling for incomplete writes
+   - ✅ Sanity checks for corrupted entries
+   - ⏭️  WAL compression (deferred to post-Beta.3)
+   - ⏭️  Performance optimization (functional, optimizations can wait)
+
+3. **High**: Complete GPU kernel implementations
    - CUDA kernels for all distance metrics
    - Benchmark GPU vs CPU performance
    - Document GPU requirements and setup
-
-3. **High**: Refine WAL implementation
-   - Fix recovery test edge case
-   - Add WAL compression
-   - Performance optimization
 
 4. **Medium**: Advanced HNSW optimizations
    - Adaptive ef_search tuning

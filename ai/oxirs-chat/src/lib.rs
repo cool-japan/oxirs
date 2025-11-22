@@ -190,6 +190,8 @@ pub mod exploration_guidance; // NEW: Data exploration guidance
 pub mod external_services;
 pub mod graph_exploration;
 pub mod health_monitoring;
+pub mod i18n; // NEW: Internationalization and multi-language support
+pub mod knowledge_bases; // NEW: Wikipedia, PubMed, and external knowledge base connectors
 pub mod llm;
 pub mod message_analytics;
 pub mod messages;

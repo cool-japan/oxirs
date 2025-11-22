@@ -79,6 +79,7 @@ wasmtime = { version = "14.0", optional = true }
 ed25519-dalek = "2.1"
 rsa = "0.10.0-rc.10"
 once_cell.workspace = true
+serde_yaml = "0.9.34"
 
 [dev-dependencies]
 criterion.workspace = true

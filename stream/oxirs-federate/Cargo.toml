@@ -19,7 +19,7 @@ oxirs-vec.workspace = true
 # SciRS2 dependencies for federated processing
 scirs2-optimize = { workspace = true }
 scirs2-stats = { workspace = true }
-scirs2-core = { workspace = true }
+scirs2-core = { workspace = true, features = ["profiling"] }
 scirs2-neural = { workspace = true }
 tokio.workspace = true
 hyper.workspace = true

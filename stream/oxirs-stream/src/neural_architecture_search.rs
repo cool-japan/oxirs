@@ -125,7 +125,10 @@ impl Architecture {
                     params += prev_dim * units + units;
                     prev_dim = *units;
                 }
-                LayerType::Conv1D { filters, kernel_size } => {
+                LayerType::Conv1D {
+                    filters,
+                    kernel_size,
+                } => {
                     params += kernel_size * filters + filters;
                     prev_dim = *filters;
                 }
@@ -199,7 +202,9 @@ impl Default for SearchSpace {
                 LayerType::GRU { units: 64 },
                 LayerType::Dropout { rate: 0.2 },
                 LayerType::BatchNorm,
-                LayerType::Activation { function: ActivationType::ReLU },
+                LayerType::Activation {
+                    function: ActivationType::ReLU,
+                },
             ],
             max_units: 512,
             min_units: 16,
@@ -363,8 +368,10 @@ impl NAS {
 
     /// Run architecture search
     pub async fn search(&mut self, input_dim: usize, output_dim: usize) -> Result<Architecture> {
-        info!("Starting NAS with strategy {:?}, max_trials={}",
-            self.config.strategy, self.config.max_trials);
+        info!(
+            "Starting NAS with strategy {:?}, max_trials={}",
+            self.config.strategy, self.config.max_trials
+        );
 
         let start_time = std::time::Instant::now();
 
@@ -379,7 +386,10 @@ impl NAS {
                 self.gradient_based_search(input_dim, output_dim).await?;
             }
             _ => {
-                warn!("Strategy {:?} not fully implemented, using random search", self.config.strategy);
+                warn!(
+                    "Strategy {:?} not fully implemented, using random search",
+                    self.config.strategy
+                );
                 self.random_search(input_dim, output_dim).await?;
             }
         }
@@ -391,8 +401,10 @@ impl NAS {
         let best = self.best_architecture.read().await;
         match &*best {
             Some(perf) => {
-                info!("NAS complete: best score={:.4}, params={}, latency={:.2}ms",
-                    perf.score, perf.parameter_count, perf.inference_latency_ms);
+                info!(
+                    "NAS complete: best score={:.4}, params={}, latency={:.2}ms",
+                    perf.score, perf.parameter_count, perf.inference_latency_ms
+                );
                 Ok(perf.architecture.clone())
             }
             None => Err(anyhow!("No valid architecture found")),
@@ -402,14 +414,24 @@ impl NAS {
     /// Random search strategy
     async fn random_search(&mut self, input_dim: usize, output_dim: usize) -> Result<()> {
         for trial in 0..self.config.max_trials {
-            let architecture = self.generate_random_architecture(input_dim, output_dim).await?;
+            let architecture = self
+                .generate_random_architecture(input_dim, output_dim)
+                .await?;
             let performance = self.evaluate_architecture(&architecture).await?;
 
             self.update_best(performance.clone()).await;
             self.history.write().await.push(performance);
 
-            debug!("Random search trial {}: score={:.4}", trial,
-                self.best_architecture.read().await.as_ref().map(|p| p.score).unwrap_or(0.0));
+            debug!(
+                "Random search trial {}: score={:.4}",
+                trial,
+                self.best_architecture
+                    .read()
+                    .await
+                    .as_ref()
+                    .map(|p| p.score)
+                    .unwrap_or(0.0)
+            );
         }
 
         Ok(())
@@ -453,7 +475,9 @@ impl NAS {
             let selected = self.tournament_selection(&performances).await?;
 
             // Crossover and mutation
-            let offspring = self.create_offspring(&selected, input_dim, output_dim).await?;
+            let offspring = self
+                .create_offspring(&selected, input_dim, output_dim)
+                .await?;
 
             // Update population
             *self.population.write().await = offspring;
@@ -470,25 +494,41 @@ impl NAS {
         // Real DARTS would use continuous relaxation and gradient descent
 
         for trial in 0..self.config.max_trials {
-            let architecture = self.generate_random_architecture(input_dim, output_dim).await?;
+            let architecture = self
+                .generate_random_architecture(input_dim, output_dim)
+                .await?;
             let performance = self.evaluate_architecture(&architecture).await?;
 
             self.update_best(performance.clone()).await;
             self.history.write().await.push(performance);
 
-            debug!("Gradient-based trial {}: score={:.4}", trial,
-                self.best_architecture.read().await.as_ref().map(|p| p.score).unwrap_or(0.0));
+            debug!(
+                "Gradient-based trial {}: score={:.4}",
+                trial,
+                self.best_architecture
+                    .read()
+                    .await
+                    .as_ref()
+                    .map(|p| p.score)
+                    .unwrap_or(0.0)
+            );
         }
 
         Ok(())
     }
 
     /// Generate a random architecture
-    async fn generate_random_architecture(&self, input_dim: usize, output_dim: usize) -> Result<Architecture> {
+    async fn generate_random_architecture(
+        &self,
+        input_dim: usize,
+        output_dim: usize,
+    ) -> Result<Architecture> {
         let mut rng = self.rng.write().await;
         let mut architecture = Architecture::new(input_dim, output_dim);
 
-        let num_layers = rng.random_range(self.config.search_space.min_layers..=self.config.search_space.max_layers);
+        let num_layers = rng.random_range(
+            self.config.search_space.min_layers..=self.config.search_space.max_layers,
+        );
 
         for _ in 0..num_layers {
             let layer_idx = rng.random_range(0..self.config.search_space.allowed_layers.len());
@@ -497,15 +537,21 @@ impl NAS {
             // Randomize layer parameters
             layer = match layer {
                 LayerType::Dense { .. } => {
-                    let units = rng.random_range(self.config.search_space.min_units..=self.config.search_space.max_units);
+                    let units = rng.random_range(
+                        self.config.search_space.min_units..=self.config.search_space.max_units,
+                    );
                     LayerType::Dense { units }
                 }
                 LayerType::LSTM { .. } => {
-                    let units = rng.random_range(self.config.search_space.min_units..=self.config.search_space.max_units);
+                    let units = rng.random_range(
+                        self.config.search_space.min_units..=self.config.search_space.max_units,
+                    );
                     LayerType::LSTM { units }
                 }
                 LayerType::GRU { .. } => {
-                    let units = rng.random_range(self.config.search_space.min_units..=self.config.search_space.max_units);
+                    let units = rng.random_range(
+                        self.config.search_space.min_units..=self.config.search_space.max_units,
+                    );
                     LayerType::GRU { units }
                 }
                 LayerType::Dropout { .. } => {
@@ -525,7 +571,10 @@ impl NAS {
     }
 
     /// Evaluate architecture performance
-    async fn evaluate_architecture(&self, architecture: &Architecture) -> Result<ArchitecturePerformance> {
+    async fn evaluate_architecture(
+        &self,
+        architecture: &Architecture,
+    ) -> Result<ArchitecturePerformance> {
         let start_time = std::time::Instant::now();
 
         // Simplified evaluation - in production, actually train and test the network
@@ -561,8 +610,9 @@ impl NAS {
         let mut stats = self.stats.write().await;
         stats.total_evaluated += 1;
         let eval_time = start_time.elapsed().as_secs_f64();
-        stats.avg_evaluation_time = (stats.avg_evaluation_time * (stats.total_evaluated - 1) as f64 + eval_time)
-            / stats.total_evaluated as f64;
+        stats.avg_evaluation_time =
+            (stats.avg_evaluation_time * (stats.total_evaluated - 1) as f64 + eval_time)
+                / stats.total_evaluated as f64;
 
         Ok(performance)
     }
@@ -572,7 +622,9 @@ impl NAS {
         let mut population = Vec::new();
 
         for _ in 0..self.config.population_size {
-            let architecture = self.generate_random_architecture(input_dim, output_dim).await?;
+            let architecture = self
+                .generate_random_architecture(input_dim, output_dim)
+                .await?;
             population.push(architecture);
         }
 
@@ -581,7 +633,10 @@ impl NAS {
     }
 
     /// Tournament selection
-    async fn tournament_selection(&self, performances: &[ArchitecturePerformance]) -> Result<Vec<Architecture>> {
+    async fn tournament_selection(
+        &self,
+        performances: &[ArchitecturePerformance],
+    ) -> Result<Vec<Architecture>> {
         let mut selected = Vec::new();
         let tournament_size = 3;
 
@@ -606,7 +661,12 @@ impl NAS {
     }
 
     /// Create offspring through crossover and mutation
-    async fn create_offspring(&self, parents: &[Architecture], input_dim: usize, output_dim: usize) -> Result<Vec<Architecture>> {
+    async fn create_offspring(
+        &self,
+        parents: &[Architecture],
+        input_dim: usize,
+        output_dim: usize,
+    ) -> Result<Vec<Architecture>> {
         let mut offspring = Vec::new();
         let mut rng = self.rng.write().await;
 
@@ -634,7 +694,12 @@ impl NAS {
     }
 
     /// Crossover operation
-    fn crossover(&self, parent1: &Architecture, parent2: &Architecture, rng: &mut Random) -> Result<(Architecture, Architecture)> {
+    fn crossover(
+        &self,
+        parent1: &Architecture,
+        parent2: &Architecture,
+        rng: &mut Random,
+    ) -> Result<(Architecture, Architecture)> {
         let mut child1 = Architecture::new(parent1.input_dim, parent1.output_dim);
         let mut child2 = Architecture::new(parent2.input_dim, parent2.output_dim);
 
@@ -665,7 +730,13 @@ impl NAS {
     }
 
     /// Mutation operation
-    fn mutate(&self, architecture: &mut Architecture, _input_dim: usize, _output_dim: usize, rng: &mut Random) -> Result<()> {
+    fn mutate(
+        &self,
+        architecture: &mut Architecture,
+        _input_dim: usize,
+        _output_dim: usize,
+        rng: &mut Random,
+    ) -> Result<()> {
         if architecture.layers.is_empty() {
             return Ok(());
         }
@@ -693,7 +764,8 @@ impl NAS {
                 // Modify a layer
                 let modify_pos = rng.gen_range(0..architecture.layers.len());
                 let layer_idx = rng.gen_range(0..self.config.search_space.allowed_layers.len());
-                architecture.layers[modify_pos] = self.config.search_space.allowed_layers[layer_idx].clone();
+                architecture.layers[modify_pos] =
+                    self.config.search_space.allowed_layers[layer_idx].clone();
             }
         }
 
@@ -974,6 +1046,9 @@ mod tests {
             params: 0.05,
         };
 
-        assert_eq!(weights.accuracy + weights.latency + weights.memory + weights.params, 1.0);
+        assert_eq!(
+            weights.accuracy + weights.latency + weights.memory + weights.params,
+            1.0
+        );
     }
 }

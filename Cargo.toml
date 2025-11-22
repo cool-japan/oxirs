@@ -23,6 +23,7 @@ members = [
 ]
 exclude = [
     "engine/oxirs-geosparql/fuzz",
+    "engine/oxirs-ttl/fuzz",
 ]
 
 [workspace.package]
@@ -213,6 +214,12 @@ zstd = "0.13"      # Zstandard compression
 lz4_flex = "0.11"  # LZ4 compression
 snap = "1.1"       # Snappy compression
 brotli = "8.0"     # Brotli compression
+
+# Geospatial libraries (GeoSPARQL support)
+geo = "0.29"       # Geospatial algorithms
+rstar = "0.12"     # R*-tree spatial indexing
+geojson = "0.24"   # GeoJSON serialization
+wkt = "0.11"       # Well-Known Text parsing
 
 # Caching
 redis = { version = "0.27.6", features = ["async-std-comp"] }

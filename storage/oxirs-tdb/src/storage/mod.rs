@@ -8,6 +8,7 @@
 
 pub mod adaptive_tuning;
 pub mod allocator;
+pub mod async_io;
 pub mod buffer_pool;
 pub mod buffer_pool_tuner; // ✅ Updated to scirs2-core v0.1.0-rc.2+ metrics API
 pub mod direct_io;
@@ -19,6 +20,7 @@ pub mod zero_copy;
 // Re-exports
 pub use adaptive_tuning::{AdaptiveTuner, AdaptiveTuningConfig};
 pub use allocator::Allocator;
+pub use async_io::{AsyncFileHandle, AsyncIoBackend, AsyncIoBatch, AsyncIoStats};
 pub use buffer_pool::{BufferPool, BufferPoolStats, PageGuard};
 pub use buffer_pool_tuner::{
     AccessPattern, BufferPoolTuner, BufferPoolTunerConfig, EvictionPolicy, PerformanceReport,

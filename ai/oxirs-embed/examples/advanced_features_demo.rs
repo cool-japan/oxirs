@@ -356,7 +356,7 @@ async fn main() -> Result<()> {
             for item in arr.iter().take(5) {
                 if let Some((entity, score)) = item
                     .as_array()
-                    .and_then(|a| Some((a.get(0)?.as_str()?, a.get(1)?.as_f64()?)))
+                    .and_then(|a| Some((a.first()?.as_str()?, a.get(1)?.as_f64()?)))
                 {
                     println!("      → {} (similarity: {:.3})", entity, score);
                 }
@@ -380,7 +380,7 @@ async fn main() -> Result<()> {
         qat: false,
     };
 
-    let quantizer = ModelQuantizer::new(quant_config);
+    let _quantizer = ModelQuantizer::new(quant_config);
 
     println!("  Quantization Configuration:");
     println!("    • Method: Int8 (8-bit integers)");

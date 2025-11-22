@@ -115,9 +115,7 @@ impl Algorithm {
                 Algorithm::OnlineSGD,
                 Algorithm::NeuralNetwork,
             ],
-            TaskType::Clustering => vec![
-                Algorithm::KMeans,
-            ],
+            TaskType::Clustering => vec![Algorithm::KMeans],
         }
     }
 }
@@ -366,12 +364,9 @@ impl AutoML {
             let hyperparams = self.generate_hyperparameters(algorithm).await?;
 
             // Train and evaluate model
-            let performance = self.train_and_evaluate(
-                algorithm,
-                &hyperparams,
-                features,
-                labels,
-            ).await?;
+            let performance = self
+                .train_and_evaluate(algorithm, &hyperparams, features, labels)
+                .await?;
 
             // Record trial
             self.trial_history.write().await.push(performance.clone());
@@ -391,7 +386,9 @@ impl AutoML {
                 let model = TrainedModel {
                     algorithm,
                     hyperparameters: hyperparams.clone(),
-                    parameters: self.train_final_model(algorithm, &hyperparams, features, labels).await?,
+                    parameters: self
+                        .train_final_model(algorithm, &hyperparams, features, labels)
+                        .await?,
                     performance: performance.clone(),
                 };
 
@@ -412,7 +409,10 @@ impl AutoML {
 
             // Early stopping
             if trials_without_improvement >= self.config.early_stopping_patience {
-                info!("Early stopping triggered after {} trials without improvement", trials_without_improvement);
+                info!(
+                    "Early stopping triggered after {} trials without improvement",
+                    trials_without_improvement
+                );
                 break;
             }
 
@@ -474,12 +474,15 @@ impl AutoML {
         let start_time = std::time::Instant::now();
 
         // Perform cross-validation
-        let cv_scores = self.cross_validate(algorithm, hyperparams, features, labels).await?;
+        let cv_scores = self
+            .cross_validate(algorithm, hyperparams, features, labels)
+            .await?;
         let cv_score = cv_scores.iter().sum::<f64>() / cv_scores.len() as f64;
 
         // Compute additional metrics
-        let (accuracy, precision, recall, f1, mse, r_squared) =
-            self.compute_metrics(algorithm, hyperparams, features, labels).await?;
+        let (accuracy, precision, recall, f1, mse, r_squared) = self
+            .compute_metrics(algorithm, hyperparams, features, labels)
+            .await?;
 
         let training_time = start_time.elapsed().as_secs_f64();
 
@@ -526,7 +529,9 @@ impl AutoML {
             let val_end = ((fold + 1) * fold_size).min(n_samples);
 
             // Simple train/val split (in production, use proper indexing)
-            let score = self.evaluate_fold(algorithm, hyperparams, features, labels, val_start, val_end).await?;
+            let score = self
+                .evaluate_fold(algorithm, hyperparams, features, labels, val_start, val_end)
+                .await?;
             scores.push(score);
         }
 
@@ -559,7 +564,14 @@ impl AutoML {
         _hyperparams: &HyperParameters,
         _features: &Array2<f64>,
         _labels: &Array1<f64>,
-    ) -> Result<(Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>, Option<f64>)> {
+    ) -> Result<(
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+        Option<f64>,
+    )> {
         // Simplified metrics computation
         let mut rng = self.rng.write().await;
 
@@ -612,7 +624,8 @@ impl AutoML {
         // Keep only top models
         if ensemble.len() > self.config.max_ensemble_size {
             ensemble.sort_by(|a, b| {
-                b.performance.overall_score()
+                b.performance
+                    .overall_score()
                     .partial_cmp(&a.performance.overall_score())
                     .unwrap_or(std::cmp::Ordering::Equal)
             });
@@ -636,8 +649,9 @@ impl AutoML {
         let mut stats = self.stats.write().await;
         stats.predictions_count += 1;
         let elapsed_ms = start_time.elapsed().as_secs_f64() * 1000.0;
-        stats.avg_prediction_time_ms = (stats.avg_prediction_time_ms * (stats.predictions_count - 1) as f64 + elapsed_ms)
-            / stats.predictions_count as f64;
+        stats.avg_prediction_time_ms =
+            (stats.avg_prediction_time_ms * (stats.predictions_count - 1) as f64 + elapsed_ms)
+                / stats.predictions_count as f64;
 
         Ok(prediction)
     }
@@ -696,9 +710,12 @@ impl AutoML {
 
         // Weighted average
         let total_weight: f64 = weights.iter().sum();
-        let weighted_pred = predictions.iter().zip(&weights)
+        let weighted_pred = predictions
+            .iter()
+            .zip(&weights)
             .map(|(p, w)| p * w)
-            .sum::<f64>() / total_weight;
+            .sum::<f64>()
+            / total_weight;
 
         Ok(weighted_pred)
     }
@@ -714,10 +731,16 @@ impl AutoML {
     }
 
     /// Get best model information
-    pub async fn get_best_model_info(&self) -> Option<(Algorithm, HyperParameters, ModelPerformance)> {
+    pub async fn get_best_model_info(
+        &self,
+    ) -> Option<(Algorithm, HyperParameters, ModelPerformance)> {
         let model = self.best_model.read().await;
         model.as_ref().map(|m| {
-            (m.algorithm, m.hyperparameters.clone(), m.performance.clone())
+            (
+                m.algorithm,
+                m.hyperparameters.clone(),
+                m.performance.clone(),
+            )
         })
     }
 
@@ -802,7 +825,9 @@ mod tests {
         let config = AutoMLConfig::default();
         let automl = AutoML::new(config).unwrap();
 
-        let params = automl.generate_hyperparameters(Algorithm::LinearRegression).await;
+        let params = automl
+            .generate_hyperparameters(Algorithm::LinearRegression)
+            .await;
         assert!(params.is_ok());
 
         let p = params.unwrap();
@@ -824,10 +849,14 @@ mod tests {
         let mut automl = AutoML::new(config).unwrap();
 
         // Small synthetic dataset
-        let features = Array2::from_shape_vec((10, 2), vec![
-            1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 6.0,
-            6.0, 7.0, 7.0, 8.0, 8.0, 9.0, 9.0, 10.0, 10.0, 11.0,
-        ]).unwrap();
+        let features = Array2::from_shape_vec(
+            (10, 2),
+            vec![
+                1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 9.0,
+                9.0, 10.0, 10.0, 11.0,
+            ],
+        )
+        .unwrap();
 
         let labels = Array1::from_vec(vec![3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0]);
 
@@ -850,10 +879,14 @@ mod tests {
 
         let mut automl = AutoML::new(config).unwrap();
 
-        let features = Array2::from_shape_vec((10, 2), vec![
-            1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 6.0,
-            6.0, 7.0, 7.0, 8.0, 8.0, 9.0, 9.0, 10.0, 10.0, 11.0,
-        ]).unwrap();
+        let features = Array2::from_shape_vec(
+            (10, 2),
+            vec![
+                1.0, 2.0, 2.0, 3.0, 3.0, 4.0, 4.0, 5.0, 5.0, 6.0, 6.0, 7.0, 7.0, 8.0, 8.0, 9.0,
+                9.0, 10.0, 10.0, 11.0,
+            ],
+        )
+        .unwrap();
 
         let labels = Array1::from_vec(vec![3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 21.0]);
 
@@ -877,7 +910,8 @@ mod tests {
 
         let mut automl = AutoML::new(config).unwrap();
 
-        let features = Array2::from_shape_vec((20, 2), (0..40).map(|x| x as f64).collect()).unwrap();
+        let features =
+            Array2::from_shape_vec((20, 2), (0..40).map(|x| x as f64).collect()).unwrap();
         let labels = Array1::from_vec((0..20).map(|x| (x % 2) as f64).collect());
 
         automl.fit(&features, &labels).await.unwrap();
@@ -900,7 +934,8 @@ mod tests {
 
         let mut automl = AutoML::new(config).unwrap();
 
-        let features = Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
+        let features =
+            Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
         let labels = Array1::from_vec((0..10).map(|x| x as f64).collect());
 
         automl.fit(&features, &labels).await.unwrap();
@@ -922,7 +957,8 @@ mod tests {
 
         let mut automl = AutoML::new(config).unwrap();
 
-        let features = Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
+        let features =
+            Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
         let labels = Array1::from_vec((0..10).map(|x| x as f64).collect());
 
         automl.fit(&features, &labels).await.unwrap();
@@ -945,7 +981,8 @@ mod tests {
 
         let mut automl = AutoML::new(config).unwrap();
 
-        let features = Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
+        let features =
+            Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
         let labels = Array1::from_vec((0..10).map(|x| x as f64).collect());
 
         automl.fit(&features, &labels).await.unwrap();
@@ -966,7 +1003,8 @@ mod tests {
 
         let mut automl = AutoML::new(config).unwrap();
 
-        let features = Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
+        let features =
+            Array2::from_shape_vec((10, 2), (0..20).map(|x| x as f64).collect()).unwrap();
         let labels = Array1::from_vec((0..10).map(|x| x as f64).collect());
 
         automl.fit(&features, &labels).await.unwrap();

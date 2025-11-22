@@ -102,6 +102,7 @@ pub mod ml_optimization;
 pub mod mvcc;
 pub mod mvcc_storage;
 pub mod network;
+pub mod neural_architecture_search;
 pub mod node_lifecycle;
 pub mod node_status_tracker;
 pub mod operational_transformation;

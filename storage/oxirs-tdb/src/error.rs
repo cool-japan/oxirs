@@ -73,6 +73,10 @@ pub enum TdbError {
     #[error("WAL error: {0}")]
     Wal(String),
 
+    /// Invalid input
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
     /// Generic error
     #[error("{0}")]
     Other(String),

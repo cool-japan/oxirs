@@ -19,6 +19,8 @@ use quick_xml::{
     Reader as XmlReader,
 };
 use std::io::BufReader;
+#[cfg(not(feature = "parallel"))]
+use std::sync::Mutex as ParkingLotMutex;
 use std::{
     collections::{HashMap, VecDeque},
     sync::{

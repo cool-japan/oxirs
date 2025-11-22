@@ -26,6 +26,7 @@ use qrcode::{render::svg, QrCode};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
+use std::sync::Arc;
 use tracing::{info, instrument, warn};
 
 type HmacSha1 = Hmac<Sha1>;
@@ -145,7 +146,7 @@ pub struct TotpConfig {
 /// Enroll user in MFA
 #[instrument(skip(state))]
 pub async fn enroll_mfa(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
     Json(request): Json<MfaEnrollRequest>,
 ) -> Result<Json<MfaSetupResponse>, FusekiError> {
@@ -169,7 +170,7 @@ pub async fn enroll_mfa(
 /// Create MFA challenge
 #[instrument(skip(state))]
 pub async fn create_mfa_challenge(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(challenge_type): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<MfaChallengeResponse>, FusekiError> {
@@ -211,7 +212,7 @@ pub async fn create_mfa_challenge(
 /// Verify MFA code
 #[instrument(skip(state, request))]
 pub async fn verify_mfa(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Json(request): Json<MfaVerifyRequest>,
 ) -> Result<Json<MfaVerifyResponse>, FusekiError> {
     let auth_service = state
@@ -301,7 +302,7 @@ pub async fn verify_mfa(
 /// Get MFA status for user
 #[instrument(skip(state))]
 pub async fn get_mfa_status(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<MfaStatusResponse>, FusekiError> {
     let auth_service = state
@@ -325,7 +326,7 @@ pub async fn get_mfa_status(
 /// Disable MFA for user
 #[instrument(skip(state))]
 pub async fn disable_mfa(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     Path(mfa_type): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
@@ -359,7 +360,7 @@ pub async fn disable_mfa(
 /// Generate new backup codes
 #[instrument(skip(state))]
 pub async fn regenerate_backup_codes(
-    State(state): State<AppState>,
+    State(state): State<Arc<AppState>>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, FusekiError> {
     let auth_service = state

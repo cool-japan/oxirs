@@ -1,13 +1,16 @@
 # OxiRS TDB - TODO
 
-*Last Updated: November 15, 2025*
+*Last Updated: November 21, 2025*
 
-## ✅ Current Status: v0.1.0-alpha.3+ (Beta.1 Features In Progress - November 15, 2025)
+## ✅ Current Status: v0.1.0-beta.1+ (Beta.2 Features In Progress - November 21, 2025)
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC and ACID transactions.
 
-### Beta.1 Release Status (November 15, 2025)
-- **Comprehensive test suite** with 536 tests passing (540 total, 4 ignored) & zero warnings
+### Beta.2 Release Status (November 21, 2025)
+- **Comprehensive test suite** with 674 tests passing (678 total, 4 ignored) & zero warnings
+- **Advanced Diagnostics** ✅ **NEW (November 21, 2025)** - Production-ready diagnostic engine with 8 built-in checks
+- **GeoSPARQL Spatial Indexing** ✅ **NEW (November 21, 2025)** - R*-tree based spatial queries with 12+ GeoSPARQL functions
+- **Asynchronous I/O Layer** ✅ **NEW (November 21, 2025)** - Non-blocking file operations with optional io_uring support
 - **Cost-Based Query Optimizer** ✅ **COMPLETE (November 15, 2025)** - Intelligent index selection with three optimization levels
 - **Bloom Filter Index Optimization** ✅ **COMPLETE (November 15, 2025)** - Probabilistic membership testing for index lookups
 - **Prefix Compression Integration** ✅ **COMPLETE** - IRI namespace compression integrated with dictionary
@@ -25,6 +28,34 @@
 - **TDB2 Feature Parity** - Quad indexes, inline values optimization, RDF-star support, prefix compression
 - **Production Features** - Statistics collection, corruption detection, crash recovery
 - **Released on crates.io**: `oxirs-tdb = "0.1.0-beta.1"`
+
+### ✨ NEW: Beta.2 Features Implemented (November 21, 2025)
+- **Advanced Diagnostics** (`src/diagnostics.rs`) - Production-ready diagnostic engine
+  - 8 built-in diagnostic checks: Index consistency, Dictionary consistency, WAL integrity, Corruption detection
+  - Three diagnostic levels: Quick (sub-second), Standard (< 5s), Deep (thorough analysis)
+  - Automated repair recommendations with 6 repair actions
+  - DiagnosticReport with severity levels (Info, Warning, Error, Critical)
+  - RepairRecommendation system for automatic issue resolution guidance
+  - Full integration with TdbStore for easy diagnostics access
+  - 32 comprehensive tests covering all diagnostic checks and repair recommendations
+- **GeoSPARQL Spatial Indexing** (`src/index/spatial/`) - Full GeoSPARQL support
+  - R*-tree spatial index (rstar crate) for O(log n) spatial queries
+  - Geometric primitives: Point, LineString, Polygon, BoundingBox
+  - 12+ GeoSPARQL functions: distance, contains, intersects, within, touches, disjoint, area, centroid, envelope, buffer, overlaps, crosses
+  - WKT (Well-Known Text) parsing and serialization for interoperability
+  - GeoJSON support for web applications
+  - Haversine distance calculation for accurate geographic distances
+  - Spatial query types: within distance, intersects bbox, contains point, k-nearest neighbors
+  - 41 comprehensive tests covering all geometries, functions, and queries
+- **Asynchronous I/O Layer** (`src/storage/async_io.rs`) - Non-blocking file operations
+  - AsyncFileHandle for async read/write operations at arbitrary offsets
+  - AsyncIoBackend enum: Auto, Tokio, IoUring (Linux only, optional)
+  - AsyncIoBatch for submitting multiple I/O operations together
+  - AsyncIoStats tracking: operations count, bytes transferred, latency
+  - Cross-platform support: tokio::fs on all platforms, io_uring on Linux with feature flag
+  - OpenOptions-based file creation with read+write permissions
+  - Zero-copy design minimizing data copying where possible
+  - 7 comprehensive tests covering all async operations
 
 ### ✨ NEW: Beta.1 Features Implemented (November 15, 2025)
 - **Stress Testing Suite** - 10 comprehensive stress tests for high-load scenarios

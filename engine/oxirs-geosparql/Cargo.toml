@@ -103,6 +103,14 @@ harness = false
 name = "performance_comparison"
 harness = false
 
+[[bench]]
+name = "benchmark_tracking"
+harness = false
+
+[[bin]]
+name = "compare_benchmarks"
+path = "src/bin/compare_benchmarks.rs"
+
 # Examples with feature requirements
 [[example]]
 name = "geojson_support"

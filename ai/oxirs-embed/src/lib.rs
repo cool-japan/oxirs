@@ -156,6 +156,7 @@ pub mod link_prediction;
 pub mod mamba_attention;
 pub mod mixed_precision;
 pub mod model_registry;
+pub mod model_selection;
 pub mod models;
 pub mod monitoring;
 pub mod multimodal;
@@ -169,6 +170,7 @@ pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
 pub mod research_networks;
 // pub mod revolutionary_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
+pub mod sparql_extension;
 pub mod training;
 pub mod utils;
 pub mod vector_search;
@@ -687,6 +689,10 @@ pub use research_networks::{
     NetworkMetrics, PaperSection, PublicationEmbedding, PublicationType, ResearchCommunity,
     ResearchNetworkAnalyzer, ResearchNetworkConfig, TopicModel, TopicModelingConfig,
 };
+pub use sparql_extension::{
+    ExpandedQuery, Expansion, ExpansionType, QueryStatistics as SparqlQueryStatistics,
+    SparqlExtension, SparqlExtensionConfig,
+};
 pub use vision_language_graph::{
     AggregationFunction, CNNConfig, CrossAttentionConfig, DomainAdaptationConfig,
     DomainAdaptationMethod, EpisodeConfig, FewShotConfig, FewShotMethod, FusionStrategy,
@@ -708,6 +714,12 @@ pub use models::QuatD;
 // Re-export model registry types
 pub use crate::model_registry::{
     ModelRegistry, ModelVersion, ResourceAllocation as ModelResourceAllocation,
+};
+
+// Re-export model selection types
+pub use crate::model_selection::{
+    DatasetCharacteristics, MemoryRequirement, ModelComparison, ModelComparisonEntry,
+    ModelRecommendation, ModelSelector, ModelType as SelectionModelType, TrainingTime, UseCaseType,
 };
 
 // Re-export revolutionary optimization types

@@ -108,6 +108,7 @@ pub mod performance_benchmarks;
 pub mod planner;
 pub mod privacy;
 pub mod production_hardening;
+pub mod profiling_metrics;
 pub mod query_decomposition;
 pub mod request_batcher;
 pub mod result_streaming;

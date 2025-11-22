@@ -313,24 +313,24 @@ pub use stream_versioning::{
 };
 
 // New v0.1.0 advanced ML exports
-pub use predictive_analytics::{
-    AccuracyMetrics, ForecastAlgorithm, ForecastResult, ForecastingConfig, PredictiveAnalytics,
-    PredictiveStats, SeasonalityType, TrendDirection,
+pub use automl_stream::{
+    Algorithm, AutoML, AutoMLConfig, AutoMLStats, HyperParameters, ModelPerformance, TaskType,
+    TrainedModel,
 };
 pub use feature_engineering::{
     Feature, FeatureExtractionConfig, FeatureMetadata, FeaturePipeline, FeatureSet, FeatureStore,
     FeatureTransform, FeatureValue, ImputationStrategy, PipelineStats,
 };
-pub use automl_stream::{
-    Algorithm, AutoML, AutoMLConfig, AutoMLStats, HyperParameters, ModelPerformance, TaskType,
-    TrainedModel,
+pub use neural_architecture_search::{
+    ActivationType, Architecture, ArchitecturePerformance, LayerType, NASConfig, NASStats,
+    ObjectiveWeights, SearchSpace, SearchStrategy, NAS,
+};
+pub use predictive_analytics::{
+    AccuracyMetrics, ForecastAlgorithm, ForecastResult, ForecastingConfig, PredictiveAnalytics,
+    PredictiveStats, SeasonalityType, TrendDirection,
 };
 pub use reinforcement_learning::{
     Action, Experience, RLAgent, RLAlgorithm, RLConfig, RLStats, State as RLState,
-};
-pub use neural_architecture_search::{
-    ActivationType, Architecture, ArchitecturePerformance, LayerType, NAS, NASConfig, NASStats,
-    ObjectiveWeights, SearchSpace, SearchStrategy,
 };
 
 pub mod backend;
@@ -414,11 +414,11 @@ pub mod online_learning;
 pub mod stream_versioning;
 
 // Advanced ML modules for v0.1.0 completion
-pub mod predictive_analytics;
-pub mod feature_engineering;
 pub mod automl_stream;
-pub mod reinforcement_learning;
+pub mod feature_engineering;
 pub mod neural_architecture_search;
+pub mod predictive_analytics;
+pub mod reinforcement_learning;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

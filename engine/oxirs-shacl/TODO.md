@@ -322,7 +322,13 @@
 
 #### Developer Experience (Target: v0.1.0) - 🎉 **Major Progress**
 - [ ] Visual shape editor
-- [ ] Interactive constraint tester
+- [x] Interactive constraint tester ✅ **(Beta.2)** - bin/constraint_tester.rs
+  - REPL-style interactive interface
+  - Shape creation and constraint management
+  - Session save/load with JSON serialization
+  - Built-in constraint examples and domain suggestions
+  - Command history tracking
+  - Real-time validation feedback
 - [x] Validation report visualizer ✅ **(Beta.2)** - visualizer.rs
   - HTML, SVG, ASCII, Markdown, JSON output formats
   - Interactive charts (pie, bar, heatmap)
@@ -347,3 +353,21 @@
   - Security analysis with vulnerability detection
   - Best practice compliance checking
   - Coverage and semantic analysis
+- [x] Shape template library ✅ **(Beta.2)** - templates.rs
+  - Pre-built templates for common patterns across 8 domains
+  - Identity (Person, Organization)
+  - Contact (Email, Phone)
+  - Commerce (Product, Order)
+  - Web (URL, WebPage)
+  - Temporal (Date, Event)
+  - Geospatial (Place, Address)
+  - Financial (Price)
+  - Scientific (Dataset)
+  - 14 ready-to-use templates with examples
+- [x] Shape analyzer CLI tool ✅ **(Beta.2)** - bin/shape_analyzer.rs
+  - Complexity analysis and scoring
+  - Dependency graph generation (DOT format)
+  - Issue detection (errors, warnings, info)
+  - Best practice recommendations
+  - Recursive dependency detection
+  - Detailed analysis reports

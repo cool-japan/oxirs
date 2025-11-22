@@ -86,6 +86,7 @@ pub mod shape_versioning;
 pub mod shapes;
 pub mod sparql;
 pub mod targets;
+pub mod templates;
 pub mod testing;
 pub mod validation;
 pub mod vocabulary;

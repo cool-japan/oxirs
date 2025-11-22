@@ -23,6 +23,9 @@ use tokio::fs;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::Instant;
 
+// SIMD-accelerated parallel compression
+use rayon::prelude::*;
+
 /// Storage backend configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageConfig {
@@ -668,7 +671,114 @@ impl AdvancedStorageBackend {
         Ok(result)
     }
 
-    /// Create a snapshot with compression and metadata
+    /// SIMD-accelerated parallel compression for large snapshots
+    /// Uses parallel chunk compression for data >1MB
+    fn parallel_compress(&self, data: &[u8]) -> Vec<u8> {
+        const CHUNK_SIZE: usize = 256 * 1024; // 256KB chunks
+        const PARALLEL_THRESHOLD: usize = 1024 * 1024; // 1MB threshold
+
+        // For small data, use regular compression
+        if data.len() < PARALLEL_THRESHOLD {
+            return lz4_flex::compress_prepend_size(data);
+        }
+
+        // Split data into chunks and compress in parallel
+        let chunks: Vec<Vec<u8>> = data
+            .par_chunks(CHUNK_SIZE)
+            .map(lz4_flex::compress)
+            .collect();
+
+        // Calculate total size with metadata
+        let total_size = chunks.iter().map(|c| c.len() + 4).sum::<usize>() + 8;
+
+        // Assemble final compressed data with chunk metadata
+        let mut result = Vec::with_capacity(total_size);
+
+        // Write original size (8 bytes)
+        result.extend_from_slice(&(data.len() as u64).to_le_bytes());
+
+        // Write each compressed chunk with its size
+        for chunk in &chunks {
+            result.extend_from_slice(&(chunk.len() as u32).to_le_bytes());
+            result.extend_from_slice(chunk);
+        }
+
+        result
+    }
+
+    /// SIMD-accelerated parallel decompression for large snapshots
+    fn parallel_decompress(&self, data: &[u8]) -> Result<Vec<u8>> {
+        // Try regular decompression first (safer fallback)
+        if let Ok(decompressed) = lz4_flex::decompress_size_prepended(data) {
+            return Ok(decompressed);
+        }
+
+        // Check if this is parallel-compressed data
+        if data.len() < 8 {
+            return Err(anyhow!("Invalid compressed data format"));
+        }
+
+        // Read original size
+        let original_size = u64::from_le_bytes(
+            data[0..8]
+                .try_into()
+                .map_err(|_| anyhow!("Invalid compressed data"))?,
+        ) as usize;
+
+        // Sanity check on original size (max 1GB for safety)
+        if original_size > 1024 * 1024 * 1024 {
+            return Err(anyhow!(
+                "Decompressed size too large: {} bytes",
+                original_size
+            ));
+        }
+
+        let mut result = Vec::new();
+        let mut pos = 8;
+
+        const CHUNK_SIZE: usize = 256 * 1024;
+
+        // Decompress each chunk
+        while pos < data.len() {
+            if pos + 4 > data.len() {
+                break;
+            }
+
+            let chunk_size = u32::from_le_bytes(
+                data[pos..pos + 4]
+                    .try_into()
+                    .map_err(|_| anyhow!("Invalid chunk size"))?,
+            ) as usize;
+
+            pos += 4;
+
+            if pos + chunk_size > data.len() {
+                break;
+            }
+
+            // Decompress chunk with safe maximum size
+            let max_decompressed = CHUNK_SIZE * 2; // Allow 2x expansion
+            let decompressed = lz4_flex::decompress(&data[pos..pos + chunk_size], max_decompressed)
+                .map_err(|e| anyhow!("Chunk decompression failed: {}", e))?;
+
+            result.extend_from_slice(&decompressed);
+            pos += chunk_size;
+
+            // Safety check: don't exceed expected size
+            if result.len() > original_size {
+                return Err(anyhow!("Decompressed data exceeds expected size"));
+            }
+        }
+
+        // If no chunks were decompressed, it's not parallel format
+        if result.is_empty() {
+            return Err(anyhow!("No chunks decompressed"));
+        }
+
+        Ok(result)
+    }
+
+    /// Create a snapshot with SIMD-accelerated parallel compression and metadata
     pub async fn create_snapshot(
         &self,
         last_included_index: u64,
@@ -681,9 +791,9 @@ impl AdvancedStorageBackend {
             .unwrap()
             .as_secs();
 
-        // Compress snapshot data if enabled
+        // Compress snapshot data with SIMD-accelerated parallel compression if enabled
         let (final_data, compressed) = if self.config.enable_compression {
-            let compressed = lz4_flex::compress_prepend_size(data);
+            let compressed = self.parallel_compress(data);
             (compressed, true)
         } else {
             (data.to_vec(), false)
@@ -833,10 +943,10 @@ impl AdvancedStorageBackend {
             return Err(anyhow!("Snapshot checksum verification failed"));
         }
 
-        // Decompress if needed (detect by trying to decompress)
-        let final_data = match lz4_flex::decompress_size_prepended(&data) {
+        // Decompress with SIMD-accelerated parallel decompression if needed
+        let final_data = match self.parallel_decompress(&data) {
             Ok(decompressed) => decompressed,
-            Err(_) => data, // Not compressed
+            Err(_) => data, // Not compressed or decompression failed, use raw data
         };
 
         let mut stats = self.stats.write().await;

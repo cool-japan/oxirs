@@ -58,6 +58,14 @@ path = "src/bin/w3c_test_runner.rs"
 name = "shacl_validator"
 path = "src/bin/shacl_validator.rs"
 
+[[bin]]
+name = "constraint_tester"
+path = "src/bin/constraint_tester.rs"
+
+[[bin]]
+name = "shape_analyzer"
+path = "src/bin/shape_analyzer.rs"
+
 [features]
 default = ["core", "async", "parallel"]
 core = []

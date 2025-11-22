@@ -761,7 +761,7 @@ impl PyMLFrameworkIntegration {
         source_format: &str,
         target_format: &str,
     ) -> PyResult<PyObject> {
-        use scirs2_core::ndarray::Array2;
+        use scirs2_core::ndarray_ext::Array2;
 
         let input_array = embeddings.as_array();
         println!(
@@ -1183,7 +1183,7 @@ impl PyAdvancedNeuralEmbeddings {
             embeddings.extend(embedding);
         }
 
-        use scirs2_core::ndarray::Array2;
+        use scirs2_core::ndarray_ext::Array2;
 
         let rows = content.len();
         let cols = embedding_dim;
@@ -1294,7 +1294,7 @@ impl PyAdvancedNeuralEmbeddings {
             embeddings.extend(embedding);
         }
 
-        use scirs2_core::ndarray::Array2;
+        use scirs2_core::ndarray_ext::Array2;
 
         // Create 2D array
         let array_2d = Array2::from_shape_fn((total_items, embedding_dim), |(i, j)| {
@@ -1362,7 +1362,7 @@ fn batch_normalize(py: Python, vectors: PyReadonlyArray2<f32>) -> PyResult<PyObj
         normalized_vectors.push(v);
     }
 
-    use scirs2_core::ndarray::Array2;
+    use scirs2_core::ndarray_ext::Array2;
 
     // Convert back to 2D array
     let rows = normalized_vectors.len();
@@ -1426,6 +1426,6 @@ mod tests {
     fn test_python_bindings_compilation() {
         // This test ensures the Python bindings compile correctly
         // Actual Python integration tests should be in Python test files
-        assert!(true);
+        // Test passes if we reach here without compilation errors
     }
 }

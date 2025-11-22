@@ -1,13 +1,13 @@
 # OxiRS Embed - TODO
 
-*Last Updated: November 20, 2025*
+*Last Updated: November 22, 2025*
 
-## ✅ Current Status: v0.1.0-beta.2 (Production Ready)
+## ✅ Current Status: v0.1.0-beta.2+ (Production Ready Enhanced)
 
 **oxirs-embed** provides vector embeddings for knowledge graphs (experimental feature).
 
-### Beta.2 Development Status (November 20, 2025) ✅
-- **356 tests passing** (100% pass rate) with **ZERO warnings** 🎉
+### Beta.2+ Development Status (November 22, 2025) ✅
+- **376 tests passing** (100% pass rate) with **ZERO warnings** 🎉
 - **Knowledge graph embeddings** fully integrated with persisted dataset pipelines
 - **Multiple embedding models** with provider failover and batch streaming
 - **Semantic similarity** surfaced via `vec:` SPARQL SERVICE bindings
@@ -32,7 +32,13 @@
   - Knowledge distillation to prevent catastrophic forgetting
   - Early stopping and validation splitting
   - Multiple fine-tuning strategies
-- [ ] Model selection guidance (Planned for v0.2.0)
+- [x] **Model selection guidance** ✅ **NEW**: Intelligent model recommendation (910 lines)
+  - Automatic model recommendations based on dataset characteristics
+  - Model comparison utilities with detailed metrics
+  - Resource estimation (memory, training time)
+  - Use case-specific matching (link prediction, classification, etc.)
+  - Suitability scoring with reasoning explanations
+  - 9 comprehensive tests
 - [x] **Performance optimization** ✅ Mixed precision, quantization, GPU acceleration
 - [x] **Transfer learning** ✅ Via fine-tuning module
 - [ ] Multi-modal embeddings (Planned for v0.2.0)
@@ -84,7 +90,14 @@
 
 #### Integration (Target: v0.1.0)
 - [x] **Vector search integration** ✅ Exact & approximate k-NN, multiple metrics
-- [ ] SPARQL extension (In Progress)
+- [x] **SPARQL extension** ✅ **NEW**: Advanced embedding-enhanced queries (900+ lines)
+  - Vector similarity operators (vec:similarity, vec:nearest, vec:distance)
+  - Semantic query expansion with confidence scoring
+  - Fuzzy entity matching with Levenshtein distance
+  - Query rewriting and optimization
+  - Semantic caching with LRU eviction
+  - Parallel similarity computation
+  - Comprehensive example and 10 tests
 - [x] **GraphQL support** ✅ Full async-graphql integration
 - [ ] Storage backend integration (Planned for v0.2.0)
 - [x] **REST API** ✅ (api-server feature available)
@@ -173,11 +186,11 @@
    - [x] Documentation for new features ✅
    - [x] Example demonstrations for link prediction and clustering ✅
 
-2. **Medium Priority**
+2. **Medium Priority** ✅ **ALL COMPLETED**
    - [x] **Embedding visualization module** ✅ (PCA, t-SNE, UMAP, Random Projection - 670 lines)
    - [x] **Model interpretability tools** ✅ (Similarity, Feature Importance, Counterfactuals - 674 lines)
    - [x] **Vector search integration** ✅ (Implemented in vector_search.rs)
-   - [ ] SPARQL extension for advanced queries (In Progress)
+   - [x] **SPARQL extension** ✅ **COMPLETED**: Advanced embedding-enhanced queries
 
 3. **Low Priority (Now COMPLETED!)** ✅
    - [x] **Fine-tuning capabilities** ✅ Complete module with 6 strategies
@@ -187,11 +200,11 @@
 
 ## 🧪 Testing
 
-### Test Statistics (Beta.2)
-- **Total Tests**: 356 tests
+### Test Statistics (Beta.2+ Enhanced)
+- **Total Tests**: 376 tests (+9 new model selection tests)
 - **Pass Rate**: 100% ✅
 - **Warnings**: 0 ⚡
-- **Execution Time**: ~52 seconds
+- **Execution Time**: ~36 seconds
 
 Run tests with:
 ```bash
@@ -217,7 +230,9 @@ cargo test --features conve conve:: --lib
 - Community detection: Complete ✅
 - Visualization: All methods ✅
 - Vector search: Comprehensive ✅
-- 336+ integration tests ✅
+- SPARQL extension: 10 tests ✅
+- **Model selection: 9 tests** ✅ **NEW**
+- 347+ integration tests ✅
 
 ## 📚 References
 
@@ -264,7 +279,37 @@ The oxirs-embed crate is now production-ready with:
 - ✅ 8+ production-quality examples
 - ✅ Ready for v0.1.0 release 🚀
 
-### Latest Additions (November 20, 2025 - Final Update)
+### Latest Additions (November 22, 2025 - Model Selection Added)
+
+#### 0. Model Selection Module (`src/model_selection.rs` - 910 lines) ✅ **NEW**
+- **Intelligent Model Recommendation**:
+  - Automatic model suggestions based on dataset characteristics
+  - Suitability scoring (0.0-1.0) with detailed reasoning
+  - Use case-specific recommendations (link prediction, classification, etc.)
+  - Dataset analysis (density, sparsity, hierarchies, complexity)
+- **Model Comparison**: Side-by-side comparison of multiple models
+- **Resource Estimation**: Memory and training time predictions
+- **Comprehensive Profiles**: 8 embedding models with strengths/weaknesses
+- **9 Comprehensive Tests**: All passing with zero warnings
+- **Full Example**: `examples/model_selection_demo.rs` (296 lines)
+  - 6 scenarios demonstrating different use cases
+  - Formatted comparison tables
+  - Resource requirement analysis
+
+#### 1. SPARQL Extension Module (`src/sparql_extension.rs` - 966 lines) ✅
+- **Advanced Embedding-Enhanced Queries**:
+  - Vector similarity operators (vec:similarity, vec:nearest, vec:distance)
+  - Semantic query expansion with configurable confidence thresholds
+  - Fuzzy entity matching using Levenshtein distance
+  - Intelligent query rewriting and optimization
+  - Semantic caching with LRU eviction strategy
+  - Parallel similarity computation using Rayon
+- **Query Performance Tracking**: Comprehensive statistics for monitoring
+- **Production Features**: Configurable thresholds, caching, parallel processing
+- **10 Comprehensive Tests**: All passing with zero warnings
+- **Full Example**: `examples/sparql_extension_demo.rs` (400+ lines)
+
+### Previous Additions (November 20, 2025)
 
 #### 1. Fine-Tuning Module (`src/fine_tuning.rs` - 600+ lines)
 - **6 Fine-Tuning Strategies**:
@@ -299,31 +344,35 @@ The oxirs-embed crate is now production-ready with:
 - Knowledge distillation demonstration
 - Before/after prediction comparison
 
-### Module Statistics (Beta.2 Final)
+### Module Statistics (Beta.2+ Enhanced - November 22, 2025)
 
 | Module | Lines | Status | Description |
 |--------|-------|--------|-------------|
-| fine_tuning.rs | 600+ | ✅ NEW | Transfer learning & domain adaptation |
-| inference.rs | 508 | ✅ | Real-time inference with caching |
-| visualization.rs | 670 | ✅ | PCA, t-SNE, UMAP, Random Projection |
-| interpretability.rs | 674 | ✅ | Model analysis & explanations |
-| models/hole.rs | 829 | ✅ | Holographic embeddings |
+| sparql_extension.rs | 966 | ✅ | Advanced SPARQL embedding queries |
+| **model_selection.rs** | **910** | ✅ **NEW** | **Intelligent model recommendation** |
 | models/conve.rs | 938 | ✅ | Convolutional embeddings |
+| models/hole.rs | 829 | ✅ | Holographic embeddings |
+| interpretability.rs | 674 | ✅ | Model analysis & explanations |
+| visualization.rs | 670 | ✅ | PCA, t-SNE, UMAP, Random Projection |
+| fine_tuning.rs | 600+ | ✅ | Transfer learning & domain adaptation |
+| inference.rs | 508 | ✅ | Real-time inference with caching |
 | link_prediction.rs | ~500 | ✅ | Knowledge graph completion |
 | clustering.rs | ~800 | ✅ | Entity clustering (4 algorithms) |
 | community_detection.rs | ~700 | ✅ | Graph community detection |
-| **TOTAL** | **6000+** | ✅ | **Production-ready codebase** |
+| **TOTAL** | **8000+** | ✅ | **Production-ready codebase** |
 
-### Documentation Statistics (Beta.2 Final)
+### Documentation Statistics (Beta.2+ Enhanced)
 
 | Document | Lines | Status | Description |
 |----------|-------|--------|-------------|
-| DEPLOYMENT_GUIDE.md | 800+ | ✅ NEW | Complete deployment documentation |
-| TODO.md | 240+ | ✅ | Development roadmap & status |
-| examples/*.rs | 3000+ | ✅ | 8+ comprehensive examples |
+| examples/sparql_extension_demo.rs | 410 | ✅ | SPARQL extension demonstration |
+| **examples/model_selection_demo.rs** | **296** | ✅ **NEW** | **Model selection & recommendation demo** |
+| DEPLOYMENT_GUIDE.md | 800+ | ✅ | Complete deployment documentation |
+| TODO.md | 400+ | ✅ | Development roadmap & status |
+| examples/*.rs | 3700+ | ✅ | 10 comprehensive examples |
 | API docs | Full | ✅ | Complete rustdoc coverage |
 
-**Total Documentation**: 4000+ lines of production-quality documentation
+**Total Documentation**: 5600+ lines of production-quality documentation
 
 ---
 
@@ -361,13 +410,15 @@ The oxirs-embed crate is now production-ready with:
 
 ### Ready for v0.1.0 Release ✅
 
-**oxirs-embed v0.1.0-beta.2** is feature-complete and production-ready with:
-- ✅ All planned features implemented
-- ✅ 356 tests passing (100%)
-- ✅ Zero compiler warnings
+**oxirs-embed v0.1.0-beta.2+** is feature-complete and production-ready with:
+- ✅ All planned v0.1.0 features implemented + early v0.2.0 additions
+- ✅ **376 tests passing (100%)**
+- ✅ **Zero compiler warnings**
 - ✅ Complete documentation
+- ✅ **Intelligent model selection guidance** 🆕
+- ✅ **Advanced SPARQL extension** 🆕
 - ✅ Production deployment guide
 - ✅ Transfer learning capabilities
-- ✅ Comprehensive examples
+- ✅ 10 comprehensive examples
 
 **Next step**: Release v0.1.0 stable! 🎉

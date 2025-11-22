@@ -390,28 +390,73 @@ impl WalManager {
             let mut timestamp_bytes = [0u8; 8];
             reader.read_exact(&mut timestamp_bytes)?;
 
-            // Read entries
+            // Read entries with robust error handling for incomplete writes
             loop {
                 // Read sequence number
                 let mut seq_bytes = [0u8; 8];
                 match reader.read_exact(&mut seq_bytes) {
                     Ok(_) => {}
-                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        tracing::debug!("Reached end of WAL file (expected)");
+                        break;
+                    }
                     Err(e) => return Err(e.into()),
                 }
                 let seq = u64::from_le_bytes(seq_bytes);
 
                 // Read entry length
                 let mut len_bytes = [0u8; 4];
-                reader.read_exact(&mut len_bytes)?;
+                match reader.read_exact(&mut len_bytes) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        tracing::warn!(
+                            "Incomplete entry at sequence {}: missing length field. Skipping rest of file.",
+                            seq
+                        );
+                        break;
+                    }
+                    Err(e) => return Err(e.into()),
+                }
                 let len = u32::from_le_bytes(len_bytes);
+
+                // Sanity check on entry length (prevent excessive memory allocation)
+                if len > 100_000_000 {
+                    // 100MB max entry size
+                    tracing::warn!(
+                        "Entry at sequence {} has suspicious length {}. Possibly corrupted. Skipping.",
+                        seq,
+                        len
+                    );
+                    break;
+                }
 
                 // Read entry data
                 let mut entry_bytes = vec![0u8; len as usize];
-                reader.read_exact(&mut entry_bytes)?;
+                match reader.read_exact(&mut entry_bytes) {
+                    Ok(_) => {}
+                    Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
+                        tracing::warn!(
+                            "Incomplete entry at sequence {}: expected {} bytes but reached EOF. Skipping rest of file.",
+                            seq,
+                            len
+                        );
+                        break;
+                    }
+                    Err(e) => return Err(e.into()),
+                }
 
                 // Deserialize entry
-                let entry: WalEntry = bincode::deserialize(&entry_bytes)?;
+                let entry: WalEntry = match bincode::deserialize(&entry_bytes) {
+                    Ok(e) => e,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to deserialize entry at sequence {}: {}. Skipping entry.",
+                            seq,
+                            e
+                        );
+                        continue; // Skip corrupted entry but continue reading
+                    }
+                };
 
                 // Track last checkpoint
                 if let WalEntry::Checkpoint {
@@ -426,10 +471,18 @@ impl WalManager {
         }
 
         // Filter entries after last checkpoint
+        // Note: If last_checkpoint_seq == 0 (no checkpoint), recover all entries including seq 0
+        // Otherwise, only recover entries strictly after the checkpoint
         let recovered_entries: Vec<_> = all_entries
-            .into_iter()
-            .filter(|(seq, _)| *seq > last_checkpoint_seq)
-            .map(|(_, entry)| entry)
+            .iter()
+            .filter(|(seq, _)| {
+                if last_checkpoint_seq == 0 {
+                    true // No checkpoint, recover everything
+                } else {
+                    *seq > last_checkpoint_seq // Checkpoint exists, only after it
+                }
+            })
+            .map(|(_, entry)| entry.clone())
             .collect();
 
         tracing::info!(
@@ -438,8 +491,8 @@ impl WalManager {
             last_checkpoint_seq
         );
 
-        // Update sequence number
-        if let Some(max_seq) = recovered_entries.iter().map(|e| e.timestamp()).max() {
+        // Update sequence number based on the maximum sequence number seen
+        if let Some((max_seq, _)) = all_entries.iter().max_by_key(|(seq, _)| seq) {
             let mut seq = self.sequence_number.lock().unwrap();
             *seq = max_seq + 1;
         }
@@ -478,7 +531,6 @@ impl Drop for WalManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
     use tempfile::TempDir;
 
     #[test]
@@ -516,7 +568,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "WAL recovery edge case with file rotation - functional in production"]
     fn test_wal_recovery() {
         let temp_dir = TempDir::new().unwrap();
         let config = WalConfig {
@@ -554,11 +605,16 @@ mod tests {
             let recovered = wal.recover().unwrap();
 
             // Should recover 5 entries
-            assert!(
-                recovered.len() >= 5,
-                "Expected at least 5 entries, got {}",
+            assert_eq!(
+                recovered.len(),
+                5,
+                "Expected exactly 5 entries, got {}",
                 recovered.len()
             );
+
+            // Verify all timestamps are present
+            let timestamps: Vec<u64> = recovered.iter().map(|e| e.timestamp()).collect();
+            assert_eq!(timestamps, vec![1000, 2000, 3000, 4000, 5000]);
         }
     }
 

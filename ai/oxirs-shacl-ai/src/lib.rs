@@ -486,6 +486,8 @@ pub mod realtime_adaptive_query_optimizer;
 pub mod realtime_anomaly_streams;
 pub mod recommendation_systems;
 pub mod reinforcement_learning;
+pub mod scalability_testing;
+pub mod security_audit;
 pub mod self_adaptive_ai;
 pub mod shape;
 pub mod shape_management;

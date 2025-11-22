@@ -546,7 +546,7 @@ impl PredictiveAnalytics {
     /// Train Holt-Winters triple exponential smoothing
     async fn train_holt_winters(&mut self, data: &Array1<f64>) -> Result<()> {
         let alpha = 0.3; // Level smoothing
-        let beta = 0.1;  // Trend smoothing
+        let beta = 0.1; // Trend smoothing
         let gamma = 0.2; // Seasonal smoothing
 
         let seasonal_period = self.config.seasonal_period.unwrap_or(12);
@@ -562,7 +562,8 @@ impl PredictiveAnalytics {
 
         // Initial seasonal components
         for i in 0..seasonal_period {
-            seasonal[i] = data[i] / (data.iter().take(seasonal_period).sum::<f64>() / seasonal_period as f64);
+            seasonal[i] =
+                data[i] / (data.iter().take(seasonal_period).sum::<f64>() / seasonal_period as f64);
         }
 
         let mut fitted = Vec::with_capacity(data.len());
@@ -637,15 +638,11 @@ impl PredictiveAnalytics {
         drop(data);
 
         let predictions = match self.config.algorithm {
-            ForecastAlgorithm::AutoRegressive => {
-                self.forecast_ar(&data_vec, &params, steps)?
-            }
+            ForecastAlgorithm::AutoRegressive => self.forecast_ar(&data_vec, &params, steps)?,
             ForecastAlgorithm::ExponentialSmoothing => {
                 self.forecast_exponential_smoothing(&data_vec, &params, steps)?
             }
-            ForecastAlgorithm::HoltWinters => {
-                self.forecast_holt_winters(&params, steps)?
-            }
+            ForecastAlgorithm::HoltWinters => self.forecast_holt_winters(&params, steps)?,
             _ => self.forecast_ar(&data_vec, &params, steps)?,
         };
 
@@ -653,11 +650,15 @@ impl PredictiveAnalytics {
         let std_dev = params.residual_variance.sqrt();
         let z_score = 1.96; // For 95% confidence
 
-        let lower_bound: Vec<f64> = predictions.iter().enumerate()
+        let lower_bound: Vec<f64> = predictions
+            .iter()
+            .enumerate()
             .map(|(i, &p)| p - z_score * std_dev * ((i + 1) as f64).sqrt())
             .collect();
 
-        let upper_bound: Vec<f64> = predictions.iter().enumerate()
+        let upper_bound: Vec<f64> = predictions
+            .iter()
+            .enumerate()
             .map(|(i, &p)| p + z_score * std_dev * ((i + 1) as f64).sqrt())
             .collect();
 
@@ -678,7 +679,8 @@ impl PredictiveAnalytics {
         let mut stats = self.stats.write().await;
         stats.total_forecasts += 1;
         stats.last_forecast_time = Some(chrono::Utc::now());
-        stats.avg_accuracy = (stats.avg_accuracy * (stats.total_forecasts - 1) as f64 + accuracy_metrics.r_squared)
+        stats.avg_accuracy = (stats.avg_accuracy * (stats.total_forecasts - 1) as f64
+            + accuracy_metrics.r_squared)
             / stats.total_forecasts as f64;
         stats.model_params_count = params.ar_coeffs.len() + params.ma_coeffs.len();
 
@@ -695,7 +697,12 @@ impl PredictiveAnalytics {
     }
 
     /// Forecast using AR model
-    fn forecast_ar(&self, data: &[f64], params: &ModelParameters, steps: usize) -> Result<Vec<f64>> {
+    fn forecast_ar(
+        &self,
+        data: &[f64],
+        params: &ModelParameters,
+        steps: usize,
+    ) -> Result<Vec<f64>> {
         let mut predictions = Vec::with_capacity(steps);
         let mut history = data.to_vec();
         let mean = params.intercept;
@@ -715,8 +722,17 @@ impl PredictiveAnalytics {
     }
 
     /// Forecast using exponential smoothing
-    fn forecast_exponential_smoothing(&self, data: &[f64], params: &ModelParameters, steps: usize) -> Result<Vec<f64>> {
-        let last_smooth = params.fitted_values.last().copied().unwrap_or(data.last().copied().unwrap_or(0.0));
+    fn forecast_exponential_smoothing(
+        &self,
+        data: &[f64],
+        params: &ModelParameters,
+        steps: usize,
+    ) -> Result<Vec<f64>> {
+        let last_smooth = params
+            .fitted_values
+            .last()
+            .copied()
+            .unwrap_or(data.last().copied().unwrap_or(0.0));
         Ok(vec![last_smooth; steps])
     }
 
@@ -769,15 +785,19 @@ impl PredictiveAnalytics {
             }
 
             // Simple test: compare variance of seasonal differences
-            let seasonal_diff: Vec<f64> = data.iter().skip(period)
+            let seasonal_diff: Vec<f64> = data
+                .iter()
+                .skip(period)
                 .zip(data.iter())
                 .map(|(x2, x1)| x2 - x1)
                 .collect();
 
             let regular_diff: Vec<f64> = data.windows(2).map(|w| w[1] - w[0]).collect();
 
-            let seasonal_var = seasonal_diff.iter().map(|&x| x * x).sum::<f64>() / seasonal_diff.len() as f64;
-            let regular_var = regular_diff.iter().map(|&x| x * x).sum::<f64>() / regular_diff.len() as f64;
+            let seasonal_var =
+                seasonal_diff.iter().map(|&x| x * x).sum::<f64>() / seasonal_diff.len() as f64;
+            let regular_var =
+                regular_diff.iter().map(|&x| x * x).sum::<f64>() / regular_diff.len() as f64;
 
             if seasonal_var < 0.5 * regular_var {
                 Ok(SeasonalityType::Additive)
@@ -797,7 +817,9 @@ impl PredictiveAnalytics {
             return Ok(AccuracyMetrics::default());
         }
 
-        let errors: Vec<f64> = actual.iter().zip(fitted.iter())
+        let errors: Vec<f64> = actual
+            .iter()
+            .zip(fitted.iter())
             .map(|(a, f)| a - f)
             .collect();
 
@@ -808,9 +830,13 @@ impl PredictiveAnalytics {
         let mse = squared_errors.iter().sum::<f64>() / n as f64;
         let rmse = mse.sqrt();
 
-        let mape = abs_errors.iter().zip(actual.iter())
+        let mape = abs_errors
+            .iter()
+            .zip(actual.iter())
             .map(|(ae, a)| if a.abs() > 1e-10 { ae / a.abs() } else { 0.0 })
-            .sum::<f64>() / n as f64 * 100.0;
+            .sum::<f64>()
+            / n as f64
+            * 100.0;
 
         let actual_mean = actual.iter().sum::<f64>() / n as f64;
         let ss_tot: f64 = actual.iter().map(|a| (a - actual_mean).powi(2)).sum();
@@ -954,10 +980,16 @@ mod tests {
         let analytics = PredictiveAnalytics::new(config).unwrap();
 
         let increasing = vec![1.0, 2.0, 3.0, 4.0, 5.0];
-        assert_eq!(analytics.detect_trend(&increasing), TrendDirection::Increasing);
+        assert_eq!(
+            analytics.detect_trend(&increasing),
+            TrendDirection::Increasing
+        );
 
         let decreasing = vec![5.0, 4.0, 3.0, 2.0, 1.0];
-        assert_eq!(analytics.detect_trend(&decreasing), TrendDirection::Decreasing);
+        assert_eq!(
+            analytics.detect_trend(&decreasing),
+            TrendDirection::Decreasing
+        );
 
         let stable = vec![5.0, 5.0, 5.0, 5.0, 5.0];
         assert_eq!(analytics.detect_trend(&stable), TrendDirection::Stable);

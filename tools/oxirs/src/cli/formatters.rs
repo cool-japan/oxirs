@@ -838,8 +838,183 @@ impl ResultFormatter for ExcelFormatter {
     }
 }
 
+/// PDF formatter for query results
+pub struct PdfFormatter {
+    pub title: String,
+    pub include_metadata: bool,
+}
+
+impl Default for PdfFormatter {
+    fn default() -> Self {
+        Self {
+            title: "SPARQL Query Results".to_string(),
+            include_metadata: true,
+        }
+    }
+}
+
+impl ResultFormatter for PdfFormatter {
+    fn format(&self, results: &QueryResults, writer: &mut dyn Write) -> std::io::Result<()> {
+        use printpdf::*;
+
+        // Create a new PDF document
+        let (doc, page1, layer1) = PdfDocument::new(
+            &self.title,
+            Mm(210.0), // A4 width
+            Mm(297.0), // A4 height
+            "Layer 1",
+        );
+
+        // Get page and layer
+        let current_layer = doc.get_page(page1).get_layer(layer1);
+
+        // Define fonts (using built-in fonts)
+        let font_bold = doc
+            .add_builtin_font(BuiltinFont::HelveticaBold)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let font_regular = doc
+            .add_builtin_font(BuiltinFont::Helvetica)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+        // Set initial position
+        let mut current_y = Mm(280.0); // Start near top of page
+        let left_margin = Mm(15.0);
+        let line_height = Mm(6.0);
+        let font_size = 10.0;
+        let title_font_size = 16.0;
+
+        // Add title
+        current_layer.use_text(
+            &self.title,
+            title_font_size,
+            Mm(left_margin.0),
+            Mm(current_y.0),
+            &font_bold,
+        );
+        current_y.0 -= line_height.0 * 2.0;
+
+        // Add metadata if requested
+        if self.include_metadata {
+            let timestamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+            current_layer.use_text(
+                format!("Generated: {}", timestamp),
+                font_size,
+                Mm(left_margin.0),
+                Mm(current_y.0),
+                &font_regular,
+            );
+            current_y.0 -= line_height.0;
+
+            current_layer.use_text(
+                format!(
+                    "{} results with {} variables",
+                    results.bindings.len(),
+                    results.variables.len()
+                ),
+                font_size,
+                Mm(left_margin.0),
+                Mm(current_y.0),
+                &font_regular,
+            );
+            current_y.0 -= line_height.0 * 2.0;
+        }
+
+        // Calculate column widths
+        let available_width = Mm(180.0); // Page width minus margins
+        let col_width = available_width.0 / results.variables.len() as f32;
+
+        // Draw table header
+        for (idx, var) in results.variables.iter().enumerate() {
+            let x_pos = left_margin.0 + (idx as f32 * col_width);
+            current_layer.use_text(
+                format!("?{}", var),
+                font_size,
+                Mm(x_pos),
+                Mm(current_y.0),
+                &font_bold,
+            );
+        }
+        current_y.0 -= line_height.0;
+
+        // Draw separator line (using text underscores as a simple separator)
+        current_layer.use_text(
+            "─".repeat(60),
+            font_size,
+            Mm(left_margin.0),
+            Mm(current_y.0),
+            &font_regular,
+        );
+        current_y.0 -= line_height.0;
+
+        // Draw data rows
+        for (row_idx, binding) in results.bindings.iter().enumerate() {
+            // Check if we need a new page
+            if current_y.0 < 20.0 {
+                // Add new page
+                let (page_id, layer_id) =
+                    doc.add_page(Mm(210.0), Mm(297.0), format!("Page {}", row_idx / 40 + 2));
+                let new_layer = doc.get_page(page_id).get_layer(layer_id);
+
+                // Reset position
+                current_y = Mm(280.0);
+
+                // Redraw header on new page
+                for (idx, var) in results.variables.iter().enumerate() {
+                    let x_pos = left_margin.0 + (idx as f32 * col_width);
+                    new_layer.use_text(
+                        format!("?{}", var),
+                        font_size,
+                        Mm(x_pos),
+                        Mm(current_y.0),
+                        &font_bold,
+                    );
+                }
+                current_y.0 -= line_height.0 * 2.0;
+            }
+
+            // Draw row data
+            for (col_idx, opt_term) in binding.values.iter().enumerate() {
+                let x_pos = left_margin.0 + (col_idx as f32 * col_width);
+                let value = match opt_term {
+                    Some(term) => {
+                        let repr = term.to_string_repr();
+                        // Truncate if too long
+                        if repr.len() > 40 {
+                            format!("{}...", &repr[..37])
+                        } else {
+                            repr
+                        }
+                    }
+                    None => "-".to_string(),
+                };
+
+                current_layer.use_text(
+                    &value,
+                    font_size,
+                    Mm(x_pos),
+                    Mm(current_y.0),
+                    &font_regular,
+                );
+            }
+            current_y.0 -= line_height.0;
+        }
+
+        // Save PDF to buffer
+        let pdf_bytes = doc
+            .save_to_bytes()
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+        // Write to output
+        writer.write_all(&pdf_bytes)?;
+
+        Ok(())
+    }
+}
+
 /// Factory function to create formatter by name
 pub fn create_formatter(format: &str) -> Option<Box<dyn ResultFormatter>> {
+    use crate::cli::template_formatter::{TemplateFormatter, TemplatePresets};
+
     match format.to_lowercase().as_str() {
         "table" | "text" => Some(Box::new(TableFormatter::default())),
         "table-ascii" => Some(Box::new(TableFormatter {
@@ -864,8 +1039,44 @@ pub fn create_formatter(format: &str) -> Option<Box<dyn ResultFormatter>> {
         "markdown" | "md" => Some(Box::new(MarkdownFormatter::default())),
         "markdown-compact" | "md-compact" => Some(Box::new(MarkdownFormatter { aligned: false })),
         "xlsx" | "excel" => Some(Box::new(ExcelFormatter::default())),
+        "pdf" => Some(Box::new(PdfFormatter::default())),
+        // Template presets
+        "template-html" => TemplateFormatter::from_string(
+            TemplatePresets::html_table().to_string(),
+            "html_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
+        "template-markdown" => TemplateFormatter::from_string(
+            TemplatePresets::markdown_table().to_string(),
+            "md_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
+        "template-text" => TemplateFormatter::from_string(
+            TemplatePresets::text_plain().to_string(),
+            "text_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
+        "template-csv" => TemplateFormatter::from_string(
+            TemplatePresets::csv_custom().to_string(),
+            "csv_template",
+        )
+        .ok()
+        .map(|f| Box::new(f) as Box<dyn ResultFormatter>),
         _ => None,
     }
+}
+
+/// Create a formatter from a custom template file
+pub fn create_formatter_from_template_file(
+    template_path: std::path::PathBuf,
+) -> Result<Box<dyn ResultFormatter>, Box<dyn std::error::Error>> {
+    use crate::cli::template_formatter::TemplateFormatter;
+
+    let formatter = TemplateFormatter::from_file(template_path)?;
+    Ok(Box::new(formatter))
 }
 
 #[cfg(test)]
@@ -1220,5 +1431,45 @@ mod tests {
         assert!(create_formatter("xlsx").is_some());
         assert!(create_formatter("excel").is_some());
         assert!(create_formatter("XLSX").is_some());
+    }
+
+    #[test]
+    fn test_pdf_formatter() {
+        let results = create_test_results();
+        let formatter = PdfFormatter::default();
+        let mut output = Vec::new();
+
+        formatter.format(&results, &mut output).unwrap();
+
+        // Verify that output is not empty (PDF file was generated)
+        assert!(!output.is_empty());
+
+        // Verify it starts with PDF file signature
+        assert_eq!(&output[0..4], b"%PDF");
+
+        // Verify reasonable file size (should be at least a few hundred bytes)
+        assert!(output.len() > 500);
+    }
+
+    #[test]
+    fn test_pdf_formatter_empty_results() {
+        let results = QueryResults {
+            variables: vec!["s".to_string()],
+            bindings: vec![],
+        };
+        let formatter = PdfFormatter::default();
+        let mut output = Vec::new();
+
+        formatter.format(&results, &mut output).unwrap();
+
+        // Should still generate a valid PDF file even with no data
+        assert!(!output.is_empty());
+        assert_eq!(&output[0..4], b"%PDF");
+    }
+
+    #[test]
+    fn test_formatter_factory_pdf() {
+        assert!(create_formatter("pdf").is_some());
+        assert!(create_formatter("PDF").is_some());
     }
 }

@@ -209,6 +209,9 @@ pub struct SecurityConfig {
 
     #[validate(nested)]
     pub rebac: Option<RebacConfig>,
+
+    #[validate(nested)]
+    pub mfa: Option<MfaConfig>,
 }
 
 /// Authentication configuration
@@ -576,6 +579,175 @@ pub enum RelationshipConditionConfig {
 
     /// Custom attribute-based condition
     Attribute { key: String, value: String },
+}
+
+/// Multi-Factor Authentication (MFA) configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct MfaConfig {
+    /// Enable MFA globally
+    pub enabled: bool,
+
+    /// Require MFA for all users (if false, users can opt-in)
+    pub required: bool,
+
+    /// Available MFA methods
+    pub methods: MfaMethods,
+
+    /// TOTP configuration
+    #[validate(nested)]
+    pub totp: Option<TotpConfig>,
+
+    /// SMS configuration
+    #[validate(nested)]
+    pub sms: Option<SmsConfig>,
+
+    /// Email configuration
+    #[validate(nested)]
+    pub email: Option<EmailConfig>,
+
+    /// WebAuthn configuration
+    #[validate(nested)]
+    pub webauthn: Option<WebAuthnConfig>,
+
+    /// Backup codes configuration
+    pub backup_codes: BackupCodesConfig,
+
+    /// MFA session duration in seconds (how long after MFA verification before re-prompt)
+    #[validate(range(min = 300, max = 86400))] // 5 min to 24 hours
+    pub session_duration_secs: u64,
+
+    /// Storage path for MFA secrets
+    pub storage_path: PathBuf,
+}
+
+/// Available MFA methods
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MfaMethods {
+    pub totp: bool,
+    pub sms: bool,
+    pub email: bool,
+    pub webauthn: bool,
+}
+
+/// TOTP (Time-based One-Time Password) configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct TotpConfig {
+    /// Issuer name shown in authenticator apps
+    #[validate(length(min = 1))]
+    pub issuer: String,
+
+    /// Number of digits in TOTP code
+    #[validate(range(min = 6, max = 8))]
+    pub digits: u32,
+
+    /// Time step in seconds
+    #[validate(range(min = 15, max = 60))]
+    pub time_step_secs: u32,
+
+    /// Number of time steps to look back/forward for validation
+    #[validate(range(min = 0, max = 5))]
+    pub skew: u32,
+}
+
+/// SMS-based MFA configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SmsConfig {
+    /// SMS provider
+    pub provider: SmsProvider,
+
+    /// API key or credentials
+    pub api_key: String,
+
+    /// Sender phone number or ID
+    pub sender: String,
+
+    /// Code expiration in seconds
+    #[validate(range(min = 60, max = 600))]
+    pub code_expiration_secs: u64,
+}
+
+/// SMS providers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SmsProvider {
+    Twilio,
+    Aws,
+    Custom,
+}
+
+/// Email-based MFA configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct EmailConfig {
+    /// SMTP server
+    #[validate(length(min = 1))]
+    pub smtp_server: String,
+
+    /// SMTP port
+    #[validate(range(min = 1, max = 65535))]
+    pub smtp_port: u16,
+
+    /// Sender email address
+    #[validate(email)]
+    pub from_address: String,
+
+    /// SMTP username
+    pub smtp_username: Option<String>,
+
+    /// SMTP password
+    pub smtp_password: Option<String>,
+
+    /// Use TLS
+    pub use_tls: bool,
+
+    /// Code expiration in seconds
+    #[validate(range(min = 60, max = 600))]
+    pub code_expiration_secs: u64,
+}
+
+/// WebAuthn configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct WebAuthnConfig {
+    /// Relying Party ID (usually the domain)
+    #[validate(length(min = 1))]
+    pub rp_id: String,
+
+    /// Relying Party name
+    #[validate(length(min = 1))]
+    pub rp_name: String,
+
+    /// Origin URL
+    #[validate(url)]
+    pub origin: String,
+
+    /// Require resident keys
+    pub require_resident_key: bool,
+
+    /// User verification requirement
+    pub user_verification: UserVerificationRequirement,
+}
+
+/// User verification requirements for WebAuthn
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UserVerificationRequirement {
+    Required,
+    Preferred,
+    Discouraged,
+}
+
+/// Backup codes configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct BackupCodesConfig {
+    /// Enable backup codes
+    pub enabled: bool,
+
+    /// Number of backup codes to generate
+    #[validate(range(min = 5, max = 20))]
+    pub count: u32,
+
+    /// Length of each backup code
+    #[validate(range(min = 8, max = 16))]
+    pub length: u32,
 }
 
 /// JWT configuration
@@ -968,6 +1140,7 @@ impl Default for ServerConfig {
                 certificate: None,
                 saml: None,
                 rebac: None,
+                mfa: None,
             },
             monitoring: MonitoringConfig {
                 metrics: MetricsConfig {

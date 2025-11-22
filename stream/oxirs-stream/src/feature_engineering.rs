@@ -54,7 +54,13 @@ impl FeatureValue {
     pub fn as_numeric(&self) -> f64 {
         match self {
             FeatureValue::Numeric(v) => *v,
-            FeatureValue::Boolean(b) => if *b { 1.0 } else { 0.0 },
+            FeatureValue::Boolean(b) => {
+                if *b {
+                    1.0
+                } else {
+                    0.0
+                }
+            }
             _ => f64::NAN,
         }
     }
@@ -353,8 +359,9 @@ impl FeaturePipeline {
             for feature in &feature_set.features {
                 if let FeatureValue::Numeric(value) = feature.value {
                     if !value.is_nan() {
-                        feature_values.entry(feature.name.clone())
-                            .or_insert_with(Vec::new)
+                        feature_values
+                            .entry(feature.name.clone())
+                            .or_default()
                             .push(value);
                     }
                 }
@@ -369,7 +376,8 @@ impl FeaturePipeline {
 
             // Compute statistics for scaling
             let mean = values.iter().sum::<f64>() / values.len() as f64;
-            let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
+            let variance =
+                values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
             let std = variance.sqrt();
 
             let mut sorted_values = values.clone();
@@ -396,27 +404,25 @@ impl FeaturePipeline {
 
         // Fit categorical encodings
         for transform in &self.transforms {
-            match transform {
-                FeatureTransform::LabelEncoder { columns } => {
-                    for column in columns {
-                        let mut unique_values = std::collections::HashSet::new();
-                        for feature_set in data {
-                            if let Some(feature) = feature_set.get_feature(column) {
-                                if let FeatureValue::Categorical(value) = &feature.value {
-                                    unique_values.insert(value.clone());
-                                }
+            if let FeatureTransform::LabelEncoder { columns } = transform {
+                for column in columns {
+                    let mut unique_values = std::collections::HashSet::new();
+                    for feature_set in data {
+                        if let Some(feature) = feature_set.get_feature(column) {
+                            if let FeatureValue::Categorical(value) = &feature.value {
+                                unique_values.insert(value.clone());
                             }
                         }
-
-                        let encoding: HashMap<String, usize> = unique_values.iter()
-                            .enumerate()
-                            .map(|(i, v)| (v.clone(), i))
-                            .collect();
-
-                        params.label_encodings.insert(column.clone(), encoding);
                     }
+
+                    let encoding: HashMap<String, usize> = unique_values
+                        .iter()
+                        .enumerate()
+                        .map(|(i, v)| (v.clone(), i))
+                        .collect();
+
+                    params.label_encodings.insert(column.clone(), encoding);
                 }
-                _ => {}
             }
         }
 
@@ -434,7 +440,9 @@ impl FeaturePipeline {
 
         // Apply each transformation in order
         for transform in &self.transforms {
-            output = self.apply_transform(&output, transform, &params, &mut history).await?;
+            output = self
+                .apply_transform(&output, transform, &params, &mut history)
+                .await?;
         }
 
         // Update statistics
@@ -442,8 +450,9 @@ impl FeaturePipeline {
         stats.total_features_processed += output.features.len() as u64;
         stats.total_transformations += 1;
         let elapsed_ms = start.elapsed().as_secs_f64() * 1000.0;
-        stats.avg_transform_time_ms = (stats.avg_transform_time_ms * (stats.total_transformations - 1) as f64 + elapsed_ms)
-            / stats.total_transformations as f64;
+        stats.avg_transform_time_ms =
+            (stats.avg_transform_time_ms * (stats.total_transformations - 1) as f64 + elapsed_ms)
+                / stats.total_transformations as f64;
         stats.features_generated = output.features.len();
 
         Ok(output)
@@ -463,7 +472,10 @@ impl FeaturePipeline {
             FeatureTransform::StandardScaler => {
                 for feature in &mut output.features {
                     if let FeatureValue::Numeric(value) = &mut feature.value {
-                        if let (Some(&mean), Some(&std)) = (params.means.get(&feature.name), params.stds.get(&feature.name)) {
+                        if let (Some(&mean), Some(&std)) = (
+                            params.means.get(&feature.name),
+                            params.stds.get(&feature.name),
+                        ) {
                             *value = (*value - mean) / std;
                         }
                     }
@@ -472,7 +484,10 @@ impl FeaturePipeline {
             FeatureTransform::MinMaxScaler { .. } => {
                 for feature in &mut output.features {
                     if let FeatureValue::Numeric(value) = &mut feature.value {
-                        if let (Some(&min), Some(&max)) = (params.mins.get(&feature.name), params.maxs.get(&feature.name)) {
+                        if let (Some(&min), Some(&max)) = (
+                            params.mins.get(&feature.name),
+                            params.maxs.get(&feature.name),
+                        ) {
                             *value = (*value - min) / (max - min).max(1e-10);
                         }
                     }
@@ -481,7 +496,10 @@ impl FeaturePipeline {
             FeatureTransform::RobustScaler => {
                 for feature in &mut output.features {
                     if let FeatureValue::Numeric(value) = &mut feature.value {
-                        if let (Some(&median), Some(&iqr)) = (params.medians.get(&feature.name), params.iqrs.get(&feature.name)) {
+                        if let (Some(&median), Some(&iqr)) = (
+                            params.medians.get(&feature.name),
+                            params.iqrs.get(&feature.name),
+                        ) {
                             *value = (*value - median) / iqr;
                         }
                     }
@@ -513,7 +531,8 @@ impl FeaturePipeline {
             FeatureTransform::RollingStd { window } => {
                 self.apply_rolling_stat(input, &mut output, *window, history, |values| {
                     let mean = values.iter().sum::<f64>() / values.len() as f64;
-                    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
+                    let variance = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
+                        / values.len() as f64;
                     variance.sqrt()
                 })?;
             }
@@ -525,7 +544,7 @@ impl FeaturePipeline {
             FeatureTransform::EWMA { alpha } => {
                 for feature in &mut output.features {
                     if let FeatureValue::Numeric(value) = &mut feature.value {
-                        let hist = history.entry(feature.name.clone()).or_insert_with(VecDeque::new);
+                        let hist = history.entry(feature.name.clone()).or_default();
                         let ewma = if hist.is_empty() {
                             *value
                         } else {
@@ -540,7 +559,7 @@ impl FeaturePipeline {
                 let mut new_features = Vec::new();
                 for feature in &input.features {
                     if let FeatureValue::Numeric(value) = feature.value {
-                        let hist = history.entry(feature.name.clone()).or_insert_with(VecDeque::new);
+                        let hist = history.entry(feature.name.clone()).or_default();
 
                         for &lag in lags {
                             if lag > 0 && lag <= hist.len() {
@@ -563,7 +582,7 @@ impl FeaturePipeline {
             FeatureTransform::RateOfChange { period } => {
                 for feature in &mut output.features {
                     if let FeatureValue::Numeric(value) = &mut feature.value {
-                        let hist = history.entry(feature.name.clone()).or_insert_with(VecDeque::new);
+                        let hist = history.entry(feature.name.clone()).or_default();
 
                         if hist.len() >= *period {
                             let old_value = hist[hist.len() - period];
@@ -614,7 +633,9 @@ impl FeaturePipeline {
                 }
             }
             FeatureTransform::PolynomialFeatures { degree } => {
-                let numeric_features: Vec<_> = input.features.iter()
+                let numeric_features: Vec<_> = input
+                    .features
+                    .iter()
                     .filter(|f| matches!(f.value, FeatureValue::Numeric(_)))
                     .collect();
 
@@ -634,8 +655,12 @@ impl FeaturePipeline {
             FeatureTransform::InteractionFeatures { pairs } => {
                 let mut new_features = Vec::new();
                 for (name1, name2) in pairs {
-                    if let (Some(f1), Some(f2)) = (input.get_feature(name1), input.get_feature(name2)) {
-                        if let (FeatureValue::Numeric(v1), FeatureValue::Numeric(v2)) = (&f1.value, &f2.value) {
+                    if let (Some(f1), Some(f2)) =
+                        (input.get_feature(name1), input.get_feature(name2))
+                    {
+                        if let (FeatureValue::Numeric(v1), FeatureValue::Numeric(v2)) =
+                            (&f1.value, &f2.value)
+                        {
                             new_features.push(Feature::numeric(
                                 format!("{}_{}_interaction", name1, name2),
                                 v1 * v2,
@@ -650,7 +675,9 @@ impl FeaturePipeline {
                     if feature.value.is_missing() {
                         let imputed_value = match strategy {
                             ImputationStrategy::Mean => params.means.get(&feature.name).copied(),
-                            ImputationStrategy::Median => params.medians.get(&feature.name).copied(),
+                            ImputationStrategy::Median => {
+                                params.medians.get(&feature.name).copied()
+                            }
                             ImputationStrategy::Constant => Some(0.0),
                             _ => None,
                         };
@@ -683,7 +710,7 @@ impl FeaturePipeline {
     {
         for feature in &mut output.features {
             if let FeatureValue::Numeric(value) = &mut feature.value {
-                let hist = history.entry(feature.name.clone()).or_insert_with(VecDeque::new);
+                let hist = history.entry(feature.name.clone()).or_default();
                 hist.push_back(*value);
 
                 if hist.len() > window {
@@ -700,7 +727,10 @@ impl FeaturePipeline {
     }
 
     /// Extract features from raw event data
-    pub async fn extract_features(&self, event_data: &HashMap<String, serde_json::Value>) -> Result<FeatureSet> {
+    pub async fn extract_features(
+        &self,
+        event_data: &HashMap<String, serde_json::Value>,
+    ) -> Result<FeatureSet> {
         let mut feature_set = FeatureSet::new();
 
         // Extract basic features from event data
@@ -724,10 +754,22 @@ impl FeaturePipeline {
         // Extract time-based features if enabled
         if self.config.extract_time_features {
             let now = chrono::Utc::now();
-            feature_set.add_feature(Feature::numeric("hour_of_day", now.format("%H").to_string().parse::<f64>().unwrap_or(0.0)));
-            feature_set.add_feature(Feature::numeric("day_of_week", now.format("%u").to_string().parse::<f64>().unwrap_or(0.0)));
-            feature_set.add_feature(Feature::numeric("day_of_month", now.format("%d").to_string().parse::<f64>().unwrap_or(0.0)));
-            feature_set.add_feature(Feature::numeric("month", now.format("%m").to_string().parse::<f64>().unwrap_or(0.0)));
+            feature_set.add_feature(Feature::numeric(
+                "hour_of_day",
+                now.format("%H").to_string().parse::<f64>().unwrap_or(0.0),
+            ));
+            feature_set.add_feature(Feature::numeric(
+                "day_of_week",
+                now.format("%u").to_string().parse::<f64>().unwrap_or(0.0),
+            ));
+            feature_set.add_feature(Feature::numeric(
+                "day_of_month",
+                now.format("%d").to_string().parse::<f64>().unwrap_or(0.0),
+            ));
+            feature_set.add_feature(Feature::numeric(
+                "month",
+                now.format("%m").to_string().parse::<f64>().unwrap_or(0.0),
+            ));
         }
 
         Ok(feature_set)
@@ -790,7 +832,12 @@ impl FeatureStore {
     }
 
     /// Store a feature set
-    pub async fn store(&self, id: impl Into<String>, features: FeatureSet, metadata: FeatureMetadata) -> Result<()> {
+    pub async fn store(
+        &self,
+        id: impl Into<String>,
+        features: FeatureSet,
+        metadata: FeatureMetadata,
+    ) -> Result<()> {
         let id = id.into();
         self.features.write().await.insert(id.clone(), features);
         self.metadata.write().await.insert(id, metadata);
@@ -835,7 +882,9 @@ mod tests {
         assert_eq!(FeatureValue::Numeric(3.14).as_numeric(), 3.14);
         assert_eq!(FeatureValue::Boolean(true).as_numeric(), 1.0);
         assert_eq!(FeatureValue::Boolean(false).as_numeric(), 0.0);
-        assert!(FeatureValue::Categorical("test".into()).as_numeric().is_nan());
+        assert!(FeatureValue::Categorical("test".into())
+            .as_numeric()
+            .is_nan());
         assert!(FeatureValue::Missing.is_missing());
     }
 

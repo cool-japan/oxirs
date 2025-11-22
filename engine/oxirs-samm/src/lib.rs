@@ -176,8 +176,10 @@
 #![allow(unused_variables)]
 
 pub mod aas_parser;
+pub mod analytics;
 pub mod cache;
 pub mod comparison;
+pub mod documentation;
 pub mod error;
 pub mod generators;
 pub mod metamodel;
@@ -196,11 +198,18 @@ pub mod utils;
 pub mod validator;
 
 // Re-exports for convenience
+pub use analytics::{
+    Anomaly, AnomalyType, BenchmarkComparison, BenchmarkLevel, BestPracticeCheck,
+    BestPracticeReport, CheckCategory, ComplexityAssessment, ComplexityLevel, DependencyMetrics,
+    DistributionAnalysis, DistributionStats, ModelAnalytics, Recommendation, RecommendationType,
+    Severity,
+};
 pub use cache::{
     AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
     PropertyCache, TtlCache, TtlCacheStatistics,
 };
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
+pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
 pub use error::{ErrorCategory, Result, SammError, SourceLocation};
 pub use generators::{GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout};
 pub use metamodel::{Aspect, Characteristic, Entity, Operation, Property};

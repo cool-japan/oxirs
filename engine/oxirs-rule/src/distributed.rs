@@ -46,6 +46,14 @@ pub struct Node {
     pub capacity: usize,
     /// Current load (0.0 - 1.0)
     pub load: f64,
+    /// Node role in Raft consensus
+    pub role: NodeRole,
+    /// Current term
+    pub term: u64,
+    /// Last heartbeat received
+    pub last_heartbeat: Option<std::time::SystemTime>,
+    /// Voted for (in current term)
+    pub voted_for: Option<String>,
 }
 
 impl Node {
@@ -57,6 +65,10 @@ impl Node {
             status: NodeStatus::Available,
             capacity: 1000,
             load: 0.0,
+            role: NodeRole::Follower,
+            term: 0,
+            last_heartbeat: None,
+            voted_for: None,
         }
     }
 
@@ -82,6 +94,52 @@ impl Node {
             self.status = NodeStatus::Available;
         }
     }
+
+    /// Promote node to leader
+    pub fn promote_to_leader(&mut self, term: u64) {
+        self.role = NodeRole::Leader;
+        self.term = term;
+        self.voted_for = Some(self.id.clone());
+        info!("Node '{}' promoted to leader (term {})", self.id, term);
+    }
+
+    /// Demote node to follower
+    pub fn demote_to_follower(&mut self) {
+        self.role = NodeRole::Follower;
+        debug!(
+            "Node '{}' demoted to follower (term {})",
+            self.id, self.term
+        );
+    }
+
+    /// Start election
+    pub fn start_election(&mut self) {
+        self.role = NodeRole::Candidate;
+        self.term += 1;
+        self.voted_for = Some(self.id.clone());
+        info!("Node '{}' starting election (term {})", self.id, self.term);
+    }
+
+    /// Receive heartbeat from leader
+    pub fn receive_heartbeat(&mut self, heartbeat: &Heartbeat) {
+        if heartbeat.term >= self.term {
+            self.last_heartbeat = Some(heartbeat.timestamp);
+            self.term = heartbeat.term;
+            if self.role != NodeRole::Follower {
+                self.demote_to_follower();
+            }
+        }
+    }
+
+    /// Check if heartbeat has timed out
+    pub fn heartbeat_timeout(&self, timeout_ms: u64) -> bool {
+        if let Some(last) = self.last_heartbeat {
+            if let Ok(elapsed) = std::time::SystemTime::now().duration_since(last) {
+                return elapsed.as_millis() > timeout_ms as u128;
+            }
+        }
+        true // No heartbeat received yet
+    }
 }
 
 /// Node status
@@ -95,6 +153,28 @@ pub enum NodeStatus {
     Overloaded,
     /// Node is offline or failed
     Offline,
+}
+
+/// Node role in Raft consensus
+#[derive(Debug, Clone, PartialEq)]
+pub enum NodeRole {
+    /// Leader node (coordinates reasoning)
+    Leader,
+    /// Follower node (executes work)
+    Follower,
+    /// Candidate node (election in progress)
+    Candidate,
+}
+
+/// Heartbeat message from leader to followers
+#[derive(Debug, Clone)]
+pub struct Heartbeat {
+    /// Leader node ID
+    pub leader_id: String,
+    /// Current term
+    pub term: u64,
+    /// Timestamp
+    pub timestamp: std::time::SystemTime,
 }
 
 /// Partitioning strategy for distributing work
@@ -175,7 +255,7 @@ impl DistributedResult {
     }
 }
 
-/// Distributed reasoner coordinator
+/// Distributed reasoner coordinator with Raft consensus
 pub struct DistributedReasoner {
     /// Registered nodes
     nodes: HashMap<String, Node>,
@@ -187,10 +267,22 @@ pub struct DistributedReasoner {
     cached_rules: Option<Vec<Rule>>,
     /// Min facts per partition (to avoid over-partitioning)
     min_facts_per_partition: usize,
+    /// Current leader node ID
+    leader_id: Option<String>,
+    /// Current term
+    current_term: u64,
+    /// Heartbeat timeout (milliseconds)
+    #[allow(dead_code)]
+    heartbeat_timeout_ms: u64,
+    /// Election timeout (milliseconds)
+    #[allow(dead_code)]
+    election_timeout_ms: u64,
+    /// Last heartbeat sent timestamp
+    last_heartbeat_sent: Option<std::time::SystemTime>,
 }
 
 impl DistributedReasoner {
-    /// Create a new distributed reasoner
+    /// Create a new distributed reasoner with Raft consensus
     pub fn new(strategy: PartitionStrategy) -> Self {
         Self {
             nodes: HashMap::new(),
@@ -200,6 +292,11 @@ impl DistributedReasoner {
             // For simulated local execution, require large datasets to justify overhead
             // Real distributed systems would use lower thresholds (e.g., 50)
             min_facts_per_partition: 500,
+            leader_id: None,
+            current_term: 0,
+            heartbeat_timeout_ms: 150,
+            election_timeout_ms: 300,
+            last_heartbeat_sent: None,
         }
     }
 
@@ -592,6 +689,223 @@ impl DistributedReasoner {
     pub fn node_count(&self) -> usize {
         self.nodes.len()
     }
+
+    /// Elect leader using simplified Raft algorithm
+    pub fn elect_leader(&mut self) -> Result<String> {
+        if self.nodes.is_empty() {
+            return Err(anyhow::anyhow!("No nodes available for election"));
+        }
+
+        // Increment term
+        self.current_term += 1;
+
+        // Simple leader election: choose node with highest capacity
+        let leader = self
+            .nodes
+            .values_mut()
+            .filter(|n| matches!(n.status, NodeStatus::Available | NodeStatus::Busy))
+            .max_by_key(|n| n.capacity)
+            .ok_or_else(|| anyhow::anyhow!("No available nodes for election"))?;
+
+        let leader_id = leader.id.clone();
+        leader.promote_to_leader(self.current_term);
+
+        // Set all other nodes as followers
+        for node in self.nodes.values_mut() {
+            if node.id != leader_id {
+                node.demote_to_follower();
+                node.term = self.current_term;
+            }
+        }
+
+        self.leader_id = Some(leader_id.clone());
+        info!(
+            "Leader elected: '{}' (term {}, capacity {})",
+            leader_id,
+            self.current_term,
+            self.nodes.get(&leader_id).map(|n| n.capacity).unwrap_or(0)
+        );
+
+        Ok(leader_id)
+    }
+
+    /// Send heartbeat from leader to all followers
+    pub fn send_heartbeat(&mut self) -> Result<()> {
+        let leader_id = self
+            .leader_id
+            .clone()
+            .ok_or_else(|| anyhow::anyhow!("No leader elected"))?;
+
+        let heartbeat = Heartbeat {
+            leader_id: leader_id.clone(),
+            term: self.current_term,
+            timestamp: std::time::SystemTime::now(),
+        };
+
+        self.last_heartbeat_sent = Some(heartbeat.timestamp);
+
+        // Send to all followers
+        let mut heartbeat_count = 0;
+        for node in self.nodes.values_mut() {
+            if node.id != leader_id {
+                node.receive_heartbeat(&heartbeat);
+                heartbeat_count += 1;
+            }
+        }
+
+        debug!(
+            "Leader '{}' sent heartbeat to {} followers (term {})",
+            leader_id, heartbeat_count, self.current_term
+        );
+
+        Ok(())
+    }
+
+    /// Check for heartbeat timeout and trigger election if needed
+    pub fn check_heartbeat_timeout(&mut self) -> Result<bool> {
+        if self.leader_id.is_none() {
+            // No leader, trigger election
+            info!("No leader present, triggering election");
+            self.elect_leader()?;
+            return Ok(true);
+        }
+
+        // Check if leader is still alive
+        if let Some(leader_id) = &self.leader_id {
+            if let Some(leader) = self.nodes.get(leader_id) {
+                if matches!(leader.status, NodeStatus::Offline) {
+                    warn!("Leader '{}' is offline, triggering election", leader_id);
+                    self.leader_id = None;
+                    self.elect_leader()?;
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Get current leader
+    pub fn get_leader(&self) -> Option<&Node> {
+        self.leader_id.as_ref().and_then(|id| self.nodes.get(id))
+    }
+
+    /// Execute distributed reasoning with Raft consensus
+    pub fn execute_distributed_with_consensus(
+        &mut self,
+        rules: &[Rule],
+        facts: &[RuleAtom],
+    ) -> Result<Vec<RuleAtom>> {
+        // Ensure we have a leader
+        if self.leader_id.is_none() {
+            info!("No leader present, electing leader");
+            self.elect_leader()?;
+        }
+
+        // Send heartbeat to maintain leadership
+        self.send_heartbeat()?;
+
+        // Execute distributed reasoning (existing logic)
+        self.execute_distributed(rules, facts)
+    }
+
+    /// Handle node failure
+    pub fn handle_node_failure(&mut self, node_id: &str) -> Result<()> {
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            warn!("Marking node '{}' as offline", node_id);
+            node.status = NodeStatus::Offline;
+
+            // If failed node was leader, trigger election
+            if self.leader_id.as_ref() == Some(&node_id.to_string()) {
+                warn!("Leader '{}' failed, triggering election", node_id);
+                self.leader_id = None;
+                self.elect_leader()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Recover node from failure
+    pub fn recover_node(&mut self, node_id: &str) -> Result<()> {
+        if let Some(node) = self.nodes.get_mut(node_id) {
+            info!("Recovering node '{}' from failure", node_id);
+            node.status = NodeStatus::Available;
+            node.load = 0.0;
+            node.demote_to_follower();
+
+            // Send heartbeat to sync state
+            self.send_heartbeat()?;
+        }
+
+        Ok(())
+    }
+
+    /// Get cluster health status
+    pub fn get_cluster_health(&self) -> ClusterHealth {
+        let total_nodes = self.nodes.len();
+        let available_nodes = self
+            .nodes
+            .values()
+            .filter(|n| matches!(n.status, NodeStatus::Available))
+            .count();
+        let offline_nodes = self
+            .nodes
+            .values()
+            .filter(|n| matches!(n.status, NodeStatus::Offline))
+            .count();
+
+        let health_ratio = if total_nodes > 0 {
+            available_nodes as f64 / total_nodes as f64
+        } else {
+            0.0
+        };
+
+        let status = if health_ratio >= 0.8 {
+            ClusterHealthStatus::Healthy
+        } else if health_ratio >= 0.5 {
+            ClusterHealthStatus::Degraded
+        } else {
+            ClusterHealthStatus::Critical
+        };
+
+        ClusterHealth {
+            status,
+            total_nodes,
+            available_nodes,
+            offline_nodes,
+            leader_id: self.leader_id.clone(),
+            current_term: self.current_term,
+        }
+    }
+}
+
+/// Cluster health status
+#[derive(Debug, Clone, PartialEq)]
+pub enum ClusterHealthStatus {
+    /// Cluster is healthy (>=80% nodes available)
+    Healthy,
+    /// Cluster is degraded (50-80% nodes available)
+    Degraded,
+    /// Cluster is critical (<50% nodes available)
+    Critical,
+}
+
+/// Cluster health information
+#[derive(Debug, Clone)]
+pub struct ClusterHealth {
+    /// Health status
+    pub status: ClusterHealthStatus,
+    /// Total nodes
+    pub total_nodes: usize,
+    /// Available nodes
+    pub available_nodes: usize,
+    /// Offline nodes
+    pub offline_nodes: usize,
+    /// Current leader
+    pub leader_id: Option<String>,
+    /// Current term
+    pub current_term: u64,
 }
 
 /// Distributed reasoning statistics
@@ -745,5 +1059,220 @@ mod tests {
         let results = reasoner.execute_distributed(&[rule], &facts).unwrap();
 
         assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn test_leader_election() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(
+                Node::new("node1".to_string(), "localhost:8001".to_string()).with_capacity(100),
+            )
+            .unwrap();
+        reasoner
+            .register_node(
+                Node::new("node2".to_string(), "localhost:8002".to_string()).with_capacity(200),
+            )
+            .unwrap();
+        reasoner
+            .register_node(
+                Node::new("node3".to_string(), "localhost:8003".to_string()).with_capacity(150),
+            )
+            .unwrap();
+
+        let leader_id = reasoner.elect_leader().unwrap();
+
+        // Node with highest capacity should be elected
+        assert_eq!(leader_id, "node2");
+        assert_eq!(reasoner.current_term, 1);
+
+        // Check leader role
+        let leader = reasoner.get_leader().unwrap();
+        assert_eq!(leader.role, NodeRole::Leader);
+    }
+
+    #[test]
+    fn test_heartbeat() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
+            .unwrap();
+        reasoner
+            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
+            .unwrap();
+
+        reasoner.elect_leader().unwrap();
+        reasoner.send_heartbeat().unwrap();
+
+        // Check that followers received heartbeat
+        for node in reasoner.nodes.values() {
+            if node.role == NodeRole::Follower {
+                assert!(node.last_heartbeat.is_some());
+            }
+        }
+    }
+
+    #[test]
+    fn test_node_failure_handling() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(
+                Node::new("node1".to_string(), "localhost:8001".to_string()).with_capacity(100),
+            )
+            .unwrap();
+        reasoner
+            .register_node(
+                Node::new("node2".to_string(), "localhost:8002".to_string()).with_capacity(200),
+            )
+            .unwrap();
+
+        let leader_id = reasoner.elect_leader().unwrap();
+
+        // Simulate leader failure
+        reasoner.handle_node_failure(&leader_id).unwrap();
+
+        // New leader should be elected
+        assert!(reasoner.leader_id.is_some());
+        assert_ne!(reasoner.leader_id.as_ref().unwrap(), &leader_id);
+    }
+
+    #[test]
+    fn test_node_recovery() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
+            .unwrap();
+        reasoner
+            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
+            .unwrap();
+
+        reasoner.elect_leader().unwrap();
+
+        // Simulate node1 failure
+        reasoner.handle_node_failure("node1").unwrap();
+
+        assert_eq!(
+            reasoner.nodes.get("node1").unwrap().status,
+            NodeStatus::Offline
+        );
+
+        // Recover node1
+        reasoner.recover_node("node1").unwrap();
+
+        assert_eq!(
+            reasoner.nodes.get("node1").unwrap().status,
+            NodeStatus::Available
+        );
+        assert_eq!(
+            reasoner.nodes.get("node1").unwrap().role,
+            NodeRole::Follower
+        );
+    }
+
+    #[test]
+    fn test_cluster_health() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
+            .unwrap();
+        reasoner
+            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
+            .unwrap();
+        reasoner
+            .register_node(Node::new("node3".to_string(), "localhost:8003".to_string()))
+            .unwrap();
+
+        reasoner.elect_leader().unwrap();
+
+        let health = reasoner.get_cluster_health();
+
+        assert_eq!(health.status, ClusterHealthStatus::Healthy);
+        assert_eq!(health.total_nodes, 3);
+        assert_eq!(health.available_nodes, 3);
+        assert_eq!(health.offline_nodes, 0);
+        assert!(health.leader_id.is_some());
+
+        // Simulate node failure
+        reasoner.handle_node_failure("node1").unwrap();
+
+        let health_degraded = reasoner.get_cluster_health();
+
+        // 2/3 = 66.7% available (Degraded, because <80%)
+        assert_eq!(health_degraded.status, ClusterHealthStatus::Degraded);
+        assert_eq!(health_degraded.available_nodes, 2);
+        assert_eq!(health_degraded.offline_nodes, 1);
+    }
+
+    #[test]
+    fn test_distributed_execution_with_consensus() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
+            .unwrap();
+        reasoner
+            .register_node(Node::new("node2".to_string(), "localhost:8002".to_string()))
+            .unwrap();
+
+        let rule = Rule {
+            name: "test_rule".to_string(),
+            body: vec![],
+            head: vec![],
+        };
+
+        let facts = vec![RuleAtom::Triple {
+            subject: Term::Constant("a".to_string()),
+            predicate: Term::Constant("p".to_string()),
+            object: Term::Constant("b".to_string()),
+        }];
+
+        let results = reasoner
+            .execute_distributed_with_consensus(&[rule], &facts)
+            .unwrap();
+
+        assert!(!results.is_empty());
+        assert!(reasoner.leader_id.is_some());
+    }
+
+    #[test]
+    fn test_heartbeat_timeout() {
+        let mut reasoner = DistributedReasoner::new(PartitionStrategy::RoundRobin);
+
+        reasoner
+            .register_node(Node::new("node1".to_string(), "localhost:8001".to_string()))
+            .unwrap();
+
+        // Check heartbeat timeout when no leader
+        let election_triggered = reasoner.check_heartbeat_timeout().unwrap();
+
+        assert!(election_triggered);
+        assert!(reasoner.leader_id.is_some());
+    }
+
+    #[test]
+    fn test_node_role_transitions() {
+        let mut node = Node::new("test_node".to_string(), "localhost:8001".to_string());
+
+        assert_eq!(node.role, NodeRole::Follower);
+        assert_eq!(node.term, 0);
+
+        // Promote to leader
+        node.promote_to_leader(1);
+        assert_eq!(node.role, NodeRole::Leader);
+        assert_eq!(node.term, 1);
+
+        // Demote to follower
+        node.demote_to_follower();
+        assert_eq!(node.role, NodeRole::Follower);
+
+        // Start election
+        node.start_election();
+        assert_eq!(node.role, NodeRole::Candidate);
+        assert_eq!(node.term, 2);
     }
 }

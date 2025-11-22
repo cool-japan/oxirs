@@ -516,6 +516,28 @@ pub async fn create_recovery_point(
     }
 }
 
+// ============================================================================
+// Metrics Endpoint
+// ============================================================================
+
+/// GET /metrics - Prometheus metrics export
+#[instrument(skip(state))]
+pub async fn metrics_handler(
+    State(state): State<Arc<AppState>>,
+) -> Result<String, (StatusCode, String)> {
+    if let Some(ref metrics_service) = state.metrics_service {
+        metrics_service
+            .get_prometheus_metrics()
+            .await
+            .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))
+    } else {
+        Err((
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Metrics service not available".to_string(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

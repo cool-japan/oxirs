@@ -208,7 +208,12 @@ pub struct NeuralNetwork {
 
 impl NeuralNetwork {
     /// Create a new neural network
-    pub fn new(input_dim: usize, hidden_dims: &[usize], output_dim: usize, rng: &mut Random) -> Self {
+    pub fn new(
+        input_dim: usize,
+        hidden_dims: &[usize],
+        output_dim: usize,
+        rng: &mut Random,
+    ) -> Self {
         let mut weights = Vec::new();
         let mut biases = Vec::new();
 
@@ -369,7 +374,10 @@ impl RLAgent {
             *self.q_network.write().await = Some(q_net);
             *self.target_network.write().await = Some(target_net);
 
-            info!("Initialized neural networks with state_dim={}, n_actions={}", state_dim, self.config.n_actions);
+            info!(
+                "Initialized neural networks with state_dim={}, n_actions={}",
+                state_dim, self.config.n_actions
+            );
         }
 
         Ok(())
@@ -381,18 +389,10 @@ impl RLAgent {
             RLAlgorithm::QLearning | RLAlgorithm::SARSA => {
                 self.select_action_q_learning(state).await
             }
-            RLAlgorithm::DQN => {
-                self.select_action_dqn(state).await
-            }
-            RLAlgorithm::UCB => {
-                self.select_action_ucb().await
-            }
-            RLAlgorithm::ThompsonSampling => {
-                self.select_action_thompson().await
-            }
-            RLAlgorithm::EpsilonGreedy => {
-                self.select_action_epsilon_greedy().await
-            }
+            RLAlgorithm::DQN => self.select_action_dqn(state).await,
+            RLAlgorithm::UCB => self.select_action_ucb().await,
+            RLAlgorithm::ThompsonSampling => self.select_action_thompson().await,
+            RLAlgorithm::EpsilonGreedy => self.select_action_epsilon_greedy().await,
             _ => {
                 // Default to ε-greedy
                 self.select_action_epsilon_greedy().await
@@ -417,11 +417,13 @@ impl RLAgent {
             let state_key = self.state_to_key(state);
             let q_table = self.q_table.read().await;
 
-            let q_values = q_table.get(&state_key)
+            let q_values = q_table
+                .get(&state_key)
                 .cloned()
                 .unwrap_or_else(|| vec![0.0; self.config.n_actions]);
 
-            let best_action = q_values.iter()
+            let best_action = q_values
+                .iter()
                 .enumerate()
                 .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                 .map(|(idx, _)| idx)
@@ -450,7 +452,8 @@ impl RLAgent {
                 let state_vec = Array1::from_vec(state.to_vector());
                 let q_values = network.forward(&state_vec);
 
-                let best_action = q_values.iter()
+                let best_action = q_values
+                    .iter()
                     .enumerate()
                     .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
                     .map(|(idx, _)| idx)
@@ -489,7 +492,8 @@ impl RLAgent {
             ucb_values.push(avg_reward + exploration_bonus);
         }
 
-        let best_action = ucb_values.iter()
+        let best_action = ucb_values
+            .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx)
@@ -515,11 +519,13 @@ impl RLAgent {
             let beta = (count as f64 - sum_reward).max(0.0) + 1.0;
 
             // Simplified beta sampling
-            let sample = rng.random::<f64>().powf(1.0 / alpha) * (1.0 - rng.random::<f64>()).powf(1.0 / beta);
+            let sample = rng.random::<f64>().powf(1.0 / alpha)
+                * (1.0 - rng.random::<f64>()).powf(1.0 / beta);
             sampled_values.push(sample);
         }
 
-        let best_action = sampled_values.iter()
+        let best_action = sampled_values
+            .iter()
             .enumerate()
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map(|(idx, _)| idx)
@@ -557,7 +563,9 @@ impl RLAgent {
                     } else {
                         0.0
                     };
-                    avg_a.partial_cmp(&avg_b).unwrap_or(std::cmp::Ordering::Equal)
+                    avg_a
+                        .partial_cmp(&avg_b)
+                        .unwrap_or(std::cmp::Ordering::Equal)
                 })
                 .unwrap_or(0);
 
@@ -566,7 +574,13 @@ impl RLAgent {
     }
 
     /// Learn from experience (update model)
-    pub async fn learn(&mut self, state: &State, action: Action, reward: f64, next_state: &State) -> Result<()> {
+    pub async fn learn(
+        &mut self,
+        state: &State,
+        action: Action,
+        reward: f64,
+        next_state: &State,
+    ) -> Result<()> {
         // Add to replay buffer
         let experience = Experience {
             state: state.clone(),
@@ -602,7 +616,8 @@ impl RLAgent {
         match self.config.algorithm {
             RLAlgorithm::QLearning | RLAlgorithm::SARSA => {
                 drop(stats);
-                self.update_q_learning(state, &action, reward, next_state).await?;
+                self.update_q_learning(state, &action, reward, next_state)
+                    .await?;
             }
             RLAlgorithm::DQN => {
                 drop(stats);
@@ -615,13 +630,20 @@ impl RLAgent {
 
         // Decay epsilon
         let mut stats = self.stats.write().await;
-        stats.current_epsilon = (stats.current_epsilon * self.config.epsilon_decay).max(self.config.epsilon_min);
+        stats.current_epsilon =
+            (stats.current_epsilon * self.config.epsilon_decay).max(self.config.epsilon_min);
 
         Ok(())
     }
 
     /// Q-learning update
-    async fn update_q_learning(&self, state: &State, action: &Action, reward: f64, next_state: &State) -> Result<()> {
+    async fn update_q_learning(
+        &self,
+        state: &State,
+        action: &Action,
+        reward: f64,
+        next_state: &State,
+    ) -> Result<()> {
         if let Action::Discrete(action_idx) = action {
             let state_key = self.state_to_key(state);
             let next_state_key = self.state_to_key(next_state);
@@ -630,13 +652,18 @@ impl RLAgent {
 
             // Get max next Q value first
             let max_next_q = {
-                let next_q_values = q_table.entry(next_state_key)
+                let next_q_values = q_table
+                    .entry(next_state_key)
                     .or_insert_with(|| vec![0.0; self.config.n_actions]);
-                next_q_values.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+                next_q_values
+                    .iter()
+                    .copied()
+                    .fold(f64::NEG_INFINITY, f64::max)
             };
 
             // Now update current Q value
-            let q_values = q_table.entry(state_key.clone())
+            let q_values = q_table
+                .entry(state_key.clone())
                 .or_insert_with(|| vec![0.0; self.config.n_actions]);
 
             // Q-learning update: Q(s,a) <- Q(s,a) + α[r + γ*max(Q(s',a')) - Q(s,a)]
@@ -646,7 +673,10 @@ impl RLAgent {
 
             q_values[*action_idx] += self.config.learning_rate * td_error;
 
-            debug!("Q-learning update: state={}, action={}, Q={:.4}", state_key, action_idx, q_values[*action_idx]);
+            debug!(
+                "Q-learning update: state={}, action={}, Q={:.4}",
+                state_key, action_idx, q_values[*action_idx]
+            );
         }
 
         Ok(())
@@ -669,7 +699,8 @@ impl RLAgent {
         };
 
         // Clone the batch experiences before dropping the lock
-        let batch: Vec<Experience> = batch_indices.iter()
+        let batch: Vec<Experience> = batch_indices
+            .iter()
             .map(|&i| replay_buffer[i].clone())
             .collect();
         drop(replay_buffer);
@@ -688,7 +719,10 @@ impl RLAgent {
                 let q_values = q_net.forward(&state_vec);
                 let next_q_values = target_net.forward(&next_state_vec);
 
-                let max_next_q = next_q_values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let max_next_q = next_q_values
+                    .iter()
+                    .copied()
+                    .fold(f64::NEG_INFINITY, f64::max);
 
                 if let Action::Discrete(action_idx) = exp.action {
                     let td_target = exp.reward + self.config.discount_factor * max_next_q;
@@ -735,11 +769,14 @@ impl RLAgent {
 
         let mut stats = self.stats.write().await;
         stats.total_episodes += 1;
-        stats.avg_reward_per_episode = (stats.avg_reward_per_episode * (stats.total_episodes - 1) as f64 + episode_reward)
-            / stats.total_episodes as f64;
+        stats.avg_reward_per_episode =
+            (stats.avg_reward_per_episode * (stats.total_episodes - 1) as f64 + episode_reward)
+                / stats.total_episodes as f64;
 
-        info!("Episode {} complete: reward={:.2}, avg_reward={:.2}",
-            stats.total_episodes, episode_reward, stats.avg_reward_per_episode);
+        info!(
+            "Episode {} complete: reward={:.2}, avg_reward={:.2}",
+            stats.total_episodes, episode_reward, stats.avg_reward_per_episode
+        );
 
         Ok(())
     }
@@ -905,7 +942,10 @@ mod tests {
 
         let state = create_test_state();
         for _ in 0..10 {
-            agent.learn(&state, Action::Discrete(0), 0.0, &state).await.unwrap();
+            agent
+                .learn(&state, Action::Discrete(0), 0.0, &state)
+                .await
+                .unwrap();
         }
 
         let final_epsilon = agent.get_epsilon().await;
@@ -919,8 +959,14 @@ mod tests {
         let mut agent = RLAgent::new(config).unwrap();
 
         let state = create_test_state();
-        agent.learn(&state, Action::Discrete(0), 1.0, &state).await.unwrap();
-        agent.learn(&state, Action::Discrete(1), 2.0, &state).await.unwrap();
+        agent
+            .learn(&state, Action::Discrete(0), 1.0, &state)
+            .await
+            .unwrap();
+        agent
+            .learn(&state, Action::Discrete(1), 2.0, &state)
+            .await
+            .unwrap();
 
         agent.end_episode().await.unwrap();
 
@@ -940,7 +986,10 @@ mod tests {
         let state = create_test_state();
 
         for i in 0..10 {
-            agent.learn(&state, Action::Discrete(0), i as f64, &state).await.unwrap();
+            agent
+                .learn(&state, Action::Discrete(0), i as f64, &state)
+                .await
+                .unwrap();
         }
 
         let buffer = agent.replay_buffer.read().await;
@@ -957,7 +1006,10 @@ mod tests {
         let mut agent = RLAgent::new(config).unwrap();
         let state = create_test_state();
 
-        agent.learn(&state, Action::Discrete(0), 1.0, &state).await.unwrap();
+        agent
+            .learn(&state, Action::Discrete(0), 1.0, &state)
+            .await
+            .unwrap();
 
         let export = agent.export_policy().await;
         assert!(export.is_ok());

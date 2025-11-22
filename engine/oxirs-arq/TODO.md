@@ -1,13 +1,13 @@
 # OxiRS ARQ - TODO
 
-*Last Updated: November 20, 2025*
+*Last Updated: November 21, 2025*
 
-## ✅ Current Status: v0.1.0-beta.2 Production-Ready - **Beta.2 Features Complete!** 🎉
+## ✅ Current Status: v0.1.0-beta.2 Production-Ready - **Beta.2+ Enhanced!** 🎉
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
 
-### Beta.2 Release Status (November 20, 2025) - **Beta.2 Features Complete!** 🎉
-- **411 tests** (unit + integration) passing with zero failures (with --all-features)
+### Beta.2+ Release Status (November 21, 2025) - **Beta.2+ Enhanced with GPU Operations!** ✨
+- **421 tests** (unit + integration) passing with zero failures (with --all-features)
 - **Beta.2 Advanced Query Management Features** ✨ NEW
   - **Query Cancellation Support** - Cooperative cancellation with callbacks and child tokens
   - **Query Timeout Management** - Soft/hard timeouts with configurable warning thresholds
@@ -15,7 +15,32 @@
   - **Query Session Management** - Unified session lifecycle with integrated features
   - **Query Rate Limiting** - Token bucket rate limiter with per-user tracking
   - **Query Audit Trail** - Circular buffer audit logging for compliance and debugging
-- **Beta.2 Production Enhancements** ✨ **LATEST**
+- **Beta.2+ Performance Enhancements** ✨ **LATEST** (November 21, 2025)
+  - **GPU-Accelerated SPARQL Operations** - High-performance vector operations
+    - SIMD-accelerated vector similarity search for semantic queries
+    - Parallel triple pattern matching with auto-vectorization
+    - Configurable batch processing for optimal throughput
+    - Result caching with hash-based deduplication
+    - Support for multiple device types (Auto-detect, CUDA, Metal, CPU)
+    - Comprehensive statistics tracking (cache hit rate, operation timings)
+    - 9 comprehensive tests validating all GPU operations
+    - Ready for future GPU acceleration (CUDA/Metal) when scirs2-core GPU API stabilizes
+    - **Complete Example** - `examples/gpu_accelerated_sparql.rs` (380+ lines)
+      - 6 comprehensive demonstrations covering all GPU operations
+      - Auto-detect, high-performance, and low-memory configurations
+      - Batch processing and cache effectiveness demos
+      - Performance comparison across configurations
+    - **Comprehensive Benchmark Suite** - `benches/gpu_operations_bench.rs`
+      - 8 benchmark groups covering all performance aspects
+      - Vector similarity scaling (100 → 5,000 entities)
+      - Cache effectiveness measurement
+      - Batch processing throughput (1 → 100 queries)
+      - Top-k variation impact (1 → 500 results)
+      - Embedding dimension scaling (32 → 512 dimensions)
+      - Configuration profile comparison
+      - Parallel query execution (1 → 16 concurrent queries)
+      - Memory efficiency testing
+- **Beta.2 Production Enhancements** ✨
   - **Query Priority System** - 5-level priority scheduler (Critical, High, Normal, Low, Batch)
     - Priority-based query scheduling with aging to prevent starvation
     - Per-priority concurrency limits and queue management
