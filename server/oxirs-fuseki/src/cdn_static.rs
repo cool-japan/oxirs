@@ -579,7 +579,7 @@ impl CdnStaticManager {
             .cache_policies
             .get(&asset.cache_policy)
             .cloned()
-            .unwrap_or_else(|| CachePolicy {
+            .unwrap_or(CachePolicy {
                 max_age: 3600,
                 stale_while_revalidate: Some(300),
                 public: true,

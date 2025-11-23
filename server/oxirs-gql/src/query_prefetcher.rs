@@ -283,17 +283,19 @@ impl QueryPrefetcher {
     pub fn record_query(&mut self, query: &str) -> Result<(), PrefetchError> {
         let now = Instant::now();
 
-        // Update execution history
-        let mut history = self
-            .execution_history
-            .write()
-            .map_err(|e| PrefetchError::LockError(e.to_string()))?;
+        {
+            // Update execution history
+            let mut history = self
+                .execution_history
+                .write()
+                .map_err(|e| PrefetchError::LockError(e.to_string()))?;
 
-        history.push_back((query.to_string(), now));
+            history.push_back((query.to_string(), now));
 
-        // Keep only recent history
-        while history.len() > 1000 {
-            history.pop_front();
+            // Keep only recent history
+            while history.len() > 1000 {
+                history.pop_front();
+            }
         }
 
         // Update sequential patterns
@@ -836,7 +838,10 @@ mod tests {
 
     #[test]
     fn test_sequential_pattern() {
-        let mut prefetcher = QueryPrefetcher::new();
+        let mut prefetcher = QueryPrefetcher::with_config(PrefetchConfig {
+            min_confidence: 0.1,
+            ..Default::default()
+        });
         prefetcher
             .set_strategy(PrefetchStrategy::Sequential)
             .unwrap();

@@ -21,7 +21,7 @@
 
 use crate::error::{FusekiError, FusekiResult};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
@@ -29,7 +29,7 @@ use tracing::{debug, error, info, warn};
 
 // Import kube-rs types when feature is enabled
 #[cfg(feature = "k8s")]
-use kube::CustomResource;
+use kube::{CustomResource, ResourceExt};
 #[cfg(feature = "k8s")]
 use schemars::JsonSchema;
 
@@ -116,6 +116,7 @@ fn default_true() -> bool {
 }
 
 /// Non-CRD wrapper for when k8s feature is disabled
+#[cfg(not(feature = "k8s"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OxirsFuseki {
@@ -127,6 +128,7 @@ pub struct OxirsFuseki {
     pub status: Option<FusekiStatus>,
 }
 
+#[cfg(not(feature = "k8s"))]
 impl OxirsFuseki {
     /// Get the resource name
     pub fn name(&self) -> &str {
@@ -136,6 +138,25 @@ impl OxirsFuseki {
     /// Get the namespace
     pub fn namespace(&self) -> &str {
         &self.metadata.namespace
+    }
+
+    /// Get the resource name (compatibility with kube-rs ResourceExt)
+    pub fn name_any(&self) -> String {
+        self.metadata.name.clone()
+    }
+}
+
+/// Helper methods for kube-rs generated OxirsFuseki
+#[cfg(feature = "k8s")]
+impl OxirsFuseki {
+    /// Get the resource name
+    pub fn name_str(&self) -> &str {
+        self.metadata.name.as_deref().unwrap_or("unknown")
+    }
+
+    /// Get the namespace
+    pub fn namespace_str(&self) -> &str {
+        self.metadata.namespace.as_deref().unwrap_or("default")
     }
 }
 
@@ -427,7 +448,7 @@ impl FusekiOperator {
         &self,
         instance: &OxirsFuseki,
     ) -> FusekiResult<ReconcileAction> {
-        let name = instance.name();
+        let name = instance.name_any();
         info!("Reconciling Fuseki instance: {}", name);
 
         // Determine required action
@@ -469,7 +490,7 @@ impl FusekiOperator {
     /// Determine what action to take for an instance
     async fn determine_action(&self, instance: &OxirsFuseki) -> FusekiResult<ReconcileAction> {
         // Check if deployment exists
-        if !self.deployment_exists(instance.name()).await? {
+        if !self.deployment_exists(&instance.name_any()).await? {
             return Ok(ReconcileAction::Create);
         }
 
@@ -519,7 +540,7 @@ impl FusekiOperator {
         use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
         use kube::{Api, Client};
 
-        info!("Creating deployment for {}", instance.name());
+        info!("Creating deployment for {}", instance.name_any());
 
         let client = Client::try_default().await.map_err(|e| {
             FusekiError::configuration(format!("Failed to create Kubernetes client: {}", e))
@@ -527,14 +548,14 @@ impl FusekiOperator {
 
         let deployments: Api<Deployment> = Api::namespaced(client, &self.namespace);
 
-        let labels = HashMap::from([
+        let labels = BTreeMap::from([
             ("app".to_string(), "oxirs-fuseki".to_string()),
-            ("instance".to_string(), instance.name().to_string()),
+            ("instance".to_string(), instance.name_any().to_string()),
         ]);
 
         let deployment = Deployment {
             metadata: ObjectMeta {
-                name: Some(instance.name().to_string()),
+                name: Some(instance.name_any().to_string()),
                 namespace: Some(self.namespace.clone()),
                 labels: Some(labels.clone()),
                 ..Default::default()
@@ -577,7 +598,7 @@ impl FusekiOperator {
                 FusekiError::configuration(format!("Failed to create deployment: {}", e))
             })?;
 
-        info!("Deployment created: {}", instance.name());
+        info!("Deployment created: {}", instance.name_any());
         Ok(())
     }
 
@@ -585,7 +606,7 @@ impl FusekiOperator {
     async fn create_deployment(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
         info!(
             "[Simulation] Creating deployment for {} with {} replicas",
-            instance.name(),
+            instance.name_any(),
             instance.spec.replicas
         );
         Ok(())
@@ -593,7 +614,7 @@ impl FusekiOperator {
 
     /// Update Kubernetes deployment
     async fn update_deployment(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
-        debug!("Updating deployment for {}", instance.name());
+        debug!("Updating deployment for {}", instance.name_any());
 
         #[cfg(feature = "k8s")]
         {
@@ -607,7 +628,7 @@ impl FusekiOperator {
             let deployments: Api<Deployment> = Api::namespaced(client, &self.namespace);
 
             // Get current deployment and patch
-            if let Ok(current) = deployments.get(instance.name()).await {
+            if let Ok(current) = deployments.get(&instance.name_any()).await {
                 let patch = serde_json::json!({
                     "spec": {
                         "replicas": instance.spec.replicas
@@ -616,7 +637,7 @@ impl FusekiOperator {
 
                 deployments
                     .patch(
-                        instance.name(),
+                        &instance.name_any(),
                         &kube::api::PatchParams::default(),
                         &kube::api::Patch::Merge(&patch),
                     )
@@ -625,14 +646,14 @@ impl FusekiOperator {
                         FusekiError::configuration(format!("Failed to patch deployment: {}", e))
                     })?;
 
-                info!("Deployment updated: {}", instance.name());
+                info!("Deployment updated: {}", instance.name_any());
             }
         }
 
         #[cfg(not(feature = "k8s"))]
         info!(
             "[Simulation] Updating deployment for {} to {} replicas",
-            instance.name(),
+            instance.name_any(),
             instance.spec.replicas
         );
 
@@ -641,7 +662,7 @@ impl FusekiOperator {
 
     /// Create Kubernetes service
     async fn create_service(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
-        info!("Creating service for {}", instance.name());
+        info!("Creating service for {}", instance.name_any());
 
         #[cfg(feature = "k8s")]
         {
@@ -656,14 +677,14 @@ impl FusekiOperator {
 
             let services: Api<Service> = Api::namespaced(client, &self.namespace);
 
-            let labels = HashMap::from([
+            let labels = BTreeMap::from([
                 ("app".to_string(), "oxirs-fuseki".to_string()),
-                ("instance".to_string(), instance.name().to_string()),
+                ("instance".to_string(), instance.name_any().to_string()),
             ]);
 
             let service = Service {
                 metadata: ObjectMeta {
-                    name: Some(instance.name().to_string()),
+                    name: Some(instance.name_any().to_string()),
                     namespace: Some(self.namespace.clone()),
                     labels: Some(labels.clone()),
                     ..Default::default()
@@ -689,13 +710,13 @@ impl FusekiOperator {
                     FusekiError::configuration(format!("Failed to create service: {}", e))
                 })?;
 
-            info!("Service created: {}", instance.name());
+            info!("Service created: {}", instance.name_any());
         }
 
         #[cfg(not(feature = "k8s"))]
         info!(
             "[Simulation] Creating service for {} on port {}",
-            instance.name(),
+            instance.name_any(),
             instance.spec.port
         );
 
@@ -704,14 +725,14 @@ impl FusekiOperator {
 
     /// Update Kubernetes service
     async fn update_service(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
-        debug!("Updating service for {}", instance.name());
+        debug!("Updating service for {}", instance.name_any());
         // Service updates are typically handled by recreation
         Ok(())
     }
 
     /// Create HPA
     async fn create_hpa(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
-        info!("Creating HPA for {}", instance.name());
+        info!("Creating HPA for {}", instance.name_any());
 
         #[cfg(feature = "k8s")]
         {
@@ -730,7 +751,7 @@ impl FusekiOperator {
 
             let hpa = HorizontalPodAutoscaler {
                 metadata: ObjectMeta {
-                    name: Some(instance.name().to_string()),
+                    name: Some(instance.name_any().to_string()),
                     namespace: Some(self.namespace.clone()),
                     ..Default::default()
                 },
@@ -738,7 +759,7 @@ impl FusekiOperator {
                     scale_target_ref: CrossVersionObjectReference {
                         api_version: Some("apps/v1".to_string()),
                         kind: "Deployment".to_string(),
-                        name: instance.name().to_string(),
+                        name: instance.name_any().to_string(),
                     },
                     min_replicas: Some(instance.spec.auto_scaling.min_replicas),
                     max_replicas: instance.spec.auto_scaling.max_replicas,
@@ -765,13 +786,13 @@ impl FusekiOperator {
                 .await
                 .map_err(|e| FusekiError::configuration(format!("Failed to create HPA: {}", e)))?;
 
-            info!("HPA created: {}", instance.name());
+            info!("HPA created: {}", instance.name_any());
         }
 
         #[cfg(not(feature = "k8s"))]
         info!(
             "[Simulation] Creating HPA for {} (min: {}, max: {}, cpu: {}%)",
-            instance.name(),
+            instance.name_any(),
             instance.spec.auto_scaling.min_replicas,
             instance.spec.auto_scaling.max_replicas,
             instance.spec.auto_scaling.target_cpu_utilization
@@ -782,7 +803,7 @@ impl FusekiOperator {
 
     /// Ensure HPA exists and is configured correctly
     async fn ensure_hpa(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
-        debug!("Ensuring HPA for {}", instance.name());
+        debug!("Ensuring HPA for {}", instance.name_any());
 
         let spec = &instance.spec.auto_scaling;
 
@@ -796,7 +817,7 @@ impl FusekiOperator {
 
     /// Delete all resources for an instance
     async fn delete_resources(&self, instance: &OxirsFuseki) -> FusekiResult<()> {
-        info!("Deleting resources for {}", instance.name());
+        info!("Deleting resources for {}", instance.name_any());
 
         #[cfg(feature = "k8s")]
         {
@@ -812,23 +833,28 @@ impl FusekiOperator {
             // Delete HPA
             let hpas: Api<HorizontalPodAutoscaler> =
                 Api::namespaced(client.clone(), &self.namespace);
-            let _ = hpas.delete(instance.name(), &Default::default()).await;
+            let _ = hpas.delete(&instance.name_any(), &Default::default()).await;
 
             // Delete Service
             let services: Api<Service> = Api::namespaced(client.clone(), &self.namespace);
-            let _ = services.delete(instance.name(), &Default::default()).await;
+            let _ = services
+                .delete(&instance.name_any(), &Default::default())
+                .await;
 
             // Delete Deployment
             let deployments: Api<Deployment> = Api::namespaced(client, &self.namespace);
             let _ = deployments
-                .delete(instance.name(), &Default::default())
+                .delete(&instance.name_any(), &Default::default())
                 .await;
 
-            info!("Resources deleted for {}", instance.name());
+            info!("Resources deleted for {}", instance.name_any());
         }
 
         #[cfg(not(feature = "k8s"))]
-        info!("[Simulation] Deleting resources for {}", instance.name());
+        info!(
+            "[Simulation] Deleting resources for {}",
+            instance.name_any()
+        );
 
         Ok(())
     }
@@ -840,10 +866,10 @@ impl FusekiOperator {
         phase: &str,
         message: &str,
     ) -> FusekiResult<()> {
-        debug!("Updating status for {} to {}", instance.name(), phase);
+        debug!("Updating status for {} to {}", instance.name_any(), phase);
 
         let mut instances = self.instances.write().await;
-        if let Some(inst) = instances.get_mut(instance.name()) {
+        if let Some(inst) = instances.get_mut(&instance.name_any()) {
             inst.status = Some(FusekiStatus {
                 ready_replicas: instance.spec.replicas,
                 available_replicas: instance.spec.replicas,
@@ -852,7 +878,7 @@ impl FusekiOperator {
                 message: Some(message.to_string()),
                 endpoint: Some(format!(
                     "http://{}:{}/",
-                    instance.name(),
+                    instance.name_any(),
                     instance.spec.port
                 )),
                 conditions: Some(vec![StatusCondition {
@@ -870,7 +896,7 @@ impl FusekiOperator {
 
     /// Add a Fuseki instance to manage
     pub async fn add_instance(&self, instance: OxirsFuseki) -> FusekiResult<()> {
-        let name = instance.name().to_string();
+        let name = instance.name_any().to_string();
         let mut instances = self.instances.write().await;
         instances.insert(name.clone(), instance);
         info!("Added Fuseki instance: {}", name);
@@ -939,7 +965,7 @@ impl FusekiOperator {
 
     /// Handle create event
     pub async fn handle_create(&self, instance: OxirsFuseki) -> FusekiResult<()> {
-        info!("Handling create event for {}", instance.name());
+        info!("Handling create event for {}", instance.name_any());
         self.add_instance(instance.clone()).await?;
         self.reconcile_instance(&instance).await?;
         Ok(())
@@ -947,7 +973,7 @@ impl FusekiOperator {
 
     /// Handle update event
     pub async fn handle_update(&self, instance: OxirsFuseki) -> FusekiResult<()> {
-        info!("Handling update event for {}", instance.name());
+        info!("Handling update event for {}", instance.name_any());
         self.add_instance(instance.clone()).await?;
         self.reconcile_instance(&instance).await?;
         Ok(())
@@ -1179,6 +1205,8 @@ mod tests {
         assert_eq!(spec.target_cpu_utilization, 70);
     }
 
+    // Tests using manually-defined OxirsFuseki (when k8s feature is disabled)
+    #[cfg(not(feature = "k8s"))]
     #[tokio::test]
     async fn test_operator_add_instance() {
         let config = OperatorConfig::default();
@@ -1221,6 +1249,7 @@ mod tests {
         assert!(instances.contains(&"test-fuseki".to_string()));
     }
 
+    #[cfg(not(feature = "k8s"))]
     #[tokio::test]
     async fn test_operator_remove_instance() {
         let config = OperatorConfig::default();

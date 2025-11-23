@@ -6,8 +6,8 @@
 
 **oxirs-fuseki** provides a SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility.
 
-### RC.2 Release Status (November 23, 2025) - **Feature Complete + CDN + K8s!** 🚀🎉
-- **760 tests passing** (unit + integration) with zero warnings ✅
+### RC.2 Release Status (November 23, 2025) - **Feature Complete + CDN + K8s + ACME!** 🚀🎉
+- **772 tests passing** (unit + integration) with zero warnings ✅
 - **GraphQL API enabled** with interactive playground at `/graphql/playground` ✨
 - **Full SPARQL 1.1/1.2 support** including `SERVICE` federation and result merging
 - **Comprehensive documentation** (Getting Started guide + Complete API reference)
@@ -24,7 +24,7 @@
 - **✨ NEW: Dataset management** (Bulk operations, snapshots, versioning, automated backups)
 - **Deployment automation** (Docker Compose, Kubernetes manifests, operator support)
 - **MFA storage** (Persistent storage for TOTP, backup codes, WebAuthn)
-- **TLS certificate rotation** (Automatic certificate monitoring and renewal)
+- **TLS certificate rotation** (Automatic certificate monitoring, ACME/Let's Encrypt, self-signed generation)
 - **Automatic recovery** (Self-healing mechanisms for failures)
 - **Backup automation** (Scheduled backups with compression and retention)
 - **HTTP/2 & HTTP/3 support** (QUIC protocol, server push, header compression)
@@ -92,12 +92,18 @@
   - Method enrollment tracking
   - JSON-based persistence with auto-save
 
-- ✅ **TLS Certificate Rotation** (tls_rotation.rs)
-  - Automatic certificate expiration monitoring
-  - Configurable rotation thresholds
-  - Certificate renewal provider interface
-  - Let's Encrypt ACME provider (stub)
-  - Self-signed certificate provider (stub)
+- ✅ **TLS Certificate Rotation** (tls_rotation.rs - enhanced)
+  - Automatic certificate expiration monitoring with retry logic
+  - Configurable rotation thresholds and intervals
+  - Certificate renewal provider interface (`CertificateRenewalProvider` trait)
+  - Let's Encrypt ACME provider framework (requires `acme` feature)
+  - ZeroSSL provider framework (alternative to Let's Encrypt)
+  - Self-signed certificate provider for dev/testing (requires `acme` feature)
+  - ACME HTTP-01 challenge server for domain validation
+  - Rotation statistics tracking (success/failure counts)
+  - Certificate backup before rotation with timestamps
+  - Multiple domain support (SAN certificates)
+  - ECDSA P-256/P-384 key generation
   - Hot reload without downtime
 
 - ✅ **Automatic Recovery** (recovery.rs)
@@ -476,7 +482,8 @@
 
 ### Integration Points
 - ✅ Kubernetes operator enhanced with optional `kube-rs` crate integration (enable `k8s` feature)
-- TLS rotation needs ACME provider implementation (e.g., `acme-lib`)
+- ✅ TLS rotation with ACME/Let's Encrypt provider framework (enable `acme` feature for full support)
+- ✅ Self-signed certificate provider for development/testing (enable `acme` feature)
 - Recovery needs deeper integration with store health metrics
 - Backup needs actual store export/import implementation
 - HTTP/2 and HTTP/3 need integration with Axum/Hyper server configuration
@@ -740,3 +747,25 @@
 - ✅ All 760 tests passing (cargo nextest)
 - ✅ Zero clippy warnings
 - ✅ New dependencies added: httpdate, kube (optional), k8s-openapi (optional), schemars (optional)
+
+**Session 9 Summary (November 23, 2025)**:
+- ✅ Enhanced TLS certificate rotation (tls_rotation.rs - ~1200 lines)
+  - Complete ACME/Let's Encrypt provider framework
+  - Self-signed certificate provider using rcgen
+  - ZeroSSL provider framework (alternative CA)
+  - ACME HTTP-01 challenge server for domain validation
+  - Rotation statistics tracking (success/failure counts, last rotation time)
+  - Certificate backup with timestamps before rotation
+  - Multiple domain support (SAN certificates)
+  - ECDSA P-256/P-384 key generation
+  - Retry logic with configurable max attempts and delay
+  - Hot reload capability without server restart
+- ✅ Fixed Kubernetes operator for kube-rs 0.96 compatibility
+  - BTreeMap usage for label selectors (kube-rs requirement)
+  - ResourceExt trait import for name_any() method
+  - Proper borrow semantics for API calls
+  - Conditional compilation for k8s/non-k8s builds
+- ✅ All 772 tests passing (cargo nextest)
+- ✅ Zero clippy warnings with --all-features
+- ✅ New dependencies added: instant-acme (optional), rcgen (optional)
+- ✅ New feature flag: `acme` for ACME/Let's Encrypt certificate automation

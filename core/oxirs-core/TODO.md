@@ -1,8 +1,55 @@
 # OxiRS Core - TODO
 
-*Last Updated: November 22, 2025*
+*Last Updated: November 23, 2025*
 
 ## ✅ Current Status: v0.1.0-beta.2 Advanced Features
+
+### ✅ November 23, 2025 - Refactoring & Performance Enhancements
+
+**🔧 MAJOR REFACTORING: mmap_store.rs Split**
+- ✅ **Refactored mmap_store.rs** - Split from 2671 lines (34% over limit) into modular structure
+  - `src/store/mmap_store/mod.rs` - Main module (1507 lines)
+  - `src/store/mmap_store/types.rs` - Type definitions (162 lines)
+  - `src/store/mmap_store/backup.rs` - Backup operations (354 lines)
+  - `src/store/mmap_store/tests.rs` - Test suite (511 lines)
+- ✅ **All exports maintained** - Public API unchanged, full backward compatibility
+
+**🧹 CODE CLEANUP: JSON-LD Migration TODOs**
+- ✅ **Cleaned up outdated TODOs** in from_rdf.rs and to_rdf.rs
+- ✅ **Phase 3 migration already complete** - Code uses native `crate::model::*` types
+- ✅ **Removed obsolete comments** about replacing oxrdf types
+
+**⚡ SIMD Integration in RDF/XML Streaming Parser**
+- ✅ **SimdXmlProcessor struct** - SIMD-accelerated XML processing in optimization.rs
+  - `find_special_char()` - SIMD search for `<`, `>`, `&`, `"` on x86_64
+  - `find_colon()` - SIMD search for namespace colon separator
+  - `is_valid_utf8()` - Fast UTF-8 validation
+  - `trim_whitespace()` - Efficient byte slice trimming
+  - `parse_qname()` - Parse qualified XML names
+  - `expand_name()` - Namespace-aware name expansion
+- ✅ **Integrated into DomFreeStreamingRdfXmlParser** - Methods actively used:
+  - `resolve_qname()` - Uses `simd_processor.parse_qname()` for QName parsing
+  - `process_text_zero_copy()` - Uses `simd_processor.is_valid_utf8()` and `trim_whitespace()`
+  - `process_attribute_name_zero_copy()` - Uses SIMD UTF-8 validation
+  - `process_attribute_value_zero_copy()` - Uses SIMD validation and trimming
+- ✅ **Platform-adaptive** - SIMD on x86_64, scalar fallback on other platforms
+
+**✨ JSON-LD Serializer Enhancement: Prefix Compaction**
+- ✅ **compact_iri() method** - New method in InnerJsonLdWriter
+  - Automatically compacts full IRIs using registered prefixes
+  - Transforms `http://example.org/name` → `ex:name` when prefix registered
+  - Applied to predicate serialization for cleaner output
+- ✅ **Maintains backward compatibility** - Works with existing tests
+
+**📦 BLOCKED: Columnar Storage Feature**
+- ⚠️ **Columnar storage** (`src/storage/columnar.rs`) exists but disabled
+- **Reason:** Dependency conflicts (chrono conflicts with arrow/datafusion/parquet)
+- **Status:** Feature-gated, waiting for upstream resolution
+
+**📊 QUALITY METRICS:**
+- ✅ **All 821 tests passing** - 100% pass rate
+- ✅ **Zero clippy warnings** - Clean compilation
+- ✅ **SCIRS2 compliance** - Full policy adherence
 
 ### ✅ November 22, 2025 - Quality Assurance & SCIRS2 Compliance Verification (Final)
 
@@ -107,11 +154,10 @@ cargo run --example embedding_training_demo
   - SplitRS automatic refactoring tested but introduced visibility issues
   - Recommendation: Keep as-is, refactor incrementally if needed
 
-- ⚠️ `src/store/mmap_store.rs`: **2671 lines** (34% over 2000-line guideline)
-  - Status: **Acceptable for now** - Large impl block (~1800 lines)
-  - Contains core CRUD, backup ops, statistics, and indexing
-  - Manual refactoring deferred to avoid regressions
-  - Recommendation: Refactor in future release with comprehensive testing
+- ✅ `src/store/mmap_store/`: **Refactored November 23, 2025**
+  - Status: **Complete** - Split from 2671 lines into modular structure
+  - mod.rs: 1507 lines, types.rs: 162 lines, backup.rs: 354 lines, tests.rs: 511 lines
+  - All tests passing, full backward compatibility maintained
 
 **CODEBASE HEALTH:**
 - ✅ All features working correctly
@@ -561,7 +607,7 @@ All Beta.1 targets have been successfully completed!
 - [x] **Performance optimization guide** - PERFORMANCE_GUIDE.md with comprehensive optimization strategies
 - [x] **Additional documentation for advanced features** - Inline documentation for SPARQL 1.2 RDF-star functions
 - [x] **API documentation** - All public APIs documented with examples
-- [ ] End-to-end tutorial (planned for v0.2.0)
-- [ ] Architecture deep-dive (planned for v0.2.0)
-- [ ] Best practices guide (planned for v0.2.0)
-- [ ] Deployment handbook (planned for v0.2.0)
+- [ ] End-to-end tutorial (planned for v0.1.0)
+- [ ] Architecture deep-dive (planned for v0.1.0)
+- [ ] Best practices guide (planned for v0.1.0)
+- [ ] Deployment handbook (planned for v0.1.0)

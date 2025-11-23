@@ -5,10 +5,7 @@ use super::profile::{JsonLdProcessingMode, JsonLdProfile, JsonLdProfileSet};
 #[cfg(feature = "async")]
 use json_event_parser::TokioAsyncReaderJsonParser;
 use json_event_parser::{JsonEvent, ReaderJsonParser, SliceJsonParser};
-// TODO: Phase 3 - Replace with native OxiRS types
-// use oxiri::{Iri, IriParseError};
-// use oxrdf::vocab::{rdf, xsd};
-// use oxrdf::{BlankNode, GraphName, Literal, NamedNode, NamedNodeRef, NamedOrBlankNode, Quad};
+// Native OxiRS types (Phase 3 migration completed)
 use crate::model::*;
 use crate::vocab::{rdf, xsd};
 use oxiri::{Iri, IriParseError};

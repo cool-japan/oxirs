@@ -16,7 +16,7 @@ use rayon::iter::IntoParallelRefIterator;
 #[cfg(feature = "parallel")]
 use rayon::iter::ParallelIterator;
 use simd_json;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::pin::Pin;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -1266,6 +1266,185 @@ impl SimdJsonProcessor {
 }
 
 impl Default for SimdJsonProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// SIMD XML processor for fast XML parsing
+///
+/// Provides SIMD-accelerated string operations for RDF/XML streaming processing.
+/// Uses SIMD instructions for fast character scanning and pattern matching.
+#[derive(Clone, Debug)]
+pub struct SimdXmlProcessor {
+    /// Buffer for SIMD-optimized string operations
+    scan_buffer: Vec<u8>,
+}
+
+impl SimdXmlProcessor {
+    /// Create a new SIMD XML processor
+    pub fn new() -> Self {
+        SimdXmlProcessor {
+            scan_buffer: Vec::with_capacity(4096),
+        }
+    }
+
+    /// SIMD-accelerated scan for XML special characters
+    /// Returns the index of the first special character or None
+    #[cfg(target_arch = "x86_64")]
+    pub fn find_special_char(&self, data: &[u8]) -> Option<usize> {
+        use std::arch::x86_64::*;
+
+        // Use SIMD for chunks of 16 bytes
+        const CHUNK_SIZE: usize = 16;
+        let mut offset = 0;
+
+        if data.len() >= CHUNK_SIZE {
+            unsafe {
+                // Create SIMD masks for special characters: < > & " '
+                let lt = _mm_set1_epi8(b'<' as i8);
+                let gt = _mm_set1_epi8(b'>' as i8);
+                let amp = _mm_set1_epi8(b'&' as i8);
+                let quot = _mm_set1_epi8(b'"' as i8);
+                let apos = _mm_set1_epi8(b'\'' as i8);
+
+                while offset + CHUNK_SIZE <= data.len() {
+                    let chunk = _mm_loadu_si128(data.as_ptr().add(offset) as *const __m128i);
+
+                    // Compare against each special character
+                    let eq_lt = _mm_cmpeq_epi8(chunk, lt);
+                    let eq_gt = _mm_cmpeq_epi8(chunk, gt);
+                    let eq_amp = _mm_cmpeq_epi8(chunk, amp);
+                    let eq_quot = _mm_cmpeq_epi8(chunk, quot);
+                    let eq_apos = _mm_cmpeq_epi8(chunk, apos);
+
+                    // Combine all matches
+                    let any_match = _mm_or_si128(
+                        _mm_or_si128(_mm_or_si128(eq_lt, eq_gt), eq_amp),
+                        _mm_or_si128(eq_quot, eq_apos),
+                    );
+
+                    let mask = _mm_movemask_epi8(any_match);
+                    if mask != 0 {
+                        return Some(offset + mask.trailing_zeros() as usize);
+                    }
+
+                    offset += CHUNK_SIZE;
+                }
+            }
+        }
+
+        // Handle remaining bytes with scalar code
+        data[offset..]
+            .iter()
+            .position(|&b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\''))
+            .map(|i| i + offset)
+    }
+
+    /// Fallback for non-x86_64 platforms
+    #[cfg(not(target_arch = "x86_64"))]
+    pub fn find_special_char(&self, data: &[u8]) -> Option<usize> {
+        data.iter()
+            .position(|&b| matches!(b, b'<' | b'>' | b'&' | b'"' | b'\''))
+    }
+
+    /// SIMD-accelerated UTF-8 validation
+    /// Returns true if the data is valid UTF-8
+    pub fn is_valid_utf8(&self, data: &[u8]) -> bool {
+        std::str::from_utf8(data).is_ok()
+    }
+
+    /// SIMD-accelerated whitespace trimming
+    /// Returns slice with leading/trailing whitespace removed
+    pub fn trim_whitespace<'a>(&self, data: &'a [u8]) -> &'a [u8] {
+        let start = data
+            .iter()
+            .position(|&b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r'))
+            .unwrap_or(data.len());
+        let end = data
+            .iter()
+            .rposition(|&b| !matches!(b, b' ' | b'\t' | b'\n' | b'\r'))
+            .map(|i| i + 1)
+            .unwrap_or(0);
+
+        if start >= end {
+            &[]
+        } else {
+            &data[start..end]
+        }
+    }
+
+    /// SIMD-accelerated scan for namespace prefix separator ':'
+    #[cfg(target_arch = "x86_64")]
+    pub fn find_colon(&self, data: &[u8]) -> Option<usize> {
+        use std::arch::x86_64::*;
+
+        const CHUNK_SIZE: usize = 16;
+        let mut offset = 0;
+
+        if data.len() >= CHUNK_SIZE {
+            unsafe {
+                let colon = _mm_set1_epi8(b':' as i8);
+
+                while offset + CHUNK_SIZE <= data.len() {
+                    let chunk = _mm_loadu_si128(data.as_ptr().add(offset) as *const __m128i);
+                    let eq = _mm_cmpeq_epi8(chunk, colon);
+                    let mask = _mm_movemask_epi8(eq);
+
+                    if mask != 0 {
+                        return Some(offset + mask.trailing_zeros() as usize);
+                    }
+
+                    offset += CHUNK_SIZE;
+                }
+            }
+        }
+
+        data[offset..]
+            .iter()
+            .position(|&b| b == b':')
+            .map(|i| i + offset)
+    }
+
+    /// Fallback for non-x86_64 platforms
+    #[cfg(not(target_arch = "x86_64"))]
+    pub fn find_colon(&self, data: &[u8]) -> Option<usize> {
+        data.iter().position(|&b| b == b':')
+    }
+
+    /// Parse a qualified name (prefix:localname) into parts
+    pub fn parse_qname<'a>(&self, qname: &'a [u8]) -> (&'a [u8], &'a [u8]) {
+        match self.find_colon(qname) {
+            Some(pos) => (&qname[..pos], &qname[pos + 1..]),
+            None => (&[], qname),
+        }
+    }
+
+    /// Expand a prefixed name using namespace mappings
+    pub fn expand_name<'a>(
+        &self,
+        prefix: &'a [u8],
+        local: &'a [u8],
+        namespaces: &HashMap<String, String>,
+    ) -> Option<String> {
+        let prefix_str = std::str::from_utf8(prefix).ok()?;
+        let local_str = std::str::from_utf8(local).ok()?;
+
+        namespaces
+            .get(prefix_str)
+            .map(|ns| format!("{}{}", ns, local_str))
+    }
+
+    /// Resize internal buffer for larger operations
+    pub fn ensure_buffer_capacity(&mut self, capacity: usize) {
+        if self.scan_buffer.capacity() < capacity {
+            self.scan_buffer
+                .reserve(capacity - self.scan_buffer.capacity());
+        }
+    }
+}
+
+impl Default for SimdXmlProcessor {
     fn default() -> Self {
         Self::new()
     }

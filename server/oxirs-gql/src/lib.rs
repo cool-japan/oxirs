@@ -319,6 +319,7 @@ pub mod query_debugger;
 pub mod query_prefetcher;
 pub mod rate_limiting;
 pub mod rdf_scalars;
+pub mod request_deduplication;
 pub mod resolvers;
 pub mod schema;
 pub mod schema_cache;
