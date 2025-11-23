@@ -35,7 +35,7 @@ use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info};
 
 /// Reinforcement learning algorithm types
@@ -316,7 +316,8 @@ pub struct RLAgent {
     /// Statistics
     stats: Arc<RwLock<RLStats>>,
     /// Random number generator
-    rng: Arc<RwLock<Random>>,
+    #[allow(clippy::arc_with_non_send_sync)]
+    rng: Arc<Mutex<Random>>,
     /// Current episode reward
     episode_reward: Arc<RwLock<f64>>,
     /// Update counter
@@ -325,6 +326,7 @@ pub struct RLAgent {
 
 impl RLAgent {
     /// Create a new RL agent
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(config: RLConfig) -> Result<Self> {
         let action_counts = vec![0u64; config.n_actions];
         let action_rewards = vec![0.0; config.n_actions];
@@ -343,7 +345,7 @@ impl RLAgent {
                 current_epsilon: epsilon,
                 ..Default::default()
             })),
-            rng: Arc::new(RwLock::new(Random::default())),
+            rng: Arc::new(Mutex::new(Random::default())),
             episode_reward: Arc::new(RwLock::new(0.0)),
             update_counter: Arc::new(RwLock::new(0)),
         })
@@ -355,7 +357,7 @@ impl RLAgent {
             self.config.algorithm,
             RLAlgorithm::DQN | RLAlgorithm::ActorCritic | RLAlgorithm::PPO
         ) {
-            let mut rng = self.rng.write().await;
+            let mut rng = self.rng.lock().await;
 
             let q_net = NeuralNetwork::new(
                 state_dim,
@@ -406,7 +408,7 @@ impl RLAgent {
         let epsilon = stats.current_epsilon;
         drop(stats);
 
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         if rng.random::<f64>() < epsilon {
             // Explore: random action
@@ -439,7 +441,7 @@ impl RLAgent {
         let epsilon = stats.current_epsilon;
         drop(stats);
 
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         if rng.random::<f64>() < epsilon {
             let action_idx = rng.random_range(0..self.config.n_actions);
@@ -506,7 +508,7 @@ impl RLAgent {
     async fn select_action_thompson(&self) -> Result<Action> {
         let action_counts = self.action_counts.read().await;
         let action_rewards = self.action_rewards.read().await;
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         let mut sampled_values = Vec::with_capacity(self.config.n_actions);
 
@@ -540,7 +542,7 @@ impl RLAgent {
         let epsilon = stats.current_epsilon;
         drop(stats);
 
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         if rng.random::<f64>() < epsilon {
             let action_idx = rng.random_range(0..self.config.n_actions);
@@ -692,7 +694,7 @@ impl RLAgent {
 
         // Sample random batch
         let batch_indices: Vec<usize> = {
-            let mut rng = self.rng.write().await;
+            let mut rng = self.rng.lock().await;
             (0..self.config.batch_size)
                 .map(|_| rng.random_range(0..replay_buffer.len()))
                 .collect()

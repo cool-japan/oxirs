@@ -29,7 +29,7 @@ use anyhow::{anyhow, Result};
 use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, info, warn};
 
 /// Neural architecture search strategy
@@ -350,11 +350,13 @@ pub struct NAS {
     /// Statistics
     stats: Arc<RwLock<NASStats>>,
     /// Random number generator
-    rng: Arc<RwLock<Random>>,
+    #[allow(clippy::arc_with_non_send_sync)]
+    rng: Arc<Mutex<Random>>,
 }
 
 impl NAS {
     /// Create a new NAS instance
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(config: NASConfig) -> Result<Self> {
         Ok(Self {
             config,
@@ -362,7 +364,7 @@ impl NAS {
             population: Arc::new(RwLock::new(Vec::new())),
             history: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(NASStats::default())),
-            rng: Arc::new(RwLock::new(Random::default())),
+            rng: Arc::new(Mutex::new(Random::default())),
         })
     }
 
@@ -454,6 +456,7 @@ impl NAS {
                 let perf = self.evaluate_architecture(architecture).await?;
                 performances.push(perf.clone());
                 self.update_best(perf.clone()).await;
+                self.history.write().await.push(perf.clone());
             }
 
             // Check for improvement
@@ -523,7 +526,7 @@ impl NAS {
         input_dim: usize,
         output_dim: usize,
     ) -> Result<Architecture> {
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
         let mut architecture = Architecture::new(input_dim, output_dim);
 
         let num_layers = rng.random_range(
@@ -578,7 +581,7 @@ impl NAS {
         let start_time = std::time::Instant::now();
 
         // Simplified evaluation - in production, actually train and test the network
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         let param_count = architecture.parameter_count();
         let comp_cost = architecture.computational_cost();
@@ -640,7 +643,7 @@ impl NAS {
         let mut selected = Vec::new();
         let tournament_size = 3;
 
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         for _ in 0..self.config.population_size {
             let mut best_idx = rng.random_range(0..performances.len());
@@ -668,7 +671,7 @@ impl NAS {
         output_dim: usize,
     ) -> Result<Vec<Architecture>> {
         let mut offspring = Vec::new();
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         for i in (0..parents.len()).step_by(2) {
             let parent1 = &parents[i];
@@ -893,7 +896,8 @@ mod tests {
         assert_eq!(architecture.input_dim, 10);
         assert_eq!(architecture.output_dim, 2);
         assert!(architecture.layers.len() >= 2);
-        assert!(architecture.layers.len() <= 5);
+        // Max layers + 1 for output layer
+        assert!(architecture.layers.len() <= 6);
     }
 
     #[tokio::test]
@@ -983,8 +987,8 @@ mod tests {
         let mut rng = Random::default();
         let (child1, child2) = nas.crossover(&parent1, &parent2, &mut rng).unwrap();
 
-        assert!(child1.layers.len() > 0);
-        assert!(child2.layers.len() > 0);
+        assert!(!child1.layers.is_empty());
+        assert!(!child2.layers.is_empty());
     }
 
     #[tokio::test]
@@ -996,13 +1000,13 @@ mod tests {
         arch.add_layer(LayerType::Dense { units: 64 });
         arch.add_layer(LayerType::Dense { units: 32 });
 
-        let original_len = arch.layers.len();
+        let _original_len = arch.layers.len();
 
         let mut rng = Random::default();
         nas.mutate(&mut arch, 10, 2, &mut rng).unwrap();
 
         // Mutation may add, remove, or modify layers
-        assert!(arch.layers.len() > 0);
+        assert!(!arch.layers.is_empty());
     }
 
     #[tokio::test]
@@ -1034,7 +1038,7 @@ mod tests {
         nas.search(10, 2).await.unwrap();
 
         let history = nas.get_history().await;
-        assert!(history.len() > 0);
+        assert!(!history.is_empty());
     }
 
     #[tokio::test]

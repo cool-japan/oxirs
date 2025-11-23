@@ -1,13 +1,13 @@
 # OxiRS Fuseki - TODO
 
-*Last Updated: November 10, 2025*
+*Last Updated: November 23, 2025*
 
-## ✅ Current Status: v0.1.0-rc.1 - **Feature Complete!** 🚀🎉
+## ✅ Current Status: v0.1.0-rc.2 - **Feature Complete!** 🚀🎉
 
 **oxirs-fuseki** provides a SPARQL 1.1/1.2 HTTP server with Apache Fuseki compatibility.
 
-### RC.1 Release Status (November 14, 2025) - **Feature Complete + GraphQL!** 🚀🎉
-- **366 tests passing** (unit + integration) with zero warnings ✅
+### RC.2 Release Status (November 23, 2025) - **Feature Complete + CDN + K8s!** 🚀🎉
+- **760 tests passing** (unit + integration) with zero warnings ✅
 - **GraphQL API enabled** with interactive playground at `/graphql/playground` ✨
 - **Full SPARQL 1.1/1.2 support** including `SERVICE` federation and result merging
 - **Comprehensive documentation** (Getting Started guide + Complete API reference)
@@ -34,6 +34,8 @@
 - **Terraform AWS modules** (Complete EKS infrastructure with VPC, storage, monitoring)
 - **✨ NEW: Load balancing** (9 strategies, health tracking, session affinity, automatic failover)
 - **✨ NEW: Edge caching** (Multi-provider CDN, smart caching, cache purging, Cloudflare/Fastly APIs)
+- **✨ NEW: CDN static assets** (Asset fingerprinting, compression, cache policies, Admin UI serving)
+- **✨ NEW: Enhanced K8s operator** (kube-rs integration, CRD generation, leader election, HPA management)
 
 ### 🎉 Beta.1 Achievements
 
@@ -196,11 +198,11 @@
 - [x] Request batching and parallel execution ✅ (batch_execution.rs - automatic batching, dependency analysis)
 - [x] HTTP/2 and HTTP/3 support ✅
 - [x] Edge caching integration ✅
-- [ ] CDN support (framework ready)
+- [x] CDN support for static assets ✅ (cdn_static.rs - November 23, 2025)
 - [x] Load balancing ✅
 
 #### Features (Target: v0.1.0)
-- [x] Complete SPARQL Update support ✅ (12/14 tests passing - CREATE, DROP, COPY, MOVE, ADD, INSERT, DELETE operations)
+- [x] Complete SPARQL Update support ✅ (21 tests passing - CREATE, DROP, COPY, MOVE, ADD, INSERT DATA, DELETE DATA, DELETE WHERE, CLEAR, LOAD operations)
 - [x] WebSocket subscriptions ✅
 - [x] Admin UI enhancements ✅ (admin_ui.rs - comprehensive dashboard with real-time updates)
 - [x] Dataset management API ✅ (dataset_management.rs - bulk operations, snapshots, versioning)
@@ -409,6 +411,29 @@
     - Cache tag generation for targeted purging
     - Configurable TTL and stale policies
 
+### v0.1.0-rc.2 (November 23, 2025) ✨
+22. **cdn_static.rs** - CDN support for static assets (900 lines)
+    - Static file serving with asset fingerprinting
+    - Content hash-based versioning for cache busting
+    - On-the-fly gzip compression for text assets
+    - Intelligent cache policy assignment by file type
+    - ETag and Last-Modified conditional request handling
+    - Integration with edge_caching module for CDN purging
+    - Security filtering (denied/allowed extensions)
+    - Asset statistics and monitoring
+    - Comprehensive test suite (18 tests)
+
+23. **k8s_operator.rs** - Enhanced Kubernetes Operator (1300 lines, major rewrite)
+    - Optional kube-rs integration with `k8s` feature flag
+    - CustomResourceDefinition (CRD) with JsonSchema derive
+    - Full Deployment, Service, HPA lifecycle management
+    - Leader election for HA operator deployments
+    - CRD YAML generator for cluster installation
+    - Extended FusekiSpec with datasets, TLS, env vars
+    - Reconciliation loop with action determination
+    - Simulation mode when k8s feature disabled
+    - Operator statistics endpoint
+
 ## 🚀 What's Next for v0.1.0 Final
 
 ### High Priority
@@ -428,7 +453,7 @@
 
 ### Low Priority
 - [x] Edge caching integration (Cloudflare, Fastly, CloudFront, Akamai) ✅
-- [ ] CDN support for static assets (framework ready)
+- [x] CDN support for static assets ✅ (cdn_static.rs - asset serving, fingerprinting, compression)
 - [x] Advanced load balancing strategies (9 strategies implemented) ✅
 - [x] Performance profiling tools ✅
 - [x] Complete SPARQL Update implementation ✅ (12/14 operations passing - CREATE, DROP, COPY, MOVE, ADD, INSERT DATA, DELETE DATA)
@@ -438,7 +463,7 @@
 ### Deployment Readiness
 - **Docker**: Production-ready with full observability stack ✅
 - **Kubernetes**: Production-ready with auto-scaling and monitoring ✅
-- **Operator**: Basic functionality complete, needs integration with actual Kubernetes API (kube-rs)
+- **Operator**: Complete with optional kube-rs integration ✅ (enable `k8s` feature for actual K8s API calls)
 - **MFA Storage**: Persistent storage complete, integrated with auth module ✅
 - **TLS Rotation**: Monitoring complete, renewal providers need implementation (ACME, self-signed)
 - **Recovery**: Self-healing mechanisms complete, needs integration with store health checks
@@ -450,7 +475,7 @@
 - **Terraform AWS**: Complete EKS infrastructure with VPC, storage, and monitoring ✅
 
 ### Integration Points
-- Kubernetes operator needs `kube-rs` crate for actual API interactions
+- ✅ Kubernetes operator enhanced with optional `kube-rs` crate integration (enable `k8s` feature)
 - TLS rotation needs ACME provider implementation (e.g., `acme-lib`)
 - Recovery needs deeper integration with store health metrics
 - Backup needs actual store export/import implementation
@@ -500,7 +525,7 @@
 
 ## 🏆 Success Metrics for v0.1.0 beta.1
 
-- [x] 400+ tests passing with zero warnings ✅ (689 tests passing)
+- [x] 400+ tests passing with zero warnings ✅ (760 tests passing)
 - [x] <50MB binary size for production image ✅ (12MB stripped)
 - [ ] <100ms p95 query latency for simple queries (needs performance testing)
 - [ ] 99.9% uptime in production deployment (needs production deployment)
@@ -511,10 +536,10 @@
 
 ---
 
-**Status**: Release Candidate 1 (RC.1) - Feature Complete! ✅
+**Status**: Release Candidate 2 (RC.2) - Feature Complete! ✅
 **Next Milestone**: v0.1.0 Final Release (Q4 2025)
-**Progress**: 99.8% complete towards v0.1.0 🚀🎉
-**Latest Update**: November 14, 2025 - Security and production modules integrated into server runtime
+**Progress**: 99.9% complete towards v0.1.0 🚀🎉
+**Latest Update**: November 23, 2025 - CDN static assets and enhanced K8s operator with kube-rs
 
 ### Summary of Latest Additions
 
@@ -645,3 +670,73 @@
 - ✅ Release build successful
 
 **Remaining**: Performance testing, final documentation polish, production deployment validation
+
+**Session 7 Summary (November 22, 2025 - Morning)**:
+- ✅ Completed SPARQL Update implementation with comprehensive tests
+- ✅ Added 10+ new tests for CLEAR, LOAD, and DELETE WHERE operations
+- ✅ Fixed CLEAR ALL implementation to work without trait method dependency
+- ✅ All 742 tests passing with zero warnings (up from 366 tests)
+- ✅ Full SPARQL 1.1 Update support verified:
+  - CREATE/DROP GRAPH operations (with SILENT variants)
+  - COPY/MOVE/ADD operations
+  - INSERT DATA/DELETE DATA operations
+  - DELETE WHERE with concrete patterns
+  - CLEAR (DEFAULT, GRAPH, ALL) operations
+  - LOAD operations (with HTTP client stubs for remote loading)
+- ✅ Updated TODO.md to reflect completion status
+
+**Session 7 Summary (November 22, 2025 - Afternoon)**:
+- ✅ Created comprehensive RC.1 status report (see /tmp/OxiRS-Fuseki-RC1-Status-Report.md)
+- ✅ Analyzed feature completeness vs Apache Jena Fuseki
+- ✅ Documented all major features and capabilities:
+  - Full SPARQL 1.1/1.2 compliance (21 Update operations verified)
+  - GraphQL API, REST API v2, WebSocket subscriptions
+  - Advanced auth (OAuth2, JWT, RBAC, ReBAC with 83 tests)
+  - Production infrastructure (Docker, Kubernetes, Terraform for AWS/GCP/Azure, Ansible)
+  - Performance optimizations (work-stealing, memory pooling, batching, streaming)
+  - Observability (Prometheus, tracing, profiling)
+  - Security hardening (DDoS protection, security audit, MFA, TLS rotation)
+- ✅ Identified remaining tasks for v0.1.0 final:
+  - Performance benchmarking and baseline documentation
+  - Production deployment validation
+  - Final documentation polish
+  - CDN static asset integration (optional)
+
+**Session 7 Summary (November 22, 2025 - Evening - Quality Assurance)**:
+- ✅ Ran full test suite with all features: **761 tests passing** (7 skipped)
+- ✅ Verified zero clippy warnings with `--all-features --all-targets -D warnings`
+- ✅ Confirmed code is properly formatted with `cargo fmt --check`
+- ✅ **SciRS2 Policy Compliance Verified**:
+  - ✅ No direct `rand` usage (using `scirs2_core::random`)
+  - ✅ No direct `ndarray` usage (using `scirs2_core::ndarray_ext`)
+  - ✅ No banned `scirs2_autograd` usage (array! macro now in scirs2_core)
+  - ✅ 15 source files properly using `scirs2_core`
+  - ✅ Workspace dependency: `scirs2-core = { workspace = true }`
+- ✅ Updated documentation with final test count (761 tests)
+
+**Session 8 Summary (November 23, 2025)**:
+- ✅ CDN support for static assets (cdn_static.rs - ~900 lines)
+  - Static file serving with asset fingerprinting (content hash-based versioning)
+  - On-the-fly gzip compression for text assets
+  - Intelligent cache policy assignment by file type
+  - ETag and Last-Modified header support for conditional requests
+  - Integration with edge_caching module for CDN providers
+  - Multiple content types supported (HTML, CSS, JS, images, fonts, RDF formats)
+  - Denied/allowed extension filtering for security
+  - Asset statistics tracking (hits, bytes served, compression ratio)
+  - Comprehensive test suite (18 tests)
+- ✅ Enhanced Kubernetes operator (k8s_operator.rs - ~1300 lines, major rewrite)
+  - Optional kube-rs integration (enable `k8s` feature)
+  - CRD generation with CustomResource derive macro
+  - Full Deployment, Service, and HPA management
+  - Leader election support for HA deployments
+  - CRD YAML generator for cluster installation
+  - Dataset and TLS configuration in spec
+  - Environment variable injection support
+  - Operator statistics endpoint
+  - Reconciliation with proper action determination
+  - Simulation mode when k8s feature disabled
+  - Updated test suite (5 tests)
+- ✅ All 760 tests passing (cargo nextest)
+- ✅ Zero clippy warnings
+- ✅ New dependencies added: httpdate, kube (optional), k8s-openapi (optional), schemars (optional)

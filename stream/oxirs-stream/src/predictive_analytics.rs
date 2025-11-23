@@ -33,7 +33,7 @@ use scirs2_core::random::Random;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
 /// Forecasting algorithm types
@@ -227,7 +227,8 @@ pub struct PredictiveAnalytics {
     /// Statistics
     stats: Arc<RwLock<PredictiveStats>>,
     /// Random number generator for confidence intervals
-    rng: Arc<RwLock<Random>>,
+    #[allow(clippy::arc_with_non_send_sync)]
+    rng: Arc<Mutex<Random>>,
 }
 
 /// Model parameters for different algorithms
@@ -265,13 +266,14 @@ impl Default for ModelParameters {
 
 impl PredictiveAnalytics {
     /// Create a new predictive analytics engine
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(config: ForecastingConfig) -> Result<Self> {
         Ok(Self {
             config,
             data: Arc::new(RwLock::new(VecDeque::with_capacity(1000))),
             model_params: Arc::new(RwLock::new(ModelParameters::default())),
             stats: Arc::new(RwLock::new(PredictiveStats::default())),
-            rng: Arc::new(RwLock::new(Random::default())),
+            rng: Arc::new(Mutex::new(Random::default())),
         })
     }
 

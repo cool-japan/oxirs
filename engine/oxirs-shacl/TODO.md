@@ -49,6 +49,15 @@
    - Interactive charts (pie, bar, heatmap)
    - Configurable themes and styles
    - Sortable violation tables
+10. **`lsp/mod.rs`** - Language Server Protocol (LSP) implementation ⬆️ **NEW (Nov 23, 2025)**
+   - Full IDE integration for SHACL shape authoring
+   - Real-time validation diagnostics
+   - Code completion with 50+ SHACL vocabulary items
+   - Hover documentation with examples
+   - Go-to-definition and find references
+   - Semantic syntax highlighting
+   - stdio transport for VS Code, IntelliJ, etc
+   - 6 specialized modules (backend, completion, diagnostics, hover, semantic_tokens, server)
 
 #### Beta.2 Achievements Summary
 - **Shape Quality Metrics**: Complete analysis of shape complexity, maintainability, performance predictions
@@ -322,6 +331,18 @@
 
 #### Developer Experience (Target: v0.1.0) - 🎉 **Major Progress**
 - [ ] Visual shape editor
+- [x] IDE Integration (LSP Server) ✅ **(Beta.2 - Nov 23, 2025)** - lsp/mod.rs  ⬆️
+  - Language Server Protocol implementation for IDE integration
+  - Real-time validation diagnostics
+  - Code completion for SHACL properties (50+ completions)
+  - Hover documentation with examples
+  - Go-to-definition and find references support
+  - Semantic tokens for syntax highlighting
+  - Supports Turtle, JSON-LD, RDF/XML formats
+  - VS Code, IntelliJ IDEA, and other LSP-compatible IDEs
+  - Full SHACL vocabulary completion (sh:, xsd:, rdf:, rdfs:)
+  - Binary: shacl_lsp with stdio transport
+  - Production-ready with 6 specialized modules (backend, completion, diagnostics, hover, semantic_tokens, server)
 - [x] Interactive constraint tester ✅ **(Beta.2)** - bin/constraint_tester.rs
   - REPL-style interactive interface
   - Shape creation and constraint management
@@ -341,7 +362,6 @@
   - Complete ShEx parser
   - Semantic mapping configuration
   - Migration reports
-- [ ] IDE integration (LSP server)
 - [x] Testing framework for shapes ✅ **(Beta.2)** - testing/mod.rs
   - Test case definitions
   - Test suite organization

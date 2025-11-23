@@ -125,6 +125,9 @@ pub mod query_cache;
 // TODO(v0.1.0-rc.1): Complete StatisticsSnapshot API integration for full functionality
 pub mod query_optimizer;
 
+// Adaptive query execution with runtime plan adjustment
+pub mod adaptive_execution;
+
 // Statistics collection for cost-based optimization
 pub mod statistics;
 

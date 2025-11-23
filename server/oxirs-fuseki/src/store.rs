@@ -427,16 +427,22 @@ impl Store {
 
         // Check if clearing all graphs
         if sparql_upper.contains("CLEAR ALL") {
-            let quad_count = store.len().map_err(|e| {
-                FusekiError::update_execution(format!("Failed to get store size: {e}"))
+            // Get all quads from all graphs
+            let all_quads = store.find_quads(None, None, None, None).map_err(|e| {
+                FusekiError::update_execution(format!("Failed to query all quads: {e}"))
             })?;
 
-            store.clear_all().map_err(|e| {
-                FusekiError::update_execution(format!("Failed to clear all graphs: {e}"))
-            })?;
+            let mut deleted_count = 0;
+            for quad in all_quads {
+                if store.remove_quad(&quad).map_err(|e| {
+                    FusekiError::update_execution(format!("Failed to remove quad: {e}"))
+                })? {
+                    deleted_count += 1;
+                }
+            }
 
-            info!("Cleared all graphs: {} quads removed", quad_count);
-            return Ok(("CLEAR ALL", 0, quad_count, vec!["*all*".to_string()]));
+            info!("Cleared all graphs: {} quads removed", deleted_count);
+            return Ok(("CLEAR ALL", 0, deleted_count, vec!["*all*".to_string()]));
         }
 
         // Check if clearing default graph

@@ -795,6 +795,26 @@ pub enum Commands {
 
     /// ReBAC relationship management
     Rebac(commands::rebac::RebacArgs),
+
+    /// Generate CLI documentation
+    Docs {
+        /// Output format (markdown, html, man, text)
+        #[arg(short, long, default_value = "markdown")]
+        format: String,
+        /// Output file path (stdout if not specified)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Generate documentation for specific command
+        #[arg(long)]
+        command: Option<String>,
+    },
+
+    /// Interactive tutorial mode for learning OxiRS
+    Tutorial {
+        /// Start at specific lesson
+        #[arg(short, long)]
+        lesson: Option<String>,
+    },
 }
 
 /// Run the CLI application
@@ -1507,5 +1527,67 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         },
 
         Commands::Rebac(args) => commands::rebac::execute(args).await.map_err(|e| e.into()),
+
+        Commands::Docs {
+            format,
+            output,
+            command,
+        } => {
+            use cli::doc_generator::{DocFormat, DocGenerator};
+            use std::io::Write;
+
+            let doc_format: DocFormat = format
+                .parse()
+                .map_err(|e: String| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
+            let generator = DocGenerator::new();
+
+            if let Some(cmd_name) = command {
+                ctx.info(&format!(
+                    "Generating documentation for command: {}",
+                    cmd_name
+                ));
+                // Generate single command docs (future enhancement)
+                ctx.warn(
+                    "Single command documentation not yet implemented. Generating all commands.",
+                );
+            }
+
+            let content = generator
+                .generate(doc_format)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+            if let Some(output_path) = output {
+                let mut file = std::fs::File::create(&output_path)?;
+                file.write_all(content.as_bytes())?;
+                ctx.success(&format!(
+                    "Documentation written to: {}",
+                    output_path.display()
+                ));
+            } else {
+                println!("{}", content);
+            }
+
+            Ok(())
+        }
+
+        Commands::Tutorial { lesson } => {
+            use cli::tutorial::TutorialManager;
+
+            let mut manager = TutorialManager::new();
+
+            if let Some(lesson_name) = lesson {
+                ctx.info(&format!("Starting tutorial with lesson: {}", lesson_name));
+                ctx.warn(
+                    "Specific lesson selection not yet implemented. Starting interactive tutorial.",
+                );
+            }
+
+            manager.start().map_err(|e| {
+                std::io::Error::new(std::io::ErrorKind::Other, format!("Tutorial error: {}", e))
+            })?;
+
+            Ok(())
+        }
     }
 }

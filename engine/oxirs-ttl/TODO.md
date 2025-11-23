@@ -573,12 +573,39 @@
 
 ## Documentation
 
-- [ ] API documentation for all public items
-- [ ] Usage examples in README
-- [ ] Streaming tutorial
-- [ ] Async usage guide
-- [ ] Performance tuning guide
-- [ ] Migration guide from oxigraph/rio
+- [x] API documentation for all public items ✅ **COMPLETE (November 2025)**
+  - Comprehensive lib.rs documentation with 24 passing doc tests
+  - Module-level documentation for all public APIs
+  - Examples in profiling.rs, streaming.rs, and other key modules
+- [x] Usage examples in README ✅ **COMPLETE (November 2025)**
+  - Complete rewrite with comprehensive examples
+  - Quick start guide with all formats
+  - Advanced usage examples (streaming, async, parallel, serialization)
+  - Configuration examples
+  - Error handling patterns
+- [x] Streaming tutorial ✅ **COMPLETE (November 2025)**
+  - docs/STREAMING_TUTORIAL.md (400+ lines)
+  - Comprehensive guide with real-world examples
+  - Database import, format conversion, statistical analysis examples
+  - Performance optimization techniques
+- [x] Async usage guide ✅ **COMPLETE (November 2025)**
+  - docs/ASYNC_GUIDE.md (500+ lines)
+  - Full Tokio integration guide
+  - Network integration (HTTP, WebSocket, S3, Kafka)
+  - Concurrent parsing examples
+  - Production patterns (timeouts, retries, backpressure)
+- [x] Performance tuning guide ✅ **COMPLETE (November 2025)**
+  - docs/PERFORMANCE_GUIDE.md (500+ lines)
+  - Complete optimization reference
+  - Profiling, benchmarking, and measurement
+  - Parse/serialization performance optimization
+  - Memory and I/O optimization
+  - Platform-specific tuning
+- [x] Documentation index ✅ **COMPLETE (November 2025)**
+  - docs/README.md - Navigation hub for all documentation
+  - Quick links by use case and feature
+  - Code example reference
+- [ ] Migration guide from oxigraph/rio (Future work)
 
 ## CI/CD
 

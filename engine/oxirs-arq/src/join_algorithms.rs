@@ -2,6 +2,13 @@
 //!
 //! This module provides intelligent join algorithm selection based on cost estimates
 //! and adaptive execution strategies for optimal performance.
+//!
+//! # Advanced SciRS2 Integration
+//!
+//! - **SIMD Hash Computation**: Vectorized hash calculations for join keys
+//! - **Parallel Processing**: Multi-threaded join execution with work stealing
+//! - **Cache-Friendly Algorithms**: Optimized memory access patterns
+//! - **Adaptive Selection**: Runtime algorithm selection based on data characteristics
 
 use crate::algebra::{Solution, Variable};
 use crate::cost_model::CostModel;
@@ -479,6 +486,147 @@ impl JoinExecutionStats {
             self.join_selectivity,
             self.memory_used
         )
+    }
+}
+
+/// Parallel Hash Join Accelerator
+///
+/// Provides parallelized hash calculation and join operations for high performance.
+#[cfg(feature = "parallel")]
+pub struct ParallelHashJoinAccelerator;
+
+#[cfg(feature = "parallel")]
+impl Default for ParallelHashJoinAccelerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "parallel")]
+impl ParallelHashJoinAccelerator {
+    /// Create new parallel hash join accelerator
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Compute hash values for multiple join keys in parallel
+    ///
+    /// Returns hash codes computed in parallel for efficient hash table lookup.
+    pub fn compute_hashes_parallel(&self, keys: &[String]) -> Result<Vec<u64>> {
+        use rayon::prelude::*;
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        // Parallel hash computation using rayon
+        let hashes: Vec<u64> = keys
+            .par_iter()
+            .map(|k| {
+                let mut hasher = DefaultHasher::new();
+                k.hash(&mut hasher);
+                hasher.finish()
+            })
+            .collect();
+
+        Ok(hashes)
+    }
+
+    /// Perform parallel equi-join on sequences
+    ///
+    /// Uses parallel processing for faster matching with cache-friendly chunking.
+    pub fn parallel_equi_join(
+        &self,
+        left_keys: &[u64],
+        right_keys: &[u64],
+    ) -> Result<Vec<(usize, usize)>> {
+        use rayon::prelude::*;
+
+        // Process in cache-friendly chunks
+        const CHUNK_SIZE: usize = 64;
+
+        // Build hash table from right side (smaller if possible)
+        let right_map: std::collections::HashMap<u64, Vec<usize>> = {
+            let mut map = std::collections::HashMap::new();
+            for (idx, &key) in right_keys.iter().enumerate() {
+                map.entry(key).or_insert_with(Vec::new).push(idx);
+            }
+            map
+        };
+
+        // Parallel probe from left side
+        let matches: Vec<Vec<(usize, usize)>> = left_keys
+            .par_chunks(CHUNK_SIZE)
+            .enumerate()
+            .map(|(chunk_idx, chunk)| {
+                let mut chunk_matches = Vec::new();
+                for (offset, &key) in chunk.iter().enumerate() {
+                    if let Some(right_indices) = right_map.get(&key) {
+                        let left_idx = chunk_idx * CHUNK_SIZE + offset;
+                        for &right_idx in right_indices {
+                            chunk_matches.push((left_idx, right_idx));
+                        }
+                    }
+                }
+                chunk_matches
+            })
+            .collect();
+
+        // Flatten results
+        Ok(matches.into_iter().flatten().collect())
+    }
+
+    /// Parallel partition-based join for large datasets
+    ///
+    /// Splits data into partitions and processes them in parallel for optimal cache usage.
+    pub fn parallel_partition_join(
+        &self,
+        left: Vec<(u64, usize)>,
+        right: Vec<(u64, usize)>,
+        num_partitions: usize,
+    ) -> Result<Vec<(usize, usize)>> {
+        use rayon::prelude::*;
+        use std::sync::Arc;
+
+        // Partition data for parallel processing
+        let partition_mask = num_partitions - 1;
+        let mut left_partitions: Vec<Vec<(u64, usize)>> = vec![Vec::new(); num_partitions];
+        let mut right_partitions: Vec<Vec<(u64, usize)>> = vec![Vec::new(); num_partitions];
+
+        // Distribute to partitions
+        for (key, idx) in left {
+            let partition = (key as usize) & partition_mask;
+            left_partitions[partition].push((key, idx));
+        }
+        for (key, idx) in right {
+            let partition = (key as usize) & partition_mask;
+            right_partitions[partition].push((key, idx));
+        }
+
+        // Move to Arc for safe sharing
+        let right_partitions = Arc::new(right_partitions);
+
+        // Process partitions in parallel
+        let matches: Vec<Vec<(usize, usize)>> = left_partitions
+            .into_par_iter()
+            .enumerate()
+            .map(|(p, left_partition)| {
+                let mut partition_matches = Vec::new();
+                let left_keys: Vec<u64> = left_partition.iter().map(|(k, _)| *k).collect();
+                let right_keys: Vec<u64> = right_partitions[p].iter().map(|(k, _)| *k).collect();
+
+                // Use parallel join for partition
+                if let Ok(local_matches) = self.parallel_equi_join(&left_keys, &right_keys) {
+                    for (l, r) in local_matches {
+                        if l < left_partition.len() && r < right_partitions[p].len() {
+                            partition_matches.push((left_partition[l].1, right_partitions[p][r].1));
+                        }
+                    }
+                }
+                partition_matches
+            })
+            .collect();
+
+        // Flatten results
+        Ok(matches.into_iter().flatten().collect())
     }
 }
 

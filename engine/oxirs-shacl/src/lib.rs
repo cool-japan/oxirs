@@ -75,6 +75,8 @@ pub mod custom_components;
 pub mod federated_validation;
 pub mod incremental;
 pub mod iri_resolver;
+#[cfg(feature = "lsp")]
+pub mod lsp;
 pub mod optimization;
 pub mod paths;
 pub mod report;

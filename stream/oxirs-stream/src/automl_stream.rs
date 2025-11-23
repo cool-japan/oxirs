@@ -33,7 +33,7 @@ use scirs2_core::random::{Random, Rng};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 use tracing::info;
 
 /// Machine learning task type
@@ -315,11 +315,13 @@ pub struct AutoML {
     /// Statistics
     stats: Arc<RwLock<AutoMLStats>>,
     /// Random number generator
-    rng: Arc<RwLock<Random>>,
+    #[allow(clippy::arc_with_non_send_sync)]
+    rng: Arc<Mutex<Random>>,
 }
 
 impl AutoML {
     /// Create a new AutoML instance
+    #[allow(clippy::arc_with_non_send_sync)]
     pub fn new(config: AutoMLConfig) -> Result<Self> {
         Ok(Self {
             config,
@@ -327,7 +329,7 @@ impl AutoML {
             ensemble: Arc::new(RwLock::new(Vec::new())),
             trial_history: Arc::new(RwLock::new(Vec::new())),
             stats: Arc::new(RwLock::new(AutoMLStats::default())),
-            rng: Arc::new(RwLock::new(Random::default())),
+            rng: Arc::new(Mutex::new(Random::default())),
         })
     }
 
@@ -355,7 +357,7 @@ impl AutoML {
 
             // Select algorithm
             let algorithm = {
-                let mut rng = self.rng.write().await;
+                let mut rng = self.rng.lock().await;
                 let idx = rng.random_range(0..candidate_algorithms.len());
                 candidate_algorithms[idx]
             };
@@ -436,7 +438,7 @@ impl AutoML {
 
     /// Generate hyperparameters for an algorithm
     async fn generate_hyperparameters(&self, algorithm: Algorithm) -> Result<HyperParameters> {
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         // Use meta-learning to initialize if enabled
         let _base = if self.config.enable_meta_learning {
@@ -553,7 +555,7 @@ impl AutoML {
 
         // For simplicity, return a random score
         // In production, actually train and evaluate
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
         Ok(0.7 + rng.random::<f64>() * 0.3) // Score between 0.7 and 1.0
     }
 
@@ -573,7 +575,7 @@ impl AutoML {
         Option<f64>,
     )> {
         // Simplified metrics computation
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
 
         match self.config.task_type {
             TaskType::Classification => {
@@ -603,7 +605,7 @@ impl AutoML {
         // Simplified model training - just create placeholder parameters
         let n_features = features.shape()[1];
 
-        let mut rng = self.rng.write().await;
+        let mut rng = self.rng.lock().await;
         let weights: Vec<f64> = (0..n_features).map(|_| rng.random::<f64>() - 0.5).collect();
         let bias = rng.random::<f64>() - 0.5;
 
@@ -921,7 +923,7 @@ mod tests {
         assert!(prediction.is_ok());
 
         let pred = prediction.unwrap();
-        assert!(pred >= 0.0 && pred <= 1.0); // Should be probability for classification
+        assert!((0.0..=1.0).contains(&pred)); // Should be probability for classification
     }
 
     #[tokio::test]
@@ -943,7 +945,7 @@ mod tests {
         let best_info = automl.get_best_model_info().await;
         assert!(best_info.is_some());
 
-        let (algorithm, hyperparams, performance) = best_info.unwrap();
+        let (_algorithm, _hyperparams, performance) = best_info.unwrap();
         assert!(performance.cv_score >= 0.0);
     }
 
@@ -988,7 +990,7 @@ mod tests {
         automl.fit(&features, &labels).await.unwrap();
 
         let history = automl.get_trial_history().await;
-        assert!(history.len() > 0);
+        assert!(!history.is_empty());
         assert!(history.len() <= 3);
     }
 

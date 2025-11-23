@@ -1,4 +1,4 @@
-//! SPARQL query processing module
+//! SPARQL query processing module with full SciRS2 integration
 
 pub mod algebra;
 pub mod binding_optimizer;

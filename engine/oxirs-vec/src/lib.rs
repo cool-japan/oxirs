@@ -88,6 +88,7 @@ pub mod federated_search;
 pub mod filtered_search;
 pub mod gnn_embeddings;
 pub mod gpu;
+pub mod gpu_benchmarks;
 pub mod graph_aware_search;
 pub mod graph_indices;
 pub mod hierarchical_similarity;
@@ -107,6 +108,7 @@ pub mod persistence;
 pub mod pq;
 pub mod pytorch;
 pub mod quantum_search;
+pub mod query_planning;
 pub mod random_utils;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
@@ -118,6 +120,7 @@ pub mod similarity;
 pub mod sparql_integration;
 pub mod sparql_service_endpoint;
 pub mod sparse;
+pub mod sq;
 pub mod storage_optimizations;
 pub mod store_integration;
 pub mod structured_vectors;
@@ -228,6 +231,9 @@ pub use gpu::{
     create_performance_accelerator, is_gpu_available, GpuAccelerator, GpuBuffer, GpuConfig,
     GpuDevice, GpuExecutionConfig,
 };
+pub use gpu_benchmarks::{
+    BenchmarkResult as GpuBenchmarkResult, GpuBenchmarkConfig, GpuBenchmarkSuite,
+};
 pub use graph_indices::{
     DelaunayGraph, GraphIndex, GraphIndexConfig, GraphType, NSWGraph, ONNGGraph, PANNGGraph,
     RNGGraph,
@@ -265,6 +271,10 @@ pub use pytorch::{
 pub use quantum_search::{
     QuantumSearchConfig, QuantumSearchResult, QuantumSearchStatistics, QuantumState,
     QuantumVectorSearch,
+};
+pub use query_planning::{
+    CostModel, IndexStatistics, QueryCharacteristics, QueryPlan, QueryPlanner, QueryStrategy,
+    VectorQueryType,
 };
 pub use rdf_content_enhancement::{
     ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,
@@ -309,6 +319,7 @@ pub use sparql_service_endpoint::{
     QueryScope, ReturnType, ServiceCapability, ServiceEndpointManager, ServiceType,
 };
 pub use sparse::{COOMatrix, CSRMatrix, SparseVector};
+pub use sq::{QuantizationMode, QuantizationParams, SqConfig, SqIndex, SqStats};
 pub use storage_optimizations::{
     CompressionType, MmapVectorFile, StorageConfig, StorageUtils, VectorBlock, VectorFileHeader,
     VectorReader, VectorWriter,

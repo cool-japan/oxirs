@@ -286,6 +286,7 @@ impl MockStore {
 
 // Individual modules
 pub mod aggregation;
+pub mod ai;
 pub mod api_explorer;
 pub mod ast;
 pub mod auto_caching_strategies;

@@ -1332,8 +1332,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_compact() {
-        let mut config = VersioningConfig::default();
-        config.compression_threshold = Duration::from_secs(0); // Immediate compression
+        let config = VersioningConfig {
+            compression_threshold: Duration::from_secs(0), // Immediate compression
+            ..Default::default()
+        };
 
         let versioning = StreamVersioning::<TestEvent>::new(config);
 

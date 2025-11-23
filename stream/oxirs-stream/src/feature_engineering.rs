@@ -879,7 +879,7 @@ mod tests {
 
     #[test]
     fn test_feature_value_conversions() {
-        assert_eq!(FeatureValue::Numeric(3.14).as_numeric(), 3.14);
+        assert_eq!(FeatureValue::Numeric(2.5).as_numeric(), 2.5);
         assert_eq!(FeatureValue::Boolean(true).as_numeric(), 1.0);
         assert_eq!(FeatureValue::Boolean(false).as_numeric(), 0.0);
         assert!(FeatureValue::Categorical("test".into())

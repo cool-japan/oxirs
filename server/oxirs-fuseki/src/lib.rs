@@ -95,6 +95,7 @@ pub mod vector_search;
 pub mod websocket;
 
 // v0.1.0 Final - Additional Production Features
+pub mod cdn_static; // CDN support for static assets
 pub mod edge_caching;
 pub mod load_balancing; // Advanced load balancing strategies // Edge caching integration framework
 
