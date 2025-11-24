@@ -341,7 +341,7 @@ fn process_point_tagged<P: GeomProcessor>(
     coord3d: &crate::geometry::coord3d::Coord3D,
     processor: &mut P,
     idx: usize,
-    tagged: bool,
+    _tagged: bool,
 ) -> geozero::error::Result<()> {
     processor.point_begin(idx)?;
 

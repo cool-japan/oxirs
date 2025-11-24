@@ -1,28 +1,219 @@
 # OxiRS Rule - TODO
 
-*Last Updated: November 23, 2025*
+*Last Updated: November 24, 2025*
 
-## ✅ Current Status: v0.1.0-beta.2 (Production Ready - November 23, 2025)
+## ✅ Current Status: v0.1.0-beta.4 (Production Ready - November 24, 2025)
 
 **oxirs-rule** provides rule-based reasoning engine for RDF data with production-ready performance.
 
-### Beta.2 Development Status (November 23, 2025) ✨ ALL TESTS PASSING!
-- **590 tests passing** (unit + integration + 40 builtin tests) - Code organization enhanced ✨
+### Beta.4 Development Status (November 24, 2025) ✨ ALL TESTS PASSING!
+- **689 tests passing** (unit + integration + 40 builtin tests) - 34 new tests added ✨
 - **ZERO WARNINGS** - Full compliance with no warnings policy 🎉
-- **Code Quality Enhancement** - SWRL builtins refactored into 13 semantic modules (November 23) ✨
-- **Production-ready** - All advanced reasoning and performance features complete
-- **10 major new modules** - Active Learning, Explainable Generation, Uncertainty Propagation, GPU Matching, Adaptive Strategies, Pellet Classification, Rule Compression, **Quantum Optimization** ✨, **Benchmark Suite** ✨, **Migration Tools** ✨
-- **Active Learning for Rule Validation** ✨ NEW - Uncertainty sampling, query-by-committee, diversity sampling, validation workflow (11 tests)
-- **Explainable Rule Generation** ✨ NEW - Natural language explanations, feature importance, confidence analysis, provenance tracking (10 tests)
-- **Uncertainty Propagation** ✨ NEW - Multi-model uncertainty tracking (Probabilistic, Fuzzy, DS, Possibilistic) with combination operators (21 tests)
-- **GPU-Accelerated Rule Matching** ✨ NEW - Hash-based pattern matching with automatic CPU fallback (20 tests)
-- **Adaptive Reasoning Strategies** ✨ NEW - Cost-based strategy selection with epsilon-greedy exploration and performance learning (20 tests)
-- **Pellet-Compatible Classification** ✨ NEW - OWL DL concept classification with subsumption hierarchy and realization (20 tests)
-- **Rule Set Compression** ✨ NEW - Multiple compression modes (Fast, Balanced, Best, Adaptive) with LZ4-style and DEFLATE algorithms (20 tests)
-- **Quantum-Inspired Optimization** ✨ NEW - 5 quantum algorithms for rule ordering (Quantum Annealing, Quantum Genetic, QPSO, Quantum Walk, Grover-Inspired) (11 tests)
-- **Benchmark Suite** ✨ NEW - Comprehensive performance testing with 10 benchmark categories and statistical analysis (10 tests, 2 ignored)
-- **Migration Tools** ✨ NEW - Rule conversion from Apache Jena, Drools DRL, and CLIPS formats with detailed warnings (15 tests)
-- **All previous features** - 499 tests from previous Beta.1 development continue to pass
+- **W3C Standards Support** - RIF (Rule Interchange Format) for enterprise rule interchange ✨
+- **Constraint Logic Programming** - CHR (Constraint Handling Rules) for constraint solving ✨
+- **Production-ready** - All advanced reasoning, interchange, and constraint features complete
+- **16 major modules** - Previous 14 + **RIF Support** ✨, **CHR Engine** ✨
+- **RIF Support** ✨ NEW (November 24) - W3C Rule Interchange Format parser/serializer, RIF-Core/BLD dialects, Jena compatibility (16 tests)
+- **Constraint Handling Rules (CHR)** ✨ NEW (November 24) - Declarative constraint solving, simplification/propagation/simpagation rules, guard conditions (18 tests)
+- **Rule Indexing** ✨ - High-performance predicate/argument indexing with O(1) lookup, statistics tracking (14 tests)
+- **Negation-as-Failure (NAF)** ✨ - Stratified reasoning, dependency graph analysis, well-founded semantics support (17 tests)
+- **Answer Set Programming (ASP)** ✨ - Choice rules, integrity constraints, stable model computation, optimization (17 tests)
+- **Explicit Tabling** ✨ - Answer memoization, loop detection, SLG resolution, incremental updates (17 tests)
+- **Active Learning for Rule Validation** ✨ - Uncertainty sampling, query-by-committee, diversity sampling, validation workflow (11 tests)
+- **Explainable Rule Generation** ✨ - Natural language explanations, feature importance, confidence analysis, provenance tracking (10 tests)
+- **Uncertainty Propagation** ✨ - Multi-model uncertainty tracking (Probabilistic, Fuzzy, DS, Possibilistic) with combination operators (21 tests)
+- **GPU-Accelerated Rule Matching** ✨ - Hash-based pattern matching with automatic CPU fallback (20 tests)
+- **Adaptive Reasoning Strategies** ✨ - Cost-based strategy selection with epsilon-greedy exploration and performance learning (20 tests)
+- **Pellet-Compatible Classification** ✨ - OWL DL concept classification with subsumption hierarchy and realization (20 tests)
+- **Rule Set Compression** ✨ - Multiple compression modes (Fast, Balanced, Best, Adaptive) with LZ4-style and DEFLATE algorithms (20 tests)
+- **Quantum-Inspired Optimization** ✨ - 5 quantum algorithms for rule ordering (Quantum Annealing, Quantum Genetic, QPSO, Quantum Walk, Grover-Inspired) (11 tests)
+- **Benchmark Suite** ✨ - Comprehensive performance testing with 10 benchmark categories and statistical analysis (10 tests, 2 ignored)
+- **Migration Tools** ✨ - Rule conversion from Apache Jena, Drools DRL, and CLIPS formats with detailed warnings (15 tests)
+- **All previous features** - 655 tests from previous Beta.3 development continue to pass
+
+#### RIF (Rule Interchange Format) Support (November 24, 2025) ✨
+**File**: `src/rif.rs` (1,900+ lines)
+
+W3C RIF specification support for rule interchange between different rule engines:
+
+1. **RIF-Core Dialect** - Basic Horn rules without negation
+2. **RIF-BLD Dialect** - Basic Logic Dialect with equality, NAF, and frame logic
+3. **Compact Syntax Parser** - Full parser for RIF presentation syntax
+4. **Serializer** - Export OxiRS rules to RIF Compact Syntax
+5. **Converter** - Bidirectional conversion between RIF and OxiRS Rule types
+
+**Features**:
+- Prefix declarations and IRI expansion
+- Import directives for modular rule sets
+- Forall quantification with variable binding
+- NAF (Negation-as-Failure) support
+- Frame logic syntax (F-logic)
+- Equality and comparison predicates
+- External function calls
+- **16 tests** covering parsing, conversion, and serialization
+
+**API**:
+```rust
+let mut parser = RifParser::new(RifDialect::Bld);
+let document = parser.parse(rif_text)?;
+let rules = document.to_oxirs_rules()?;
+
+// Serialize back
+let serializer = RifSerializer::new(RifDialect::Bld);
+let output = serializer.serialize(&document)?;
+```
+
+#### Constraint Handling Rules (CHR) Engine (November 24, 2025) ✨
+**File**: `src/chr.rs` (1,200+ lines)
+
+Declarative constraint solving framework for logic programming with constraints:
+
+1. **Simplification Rules** - `H <=> G | B` - Replaces head with body when guard holds
+2. **Propagation Rules** - `H ==> G | B` - Keeps head and adds body constraints
+3. **Simpagation Rules** - `H1 \ H2 <=> G | B` - Hybrid: keeps H1, removes H2
+4. **Guard Conditions** - Equality, inequality, comparisons, conjunctions, disjunctions
+5. **Constraint Store** - Indexed constraint storage with efficient lookup
+
+**Features**:
+- Multi-head rules for complex constraint interactions
+- Propagation history to prevent infinite loops
+- Guard evaluation with full comparison operators
+- Constraint matching with unification
+- Rule parsing from CHR syntax
+- Statistics tracking (rule applications, propagations, simplifications)
+- **18 tests** covering all rule types and constraint operations
+
+**API**:
+```rust
+let mut engine = ChrEngine::new();
+
+// Add antisymmetry rule: leq(X, Y), leq(Y, X) <=> X = Y
+engine.add_rule(ChrRule::simplification(
+    "antisymmetry",
+    vec![Constraint::binary("leq", "X", "Y"), Constraint::binary("leq", "Y", "X")],
+    vec![],
+    vec![Constraint::eq("X", "Y")],
+));
+
+engine.add_constraint(Constraint::new("leq", vec![ChrTerm::const_("a"), ChrTerm::const_("b")]));
+let result = engine.solve()?;
+```
+
+#### Rule Indexing (November 24, 2025) ✨
+**File**: `src/rule_index.rs` (750+ lines)
+
+High-performance rule lookup with multiple indexing strategies:
+
+1. **Predicate Indexing** - Index rules by body predicate patterns
+2. **First-Argument Indexing** - Additional indexing by first argument
+3. **Combined Indexing** - Predicate + subject + object pattern indexing
+4. **Statistics Tracking** - Hit rates, selectivity, access counts
+
+**Features**:
+- O(1) average case lookup (vs O(n) linear scan)
+- 10-100x expected speedup for large rule sets (100+ rules)
+- Auto-updating indices on rule add/remove
+- RwLock-based thread safety
+- **14 tests** covering all indexing modes
+
+**API**:
+```rust
+let index = RuleIndex::with_defaults();
+index.add_rule(rule);
+let matching = index.find_rules_for_triple(Some("john"), "knows", None);
+```
+
+#### Negation-as-Failure with Stratification (November 24, 2025) ✨
+**File**: `src/negation.rs` (1,000+ lines)
+
+Stratified reasoning with NAF semantics for safe negation handling:
+
+1. **NAF Semantics** - Closed-world assumption (`\+ goal` syntax)
+2. **Stratification Analysis** - Detect and prevent unsafe circular negation
+3. **Dependency Graph** - Analyze positive/negative rule dependencies
+4. **Well-Founded Semantics** - Optional three-valued logic support
+5. **Loop Detection** - Multiple strategies (Fail, Delay, WellFounded, Partial)
+
+**Features**:
+- Safe evaluation of negated goals
+- Layer-by-layer (stratum) rule processing
+- Stratification violation detection
+- Parser for `\+`, `not`, `NAF` notation
+- **17 tests** covering all stratification scenarios
+
+**API**:
+```rust
+let mut reasoner = StratifiedReasoner::default();
+reasoner.add_rule(NafRule::new(
+    "single".into(),
+    vec![
+        NafAtom::positive(person_atom),
+        NafAtom::negated(married_atom), // NAF: not married
+    ],
+    vec![single_atom],
+));
+let results = reasoner.infer()?;
+```
+
+#### Answer Set Programming (ASP) Solver (November 24, 2025) ✨
+**File**: `src/asp.rs` (850+ lines)
+
+Complete ASP solver for combinatorial optimization over RDF:
+
+1. **Choice Rules** - Non-deterministic selection (`{ a; b; c } = 1`)
+2. **Integrity Constraints** - Hard constraints (`:- body`)
+3. **Weak Constraints** - Soft constraints with weights (`:~ body [w@l]`)
+4. **Stable Model Computation** - Grounded answer set generation
+5. **Optimization** - Find optimal solutions based on cost criteria
+
+**Features**:
+- Full grounding with domain extraction
+- Multiple answer set enumeration
+- Classical and default negation support
+- Subsumption checking for efficiency
+- Conversion to/from OxiRS Rule types
+- **17 tests** covering all ASP constructs
+
+**API**:
+```rust
+let mut solver = AspSolver::new();
+solver.add_fact("node(a)")?;
+solver.add_fact("edge(a, b)")?;
+solver.add_choice_rule(
+    vec![Atom::new("color", vec![var("X"), const_("red")])],
+    Some(1), Some(1), // exactly 1
+    vec![AspLiteral::positive(Atom::new("node", vec![var("X")]))],
+);
+solver.add_constraint(vec![/* adjacent nodes same color */]);
+let answer_sets = solver.solve()?;
+```
+
+#### Explicit Tabling with Loop Detection (November 24, 2025) ✨
+**File**: `src/tabling.rs` (700+ lines)
+
+Memoization and loop handling for recursive queries:
+
+1. **Answer Memoization** - Cache computed answers for reuse
+2. **Loop Detection** - Multiple strategies (FailOnLoop, DelayAndResume, WellFounded, ReturnPartial)
+3. **Call Variant Tracking** - Normalized call patterns for efficient lookup
+4. **Incremental Updates** - Invalidate entries on fact changes
+5. **Statistics** - Hit rate, miss rate, loop detection counts
+
+**Features**:
+- Prevents infinite loops in recursive rules
+- Significant speedup for repeated queries
+- Table directives per-predicate or global
+- Configurable timeout and recursion depth
+- **17 tests** covering all tabling scenarios
+
+**API**:
+```rust
+let mut engine = TablingEngine::new(TablingConfig::default());
+engine.add_table_directive(TableDirective::predicate("ancestor"));
+engine.add_rule(ancestor_rule);
+engine.add_fact(parent_fact);
+let results = engine.query(&ancestor_goal)?;
+```
 
 #### Quantum-Inspired Optimization (November 14, 2025) ✨
 **File**: `src/quantum_optimizer.rs` (1,018 lines)

@@ -1,13 +1,94 @@
 # OxiRS ARQ - TODO
 
-*Last Updated: November 21, 2025*
+*Last Updated: November 24, 2025*
 
 ## ✅ Current Status: v0.1.0-beta.2 Production-Ready - **Beta.2+ Enhanced!** 🎉
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
 
-### Beta.2+ Release Status (November 22, 2025) - **Beta.2+ Enhanced with Advanced SciRS2 Integration!** ✨
-- **390 tests** (unit + integration) passing with zero failures (with --all-features - lib tests)
+### Beta.2+ Release Status (November 24, 2025) - **Beta.2++ Enhanced with Advanced Features!** ✨
+- **501 tests** (unit + integration) passing with zero failures (with --all-features - lib tests)
+- **Beta.2++ New Features** ✨ **LATEST** (November 24, 2025)
+  - **Query Hints System** (`query_hints.rs`) - PostgreSQL/MySQL-style optimizer hints
+    - Join algorithm hints (HASH_JOIN, MERGE_JOIN, NESTED_LOOP, INDEX_JOIN)
+    - Index usage hints (USE_INDEX, IGNORE_INDEX, FORCE_INDEX)
+    - Cardinality override hints for optimizer guidance
+    - Parallelism hints (PARALLEL, NO_PARALLEL with thread counts)
+    - Materialization hints (MATERIALIZE, LAZY, STREAMING)
+    - Timeout and memory limit hints
+    - Cache control hints (CACHE, NO_CACHE)
+    - Join order hints (LEADING, ORDERED, FIXED_ORDER)
+    - Filter pushdown hints
+    - Custom directives support
+    - Embedded in SPARQL comments: `/*+ HINT1 HINT2 */` or `# /*+ HINT */`
+    - 18 comprehensive tests validating all hint types
+  - **Cost Model Calibration** (`cost_model_calibration.rs`) - Adaptive learning from query execution
+    - Automatic calibration of cost model parameters from actual execution times
+    - Weighted linear regression for coefficient estimation
+    - Outlier detection and removal for robust calibration
+    - Per-operation type statistics (scan, join, sort, filter, aggregate)
+    - Online learning with configurable thresholds
+    - R-squared and confidence level tracking
+    - Export/import calibration data for persistence
+    - 12 comprehensive tests validating calibration accuracy
+  - **Advanced Query Fingerprinting** (`query_fingerprinting.rs`) - Intelligent query analysis
+    - Structural fingerprinting independent of literal values
+    - Semantic fingerprinting with predicate/type preservation
+    - Parameterized query templates with parameter extraction
+    - Query similarity computation (structural + template similarity)
+    - Query clustering for workload analysis
+    - Feature extraction (triple patterns, filters, optionals, unions, etc.)
+    - Complexity scoring for query classification
+    - Multiple hash algorithms (SHA-256, MD5, FNV-1a)
+    - Fingerprint caching with LRU eviction
+    - 13 comprehensive tests validating all fingerprinting features
+  - **Query Regression Testing** (`query_regression_testing.rs`) - CI/CD-ready performance testing
+    - Golden query sets with expected performance baselines
+    - Statistical regression detection with significance tests
+    - Execution recording with rolling window analysis
+    - Automated regression reports with detailed analysis
+    - Multiple threshold presets (strict for CI, lenient for dev)
+    - Trend analysis (improving, stable, degrading)
+    - Report comparison between test runs
+    - Suite export/import for persistence
+    - Builder pattern for flexible suite construction
+    - Outlier detection and filtering
+    - Confidence intervals and p-value calculation
+    - 17 comprehensive tests validating all regression features
+  - **Adaptive Index Advisor** (`adaptive_index_advisor.rs`) - Intelligent index recommendations
+    - Query pattern analysis and tracking for workload understanding
+    - Automatic index recommendations based on access patterns
+    - Support for all 6 RDF index types (SPO, SOP, PSO, POS, OSP, OPS)
+    - Index benefit estimation with cost-benefit analysis
+    - Unused index detection for cleanup recommendations
+    - Overlapping index identification
+    - Configuration presets (conservative, aggressive, default)
+    - Pattern export/import for persistence
+    - Detailed analysis reports with text summaries
+    - Priority-based recommendations (Critical, High, Medium, Low)
+    - 17 comprehensive tests validating all advisor features
+  - **Query Execution History** (`query_execution_history.rs`) - Comprehensive execution tracking
+    - Full execution recording with detailed metrics (planning, execution, serialization times)
+    - Query classification by form (SELECT, ASK, CONSTRUCT, DESCRIBE, UPDATE)
+    - Slow query detection with configurable thresholds
+    - Query grouping by fingerprint for workload analysis
+    - Historical trend analysis with hourly breakdown
+    - User and source tracking for multi-tenant environments
+    - Top queries by frequency and total time
+    - Error rate and success rate tracking
+    - Configuration presets (minimal, comprehensive, default)
+    - 16 comprehensive tests validating all history features
+  - **Query Plan Export** (`query_plan_export.rs`) - Multi-format plan visualization
+    - Export to JSON for tooling integration
+    - Export to DOT (Graphviz) for graph visualization
+    - Export to Mermaid for web-friendly diagrams
+    - Export to plain text for human readability
+    - Export to YAML for configuration-friendly output
+    - Export to HTML with interactive visualization
+    - Cost estimates and execution statistics inclusion
+    - Configurable export options (pretty print, metadata, etc.)
+    - Plan tree manipulation (node count, depth, properties)
+    - 15 comprehensive tests validating all export features
 - **Beta.2 Advanced Query Management Features** ✨ NEW
   - **Query Cancellation Support** - Cooperative cancellation with callbacks and child tokens
   - **Query Timeout Management** - Soft/hard timeouts with configurable warning thresholds

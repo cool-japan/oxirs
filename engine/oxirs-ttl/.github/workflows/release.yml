@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Create GitHub release
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'beta') || contains(github.ref, 'alpha') || contains(github.ref, 'rc') }}
+          body: |
+            # oxirs-ttl ${{ steps.get_version.outputs.VERSION }}
+
+            ## What's New
+
+            See [CHANGELOG.md](https://github.com/cool-japan/oxirs/blob/main/engine/oxirs-ttl/CHANGELOG.md) for details.
+
+            ## Installation
+
+            ```toml
+            [dependencies]
+            oxirs-ttl = "${{ steps.get_version.outputs.VERSION }}"
+            ```
+
+            ## Features
+
+            - High-performance Turtle, N-Triples, TriG, N-Quads parsing
+            - Advanced N3 support with formulas, variables, and implications
+            - Streaming support for large files
+            - Async I/O with Tokio
+            - Parallel processing with rayon
+            - RDF 1.2 support (quoted triples, directional language tags)
+            - 469 tests passing with 97% W3C compliance
+
+  # Publish to crates.io
+  publish-crate:
+    name: Publish to crates.io
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        continue-on-error: true  # Don't fail if already published
+
+  # Build and upload release artifacts
+  build-artifacts:
+    name: Build Release Artifacts
+    needs: create-release
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: oxirs-ttl-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: oxirs-ttl-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: oxirs-ttl-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: oxirs-ttl-windows-x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build release binary
+        run: cargo build --release --all-features --target ${{ matrix.target }}
+
+      - name: Create artifact archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ${{ matrix.artifact_name }}.tar.gz liboxirs_ttl.*
+          mv ${{ matrix.artifact_name }}.tar.gz ${{ github.workspace }}/
+
+      - name: Create artifact archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ${{ matrix.artifact_name }}.zip oxirs_ttl.dll oxirs_ttl.lib
+          move ${{ matrix.artifact_name }}.zip ${{ github.workspace }}/
+
+      - name: Upload Release Asset (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.artifact_name }}.tar.gz
+          asset_name: ${{ matrix.artifact_name }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Release Asset (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./${{ matrix.artifact_name }}.zip
+          asset_name: ${{ matrix.artifact_name }}.zip
+          asset_content_type: application/zip
+
+  # Update documentation on docs.rs
+  update-docs:
+    name: Update Documentation
+    needs: publish-crate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build documentation
+        run: cargo doc --all-features --no-deps
+
+      - name: Trigger docs.rs rebuild
+        run: |
+          echo "Documentation will be automatically rebuilt on docs.rs after crates.io publication"

@@ -781,7 +781,30 @@ impl Runtime {
             .route("/$/server", get(handlers::admin::server_info))
             .route("/$/stats", get(handlers::admin::server_stats))
             .route("/$/compact/:name", post(handlers::admin::compact_dataset))
-            .route("/$/backup/:name", post(handlers::admin::backup_dataset));
+            .route("/$/backup/:name", post(handlers::admin::backup_dataset))
+            // Fuseki-compatible backup listing and config reload
+            .route("/$/backups-list", get(handlers::list_backups))
+            .route("/$/reload", post(handlers::reload_config));
+
+        // Validation service routes (Fuseki-compatible)
+        app = app
+            .route(
+                "/$/validate/query",
+                get(handlers::validate_query_get).post(handlers::validate_query),
+            )
+            .route(
+                "/$/validate/update",
+                get(handlers::validate_update_get).post(handlers::validate_update),
+            )
+            .route(
+                "/$/validate/iri",
+                get(handlers::validate_iri_get).post(handlers::validate_iri),
+            )
+            .route("/$/validate/data", post(handlers::validate_data))
+            .route(
+                "/$/validate/langtag",
+                get(handlers::validate_langtag_get).post(handlers::validate_langtag),
+            );
 
         // Authentication routes (if enabled)
         if self.config.security.auth_required {

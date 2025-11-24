@@ -24,7 +24,7 @@ fn main() -> Result<()> {
     {
         use std::env;
         use std::fs::File;
-        use std::io::{BufReader, BufWriter};
+        use std::io::BufReader;
 
         let temp_dir = env::temp_dir();
 

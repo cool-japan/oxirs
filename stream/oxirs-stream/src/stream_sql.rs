@@ -95,9 +95,10 @@ pub enum Token {
     Select,
     From,
     Where,
-    GroupBy,
+    Group,
+    By,
     Having,
-    OrderBy,
+    Order,
     Limit,
     Window,
     Tumbling,
@@ -292,10 +293,10 @@ impl Lexer {
                         "SELECT" => Token::Select,
                         "FROM" => Token::From,
                         "WHERE" => Token::Where,
-                        "GROUP" => Token::GroupBy,
-                        "BY" => Token::GroupBy,
+                        "GROUP" => Token::Group,
+                        "BY" => Token::By,
                         "HAVING" => Token::Having,
-                        "ORDER" => Token::OrderBy,
+                        "ORDER" => Token::Order,
                         "LIMIT" => Token::Limit,
                         "WINDOW" => Token::Window,
                         "TUMBLING" => Token::Tumbling,
@@ -792,10 +793,10 @@ impl Parser {
         };
 
         // GROUP BY clause
-        let group_by = if self.current_token() == &Token::GroupBy {
+        let group_by = if self.current_token() == &Token::Group {
             self.advance();
-            // Skip 'BY' if present
-            if self.current_token() == &Token::GroupBy {
+            // Expect 'BY'
+            if self.current_token() == &Token::By {
                 self.advance();
             }
             self.parse_expression_list()?
@@ -812,10 +813,10 @@ impl Parser {
         };
 
         // ORDER BY clause
-        let order_by = if self.current_token() == &Token::OrderBy {
+        let order_by = if self.current_token() == &Token::Order {
             self.advance();
-            // Skip 'BY' if present
-            if self.current_token() == &Token::GroupBy {
+            // Expect 'BY'
+            if self.current_token() == &Token::By {
                 self.advance();
             }
             self.parse_order_by_list()?
@@ -1610,20 +1611,20 @@ mod tests {
 
     #[test]
     fn test_lexer_basic() {
-        let mut lexer = Lexer::new("SELECT * FROM stream");
+        let mut lexer = Lexer::new("SELECT * FROM events");
         let tokens = lexer.tokenize();
 
         assert_eq!(tokens.len(), 5);
         assert_eq!(tokens[0], Token::Select);
         assert_eq!(tokens[1], Token::Star);
         assert_eq!(tokens[2], Token::From);
-        assert_eq!(tokens[3], Token::Identifier("stream".to_string()));
+        assert_eq!(tokens[3], Token::Identifier("events".to_string()));
         assert_eq!(tokens[4], Token::Eof);
     }
 
     #[test]
     fn test_lexer_with_literals() {
-        let mut lexer = Lexer::new("SELECT name, 42, 'hello' FROM stream");
+        let mut lexer = Lexer::new("SELECT name, 42, 'hello' FROM events");
         let tokens = lexer.tokenize();
 
         assert!(matches!(tokens[1], Token::Identifier(_)));
@@ -1658,7 +1659,7 @@ mod tests {
 
     #[test]
     fn test_parser_window() {
-        let mut lexer = Lexer::new("SELECT * FROM stream WINDOW TUMBLING (SIZE 5 MINUTES)");
+        let mut lexer = Lexer::new("SELECT * FROM events WINDOW TUMBLING (SIZE 5 MINUTES)");
         let tokens = lexer.tokenize();
         let mut parser = Parser::new(tokens);
         let result = parser.parse_select();
@@ -1753,7 +1754,7 @@ mod tests {
         let config = StreamSqlConfig::default();
         let engine = StreamSqlEngine::new(config);
 
-        assert!(engine.validate("SELECT * FROM stream").is_ok());
+        assert!(engine.validate("SELECT * FROM events").is_ok());
         assert!(engine.validate("INVALID SQL").is_err());
     }
 
@@ -1778,10 +1779,10 @@ mod tests {
         let engine = StreamSqlEngine::new(config);
 
         // First execution - cache miss
-        engine.execute("SELECT * FROM stream").await.unwrap();
+        engine.execute("SELECT * FROM events").await.unwrap();
 
         // Second execution - cache hit
-        engine.execute("SELECT * FROM stream").await.unwrap();
+        engine.execute("SELECT * FROM events").await.unwrap();
 
         let stats = engine.get_stats().await;
         assert_eq!(stats.cache_misses, 1);
@@ -1804,12 +1805,12 @@ mod tests {
 
     #[test]
     fn test_parser_order_by() {
-        let mut lexer = Lexer::new("SELECT * FROM events ORDER BY timestamp DESC, id ASC");
+        let mut lexer = Lexer::new("SELECT * FROM events ORDER BY created_at DESC, id ASC");
         let tokens = lexer.tokenize();
         let mut parser = Parser::new(tokens);
         let result = parser.parse_select();
 
-        assert!(result.is_ok());
+        assert!(result.is_ok(), "Parse failed: {:?}", result);
         let stmt = result.unwrap();
         assert_eq!(stmt.order_by.len(), 2);
         assert!(!stmt.order_by[0].ascending);
@@ -1831,7 +1832,7 @@ mod tests {
     #[test]
     fn test_parser_sliding_window() {
         let mut lexer =
-            Lexer::new("SELECT * FROM stream WINDOW SLIDING (SIZE 10 SECONDS, SLIDE 5 SECONDS)");
+            Lexer::new("SELECT * FROM events WINDOW SLIDING (SIZE 10 SECONDS, SLIDE 5 SECONDS)");
         let tokens = lexer.tokenize();
         let mut parser = Parser::new(tokens);
         let result = parser.parse_select();

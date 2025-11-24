@@ -95,6 +95,15 @@ pub mod values_support;
 pub mod vector_query_optimizer;
 pub mod websocket_streaming; // WebSocket streaming for SPARQL results (v0.1.0)
 
+// Beta.2+ Advanced modules
+pub mod adaptive_index_advisor; // Adaptive index recommendations (Beta.2+)
+pub mod cost_model_calibration; // Cost model calibration for adaptive learning (Beta.2+)
+pub mod query_execution_history; // Query execution history tracking (Beta.2+)
+pub mod query_fingerprinting; // Advanced query fingerprinting for caching and analysis (Beta.2+)
+pub mod query_hints; // Query hints system for optimizer guidance (Beta.2+)
+pub mod query_plan_export;
+pub mod query_regression_testing; // Query regression testing framework (Beta.2+) // Query plan export to various formats (Beta.2+)
+
 // RDF-star / SPARQL-star integration
 #[cfg(feature = "star")]
 pub mod star_integration;
@@ -212,6 +221,16 @@ pub use distributed_consensus::{
 };
 */
 
+pub use adaptive_index_advisor::{
+    AccessPattern, AdvisorConfig, AdvisorStatistics, AnalysisSummary, IndexAdvisor,
+    IndexAnalysisReport, IndexConfiguration, IndexRecommendation, IndexType, IndexUsageStats,
+    PatternComponent, QueryPattern, RecommendationPriority,
+};
+pub use cost_model_calibration::{
+    CalibrationConfig, CalibrationExport, CalibrationReport, CalibratorStatistics,
+    CostModelCalibrator, CostModelParameters, ExecutionSample, OperationCalibrationExport,
+    OperationCalibrationStats, OperationSummary, OperationType,
+};
 pub use federation::{
     EndpointCapabilities, EndpointCriteria, EndpointDiscovery, EndpointHealth, FederatedSubquery,
     FederationConfig, FederationExecutor, FederationStats, LoadBalancingStrategy,
@@ -266,6 +285,33 @@ pub use production::{
     SparqlProductionError,
     TimeoutAction,
     TimeoutCheckResult,
+};
+pub use query_execution_history::{
+    ExecutionMetrics, ExecutionRecord, ExecutionStatus, FormDistribution, HistoryAnalysis,
+    HistoryConfig, HistoryStatistics, PeriodStatistics, QueryExecutionHistory, QueryFormType,
+    QueryGroupStats, SlowQueryEntry,
+};
+pub use query_fingerprinting::{
+    FingerprintConfig, FingerprintingStatistics, HashAlgorithm, ParameterSlot, ParameterType,
+    QueryFeatures as FingerprintQueryFeatures, QueryFingerprint, QueryFingerprinter,
+    QueryForm as FingerprintQueryForm,
+};
+pub use query_hints::{
+    CacheHint, CardinalityHint, FilterHint, FilterPushdownDirective, HintApplicationResult,
+    HintParser, HintParserStats, HintValidationWarning, HintValidator, IndexDirective, IndexHint,
+    JoinAlgorithmHint, JoinBuildSide, JoinHint, JoinOrderHint, JoinOrderStrategy,
+    MaterializationHint, MaterializationStrategy as HintMaterializationStrategy, MemoryHint,
+    ParallelismHint, QueryHints, QueryHintsBuilder, WarningSeverity,
+};
+pub use query_plan_export::{
+    CostEstimate, ExecutionStats as PlanExecutionStats, ExportConfig, ExportError, ExportFormat,
+    ExporterStats, OperatorType, PlanNode, QueryPlanExporter,
+};
+pub use query_regression_testing::{
+    ExecutionResult as RegressionExecutionResult, ExecutionStatistics as RegressionExecutionStats,
+    GoldenQuery, QueryRegressionAnalysis, RegressionConfig,
+    RegressionReport as QueryRegressionReport, RegressionStatus, RegressionTestSuite,
+    RegressionTestSuiteBuilder, ReportComparison, ReportSummary, SuiteExport, SuiteStatistics,
 };
 pub use simd_query_ops::{
     ComparisonOp, JoinStats, SimdAggregations, SimdConfig, SimdFilterEvaluator, SimdHashJoin,

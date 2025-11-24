@@ -15,8 +15,11 @@ use lsp_types::{
     CompletionOptions, Diagnostic, DiagnosticSeverity, DidChangeTextDocumentParams,
     DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
     GotoDefinitionResponse, Hover, HoverProviderCapability, InitializeParams, InitializeResult,
-    MessageType, OneOf, Position, Range, ServerCapabilities, ServerInfo,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Url, WorkDoneProgressOptions,
+    MessageType, OneOf, Position, Range, SemanticTokens, SemanticTokensFullOptions,
+    SemanticTokensOptions, SemanticTokensParams, SemanticTokensRangeParams,
+    SemanticTokensRangeResult, SemanticTokensResult, SemanticTokensServerCapabilities,
+    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, Url,
+    WorkDoneProgressOptions,
 };
 use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::{
@@ -27,6 +30,7 @@ use tower_lsp::{Client, LanguageServer};
 use crate::lsp::completion::CompletionProvider;
 use crate::lsp::diagnostics::DiagnosticsGenerator;
 use crate::lsp::hover::HoverProvider;
+use crate::lsp::semantic_tokens::SemanticTokensProvider;
 use crate::Shape;
 
 use oxirs_core::ConcreteStore;
@@ -58,6 +62,8 @@ pub struct ShaclBackend {
     hover_provider: Arc<HoverProvider>,
     /// Diagnostics generator
     diagnostics_generator: Arc<DiagnosticsGenerator>,
+    /// Semantic tokens provider
+    semantic_tokens_provider: Arc<SemanticTokensProvider>,
 }
 
 impl ShaclBackend {
@@ -72,6 +78,7 @@ impl ShaclBackend {
             completion_provider: Arc::new(CompletionProvider::new(store.clone())),
             hover_provider: Arc::new(HoverProvider::new(store.clone())),
             diagnostics_generator: Arc::new(DiagnosticsGenerator::new()),
+            semantic_tokens_provider: Arc::new(SemanticTokensProvider::new()),
         }
     }
 
@@ -168,7 +175,16 @@ impl LanguageServer for ShaclBackend {
                 references_provider: Some(OneOf::Left(true)),
                 document_symbol_provider: Some(OneOf::Left(true)),
                 workspace_symbol_provider: Some(OneOf::Left(true)),
-                semantic_tokens_provider: None, // TODO: Add semantic tokens
+                semantic_tokens_provider: Some(
+                    SemanticTokensServerCapabilities::SemanticTokensOptions(
+                        SemanticTokensOptions {
+                            work_done_progress_options: WorkDoneProgressOptions::default(),
+                            legend: SemanticTokensProvider::legend(),
+                            range: Some(true),
+                            full: Some(SemanticTokensFullOptions::Bool(true)),
+                        },
+                    ),
+                ),
                 ..Default::default()
             },
             server_info: Some(ServerInfo {
@@ -288,6 +304,47 @@ impl LanguageServer for ShaclBackend {
             // Find shape definition at position
             // For now, return None - full implementation would search for shape IRI
             Ok(None)
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn semantic_tokens_full(
+        &self,
+        params: SemanticTokensParams,
+    ) -> Result<Option<SemanticTokensResult>> {
+        let uri = params.text_document.uri;
+
+        if let Some(doc) = self.get_document(&uri) {
+            let tokens = self.semantic_tokens_provider.generate_tokens(&doc.text);
+
+            Ok(Some(SemanticTokensResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: tokens,
+            })))
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn semantic_tokens_range(
+        &self,
+        params: SemanticTokensRangeParams,
+    ) -> Result<Option<SemanticTokensRangeResult>> {
+        let uri = params.text_document.uri;
+        let range = params.range;
+
+        if let Some(doc) = self.get_document(&uri) {
+            let tokens = self.semantic_tokens_provider.generate_tokens_range(
+                &doc.text,
+                range.start.line,
+                range.end.line,
+            );
+
+            Ok(Some(SemanticTokensRangeResult::Tokens(SemanticTokens {
+                result_id: None,
+                data: tokens,
+            })))
         } else {
             Ok(None)
         }

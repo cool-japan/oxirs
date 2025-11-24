@@ -56,6 +56,7 @@ pub struct ShapeTemplate {
 }
 
 /// Shape template library
+#[derive(Debug)]
 pub struct TemplateLibrary {
     templates: Vec<ShapeTemplate>,
 }

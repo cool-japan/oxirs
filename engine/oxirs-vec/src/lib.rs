@@ -76,6 +76,7 @@ pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
 pub mod distance_metrics;
 pub mod distributed_vector_search;
+pub mod dynamic_index_selector;
 pub mod embedding_pipeline;
 pub mod embeddings;
 pub mod enhanced_performance_monitoring;
@@ -94,6 +95,7 @@ pub mod graph_indices;
 pub mod hierarchical_similarity;
 pub mod hnsw;
 pub mod huggingface;
+pub mod hybrid_fusion;
 pub mod index;
 pub mod ivf;
 pub mod joint_embedding_spaces;
@@ -101,6 +103,7 @@ pub mod kg_embeddings;
 pub mod lsh;
 pub mod mmap_advanced;
 pub mod mmap_index;
+pub mod nsg;
 pub mod opq;
 pub mod oxirs_arq_integration;
 pub mod performance_insights;
@@ -109,6 +112,7 @@ pub mod pq;
 pub mod pytorch;
 pub mod quantum_search;
 pub mod query_planning;
+pub mod query_rewriter;
 pub mod random_utils;
 pub mod rdf_content_enhancement;
 pub mod rdf_integration;
@@ -199,6 +203,7 @@ pub use distributed_vector_search::{
     DistributedSearchResponse, DistributedVectorSearch, LoadBalancingAlgorithm, NodeHealthStatus,
     PartitioningStrategy, QueryExecutionStrategy,
 };
+pub use dynamic_index_selector::{DynamicIndexSelector, IndexSelectorConfig};
 pub use embedding_pipeline::{
     DimensionalityReduction, EmbeddingPipeline, NormalizationConfig, PostprocessingPipeline,
     PreprocessingPipeline, TokenizerConfig, VectorNormalization,
@@ -244,6 +249,10 @@ pub use hierarchical_similarity::{
     SimilarityExplanation, SimilarityTaskType,
 };
 pub use hnsw::{HnswConfig, HnswIndex};
+pub use hybrid_fusion::{
+    FusedResult, HybridFusion, HybridFusionConfig, HybridFusionStatistics, HybridFusionStrategy,
+    NormalizationMethod,
+};
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
 pub use joint_embedding_spaces::{
@@ -258,6 +267,7 @@ pub use kg_embeddings::{
 };
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
+pub use nsg::{DistanceMetric as NsgDistanceMetric, NsgConfig, NsgIndex, NsgStats};
 pub use performance_insights::{
     AlertingSystem, OptimizationRecommendations, PerformanceInsightsAnalyzer,
     PerformanceTrends as InsightsPerformanceTrends, QueryComplexity,
@@ -275,6 +285,9 @@ pub use quantum_search::{
 pub use query_planning::{
     CostModel, IndexStatistics, QueryCharacteristics, QueryPlan, QueryPlanner, QueryStrategy,
     VectorQueryType,
+};
+pub use query_rewriter::{
+    QueryRewriter, QueryRewriterConfig, QueryVectorStatistics, RewriteRule, RewrittenQuery,
 };
 pub use rdf_content_enhancement::{
     ComponentWeights, MultiLanguageProcessor, PathConstraint, PathDirection, PropertyAggregator,

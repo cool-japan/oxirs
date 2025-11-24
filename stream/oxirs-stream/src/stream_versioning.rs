@@ -389,13 +389,19 @@ where
         self.update_stats_after_create(event_count, size_bytes)
             .await;
 
+        // Apply retention policy
+        self.apply_retention_policy(&mut versions, &mut event_storage)?;
+
+        // Drop locks before calling maybe_create_auto_snapshot which acquires its own locks
+        drop(versions);
+        drop(event_storage);
+        drop(branches);
+        drop(current);
+
         // Check if we need to create auto-snapshot
         if self.config.auto_snapshot {
             self.maybe_create_auto_snapshot().await?;
         }
-
-        // Apply retention policy
-        self.apply_retention_policy().await?;
 
         Ok(new_version_id)
     }
@@ -999,10 +1005,11 @@ where
         Ok(())
     }
 
-    async fn apply_retention_policy(&self) -> Result<(), StreamError> {
-        let mut versions = self.versions.write().await;
-        let mut event_storage = self.events.write().await;
-
+    fn apply_retention_policy(
+        &self,
+        versions: &mut BTreeMap<VersionId, VersionMetadata>,
+        event_storage: &mut HashMap<VersionId, Vec<VersionedEvent<T>>>,
+    ) -> Result<(), StreamError> {
         // Check max versions
         while versions.len() > self.config.max_versions {
             if let Some((&oldest_id, _)) = versions.iter().next() {
@@ -1205,10 +1212,16 @@ mod tests {
         // Version 2
         versioning
             .create_version(
-                vec![TestEvent {
-                    id: 2,
-                    value: "v2".to_string(),
-                }],
+                vec![
+                    TestEvent {
+                        id: 1,
+                        value: "v1".to_string(),
+                    },
+                    TestEvent {
+                        id: 2,
+                        value: "v2".to_string(),
+                    },
+                ],
                 "V2",
             )
             .await
@@ -1237,10 +1250,16 @@ mod tests {
 
         versioning
             .create_version(
-                vec![TestEvent {
-                    id: 2,
-                    value: "added".to_string(),
-                }],
+                vec![
+                    TestEvent {
+                        id: 1,
+                        value: "initial".to_string(),
+                    },
+                    TestEvent {
+                        id: 2,
+                        value: "added".to_string(),
+                    },
+                ],
                 "Added",
             )
             .await
@@ -1375,5 +1394,21 @@ mod tests {
 
         let result = versioning.delete_branch("main").await;
         assert!(result.is_err());
+    }
+    #[tokio::test]
+    async fn test_retention_policy_concurrency() {
+        // Configure to trigger retention policy immediately
+        let config = VersioningConfig {
+            max_versions: 1,
+            ..Default::default()
+        };
+        let versioning = StreamVersioning::<TestEvent>::new(config);
+
+        // Create version 1
+        versioning.create_version(vec![], "v1").await.unwrap();
+
+        // Create version 2 - this should trigger retention policy and deadlock
+        // because create_version holds locks and calls apply_retention_policy which wants locks
+        versioning.create_version(vec![], "v2").await.unwrap();
     }
 }

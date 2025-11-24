@@ -1,6 +1,6 @@
 # OxiRS SHACL - TODO
 
-*Last Updated: November 19, 2025*
+*Last Updated: November 24, 2025*
 
 ## ✅ Current Status: v0.1.0-beta.2 - Production-Ready SHACL
 
@@ -58,6 +58,31 @@
    - Semantic syntax highlighting
    - stdio transport for VS Code, IntelliJ, etc
    - 6 specialized modules (backend, completion, diagnostics, hover, semantic_tokens, server)
+11. **`designer/mod.rs`** - Interactive Shape Designer ⬆️ **NEW (Nov 24, 2025)**
+   - Step-by-step wizard for guided shape creation
+   - Domain-aware constraint recommendations (8 domains: Identity, Contact, Commerce, Web, Temporal, Geospatial, Financial, Scientific)
+   - Shape inference from sample RDF data
+   - Property hint system for intelligent defaults
+   - 4 specialized modules (mod, wizard, recommendations, inference)
+12. **`visual_editor/mod.rs`** - Visual Shape Editor Support ⬆️ **NEW (Nov 24, 2025)**
+   - Multi-format export: DOT/GraphViz, Mermaid, SVG, JSON Schema, PlantUML, D3.js, Cytoscape.js
+   - Configurable color schemes (default, high contrast, pastel, monochrome, custom)
+   - Hierarchical shape visualization with property nodes
+   - Layout algorithms: hierarchical, force-directed, circular, grid
+   - Interactive JavaScript/JSON for web integration
+13. **`advanced_features/shape_comparison.rs`** - Shape Comparison & Diff ⬆️ **NEW (Nov 24, 2025)**
+   - Shape-to-shape comparison with detailed diffs
+   - Breaking change detection (backward/forward compatibility)
+   - Change severity classification (None, Info, Warning, Breaking)
+   - Migration path suggestions with actionable steps
+   - Human-readable diff report generation (Markdown)
+   - Shape set comparison for bulk analysis
+14. **Enhanced `lsp/semantic_tokens.rs`** - Full Semantic Tokens ⬆️ **ENHANCED (Nov 24, 2025)**
+   - Full Turtle/SHACL syntax token generation
+   - 11 token types: Namespace, Class, Property, String, Number, Keyword, Comment, Variable, Operator, Type, Function
+   - SHACL-aware term classification (constraints as Functions, node kinds as Types)
+   - Language tag and datatype detection in literals
+   - Range-based token generation for incremental updates
 
 #### Beta.2 Achievements Summary
 - **Shape Quality Metrics**: Complete analysis of shape complexity, maintainability, performance predictions
@@ -72,6 +97,10 @@
 - **Rule Engine Integration** (NEW): Full integration with oxirs-rule for reasoning-aware validation
 - **Defeasible Reasoning** (NEW): Default rules, prioritized constraints, exception handling
 - **Domain-Specific Language** (NEW): Fluent Rust API for SHACL shapes with type safety
+- **Interactive Shape Designer** (NEW Nov 24): Wizard-based shape creation with domain-aware recommendations
+- **Visual Shape Editor** (NEW Nov 24): Multi-format export (DOT, Mermaid, SVG, JSON Schema, PlantUML, D3.js, Cytoscape.js)
+- **Shape Comparison & Diff** (NEW Nov 24): Breaking change detection, migration planning, compatibility assessment
+- **Enhanced LSP Semantic Tokens** (Nov 24): Full Turtle/SHACL syntax highlighting with 11 token types
 - All features integrate with existing SciRS2-powered optimization infrastructure
 
 ---
@@ -279,7 +308,12 @@
   - Version history with rollback
   - Evolution metrics and statistics
 - [x] Anomaly-based shape refinement ✅ **(Beta.1)** - AnomalyDetector
-- [ ] Interactive shape designer
+- [x] Interactive shape designer ✅ **(Beta.2 - Nov 24, 2025)** - designer/mod.rs ⬆️
+  - Step-by-step wizard for guided shape creation
+  - Domain-aware constraint recommendations (8 domains)
+  - Shape inference from sample RDF data
+  - Property hint system for intelligent defaults
+  - Constraint specification with validation rules
 
 #### Reasoning Integration (Target: v0.1.0) - 🎉 **Complete**
 - [x] Integration with oxirs-rule reasoning ✅ **(Beta.2)** - integration/rule_engine.rs
@@ -329,8 +363,13 @@
   - Pre-commit hook generation
   - Threshold-based pass/fail criteria
 
-#### Developer Experience (Target: v0.1.0) - 🎉 **Major Progress**
-- [ ] Visual shape editor
+#### Developer Experience (Target: v0.1.0) - 🎉 **Complete**
+- [x] Visual shape editor ✅ **(Beta.2 - Nov 24, 2025)** - visual_editor/mod.rs ⬆️
+  - Multi-format export: DOT/GraphViz, Mermaid, SVG, JSON Schema, PlantUML, D3.js, Cytoscape.js
+  - Configurable color schemes (default, high contrast, pastel, monochrome, custom)
+  - Hierarchical shape visualization with property nodes
+  - Interactive JavaScript/JSON for web integration
+  - Layout algorithms: hierarchical, force-directed, circular, grid
 - [x] IDE Integration (LSP Server) ✅ **(Beta.2 - Nov 23, 2025)** - lsp/mod.rs  ⬆️
   - Language Server Protocol implementation for IDE integration
   - Real-time validation diagnostics

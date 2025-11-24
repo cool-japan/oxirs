@@ -72,6 +72,7 @@ pub mod analytics;
 pub mod builders;
 pub mod constraints;
 pub mod custom_components;
+pub mod designer;
 pub mod federated_validation;
 pub mod incremental;
 pub mod iri_resolver;
@@ -91,6 +92,7 @@ pub mod targets;
 pub mod templates;
 pub mod testing;
 pub mod validation;
+pub mod visual_editor;
 pub mod vocabulary;
 pub mod w3c_test_suite;
 pub mod w3c_test_suite_enhanced;
@@ -146,7 +148,17 @@ pub use testing::{
     TestSuiteResult, TestSummary,
 };
 pub use validation::{ValidationEngine, ValidationViolation};
+pub use visual_editor::{
+    ColorScheme, ExportFormat, LayoutDirection, ShapeVisualizer, VisualizerConfig,
+};
 pub use w3c_test_suite::*;
+
+// Re-export designer types
+pub use designer::{
+    ConstraintSpec, DesignIssue, DesignStep, DesignWizard, Domain, PropertyDesign, PropertyHint,
+    RecommendationEngine, ShapeDesign, ShapeDesigner,
+    ShapeInferenceEngine as DesignerInferenceEngine,
+};
 
 // Re-export optimization types (note: these are already imported above)
 

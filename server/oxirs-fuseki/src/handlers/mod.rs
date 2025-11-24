@@ -22,10 +22,11 @@ pub mod sparql;
 pub mod sparql_refactored;
 pub mod tasks; // Async Task Management
 pub mod upload; // RDF Bulk Upload
+pub mod validation; // Validation Services (Query, Update, IRI, Data, Language Tag)
 pub mod websocket;
 
 // Re-export commonly used handlers
-pub use admin::ui_handler;
+pub use admin::{list_backups, reload_config, ui_handler};
 pub use api_keys::{
     create_api_key, get_api_key, get_api_key_usage, list_api_keys, revoke_api_key, update_api_key,
     validate_api_key_auth,
@@ -62,4 +63,8 @@ pub use tasks::{
     cancel_task, create_task, delete_task, get_task, get_task_statistics, list_tasks, TaskManager,
 };
 pub use upload::{handle_multipart_upload_server, handle_upload_server};
+pub use validation::{
+    validate_data, validate_iri, validate_iri_get, validate_langtag, validate_langtag_get,
+    validate_query, validate_query_get, validate_update, validate_update_get,
+};
 pub use websocket::{websocket_handler, SubscriptionManager};

@@ -64,6 +64,14 @@ pub struct ServerSettings {
     pub graceful_shutdown_timeout_secs: u64,
 
     pub tls: Option<TlsConfig>,
+
+    /// Directory for storing backups
+    #[serde(default)]
+    pub backup_directory: Option<PathBuf>,
+
+    /// Path to the configuration file (set at runtime)
+    #[serde(skip)]
+    pub config_file: Option<PathBuf>,
 }
 
 /// TLS configuration
@@ -1105,6 +1113,8 @@ impl Default for ServerConfig {
                 request_timeout_secs: 30,
                 graceful_shutdown_timeout_secs: 30,
                 tls: None,
+                backup_directory: None,
+                config_file: None,
             },
             datasets: HashMap::new(),
             security: SecurityConfig {

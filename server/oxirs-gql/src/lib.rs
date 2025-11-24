@@ -331,6 +331,22 @@ pub mod types;
 pub mod validation;
 pub mod zero_trust_security;
 
+// v0.2.0 Operational Enhancements (November 24, 2025)
+pub mod api_versioning;
+pub mod blue_green_deployment;
+pub mod canary_release;
+pub mod circuit_breaker;
+pub mod graphql_mesh;
+pub mod multi_region;
+pub mod performance_insights;
+pub mod schema_changelog;
+pub mod visual_schema_designer;
+
+// v0.3.0 Security & Integration Features (November 24, 2025)
+pub mod query_sanitization;
+pub mod response_streaming;
+pub mod webhook_support;
+
 // Advanced performance modules
 pub mod advanced_cache;
 pub mod advanced_security_system;

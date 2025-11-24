@@ -671,11 +671,13 @@ impl PerformanceProfiler {
         while samples.len() > self.config.history_size {
             samples.pop_front();
         }
+        drop(samples); // Release samples lock
 
         let mut stats = self.stats.write().await;
         stats.samples_collected += 1;
+        drop(stats); // Release stats lock before calling check_warnings
 
-        // Check for warnings
+        // Check for warnings (needs to acquire stats lock)
         self.check_warnings(&sample).await;
 
         sample
@@ -1115,6 +1117,10 @@ mod tests {
             .build();
 
         profiler.start().await.unwrap();
+
+        // Wait a bit to ensure time passes for throughput calculation
+        tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+
         profiler.record_event(100);
 
         // Collect sample which checks warnings

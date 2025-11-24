@@ -70,6 +70,10 @@ harness = false
 name = "refactoring_benchmarks"
 harness = false
 
+[[bench]]
+name = "v0_3_0_benchmarks"
+harness = false
+
 [features]
 default = []
 

@@ -80,5 +80,8 @@ pub mod visualize;
 /// ReBAC relationship management
 pub mod rebac;
 
+/// ReBAC manager implementation
+pub mod rebac_manager;
+
 /// Command stubs and utilities
 pub mod stubs;

@@ -14,6 +14,8 @@ pub enum QueryStrategy {
     ExhaustiveScan,
     /// HNSW approximate search
     HnswApproximate,
+    /// NSG (Navigable Small World Graph) approximate search
+    NsgApproximate,
     /// IVF with coarse quantization
     IvfCoarse,
     /// Product quantization with refinement
@@ -186,6 +188,12 @@ impl QueryPlanner {
                 let hnsw_complexity = (self.index_stats.vector_count as f64).ln() * 16.0;
                 hnsw_complexity * self.cost_model.distance_computation_cost_us
             }
+            QueryStrategy::NsgApproximate => {
+                // NSG is typically more efficient than HNSW due to monotonic search
+                // Cost ≈ log(N) * out_degree (typically 32) * distance computation
+                let nsg_complexity = (self.index_stats.vector_count as f64).ln() * 12.0;
+                nsg_complexity * self.cost_model.distance_computation_cost_us
+            }
             QueryStrategy::IvfCoarse => {
                 // Cost ≈ sqrt(N) * distance computation
                 let ivf_probes = (self.index_stats.vector_count as f64).sqrt();
@@ -246,6 +254,7 @@ impl QueryPlanner {
         match strategy {
             QueryStrategy::ExhaustiveScan => 1.0,
             QueryStrategy::HnswApproximate => 0.95,
+            QueryStrategy::NsgApproximate => 0.96, // NSG typically has slightly better recall than HNSW
             QueryStrategy::IvfCoarse => 0.85,
             QueryStrategy::ProductQuantization => 0.90,
             QueryStrategy::ScalarQuantization => 0.92,
@@ -272,6 +281,16 @@ impl QueryPlanner {
                     (query.k * 2).max(32)
                 };
                 params.insert("ef_search".to_string(), ef_search.to_string());
+            }
+            QueryStrategy::NsgApproximate => {
+                // NSG search length based on k and recall requirement
+                let search_length = if query.min_recall >= 0.95 {
+                    (query.k * 5).max(50)
+                } else {
+                    (query.k * 3).max(30)
+                };
+                params.insert("search_length".to_string(), search_length.to_string());
+                params.insert("out_degree".to_string(), "32".to_string());
             }
             QueryStrategy::IvfCoarse => {
                 let nprobe = if query.min_recall >= 0.90 { 16 } else { 8 };
@@ -300,6 +319,12 @@ impl QueryPlanner {
     pub fn update_statistics(&mut self, strategy: QueryStrategy, latency_ms: f64, recall: f32) {
         self.index_stats.avg_latencies.insert(strategy, latency_ms);
         self.index_stats.avg_recalls.insert(strategy, recall);
+    }
+
+    /// Update index metadata (vector count, dimensions)
+    pub fn update_index_metadata(&mut self, vector_count: usize, dimensions: usize) {
+        self.index_stats.vector_count = vector_count;
+        self.index_stats.dimensions = dimensions;
     }
 }
 

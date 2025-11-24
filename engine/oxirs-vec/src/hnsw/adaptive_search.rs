@@ -141,7 +141,8 @@ impl AdaptiveSearchTuner {
 
         // Attempt adaptation if enough data
         if history.len() >= self.config.min_queries_for_adaptation {
-            self.adapt_ef_search(&stats, &history)?;
+            // Pass mutable reference to avoid re-acquiring the lock
+            self.adapt_ef_search_internal(&mut stats, &history)?;
         }
 
         Ok(())
@@ -176,14 +177,13 @@ impl AdaptiveSearchTuner {
         stats.current_ef_search = *self.current_ef_search.read();
     }
 
-    /// Adapt ef_search based on performance
-    fn adapt_ef_search(
+    /// Adapt ef_search based on performance (internal method with mutable refs)
+    fn adapt_ef_search_internal(
         &self,
-        _stats: &AdaptiveSearchStats,
+        stats: &mut AdaptiveSearchStats,
         _history: &VecDeque<QueryMetrics>,
     ) -> Result<()> {
         let mut current_ef = self.current_ef_search.write();
-        let mut stats = self.stats.write();
 
         let avg_latency = stats.avg_latency_ms;
         let avg_recall = stats.avg_recall;

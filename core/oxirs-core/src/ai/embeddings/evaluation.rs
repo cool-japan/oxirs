@@ -176,8 +176,7 @@ pub async fn compute_kg_metrics(
     let mut metrics = KnowledgeGraphMetrics::default();
 
     // Convert to hashset for efficient filtering
-    let all_triples_set: HashSet<(String, String, String)> =
-        all_triples.iter().cloned().collect();
+    let all_triples_set: HashSet<(String, String, String)> = all_triples.iter().cloned().collect();
 
     // Head prediction metrics
     metrics.task_breakdown.head_prediction = compute_link_prediction_metrics(

@@ -15,6 +15,7 @@ pub struct RequestDeduplicator {
     /// Map of in-flight requests
     /// Key is the unique request identifier (e.g., hash of query + variables)
     /// Value is a watch channel receiver that will receive the result
+    #[allow(clippy::type_complexity)]
     inflight:
         Arc<RwLock<HashMap<String, watch::Receiver<Option<Result<ExecutionResult, String>>>>>>,
 }

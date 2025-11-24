@@ -89,32 +89,46 @@
 - [x] Locality Sensitive Hashing (LSH)
 - [~] Tree indices (Ball Tree, KD-Tree, VP-Tree) - under investigation
 - [x] Scalar Quantization (SQ) **[COMPLETED - Nov 23]**
-- [ ] NSG (Navigable Small World Graph)
+- [x] NSG (Navigable Small World Graph) **[COMPLETED - Nov 25]** ✨
 - [ ] DiskANN for billion-scale vectors
 - [ ] Learned indexes with neural networks
 
-### Hybrid Search Support (Fusion Complete, Advanced Pending)
+### Hybrid Search Support (Enhanced - November 25, 2025)
 - [x] Result merging and fusion
 - [x] Score normalization strategies
 - [x] Rank fusion algorithms (RRF, CombSUM)
-- [ ] Dense + sparse vector fusion
+- [x] **Dense + sparse vector fusion** **[COMPLETED - Nov 25]** ✨
+  - Multiple fusion strategies (Weighted Sum, RRF, Learned, Convex, Harmonic, Geometric)
+  - Automatic score normalization (Min-Max, Z-Score, Softmax, Rank)
+  - Performance statistics tracking
+  - Query-time boosting support
 - [ ] Keyword + semantic search combination
 - [ ] Re-ranking with cross-encoders
 - [ ] Multi-modal search (text, image, audio)
 - [ ] Personalized search with user embeddings
 
-### Query Optimization (Enhanced - November 23, 2025)
+### Query Optimization (Enhanced - November 25, 2025)
 - [x] Query result caching (LRU eviction)
 - [x] Batch query optimization
 - [x] SIMD-accelerated distance calculations
 - [x] Parallel query execution
 - [x] **Adaptive recall optimization** (HNSW ef_search tuning) ✨
 - [x] **Query planning and cost estimation** ✨ **[COMPLETED - Nov 23]**
-  - Intelligent strategy selection (HNSW, IVF, PQ, SQ, LSH, GPU, Hybrid)
+  - Intelligent strategy selection (HNSW, IVF, PQ, SQ, LSH, GPU, Hybrid, NSG)
   - Cost model with historical performance tracking
   - Automatic parameter generation
-- [ ] Dynamic index selection
-- [ ] Query rewriting for performance
+- [x] **Dynamic index selection** **[COMPLETED - Nov 25]** ✨
+  - Runtime index selection based on query characteristics
+  - Multiple index support (HNSW, NSG, IVF, LSH)
+  - Performance learning and adaptive selection
+  - Automatic parameter tuning
+- [x] **Query rewriting for performance** **[COMPLETED - Nov 25]** ✨
+  - Automatic query optimization (expansion, reduction, parameter tuning)
+  - Rule-based rewriting with 8 optimization rules
+  - Query statistics and analysis (sparsity, norm, variance)
+  - Performance-driven confidence scoring
+  - Query plan caching with learning
+  - Index selection hints
 
 ### Production Features (Monitoring Complete, Advanced Pending)
 - [x] Monitoring and alerting

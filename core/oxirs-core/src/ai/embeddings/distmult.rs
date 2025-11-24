@@ -1,4 +1,7 @@
-use super::{EmbeddingConfig, KnowledgeGraphEmbedding, KnowledgeGraphMetrics, TrainingConfig, TrainingMetrics};
+use super::{
+    EmbeddingConfig, KnowledgeGraphEmbedding, KnowledgeGraphMetrics, TrainingConfig,
+    TrainingMetrics,
+};
 use crate::model::Triple;
 use anyhow::{anyhow, Result};
 use scirs2_core::ndarray_ext::Array1;

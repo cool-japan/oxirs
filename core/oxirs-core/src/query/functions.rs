@@ -156,6 +156,7 @@ impl FunctionRegistry {
         self.register_native("SECONDS", Arc::new(fn_seconds));
         self.register_native("TIMEZONE", Arc::new(fn_timezone));
         self.register_native("TZ", Arc::new(fn_tz));
+        self.register_native("ADJUST", Arc::new(fn_adjust));
 
         // Hash functions (SPARQL 1.2)
         self.register_native("SHA1", Arc::new(fn_sha1));
@@ -192,6 +193,15 @@ impl FunctionRegistry {
         self.register_native("BOUND", Arc::new(fn_bound));
         self.register_native("COALESCE", Arc::new(fn_coalesce));
         self.register_native("IF", Arc::new(fn_if));
+
+        // Type checking functions (SPARQL 1.1)
+        self.register_native("isIRI", Arc::new(fn_is_iri));
+        self.register_native("isURI", Arc::new(fn_is_iri));
+        self.register_native("isBLANK", Arc::new(fn_is_blank));
+        self.register_native("isLITERAL", Arc::new(fn_is_literal));
+        self.register_native("isNUMERIC", Arc::new(fn_is_numeric));
+        self.register_native("sameTerm", Arc::new(fn_same_term));
+        self.register_native("LANGMATCHES", Arc::new(fn_langmatches));
 
         // List functions (SPARQL 1.2)
         self.register_native("IN", Arc::new(fn_in));
@@ -1581,6 +1591,150 @@ fn fn_if(args: &[Term]) -> Result<Term, OxirsError> {
             "IF condition must be boolean".to_string(),
         )),
     }
+}
+
+// Type checking functions
+
+#[allow(dead_code)]
+fn fn_is_iri(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "isIRI requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    let result = matches!(&args[0], Term::NamedNode(_));
+    Ok(Term::Literal(Literal::new_typed(
+        if result { "true" } else { "false" },
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+    )))
+}
+
+#[allow(dead_code)]
+fn fn_is_blank(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "isBLANK requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    let result = matches!(&args[0], Term::BlankNode(_));
+    Ok(Term::Literal(Literal::new_typed(
+        if result { "true" } else { "false" },
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+    )))
+}
+
+#[allow(dead_code)]
+fn fn_is_literal(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "isLITERAL requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    let result = matches!(&args[0], Term::Literal(_));
+    Ok(Term::Literal(Literal::new_typed(
+        if result { "true" } else { "false" },
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+    )))
+}
+
+#[allow(dead_code)]
+fn fn_is_numeric(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "isNUMERIC requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    let result = match &args[0] {
+        Term::Literal(lit) => {
+            let dt = lit.datatype();
+            dt.as_str() == "http://www.w3.org/2001/XMLSchema#integer"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#decimal"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#float"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#double"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#nonPositiveInteger"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#negativeInteger"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#long"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#int"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#short"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#byte"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#nonNegativeInteger"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#unsignedLong"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#unsignedInt"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#unsignedShort"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#unsignedByte"
+                || dt.as_str() == "http://www.w3.org/2001/XMLSchema#positiveInteger"
+        }
+        _ => false,
+    };
+
+    Ok(Term::Literal(Literal::new_typed(
+        if result { "true" } else { "false" },
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+    )))
+}
+
+#[allow(dead_code)]
+fn fn_same_term(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "sameTerm requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    let result = args[0] == args[1];
+    Ok(Term::Literal(Literal::new_typed(
+        if result { "true" } else { "false" },
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+    )))
+}
+
+#[allow(dead_code)]
+fn fn_langmatches(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "LANGMATCHES requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(lang_tag), Term::Literal(lang_range)) => {
+            let tag = lang_tag.value().to_lowercase();
+            let range = lang_range.value().to_lowercase();
+
+            let result = if range == "*" {
+                !tag.is_empty()
+            } else {
+                tag == range || tag.starts_with(&format!("{}-", range))
+            };
+
+            Ok(Term::Literal(Literal::new_typed(
+                if result { "true" } else { "false" },
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "LANGMATCHES requires two string literals".to_string(),
+        )),
+    }
+}
+
+// Date/time adjustment function
+
+#[allow(dead_code)]
+fn fn_adjust(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "ADJUST requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    // For now, just return the first argument (datetime value)
+    // A full implementation would apply timezone adjustment
+    Ok(args[0].clone())
 }
 
 // List functions
