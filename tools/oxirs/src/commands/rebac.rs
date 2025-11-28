@@ -3,7 +3,7 @@
 //! CLI commands for managing ReBAC relationships and authorization data.
 
 use crate::cli::error::{CliError, CliResult};
-use crate::commands::rebac_manager::{RebacManager, RelationshipTuple};
+use crate::commands::rebac_manager::RebacManager;
 use clap::{Args, Subcommand};
 use std::path::PathBuf;
 use tracing::{info, warn};
@@ -301,7 +301,7 @@ async fn import_relationships(args: ImportArgs) -> CliResult<()> {
             ImportFormat::Turtle => manager.import_turtle(&content)?,
             ImportFormat::Json => manager.import_json(&content)?,
             ImportFormat::Auto => {
-                return Err(CliError::execution_error(
+                return Err(CliError::validation_error(
                     "Auto format should have been resolved",
                 ))
             }
@@ -393,7 +393,7 @@ async fn migrate_backend(args: MigrateArgs) -> CliResult<()> {
         // Verify counts match
         let target_rels = target_manager.get_all_relationships()?;
         if target_rels.len() != total_count {
-            return Err(CliError::execution_error(format!(
+            return Err(CliError::validation_error(format!(
                 "Verification failed: expected {} relationships, found {}",
                 total_count,
                 target_rels.len()
@@ -530,7 +530,7 @@ async fn show_statistics(args: StatsArgs) -> CliResult<()> {
     match args.format.as_str() {
         "json" => {
             let json = serde_json::to_string_pretty(&stats).map_err(|e| {
-                CliError::execution_error(format!("JSON serialization failed: {}", e))
+                CliError::serialization_error(format!("JSON serialization failed: {}", e))
             })?;
             println!("{}", json);
         }

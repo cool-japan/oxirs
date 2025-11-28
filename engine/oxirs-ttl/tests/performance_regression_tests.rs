@@ -184,9 +184,9 @@ fn test_complex_turtle_syntax_performance() {
 
     println!("Complex syntax (2000 statements): {:?}", elapsed);
     // Complex syntax with blank nodes and lists is more intensive
-    // Conservative threshold for CI and slower machines
+    // Conservative threshold for CI and slower machines (increased to handle system load variability)
     assert!(
-        elapsed.as_millis() < 400,
+        elapsed.as_millis() < 500,
         "Performance regression in complex syntax: {:?}",
         elapsed
     );

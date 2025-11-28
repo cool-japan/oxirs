@@ -1,14 +1,14 @@
 # OxiRS TDB - TODO
 
-*Last Updated: November 21, 2025*
+*Last Updated: November 25, 2025*
 
-## ✅ Current Status: v0.1.0-beta.1+ (Beta.2 Features In Progress - November 21, 2025)
+## ✅ Current Status: v0.1.0-beta.1+ (Beta.2 Features In Progress - November 25, 2025)
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC and ACID transactions.
 
-### Beta.2 Release Status (November 23, 2025)
-- **Comprehensive test suite** with 688 tests passing (692 total, 4 ignored) & zero warnings
-- **Latest enhancements** (November 23, 2025): Incremental backups, query plan visualization, adaptive execution
+### Beta.2 Release Status (November 25, 2025)
+- **Comprehensive test suite** with 716 tests passing (720 total, 4 ignored) & zero warnings
+- **Latest enhancements** (November 25, 2025): Columnar analytics storage, GeoSPARQL integration, LSM-tree engine
 - **Advanced Diagnostics** ✅ **NEW (November 21, 2025)** - Production-ready diagnostic engine with 8 built-in checks
 - **GeoSPARQL Spatial Indexing** ✅ **NEW (November 21, 2025)** - R*-tree based spatial queries with 12+ GeoSPARQL functions
 - **Asynchronous I/O Layer** ✅ **NEW (November 21, 2025)** - Non-blocking file operations with optional io_uring support
@@ -30,7 +30,41 @@
 - **Production Features** - Statistics collection, corruption detection, crash recovery
 - **Released on crates.io**: `oxirs-tdb = "0.1.0-beta.1"`
 
-### ✨ NEW: Beta.2 Features Implemented (November 21-23, 2025)
+### ✨ NEW: Beta.2 Features Implemented (November 21-25, 2025)
+- **Columnar Analytics Storage** ✅ **NEW (November 25, 2025)** (`src/storage/columnar_analytics.rs`) - OLAP-optimized storage
+  - Column-oriented storage layout for analytical queries
+  - Stripe-based architecture with configurable stripe size (default 10K rows)
+  - Predicate pushdown and column pruning for efficient filtering
+  - Statistics-based stripe pruning (min/max values, null counts)
+  - Efficient aggregations: COUNT, SUM, MIN, MAX, AVG
+  - Compression-aware scanning with per-column compression
+  - RDF triple column groups (subject, predicate, object)
+  - Multiple stripe support for large datasets
+  - Global and per-stripe statistics tracking
+  - 10 comprehensive tests covering all analytics operations (all passing)
+  - Optimized for SPARQL analytical queries (GROUP BY, aggregations, filters)
+- **GeoSPARQL TdbStore Integration** ✅ **NEW (November 25, 2025)** (`src/store/mod.rs`) - Full spatial query support
+  - Seamless integration of GeoSPARQL spatial indexing with main TdbStore
+  - `insert_geometry()` method to associate geometries with RDF subjects
+  - `spatial_query()` method for executing spatial queries (WithinDistance, IntersectsBBox, KNN)
+  - `spatial_statistics()` method for monitoring spatial index health
+  - `remove_geometry()` method for deleting geometries
+  - Configurable spatial indexing (enabled by default, can be disabled via config)
+  - 10 comprehensive integration tests covering all spatial operations (all passing)
+  - Full error handling when spatial indexing is disabled
+- **LSM-tree Storage Engine** ✅ **NEW (November 25, 2025)** (`src/storage/lsm_tree.rs`) - Write-optimized storage
+  - Log-Structured Merge-tree architecture for high write throughput
+  - In-memory MemTable with automatic flushing at configurable threshold (default 4MB)
+  - Sorted String Tables (SSTables) with bloom filters per level
+  - Multi-level compaction with three strategies: SizeTiered, Leveled, Universal
+  - MVCC support with sequence numbers for versioning
+  - Range scan support with efficient sorted iteration
+  - Configurable number of levels (default 5) with size multiplier (default 10x)
+  - Bloom filter integration for fast negative lookups (configurable FPR)
+  - Statistics tracking: MemTable size, SSTable count per level, total size
+  - 8 comprehensive tests covering all operations (put, get, delete, scan, flush, compaction)
+  - Suitable for write-heavy RDF workloads and bulk import operations
+
 - **Advanced Diagnostics** (`src/diagnostics.rs`) - Production-ready diagnostic engine
   - 8 built-in diagnostic checks: Index consistency, Dictionary consistency, WAL integrity, Corruption detection
   - Three diagnostic levels: Quick (sub-second), Standard (< 5s), Deep (thorough analysis)
@@ -312,7 +346,7 @@
 - [x] Inline values for small literals ✅ **COMPLETE** (`src/dictionary/inline_values.rs`)
 - [x] Custom datatype support ✅ **COMPLETE** (already supported in Term::Literal)
 - [x] RDF-star quoted triple storage ✅ **COMPLETE** (`src/rdf_star.rs`)
-- [ ] Geospatial indexing integration
+- [x] Geospatial indexing integration ✅ **COMPLETE (November 25, 2025)** - GeoSPARQL fully integrated with TdbStore
 
 #### Advanced Compression Algorithms (Target: v0.1.0)
 - [x] LZ4 compression for fast operations ✅ **COMPLETE** (`src/compression/unified.rs`)
@@ -372,14 +406,14 @@
 - [x] Adaptive query execution ✅ **COMPLETE (November 23, 2025)** - Runtime plan adjustment based on actual results (`src/adaptive_execution.rs`)
 
 #### Storage Engine Enhancements (Target: v0.1.0)
-- [ ] LSM-tree based storage option
-- [ ] Columnar storage for analytics
+- [x] LSM-tree based storage option ✅ **COMPLETE (November 25, 2025)** - Full implementation with multi-level compaction
+- [x] Columnar storage for analytics ✅ **COMPLETE (November 25, 2025)** - OLAP-optimized with predicate pushdown and aggregations
 - [ ] Memory-mapped file optimization
 - [ ] NUMA-aware memory management
 - [ ] GPU-accelerated index scans
-- [ ] Zero-copy I/O operations
-- [ ] Direct I/O for large datasets
-- [ ] Asynchronous I/O with io_uring
+- [x] Zero-copy I/O operations ✅ **COMPLETE** (`src/storage/zero_copy.rs`)
+- [x] Direct I/O for large datasets ✅ **COMPLETE (November 15, 2025)** (`src/storage/direct_io.rs`)
+- [x] Asynchronous I/O with io_uring ✅ **COMPLETE (November 21, 2025)** (`src/storage/async_io.rs`)
 
 #### Production Features (Target: v0.1.0)
 - [ ] Database replication (master-slave, master-master)

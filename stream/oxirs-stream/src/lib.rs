@@ -333,6 +333,12 @@ pub use reinforcement_learning::{
     Action, Experience, RLAgent, RLAlgorithm, RLConfig, RLStats, State as RLState,
 };
 
+// Utility exports
+pub use utils::{
+    create_dev_stream, create_prod_stream, BatchProcessor, EventFilter, EventSampler,
+    SimpleRateLimiter, StreamMultiplexer, StreamStats,
+};
+
 pub mod backend;
 pub mod backend_optimizer;
 pub mod backpressure;
@@ -419,6 +425,9 @@ pub mod feature_engineering;
 pub mod neural_architecture_search;
 pub mod predictive_analytics;
 pub mod reinforcement_learning;
+
+// Utilities module
+pub mod utils;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2117,6 +2126,101 @@ impl StreamConfig {
         self.circuit_breaker.enabled = enabled;
         self.circuit_breaker.failure_threshold = failure_threshold;
         self
+    }
+
+    /// Create a development configuration with memory backend and debug settings
+    pub fn development(topic: &str) -> Self {
+        Self {
+            backend: StreamBackendType::Memory {
+                max_size: Some(10000),
+                persistence: false,
+            },
+            topic: topic.to_string(),
+            batch_size: 10,
+            flush_interval_ms: 100,
+            max_connections: 5,
+            connection_timeout: Duration::from_secs(10),
+            enable_compression: false,
+            compression_type: CompressionType::None,
+            retry_config: RetryConfig {
+                max_retries: 3,
+                initial_backoff: Duration::from_millis(100),
+                max_backoff: Duration::from_secs(5),
+                backoff_multiplier: 2.0,
+                jitter: true,
+            },
+            circuit_breaker: CircuitBreakerConfig {
+                enabled: false,
+                failure_threshold: 5,
+                success_threshold: 2,
+                timeout: Duration::from_secs(60),
+                half_open_max_calls: 10,
+            },
+            security: SecurityConfig::default(),
+            performance: StreamPerformanceConfig::default(),
+            monitoring: MonitoringConfig {
+                enable_metrics: true,
+                enable_tracing: false,
+                metrics_interval: Duration::from_secs(5),
+                health_check_interval: Duration::from_secs(30),
+                enable_profiling: false,
+                prometheus_endpoint: None,
+                jaeger_endpoint: None,
+                log_level: "debug".to_string(),
+            },
+        }
+    }
+
+    /// Create a production configuration with optimal performance settings
+    pub fn production(topic: &str) -> Self {
+        Self {
+            backend: StreamBackendType::Memory {
+                max_size: Some(100000),
+                persistence: true,
+            },
+            topic: topic.to_string(),
+            batch_size: 1000,
+            flush_interval_ms: 10,
+            max_connections: 50,
+            connection_timeout: Duration::from_secs(30),
+            enable_compression: true,
+            compression_type: CompressionType::Zstd,
+            retry_config: RetryConfig {
+                max_retries: 5,
+                initial_backoff: Duration::from_millis(200),
+                max_backoff: Duration::from_secs(30),
+                backoff_multiplier: 2.0,
+                jitter: true,
+            },
+            circuit_breaker: CircuitBreakerConfig {
+                enabled: true,
+                failure_threshold: 10,
+                success_threshold: 3,
+                timeout: Duration::from_secs(30),
+                half_open_max_calls: 5,
+            },
+            security: SecurityConfig::default(),
+            performance: StreamPerformanceConfig {
+                enable_batching: true,
+                enable_pipelining: true,
+                parallel_processing: true,
+                buffer_size: 65536,
+                prefetch_count: 1000,
+                enable_zero_copy: true,
+                enable_simd: true,
+                worker_threads: None,
+            },
+            monitoring: MonitoringConfig {
+                enable_metrics: true,
+                enable_tracing: true,
+                metrics_interval: Duration::from_secs(1),
+                health_check_interval: Duration::from_secs(10),
+                enable_profiling: true,
+                prometheus_endpoint: None,
+                jaeger_endpoint: None,
+                log_level: "info".to_string(),
+            },
+        }
     }
 }
 

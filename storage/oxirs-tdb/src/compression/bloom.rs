@@ -58,6 +58,16 @@ impl BloomFilter {
         true
     }
 
+    /// Insert a byte slice
+    pub fn insert_bytes(&mut self, bytes: &[u8]) {
+        self.insert(&bytes)
+    }
+
+    /// Check if a byte slice might exist
+    pub fn contains_bytes(&self, bytes: &[u8]) -> bool {
+        self.contains(&bytes)
+    }
+
     /// Clear the filter
     pub fn clear(&mut self) {
         self.bits.fill(false);

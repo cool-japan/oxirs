@@ -3,14 +3,15 @@
 //! This module provides the core functionality for managing ReBAC (Relationship-Based Access Control)
 //! relationships using RDF as the underlying storage format.
 
-use crate::cli::error::{CliError, CliResult};
-use oxirs_core::model::{BlankNode, Literal, NamedNode, Quad, Subject, Term};
-use oxirs_core::store::Store;
-use scirs2_core::random::{rng, Random};
+use crate::cli::error::{CliError, CliErrorKind, CliResult};
+use oxirs_core::model::{
+    BlankNode, GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject,
+};
+use oxirs_core::RdfStore;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 /// Authorization namespace for ReBAC relationships
 pub const AUTH_NAMESPACE: &str = "http://oxirs.org/auth#";
@@ -64,11 +65,13 @@ impl RelationshipTuple {
     /// Convert to RDF quad
     pub fn to_quad(&self, namespace: &str, graph_uri: &str) -> CliResult<Quad> {
         let subject = self.parse_subject(&self.subject)?;
-        let predicate = NamedNode::new(format!("{}{}", namespace, self.relation))
-            .map_err(|e| CliError::execution_error(format!("Invalid relation: {}", e)))?;
-        let object = self.parse_term(&self.object)?;
-        let graph = NamedNode::new(graph_uri)
-            .map_err(|e| CliError::execution_error(format!("Invalid graph URI: {}", e)))?;
+        let predicate_node = NamedNode::new(format!("{}{}", namespace, self.relation))
+            .map_err(|e| CliError::validation_error(format!("Invalid relation: {}", e)))?;
+        let predicate = Predicate::NamedNode(predicate_node);
+        let object = self.parse_object(&self.object)?;
+        let graph_node = NamedNode::new(graph_uri)
+            .map_err(|e| CliError::validation_error(format!("Invalid graph URI: {}", e)))?;
+        let graph = GraphName::NamedNode(graph_node);
 
         Ok(Quad::new(subject, predicate, object, graph))
     }
@@ -76,63 +79,77 @@ impl RelationshipTuple {
     /// Parse subject string to RDF Subject
     fn parse_subject(&self, s: &str) -> CliResult<Subject> {
         if s.starts_with("_:") {
-            Ok(Subject::BlankNode(BlankNode::new(
-                s.trim_start_matches("_:"),
-            )?))
+            Ok(Subject::BlankNode(
+                BlankNode::new(s.trim_start_matches("_:")).map_err(|e| {
+                    CliError::validation_error(format!("Invalid blank node: {}", e))
+                })?,
+            ))
         } else if s.contains(':') {
             Ok(Subject::NamedNode(NamedNode::new(s).map_err(|e| {
-                CliError::execution_error(format!("Invalid subject: {}", e))
+                CliError::validation_error(format!("Invalid subject: {}", e))
             })?))
         } else {
             // Assume user/dataset/graph prefix
             Ok(Subject::NamedNode(
                 NamedNode::new(format!("urn:oxirs:auth:{}", s))
-                    .map_err(|e| CliError::execution_error(format!("Invalid subject: {}", e)))?,
+                    .map_err(|e| CliError::validation_error(format!("Invalid subject: {}", e)))?,
             ))
         }
     }
 
-    /// Parse term string to RDF Term
-    fn parse_term(&self, s: &str) -> CliResult<Term> {
+    /// Parse object string to RDF Object
+    fn parse_object(&self, s: &str) -> CliResult<Object> {
         if s.starts_with("_:") {
-            Ok(Term::BlankNode(BlankNode::new(s.trim_start_matches("_:"))?))
+            Ok(Object::BlankNode(
+                BlankNode::new(s.trim_start_matches("_:")).map_err(|e| {
+                    CliError::validation_error(format!("Invalid blank node: {}", e))
+                })?,
+            ))
         } else if s.starts_with('"') {
             // Literal value
-            Ok(Term::Literal(Literal::new_simple_literal(
+            Ok(Object::Literal(Literal::new_simple_literal(
                 s.trim_matches('"'),
             )))
         } else if s.contains(':') {
-            Ok(Term::NamedNode(NamedNode::new(s).map_err(|e| {
-                CliError::execution_error(format!("Invalid object: {}", e))
+            Ok(Object::NamedNode(NamedNode::new(s).map_err(|e| {
+                CliError::validation_error(format!("Invalid object: {}", e))
             })?))
         } else {
             // Assume resource prefix
-            Ok(Term::NamedNode(
+            Ok(Object::NamedNode(
                 NamedNode::new(format!("urn:oxirs:auth:{}", s))
-                    .map_err(|e| CliError::execution_error(format!("Invalid object: {}", e)))?,
+                    .map_err(|e| CliError::validation_error(format!("Invalid object: {}", e)))?,
             ))
         }
     }
 
     /// Create from RDF quad
     pub fn from_quad(quad: &Quad, namespace: &str) -> Option<Self> {
-        let subject = match quad.subject {
-            Subject::NamedNode(ref n) => n.as_str().to_string(),
-            Subject::BlankNode(ref b) => format!("_:{}", b.as_str()),
+        let subject = match quad.subject() {
+            Subject::NamedNode(n) => n.as_str().to_string(),
+            Subject::BlankNode(b) => format!("_:{}", b.as_str()),
             _ => return None,
         };
 
-        let predicate = quad.predicate.as_str();
-        let relation = if let Some(stripped) = predicate.strip_prefix(namespace) {
-            stripped.to_string()
-        } else {
-            predicate.to_string()
+        // Extract predicate string from Predicate enum
+        use oxirs_core::model::Predicate;
+        let predicate_str = match quad.predicate() {
+            Predicate::NamedNode(n) => n.as_str(),
+            Predicate::Variable(v) => v.as_str(),
         };
 
-        let object = match &quad.object {
-            Term::NamedNode(n) => n.as_str().to_string(),
-            Term::BlankNode(b) => format!("_:{}", b.as_str()),
-            Term::Literal(l) => format!("\"{}\"", l.value()),
+        let relation = if let Some(stripped) = predicate_str.strip_prefix(namespace) {
+            stripped.to_string()
+        } else {
+            predicate_str.to_string()
+        };
+
+        let object = match quad.object() {
+            Object::NamedNode(n) => n.as_str().to_string(),
+            Object::BlankNode(b) => format!("_:{}", b.as_str()),
+            Object::Literal(l) => format!("\"{}\"", l.value()),
+            Object::Variable(v) => v.as_str().to_string(),
+            Object::QuotedTriple(_) => return None, // Skip quoted triples for now
         };
 
         Some(Self {
@@ -156,7 +173,7 @@ pub enum StorageBackend {
 /// ReBAC Manager for managing authorization relationships
 pub struct RebacManager {
     /// RDF store for relationship storage
-    store: Store,
+    store: RdfStore,
     /// Authorization namespace
     namespace: String,
     /// Default graph URI
@@ -168,8 +185,12 @@ pub struct RebacManager {
 impl RebacManager {
     /// Create a new in-memory ReBAC manager
     pub fn new_in_memory() -> CliResult<Self> {
-        let store = Store::new()
-            .map_err(|e| CliError::execution_error(format!("Failed to create store: {}", e)))?;
+        let store = RdfStore::new().map_err(|e| {
+            CliError::new(CliErrorKind::Other(format!(
+                "Failed to create store: {}",
+                e
+            )))
+        })?;
         Ok(Self {
             store,
             namespace: AUTH_NAMESPACE.to_string(),
@@ -180,8 +201,9 @@ impl RebacManager {
 
     /// Create a new persistent ReBAC manager with RDF-native storage
     pub fn new_persistent(path: &Path) -> CliResult<Self> {
-        let store = Store::open(path)
-            .map_err(|e| CliError::execution_error(format!("Failed to open store: {}", e)))?;
+        let store = RdfStore::open(path).map_err(|e| {
+            CliError::new(CliErrorKind::Other(format!("Failed to open store: {}", e)))
+        })?;
         Ok(Self {
             store,
             namespace: AUTH_NAMESPACE.to_string(),
@@ -210,8 +232,11 @@ impl RebacManager {
     /// Add a relationship tuple
     pub fn add_relationship(&mut self, tuple: &RelationshipTuple) -> CliResult<()> {
         let quad = tuple.to_quad(&self.namespace, &self.graph_uri)?;
-        self.store.insert(&quad).map_err(|e| {
-            CliError::execution_error(format!("Failed to insert relationship: {}", e))
+        self.store.insert_quad(quad).map_err(|e| {
+            CliError::new(CliErrorKind::Other(format!(
+                "Failed to insert relationship: {}",
+                e
+            )))
         })?;
         debug!("Added relationship: {:?}", tuple);
         Ok(())
@@ -231,8 +256,11 @@ impl RebacManager {
     /// Remove a relationship tuple
     pub fn remove_relationship(&mut self, tuple: &RelationshipTuple) -> CliResult<bool> {
         let quad = tuple.to_quad(&self.namespace, &self.graph_uri)?;
-        let removed = self.store.remove(&quad).map_err(|e| {
-            CliError::execution_error(format!("Failed to remove relationship: {}", e))
+        let removed = self.store.remove_quad(&quad).map_err(|e| {
+            CliError::new(CliErrorKind::Other(format!(
+                "Failed to remove relationship: {}",
+                e
+            )))
         })?;
         if removed {
             debug!("Removed relationship: {:?}", tuple);
@@ -243,7 +271,7 @@ impl RebacManager {
     /// Check if a relationship exists
     pub fn has_relationship(&self, tuple: &RelationshipTuple) -> CliResult<bool> {
         let quad = tuple.to_quad(&self.namespace, &self.graph_uri)?;
-        Ok(self.store.contains(&quad))
+        Ok(self.store.contains_quad(&quad).unwrap_or(false))
     }
 
     /// Query relationships with optional filters
@@ -253,11 +281,10 @@ impl RebacManager {
         relation: Option<&str>,
         object: Option<&str>,
     ) -> CliResult<Vec<RelationshipTuple>> {
-        let graph = NamedNode::new(&self.graph_uri)
-            .map_err(|e| CliError::execution_error(format!("Invalid graph URI: {}", e)))?;
-
         // Query all quads in the ReBAC graph
-        let quads = self.store.quads_for_graph(&graph);
+        let quads = self.store.iter_quads().map_err(|e| {
+            CliError::new(CliErrorKind::Other(format!("Failed to query quads: {}", e)))
+        })?;
 
         let mut results = Vec::new();
         for quad in quads {
@@ -294,8 +321,10 @@ impl RebacManager {
     pub fn get_statistics(&self) -> CliResult<RebacStatistics> {
         let all_tuples = self.get_all_relationships()?;
 
-        let mut stats = RebacStatistics::default();
-        stats.total_relationships = all_tuples.len();
+        let mut stats = RebacStatistics {
+            total_relationships: all_tuples.len(),
+            ..Default::default()
+        };
 
         // Count by relation type
         for tuple in &all_tuples {
@@ -399,8 +428,9 @@ impl RebacManager {
     /// Export relationships to JSON format
     pub fn export_json(&self) -> CliResult<String> {
         let tuples = self.get_all_relationships()?;
-        serde_json::to_string_pretty(&tuples)
-            .map_err(|e| CliError::execution_error(format!("Failed to serialize to JSON: {}", e)))
+        serde_json::to_string_pretty(&tuples).map_err(|e| {
+            CliError::serialization_error(format!("Failed to serialize to JSON: {}", e))
+        })
     }
 
     /// Import relationships from Turtle format
@@ -448,7 +478,7 @@ impl RebacManager {
     /// Import relationships from JSON format
     pub fn import_json(&mut self, json: &str) -> CliResult<usize> {
         let tuples: Vec<RelationshipTuple> = serde_json::from_str(json)
-            .map_err(|e| CliError::execution_error(format!("Failed to parse JSON: {}", e)))?;
+            .map_err(|e| CliError::serialization_error(format!("Failed to parse JSON: {}", e)))?;
 
         self.add_relationships(&tuples)
     }
@@ -697,7 +727,13 @@ mod tests {
 
     #[test]
     fn test_persistent_storage() {
-        let temp_dir = env::temp_dir().join(format!("rebac_test_{}", rng().gen::<u64>()));
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let temp_dir = env::temp_dir().join(format!("rebac_test_{}", timestamp));
         std::fs::create_dir_all(&temp_dir).unwrap();
 
         {

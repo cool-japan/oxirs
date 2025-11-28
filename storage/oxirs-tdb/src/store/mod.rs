@@ -7,6 +7,9 @@ use crate::compression::{BloomFilter, PrefixCompressor};
 use crate::diagnostics::{DiagnosticContext, DiagnosticEngine, DiagnosticLevel, DiagnosticReport};
 use crate::dictionary::{Dictionary, Term};
 use crate::error::{Result, TdbError};
+use crate::index::spatial::{
+    Geometry, SpatialIndex, SpatialQuery, SpatialQueryResult, SpatialStats,
+};
 use crate::index::{Triple, TripleIndexes};
 use crate::query_cache::{QueryCache, QueryCacheConfig};
 use crate::query_monitor::{QueryMonitor, QueryMonitorConfig};
@@ -39,6 +42,8 @@ pub struct TdbConfig {
     pub enable_statistics: bool,
     /// Enable query monitoring
     pub enable_query_monitoring: bool,
+    /// Enable spatial indexing (GeoSPARQL)
+    pub enable_spatial_indexing: bool,
 }
 
 impl TdbConfig {
@@ -53,6 +58,7 @@ impl TdbConfig {
             enable_query_cache: true,
             enable_statistics: true,
             enable_query_monitoring: true,
+            enable_spatial_indexing: true,
         }
     }
 
@@ -91,6 +97,12 @@ impl TdbConfig {
         self.enable_bloom_filters = enable;
         self
     }
+
+    /// Enable/disable spatial indexing
+    pub fn with_spatial_indexing(mut self, enable: bool) -> Self {
+        self.enable_spatial_indexing = enable;
+        self
+    }
 }
 
 /// High-level TDB triple store
@@ -119,6 +131,8 @@ pub struct TdbStore {
     query_monitor: QueryMonitor,
     /// Diagnostic engine
     diagnostic_engine: DiagnosticEngine,
+    /// Spatial index for GeoSPARQL queries (optional)
+    spatial_index: Option<SpatialIndex>,
 }
 
 impl TdbStore {
@@ -186,6 +200,13 @@ impl TdbStore {
         // Initialize diagnostic engine
         let diagnostic_engine = DiagnosticEngine::new();
 
+        // Initialize spatial index
+        let spatial_index = if config.enable_spatial_indexing {
+            Some(SpatialIndex::new())
+        } else {
+            None
+        };
+
         Ok(Self {
             config,
             dictionary,
@@ -199,6 +220,7 @@ impl TdbStore {
             statistics,
             query_monitor,
             diagnostic_engine,
+            spatial_index,
         })
     }
 
@@ -910,6 +932,107 @@ impl TdbStore {
     pub fn active_queries(&self) -> Vec<Arc<crate::query_monitor::QueryExecution>> {
         self.query_monitor.active_queries()
     }
+
+    // ==================== GeoSPARQL Spatial Methods ====================
+
+    /// Insert a geometry associated with a subject URI
+    ///
+    /// # Arguments
+    /// * `subject` - URI of the subject node
+    /// * `geometry` - Geometry to index
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use oxirs_tdb::index::spatial::{Point, Geometry};
+    ///
+    /// let mut store = TdbStore::open("data")?;
+    /// let point = Point::new(40.7128, -74.0060); // New York City
+    /// store.insert_geometry("http://example.org/nyc", point.into())?;
+    /// ```
+    pub fn insert_geometry(&mut self, subject: &str, geometry: Geometry) -> Result<()> {
+        if let Some(ref mut spatial_index) = self.spatial_index {
+            // Encode subject to NodeId
+            let subject_term = Term::Iri(subject.to_string());
+            let node_id = self.dictionary.encode(&subject_term)?;
+
+            // Insert into spatial index
+            spatial_index.insert(node_id, geometry);
+
+            Ok(())
+        } else {
+            Err(TdbError::Other(
+                "Spatial indexing is not enabled".to_string(),
+            ))
+        }
+    }
+
+    /// Execute a spatial query
+    ///
+    /// # Arguments
+    /// * `query` - Spatial query to execute
+    ///
+    /// # Returns
+    /// Vector of matching geometries with their subject URIs
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use oxirs_tdb::index::spatial::{SpatialQuery, Point};
+    ///
+    /// let store = TdbStore::open("data")?;
+    /// let query = SpatialQuery::WithinDistance {
+    ///     center: Point::new(40.7589, -73.9851), // Times Square
+    ///     distance: 10_000.0, // 10km
+    /// };
+    /// let results = store.spatial_query(&query)?;
+    /// ```
+    pub fn spatial_query(&self, query: &SpatialQuery) -> Result<Vec<SpatialQueryResult>> {
+        if let Some(ref spatial_index) = self.spatial_index {
+            Ok(spatial_index.query(query))
+        } else {
+            Err(TdbError::Other(
+                "Spatial indexing is not enabled".to_string(),
+            ))
+        }
+    }
+
+    /// Get spatial index statistics
+    ///
+    /// Returns statistics about the spatial index including geometry counts
+    /// and R-tree structure information.
+    pub fn spatial_statistics(&self) -> Result<SpatialStats> {
+        if let Some(ref spatial_index) = self.spatial_index {
+            Ok(spatial_index.stats())
+        } else {
+            Err(TdbError::Other(
+                "Spatial indexing is not enabled".to_string(),
+            ))
+        }
+    }
+
+    /// Check if spatial indexing is enabled
+    pub fn is_spatial_indexing_enabled(&self) -> bool {
+        self.spatial_index.is_some()
+    }
+
+    /// Remove a geometry from the spatial index
+    ///
+    /// # Arguments
+    /// * `subject` - URI of the subject node whose geometry should be removed
+    pub fn remove_geometry(&mut self, subject: &str) -> Result<bool> {
+        if let Some(ref mut spatial_index) = self.spatial_index {
+            // Encode subject to NodeId
+            let subject_term = Term::Iri(subject.to_string());
+            if let Some(node_id) = self.dictionary.lookup(&subject_term)? {
+                Ok(spatial_index.remove(&node_id).is_some())
+            } else {
+                Ok(false) // Subject not in dictionary
+            }
+        } else {
+            Err(TdbError::Other(
+                "Spatial indexing is not enabled".to_string(),
+            ))
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1183,5 +1306,271 @@ mod tests {
 
         assert_eq!(metrics.total_entries(), 300);
         assert_eq!(metrics.avg_entries_per_index(), 100.0);
+    }
+
+    // ==================== Spatial Indexing Tests ====================
+
+    #[test]
+    fn test_spatial_indexing_enabled() {
+        let temp_dir = env::temp_dir().join("oxirs_tdb_spatial_enabled");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let store = TdbStore::open(&temp_dir).unwrap();
+        assert!(store.is_spatial_indexing_enabled());
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_spatial_indexing_disabled() {
+        let temp_dir = env::temp_dir().join("oxirs_tdb_spatial_disabled");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let config = TdbConfig::new(&temp_dir).with_spatial_indexing(false);
+        let store = TdbStore::open_with_config(config).unwrap();
+        assert!(!store.is_spatial_indexing_enabled());
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_insert_point_geometry() {
+        use crate::index::spatial::{Geometry, Point};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_insert_point");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Insert a point for New York City
+        let point = Point::new(40.7128, -74.0060);
+        store
+            .insert_geometry("http://example.org/nyc", point.into())
+            .unwrap();
+
+        // Verify statistics
+        let stats = store.spatial_statistics().unwrap();
+        assert_eq!(stats.geometry_count, 1);
+        assert_eq!(stats.points_count, 1);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_insert_multiple_geometries() {
+        use crate::index::spatial::{Geometry, Point};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_multiple_geometries");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Insert multiple cities
+        let cities = vec![
+            ("http://example.org/nyc", Point::new(40.7128, -74.0060)),
+            ("http://example.org/london", Point::new(51.5074, -0.1278)),
+            ("http://example.org/tokyo", Point::new(35.6762, 139.6503)),
+        ];
+
+        for (uri, point) in cities {
+            store.insert_geometry(uri, point.into()).unwrap();
+        }
+
+        // Verify statistics
+        let stats = store.spatial_statistics().unwrap();
+        assert_eq!(stats.geometry_count, 3);
+        assert_eq!(stats.points_count, 3);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_spatial_query_within_distance() {
+        use crate::index::spatial::{Geometry, Point, SpatialQuery};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_spatial_within_distance");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Insert Times Square and Central Park (both in NYC)
+        store
+            .insert_geometry(
+                "http://example.org/times_square",
+                Point::new(40.7589, -73.9851).into(),
+            )
+            .unwrap();
+        store
+            .insert_geometry(
+                "http://example.org/central_park",
+                Point::new(40.7829, -73.9654).into(),
+            )
+            .unwrap();
+
+        // Query for points within 5km of Times Square
+        let query = SpatialQuery::WithinDistance {
+            center: Point::new(40.7589, -73.9851),
+            distance: 5000.0,
+        };
+
+        let results = store.spatial_query(&query).unwrap();
+        assert!(!results.is_empty());
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_spatial_query_intersects_bbox() {
+        use crate::index::spatial::{BoundingBox, Geometry, Point, SpatialQuery};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_spatial_intersects");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Insert points
+        store
+            .insert_geometry("http://example.org/p1", Point::new(40.0, -74.0).into())
+            .unwrap();
+        store
+            .insert_geometry("http://example.org/p2", Point::new(41.0, -73.0).into())
+            .unwrap();
+        store
+            .insert_geometry("http://example.org/p3", Point::new(50.0, 0.0).into())
+            .unwrap();
+
+        // Query for points in a bounding box covering NYC area
+        let query = SpatialQuery::IntersectsBBox {
+            bbox: BoundingBox::new(39.0, -75.0, 42.0, -72.0),
+        };
+
+        let results = store.spatial_query(&query).unwrap();
+        assert_eq!(results.len(), 2); // p1 and p2 should match, p3 should not
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_spatial_query_knn() {
+        use crate::index::spatial::{Geometry, Point, SpatialQuery};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_spatial_knn");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Insert multiple points
+        let points = vec![
+            ("http://example.org/p1", Point::new(40.0, -74.0)),
+            ("http://example.org/p2", Point::new(40.5, -74.0)),
+            ("http://example.org/p3", Point::new(41.0, -74.0)),
+            ("http://example.org/p4", Point::new(41.5, -74.0)),
+            ("http://example.org/p5", Point::new(42.0, -74.0)),
+        ];
+
+        for (uri, point) in points {
+            store.insert_geometry(uri, point.into()).unwrap();
+        }
+
+        // Query for 3 nearest neighbors to (40.0, -74.0)
+        let query = SpatialQuery::KNearestNeighbors {
+            point: Point::new(40.0, -74.0),
+            k: 3,
+        };
+
+        let results = store.spatial_query(&query).unwrap();
+        assert_eq!(results.len(), 3);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_remove_geometry() {
+        use crate::index::spatial::{Geometry, Point};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_remove_geometry");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Insert a point
+        store
+            .insert_geometry(
+                "http://example.org/nyc",
+                Point::new(40.7128, -74.0060).into(),
+            )
+            .unwrap();
+
+        // Verify it's there
+        let stats = store.spatial_statistics().unwrap();
+        assert_eq!(stats.geometry_count, 1);
+
+        // Remove the geometry
+        let removed = store.remove_geometry("http://example.org/nyc").unwrap();
+        assert!(removed);
+
+        // Verify it's gone
+        let stats = store.spatial_statistics().unwrap();
+        assert_eq!(stats.geometry_count, 0);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_remove_nonexistent_geometry() {
+        let temp_dir = env::temp_dir().join("oxirs_tdb_remove_nonexistent");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let mut store = TdbStore::open(&temp_dir).unwrap();
+
+        // Try to remove a geometry that doesn't exist
+        let removed = store
+            .remove_geometry("http://example.org/nonexistent")
+            .unwrap();
+        assert!(!removed);
+
+        std::fs::remove_dir_all(&temp_dir).ok();
+    }
+
+    #[test]
+    fn test_spatial_operations_when_disabled() {
+        use crate::index::spatial::{Geometry, Point};
+
+        let temp_dir = env::temp_dir().join("oxirs_tdb_spatial_disabled_ops");
+        std::fs::remove_dir_all(&temp_dir).ok();
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        let config = TdbConfig::new(&temp_dir).with_spatial_indexing(false);
+        let mut store = TdbStore::open_with_config(config).unwrap();
+
+        // Try to insert geometry - should fail
+        let result = store.insert_geometry(
+            "http://example.org/nyc",
+            Point::new(40.7128, -74.0060).into(),
+        );
+        assert!(result.is_err());
+
+        // Try to query - should fail
+        let query = crate::index::spatial::SpatialQuery::WithinDistance {
+            center: Point::new(40.7589, -73.9851),
+            distance: 5000.0,
+        };
+        let result = store.spatial_query(&query);
+        assert!(result.is_err());
+
+        // Try to get statistics - should fail
+        let result = store.spatial_statistics();
+        assert!(result.is_err());
+
+        std::fs::remove_dir_all(&temp_dir).ok();
     }
 }
