@@ -180,9 +180,13 @@ pub mod analytics;
 pub mod cache;
 pub mod chat;
 pub mod chat_session;
+pub mod collaboration; // NEW: Real-time collaboration with shared sessions
+pub mod collaboration_server; // NEW: Server endpoints for collaboration
 pub mod context;
 pub mod custom_prompts; // NEW: Custom prompts system for users
 pub mod custom_tools; // NEW: Custom tools framework for extensibility
+pub mod dashboard; // NEW: Analytics dashboard backend
+pub mod dashboard_server; // NEW: Dashboard API endpoints
 pub mod enterprise_integration;
 pub mod error;
 pub mod explanation;
@@ -214,6 +218,7 @@ pub mod suggestions; // Query suggestions (NEW)
 pub mod types;
 pub mod utils; // Utility modules for stats, NLP, and ranking
 pub mod visualization; // NEW: Result visualization helpers
+pub mod voice; // NEW: Voice interface with STT/TTS
 pub mod webhooks; // Webhook support (NEW)
 pub mod workflow;
 
@@ -241,6 +246,26 @@ pub type ChatManager = llm::manager::EnhancedLLMManager;
 // Re-export LLM types including circuit breaker
 pub use llm::{
     CircuitBreakerConfig, CircuitBreakerState, CircuitBreakerStats, LLMConfig, LLMResponse,
+};
+
+// Re-export collaboration types
+pub use collaboration::{
+    AccessControl, CollaborationConfig, CollaborationManager, CollaborationStats,
+    CollaborationUpdate, CursorPosition, Participant, ParticipantRole, ParticipantStatus,
+    SharedSession, TextRange,
+};
+
+// Re-export voice interface types
+pub use voice::{
+    AudioFormat, SpeechToTextProvider, SttProviderType, SttResult, SttStreamResult,
+    TextToSpeechProvider, TtsProviderType, TtsResult, VoiceConfig, VoiceInterface, WordTimestamp,
+};
+
+// Re-export dashboard types
+pub use dashboard::{
+    ActivityDataPoint, DashboardAnalytics, DashboardConfig, DashboardOverview, ExportFormat,
+    HealthAnalytics, HealthDataPoint, QueryAnalytics, QueryRecord, QueryType, SystemHealthMetrics,
+    TimeRange, UserActivity, UserActivityTracker, UserAnalytics,
 };
 
 // Re-export revolutionary chat optimization types

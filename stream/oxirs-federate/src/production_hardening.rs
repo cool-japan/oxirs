@@ -94,6 +94,9 @@ pub struct ProductionHardening {
     chaos_controller: Arc<RwLock<Option<ChaosController>>>,
     /// Advanced anomaly detector
     anomaly_detector: Arc<RwLock<AnomalyDetector>>,
+    /// Request tracking counters
+    total_requests_validated: Arc<std::sync::atomic::AtomicU64>,
+    total_requests_rejected: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl ProductionHardening {
@@ -122,6 +125,8 @@ impl ProductionHardening {
             anomaly_detector: Arc::new(RwLock::new(AnomalyDetector::new(
                 AnomalyDetectorConfig::default(),
             ))),
+            total_requests_validated: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            total_requests_rejected: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 
@@ -147,6 +152,8 @@ impl ProductionHardening {
             match self.security_validator.validate(request) {
                 Ok(_) => validations.push("security: pass".to_string()),
                 Err(e) => {
+                    self.total_requests_rejected
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     return Ok(ValidationResult {
                         is_valid: false,
                         reason: format!("Security validation failed: {}", e),
@@ -160,6 +167,8 @@ impl ProductionHardening {
         if self.config.enable_adaptive_rate_limiting {
             let mut rate_limiter = self.rate_limiter.write().await;
             if !rate_limiter.allow_request(&request.client_id).await? {
+                self.total_requests_rejected
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return Ok(ValidationResult {
                     is_valid: false,
                     reason: "Rate limit exceeded".to_string(),
@@ -174,6 +183,8 @@ impl ProductionHardening {
             match self.complexity_analyzer.analyze(&request.query) {
                 Ok(complexity) => {
                     if complexity.score > self.config.max_query_complexity {
+                        self.total_requests_rejected
+                            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         return Ok(ValidationResult {
                             is_valid: false,
                             reason: format!("Query too complex: {:.2}", complexity.score),
@@ -196,6 +207,8 @@ impl ProductionHardening {
         if self.config.enable_resource_quotas {
             let quota_manager = self.quota_manager.read().await;
             if !quota_manager.check_quota(&request.client_id)? {
+                self.total_requests_rejected
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 return Ok(ValidationResult {
                     is_valid: false,
                     reason: "Resource quota exceeded".to_string(),
@@ -208,12 +221,18 @@ impl ProductionHardening {
         // Circuit breaker check
         let circuit_breaker = self.circuit_breaker.read().await;
         if !circuit_breaker.is_closed() {
+            self.total_requests_rejected
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return Ok(ValidationResult {
                 is_valid: false,
                 reason: "Circuit breaker open - service temporarily unavailable".to_string(),
                 suggestions: vec!["Retry after circuit breaker resets".to_string()],
             });
         }
+
+        // All validations passed
+        self.total_requests_validated
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
         Ok(ValidationResult {
             is_valid: true,
@@ -273,8 +292,12 @@ impl ProductionHardening {
             circuit_breaker_failure_rate: circuit_breaker.failure_rate(),
             rate_limit_rps: rate_limiter.current_rate(),
             quota_usage: quota_manager.total_usage(),
-            total_requests_validated: 0, // TODO: Track
-            total_requests_rejected: 0,  // TODO: Track
+            total_requests_validated: self
+                .total_requests_validated
+                .load(std::sync::atomic::Ordering::Relaxed),
+            total_requests_rejected: self
+                .total_requests_rejected
+                .load(std::sync::atomic::Ordering::Relaxed),
         })
     }
 }

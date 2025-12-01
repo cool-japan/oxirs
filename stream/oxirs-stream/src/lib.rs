@@ -196,8 +196,9 @@ pub use tls_security::{
     TlsConfig, TlsManager, TlsMetrics, TlsSessionInfo, TlsVersion,
 };
 pub use wasm_edge_computing::{
-    EdgeExecutionResult, EdgeLocation, OptimizationLevel, ProcessingSpecialization, WasmEdgeConfig,
-    WasmEdgeProcessor, WasmPlugin, WasmResourceLimits,
+    EdgeExecutionResult, EdgeLocation, OptimizationLevel, PerformanceProfile, PluginCapability,
+    PluginSchema, ProcessingSpecialization, ResourceMetrics, SecurityLevel, WasmEdgeConfig,
+    WasmEdgeProcessor, WasmPlugin, WasmProcessingResult, WasmProcessorStats, WasmResourceLimits,
 };
 pub use webhook::{
     EventFilter as WebhookEventFilter, HttpMethod, RateLimit, RetryConfig as WebhookRetryConfig,
@@ -339,6 +340,11 @@ pub use utils::{
     SimpleRateLimiter, StreamMultiplexer, StreamStats,
 };
 
+// Advanced SciRS2 optimization exports
+pub use advanced_scirs2_optimization::{
+    AdvancedOptimizerConfig, AdvancedStreamOptimizer, MovingStats, OptimizerMetrics,
+};
+
 pub mod backend;
 pub mod backend_optimizer;
 pub mod backpressure;
@@ -428,6 +434,9 @@ pub mod reinforcement_learning;
 
 // Utilities module
 pub mod utils;
+
+// Advanced SciRS2 optimization module
+pub mod advanced_scirs2_optimization;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

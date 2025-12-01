@@ -40,6 +40,24 @@ pub enum CicdAction {
     },
 }
 
+/// Cache management actions
+#[derive(Subcommand)]
+pub enum CacheAction {
+    /// Show cache statistics
+    Stats,
+    /// Clear the query cache
+    Clear,
+    /// Configure cache settings
+    Config {
+        /// TTL in seconds
+        #[arg(long)]
+        ttl: Option<u64>,
+        /// Maximum cache size
+        #[arg(long)]
+        max_size: Option<usize>,
+    },
+}
+
 /// Alias management actions
 #[derive(Subcommand)]
 pub enum AliasAction {
@@ -176,6 +194,12 @@ pub enum HistoryAction {
     Clear,
     /// Show history statistics
     Stats,
+    /// Show comprehensive query analytics
+    Analytics {
+        /// Filter by dataset
+        #[arg(short, long)]
+        dataset: Option<String>,
+    },
 }
 
 /// Migration actions for converting between databases and formats

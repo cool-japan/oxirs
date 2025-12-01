@@ -545,20 +545,47 @@ impl CodeGenerator {
         match node_type {
             NodeType::Map => {
                 code.push_str("        // Map transformation logic\n");
-                code.push_str("        // TODO: Implement map transformation\n");
+                code.push_str("        let transformed = events.into_iter()\n");
+                code.push_str("            .map(|event| {\n");
+                code.push_str("                // Apply transformation to each event\n");
+                code.push_str("                // Customize this transformation based on your requirements\n");
+                code.push_str("                event\n");
+                code.push_str("            })\n");
+                code.push_str("            .collect::<Vec<_>>();\n");
             }
             NodeType::Filter => {
                 code.push_str("        // Filter logic\n");
-                code.push_str("        // TODO: Implement filter predicate\n");
+                code.push_str("        let filtered = events.into_iter()\n");
+                code.push_str("            .filter(|event| {\n");
+                code.push_str("                // Define your filter predicate here\n");
+                code.push_str("                // Return true to keep the event, false to filter it out\n");
+                code.push_str("                true  // Placeholder - customize this condition\n");
+                code.push_str("            })\n");
+                code.push_str("            .collect::<Vec<_>>();\n");
             }
             NodeType::MLModel(model_type) => {
                 code.push_str("        // ML model inference\n");
                 code.push_str(&format!("        // Model type: {:?}\n", model_type));
-                code.push_str("        // TODO: Implement model inference\n");
+                code.push_str("        let predictions = events.into_iter()\n");
+                code.push_str("            .map(|event| {\n");
+                code.push_str("                // Extract features from event\n");
+                code.push_str("                // let features = extract_features(&event);\n");
+                code.push_str("                // Run model inference\n");
+                code.push_str("                // let prediction = model.predict(&features)?;\n");
+                code.push_str("                // Add prediction to event metadata\n");
+                code.push_str("                event\n");
+                code.push_str("            })\n");
+                code.push_str("            .collect::<Vec<_>>();\n");
             }
             _ => {
                 code.push_str("        // Node processing logic\n");
-                code.push_str("        // TODO: Implement processing logic\n");
+                code.push_str("        let processed = events.into_iter()\n");
+                code.push_str("            .map(|event| {\n");
+                code.push_str("                // Implement your custom processing logic here\n");
+                code.push_str("                debug!(\"Processing event: {:?}\", event);\n");
+                code.push_str("                event\n");
+                code.push_str("            })\n");
+                code.push_str("            .collect::<Vec<_>>();\n");
             }
         }
 
@@ -621,8 +648,31 @@ impl CodeGenerator {
         }
 
         code.push_str("        info!(\"Starting pipeline execution\");\n\n");
-        code.push_str("        // TODO: Implement pipeline execution logic\n");
-        code.push_str("        // Process events through the pipeline DAG\n\n");
+        code.push_str("        // Pipeline execution logic - process events through DAG\n");
+        code.push_str("        let mut stream = oxirs_stream::Stream::new(self.config.clone())");
+        if self.config.code_style.use_async {
+            code.push_str(".await?;\n\n");
+        } else {
+            code.push_str("?;\n\n");
+        }
+        code.push_str("        loop {\n");
+        code.push_str("            // Consume events from stream\n");
+        if self.config.code_style.use_async {
+            code.push_str("            match stream.consume().await? {\n");
+        } else {
+            code.push_str("            match stream.consume()? {\n");
+        }
+        code.push_str("                Some(event) => {\n");
+        code.push_str("                    debug!(\"Processing event: {:?}\", event);\n");
+        code.push_str("                    // Process through pipeline nodes\n");
+        code.push_str("                    // Implement your pipeline DAG traversal here\n");
+        code.push_str("                }\n");
+        code.push_str("                None => {\n");
+        code.push_str("                    debug!(\"No more events, exiting\");\n");
+        code.push_str("                    break;\n");
+        code.push_str("                }\n");
+        code.push_str("            }\n");
+        code.push_str("        }\n\n");
 
         code.push_str("        Ok(())\n");
         code.push_str("    }\n");
@@ -764,7 +814,16 @@ impl CodeGenerator {
         code.push_str("#[tokio::test]\n");
         code.push_str("async fn test_pipeline_execution() -> Result<()> {\n");
         code.push_str(&format!("    // Test pipeline: {}\n", pipeline.name));
-        code.push_str("    // TODO: Implement integration tests\n");
+        code.push_str("    use oxirs_stream::StreamConfig;\n\n");
+        code.push_str("    // Create test configuration\n");
+        code.push_str("    let config = StreamConfig::memory();\n");
+        code.push_str("    let mut pipeline = Pipeline::new(config).await?;\n\n");
+        code.push_str("    // Create test events\n");
+        code.push_str("    let test_events = vec![\n");
+        code.push_str("        // Add your test events here\n");
+        code.push_str("    ];\n\n");
+        code.push_str("    // Run pipeline with test data\n");
+        code.push_str("    // Verify expected behavior\n\n");
         code.push_str("    Ok(())\n");
         code.push_str("}\n\n");
 
@@ -774,7 +833,13 @@ impl CodeGenerator {
             code.push_str("#[tokio::test]\n");
             code.push_str(&format!("async fn {}() -> Result<()> {{\n", test_name));
             code.push_str(&format!("    // Test node: {}\n", node.name));
-            code.push_str("    // TODO: Implement node test\n");
+            code.push_str("    use oxirs_stream::StreamEvent;\n\n");
+            code.push_str("    // Create test node instance\n");
+            code.push_str(&format!("    let node = {}::new();\n\n", self.to_pascal_case(&node.name)));
+            code.push_str("    // Create test input\n");
+            code.push_str("    let test_input = vec![];\n\n");
+            code.push_str("    // Process and verify output\n");
+            code.push_str("    // assert_eq!(output.len(), expected_len);\n\n");
             code.push_str("    Ok(())\n");
             code.push_str("}\n\n");
         }

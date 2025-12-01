@@ -50,6 +50,7 @@
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 
+use crate::forward::Substitution;
 use crate::{Rule, RuleAtom, Term};
 use anyhow::{anyhow, Result};
 use scirs2_core::metrics::{Counter, Timer};
@@ -239,28 +240,32 @@ impl ProbLogEngine {
         Ok(prob)
     }
 
-    /// Derive probability using rules
+    /// Derive probability using rules with full variable unification
     fn derive_probability(&mut self, query: &RuleAtom) -> Result<f64> {
         let mut total_prob = 0.0;
 
         // Try each rule
         for prob_rule in &self.probabilistic_rules.clone() {
-            // Check if rule head matches query
-            if !self.matches_pattern(&prob_rule.rule.head, query) {
-                continue;
+            // Try to unify each head atom with the query
+            for head_atom in &prob_rule.rule.head {
+                if let Some(substitution) = self.unify_atoms(head_atom, query) {
+                    // Apply substitution to rule body
+                    let instantiated_body =
+                        self.apply_substitution_to_body(&prob_rule.rule.body, &substitution);
+
+                    // Evaluate instantiated rule body
+                    let body_prob = self.evaluate_body(&instantiated_body)?;
+
+                    // Combine with rule probability
+                    let derivation_prob = body_prob * prob_rule.probability.unwrap_or(1.0);
+
+                    // Disjunctive combination: P(A ∨ B) = P(A) + P(B) - P(A)P(B)
+                    total_prob = total_prob + derivation_prob - (total_prob * derivation_prob);
+
+                    self.stats.inferences += 1;
+                    PROBLOG_INFERENCES.inc();
+                }
             }
-
-            // Evaluate rule body
-            let body_prob = self.evaluate_body(&prob_rule.rule.body)?;
-
-            // Combine with rule probability
-            let derivation_prob = body_prob * prob_rule.probability.unwrap_or(1.0);
-
-            // Disjunctive combination: P(A ∨ B) = P(A) + P(B) - P(A)P(B)
-            total_prob = total_prob + derivation_prob - (total_prob * derivation_prob);
-
-            self.stats.inferences += 1;
-            PROBLOG_INFERENCES.inc();
         }
 
         Ok(total_prob)
@@ -279,15 +284,13 @@ impl ProbLogEngine {
         Ok(prob)
     }
 
-    /// Check if rule head pattern matches query
-    fn matches_pattern(&self, head: &[RuleAtom], query: &RuleAtom) -> bool {
-        // Simplified pattern matching - in real implementation, would use unification
-        head.iter().any(|h| self.atoms_match(h, query))
-    }
+    /// Unify two atoms, returning a substitution if successful
+    ///
+    /// Implements full variable unification with occurs check
+    fn unify_atoms(&self, pattern: &RuleAtom, target: &RuleAtom) -> Option<Substitution> {
+        let mut substitution = HashMap::new();
 
-    /// Check if two atoms match (simplified)
-    fn atoms_match(&self, pattern: &RuleAtom, query: &RuleAtom) -> bool {
-        match (pattern, query) {
+        match (pattern, target) {
             (
                 RuleAtom::Triple {
                     subject: s1,
@@ -299,19 +302,127 @@ impl ProbLogEngine {
                     predicate: p2,
                     object: o2,
                 },
-            ) => self.terms_match(s1, s2) && self.terms_match(p1, p2) && self.terms_match(o1, o2),
+            ) => {
+                // Unify each component
+                if !self.unify_terms(s1, s2, &mut substitution) {
+                    return None;
+                }
+                if !self.unify_terms(p1, p2, &mut substitution) {
+                    return None;
+                }
+                if !self.unify_terms(o1, o2, &mut substitution) {
+                    return None;
+                }
+                Some(substitution)
+            }
+            _ => None,
+        }
+    }
+
+    /// Unify two terms, updating the substitution
+    fn unify_terms(&self, t1: &Term, t2: &Term, subst: &mut Substitution) -> bool {
+        // Apply existing substitutions
+        let t1_resolved = self.apply_substitution_to_term(t1, subst);
+        let t2_resolved = self.apply_substitution_to_term(t2, subst);
+
+        match (&t1_resolved, &t2_resolved) {
+            // Variable to variable
+            (Term::Variable(v1), Term::Variable(v2)) if v1 == v2 => true,
+            // Variable to constant/literal
+            (Term::Variable(v), t) | (t, Term::Variable(v)) => {
+                // Occurs check: prevent cyclic substitutions
+                if self.occurs_in_term(v, t) {
+                    return false;
+                }
+                subst.insert(v.clone(), t.clone());
+                true
+            }
+            // Constant to constant
+            (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
+            // Literal to literal
+            (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
+            // Function to function
+            (Term::Function { name: n1, args: a1 }, Term::Function { name: n2, args: a2 }) => {
+                if n1 != n2 || a1.len() != a2.len() {
+                    return false;
+                }
+                // Recursively unify arguments
+                for (arg1, arg2) in a1.iter().zip(a2.iter()) {
+                    if !self.unify_terms(arg1, arg2, subst) {
+                        return false;
+                    }
+                }
+                true
+            }
             _ => false,
         }
     }
 
-    /// Check if two terms match
-    fn terms_match(&self, t1: &Term, t2: &Term) -> bool {
-        match (t1, t2) {
-            (Term::Variable(_), _) | (_, Term::Variable(_)) => true,
-            (Term::Constant(c1), Term::Constant(c2)) => c1 == c2,
-            (Term::Literal(l1), Term::Literal(l2)) => l1 == l2,
-            _ => false,
+    /// Check if a variable occurs in a term (for occurs check)
+    #[allow(clippy::only_used_in_recursion)] // false positive: parameters are used for comparisons
+    fn occurs_in_term(&self, var: &str, term: &Term) -> bool {
+        match term {
+            Term::Variable(v) => v == var,
+            Term::Constant(_) | Term::Literal(_) => false,
+            Term::Function { args, .. } => args.iter().any(|arg| self.occurs_in_term(var, arg)),
         }
+    }
+
+    /// Apply substitution to a term
+    #[allow(clippy::only_used_in_recursion)] // false positive: parameters are used for lookups
+    fn apply_substitution_to_term(&self, term: &Term, subst: &Substitution) -> Term {
+        match term {
+            Term::Variable(v) => subst.get(v).cloned().unwrap_or_else(|| term.clone()),
+            Term::Function { name, args } => Term::Function {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| self.apply_substitution_to_term(arg, subst))
+                    .collect(),
+            },
+            _ => term.clone(),
+        }
+    }
+
+    /// Apply substitution to an atom
+    fn apply_substitution_to_atom(&self, atom: &RuleAtom, subst: &Substitution) -> RuleAtom {
+        match atom {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => RuleAtom::Triple {
+                subject: self.apply_substitution_to_term(subject, subst),
+                predicate: self.apply_substitution_to_term(predicate, subst),
+                object: self.apply_substitution_to_term(object, subst),
+            },
+            RuleAtom::Builtin { name, args } => RuleAtom::Builtin {
+                name: name.clone(),
+                args: args
+                    .iter()
+                    .map(|arg| self.apply_substitution_to_term(arg, subst))
+                    .collect(),
+            },
+            RuleAtom::NotEqual { left, right } => RuleAtom::NotEqual {
+                left: self.apply_substitution_to_term(left, subst),
+                right: self.apply_substitution_to_term(right, subst),
+            },
+            RuleAtom::GreaterThan { left, right } => RuleAtom::GreaterThan {
+                left: self.apply_substitution_to_term(left, subst),
+                right: self.apply_substitution_to_term(right, subst),
+            },
+            RuleAtom::LessThan { left, right } => RuleAtom::LessThan {
+                left: self.apply_substitution_to_term(left, subst),
+                right: self.apply_substitution_to_term(right, subst),
+            },
+        }
+    }
+
+    /// Apply substitution to rule body
+    fn apply_substitution_to_body(&self, body: &[RuleAtom], subst: &Substitution) -> Vec<RuleAtom> {
+        body.iter()
+            .map(|atom| self.apply_substitution_to_atom(atom, subst))
+            .collect()
     }
 
     /// Sample from the probability distribution
@@ -360,34 +471,39 @@ impl ProbLogEngine {
             return Ok(Some(DerivationTree::leaf(query.clone(), prob)));
         }
 
-        // Try to derive using rules
+        // Try to derive using rules with full unification
         for prob_rule in &self.probabilistic_rules.clone() {
-            if !self.matches_pattern(&prob_rule.rule.head, query) {
-                continue;
-            }
+            // Try to unify each head atom with the query
+            for head_atom in &prob_rule.rule.head {
+                if let Some(substitution) = self.unify_atoms(head_atom, query) {
+                    // Apply substitution to rule body
+                    let instantiated_body =
+                        self.apply_substitution_to_body(&prob_rule.rule.body, &substitution);
 
-            // Build premise trees
-            let mut premises = Vec::new();
-            let mut body_prob = 1.0;
+                    // Build premise trees for instantiated body
+                    let mut premises = Vec::new();
+                    let mut body_prob = 1.0;
 
-            for body_atom in &prob_rule.rule.body {
-                if let Some(tree) = self.explain(body_atom)? {
-                    body_prob *= tree.probability;
-                    premises.push(tree);
-                } else {
-                    // Cannot derive this premise
-                    body_prob = 0.0;
-                    break;
+                    for body_atom in &instantiated_body {
+                        if let Some(tree) = self.explain(body_atom)? {
+                            body_prob *= tree.probability;
+                            premises.push(tree);
+                        } else {
+                            // Cannot derive this premise
+                            body_prob = 0.0;
+                            break;
+                        }
+                    }
+
+                    if body_prob > 0.0 {
+                        let total_prob = body_prob * prob_rule.probability.unwrap_or(1.0);
+                        return Ok(Some(DerivationTree::node(
+                            query.clone(),
+                            total_prob,
+                            premises,
+                        )));
+                    }
                 }
-            }
-
-            if body_prob > 0.0 {
-                let total_prob = body_prob * prob_rule.probability.unwrap_or(1.0);
-                return Ok(Some(DerivationTree::node(
-                    query.clone(),
-                    total_prob,
-                    premises,
-                )));
             }
         }
 
@@ -478,7 +594,6 @@ mod tests {
         )?);
 
         // Add ground rule: parent(john,mary) → ancestor(john,mary)
-        // Note: Full variable unification is a TODO - this is a simplified version
         engine.add_rule(ProbabilisticRule::deterministic(Rule {
             name: "ancestor".to_string(),
             body: vec![create_triple("john", "parent", "mary")],
@@ -575,7 +690,6 @@ mod tests {
         engine.add_fact(create_triple("john", "parent", "mary"));
 
         // Add ground probabilistic rule: 0.9::parent(john,mary) → ancestor(john,mary)
-        // Note: Full variable unification is a TODO - this is a simplified version
         engine.add_rule(ProbabilisticRule::probabilistic(
             0.9,
             Rule {
@@ -589,6 +703,207 @@ mod tests {
         let prob = engine.query_probability(&create_triple("john", "ancestor", "mary"))?;
 
         assert!((prob - 0.9).abs() < 0.001);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_variable_unification_simple() -> Result<()> {
+        let mut engine = ProbLogEngine::new();
+
+        // Add probabilistic fact: 0.8::parent(john, mary)
+        engine.add_probabilistic_fact(ProbabilisticFact::new(
+            0.8,
+            create_triple("john", "parent", "mary"),
+        )?);
+
+        // Add rule with variables: parent(X,Y) → ancestor(X,Y)
+        engine.add_rule(ProbabilisticRule::deterministic(Rule {
+            name: "ancestor_rule".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("ancestor".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }));
+
+        // Query: ancestor(john, mary) should have probability 0.8
+        // This tests that X=john, Y=mary unifies correctly
+        let prob = engine.query_probability(&create_triple("john", "ancestor", "mary"))?;
+
+        assert!((prob - 0.8).abs() < 0.001, "Expected 0.8, got {}", prob);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_variable_unification_multiple_facts() -> Result<()> {
+        let mut engine = ProbLogEngine::new();
+
+        // Add multiple parent facts with different probabilities
+        engine.add_probabilistic_fact(ProbabilisticFact::new(
+            0.9,
+            create_triple("john", "parent", "mary"),
+        )?);
+
+        engine.add_probabilistic_fact(ProbabilisticFact::new(
+            0.7,
+            create_triple("mary", "parent", "bob"),
+        )?);
+
+        // Add rule with variables: parent(X,Y) → ancestor(X,Y)
+        engine.add_rule(ProbabilisticRule::deterministic(Rule {
+            name: "ancestor".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("ancestor".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }));
+
+        // Test first derivation: ancestor(john, mary) = 0.9
+        let prob1 = engine.query_probability(&create_triple("john", "ancestor", "mary"))?;
+        assert!((prob1 - 0.9).abs() < 0.001, "Expected 0.9, got {}", prob1);
+
+        // Test second derivation: ancestor(mary, bob) = 0.7
+        let prob2 = engine.query_probability(&create_triple("mary", "ancestor", "bob"))?;
+        assert!((prob2 - 0.7).abs() < 0.001, "Expected 0.7, got {}", prob2);
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore] // Recursive rules require cycle detection to prevent stack overflow
+    fn test_variable_unification_transitive() -> Result<()> {
+        let mut engine = ProbLogEngine::new();
+
+        // Add facts: parent(john, mary), parent(mary, bob)
+        engine.add_probabilistic_fact(ProbabilisticFact::new(
+            0.9,
+            create_triple("john", "parent", "mary"),
+        )?);
+
+        engine.add_probabilistic_fact(ProbabilisticFact::new(
+            0.8,
+            create_triple("mary", "parent", "bob"),
+        )?);
+
+        // Rule 1: parent(X,Y) → ancestor(X,Y)
+        engine.add_rule(ProbabilisticRule::deterministic(Rule {
+            name: "ancestor_base".to_string(),
+            body: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("parent".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("ancestor".to_string()),
+                object: Term::Variable("Y".to_string()),
+            }],
+        }));
+
+        // Rule 2: parent(X,Y) ∧ ancestor(Y,Z) → ancestor(X,Z)
+        // Note: This creates recursive queries which need cycle detection
+        engine.add_rule(ProbabilisticRule::deterministic(Rule {
+            name: "ancestor_trans".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("parent".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("Y".to_string()),
+                    predicate: Term::Constant("ancestor".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("ancestor".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
+        }));
+
+        // Query: ancestor(john, bob) should be derived transitively
+        // P(ancestor(john, bob)) = P(parent(john, mary)) × P(ancestor(mary, bob))
+        //                        = P(parent(john, mary)) × P(parent(mary, bob))
+        //                        = 0.9 × 0.8 = 0.72
+        let prob = engine.query_probability(&create_triple("john", "ancestor", "bob"))?;
+
+        assert!((prob - 0.72).abs() < 0.001, "Expected 0.72, got {}", prob);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_variable_unification_with_probabilistic_rule() -> Result<()> {
+        let mut engine = ProbLogEngine::new();
+
+        // Add deterministic fact
+        engine.add_fact(create_triple("john", "parent", "mary"));
+
+        // Add probabilistic rule: 0.95::parent(X,Y) → related(X,Y)
+        // This means "if X is parent of Y, then X is related to Y with 95% probability"
+        engine.add_rule(ProbabilisticRule::probabilistic(
+            0.95,
+            Rule {
+                name: "related_rule".to_string(),
+                body: vec![RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("parent".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                }],
+                head: vec![RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("related".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                }],
+            },
+        )?);
+
+        // Query: related(john, mary) should have probability 1.0 * 0.95 = 0.95
+        let prob = engine.query_probability(&create_triple("john", "related", "mary"))?;
+
+        assert!((prob - 0.95).abs() < 0.001, "Expected 0.95, got {}", prob);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_unification_failure() -> Result<()> {
+        let mut engine = ProbLogEngine::new();
+
+        // Add fact: parent(john, mary)
+        engine.add_fact(create_triple("john", "parent", "mary"));
+
+        // Add rule with mismatched constants: parent(john, bob) → ancestor(john, bob)
+        // This should NOT unify with parent(john, mary)
+        engine.add_rule(ProbabilisticRule::deterministic(Rule {
+            name: "specific_rule".to_string(),
+            body: vec![create_triple("john", "parent", "bob")],
+            head: vec![create_triple("john", "ancestor", "bob")],
+        }));
+
+        // Query: ancestor(john, bob) should have probability 0.0 (cannot derive)
+        let prob = engine.query_probability(&create_triple("john", "ancestor", "bob"))?;
+
+        assert!(
+            prob.abs() < 0.001,
+            "Expected 0.0, got {} - unification should fail",
+            prob
+        );
 
         Ok(())
     }

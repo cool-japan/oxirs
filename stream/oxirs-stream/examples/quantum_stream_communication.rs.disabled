@@ -1,0 +1,206 @@
+//! # Quantum Stream Communication Example
+//!
+//! Demonstrates quantum-enhanced streaming with:
+//! - Quantum entanglement-based communication
+//! - Quantum key distribution (QKD)
+//! - Quantum teleportation for ultra-secure data transfer
+//! - Multiple quantum security protocols (BB84, E91, SARG04)
+
+use anyhow::Result;
+use oxirs_stream::{
+    EntanglementDistribution, QuantumCommConfig, QuantumCommSystem, QuantumEvent,
+    QuantumSecurityProtocol, QuantumState, QuantumStreamProcessor, StreamConfig,
+};
+use tracing::{info, warn};
+use tracing_subscriber;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize logging
+    tracing_subscriber::fmt::init();
+
+    info!("Starting Quantum Stream Communication Example");
+
+    // Demonstrate quantum communication capabilities
+    quantum_key_distribution_example().await?;
+    quantum_teleportation_example().await?;
+    quantum_streaming_example().await?;
+
+    Ok(())
+}
+
+/// Example: Quantum Key Distribution (QKD) using BB84 protocol
+async fn quantum_key_distribution_example() -> Result<()> {
+    info!("=== Quantum Key Distribution (BB84) Example ===");
+
+    // Create quantum communication system with BB84 protocol
+    let config = QuantumCommConfig {
+        protocol: QuantumSecurityProtocol::BB84,
+        key_length: 256,
+        error_correction_enabled: true,
+        privacy_amplification_enabled: true,
+        max_error_rate: 0.11, // QBER threshold
+        entanglement_distribution: EntanglementDistribution::Direct,
+    };
+
+    let mut qcomm = QuantumCommSystem::new(config)?;
+
+    // Initialize quantum communication
+    qcomm.initialize().await?;
+    info!("Quantum communication initialized");
+
+    // Perform key distribution
+    info!("Starting quantum key distribution...");
+    let shared_key = qcomm.distribute_key().await?;
+
+    info!(
+        "Shared quantum key generated: {} bits",
+        shared_key.len() * 8
+    );
+    info!(
+        "Key (first 32 bytes): {:02x?}",
+        &shared_key[..32.min(shared_key.len())]
+    );
+
+    // Check security metrics
+    let metrics = qcomm.get_security_metrics().await?;
+    info!(
+        "Quantum Bit Error Rate (QBER): {:.4}%",
+        metrics.qber * 100.0
+    );
+    info!("Security parameter: {:.2}", metrics.security_parameter);
+
+    if metrics.qber > 0.11 {
+        warn!("QBER exceeds threshold - possible eavesdropping!");
+    } else {
+        info!("Channel is secure - no eavesdropping detected");
+    }
+
+    Ok(())
+}
+
+/// Example: Quantum teleportation for secure data transfer
+async fn quantum_teleportation_example() -> Result<()> {
+    info!("=== Quantum Teleportation Example ===");
+
+    // Create quantum communication system for teleportation
+    let config = QuantumCommConfig {
+        protocol: QuantumSecurityProtocol::E91, // EPR-based protocol
+        key_length: 256,
+        error_correction_enabled: true,
+        privacy_amplification_enabled: true,
+        max_error_rate: 0.11,
+        entanglement_distribution: EntanglementDistribution::EntanglementSwapping,
+    };
+
+    let mut qcomm = QuantumCommSystem::new(config)?;
+    qcomm.initialize().await?;
+
+    // Create quantum state to teleport
+    let quantum_state = QuantumState {
+        alpha: num_complex::Complex::new(0.707, 0.0), // |0⟩ coefficient
+        beta: num_complex::Complex::new(0.0, 0.707),  // |1⟩ coefficient
+        phase: 0.0,
+        coherence: 1.0,
+    };
+
+    info!(
+        "Teleporting quantum state: α={:.3}, β={:.3}",
+        quantum_state.alpha.norm(),
+        quantum_state.beta.norm()
+    );
+
+    // Perform quantum teleportation
+    let teleported_state = qcomm.teleport_state(&quantum_state).await?;
+
+    // Verify fidelity
+    let fidelity = qcomm
+        .calculate_fidelity(&quantum_state, &teleported_state)
+        .await?;
+    info!("Teleportation fidelity: {:.4}", fidelity);
+
+    if fidelity > 0.99 {
+        info!("High-fidelity teleportation successful!");
+    } else {
+        warn!("Teleportation fidelity degraded - check quantum channel");
+    }
+
+    // Use teleported state for secure data encoding
+    let secure_message = b"Ultra-secret quantum message";
+    let encoded = qcomm
+        .encode_with_quantum_state(secure_message, &teleported_state)
+        .await?;
+    info!("Message encoded using quantum teleported state");
+    info!("Encoded size: {} bytes", encoded.len());
+
+    Ok(())
+}
+
+/// Example: Quantum-enhanced streaming for real-time data
+async fn quantum_streaming_example() -> Result<()> {
+    info!("=== Quantum Streaming Example ===");
+
+    // Create quantum stream processor
+    let stream_config = StreamConfig::memory();
+    let quantum_config = QuantumCommConfig {
+        protocol: QuantumSecurityProtocol::SARG04, // Advanced protocol
+        key_length: 512,
+        error_correction_enabled: true,
+        privacy_amplification_enabled: true,
+        max_error_rate: 0.08,
+        entanglement_distribution: EntanglementDistribution::QuantumRepeaters,
+    };
+
+    let mut processor = QuantumStreamProcessor::new(stream_config, quantum_config)?;
+    processor.initialize().await?;
+
+    // Process quantum events
+    info!("Processing quantum events...");
+
+    for i in 0..100 {
+        // Create quantum event
+        let event = QuantumEvent {
+            id: format!("qevent-{}", i),
+            timestamp: chrono::Utc::now(),
+            quantum_state: QuantumState {
+                alpha: num_complex::Complex::new(
+                    (fastrand::f64() * std::f64::consts::PI).cos(),
+                    0.0,
+                ),
+                beta: num_complex::Complex::new(
+                    (fastrand::f64() * std::f64::consts::PI).sin(),
+                    0.0,
+                ),
+                phase: fastrand::f64() * 2.0 * std::f64::consts::PI,
+                coherence: 1.0,
+            },
+            classical_data: vec![fastrand::u8(..)],
+            entangled_pairs: vec![],
+        };
+
+        // Process with quantum operations
+        processor.process_event(&event).await?;
+
+        if i % 20 == 0 {
+            let stats = processor.get_stats().await;
+            info!(
+                "Processed {} quantum events, avg fidelity: {:.4}",
+                stats.total_events, stats.average_fidelity
+            );
+        }
+    }
+
+    // Get final quantum processing statistics
+    let final_stats = processor.get_stats().await;
+    info!("=== Quantum Processing Statistics ===");
+    info!("Total events processed: {}", final_stats.total_events);
+    info!("Average fidelity: {:.4}", final_stats.average_fidelity);
+    info!("Average QBER: {:.4}%", final_stats.average_qber * 100.0);
+    info!(
+        "Entanglement generation rate: {:.2} pairs/sec",
+        final_stats.entanglement_rate
+    );
+    info!("Decoherence events: {}", final_stats.decoherence_count);
+
+    Ok(())
+}

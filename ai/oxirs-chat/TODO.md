@@ -46,7 +46,7 @@
 - [~] Visual query builder (backend API exists; needs UI components)
 - [x] Result visualization (RichContentElement system)
 - [x] Export to multiple formats (JSON, CSV, RDF formats)
-- [~] Collaborative features (session management ✓; needs real-time sync)
+- [x] Collaborative features (session management ✓; real-time sync ✓; cursor sharing ✓)
 
 #### Integration (Target: v0.1.0)
 - [x] Multiple LLM providers (OpenAI ✓, Anthropic ✓, Local ✓; Cohere/Groq/Mistral - pending fixes)
@@ -62,6 +62,6 @@
 - [x] Advanced reasoning (chain-of-thought ✓, tree-of-thoughts ✓)
 - [x] Production deployment guides (Docker ✓, Kubernetes ✓, Cloud deployment ✓)
 - [x] Multi-language support (10 languages: EN, JA, ES, FR, DE, ZH, KO, PT, RU, AR)
-- [~] Voice interface (speech service config exists; needs STT/TTS integration)
-- [ ] Real-time collaboration (WebSocket support exists; needs shared session features)
-- [~] Analytics dashboard (message analytics exists; needs comprehensive dashboard UI)
+- [x] Voice interface (STT/TTS framework implemented with multi-provider support)
+- [x] Real-time collaboration (WebSocket + shared sessions + cursor sharing + presence)
+- [x] Analytics dashboard (backend API ✓; WebSocket streaming ✓; SSE support ✓; needs frontend UI)

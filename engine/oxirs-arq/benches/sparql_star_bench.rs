@@ -391,7 +391,7 @@ fn bench_scalability_by_depth(c: &mut Criterion) {
     let mut group = c.benchmark_group("star_scalability_depth");
     group.measurement_time(Duration::from_secs(15));
 
-    for depth in vec![1, 2, 3, 4] {
+    for depth in [1, 2, 3, 4] {
         group.bench_with_input(
             BenchmarkId::new("create_nested_triple", depth),
             &depth,
@@ -537,7 +537,7 @@ fn create_nested_triple_arq(depth: usize) -> oxirs_arq::algebra::Term {
         current = oxirs_arq::algebra::Term::QuotedTriple(Box::new(
             oxirs_arq::algebra::TriplePattern::new(
                 oxirs_arq::algebra::Term::Iri(
-                    oxirs_core::model::NamedNode::new(&format!("http://example.org/person{}", i))
+                    oxirs_core::model::NamedNode::new(format!("http://example.org/person{}", i))
                         .unwrap(),
                 ),
                 oxirs_arq::algebra::Term::Iri(

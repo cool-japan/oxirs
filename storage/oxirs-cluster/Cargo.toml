@@ -98,4 +98,6 @@ raft = ["openraft"]
 bft = []
 test-support = []
 leak_detection = []
+cuda = []   # GPU acceleration with CUDA (NVIDIA)
+metal = []  # GPU acceleration with Metal (Apple Silicon)
 

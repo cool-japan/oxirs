@@ -78,7 +78,15 @@ pub async fn run(name: String, format: String, location: Option<PathBuf>) -> Com
     let _store = match final_format.as_str() {
         "tdb2" => Store::create(&dataset_path)?,
         "memory" => Store::create(&dataset_path)?, // Use create for both
-        _ => unreachable!(),
+        _ => {
+            // This should never happen due to validation at line 35-42,
+            // but we handle it gracefully instead of using unreachable!()
+            return Err(format!(
+                "Internal error: unsupported format '{}' passed validation",
+                final_format
+            )
+            .into());
+        }
     };
 
     // Create configuration file with features

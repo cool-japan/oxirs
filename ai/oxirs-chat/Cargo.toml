@@ -22,6 +22,7 @@ scirs2-text = { workspace = true }
 scirs2-neural = { workspace = true }
 scirs2-stats = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-stream = "0.1"
 hyper = { workspace = true, features = ["full"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

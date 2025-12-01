@@ -1,7 +1,7 @@
 //! Context types and configurations for contextual embeddings
 
-use serde::{Deserialize, Serialize};
 use crate::ModelConfig;
+use serde::{Deserialize, Serialize};
 
 /// Contextual embedding configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,11 +31,7 @@ impl Default for ContextualConfig {
             base_config: ModelConfig::default(),
             base_dim: 768,
             context_dim: 512,
-            context_types: vec![
-                ContextType::Query,
-                ContextType::User,
-                ContextType::Task,
-            ],
+            context_types: vec![ContextType::Query, ContextType::User, ContextType::Task],
             adaptation_strategy: AdaptationStrategy::DynamicAttention,
             fusion_method: ContextFusionMethod::MultiHeadAttention,
             temporal_config: TemporalConfig::default(),

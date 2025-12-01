@@ -1092,7 +1092,7 @@ mod tests {
         let query = r#"SELECT ?s WHERE { ?s <http://example.org/age> 25 . ?s <http://example.org/name> "Alice" }"#;
         let fp = fingerprinter.fingerprint(query).unwrap();
 
-        assert!(fp.parameters.len() >= 1);
+        assert!(!fp.parameters.is_empty());
     }
 
     #[test]
@@ -1100,7 +1100,7 @@ mod tests {
         let config = FingerprintConfig::default();
         let fingerprinter = QueryFingerprinter::new(config);
 
-        let queries = vec![
+        let queries = [
             "SELECT ?s WHERE { ?s <http://example.org/name> \"Alice\" }",
             "SELECT ?s WHERE { ?s <http://example.org/name> \"Bob\" }",
             "SELECT ?s WHERE { ?s <http://example.org/name> \"Charlie\" }",
@@ -1124,7 +1124,7 @@ mod tests {
         let config = FingerprintConfig::default();
         let fingerprinter = QueryFingerprinter::new(config);
 
-        let queries = vec![
+        let queries = [
             "SELECT ?s WHERE { ?s <http://example.org/name> \"Alice\" }",
             "SELECT ?s WHERE { ?s <http://example.org/name> \"Bob\" }",
             "ASK { ?x <http://example.org/age> ?y }",

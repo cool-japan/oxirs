@@ -1568,4 +1568,108 @@ mod tests {
         assert_eq!(stats.total_nodes, 0);
         assert_eq!(stats.active_nodes, 0);
     }
+
+    #[test]
+    fn test_computational_capacity() {
+        let capacity = ComputationalCapacity::default();
+        assert!(capacity.cpu_cores > 0);
+        assert!(capacity.ram_mb > 0);
+    }
+
+    #[test]
+    fn test_node_trust_score() {
+        let addr = ([127, 0, 0, 1], 8080).into();
+        let mut node = FederatedNode::new(addr, PrivacyLevel::Statistical);
+
+        // Initial trust score should be based on reputation only
+        let initial_score = node.trust_score();
+        assert!((initial_score - 0.6).abs() < 1e-6); // 1.0 * 0.6 + 0.0 * 0.4
+
+        // Update contribution score
+        node.contribution_score = 0.8;
+        let updated_score = node.trust_score();
+        assert!((updated_score - 0.92).abs() < 1e-6); // 1.0 * 0.6 + 0.8 * 0.4
+    }
+
+    #[test]
+    fn test_node_activity_tracking() {
+        let addr = ([127, 0, 0, 1], 8080).into();
+        let mut node = FederatedNode::new(addr, PrivacyLevel::Statistical);
+
+        assert!(node.is_active());
+
+        node.update_activity();
+        assert!(node.is_active());
+    }
+
+    // Note: Additional comprehensive tests focus on enum variants and simple validations
+    // Complex struct initialization tests are limited by private fields and varying implementations
+
+    #[test]
+    fn test_aggregation_strategies_variants() {
+        // Verify all aggregation strategy variants are defined
+        let _fed_avg = AggregationStrategy::FederatedAveraging;
+        let _weighted = AggregationStrategy::WeightedAveraging;
+    }
+
+    #[test]
+    fn test_consensus_algorithm_variants() {
+        // Verify consensus algorithm variants
+        let _pbft = ConsensusAlgorithm::PBFT;
+        let _raft = ConsensusAlgorithm::RAFT;
+        let _pos = ConsensusAlgorithm::PoS;
+    }
+
+    #[test]
+    fn test_privacy_level_variants() {
+        // Verify privacy level variants
+        assert_eq!(PrivacyLevel::Open, PrivacyLevel::Open);
+        assert_eq!(PrivacyLevel::Statistical, PrivacyLevel::Statistical);
+        assert_eq!(
+            PrivacyLevel::DifferentialPrivacy { epsilon: 1.0 },
+            PrivacyLevel::DifferentialPrivacy { epsilon: 1.0 }
+        );
+    }
+
+    #[test]
+    fn test_security_level_variants() {
+        let levels = [
+            SecurityLevel::Low,
+            SecurityLevel::Medium,
+            SecurityLevel::High,
+        ];
+        assert_eq!(levels.len(), 3);
+    }
+
+    #[test]
+    fn test_noise_mechanism_variants() {
+        let mechanisms = [
+            NoiseMechanism::Laplace,
+            NoiseMechanism::Gaussian,
+            NoiseMechanism::Exponential,
+        ];
+        assert_eq!(mechanisms.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_federated_learning_config_defaults() {
+        let config = FederatedLearningConfig::default();
+        assert_eq!(config.min_nodes_for_consensus, 3);
+        assert!((config.byzantine_tolerance - 0.33).abs() < 1e-6);
+        assert!(config.privacy_config.enable_differential_privacy);
+    }
+
+    #[test]
+    fn test_privacy_config_defaults() {
+        let config = PrivacyConfig::default();
+        assert!(config.enable_differential_privacy);
+        assert_eq!(config.epsilon, 1.0);
+    }
+
+    #[tokio::test]
+    async fn test_honey_badger_bft_construction() {
+        let node_count = 4;
+        let _hb_bft = HoneyBadgerBFT::new(Uuid::new_v4(), node_count);
+        // Construction test - verifies basic instantiation works
+    }
 }

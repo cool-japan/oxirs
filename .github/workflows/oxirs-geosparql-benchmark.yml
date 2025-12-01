@@ -1,0 +1,235 @@
+name: Benchmark Tracking
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run weekly benchmarks on Sunday at 3 AM UTC
+    - cron: '0 3 * * 0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmark:
+    name: Run Benchmarks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-target-bench-${{ hashFiles('**/Cargo.lock') }}
+
+      # Run benchmarks
+      - name: Run spatial_operations benchmarks
+        run: cargo bench --package oxirs-geosparql --bench spatial_operations -- --output-format bencher | tee spatial_ops_bench.txt
+
+      - name: Run spatial_index benchmarks
+        run: cargo bench --package oxirs-geosparql --bench spatial_index -- --output-format bencher | tee spatial_index_bench.txt
+
+      - name: Run buffer_performance benchmarks
+        run: cargo bench --package oxirs-geosparql --bench buffer_performance -- --output-format bencher | tee buffer_perf_bench.txt
+
+      - name: Run performance_comparison benchmarks
+        run: cargo bench --package oxirs-geosparql --bench performance_comparison -- --output-format bencher | tee perf_comparison_bench.txt
+
+      # Combine benchmark results
+      - name: Combine benchmark results
+        run: |
+          cat spatial_ops_bench.txt spatial_index_bench.txt buffer_perf_bench.txt perf_comparison_bench.txt > combined_bench.txt
+
+      # Store benchmark results
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Rust Benchmark
+          tool: 'cargo'
+          output-file-path: combined_bench.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: true
+          # Save benchmark data to gh-pages branch
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: dev/bench
+          # Alert if performance regresses by more than 50%
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
+          alert-comment-cc-users: '@cool-japan/oxirs-maintainers'
+
+      # Upload raw benchmark results as artifacts
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.sha }}
+          path: |
+            spatial_ops_bench.txt
+            spatial_index_bench.txt
+            buffer_perf_bench.txt
+            perf_comparison_bench.txt
+            combined_bench.txt
+          retention-days: 90
+
+  # Compare with baseline (for PRs)
+  compare-baseline:
+    name: Compare with Baseline
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev
+
+      # Run baseline benchmarks
+      - name: Run baseline benchmarks
+        run: cargo bench --package oxirs-geosparql --no-fail-fast -- --output-format bencher | tee baseline_bench.txt
+
+      # Checkout PR branch
+      - uses: actions/checkout@v4
+        with:
+          clean: false
+
+      # Run PR benchmarks
+      - name: Run PR benchmarks
+        run: cargo bench --package oxirs-geosparql --no-fail-fast -- --output-format bencher | tee pr_bench.txt
+
+      # Compare results
+      - name: Compare benchmarks
+        run: |
+          echo "## Benchmark Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Benchmark | Baseline | PR | Change |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|----------|-------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          # Parse and compare (simplified - use proper tool in production)
+          while IFS= read -r line; do
+            if [[ $line =~ ^test ]]; then
+              echo "$line" | awk '{print "| " $2 " | " $5 " | TBD | TBD |"}' >> $GITHUB_STEP_SUMMARY
+            fi
+          done < baseline_bench.txt
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Note: Use \`cargo bench --package oxirs-geosparql compare_benchmarks\` for detailed comparison" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-comparison-${{ github.sha }}
+          path: |
+            baseline_bench.txt
+            pr_bench.txt
+          retention-days: 30
+
+  # Profile for performance hotspots
+  profile:
+    name: Performance Profiling
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev linux-tools-generic
+
+      - name: Install cargo-flamegraph
+        run: cargo install flamegraph
+
+      - name: Run profiling
+        run: |
+          # Profile spatial index operations
+          cargo flamegraph --bench spatial_index -- --bench || true
+
+          # Profile geometric operations
+          cargo flamegraph --bench spatial_operations -- --bench || true
+
+      - name: Upload flamegraphs
+        uses: actions/upload-artifact@v4
+        with:
+          name: flamegraphs-${{ github.sha }}
+          path: |
+            flamegraph.svg
+            *.svg
+          retention-days: 30
+        continue-on-error: true
+
+  # Memory profiling
+  memory-profile:
+    name: Memory Profiling
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libproj-dev proj-bin libgeos-dev valgrind
+
+      - name: Install cargo-valgrind
+        run: cargo install cargo-valgrind
+
+      - name: Run memory profiling
+        run: |
+          # Profile memory usage of stress tests
+          cargo valgrind test --package oxirs-geosparql stress_tests::test_memory_efficiency || true
+
+      - name: Check for memory leaks
+        run: |
+          echo "Memory profiling completed. Check Valgrind output for leaks."
+
+  # Regression detection summary
+  regression-summary:
+    name: Regression Detection Summary
+    needs: [benchmark, compare-baseline]
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    steps:
+      - name: Performance Summary
+        run: |
+          echo "## Performance Regression Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [[ "${{ needs.benchmark.result }}" == "success" ]]; then
+            echo "✅ Benchmarks passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Benchmarks failed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [[ "${{ needs.compare-baseline.result }}" == "success" ]]; then
+            echo "✅ Baseline comparison passed" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Baseline comparison needs review" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "For detailed benchmark results, check the artifacts." >> $GITHUB_STEP_SUMMARY

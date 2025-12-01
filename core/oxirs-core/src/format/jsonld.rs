@@ -33,8 +33,9 @@ impl JsonLdParser {
     /// Set the JSON-LD processing profile
     pub fn with_profile(mut self, profile: JsonLdProfileSet) -> Self {
         self.profile = profile.clone();
-        // TODO: Fix type mismatch between format::JsonLdProfileSet and jsonld::JsonLdProfileSet
-        // self.inner = self.inner.with_profile(profile);
+        // Convert format::JsonLdProfileSet to jsonld::JsonLdProfileSet
+        let jsonld_profile_set = profile.to_jsonld_profile_set();
+        self.inner = self.inner.with_profile(jsonld_profile_set);
         self
     }
 

@@ -82,6 +82,51 @@ impl JsonLdProfileSet {
     pub fn profiles(&self) -> &[JsonLdProfile] {
         &self.profiles
     }
+
+    /// Convert to jsonld module's JsonLdProfileSet (bitfield-based)
+    ///
+    /// Maps format::JsonLdProfile to jsonld::JsonLdProfile for compatibility.
+    pub fn to_jsonld_profile_set(&self) -> crate::jsonld::JsonLdProfileSet {
+        use crate::jsonld;
+        let mut set = jsonld::JsonLdProfileSet::empty();
+
+        for profile in &self.profiles {
+            let jsonld_profile = match profile {
+                JsonLdProfile::Standard => continue, // No direct equivalent, skip
+                JsonLdProfile::Expanded => jsonld::JsonLdProfile::Expanded,
+                JsonLdProfile::Compacted => jsonld::JsonLdProfile::Compacted,
+                JsonLdProfile::Flattened => jsonld::JsonLdProfile::Flattened,
+                JsonLdProfile::Streaming => jsonld::JsonLdProfile::Streaming,
+            };
+            set |= jsonld_profile;
+        }
+
+        set
+    }
+
+    /// Create from jsonld module's JsonLdProfileSet
+    ///
+    /// Converts jsonld::JsonLdProfileSet to format::JsonLdProfileSet.
+    pub fn from_jsonld_profile_set(jsonld_set: crate::jsonld::JsonLdProfileSet) -> Self {
+        use crate::jsonld;
+        let mut profiles = Vec::new();
+
+        for jsonld_profile in jsonld_set {
+            let profile = match jsonld_profile {
+                jsonld::JsonLdProfile::Expanded => JsonLdProfile::Expanded,
+                jsonld::JsonLdProfile::Compacted => JsonLdProfile::Compacted,
+                jsonld::JsonLdProfile::Flattened => JsonLdProfile::Flattened,
+                jsonld::JsonLdProfile::Streaming => JsonLdProfile::Streaming,
+                // Context, Frame, Framed don't have direct equivalents
+                jsonld::JsonLdProfile::Context => continue,
+                jsonld::JsonLdProfile::Frame => continue,
+                jsonld::JsonLdProfile::Framed => continue,
+            };
+            profiles.push(profile);
+        }
+
+        Self { profiles }
+    }
 }
 
 impl From<JsonLdProfile> for JsonLdProfileSet {

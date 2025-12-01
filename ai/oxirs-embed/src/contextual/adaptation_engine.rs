@@ -1,8 +1,8 @@
 //! Adaptation engine for contextual embeddings
 
-use anyhow::Result;
-use crate::Vector;
 use super::ContextualConfig;
+use crate::Vector;
+use anyhow::Result;
 
 /// Adaptation engine for contextual embeddings
 pub struct AdaptationEngine {
@@ -17,7 +17,7 @@ impl AdaptationEngine {
     pub async fn adapt_embeddings(
         &self,
         base_embeddings: &[Vector],
-        context: &ProcessedContext,
+        _context: &ProcessedContext,
     ) -> Result<Vec<Vector>> {
         // Simplified adaptation implementation
         Ok(base_embeddings.to_vec())

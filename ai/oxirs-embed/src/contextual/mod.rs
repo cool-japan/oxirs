@@ -7,14 +7,14 @@
 //! - Temporal context for time-aware embeddings
 //! - Interactive refinement based on feedback
 
-pub mod context_types;
 pub mod adaptation_engine;
-pub mod fusion_network;
-pub mod temporal_context;
-pub mod interactive_refinement;
-pub mod context_cache;
 pub mod base_embedding;
+pub mod context_cache;
 pub mod context_processor;
+pub mod context_types;
+pub mod fusion_network;
+pub mod interactive_refinement;
+pub mod temporal_context;
 
 use crate::{EmbeddingModel, ModelConfig, ModelStats, TrainingStats, Triple, Vector};
 use anyhow::Result;
@@ -24,14 +24,14 @@ use serde_json;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-pub use context_types::*;
 pub use adaptation_engine::*;
-pub use fusion_network::*;
-pub use temporal_context::*;
-pub use interactive_refinement::*;
-pub use context_cache::*;
 pub use base_embedding::*;
+pub use context_cache::*;
 pub use context_processor::*;
+pub use context_types::*;
+pub use fusion_network::*;
+pub use interactive_refinement::*;
+pub use temporal_context::*;
 
 /// Main contextual embedding model
 pub struct ContextualEmbeddingModel {
@@ -79,7 +79,11 @@ impl ContextualEmbeddingModel {
         let processed_context = self.context_processor.process_context(context).await?;
 
         // Check cache first
-        if let Some(cached) = self.context_cache.get_embeddings(triples, &processed_context).await {
+        if let Some(cached) = self
+            .context_cache
+            .get_embeddings(triples, &processed_context)
+            .await
+        {
             return Ok(cached);
         }
 
@@ -87,15 +91,21 @@ impl ContextualEmbeddingModel {
         let base_embeddings = self.base_model.embed(triples).await?;
 
         // Apply contextual adaptation
-        let adapted_embeddings = self.adaptation_engine
-            .adapt_embeddings(&base_embeddings, &processed_context).await?;
+        let adapted_embeddings = self
+            .adaptation_engine
+            .adapt_embeddings(&base_embeddings, &processed_context)
+            .await?;
 
         // Fuse contexts
-        let final_embeddings = self.fusion_network
-            .fuse_contexts(&adapted_embeddings, &processed_context).await?;
+        let final_embeddings = self
+            .fusion_network
+            .fuse_contexts(&adapted_embeddings, &processed_context)
+            .await?;
 
         // Cache results
-        self.context_cache.store_embeddings(triples, &processed_context, &final_embeddings).await;
+        self.context_cache
+            .store_embeddings(triples, &processed_context, &final_embeddings)
+            .await;
 
         Ok(final_embeddings)
     }
@@ -128,11 +138,11 @@ impl EmbeddingModel for ContextualEmbeddingModel {
     async fn train(&mut self, epochs: Option<usize>) -> Result<TrainingStats> {
         // Simplified training implementation
         let _epochs = epochs.unwrap_or(self.model_config.max_epochs);
-        
+
         // Update stats
         self.stats.is_trained = true;
         self.stats.last_training_time = Some(Utc::now());
-        
+
         Ok(TrainingStats {
             epochs_completed: _epochs,
             final_loss: 0.01,
@@ -143,22 +153,25 @@ impl EmbeddingModel for ContextualEmbeddingModel {
     }
 
     fn get_entity_embedding(&self, entity: &str) -> Result<Vector> {
-        self.entities.get(entity)
+        self.entities
+            .get(entity)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Entity not found: {}", entity))
     }
 
     fn get_relation_embedding(&self, relation: &str) -> Result<Vector> {
-        self.relations.get(relation)
+        self.relations
+            .get(relation)
             .cloned()
             .ok_or_else(|| anyhow::anyhow!("Relation not found: {}", relation))
     }
 
     fn score_triple(&self, subject: &str, predicate: &str, object: &str) -> Result<f64> {
         // Simple scoring implementation
-        if self.entities.contains_key(subject) && 
-           self.relations.contains_key(predicate) && 
-           self.entities.contains_key(object) {
+        if self.entities.contains_key(subject)
+            && self.relations.contains_key(predicate)
+            && self.entities.contains_key(object)
+        {
             Ok(0.8) // Default high score for known entities
         } else {
             Ok(0.1) // Low score for unknown entities
@@ -172,7 +185,8 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         // Return top k entity predictions
-        let mut predictions: Vec<(String, f64)> = self.entities
+        let mut predictions: Vec<(String, f64)> = self
+            .entities
             .keys()
             .take(k)
             .map(|entity| (entity.clone(), 0.8))
@@ -188,7 +202,8 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         // Return top k entity predictions
-        let mut predictions: Vec<(String, f64)> = self.entities
+        let mut predictions: Vec<(String, f64)> = self
+            .entities
             .keys()
             .take(k)
             .map(|entity| (entity.clone(), 0.8))
@@ -204,7 +219,8 @@ impl EmbeddingModel for ContextualEmbeddingModel {
         k: usize,
     ) -> Result<Vec<(String, f64)>> {
         // Return top k relation predictions
-        let mut predictions: Vec<(String, f64)> = self.relations
+        let mut predictions: Vec<(String, f64)> = self
+            .relations
             .keys()
             .take(k)
             .map(|relation| (relation.clone(), 0.8))
@@ -233,11 +249,11 @@ impl EmbeddingModel for ContextualEmbeddingModel {
     fn save(&self, path: &str) -> Result<()> {
         use std::fs::File;
         use std::io::Write;
-        
+
         // Create the full path including model metadata
         let model_path = format!("{path}.contextual");
         let metadata_path = format!("{path}.metadata.json");
-        
+
         // Serialize the model configuration and state
         let model_data = serde_json::json!({
             "model_id": self.model_id,
@@ -250,12 +266,12 @@ impl EmbeddingModel for ContextualEmbeddingModel {
             "timestamp": chrono::Utc::now(),
             "version": "1.0"
         });
-        
+
         // Write model data
         let mut file = File::create(&model_path)?;
         let serialized = serde_json::to_string_pretty(&model_data)?;
         file.write_all(serialized.as_bytes())?;
-        
+
         // Write metadata
         let metadata = serde_json::json!({
             "model_type": "ContextualEmbedding",
@@ -268,69 +284,77 @@ impl EmbeddingModel for ContextualEmbeddingModel {
             "created_at": chrono::Utc::now(),
             "file_path": model_path
         });
-        
+
         let mut metadata_file = File::create(&metadata_path)?;
         let metadata_serialized = serde_json::to_string_pretty(&metadata)?;
         metadata_file.write_all(metadata_serialized.as_bytes())?;
-        
-        tracing::info!("Contextual model saved to {} and {}", model_path, metadata_path);
+
+        tracing::info!(
+            "Contextual model saved to {} and {}",
+            model_path,
+            metadata_path
+        );
         Ok(())
     }
 
     fn load(&mut self, path: &str) -> Result<()> {
         use std::fs::File;
         use std::io::Read;
-        
+
         // Determine the full path
         let model_path = format!("{path}.contextual");
-        
+
         // Read and deserialize model data
         let mut file = File::open(&model_path)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
-        
+
         let model_data: serde_json::Value = serde_json::from_str(&contents)?;
-        
+
         // Validate version compatibility
         if let Some(version) = model_data.get("version").and_then(|v| v.as_str()) {
             if version != "1.0" {
                 return Err(anyhow::anyhow!("Unsupported model version: {}", version));
             }
         }
-        
+
         // Load model components
         if let Some(model_id) = model_data.get("model_id") {
             self.model_id = serde_json::from_value(model_id.clone())?;
         }
-        
+
         if let Some(config) = model_data.get("config") {
             self.config = serde_json::from_value(config.clone())?;
         }
-        
+
         if let Some(model_config) = model_data.get("model_config") {
             self.model_config = serde_json::from_value(model_config.clone())?;
         }
-        
+
         if let Some(stats) = model_data.get("stats") {
             self.stats = serde_json::from_value(stats.clone())?;
         }
-        
+
         if let Some(entities) = model_data.get("entities") {
             self.entities = serde_json::from_value(entities.clone())?;
         }
-        
+
         if let Some(relations) = model_data.get("relations") {
             self.relations = serde_json::from_value(relations.clone())?;
         }
-        
+
         if let Some(triples) = model_data.get("triples") {
             self.triples = serde_json::from_value(triples.clone())?;
         }
-        
+
         tracing::info!("Contextual model loaded from {}", model_path);
-        tracing::info!("Model contains {} entities, {} relations, {} triples", 
-                      self.entities.len(), self.relations.len(), self.triples.len());
-        
+        tracing::info!(
+            "Model contains {} entities, {} relations, {} triples",
+            self.entities.len(),
+            self.relations.len(),
+            self.triples.len()
+        );
+
         Ok(())
     }
 
@@ -403,33 +427,23 @@ pub struct UserPreferences {
 }
 
 /// Complexity levels
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ComplexityLevel {
     Beginner,
+    #[default]
     Intermediate,
     Advanced,
     Expert,
 }
 
-impl Default for ComplexityLevel {
-    fn default() -> Self {
-        ComplexityLevel::Intermediate
-    }
-}
-
 /// Response formats
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum ResponseFormat {
     Detailed,
+    #[default]
     Summary,
     BulletPoints,
     Technical,
-}
-
-impl Default for ResponseFormat {
-    fn default() -> Self {
-        ResponseFormat::Summary
-    }
 }
 
 /// User interaction history
@@ -489,18 +503,13 @@ pub struct PerformanceRequirements {
 }
 
 /// Priority levels
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum PriorityLevel {
     Low,
+    #[default]
     Medium,
     High,
     Critical,
-}
-
-impl Default for PriorityLevel {
-    fn default() -> Self {
-        PriorityLevel::Medium
-    }
 }
 
 /// Task constraints

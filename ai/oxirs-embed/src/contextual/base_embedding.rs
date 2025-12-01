@@ -1,7 +1,7 @@
 //! Base embedding model
 
+use crate::{ModelConfig, TrainingStats, Triple, Vector};
 use anyhow::Result;
-use crate::{ModelConfig, Triple, Vector, TrainingStats};
 
 /// Base embedding model
 pub struct BaseEmbeddingModel {

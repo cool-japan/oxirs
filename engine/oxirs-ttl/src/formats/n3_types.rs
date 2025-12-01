@@ -1,9 +1,147 @@
 //! N3 (Notation3) type definitions
 //!
 //! This module defines N3-specific types that extend RDF with:
-//! - Formulas (graphs as first-class values)
-//! - Variables (universally or existentially quantified)
-//! - Built-in predicates for logic and math
+//! - **Formulas**: Graphs as first-class values (quoted graphs)
+//! - **Variables**: Universally or existentially quantified variables
+//! - **Implications**: Logical rules with `=>` operator
+//! - **Built-in Predicates**: Logic, math, string, list operations
+//!
+//! # N3 Language Features
+//!
+//! N3 extends RDF/Turtle with powerful semantic web features:
+//!
+//! ## Formulas (Quoted Graphs)
+//!
+//! Formulas allow you to treat graphs as first-class values:
+//!
+//! ```text
+//! { :alice :knows :bob } :source :document1 .
+//! ```
+//!
+//! ## Variables
+//!
+//! Variables enable quantification and rule definition:
+//!
+//! ```text
+//! @forAll :x, :y .  # Universal quantification
+//! @forSome :z .     # Existential quantification
+//! ```
+//!
+//! ## Implications (Rules)
+//!
+//! Rules enable logical inference:
+//!
+//! ```text
+//! { ?x :parent ?y } => { ?y :child ?x } .
+//! ```
+//!
+//! # Examples
+//!
+//! ## Creating Variables
+//!
+//! ```rust
+//! use oxirs_ttl::n3::N3Variable;
+//!
+//! // Create a universal variable (forAll)
+//! let x = N3Variable::universal("x");
+//! assert!(x.universal);
+//! assert_eq!(x.name, "x");
+//! assert_eq!(x.prefixed_name(), "?x");
+//!
+//! // Create an existential variable (forSome)
+//! let z = N3Variable::existential("z");
+//! assert!(!z.universal);
+//! ```
+//!
+//! ## Creating Formulas
+//!
+//! ```rust
+//! use oxirs_ttl::n3::{N3Formula, N3Statement, N3Term, N3Variable};
+//! use oxirs_core::model::NamedNode;
+//!
+//! // Create an empty formula
+//! let mut formula = N3Formula::new();
+//! assert!(formula.is_empty());
+//!
+//! // Add a statement to the formula
+//! let stmt = N3Statement::new(
+//!     N3Term::Variable(N3Variable::universal("x")),
+//!     N3Term::NamedNode(NamedNode::new("http://example.org/knows")?),
+//!     N3Term::Variable(N3Variable::universal("y"))
+//! );
+//! formula.add_statement(stmt);
+//! assert_eq!(formula.len(), 1);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Creating Implications (Rules)
+//!
+//! ```rust
+//! use oxirs_ttl::n3::{N3Formula, N3Implication, N3Statement, N3Term, N3Variable};
+//! use oxirs_core::model::NamedNode;
+//!
+//! // Create antecedent: { ?x :parent ?y }
+//! let mut antecedent = N3Formula::new();
+//! antecedent.add_statement(N3Statement::new(
+//!     N3Term::Variable(N3Variable::universal("x")),
+//!     N3Term::NamedNode(NamedNode::new("http://example.org/parent")?),
+//!     N3Term::Variable(N3Variable::universal("y"))
+//! ));
+//!
+//! // Create consequent: { ?y :child ?x }
+//! let mut consequent = N3Formula::new();
+//! consequent.add_statement(N3Statement::new(
+//!     N3Term::Variable(N3Variable::universal("y")),
+//!     N3Term::NamedNode(NamedNode::new("http://example.org/child")?),
+//!     N3Term::Variable(N3Variable::universal("x"))
+//! ));
+//!
+//! // Create implication
+//! let rule = N3Implication::new(antecedent, consequent);
+//! println!("Rule: {}", rule);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Working with N3 Terms
+//!
+//! ```rust
+//! use oxirs_ttl::n3::{N3Term, N3Variable, N3Formula};
+//! use oxirs_core::model::NamedNode;
+//!
+//! // Named node term
+//! let iri_term = N3Term::NamedNode(NamedNode::new("http://example.org/alice")?);
+//! assert!(!iri_term.is_variable());
+//! assert!(!iri_term.is_formula());
+//!
+//! // Variable term
+//! let var_term = N3Term::Variable(N3Variable::universal("x"));
+//! assert!(var_term.is_variable());
+//!
+//! // Formula term (quoted graph)
+//! let formula_term = N3Term::Formula(Box::new(N3Formula::new()));
+//! assert!(formula_term.is_formula());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Converting to RDF
+//!
+//! ```rust
+//! use oxirs_ttl::n3::{N3Statement, N3Term};
+//! use oxirs_core::model::{NamedNode, Literal};
+//!
+//! // N3 statement without variables can be converted to RDF
+//! let stmt = N3Statement::new(
+//!     N3Term::NamedNode(NamedNode::new("http://example.org/alice")?),
+//!     N3Term::NamedNode(NamedNode::new("http://example.org/name")?),
+//!     N3Term::Literal(Literal::new("Alice"))
+//! );
+//!
+//! // Convert to RDF triple
+//! let triple = stmt.as_rdf_triple();
+//! assert!(triple.is_some());
+//! assert!(!stmt.has_variables());
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use oxirs_core::model::{BlankNode, Literal, NamedNode, Triple};
 use std::collections::HashMap;
@@ -14,6 +152,19 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 static FORMULA_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
 /// An N3 variable (universal or existential)
+///
+/// N3 variables enable quantification and pattern matching in rules.
+/// Variables are written with a `?` prefix in N3 syntax.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_ttl::n3::N3Variable;
+///
+/// let x = N3Variable::universal("x");
+/// assert_eq!(x.prefixed_name(), "?x");
+/// assert!(x.universal);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct N3Variable {
     /// Variable name (without the ? prefix)
@@ -52,6 +203,28 @@ impl fmt::Display for N3Variable {
 }
 
 /// An N3 formula (a graph that can be used as a term)
+///
+/// Formulas are one of N3's most powerful features, allowing graphs
+/// to be treated as first-class values. They can be used as subjects,
+/// predicates, or objects in statements.
+///
+/// # Examples
+///
+/// ```rust
+/// use oxirs_ttl::n3::{N3Formula, N3Statement, N3Term, N3Variable};
+/// use oxirs_core::model::NamedNode;
+///
+/// let mut formula = N3Formula::new();
+/// formula.add_statement(N3Statement::new(
+///     N3Term::Variable(N3Variable::universal("x")),
+///     N3Term::NamedNode(NamedNode::new("http://example.org/type")?),
+///     N3Term::NamedNode(NamedNode::new("http://example.org/Person")?)
+/// ));
+///
+/// assert_eq!(formula.len(), 1);
+/// assert!(!formula.is_empty());
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub struct N3Formula {
     /// Unique identifier for this formula

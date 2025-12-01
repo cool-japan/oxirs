@@ -79,3 +79,8 @@ harness = false
 name = "gpu_operations_bench"
 harness = false
 
+[[bench]]
+name = "sparql_star_bench"
+harness = false
+required-features = ["star"]
+

@@ -217,6 +217,7 @@ pub mod docs;
 pub mod enhanced_errors;
 pub mod functions;
 pub mod governance;
+pub mod gpu_acceleration;
 pub mod graph_diff;
 pub mod graphql_star;
 pub mod hdt_star;

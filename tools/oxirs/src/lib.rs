@@ -769,6 +769,15 @@ pub enum Commands {
         graphviz: Option<PathBuf>,
     },
 
+    /// Query optimization analyzer
+    Optimize {
+        /// SPARQL query string or file
+        query: String,
+        /// Query is a file path
+        #[arg(short, long)]
+        file: bool,
+    },
+
     /// SPARQL query template management
     Template {
         #[command(subcommand)]
@@ -791,6 +800,12 @@ pub enum Commands {
     Alias {
         #[command(subcommand)]
         action: AliasAction,
+    },
+
+    /// Query cache management
+    Cache {
+        #[command(subcommand)]
+        action: CacheAction,
     },
 
     /// ReBAC relationship management
@@ -1443,6 +1458,11 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             .await
             .map_err(|e| e.into())
         }
+        Commands::Optimize { query, file } => {
+            commands::query_optimizer::optimize_command(query, file)
+                .await
+                .map_err(|e| e.into())
+        }
         Commands::Template { action } => {
             use std::collections::HashMap;
             match action {
@@ -1491,6 +1511,11 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             HistoryAction::Stats => commands::history::commands::stats_command()
                 .await
                 .map_err(|e| e.into()),
+            HistoryAction::Analytics { dataset } => {
+                commands::history::commands::analytics_command(dataset)
+                    .await
+                    .map_err(|e| e.into())
+            }
         },
         Commands::Cicd { action } => match action {
             CicdAction::Report {
@@ -1524,6 +1549,20 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 .await
                 .map_err(|e| e.into()),
             AliasAction::Reset => commands::alias::reset().await.map_err(|e| e.into()),
+        },
+
+        Commands::Cache { action } => match action {
+            CacheAction::Stats => commands::cache::commands::stats_command()
+                .await
+                .map_err(|e| e.into()),
+            CacheAction::Clear => commands::cache::commands::clear_command()
+                .await
+                .map_err(|e| e.into()),
+            CacheAction::Config { ttl, max_size } => {
+                commands::cache::commands::config_command(ttl, max_size)
+                    .await
+                    .map_err(|e| e.into())
+            }
         },
 
         Commands::Rebac(args) => commands::rebac::execute(args).await.map_err(|e| e.into()),

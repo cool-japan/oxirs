@@ -139,6 +139,10 @@ pub enum SammError {
     #[error("Network error: {0}")]
     Network(String),
 
+    /// Graph operation error
+    #[error("Graph error: {0}")]
+    GraphError(String),
+
     /// Generic error
     #[error("SAMM error: {0}")]
     Other(String),
@@ -277,6 +281,7 @@ impl SammError {
             SammError::Rdf(_) => ErrorCategory::Rdf,
             SammError::Unsupported(_) => ErrorCategory::Unsupported,
             SammError::Generation(_) => ErrorCategory::Generation,
+            SammError::GraphError(_) => ErrorCategory::Other,
             SammError::Other(_) => ErrorCategory::Other,
         }
     }

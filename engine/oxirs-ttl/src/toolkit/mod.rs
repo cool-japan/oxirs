@@ -10,12 +10,14 @@
 
 pub mod buffer_manager;
 pub mod error;
+pub mod error_reporter;
 pub mod fast_scanner;
 pub mod format_detector;
 pub mod iri_validator;
 pub mod lazy_iri;
 pub mod lexer;
 pub mod parser;
+pub mod rdf_validator;
 pub mod serializer;
 pub mod simd_lexer;
 pub mod string_interner;
@@ -24,6 +26,9 @@ pub mod zero_copy;
 // Re-export the main traits and types
 pub use buffer_manager::{BufferManager, GlobalBufferManager};
 pub use error::*;
+pub use error_reporter::{
+    create_error_report, format_simple_error, ErrorReporter, ErrorSuggestion,
+};
 pub use fast_scanner::FastScanner;
 pub use format_detector::{DetectionMethod, DetectionResult, FormatDetector, RdfFormat};
 pub use iri_validator::{
@@ -32,6 +37,10 @@ pub use iri_validator::{
 pub use lazy_iri::{CachedIriResolver, IriResolutionError, LazyIri, ResolverStats};
 pub use lexer::*;
 pub use parser::*;
+pub use rdf_validator::{
+    check_duplicates, check_orphaned_blank_nodes, compute_stats, validate_quad, validate_triple,
+    DatasetStats, Severity, ValidationIssue, ValidationResult,
+};
 pub use serializer::*;
 pub use simd_lexer::{SimdLexer, SimdStats};
 pub use string_interner::StringInterner;

@@ -38,7 +38,7 @@ impl BatchProcessor {
                     batch.push(event);
 
                     if batch.len() >= self.batch_size {
-                        callback(batch.drain(..).collect()).await?;
+                        callback(std::mem::take(&mut batch)).await?;
                         total_processed += self.batch_size;
                     }
                 }
@@ -46,7 +46,7 @@ impl BatchProcessor {
                     // No more events, process remaining batch
                     if !batch.is_empty() {
                         let count = batch.len();
-                        callback(batch.drain(..).collect()).await?;
+                        callback(std::mem::take(&mut batch)).await?;
                         total_processed += count;
                     }
                     break;
@@ -58,7 +58,7 @@ impl BatchProcessor {
                     // Timeout - process what we have
                     if !batch.is_empty() {
                         let count = batch.len();
-                        callback(batch.drain(..).collect()).await?;
+                        callback(std::mem::take(&mut batch)).await?;
                         total_processed += count;
                     }
 
@@ -74,9 +74,12 @@ impl BatchProcessor {
     }
 }
 
+/// Type alias for event predicate functions
+type EventPredicate = Box<dyn Fn(&StreamEvent) -> bool + Send + Sync>;
+
 /// Event filter builder for creating complex event filters
 pub struct EventFilter {
-    predicates: Vec<Box<dyn Fn(&StreamEvent) -> bool + Send + Sync>>,
+    predicates: Vec<EventPredicate>,
 }
 
 impl EventFilter {
@@ -118,10 +121,10 @@ impl EventFilter {
     pub fn by_graph(self, graph_name: String) -> Self {
         self.add_predicate(move |event| match event {
             StreamEvent::TripleAdded { graph, .. } => {
-                graph.as_ref().map_or(false, |g| g == &graph_name)
+                graph.as_ref().is_some_and(|g| g == &graph_name)
             }
             StreamEvent::TripleRemoved { graph, .. } => {
-                graph.as_ref().map_or(false, |g| g == &graph_name)
+                graph.as_ref().is_some_and(|g| g == &graph_name)
             }
             _ => false,
         })

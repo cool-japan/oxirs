@@ -669,4 +669,267 @@ mod tests {
         );
         vec![binding]
     }
+
+    fn create_multi_var_solution(
+        var_x: &Variable,
+        val_x: &str,
+        var_y: &Variable,
+        val_y: &str,
+    ) -> Solution {
+        let mut binding = Binding::new();
+        binding.insert(
+            var_x.clone(),
+            Term::Iri(NamedNode::new_unchecked(format!(
+                "http://example.org/x/{val_x}"
+            ))),
+        );
+        binding.insert(
+            var_y.clone(),
+            Term::Iri(NamedNode::new_unchecked(format!(
+                "http://example.org/y/{val_y}"
+            ))),
+        );
+        vec![binding]
+    }
+
+    #[test]
+    fn test_empty_left_input() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+        let left_solutions = vec![];
+        let right_solutions = vec![create_test_solution(&var_x, "value1")];
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, stats) = result.unwrap();
+        assert!(solutions.is_empty());
+        assert_eq!(stats.output_cardinality, 0);
+    }
+
+    #[test]
+    fn test_empty_right_input() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+        let left_solutions = vec![create_test_solution(&var_x, "value1")];
+        let right_solutions = vec![];
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, stats) = result.unwrap();
+        assert!(solutions.is_empty());
+        assert_eq!(stats.output_cardinality, 0);
+    }
+
+    #[test]
+    fn test_no_matching_values() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+        let left_solutions = vec![create_test_solution(&var_x, "value1")];
+        let right_solutions = vec![create_test_solution(&var_x, "value2")];
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, _stats) = result.unwrap();
+        assert!(
+            solutions.is_empty(),
+            "No matches should result in empty output"
+        );
+    }
+
+    #[test]
+    fn test_multiple_join_variables() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+        let var_y = Variable::new("y").unwrap();
+
+        let left_solutions = vec![
+            create_multi_var_solution(&var_x, "a", &var_y, "1"),
+            create_multi_var_solution(&var_x, "b", &var_y, "2"),
+        ];
+        let right_solutions = vec![
+            create_multi_var_solution(&var_x, "a", &var_y, "1"),
+            create_multi_var_solution(&var_x, "c", &var_y, "3"),
+        ];
+        let join_variables = vec![var_x, var_y];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, stats) = result.unwrap();
+        assert_eq!(solutions.len(), 1, "Should find one matching solution");
+        assert!(stats.join_selectivity > 0.0);
+    }
+
+    #[test]
+    fn test_large_dataset_join() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+
+        // Create 100 solutions on each side
+        let left_solutions: Vec<_> = (0..100)
+            .map(|i| create_test_solution(&var_x, &format!("value{}", i)))
+            .collect();
+        let right_solutions: Vec<_> = (50..150)
+            .map(|i| create_test_solution(&var_x, &format!("value{}", i)))
+            .collect();
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, stats) = result.unwrap();
+        // Overlap is from 50 to 99, so 50 matches
+        assert_eq!(solutions.len(), 50);
+        assert!(
+            !stats.execution_time.is_zero(),
+            "Execution time should be measured"
+        );
+        println!("Large join stats: {}", stats.performance_summary());
+    }
+
+    #[test]
+    fn test_hash_join_preferred_for_large_inputs() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 10 * 1024 * 1024); // 10MB threshold
+
+        let var_x = Variable::new("x").unwrap();
+
+        // Create large enough datasets to prefer hash join
+        let left_solutions: Vec<_> = (0..1000)
+            .map(|i| create_test_solution(&var_x, &format!("value{}", i)))
+            .collect();
+        let right_solutions: Vec<_> = (0..1000)
+            .map(|i| create_test_solution(&var_x, &format!("value{}", i)))
+            .collect();
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (_solutions, stats) = result.unwrap();
+        // Hash join or sort-merge should be selected for large inputs
+        assert!(
+            matches!(
+                stats.algorithm_used,
+                OptimalJoinAlgorithm::HashJoin | OptimalJoinAlgorithm::SortMergeJoin
+            ),
+            "Large inputs should use hash join or sort-merge join"
+        );
+    }
+
+    #[test]
+    fn test_selectivity_calculation() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+
+        // 10 left solutions, 10 right solutions, 5 matches
+        let left_solutions: Vec<_> = (0..10)
+            .map(|i| create_test_solution(&var_x, &format!("value{}", i)))
+            .collect();
+        let right_solutions: Vec<_> = (5..15)
+            .map(|i| create_test_solution(&var_x, &format!("value{}", i)))
+            .collect();
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, stats) = result.unwrap();
+        assert_eq!(solutions.len(), 5);
+        // Selectivity should be 5 / (10 * 10) = 0.05
+        assert!(
+            (stats.join_selectivity - 0.05).abs() < 0.01,
+            "Selectivity calculation incorrect"
+        );
+    }
+
+    #[test]
+    fn test_join_stats_reporting() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+        let left_solutions = vec![create_test_solution(&var_x, "value1")];
+        let right_solutions = vec![create_test_solution(&var_x, "value1")];
+        let join_variables = vec![var_x];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (_solutions, stats) = result.unwrap();
+
+        // Verify stats are populated correctly
+        assert_eq!(stats.input_cardinalities.0, 1);
+        assert_eq!(stats.input_cardinalities.1, 1);
+        assert_eq!(stats.output_cardinality, 1);
+        assert!(stats.memory_used > 0);
+        assert!(stats.join_selectivity > 0.0);
+
+        let summary = stats.performance_summary();
+        assert!(
+            summary.contains("Algorithm"),
+            "Summary should contain algorithm info: {}",
+            summary
+        );
+    }
+
+    #[test]
+    fn test_cartesian_product() {
+        let cost_model = CostModel::new(CostModelConfig::default());
+        let mut selector = JoinAlgorithmSelector::new(cost_model, 1024 * 1024);
+
+        let var_x = Variable::new("x").unwrap();
+        let var_y = Variable::new("y").unwrap();
+
+        // Join on different variables - should produce cartesian product
+        let left_solutions = vec![
+            create_test_solution(&var_x, "a"),
+            create_test_solution(&var_x, "b"),
+        ];
+        let right_solutions = vec![
+            create_test_solution(&var_y, "1"),
+            create_test_solution(&var_y, "2"),
+        ];
+
+        // Empty join variables means cartesian product
+        let join_variables = vec![];
+
+        let result =
+            selector.execute_optimal_join(left_solutions, right_solutions, &join_variables);
+        assert!(result.is_ok());
+
+        let (solutions, stats) = result.unwrap();
+        // Cartesian product: 2 * 2 = 4
+        assert_eq!(solutions.len(), 4);
+        assert!(
+            (stats.join_selectivity - 1.0).abs() < 0.01,
+            "Cartesian product selectivity should be ~1.0"
+        );
+    }
 }

@@ -43,6 +43,7 @@
 
 use std::net::SocketAddr;
 
+pub mod adaptive_execution; // Adaptive query execution with full SciRS2 integration (v0.1.0 Final)
 pub mod admin_ui; // Admin UI enhancements (Beta.2/RC.1)
 pub mod aggregation;
 pub mod analytics;
@@ -96,8 +97,8 @@ pub mod websocket;
 
 // v0.1.0 Final - Additional Production Features
 pub mod cdn_static; // CDN support for static assets
-pub mod edge_caching;
-pub mod load_balancing; // Advanced load balancing strategies // Edge caching integration framework
+pub mod edge_caching; // Edge caching integration framework
+pub mod load_balancing; // Advanced load balancing strategies
 
 use store::Store;
 

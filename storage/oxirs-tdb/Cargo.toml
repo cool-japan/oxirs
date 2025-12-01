@@ -52,6 +52,15 @@ brotli = "8.0"
 
 flate2 = "1.1"
 
+# Encryption
+aes-gcm = "0.10"
+pbkdf2 = { version = "0.12", features = ["simple"] }
+sha2 = "0.10"
+
+# Unix system calls (for madvise, mlock)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Optional: io_uring support (Linux only)
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-uring = { version = "0.5", optional = true }

@@ -343,9 +343,14 @@ pub mod schema_changelog;
 pub mod visual_schema_designer;
 
 // v0.3.0 Security & Integration Features (November 24, 2025)
+pub mod content_security_policy;
+pub mod edge_caching;
 pub mod query_sanitization;
 pub mod response_streaming;
 pub mod webhook_support;
+
+// v0.4.0 Advanced Observability & Protocol Features (November 29, 2025)
+pub mod query_batching;
 
 // Advanced performance modules
 pub mod advanced_cache;

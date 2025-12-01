@@ -281,10 +281,17 @@ impl RebacManager {
         relation: Option<&str>,
         object: Option<&str>,
     ) -> CliResult<Vec<RelationshipTuple>> {
-        // Query all quads in the ReBAC graph
-        let quads = self.store.iter_quads().map_err(|e| {
-            CliError::new(CliErrorKind::Other(format!("Failed to query quads: {}", e)))
-        })?;
+        // Query all quads in the ReBAC graph only
+        let graph_node = NamedNode::new(&self.graph_uri)
+            .map_err(|e| CliError::validation_error(format!("Invalid graph URI: {}", e)))?;
+        let target_graph = GraphName::NamedNode(graph_node);
+
+        let quads = self
+            .store
+            .query_quads(None, None, None, Some(&target_graph))
+            .map_err(|e| {
+                CliError::new(CliErrorKind::Other(format!("Failed to query quads: {}", e)))
+            })?;
 
         let mut results = Vec::new();
         for quad in quads {
@@ -618,10 +625,15 @@ mod tests {
 
         let tuple = RelationshipTuple::new("user:alice", "owner", "dataset:public");
         manager.add_relationship(&tuple).unwrap();
-        manager.add_relationship(&tuple).unwrap(); // Duplicate
+        manager.add_relationship(&tuple).unwrap(); // Attempt duplicate (RDF stores auto-deduplicate)
 
+        // RDF stores automatically de-duplicate quads, so no duplicates should exist
         let duplicates = manager.find_duplicates().unwrap();
-        assert_eq!(duplicates.len(), 1);
+        assert_eq!(duplicates.len(), 0);
+
+        // Verify that only one relationship exists
+        let all = manager.get_all_relationships().unwrap();
+        assert_eq!(all.len(), 1);
     }
 
     #[test]

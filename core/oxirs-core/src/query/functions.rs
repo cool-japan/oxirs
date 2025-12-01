@@ -8,15 +8,26 @@ use crate::model::{Literal, NamedNode, Term};
 use crate::OxirsError;
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use regex::Regex;
+use scirs2_core::metrics::{Counter, Histogram, MetricsRegistry, Timer};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// SPARQL function registry
+/// SPARQL function registry with built-in performance monitoring
 pub struct FunctionRegistry {
     /// Built-in functions
     functions: HashMap<String, FunctionImpl>,
     /// Custom extension functions
     extensions: HashMap<String, Arc<dyn CustomFunction>>,
+    /// Function execution counter (tracks calls per function)
+    execution_counter: Arc<Counter>,
+    /// Function execution timer (tracks execution time)
+    execution_timer: Arc<Timer>,
+    /// Function error counter
+    error_counter: Arc<Counter>,
+    /// Function execution time histogram
+    execution_histogram: Arc<Histogram>,
+    /// Metrics registry for global tracking
+    metrics_registry: Arc<MetricsRegistry>,
 }
 
 /// Function implementation
@@ -95,11 +106,23 @@ impl Default for FunctionRegistry {
 }
 
 impl FunctionRegistry {
-    /// Create new function registry with SPARQL 1.2 built-ins
+    /// Create new function registry with SPARQL 1.2 built-ins and performance monitoring
     pub fn new() -> Self {
+        let metrics_registry = Arc::new(MetricsRegistry::new());
+
+        let execution_counter = Arc::new(Counter::new("function_executions".to_string()));
+        let execution_timer = Arc::new(Timer::new("function_duration".to_string()));
+        let error_counter = Arc::new(Counter::new("function_errors".to_string()));
+        let execution_histogram = Arc::new(Histogram::new("function_duration_dist".to_string()));
+
         let mut registry = FunctionRegistry {
             functions: HashMap::new(),
             extensions: HashMap::new(),
+            execution_counter,
+            execution_timer,
+            error_counter,
+            execution_histogram,
+            metrics_registry,
         };
 
         registry.register_sparql_12_functions();
@@ -124,6 +147,12 @@ impl FunctionRegistry {
         // Case functions
         self.register_native("UCASE", Arc::new(fn_ucase));
         self.register_native("LCASE", Arc::new(fn_lcase));
+
+        // SPARQL 1.2 additional string functions
+        self.register_native("CONCAT_WS", Arc::new(fn_concat_ws));
+        self.register_native("SPLIT", Arc::new(fn_split));
+        self.register_native("LPAD", Arc::new(fn_lpad));
+        self.register_native("RPAD", Arc::new(fn_rpad));
 
         // Numeric functions
         self.register_native("ABS", Arc::new(fn_abs));
@@ -220,10 +249,16 @@ impl FunctionRegistry {
         self.extensions.insert(metadata.name.clone(), func);
     }
 
-    /// Execute a function
+    /// Execute a function with automatic performance monitoring
     pub fn execute(&self, name: &str, args: &[Term]) -> Result<Term, OxirsError> {
-        // Check built-in functions
-        if let Some(func) = self.functions.get(name) {
+        // Start timing
+        let start = std::time::Instant::now();
+
+        // Increment execution counter
+        self.execution_counter.inc();
+
+        // Execute function
+        let result = if let Some(func) = self.functions.get(name) {
             match func {
                 FunctionImpl::Native(f) => f(args),
                 FunctionImpl::JavaScript(_) => Err(OxirsError::Query(
@@ -239,7 +274,73 @@ impl FunctionRegistry {
             func.execute(args)
         } else {
             Err(OxirsError::Query(format!("Unknown function: {name}")))
+        };
+
+        // Record execution time
+        let duration = start.elapsed();
+        self.execution_timer.observe(duration);
+        self.execution_histogram
+            .observe(duration.as_micros() as f64);
+
+        // Track errors
+        if result.is_err() {
+            self.error_counter.inc();
         }
+
+        result
+    }
+
+    /// Get function execution statistics
+    pub fn get_statistics(&self) -> FunctionStatistics {
+        let timer_stats = self.execution_timer.get_stats();
+
+        FunctionStatistics {
+            total_executions: self.execution_counter.get(),
+            total_errors: self.error_counter.get(),
+            average_duration_micros: timer_stats.mean * 1_000_000.0, // Convert to microseconds
+            // Note: SCIRS2 Histogram doesn't currently expose percentiles
+            p95_duration_micros: timer_stats.mean * 1_000_000.0, // Use mean as approximation
+            p99_duration_micros: timer_stats.mean * 1_000_000.0, // Use mean as approximation
+        }
+    }
+
+    /// Get metrics registry for external monitoring systems
+    pub fn metrics_registry(&self) -> &Arc<MetricsRegistry> {
+        &self.metrics_registry
+    }
+}
+
+/// Function execution statistics
+#[derive(Debug, Clone)]
+pub struct FunctionStatistics {
+    /// Total number of function executions
+    pub total_executions: u64,
+    /// Total number of function errors
+    pub total_errors: u64,
+    /// Average execution duration in microseconds
+    pub average_duration_micros: f64,
+    /// 95th percentile execution duration in microseconds
+    pub p95_duration_micros: f64,
+    /// 99th percentile execution duration in microseconds
+    pub p99_duration_micros: f64,
+}
+
+impl std::fmt::Display for FunctionStatistics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "FunctionStats {{ executions: {}, errors: {}, avg: {:.2}μs, p95: {:.2}μs, p99: {:.2}μs, error_rate: {:.2}% }}",
+            self.total_executions,
+            self.total_errors,
+            self.average_duration_micros,
+            self.p95_duration_micros,
+            self.p99_duration_micros,
+            if self.total_executions > 0 {
+                (self.total_errors as f64 / self.total_executions as f64) * 100.0
+            } else {
+                0.0
+            }
+        )
     }
 }
 
@@ -559,6 +660,189 @@ fn fn_lcase(args: &[Term]) -> Result<Term, OxirsError> {
         Term::Literal(lit) => Ok(Term::Literal(Literal::new(lit.value().to_lowercase()))),
         _ => Err(OxirsError::Query(
             "LCASE requires string argument".to_string(),
+        )),
+    }
+}
+
+// SPARQL 1.2 Additional String Functions
+
+/// CONCAT_WS - Concatenate with separator
+/// CONCAT_WS(separator, str1, str2, ...) joins strings with a separator
+fn fn_concat_ws(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() < 2 {
+        return Err(OxirsError::Query(
+            "CONCAT_WS requires at least 2 arguments (separator and at least one string)"
+                .to_string(),
+        ));
+    }
+
+    // First argument is the separator
+    let separator = match &args[0] {
+        Term::Literal(lit) => lit.value(),
+        _ => {
+            return Err(OxirsError::Query(
+                "CONCAT_WS separator must be a string literal".to_string(),
+            ))
+        }
+    };
+
+    // Remaining arguments are strings to concatenate
+    let strings: Result<Vec<&str>, OxirsError> = args[1..]
+        .iter()
+        .map(|arg| match arg {
+            Term::Literal(lit) => Ok(lit.value()),
+            Term::NamedNode(nn) => Ok(nn.as_str()),
+            _ => Err(OxirsError::Query(
+                "CONCAT_WS requires string arguments".to_string(),
+            )),
+        })
+        .collect();
+
+    let result = strings?.join(separator);
+    Ok(Term::Literal(Literal::new(&result)))
+}
+
+/// SPLIT - Split string by delimiter into multiple strings
+/// Returns a concatenated result with | separator for now (SPARQL doesn't have native arrays)
+fn fn_split(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "SPLIT requires exactly 2 arguments (string and delimiter)".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(text), Term::Literal(delimiter)) => {
+            let parts: Vec<&str> = text.value().split(delimiter.value()).collect();
+            // Since SPARQL doesn't have native array return type, we return JSON array as string
+            let result = format!(
+                "[{}]",
+                parts
+                    .iter()
+                    .map(|s| format!("\"{}\"", s))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            Ok(Term::Literal(Literal::new(&result)))
+        }
+        _ => Err(OxirsError::Query(
+            "SPLIT requires string arguments".to_string(),
+        )),
+    }
+}
+
+/// LPAD - Left pad string to specified length
+/// LPAD(string, length, padString) pads the left side of string
+fn fn_lpad(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() < 2 || args.len() > 3 {
+        return Err(OxirsError::Query(
+            "LPAD requires 2 or 3 arguments (string, length, [padString])".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(text), Term::Literal(length_lit)) => {
+            let target_length = length_lit
+                .value()
+                .parse::<usize>()
+                .map_err(|_| OxirsError::Query("LPAD length must be numeric".to_string()))?;
+
+            let pad_string = if args.len() == 3 {
+                match &args[2] {
+                    Term::Literal(pad) => pad.value(),
+                    _ => {
+                        return Err(OxirsError::Query(
+                            "LPAD pad string must be a string literal".to_string(),
+                        ))
+                    }
+                }
+            } else {
+                " " // Default to space
+            };
+
+            let text_value = text.value();
+            let current_length = text_value.chars().count();
+
+            let result = if current_length >= target_length {
+                text_value.to_string()
+            } else {
+                let pad_length = target_length - current_length;
+                let pad_chars: Vec<char> = pad_string.chars().collect();
+                if pad_chars.is_empty() {
+                    return Err(OxirsError::Query(
+                        "LPAD pad string cannot be empty".to_string(),
+                    ));
+                }
+
+                let mut padding = String::new();
+                for i in 0..pad_length {
+                    padding.push(pad_chars[i % pad_chars.len()]);
+                }
+                format!("{}{}", padding, text_value)
+            };
+
+            Ok(Term::Literal(Literal::new(&result)))
+        }
+        _ => Err(OxirsError::Query(
+            "LPAD requires string and numeric arguments".to_string(),
+        )),
+    }
+}
+
+/// RPAD - Right pad string to specified length
+/// RPAD(string, length, padString) pads the right side of string
+fn fn_rpad(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() < 2 || args.len() > 3 {
+        return Err(OxirsError::Query(
+            "RPAD requires 2 or 3 arguments (string, length, [padString])".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(text), Term::Literal(length_lit)) => {
+            let target_length = length_lit
+                .value()
+                .parse::<usize>()
+                .map_err(|_| OxirsError::Query("RPAD length must be numeric".to_string()))?;
+
+            let pad_string = if args.len() == 3 {
+                match &args[2] {
+                    Term::Literal(pad) => pad.value(),
+                    _ => {
+                        return Err(OxirsError::Query(
+                            "RPAD pad string must be a string literal".to_string(),
+                        ))
+                    }
+                }
+            } else {
+                " " // Default to space
+            };
+
+            let text_value = text.value();
+            let current_length = text_value.chars().count();
+
+            let result = if current_length >= target_length {
+                text_value.to_string()
+            } else {
+                let pad_length = target_length - current_length;
+                let pad_chars: Vec<char> = pad_string.chars().collect();
+                if pad_chars.is_empty() {
+                    return Err(OxirsError::Query(
+                        "RPAD pad string cannot be empty".to_string(),
+                    ));
+                }
+
+                let mut padding = String::new();
+                for i in 0..pad_length {
+                    padding.push(pad_chars[i % pad_chars.len()]);
+                }
+                format!("{}{}", text_value, padding)
+            };
+
+            Ok(Term::Literal(Literal::new(&result)))
+        }
+        _ => Err(OxirsError::Query(
+            "RPAD requires string and numeric arguments".to_string(),
         )),
     }
 }
@@ -1856,6 +2140,247 @@ mod tests {
                     "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
                 );
             }
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_concat_ws_function() {
+        let registry = FunctionRegistry::new();
+
+        // Test CONCAT_WS with comma separator
+        let args = vec![
+            Term::Literal(Literal::new(",")),
+            Term::Literal(Literal::new("apple")),
+            Term::Literal(Literal::new("banana")),
+            Term::Literal(Literal::new("cherry")),
+        ];
+        let result = registry.execute("CONCAT_WS", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "apple,banana,cherry"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test CONCAT_WS with space separator
+        let args = vec![
+            Term::Literal(Literal::new(" ")),
+            Term::Literal(Literal::new("Hello")),
+            Term::Literal(Literal::new("SPARQL")),
+            Term::Literal(Literal::new("World")),
+        ];
+        let result = registry.execute("CONCAT_WS", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Hello SPARQL World"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test CONCAT_WS with single value
+        let args = vec![
+            Term::Literal(Literal::new(",")),
+            Term::Literal(Literal::new("single")),
+        ];
+        let result = registry.execute("CONCAT_WS", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "single"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_split_function() {
+        let registry = FunctionRegistry::new();
+
+        // Test SPLIT with comma delimiter
+        let args = vec![
+            Term::Literal(Literal::new("apple,banana,cherry")),
+            Term::Literal(Literal::new(",")),
+        ];
+        let result = registry.execute("SPLIT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "[\"apple\",\"banana\",\"cherry\"]"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test SPLIT with space delimiter
+        let args = vec![
+            Term::Literal(Literal::new("Hello SPARQL World")),
+            Term::Literal(Literal::new(" ")),
+        ];
+        let result = registry.execute("SPLIT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "[\"Hello\",\"SPARQL\",\"World\"]"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test SPLIT with no delimiter found
+        let args = vec![
+            Term::Literal(Literal::new("nodeLimiter")),
+            Term::Literal(Literal::new(",")),
+        ];
+        let result = registry.execute("SPLIT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "[\"nodeLimiter\"]"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_lpad_function() {
+        let registry = FunctionRegistry::new();
+
+        // Test LPAD with default space padding
+        let args = vec![
+            Term::Literal(Literal::new("123")),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("LPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "  123"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LPAD with custom padding
+        let args = vec![
+            Term::Literal(Literal::new("test")),
+            Term::Literal(Literal::new_typed(
+                "10",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new("*")),
+        ];
+        let result = registry.execute("LPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "******test"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LPAD with repeating pattern
+        let args = vec![
+            Term::Literal(Literal::new("X")),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new("ab")),
+        ];
+        let result = registry.execute("LPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "ababX"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LPAD when string is already longer
+        let args = vec![
+            Term::Literal(Literal::new("toolong")),
+            Term::Literal(Literal::new_typed(
+                "3",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("LPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "toolong"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_function_metrics() {
+        let registry = FunctionRegistry::new();
+
+        // Execute some functions
+        let args = vec![Term::Literal(Literal::new("test"))];
+        let _ = registry.execute("STRLEN", &args);
+        let _ = registry.execute("UCASE", &args);
+        let _ = registry.execute("STRLEN", &args);
+
+        // Try an error case
+        let bad_args = vec![Term::Literal(Literal::new("bad"))];
+        let _ = registry.execute("UNKNOWN_FUNCTION", &bad_args);
+
+        // Get statistics
+        let stats = registry.get_statistics();
+
+        // Verify metrics
+        assert_eq!(stats.total_executions, 4); // 3 successful + 1 error
+        assert_eq!(stats.total_errors, 1); // 1 unknown function error
+        assert!(stats.average_duration_micros >= 0.0);
+        assert!(stats.p95_duration_micros >= 0.0);
+        assert!(stats.p99_duration_micros >= 0.0);
+
+        // Verify display
+        let display = format!("{}", stats);
+        assert!(display.contains("executions: 4"));
+        assert!(display.contains("errors: 1"));
+
+        // Verify metrics registry exists
+        let _metrics = registry.metrics_registry();
+        // Basic smoke test - metrics registry is created
+        assert!(stats.total_executions > 0);
+    }
+
+    #[test]
+    fn test_rpad_function() {
+        let registry = FunctionRegistry::new();
+
+        // Test RPAD with default space padding
+        let args = vec![
+            Term::Literal(Literal::new("123")),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("RPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "123  "),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test RPAD with custom padding
+        let args = vec![
+            Term::Literal(Literal::new("test")),
+            Term::Literal(Literal::new_typed(
+                "10",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new("*")),
+        ];
+        let result = registry.execute("RPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "test******"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test RPAD with repeating pattern
+        let args = vec![
+            Term::Literal(Literal::new("X")),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new("ab")),
+        ];
+        let result = registry.execute("RPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Xabab"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test RPAD when string is already longer
+        let args = vec![
+            Term::Literal(Literal::new("toolong")),
+            Term::Literal(Literal::new_typed(
+                "3",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("RPAD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "toolong"),
             _ => panic!("Expected literal"),
         }
     }

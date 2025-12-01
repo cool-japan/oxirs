@@ -1111,7 +1111,7 @@ mod tests {
         }
 
         // Should be roughly 50%, allow some variance
-        assert!(canary_count >= 30 && canary_count <= 70);
+        assert!((30..=70).contains(&canary_count));
     }
 
     #[tokio::test]

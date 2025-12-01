@@ -2,13 +2,15 @@
 
 *Last Updated: November 25, 2025*
 
-## ✅ Current Status: v0.1.0-beta.1+ (Beta.2 Features In Progress - November 25, 2025)
+## ✅ Current Status: v0.1.0-beta.1+ (Beta.2 Features Complete - November 29, 2025)
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC and ACID transactions.
 
-### Beta.2 Release Status (November 25, 2025)
-- **Comprehensive test suite** with 716 tests passing (720 total, 4 ignored) & zero warnings
-- **Latest enhancements** (November 25, 2025): Columnar analytics storage, GeoSPARQL integration, LSM-tree engine
+### Beta.2 Release Status (November 29, 2025)
+- **Comprehensive test suite** with 791 tests passing (795 total, 4 ignored) & zero warnings
+- **Latest enhancements** (November 29, 2025): Backup encryption at rest with AES-256-GCM
+- **Previous enhancements** (November 29, 2025): Memory-mapped file optimization with OS-level hints and huge pages support
+- **Earlier enhancements** (November 25, 2025): Columnar analytics storage, GeoSPARQL integration, LSM-tree engine
 - **Advanced Diagnostics** ✅ **NEW (November 21, 2025)** - Production-ready diagnostic engine with 8 built-in checks
 - **GeoSPARQL Spatial Indexing** ✅ **NEW (November 21, 2025)** - R*-tree based spatial queries with 12+ GeoSPARQL functions
 - **Asynchronous I/O Layer** ✅ **NEW (November 21, 2025)** - Non-blocking file operations with optional io_uring support
@@ -30,7 +32,7 @@
 - **Production Features** - Statistics collection, corruption detection, crash recovery
 - **Released on crates.io**: `oxirs-tdb = "0.1.0-beta.1"`
 
-### ✨ NEW: Beta.2 Features Implemented (November 21-25, 2025)
+### ✨ NEW: Beta.2 Features Implemented (November 21-29, 2025)
 - **Columnar Analytics Storage** ✅ **NEW (November 25, 2025)** (`src/storage/columnar_analytics.rs`) - OLAP-optimized storage
   - Column-oriented storage layout for analytical queries
   - Stripe-based architecture with configurable stripe size (default 10K rows)
@@ -64,6 +66,53 @@
   - Statistics tracking: MemTable size, SSTable count per level, total size
   - 8 comprehensive tests covering all operations (put, get, delete, scan, flush, compaction)
   - Suitable for write-heavy RDF workloads and bulk import operations
+
+- **Memory-Mapped File Optimization** ✅ **NEW (November 29, 2025)** (`src/storage/mmap_optimizer.rs`) - Advanced mmap features
+  - OS-level caching hints (madvise): Normal, Sequential, Random, WillNeed, DontNeed
+  - Huge pages support for reduced TLB misses (Linux transparent huge pages)
+  - Intelligent prefetching based on access patterns
+  - Multi-region management for large databases (up to 16 regions by default)
+  - Memory locking to prevent swapping (mlock)
+  - Statistics tracking (bytes mapped, prefetch count, advise calls, huge pages used)
+  - Cross-platform support (madvise/mlock on Unix, graceful degradation on other platforms)
+  - 13 comprehensive tests covering all optimization features (all passing)
+  - Suitable for large RDF datasets requiring optimal memory access patterns
+
+- **Online Backup Without Downtime** ✅ **NEW (November 29, 2025)** (`src/online_backup.rs`) - Production-ready online backups
+  - Snapshot isolation for consistent point-in-time backups
+  - Non-blocking backup execution (database remains fully available)
+  - MVCC-based snapshot consistency with WAL LSN tracking
+  - Multiple concurrent snapshots (configurable limit, default 10)
+  - Background backup with progress monitoring
+  - Automatic cleanup of expired snapshots (configurable TTL, default 1 hour)
+  - Incremental snapshot-based backups
+  - Snapshot statistics tracking (created, active, expired, backup duration)
+  - 12 comprehensive tests covering all snapshot operations (all passing)
+  - Suitable for production databases requiring zero-downtime backups
+
+- **Continuous WAL Shipping** ✅ **NEW (November 29, 2025)** (`src/wal_shipping.rs`) - Production-ready continuous archiving
+  - Continuous WAL file shipping to multiple destinations
+  - Support for filesystem and network share destinations
+  - Automatic retry logic for failed shipments (configurable max retries, default 3)
+  - Shipping verification with file size checks
+  - Shipping queue management (configurable size, default 100 files)
+  - Multiple concurrent destinations support
+  - Shipping statistics tracking (files shipped, bytes shipped, failures, retry attempts)
+  - Average shipping time tracking for performance monitoring
+  - 11 comprehensive tests covering all shipping operations (all passing)
+  - Suitable for disaster recovery, standby servers, and geographic replication
+
+- **Backup Encryption at Rest** ✅ **NEW (November 29, 2025)** (`src/backup_encryption.rs`) - Production-grade encryption for backups
+  - AES-256-GCM authenticated encryption for confidentiality and authenticity
+  - PBKDF2-SHA256 key derivation with 600,000 iterations (OWASP 2023)
+  - Secure random nonce generation (96-bit) per encryption
+  - Random 32-byte salt for each backup
+  - Optional LZ4 compression before encryption
+  - File-level encryption and decryption support
+  - Password change/re-encryption capability
+  - Encrypted data serialization for storage
+  - 12 comprehensive tests covering all encryption operations (all passing)
+  - Suitable for regulatory compliance (GDPR, HIPAA, SOC 2)
 
 - **Advanced Diagnostics** (`src/diagnostics.rs`) - Production-ready diagnostic engine
   - 8 built-in diagnostic checks: Index consistency, Dictionary consistency, WAL integrity, Corruption detection
@@ -385,14 +434,14 @@
 - [ ] Cross-shard transactions
 
 #### Hot Backup Capabilities (Target: v0.1.0)
-- [ ] Online backup without downtime
+- [x] Online backup without downtime ✅ **COMPLETE (November 29, 2025)** - Snapshot-based non-blocking backups
 - [x] Incremental backup with change tracking ✅ **COMPLETE (November 23, 2025)** - File manifest tracking, backup chains
 - [x] Point-in-time recovery (PITR) ✅ **COMPLETE** - Via incremental backup restoration
-- [ ] Continuous archiving (WAL shipping)
-- [ ] Snapshot isolation for backups
+- [x] Continuous archiving (WAL shipping) ✅ **COMPLETE (November 29, 2025)** - Multiple destination support, retry logic
+- [x] Snapshot isolation for backups ✅ **COMPLETE (November 29, 2025)** - MVCC-based consistent snapshots
 - [x] Backup verification and validation ✅ **COMPLETE** - CRC32 checksums, metadata validation
 - [ ] Cloud storage integration (S3, GCS, Azure)
-- [ ] Encryption at rest for backups
+- [x] Encryption at rest for backups ✅ **COMPLETE (November 29, 2025)** - AES-256-GCM with PBKDF2 key derivation
 
 #### Query Optimization (Target: v0.1.0)
 - [x] Cost-based query optimization ✅ **COMPLETE (2025-11-15)** - Three optimization levels with intelligent index selection (`src/query_optimizer.rs`)
@@ -408,8 +457,8 @@
 #### Storage Engine Enhancements (Target: v0.1.0)
 - [x] LSM-tree based storage option ✅ **COMPLETE (November 25, 2025)** - Full implementation with multi-level compaction
 - [x] Columnar storage for analytics ✅ **COMPLETE (November 25, 2025)** - OLAP-optimized with predicate pushdown and aggregations
-- [ ] Memory-mapped file optimization
-- [ ] NUMA-aware memory management
+- [x] Memory-mapped file optimization ✅ **COMPLETE (November 29, 2025)** - OS-level caching hints, huge pages support (`src/storage/mmap_optimizer.rs`)
+- [x] NUMA-aware memory management ✅ **COMPLETE (November 29, 2025)** - Multi-socket optimization with auto-topology detection (`src/storage/numa_allocator.rs`)
 - [ ] GPU-accelerated index scans
 - [x] Zero-copy I/O operations ✅ **COMPLETE** (`src/storage/zero_copy.rs`)
 - [x] Direct I/O for large datasets ✅ **COMPLETE (November 15, 2025)** (`src/storage/direct_io.rs`)
@@ -423,4 +472,4 @@
 - [x] Resource quotas per user/query ✅ **COMPLETE (November 15, 2025)** - Per-query resource limiting (`src/query_resource_quota.rs`)
 - [x] Query timeout enforcement ✅ **COMPLETE (November 20, 2025)** - Configurable timeouts with grace periods (`src/query_timeout.rs`)
 - [x] Slow query logging and analysis ✅ **COMPLETE (November 20, 2025)** - Pattern analysis with recommendations (`src/slow_query_log.rs`)
-- [ ] Database partitioning and sharding
+- [x] Database partitioning and sharding ✅ **COMPLETE (November 29, 2025)** - Horizontal scaling with 5 partitioning strategies (`src/storage/partitioning.rs`)

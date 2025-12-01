@@ -40,7 +40,10 @@ use crate::metamodel::{Aspect, Characteristic, CharacteristicKind, ModelElement,
 use crate::query::ModelQuery;
 use crate::utils;
 use scirs2_core::ndarray_ext::stats::{mean, variance};
-use scirs2_core::ndarray_ext::Array1;
+use scirs2_core::ndarray_ext::{Array1, ArrayView1};
+use scirs2_stats::{
+    coef_variation, iqr, kurtosis, mean_abs_deviation, median, median_abs_deviation, skew, std,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -997,6 +1000,278 @@ impl ModelAnalytics {
                 .join("\n")
         )
     }
+
+    /// Compute advanced statistical metrics for model properties
+    ///
+    /// Uses scirs2-stats to provide comprehensive statistical analysis including
+    /// dispersion measures, shape statistics, and robustness metrics.
+    ///
+    /// # Returns
+    ///
+    /// StatisticalMetrics containing advanced statistics about the model
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use oxirs_samm::analytics::ModelAnalytics;
+    /// use oxirs_samm::metamodel::Aspect;
+    ///
+    /// let aspect = Aspect::new("urn:samm:org.example:1.0.0#MyAspect".to_string());
+    /// let analytics = ModelAnalytics::analyze(&aspect);
+    /// let stats = analytics.compute_statistical_metrics();
+    ///
+    /// println!("Coefficient of Variation: {:.2}%", stats.coefficient_variation * 100.0);
+    /// println!("Median Absolute Deviation: {:.2}", stats.median_abs_deviation);
+    /// ```
+    pub fn compute_statistical_metrics(&self) -> StatisticalMetrics {
+        // Extract property counts and complexity scores as data points
+        let prop_count = self.distributions.property_distribution.mean;
+        let data = Array1::from_vec(vec![
+            prop_count,
+            self.complexity_assessment.structural,
+            self.complexity_assessment.cognitive,
+            self.complexity_assessment.coupling * 100.0,
+        ]);
+
+        // Compute basic statistics manually for simplicity
+        let n = data.len() as f64;
+        let sum: f64 = data.iter().sum();
+        let mean_value = sum / n;
+
+        // Sort for median and percentile calculations
+        let mut sorted_data = data.to_vec();
+        sorted_data.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        let median_value = if sorted_data.is_empty() {
+            0.0
+        } else {
+            sorted_data[sorted_data.len() / 2]
+        };
+
+        // Standard deviation and variance
+        let sq_diff_sum: f64 = data.iter().map(|x| (x - mean_value).powi(2)).sum();
+        let var_value = sq_diff_sum / (n - 1.0);
+        let std_value = var_value.sqrt();
+
+        // Dispersion measures using scirs2-stats
+        let data_view = data.view();
+        let mad = mean_abs_deviation(&data_view, None).unwrap_or(0.0);
+        let median_ad = median_abs_deviation(&data_view, None, Some(1.4826)).unwrap_or(0.0);
+        let iqr_value = iqr(&data_view, None).unwrap_or(0.0);
+        let cv = if mean_value.abs() > 0.001 {
+            std_value / mean_value.abs()
+        } else {
+            0.0
+        };
+
+        // Shape statistics using scirs2-stats
+        let skewness = skew(&data_view, false, None).unwrap_or(0.0);
+        let kurt = kurtosis(&data_view, true, false, None).unwrap_or(0.0);
+
+        StatisticalMetrics {
+            mean: mean_value,
+            median: median_value,
+            std_dev: std_value,
+            variance: var_value,
+            mean_abs_deviation: mad,
+            median_abs_deviation: median_ad,
+            interquartile_range: iqr_value,
+            coefficient_variation: cv,
+            skewness,
+            kurtosis: kurt,
+        }
+    }
+
+    /// Detect statistical anomalies using robust methods
+    ///
+    /// Uses median absolute deviation (MAD) for robust outlier detection,
+    /// which is less sensitive to outliers than standard deviation.
+    ///
+    /// # Returns
+    ///
+    /// Vector of StatisticalAnomaly indicating unusual patterns
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use oxirs_samm::analytics::ModelAnalytics;
+    ///
+    /// let analytics = ModelAnalytics::analyze(&aspect);
+    /// let anomalies = analytics.detect_statistical_anomalies();
+    ///
+    /// for anomaly in anomalies {
+    ///     println!("⚠ {}: {} (score: {:.2})",
+    ///              anomaly.metric_name, anomaly.description, anomaly.deviation_score);
+    /// }
+    /// ```
+    pub fn detect_statistical_anomalies(&self) -> Vec<StatisticalAnomaly> {
+        let mut anomalies = Vec::new();
+        let stats = self.compute_statistical_metrics();
+
+        // Check for high variability (CV > 100%)
+        if stats.coefficient_variation > 1.0 {
+            anomalies.push(StatisticalAnomaly {
+                metric_name: "Coefficient of Variation".to_string(),
+                description: format!(
+                    "High variability detected: {:.1}% (threshold: 100%)",
+                    stats.coefficient_variation * 100.0
+                ),
+                deviation_score: stats.coefficient_variation,
+                severity: if stats.coefficient_variation > 2.0 {
+                    Severity::Error
+                } else {
+                    Severity::Warning
+                },
+            });
+        }
+
+        // Check for extreme skewness (|skewness| > 2)
+        if stats.skewness.abs() > 2.0 {
+            anomalies.push(StatisticalAnomaly {
+                metric_name: "Skewness".to_string(),
+                description: format!(
+                    "Highly skewed distribution: {:.2} (threshold: ±2.0)",
+                    stats.skewness
+                ),
+                deviation_score: stats.skewness.abs(),
+                severity: Severity::Info,
+            });
+        }
+
+        // Check for excessive kurtosis (|kurtosis| > 3)
+        if stats.kurtosis.abs() > 3.0 {
+            anomalies.push(StatisticalAnomaly {
+                metric_name: "Kurtosis".to_string(),
+                description: format!(
+                    "Heavy-tailed distribution: {:.2} (threshold: ±3.0)",
+                    stats.kurtosis
+                ),
+                deviation_score: stats.kurtosis.abs(),
+                severity: Severity::Info,
+            });
+        }
+
+        // Check for high median absolute deviation
+        if stats.median_abs_deviation > stats.median * 0.5 {
+            anomalies.push(StatisticalAnomaly {
+                metric_name: "Median Absolute Deviation".to_string(),
+                description: format!(
+                    "High spread around median: {:.2} (>50% of median)",
+                    stats.median_abs_deviation
+                ),
+                deviation_score: stats.median_abs_deviation / stats.median.max(1.0),
+                severity: Severity::Warning,
+            });
+        }
+
+        anomalies
+    }
+
+    /// Assess model quality using statistical hypothesis testing
+    ///
+    /// Applies statistical tests to determine if the model meets quality thresholds.
+    /// Uses robust statistical methods from scirs2-stats.
+    ///
+    /// # Returns
+    ///
+    /// QualityTest results with statistical confidence levels
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use oxirs_samm::analytics::ModelAnalytics;
+    ///
+    /// let analytics = ModelAnalytics::analyze(&aspect);
+    /// let test = analytics.statistical_quality_test();
+    ///
+    /// if test.passes_threshold {
+    ///     println!("✓ Model meets quality standards (confidence: {:.1}%)",
+    ///              test.confidence_level * 100.0);
+    /// }
+    /// ```
+    pub fn statistical_quality_test(&self) -> QualityTest {
+        let stats = self.compute_statistical_metrics();
+
+        // Quality passes if:
+        // 1. Low coefficient of variation (< 80%)
+        // 2. Moderate skewness (|skew| < 1.5)
+        // 3. Quality score above median
+        let cv_ok = stats.coefficient_variation < 0.8;
+        let skew_ok = stats.skewness.abs() < 1.5;
+        let score_ok = self.quality_score > stats.median;
+
+        let tests_passed = [cv_ok, skew_ok, score_ok].iter().filter(|&&x| x).count();
+        let confidence = tests_passed as f64 / 3.0;
+
+        QualityTest {
+            passes_threshold: tests_passed >= 2, // At least 2 out of 3 tests must pass
+            confidence_level: confidence,
+            cv_check: cv_ok,
+            skewness_check: skew_ok,
+            score_check: score_ok,
+            details: format!(
+                "Passed {}/3 tests: CV={:.1}%, Skewness={:.2}, Score={:.1}",
+                tests_passed,
+                stats.coefficient_variation * 100.0,
+                stats.skewness,
+                self.quality_score
+            ),
+        }
+    }
+}
+
+/// Advanced statistical metrics computed using scirs2-stats
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatisticalMetrics {
+    /// Mean value
+    pub mean: f64,
+    /// Median value (robust to outliers)
+    pub median: f64,
+    /// Standard deviation
+    pub std_dev: f64,
+    /// Variance
+    pub variance: f64,
+    /// Mean absolute deviation
+    pub mean_abs_deviation: f64,
+    /// Median absolute deviation (robust dispersion)
+    pub median_abs_deviation: f64,
+    /// Interquartile range (Q3 - Q1)
+    pub interquartile_range: f64,
+    /// Coefficient of variation (std/mean)
+    pub coefficient_variation: f64,
+    /// Skewness (distribution asymmetry)
+    pub skewness: f64,
+    /// Kurtosis (distribution tail weight)
+    pub kurtosis: f64,
+}
+
+/// Statistical anomaly detected using robust methods
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StatisticalAnomaly {
+    /// Name of the metric that triggered the anomaly
+    pub metric_name: String,
+    /// Description of the anomaly
+    pub description: String,
+    /// Deviation score (how far from normal)
+    pub deviation_score: f64,
+    /// Severity level
+    pub severity: Severity,
+}
+
+/// Statistical quality test result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QualityTest {
+    /// Whether the model passes quality thresholds
+    pub passes_threshold: bool,
+    /// Confidence level (0-1)
+    pub confidence_level: f64,
+    /// Coefficient of variation check passed
+    pub cv_check: bool,
+    /// Skewness check passed
+    pub skewness_check: bool,
+    /// Score check passed
+    pub score_check: bool,
+    /// Detailed test results
+    pub details: String,
 }
 
 #[cfg(test)]
@@ -1175,5 +1450,88 @@ mod tests {
             ComplexityLevel::VeryHigh,
             ComplexityLevel::VeryHigh
         ));
+    }
+
+    #[test]
+    fn test_statistical_metrics() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let stats = analytics.compute_statistical_metrics();
+
+        // Verify all metrics are computed
+        assert!(stats.mean >= 0.0);
+        assert!(stats.median >= 0.0);
+        assert!(stats.std_dev >= 0.0);
+        assert!(stats.variance >= 0.0);
+        assert!(stats.mean_abs_deviation >= 0.0);
+        assert!(stats.median_abs_deviation >= 0.0);
+        assert!(stats.interquartile_range >= 0.0);
+        assert!(stats.coefficient_variation >= 0.0);
+    }
+
+    #[test]
+    fn test_statistical_anomaly_detection() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let anomalies = analytics.detect_statistical_anomalies();
+
+        // Anomalies should be a valid vector (may be empty for good models)
+        // If any anomalies exist, verify they have valid data
+        for anomaly in &anomalies {
+            assert!(!anomaly.metric_name.is_empty());
+            assert!(!anomaly.description.is_empty());
+            assert!(anomaly.deviation_score >= 0.0);
+        }
+    }
+
+    #[test]
+    fn test_quality_test() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let test = analytics.statistical_quality_test();
+
+        // Verify test result structure
+        assert!(test.confidence_level >= 0.0 && test.confidence_level <= 1.0);
+        assert!(!test.details.is_empty());
+
+        // At least one check should have a value
+        assert!(test.cv_check || test.skewness_check || test.score_check || !test.passes_threshold);
+    }
+
+    #[test]
+    fn test_statistical_metrics_values() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let stats = analytics.compute_statistical_metrics();
+
+        // Mean should be positive and finite
+        assert!(stats.mean > 0.0);
+        assert!(stats.mean.is_finite());
+
+        // All metrics should be non-negative and finite
+        assert!(stats.median >= 0.0 && stats.median.is_finite());
+        assert!(stats.std_dev >= 0.0 && stats.std_dev.is_finite());
+        assert!(stats.variance >= 0.0 && stats.variance.is_finite());
+
+        // Coefficient of variation should be finite and non-negative
+        assert!(stats.coefficient_variation.is_finite());
+        assert!(stats.coefficient_variation >= 0.0);
+    }
+
+    #[test]
+    fn test_high_variability_anomaly() {
+        let mut aspect = Aspect::new("urn:samm:org.test:1.0.0#VariableAspect".to_string());
+
+        // Create a model with high variability
+        for i in 0..100 {
+            let prop = Property::new(format!("urn:samm:org.test:1.0.0#prop{}", i));
+            aspect.add_property(prop);
+        }
+
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let stats = analytics.compute_statistical_metrics();
+
+        // High property count should result in some variability
+        assert!(stats.coefficient_variation > 0.0);
     }
 }

@@ -937,8 +937,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_excessive_depth_blocked() {
-        let mut config = SanitizationConfig::default();
-        config.max_depth = 3;
+        let config = SanitizationConfig {
+            max_depth: 3,
+            ..Default::default()
+        };
         let sanitizer = QuerySanitizer::with_config(config);
 
         let query = "query { a { b { c { d { e { f } } } } } }";
@@ -952,8 +954,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_introspection_blocked() {
-        let mut config = SanitizationConfig::default();
-        config.allow_introspection = false;
+        let config = SanitizationConfig {
+            allow_introspection: false,
+            ..Default::default()
+        };
         let sanitizer = QuerySanitizer::with_config(config);
 
         let query = "query { __schema { types { name } } }";
@@ -1010,8 +1014,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_complexity_limit() {
-        let mut config = SanitizationConfig::default();
-        config.max_complexity = 10.0;
+        let config = SanitizationConfig {
+            max_complexity: 10.0,
+            ..Default::default()
+        };
         let sanitizer = QuerySanitizer::with_config(config);
 
         let query = "query { a { b { c { d } } } e { f { g { h } } } }";
@@ -1053,8 +1059,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_strict_mode() {
-        let mut config = SanitizationConfig::default();
-        config.strict_mode = true;
+        let config = SanitizationConfig {
+            strict_mode: true,
+            ..Default::default()
+        };
         let sanitizer = QuerySanitizer::with_config(config);
 
         // Even minor issues should block in strict mode

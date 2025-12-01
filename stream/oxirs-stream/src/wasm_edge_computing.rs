@@ -19,27 +19,50 @@ use crate::event::StreamEvent;
 /// WASM edge processor configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmEdgeConfig {
-    pub max_concurrent_instances: usize,
-    pub memory_limit_mb: u64,
-    pub execution_timeout_ms: u64,
-    pub enable_hot_reload: bool,
-    pub enable_security_sandbox: bool,
-    pub resource_limits: WasmResourceLimits,
-    pub edge_locations: Vec<EdgeLocation>,
     pub optimization_level: OptimizationLevel,
+    pub resource_limits: WasmResourceLimits,
+    pub enable_caching: bool,
+    pub enable_jit: bool,
+    pub security_sandbox: bool,
+    pub allowed_imports: Vec<String>,
+    // Optional legacy fields for backward compatibility
+    #[serde(default)]
+    pub max_concurrent_instances: usize,
+    #[serde(default)]
+    pub memory_limit_mb: u64,
+    #[serde(default)]
+    pub execution_timeout_ms: u64,
+    #[serde(default)]
+    pub enable_hot_reload: bool,
+    #[serde(default)]
+    pub edge_locations: Vec<EdgeLocation>,
 }
 
 /// WASM resource limits
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WasmResourceLimits {
-    pub max_memory_pages: u32,
+    pub max_memory_bytes: u64,
+    pub max_execution_time_ms: u64,
+    pub max_stack_size_bytes: u64,
     pub max_table_elements: u32,
+    pub enable_simd: bool,
+    pub enable_threads: bool,
+    // Legacy fields
+    #[serde(default)]
+    pub max_memory_pages: u32,
+    #[serde(default)]
     pub max_instances: u32,
+    #[serde(default)]
     pub max_tables: u32,
+    #[serde(default)]
     pub max_memories: u32,
+    #[serde(default)]
     pub max_globals: u32,
+    #[serde(default)]
     pub max_functions: u32,
+    #[serde(default)]
     pub max_imports: u32,
+    #[serde(default)]
     pub max_exports: u32,
 }
 
@@ -129,6 +152,18 @@ pub struct PluginSchema {
     pub exported_functions: Vec<String>,
 }
 
+impl Default for PluginSchema {
+    fn default() -> Self {
+        Self {
+            input_types: vec!["StreamEvent".to_string()],
+            output_types: vec!["StreamEvent".to_string()],
+            configuration_schema: serde_json::json!({}),
+            required_imports: vec![],
+            exported_functions: vec!["process_events".to_string()],
+        }
+    }
+}
+
 /// Performance characteristics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PerformanceProfile {
@@ -139,14 +174,28 @@ pub struct PerformanceProfile {
     pub scalability_factor: f64,
 }
 
+impl Default for PerformanceProfile {
+    fn default() -> Self {
+        Self {
+            average_execution_time_us: 100,
+            memory_usage_mb: 1.0,
+            cpu_intensity: 0.5,
+            throughput_events_per_second: 1000,
+            scalability_factor: 1.0,
+        }
+    }
+}
+
 /// Security levels for plugins
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum SecurityLevel {
     Untrusted,
     BasicSandbox,
+    Standard,
     Enhanced,
     TrustedVerified,
     CriticalSecurity,
+    High,
 }
 
 /// WASM execution context
@@ -198,6 +247,21 @@ pub struct EdgeExecutionResult {
     pub success: bool,
     pub error_message: Option<String>,
     pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// WASM processing result for single event processing
+#[derive(Debug, Clone)]
+pub struct WasmProcessingResult {
+    pub output: Option<StreamEvent>,
+    pub latency_ms: f64,
+}
+
+/// WASM processor statistics
+#[derive(Debug, Clone)]
+pub struct WasmProcessorStats {
+    pub total_processed: u64,
+    pub average_latency_ms: f64,
+    pub active_plugins: usize,
 }
 
 /// Advanced WASM edge computing processor
@@ -720,6 +784,107 @@ impl WasmEdgeProcessor {
         info!("Unregistered plugin: {}", plugin_id);
         Ok(())
     }
+
+    // ===== Example API Compatibility Methods =====
+
+    /// Load plugin (alias for register_plugin for API compatibility)
+    pub async fn load_plugin(&self, plugin: WasmPlugin) -> Result<()> {
+        self.register_plugin(plugin).await
+    }
+
+    /// Process a single event using the processor
+    pub async fn process(&mut self, event: StreamEvent) -> Result<WasmProcessingResult> {
+        // Get the first plugin if available, or return empty result
+        let plugin_id = {
+            let plugins = self.plugins.read().await;
+            plugins.keys().next().cloned()
+        };
+
+        if let Some(pid) = plugin_id {
+            let result = self.execute_plugin(&pid, vec![event], None).await?;
+            Ok(WasmProcessingResult {
+                output: if result.output_events.is_empty() {
+                    None
+                } else {
+                    Some(result.output_events[0].clone())
+                },
+                latency_ms: result.execution_time_us as f64 / 1000.0,
+            })
+        } else {
+            Ok(WasmProcessingResult {
+                output: None,
+                latency_ms: 0.0,
+            })
+        }
+    }
+
+    /// Process event at a specific edge location
+    pub async fn process_at_location(
+        &self,
+        event: StreamEvent,
+        location: &EdgeLocation,
+    ) -> Result<WasmProcessingResult> {
+        // Get the first plugin if available
+        let plugin_id = {
+            let plugins = self.plugins.read().await;
+            plugins.keys().next().cloned()
+        };
+
+        if let Some(pid) = plugin_id {
+            let result = self
+                .execute_plugin(&pid, vec![event], Some(location.id.clone()))
+                .await?;
+            Ok(WasmProcessingResult {
+                output: if result.output_events.is_empty() {
+                    None
+                } else {
+                    Some(result.output_events[0].clone())
+                },
+                latency_ms: result.execution_time_us as f64 / 1000.0,
+            })
+        } else {
+            Ok(WasmProcessingResult {
+                output: None,
+                latency_ms: 0.0,
+            })
+        }
+    }
+
+    /// Hot-swap plugin (alias for hot_reload_plugin for API compatibility)
+    pub async fn hot_swap_plugin(&self, old_plugin_id: &str, new_plugin: WasmPlugin) -> Result<()> {
+        // Unregister old plugin
+        self.unregister_plugin(old_plugin_id).await?;
+
+        // Register new plugin
+        self.register_plugin(new_plugin).await?;
+
+        info!("Hot-swapped plugin {} with new version", old_plugin_id);
+        Ok(())
+    }
+
+    /// Get processor statistics
+    pub async fn get_stats(&self) -> WasmProcessorStats {
+        let plugins = self.plugins.read().await;
+        let metrics = self.performance_metrics.read().await;
+
+        let total_processed = metrics.values().map(|m| m.total_executions).sum();
+
+        let average_latency_ms = if metrics.is_empty() {
+            0.0
+        } else {
+            metrics
+                .values()
+                .map(|m| m.average_execution_time_us / 1000.0)
+                .sum::<f64>()
+                / metrics.len() as f64
+        };
+
+        WasmProcessorStats {
+            total_processed,
+            average_latency_ms,
+            active_plugins: plugins.len(),
+        }
+    }
 }
 
 impl Default for SecurityManager {
@@ -798,14 +963,17 @@ impl Default for ResourceMetrics {
 impl Default for WasmEdgeConfig {
     fn default() -> Self {
         Self {
+            optimization_level: OptimizationLevel::Release,
+            resource_limits: WasmResourceLimits::default(),
+            enable_caching: true,
+            enable_jit: true,
+            security_sandbox: true,
+            allowed_imports: vec!["env".to_string(), "wasi_snapshot_preview1".to_string()],
             max_concurrent_instances: 10,
             memory_limit_mb: 512,
             execution_timeout_ms: 5000,
             enable_hot_reload: true,
-            enable_security_sandbox: true,
-            resource_limits: WasmResourceLimits::default(),
             edge_locations: vec![],
-            optimization_level: OptimizationLevel::Release,
         }
     }
 }
@@ -813,8 +981,13 @@ impl Default for WasmEdgeConfig {
 impl Default for WasmResourceLimits {
     fn default() -> Self {
         Self {
-            max_memory_pages: 1024,
-            max_table_elements: 1024,
+            max_memory_bytes: 512 * 1024 * 1024, // 512 MB
+            max_execution_time_ms: 5000,
+            max_stack_size_bytes: 2 * 1024 * 1024, // 2 MB
+            max_table_elements: 10000,
+            enable_simd: true,
+            enable_threads: false,
+            max_memory_pages: 8192, // 512 MB / 64KB per page
             max_instances: 10,
             max_tables: 10,
             max_memories: 10,

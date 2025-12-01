@@ -1,13 +1,36 @@
 # OxiRS ARQ - TODO
 
-*Last Updated: November 24, 2025*
+*Last Updated: November 29, 2025*
 
 ## ✅ Current Status: v0.1.0-beta.2 Production-Ready - **Beta.2+ Enhanced!** 🎉
 
 **oxirs-arq** provides a SPARQL 1.1/1.2 query engine with optimization.
 
-### Beta.2+ Release Status (November 24, 2025) - **Beta.2++ Enhanced with Advanced Features!** ✨
-- **501 tests** (unit + integration) passing with zero failures (with --all-features - lib tests)
+### Beta.2+ Release Status (November 29, 2025) - **Beta.2++ Enhanced with Advanced Features!** ✨
+- **551 tests** (unit + integration) passing with zero failures (with --all-features - lib tests)
+- **Code Quality Improvements** (November 29, 2025)
+  - ✅ Fixed all clippy warnings (no warnings policy compliance)
+  - ✅ Enabled SPARQL-star benchmark (sparql_star_bench.rs)
+  - ✅ All benchmarks now active and functional (4 total: join_performance, comprehensive_sparql_bench, gpu_operations_bench, sparql_star_bench)
+- **Test Coverage Improvements** (November 29, 2025)
+  - ✅ Added comprehensive tests to `join_algorithms.rs` (1→11 tests)
+    - Empty input handling (left/right)
+    - No matching values scenarios
+    - Multiple join variables
+    - Large dataset joins (100+ solutions)
+    - Hash join algorithm selection for large inputs
+    - Selectivity calculation validation
+    - Join statistics reporting
+    - Cartesian product handling
+  - ✅ Added comprehensive tests to `bgp_optimizer.rs` (1→11 tests)
+    - Optimizer creation and configuration
+    - Empty BGP handling
+    - Single and multiple pattern optimization
+    - Selectivity validation (0.0-1.0 range)
+    - Non-negative cost validation
+    - Pattern count preservation
+    - Bound variable handling
+    - Index plan structure verification
 - **Beta.2++ New Features** ✨ **LATEST** (November 24, 2025)
   - **Query Hints System** (`query_hints.rs`) - PostgreSQL/MySQL-style optimizer hints
     - Join algorithm hints (HASH_JOIN, MERGE_JOIN, NESTED_LOOP, INDEX_JOIN)

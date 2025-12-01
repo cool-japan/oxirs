@@ -376,8 +376,10 @@ mod tests {
 
     #[test]
     fn test_history_size_limit() {
-        let mut config = AdaptiveConfig::default();
-        config.max_history_entries = 5;
+        let config = AdaptiveConfig {
+            max_history_entries: 5,
+            ..Default::default()
+        };
 
         let stats = Arc::new(TripleStatistics::new(StatisticsConfig::default()));
         let optimizer = Arc::new(QueryOptimizer::new(stats));
@@ -398,8 +400,10 @@ mod tests {
 
     #[test]
     fn test_disabled_adaptive_execution() {
-        let mut config = AdaptiveConfig::default();
-        config.enabled = false;
+        let config = AdaptiveConfig {
+            enabled: false,
+            ..Default::default()
+        };
 
         let stats = Arc::new(TripleStatistics::new(StatisticsConfig::default()));
         let optimizer = Arc::new(QueryOptimizer::new(stats));

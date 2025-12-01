@@ -1,8 +1,8 @@
 //! Context fusion network
 
-use anyhow::Result;
-use crate::Vector;
 use super::{ContextualConfig, ProcessedContext};
+use crate::Vector;
+use anyhow::Result;
 
 /// Fusion network for combining contexts
 pub struct FusionNetwork {
@@ -17,7 +17,7 @@ impl FusionNetwork {
     pub async fn fuse_contexts(
         &self,
         embeddings: &[Vector],
-        context: &ProcessedContext,
+        _context: &ProcessedContext,
     ) -> Result<Vec<Vector>> {
         // Simplified fusion implementation
         Ok(embeddings.to_vec())

@@ -237,6 +237,19 @@ impl RuleEngine {
         self.clear_cache();
     }
 
+    /// Set maximum proof depth for backward chaining
+    ///
+    /// This limits the recursion depth to prevent stack overflow.
+    /// Lower values (e.g., 20-30) are safer for large datasets.
+    /// Default is 100.
+    pub fn set_backward_chain_max_depth(&mut self, max_depth: usize) {
+        self.backward_chainer = backward::BackwardChainer::with_config(max_depth, false);
+        // Re-add existing rules to the new backward chainer
+        for rule in &self.rules {
+            self.backward_chainer.add_rule(rule.clone());
+        }
+    }
+
     /// Add a single fact to the knowledge base
     pub fn add_fact(&mut self, fact: RuleAtom) {
         self.add_facts(vec![fact]);

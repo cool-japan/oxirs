@@ -16,7 +16,10 @@ pub mod direct_io;
 pub mod file_manager;
 pub mod lsm_tree; // LSM-tree storage engine
 pub mod memory_optimization;
+pub mod mmap_optimizer; // Memory-mapped file optimization with OS-level hints
+pub mod numa_allocator; // NUMA-aware memory management
 pub mod page;
+pub mod partitioning; // Database partitioning for horizontal scaling
 pub mod zero_copy;
 
 // Re-exports
@@ -37,5 +40,13 @@ pub use lsm_tree::{CompactionStrategy, LevelStats, LsmConfig, LsmStats, LsmTree}
 pub use memory_optimization::{
     MemoryOptimizationConfig, MemoryOptimizer, MemoryPoolStats, ReadaheadStrategy,
 };
+pub use mmap_optimizer::{
+    AccessPattern as MmapAccessPattern, MmapOptimizer, MmapOptimizerConfig, MmapStats,
+};
+pub use numa_allocator::{NumaAllocator, NumaNode, NumaPolicy, NumaStats, NumaTopology};
 pub use page::{Page, PageHeader, PageId, PageType, PAGE_SIZE, PAGE_USABLE_SIZE};
+pub use partitioning::{
+    PartitionId, PartitionManager, PartitionMetadata, PartitionStats, PartitionStrategy,
+    TriplePattern,
+};
 pub use zero_copy::{BatchView, VectoredIO, ZeroCopyBuffer, ZeroCopyStats};

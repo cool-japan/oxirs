@@ -1,5 +1,6 @@
 //! HTTP request handlers for SPARQL protocol and server management
 
+pub mod adaptive_execution_admin; // Adaptive execution monitoring endpoints (v0.1.0 Final)
 pub mod admin;
 pub mod api_keys;
 pub mod auth;

@@ -94,6 +94,7 @@ pub mod enhanced_snapshotting;
 pub mod error;
 pub mod failover;
 pub mod federation;
+pub mod gpu_acceleration;
 pub mod health_monitor;
 pub mod health_monitoring;
 pub mod memory_optimization;

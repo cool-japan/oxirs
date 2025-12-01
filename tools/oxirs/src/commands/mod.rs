@@ -59,6 +59,15 @@ pub mod package;
 /// Query EXPLAIN/ANALYZE commands
 pub mod explain;
 
+/// Query optimization analyzer
+pub mod query_optimizer;
+
+/// Advanced statistical performance analyzer (SciRS2-powered)
+pub mod performance_analyzer;
+
+/// Query similarity detection and analysis
+pub mod query_similarity;
+
 /// Query template management
 pub mod templates;
 

@@ -14,6 +14,7 @@ pub mod completion;
 pub mod dataset_manager;
 pub mod doc_generator;
 pub mod error;
+pub mod error_suggestions;
 pub mod formatters;
 pub mod fuzzy_history;
 pub mod graphviz_export;
@@ -44,6 +45,7 @@ pub use dataset_manager::{
 };
 pub use doc_generator::{ArgumentDoc, CommandDoc, DocFormat, DocGenerator, ExampleDoc, OptionDoc};
 pub use error::{CliError, CliResult};
+pub use error_suggestions::{enhance_error, enhanced_error_from_message};
 pub use formatters::{
     create_formatter, Binding, CsvFormatter, HtmlFormatter, JsonFormatter, MarkdownFormatter,
     PdfFormatter, QueryResults, RdfTerm, ResultFormatter, TableFormatter, XmlFormatter,

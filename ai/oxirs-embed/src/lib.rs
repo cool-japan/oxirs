@@ -136,12 +136,13 @@ pub mod clustering;
 pub mod community_detection;
 pub mod compression;
 pub mod consciousness_aware_embeddings;
-// pub mod contextual;
+pub mod contextual;
 pub mod continual_learning;
 pub mod cross_domain_transfer;
 pub mod cross_module_performance;
 pub mod delta;
 pub mod diffusion_embeddings;
+pub mod distributed_training;
 pub mod enterprise_knowledge;
 pub mod entity_linking;
 pub mod evaluation;
@@ -171,6 +172,8 @@ pub mod real_time_optimization;
 pub mod research_networks;
 // pub mod revolutionary_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
 pub mod sparql_extension;
+pub mod storage_backend;
+pub mod temporal_embeddings;
 pub mod training;
 pub mod utils;
 pub mod vector_search;
@@ -650,6 +653,17 @@ pub use models::{
     PoolingStrategy, RotatE, TransE, TransformerConfig, TransformerEmbedding, TransformerType,
 };
 
+pub use contextual::{
+    AccessibilityPreferences, ComplexityLevel, ContextualConfig, ContextualEmbeddingModel,
+    DomainContext, EmbeddingContext, PerformanceRequirements, PriorityLevel, PrivacySettings,
+    QueryContext, QueryType as ContextualQueryType, ResponseFormat, TaskConstraints, TaskContext,
+    TaskType, UserContext, UserHistory, UserPreferences,
+};
+pub use distributed_training::{
+    AggregationMethod, CommunicationBackend, DistributedEmbeddingTrainer, DistributedStrategy,
+    DistributedTrainingConfig, DistributedTrainingCoordinator, DistributedTrainingStats,
+    FaultToleranceConfig, WorkerInfo, WorkerStatus,
+};
 #[cfg(feature = "conve")]
 pub use models::{ConvE, ConvEConfig};
 pub use monitoring::{
@@ -692,6 +706,14 @@ pub use research_networks::{
 pub use sparql_extension::{
     ExpandedQuery, Expansion, ExpansionType, QueryStatistics as SparqlQueryStatistics,
     SparqlExtension, SparqlExtensionConfig,
+};
+pub use storage_backend::{
+    DiskBackend, EmbeddingMetadata, EmbeddingVersion, MemoryBackend, StorageBackend,
+    StorageBackendConfig, StorageBackendManager, StorageBackendType, StorageStats,
+};
+pub use temporal_embeddings::{
+    TemporalEmbeddingConfig, TemporalEmbeddingModel, TemporalEvent, TemporalForecast,
+    TemporalGranularity, TemporalScope, TemporalStats, TemporalTriple,
 };
 pub use vision_language_graph::{
     AggregationFunction, CNNConfig, CrossAttentionConfig, DomainAdaptationConfig,

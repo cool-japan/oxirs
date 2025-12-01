@@ -601,26 +601,146 @@ impl RuleIntegration {
     }
 
     /// Validate RDF data before rule processing
+    ///
+    /// Performs comprehensive validation including:
+    /// - Store size checks
+    /// - Rule engine state validation
+    /// - Basic integrity checks
     pub fn validate_rdf_data(&self) -> Result<ValidationReport> {
         let quad_count = self.store.len()?;
         let mut warnings = Vec::new();
-        let errors = Vec::new();
+        let mut errors = Vec::new();
 
-        // Basic validation checks
+        // 1. Check if store is empty
         if quad_count == 0 {
             warnings.push("Store is empty - no data to validate".to_string());
+        } else {
+            debug!("Validating {} quads in store", quad_count);
         }
 
-        // TODO: Add more comprehensive validation
-        // - Check for malformed IRIs
-        // - Validate literal datatypes
-        // - Check for circular references
+        // 2. Check rule engine state
+        let facts = self.rule_engine.get_facts();
+        if facts.is_empty() && quad_count > 0 {
+            warnings.push(
+                "Store contains data but rule engine has no facts - consider calling apply_rules()"
+                    .to_string(),
+            );
+        }
+
+        // 3. Validate that fact count is reasonable compared to quad count
+        if facts.len() > quad_count * 10 {
+            warnings.push(format!(
+                "Rule engine has {} facts but store has only {} quads - possible rule explosion",
+                facts.len(),
+                quad_count
+            ));
+        }
+
+        // 4. Check for very large datasets that might cause performance issues
+        if quad_count > 1_000_000 {
+            warnings.push(format!(
+                "Large dataset ({} quads) - consider chunked processing for better performance",
+                quad_count
+            ));
+        }
+
+        // 5. Validate IRI format in  facts (lightweight check)
+        let mut malformed_iris = 0;
+        for fact in &facts {
+            if let Some(iri) = self.extract_iri_from_fact(fact) {
+                if !self.is_valid_iri(&iri) {
+                    malformed_iris += 1;
+                    if malformed_iris <= 5 {
+                        // Only report first 5
+                        errors.push(format!("Malformed IRI in fact: {}", iri));
+                    }
+                }
+            }
+        }
+
+        if malformed_iris > 5 {
+            errors.push(format!(
+                "Found {} additional malformed IRIs (showing first 5)",
+                malformed_iris - 5
+            ));
+        }
 
         Ok(ValidationReport {
             total_triples: quad_count,
             warnings,
             errors,
         })
+    }
+
+    /// Extract IRI from a fact for validation (helper)
+    fn extract_iri_from_fact(&self, fact: &RuleAtom) -> Option<String> {
+        match fact {
+            RuleAtom::Triple {
+                subject,
+                predicate,
+                object,
+            } => {
+                // Check subject
+                if let Term::Constant(s) = subject {
+                    if s.contains("://") {
+                        return Some(s.clone());
+                    }
+                }
+                // Check predicate
+                if let Term::Constant(p) = predicate {
+                    if p.contains("://") {
+                        return Some(p.clone());
+                    }
+                }
+                // Check object
+                if let Term::Constant(o) = object {
+                    if o.contains("://") {
+                        return Some(o.clone());
+                    }
+                }
+                None
+            }
+            _ => None,
+        }
+    }
+
+    /// Check if an IRI is well-formed
+    fn is_valid_iri(&self, iri: &str) -> bool {
+        // Basic IRI validation
+        // 1. Must not be empty
+        if iri.is_empty() {
+            return false;
+        }
+
+        // 2. Must contain a colon (scheme separator)
+        if !iri.contains(':') {
+            return false;
+        }
+
+        // 3. Common schemes should be lowercase
+        let common_schemes = ["http", "https", "urn", "file", "ftp"];
+        for scheme in &common_schemes {
+            if iri.starts_with(&format!("{}:", scheme.to_uppercase())) {
+                return false; // Scheme should be lowercase
+            }
+        }
+
+        // 4. Must not contain illegal characters
+        let illegal_chars = [' ', '<', '>', '{', '}', '|', '\\', '^', '`'];
+        if iri.chars().any(|c| illegal_chars.contains(&c)) {
+            return false;
+        }
+
+        // 5. Fragment identifier validation (if present)
+        if let Some(fragment_pos) = iri.rfind('#') {
+            let fragment = &iri[fragment_pos + 1..];
+            // Fragment should not be empty if # is present
+            if fragment.is_empty() {
+                return false;
+            }
+        }
+
+        true
     }
 
     /// Batch process multiple triples with optimized rule application

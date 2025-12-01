@@ -1,7 +1,7 @@
 //! Context processor for embedding contexts
 
-use anyhow::Result;
 use super::{ContextualConfig, EmbeddingContext, ProcessedContext};
+use anyhow::Result;
 
 /// Context processor for handling embedding contexts
 pub struct ContextProcessor {
@@ -13,10 +13,7 @@ impl ContextProcessor {
         Self { config }
     }
 
-    pub async fn process_context(
-        &self,
-        context: &EmbeddingContext,
-    ) -> Result<ProcessedContext> {
+    pub async fn process_context(&self, _context: &EmbeddingContext) -> Result<ProcessedContext> {
         // Simplified context processing implementation
         Ok(ProcessedContext::default())
     }

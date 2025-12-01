@@ -305,8 +305,14 @@ impl GraphQLFederation {
                 step.service_name
             );
 
-            // TODO: Extract entity references from the step query
-            let entity_refs = Vec::new(); // Placeholder for entity references
+            // Extract entity references from the step query
+            let entity_refs = self.extract_entity_references(&step.query)?;
+
+            debug!(
+                "Extracted {} entity references from query for service {}",
+                entity_refs.len(),
+                step.service_name
+            );
 
             // Batch resolve entities for this service
             let entities = self

@@ -112,6 +112,12 @@ pub mod production;
 // Backup and restore utilities
 pub mod backup;
 
+// Backup encryption for data at rest
+pub mod backup_encryption;
+
+// Online backup without downtime
+pub mod online_backup;
+
 // Crash recovery and corruption detection
 pub mod recovery;
 
@@ -161,12 +167,19 @@ pub mod materialized_views;
 // WAL archiving for point-in-time recovery
 pub mod wal_archive;
 
+// WAL shipping for continuous archiving
+pub mod wal_shipping;
+
 // Re-export commonly used types
+pub use backup_encryption::{BackupEncryption, EncryptedData, EncryptionConfig};
 pub use connection_pool::{ConnectionPool, ConnectionPoolConfig, ConnectionPoolStatsSnapshot};
 pub use error::{Result, TdbError};
 pub use materialized_views::{
     MaterializedView, MaterializedViewConfig, MaterializedViewManager,
     MaterializedViewManagerStats, RefreshStrategy, ViewInfo,
+};
+pub use online_backup::{
+    OnlineBackupManager, OnlineBackupStats, Snapshot, SnapshotConfig, SnapshotId, SnapshotStatus,
 };
 pub use query_resource_quota::{
     QueryQuotaStats, QueryResourceQuotaConfig, QueryResourceQuotaManager, QueryResourceTracker,
@@ -175,6 +188,9 @@ pub use query_resource_quota::{
 pub use store::{TdbConfig, TdbStats, TdbStore};
 pub use wal_archive::{
     WalArchiveConfig, WalArchiveMetadata, WalArchiver, WalArchiverStatsSnapshot,
+};
+pub use wal_shipping::{
+    ShippingConfig, ShippingDestination, ShippingRecord, ShippingStats, ShippingStatus, WalShipper,
 };
 
 /// TDB storage engine version

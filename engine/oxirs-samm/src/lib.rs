@@ -182,6 +182,7 @@ pub mod comparison;
 pub mod documentation;
 pub mod error;
 pub mod generators;
+// pub mod graph_analytics;  // TODO: Enable when scirs2-graph API stabilizes (v1.0.0)
 pub mod metamodel;
 pub mod migration;
 pub mod package;
@@ -201,8 +202,8 @@ pub mod validator;
 pub use analytics::{
     Anomaly, AnomalyType, BenchmarkComparison, BenchmarkLevel, BestPracticeCheck,
     BestPracticeReport, CheckCategory, ComplexityAssessment, ComplexityLevel, DependencyMetrics,
-    DistributionAnalysis, DistributionStats, ModelAnalytics, Recommendation, RecommendationType,
-    Severity,
+    DistributionAnalysis, DistributionStats, ModelAnalytics, QualityTest, Recommendation,
+    RecommendationType, Severity, StatisticalAnomaly, StatisticalMetrics,
 };
 pub use cache::{
     AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
@@ -212,6 +213,9 @@ pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, Proper
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
 pub use error::{ErrorCategory, Result, SammError, SourceLocation};
 pub use generators::{GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout};
+// pub use graph_analytics::{
+//     CentralityMetrics, Community, Cycle, GraphMetrics, ModelGraph,
+// };
 pub use metamodel::{Aspect, Characteristic, Entity, Operation, Property};
 pub use migration::{MigrationOptions, MigrationResult, ModelMigrator, SammVersion};
 pub use parser::{ErrorRecoveryStrategy, RecoveryAction, RecoveryContext, StreamingParser};

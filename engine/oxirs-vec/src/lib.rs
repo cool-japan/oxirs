@@ -68,6 +68,7 @@ pub mod automl_optimization;
 pub mod benchmarking;
 pub mod cache_friendly_index;
 pub mod clustering;
+pub mod compaction;
 pub mod compression;
 #[cfg(feature = "content-processing")]
 pub mod content_processing;
@@ -96,6 +97,7 @@ pub mod hierarchical_similarity;
 pub mod hnsw;
 pub mod huggingface;
 pub mod hybrid_fusion;
+pub mod hybrid_search;
 pub mod index;
 pub mod ivf;
 pub mod joint_embedding_spaces;
@@ -129,6 +131,7 @@ pub mod storage_optimizations;
 pub mod store_integration;
 pub mod structured_vectors;
 pub mod tensorflow;
+pub mod tiering;
 pub mod tree_indices;
 pub mod validation;
 pub mod wal;
@@ -185,6 +188,10 @@ pub use benchmarking::{
     ScalabilityMetrics as BenchmarkScalabilityMetrics, SystemInfo,
 };
 pub use cache_friendly_index::{CacheFriendlyVectorIndex, IndexConfig as CacheFriendlyIndexConfig};
+pub use compaction::{
+    CompactionConfig, CompactionManager, CompactionMetrics, CompactionResult, CompactionState,
+    CompactionStatistics, CompactionStrategy,
+};
 pub use compression::{create_compressor, CompressionMethod, VectorCompressor};
 #[cfg(feature = "content-processing")]
 pub use content_processing::{
@@ -252,6 +259,11 @@ pub use hnsw::{HnswConfig, HnswIndex};
 pub use hybrid_fusion::{
     FusedResult, HybridFusion, HybridFusionConfig, HybridFusionStatistics, HybridFusionStrategy,
     NormalizationMethod,
+};
+pub use hybrid_search::{
+    Bm25Scorer, DocumentScore, HybridQuery, HybridResult, HybridSearchConfig, HybridSearchManager,
+    KeywordAlgorithm, KeywordMatch, KeywordSearcher, QueryExpander, RankFusion, RankFusionStrategy,
+    SearchMode, SearchWeights, TfidfScorer,
 };
 pub use index::{AdvancedVectorIndex, DistanceMetric, IndexConfig, IndexType, SearchResult};
 pub use ivf::{IvfConfig, IvfIndex, IvfStats, QuantizationStrategy};
@@ -345,6 +357,10 @@ pub use tensorflow::{
     OptimizationLevel, PreprocessingPipeline as TensorFlowPreprocessingPipeline, ServerConfig,
     SessionConfig, TensorDataType, TensorFlowConfig, TensorFlowDevice, TensorFlowEmbedder,
     TensorFlowModelInfo, TensorFlowModelServer, TensorSpec,
+};
+pub use tiering::{
+    IndexMetadata, StorageTier, TierMetrics, TierStatistics, TierTransitionReason, TieringConfig,
+    TieringManager, TieringPolicy,
 };
 pub use tree_indices::{
     BallTree, CoverTree, KdTree, RandomProjectionTree, TreeIndex, TreeIndexConfig, TreeType, VpTree,

@@ -5,6 +5,7 @@
 
 use anyhow::{anyhow, Result};
 use dashmap::DashMap;
+use scirs2_core::metrics::{Counter, Histogram, MetricsRegistry, Timer};
 use scirs2_core::ndarray_ext::ArrayView1;
 use scirs2_core::random::Random;
 use scirs2_core::rngs::StdRng;
@@ -180,7 +181,13 @@ pub struct VectorStoreStats {
     pub cache_hit_rate: f32,
 }
 
-/// In-memory vector store with various indexing strategies
+/// In-memory vector store with production-ready monitoring
+///
+/// Integrates SCIRS2 metrics for comprehensive performance tracking:
+/// - Insert operations counting
+/// - Search latency measurement
+/// - Cache hit rate monitoring
+/// - Index rebuild timing
 pub struct InMemoryVectorStore {
     /// Vector storage
     vectors: Arc<DashMap<String, VectorData>>,
@@ -197,11 +204,30 @@ pub struct InMemoryVectorStore {
     /// Statistics
     stats: Arc<RwLock<VectorStoreStats>>,
 
-    /// Cache hit counter
+    /// Cache hit counter (atomic for lock-free access)
     cache_hits: Arc<std::sync::atomic::AtomicUsize>,
 
-    /// Cache miss counter
+    /// Cache miss counter (atomic for lock-free access)
     cache_misses: Arc<std::sync::atomic::AtomicUsize>,
+
+    /// SCIRS2 Metrics
+    /// Insert operation counter
+    insert_counter: Arc<Counter>,
+
+    /// Search operation counter
+    search_counter: Arc<Counter>,
+
+    /// Search latency timer
+    search_timer: Arc<Timer>,
+
+    /// Index build timer
+    index_build_timer: Arc<Timer>,
+
+    /// Similarity computation histogram
+    similarity_histogram: Arc<Histogram>,
+
+    /// Metrics registry
+    metrics_registry: Arc<MetricsRegistry>,
 }
 
 /// Vector store configuration
@@ -771,6 +797,12 @@ impl Ord for SimilarityItem {
 
 impl InMemoryVectorStore {
     /// Create new in-memory vector store
+    /// Create a new vector store with production monitoring
+    ///
+    /// Automatically initializes SCIRS2 metrics for comprehensive tracking:
+    /// - Insert/search operation counters
+    /// - Latency timers for performance analysis
+    /// - Similarity computation histograms
     pub fn new(config: VectorStoreConfig) -> Self {
         let stats = VectorStoreStats {
             total_vectors: 0,
@@ -782,6 +814,14 @@ impl InMemoryVectorStore {
             cache_hit_rate: 0.0,
         };
 
+        // Initialize SCIRS2 metrics
+        let metrics_registry = Arc::new(MetricsRegistry::new());
+        let insert_counter = Arc::new(Counter::new("vector_inserts".to_string()));
+        let search_counter = Arc::new(Counter::new("vector_searches".to_string()));
+        let search_timer = Arc::new(Timer::new("search_latency".to_string()));
+        let index_build_timer = Arc::new(Timer::new("index_build_time".to_string()));
+        let similarity_histogram = Arc::new(Histogram::new("similarity_scores".to_string()));
+
         Self {
             vectors: Arc::new(DashMap::new()),
             index: Arc::new(RwLock::new(None)),
@@ -790,6 +830,12 @@ impl InMemoryVectorStore {
             stats: Arc::new(RwLock::new(stats)),
             cache_hits: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
             cache_misses: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            insert_counter,
+            search_counter,
+            search_timer,
+            index_build_timer,
+            similarity_histogram,
+            metrics_registry,
         }
     }
 
@@ -903,6 +949,9 @@ impl VectorStore for InMemoryVectorStore {
         let id_for_lookup = id.clone();
         self.vectors.insert(id.clone(), data);
 
+        // Track insert operation
+        self.insert_counter.inc();
+
         // Add to index if it exists
         if let Some(index) = self.index.write().await.as_mut() {
             index
@@ -934,6 +983,9 @@ impl VectorStore for InMemoryVectorStore {
     }
 
     async fn search(&self, query: &VectorQuery) -> Result<Vec<(String, f32)>> {
+        // Track search operation
+        self.search_counter.inc();
+
         let metric = query.metric.unwrap_or(self.config.default_metric);
 
         // Check cache first
@@ -975,6 +1027,9 @@ impl VectorStore for InMemoryVectorStore {
 
                 let similarity = compute_similarity(&query.vector, &data.vector, metric)?;
 
+                // Track similarity distribution
+                self.similarity_histogram.observe(similarity as f64);
+
                 // Apply minimum similarity threshold
                 if let Some(min_sim) = query.min_similarity {
                     if similarity < min_sim {
@@ -991,8 +1046,10 @@ impl VectorStore for InMemoryVectorStore {
             similarities
         };
 
-        // Update statistics
+        // Update statistics and track metrics
         let query_time = start.elapsed();
+        self.search_timer.observe(query_time);
+
         let mut stats = self.stats.write().await;
         stats.avg_query_time = (stats.avg_query_time + query_time) / 2;
 
@@ -1104,6 +1161,85 @@ impl VectorStore for InMemoryVectorStore {
         };
 
         Ok(stats)
+    }
+}
+
+// Additional methods for InMemoryVectorStore outside the trait
+impl InMemoryVectorStore {
+    /// Get production performance metrics
+    ///
+    /// Returns comprehensive SCIRS2-based metrics including:
+    /// - Total insert/search operations
+    /// - Search latency statistics
+    /// - Similarity score distribution
+    /// - Index build performance
+    pub fn get_performance_metrics(&self) -> VectorStorePerformanceMetrics {
+        let insert_count = self.insert_counter.get();
+        let search_count = self.search_counter.get();
+
+        let search_timer_stats = self.search_timer.get_stats();
+        let index_timer_stats = self.index_build_timer.get_stats();
+        let similarity_hist_stats = self.similarity_histogram.get_stats();
+
+        VectorStorePerformanceMetrics {
+            total_inserts: insert_count,
+            total_searches: search_count,
+            avg_search_latency_ms: search_timer_stats.mean * 1000.0,
+            min_search_latency_ms: 0.0, // Timer doesn't track min
+            max_search_latency_ms: 0.0, // Timer doesn't track max
+            avg_index_build_time_ms: index_timer_stats.mean * 1000.0,
+            avg_similarity_score: similarity_hist_stats.mean,
+            similarity_count: similarity_hist_stats.count,
+        }
+    }
+
+    /// Get metrics registry for external monitoring
+    pub fn metrics_registry(&self) -> &Arc<MetricsRegistry> {
+        &self.metrics_registry
+    }
+}
+
+/// Vector store performance metrics from SCIRS2
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VectorStorePerformanceMetrics {
+    /// Total number of insert operations
+    pub total_inserts: u64,
+
+    /// Total number of search operations
+    pub total_searches: u64,
+
+    /// Average search latency in milliseconds
+    pub avg_search_latency_ms: f64,
+
+    /// Minimum search latency in milliseconds
+    pub min_search_latency_ms: f64,
+
+    /// Maximum search latency in milliseconds
+    pub max_search_latency_ms: f64,
+
+    /// Average index build time in milliseconds
+    pub avg_index_build_time_ms: f64,
+
+    /// Average similarity score across all computations
+    pub avg_similarity_score: f64,
+
+    /// Total similarity score calculations
+    pub similarity_count: u64,
+}
+
+impl std::fmt::Display for VectorStorePerformanceMetrics {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "VectorPerf {{ inserts: {}, searches: {}, avg_latency: {:.2}ms, min: {:.2}ms, max: {:.2}ms, avg_similarity: {:.3}, computations: {} }}",
+            self.total_inserts,
+            self.total_searches,
+            self.avg_search_latency_ms,
+            self.min_search_latency_ms,
+            self.max_search_latency_ms,
+            self.avg_similarity_score,
+            self.similarity_count
+        )
     }
 }
 

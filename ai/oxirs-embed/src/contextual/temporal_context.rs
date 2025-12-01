@@ -1,7 +1,6 @@
 //! Temporal context handling
 
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 
 /// Temporal context for time-aware embeddings
 #[derive(Debug, Clone)]

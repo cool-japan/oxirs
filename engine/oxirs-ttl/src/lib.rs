@@ -168,8 +168,14 @@ pub mod nquads {
 }
 
 pub mod n3 {
-    //! N3 format parser (experimental)
+    //! N3 format parser and reasoning (experimental)
     pub use crate::formats::n3::*;
+    pub use crate::formats::n3_types::*;
+
+    /// N3 reasoning primitives
+    pub mod reasoning {
+        pub use crate::formats::n3_reasoning::*;
+    }
 }
 
 // Re-export common types

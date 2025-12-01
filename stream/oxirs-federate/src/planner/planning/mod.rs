@@ -160,10 +160,28 @@ impl FederatedQueryPlanner {
 
         // Add service query steps
         for (idx, service_query) in service_queries.iter().enumerate() {
+            // Retrieve service details directly from registry endpoints
+            let (service_url, auth_config) = service_registry
+                .get_sparql_endpoints()
+                .into_iter()
+                .find(|ep| ep.id == service_query.service_id)
+                .map(|ep| (Some(ep.url.to_string()), ep.auth.clone()))
+                .or_else(|| {
+                    // Check GraphQL services if not found in SPARQL endpoints
+                    service_registry
+                        .get_graphql_services()
+                        .into_iter()
+                        .find(|svc| svc.id == service_query.service_id)
+                        .map(|svc| (Some(svc.url.to_string()), svc.auth.clone()))
+                })
+                .unwrap_or((None, None));
+
             let step = ExecutionStep {
                 step_id: format!("service_query_{idx}"),
                 step_type: StepType::ServiceQuery,
                 service_id: Some(service_query.service_id.clone()),
+                service_url,
+                auth_config,
                 query_fragment: service_query.query.clone(),
                 dependencies: Vec::new(),
                 estimated_cost: self
@@ -184,10 +202,27 @@ impl FederatedQueryPlanner {
         // Add entity resolution steps if needed
         if let Some(entity_plan) = entity_plan {
             for (idx, entity_step) in entity_plan.steps.iter().enumerate() {
+                // Retrieve service details directly from registry endpoints
+                let (service_url, auth_config) = service_registry
+                    .get_sparql_endpoints()
+                    .into_iter()
+                    .find(|ep| ep.id == entity_step.service_name)
+                    .map(|ep| (Some(ep.url.to_string()), ep.auth.clone()))
+                    .or_else(|| {
+                        service_registry
+                            .get_graphql_services()
+                            .into_iter()
+                            .find(|svc| svc.id == entity_step.service_name)
+                            .map(|svc| (Some(svc.url.to_string()), svc.auth.clone()))
+                    })
+                    .unwrap_or((None, None));
+
                 let step = ExecutionStep {
                     step_id: format!("entity_resolution_{idx}"),
                     step_type: StepType::EntityResolution,
                     service_id: Some(entity_step.service_name.clone()),
+                    service_url,
+                    auth_config,
                     query_fragment: entity_step.query.clone(),
                     dependencies: entity_step.depends_on.clone(),
                     estimated_cost: 10.0, // Base cost for entity resolution
@@ -211,6 +246,8 @@ impl FederatedQueryPlanner {
                 step_id: "result_stitching".to_string(),
                 step_type: StepType::ResultStitching,
                 service_id: None,
+                service_url: None,
+                auth_config: None,
                 query_fragment: "".to_string(),
                 dependencies: steps.iter().map(|s| s.step_id.clone()).collect(),
                 estimated_cost: 5.0,
@@ -265,6 +302,8 @@ impl FederatedQueryPlanner {
             step_id: "single_service_query".to_string(),
             step_type: StepType::ServiceQuery,
             service_id: Some(service_id.clone()),
+            service_url: None,
+            auth_config: None,
             query_fragment: query.to_string(),
             dependencies: Vec::new(),
             estimated_cost: self.estimate_step_cost(query, &service_id),
@@ -656,6 +695,8 @@ impl FederatedQueryPlanner {
                 step_id: "sparql_step_1".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some(selected_service_id),
+                service_url: None,
+                auth_config: None,
                 query_fragment: query_info.original_query.clone(),
                 dependencies: vec![],
                 estimated_cost: query_info.estimated_cost as f64,
@@ -848,6 +889,8 @@ mod tests {
                 step_id: "step1".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query1".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -858,6 +901,8 @@ mod tests {
                 step_id: "step2".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query2".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -868,6 +913,8 @@ mod tests {
                 step_id: "step3".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query3".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -896,6 +943,8 @@ mod tests {
                 step_id: "step1".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query1".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -906,6 +955,8 @@ mod tests {
                 step_id: "step2".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query2".to_string(),
                 dependencies: vec!["step1".to_string()],
                 estimated_cost: 1.0,
@@ -916,6 +967,8 @@ mod tests {
                 step_id: "step3".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query3".to_string(),
                 dependencies: vec!["step2".to_string()],
                 estimated_cost: 1.0,
@@ -943,6 +996,8 @@ mod tests {
                 step_id: "step1".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query1".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -953,6 +1008,8 @@ mod tests {
                 step_id: "step2".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query2".to_string(),
                 dependencies: vec!["step1".to_string()],
                 estimated_cost: 1.0,
@@ -963,6 +1020,8 @@ mod tests {
                 step_id: "step3".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query3".to_string(),
                 dependencies: vec!["step1".to_string()],
                 estimated_cost: 1.0,
@@ -973,6 +1032,8 @@ mod tests {
                 step_id: "step4".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service4".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query4".to_string(),
                 dependencies: vec!["step2".to_string(), "step3".to_string()],
                 estimated_cost: 1.0,
@@ -1002,6 +1063,8 @@ mod tests {
                 step_id: "step1".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service1".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query1".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -1012,6 +1075,8 @@ mod tests {
                 step_id: "step2".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service2".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query2".to_string(),
                 dependencies: Vec::new(),
                 estimated_cost: 1.0,
@@ -1022,6 +1087,8 @@ mod tests {
                 step_id: "step3".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service3".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query3".to_string(),
                 dependencies: vec!["step1".to_string()],
                 estimated_cost: 1.0,
@@ -1032,6 +1099,8 @@ mod tests {
                 step_id: "step4".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service4".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query4".to_string(),
                 dependencies: vec!["step1".to_string()],
                 estimated_cost: 1.0,
@@ -1042,6 +1111,8 @@ mod tests {
                 step_id: "step5".to_string(),
                 step_type: StepType::ServiceQuery,
                 service_id: Some("service5".to_string()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: "query5".to_string(),
                 dependencies: vec!["step2".to_string()],
                 estimated_cost: 1.0,

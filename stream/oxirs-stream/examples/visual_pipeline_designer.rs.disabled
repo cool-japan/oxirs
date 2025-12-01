@@ -1,0 +1,331 @@
+//! # Visual Pipeline Designer Example
+//!
+//! Demonstrates the visual stream designer and code generation:
+//! - Building pipelines visually with drag-and-drop
+//! - Real-time debugging with breakpoints
+//! - Performance profiling
+//! - Code generation from visual flows
+//! - SQL-like query language for streams
+
+use anyhow::Result;
+use oxirs_stream::{
+    CodeGenConfig, CodeGenerator, DeploymentTarget, GenerationStrategy, NodeType,
+    OptimizationLevel, PipelineNode, StreamSqlEngine, VisualPipeline, VisualPipelineDesigner,
+};
+use std::collections::HashMap;
+use tracing::info;
+use tracing_subscriber;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // Initialize logging
+    tracing_subscriber::fmt::init();
+
+    info!("Starting Visual Pipeline Designer Example");
+
+    // Demonstrate visual designer capabilities
+    create_visual_pipeline_example().await?;
+    debug_pipeline_example().await?;
+    generate_code_example().await?;
+    stream_sql_example().await?;
+
+    Ok(())
+}
+
+/// Example: Creating a visual pipeline
+async fn create_visual_pipeline_example() -> Result<()> {
+    info!("=== Creating Visual Pipeline Example ===");
+
+    // Create visual designer
+    let mut designer = VisualPipelineDesigner::new();
+
+    // Create a new pipeline
+    let mut pipeline = designer.create_pipeline("RealTimeAnalytics".to_string())?;
+    info!("Created pipeline: {}", pipeline.name);
+
+    // Add source node
+    let source_node = PipelineNode {
+        id: "source-1".to_string(),
+        name: "KafkaSource".to_string(),
+        node_type: NodeType::Source,
+        position: (100.0, 100.0),
+        config: HashMap::new(),
+        inputs: vec![],
+        outputs: vec!["stream-1".to_string()],
+    };
+    pipeline.add_node(source_node)?;
+
+    // Add filter node
+    let filter_node = PipelineNode {
+        id: "filter-1".to_string(),
+        name: "EventFilter".to_string(),
+        node_type: NodeType::Filter,
+        position: (300.0, 100.0),
+        config: [("predicate".to_string(), "value > 100".to_string())]
+            .iter()
+            .cloned()
+            .collect(),
+        inputs: vec!["stream-1".to_string()],
+        outputs: vec!["stream-2".to_string()],
+    };
+    pipeline.add_node(filter_node)?;
+
+    // Add map transformation node
+    let map_node = PipelineNode {
+        id: "map-1".to_string(),
+        name: "Transformer".to_string(),
+        node_type: NodeType::Map,
+        position: (500.0, 100.0),
+        config: HashMap::new(),
+        inputs: vec!["stream-2".to_string()],
+        outputs: vec!["stream-3".to_string()],
+    };
+    pipeline.add_node(map_node)?;
+
+    // Add ML model node
+    let ml_node = PipelineNode {
+        id: "ml-1".to_string(),
+        name: "AnomalyDetector".to_string(),
+        node_type: NodeType::MLModel("anomaly_detection".to_string()),
+        position: (700.0, 100.0),
+        config: [
+            ("model_type".to_string(), "isolation_forest".to_string()),
+            ("threshold".to_string(), "0.95".to_string()),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        inputs: vec!["stream-3".to_string()],
+        outputs: vec!["stream-4".to_string()],
+    };
+    pipeline.add_node(ml_node)?;
+
+    // Add sink node
+    let sink_node = PipelineNode {
+        id: "sink-1".to_string(),
+        name: "AlertSink".to_string(),
+        node_type: NodeType::Sink,
+        position: (900.0, 100.0),
+        config: HashMap::new(),
+        inputs: vec!["stream-4".to_string()],
+        outputs: vec![],
+    };
+    pipeline.add_node(sink_node)?;
+
+    // Validate pipeline
+    let validation = designer.validate_pipeline(&pipeline).await?;
+    if validation.is_valid {
+        info!("✅ Pipeline validation passed");
+    } else {
+        info!("❌ Pipeline validation failed: {:?}", validation.errors);
+    }
+
+    // Export pipeline to various formats
+    let json_export = designer.export_to_json(&pipeline)?;
+    info!("Exported to JSON ({} bytes)", json_export.len());
+
+    let dot_export = designer.export_to_dot(&pipeline)?;
+    info!("Exported to DOT format ({} bytes)", dot_export.len());
+
+    let mermaid_export = designer.export_to_mermaid(&pipeline)?;
+    info!("Exported to Mermaid diagram:\n{}", mermaid_export);
+
+    Ok(())
+}
+
+/// Example: Debugging a pipeline with breakpoints
+async fn debug_pipeline_example() -> Result<()> {
+    info!("=== Pipeline Debugging Example ===");
+
+    let mut designer = VisualPipelineDesigner::new();
+    let mut pipeline = designer.create_pipeline("DebugPipeline".to_string())?;
+
+    // Create simple pipeline
+    let source = PipelineNode {
+        id: "source-1".to_string(),
+        name: "Source".to_string(),
+        node_type: NodeType::Source,
+        position: (100.0, 100.0),
+        config: HashMap::new(),
+        inputs: vec![],
+        outputs: vec!["stream-1".to_string()],
+    };
+    pipeline.add_node(source)?;
+
+    let processor = PipelineNode {
+        id: "processor-1".to_string(),
+        name: "Processor".to_string(),
+        node_type: NodeType::Map,
+        position: (300.0, 100.0),
+        config: HashMap::new(),
+        inputs: vec!["stream-1".to_string()],
+        outputs: vec!["stream-2".to_string()],
+    };
+    pipeline.add_node(processor)?;
+
+    // Set breakpoint on processor node
+    info!("Setting breakpoint on processor node");
+    designer.set_breakpoint(&mut pipeline, "processor-1", true)?;
+
+    // Enable event capture for debugging
+    designer.enable_event_capture(&mut pipeline, "processor-1")?;
+    info!("Event capture enabled for debugging");
+
+    // Start debugging session
+    info!("Starting debug session...");
+    let debug_session = designer.start_debug_session(&pipeline).await?;
+
+    info!("Debug session active - breakpoints will pause execution");
+    info!("Use step_over(), step_into(), continue_execution()");
+
+    // Inspect captured events
+    let captured_events = designer.get_captured_events("processor-1").await?;
+    info!("Captured {} events for inspection", captured_events.len());
+
+    // Performance profiling during debug
+    let profile = designer.profile_node(&pipeline, "processor-1").await?;
+    info!("Node performance:");
+    info!("  Average latency: {:.2}ms", profile.avg_latency_ms);
+    info!("  Throughput: {:.2} events/sec", profile.throughput);
+    info!("  Memory usage: {} MB", profile.memory_mb);
+
+    Ok(())
+}
+
+/// Example: Generate production code from visual pipeline
+async fn generate_code_example() -> Result<()> {
+    info!("=== Code Generation Example ===");
+
+    let mut designer = VisualPipelineDesigner::new();
+    let mut pipeline = designer.create_pipeline("ProductionPipeline".to_string())?;
+
+    // Build a complete pipeline
+    let source = PipelineNode {
+        id: "kafka-source".to_string(),
+        name: "KafkaSource".to_string(),
+        node_type: NodeType::Source,
+        position: (100.0, 100.0),
+        config: [
+            ("topic".to_string(), "events".to_string()),
+            ("brokers".to_string(), "localhost:9092".to_string()),
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        inputs: vec![],
+        outputs: vec!["raw-stream".to_string()],
+    };
+    pipeline.add_node(source)?;
+
+    // Configure code generation
+    let codegen_config = CodeGenConfig {
+        project_name: "stream-processor".to_string(),
+        project_version: "1.0.0".to_string(),
+        author: Some("OxiRS Stream Generator".to_string()),
+        license: "MIT".to_string(),
+        generation_strategy: GenerationStrategy::Modular,
+        optimization_level: OptimizationLevel::Release,
+        enable_tests: true,
+        enable_benchmarks: true,
+        enable_documentation: true,
+        enable_ci_cd: true,
+        target_deployment: DeploymentTarget::Kubernetes,
+        code_style: oxirs_stream::CodeStyle {
+            indent_size: 4,
+            max_line_length: 100,
+            use_async: true,
+            error_handling: oxirs_stream::ErrorHandlingStyle::Anyhow,
+            naming_convention: oxirs_stream::NamingConvention::SnakeCase,
+        },
+    };
+
+    // Generate code
+    info!("Generating production-ready code...");
+    let generator = CodeGenerator::new(codegen_config);
+    let generated = generator.generate(&pipeline)?;
+
+    info!("✅ Code generation complete!");
+    info!("Generated {} files", generated.metadata.total_files);
+    info!("Total lines of code: {}", generated.metadata.total_lines);
+    info!("Dependencies: {} crates", generated.dependencies.len());
+
+    // Show generated file structure
+    info!("\nGenerated project structure:");
+    for (path, content) in &generated.files {
+        info!("  {} ({} bytes)", path, content.len());
+    }
+
+    // Show build instructions
+    info!("\nBuild instructions:");
+    for (i, instruction) in generated.build_instructions.iter().enumerate() {
+        info!("  {}. {}", i + 1, instruction);
+    }
+
+    Ok(())
+}
+
+/// Example: SQL-like queries on streams
+async fn stream_sql_example() -> Result<()> {
+    info!("=== Stream SQL Example ===");
+
+    // Create SQL engine for streams
+    let config = oxirs_stream::StreamSqlConfig {
+        max_query_complexity: 100,
+        enable_windowing: true,
+        enable_joins: true,
+        max_window_size: 10000,
+    };
+
+    let mut sql_engine = StreamSqlEngine::new(config)?;
+
+    // Example 1: Simple SELECT with WHERE
+    let query1 = r#"
+        SELECT subject, predicate, object
+        FROM rdf_stream
+        WHERE predicate = 'http://example.org/hasValue'
+    "#;
+
+    info!("Executing query: {}", query1);
+    let result1 = sql_engine.execute(query1).await?;
+    info!("Query result: {} rows", result1.row_count);
+
+    // Example 2: Windowed aggregation
+    let query2 = r#"
+        SELECT
+            COUNT(*) as event_count,
+            AVG(value) as avg_value,
+            MAX(value) as max_value
+        FROM metrics_stream
+        WINDOW TUMBLING(INTERVAL '1' MINUTE)
+        GROUP BY metric_type
+    "#;
+
+    info!("Executing windowed query: {}", query2);
+    let result2 = sql_engine.execute(query2).await?;
+    info!("Aggregation result: {} groups", result2.row_count);
+
+    // Example 3: Stream JOIN
+    let query3 = r#"
+        SELECT a.user_id, a.action, b.profile_data
+        FROM user_actions a
+        JOIN user_profiles b
+        ON a.user_id = b.user_id
+        WINDOW SLIDING(INTERVAL '5' MINUTE, INTERVAL '1' MINUTE)
+    "#;
+
+    info!("Executing stream JOIN: {}", query3);
+    let result3 = sql_engine.execute(query3).await?;
+    info!("JOIN result: {} matched rows", result3.row_count);
+
+    // Get SQL engine statistics
+    let stats = sql_engine.get_stats().await;
+    info!("\nSQL Engine Statistics:");
+    info!("  Total queries executed: {}", stats.total_queries);
+    info!(
+        "  Average execution time: {:.2}ms",
+        stats.avg_execution_time_ms
+    );
+    info!("  Cache hit rate: {:.2}%", stats.cache_hit_rate * 100.0);
+
+    Ok(())
+}

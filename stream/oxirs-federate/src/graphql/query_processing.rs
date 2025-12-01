@@ -156,6 +156,8 @@ impl GraphQLFederation {
                 step_id: format!("entity_resolution_{step_counter}"),
                 step_type: StepType::EntityResolution,
                 service_id: Some(entity_req.service_id.clone()),
+                service_url: None,
+                auth_config: None,
                 query_fragment: format!(
                     "_entities(representations: [{{__typename: \"{}\", id: \"$id\"}}])",
                     entity_req.entity_type
@@ -175,6 +177,8 @@ impl GraphQLFederation {
                     step_id: format!("service_query_{step_counter}"),
                     step_type: StepType::GraphQLQuery,
                     service_id: Some(service_id.clone()),
+                    service_url: None,
+                    auth_config: None,
                     query_fragment: fields.join(", "),
                     dependencies: Vec::new(),
                     estimated_cost: fields.len() as f64,
@@ -190,6 +194,8 @@ impl GraphQLFederation {
             step_id: "result_stitching".to_string(),
             step_type: StepType::ResultStitching,
             service_id: None,
+            service_url: None,
+            auth_config: None,
             query_fragment: String::new(),
             dependencies: steps.iter().map(|s| s.step_id.clone()).collect(),
             estimated_cost: 0.5,
@@ -467,10 +473,14 @@ impl GraphQLFederation {
             Vec::new()
         };
 
+        // Parse directives from the inline fragment
+        let parsed_directives = self.parse_directives_from_text(fragment_str)?;
+        let directives = parsed_directives.iter().map(|d| d.name.clone()).collect();
+
         let inline_fragment = InlineFragment {
             type_condition,
             selection_set,
-            directives: Vec::new(), // TODO: Parse directives if needed
+            directives,
         };
 
         Ok(Some(Selection {
@@ -496,9 +506,13 @@ impl GraphQLFederation {
             return Ok(None);
         }
 
+        // Parse directives from the fragment spread
+        let parsed_directives = self.parse_directives_from_text(fragment_str)?;
+        let directives = parsed_directives.iter().map(|d| d.name.clone()).collect();
+
         let fragment_spread = FragmentSpread {
             name: fragment_name,
-            directives: Vec::new(), // TODO: Parse directives if needed
+            directives,
         };
 
         Ok(Some(Selection {
@@ -508,6 +522,67 @@ impl GraphQLFederation {
             selection_set: Vec::new(),
             fragment: Some(FragmentType::Spread(fragment_spread)),
         }))
+    }
+
+    /// Parse directives from text (e.g., @skip(if: $var), @include(if: true))
+    fn parse_directives_from_text(&self, text: &str) -> Result<Vec<Directive>> {
+        let mut directives = Vec::new();
+
+        // Find all directive patterns (@name or @name(...))
+        let mut current_pos = 0;
+        while let Some(at_pos) = text[current_pos..].find('@') {
+            let start = current_pos + at_pos;
+            let remaining = &text[start + 1..];
+
+            // Extract directive name
+            let name_end = remaining
+                .find(|c: char| !c.is_alphanumeric() && c != '_')
+                .unwrap_or(remaining.len());
+
+            let name = remaining[..name_end].to_string();
+
+            // Check for arguments
+            let mut arguments = HashMap::new();
+            if let Some(paren_start) = remaining[name_end..].find('(') {
+                if let Some(paren_end) = remaining[name_end..].find(')') {
+                    let args_text = &remaining[name_end + paren_start + 1..name_end + paren_end];
+
+                    // Simple argument parsing (handles basic cases like if: $var or if: true)
+                    for arg_pair in args_text.split(',') {
+                        if let Some(colon_pos) = arg_pair.find(':') {
+                            let arg_name = arg_pair[..colon_pos].trim().to_string();
+                            let arg_value_str = arg_pair[colon_pos + 1..].trim();
+
+                            // Parse argument value (simplified - handles booleans, strings, variables)
+                            let arg_value = if arg_value_str == "true" {
+                                serde_json::json!(true)
+                            } else if arg_value_str == "false" {
+                                serde_json::json!(false)
+                            } else if arg_value_str.starts_with('$') {
+                                serde_json::json!({
+                                    "variable": arg_value_str
+                                })
+                            } else if arg_value_str.starts_with('"') && arg_value_str.ends_with('"')
+                            {
+                                serde_json::json!(
+                                    arg_value_str[1..arg_value_str.len() - 1].to_string()
+                                )
+                            } else {
+                                serde_json::json!(arg_value_str)
+                            };
+
+                            arguments.insert(arg_name, arg_value);
+                        }
+                    }
+                }
+            }
+
+            directives.push(Directive { name, arguments });
+
+            current_pos = start + 1;
+        }
+
+        Ok(directives)
     }
 
     /// Analyze which services own which fields

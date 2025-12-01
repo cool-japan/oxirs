@@ -1,8 +1,8 @@
 //! Context cache for embedding storage and retrieval
 
-use std::collections::HashMap;
-use crate::{Triple, Vector};
 use super::{ContextCacheConfig, ProcessedContext};
+use crate::{Triple, Vector};
+use std::collections::HashMap;
 
 /// Context cache for embeddings
 pub struct ContextCache {

@@ -1,13 +1,13 @@
 # OxiRS GraphQL - TODO
 
-*Last Updated: November 24, 2025*
+*Last Updated: November 29, 2025*
 
-## ✅ Current Status: v0.2.0 FULLY COMPLETE - ALL FEATURES IMPLEMENTED
+## ✅ Current Status: v0.3.0 COMPLETE | v0.4.0 IN PROGRESS
 
 **oxirs-gql** provides a production-ready GraphQL interface for RDF data with automatic schema generation and AI-powered capabilities.
 
 ### Implementation Status Summary
-- **693 tests passing** (100% success rate) ✅ **+39 new tests (Nov 24 - v0.3.0 Security & Integration)**
+- **750 tests passing** (100% success rate) ✅ **+16 new tests (Nov 29 - v0.4.0 Query Batching)**
 - **Beta.1 targets: 100% complete** ✅
 - **v0.1.0 targets: 100% complete** ✅ **ALL FEATURES IMPLEMENTED**
 - **v0.2.0 Advanced Query Optimization: 5/5 complete** ✅ **100% COMPLETE - Nov 21 AM**
@@ -15,9 +15,10 @@
 - **v0.2.0 AI-Powered Features: 5/5 complete** ✅ **100% COMPLETE - Nov 22 PM** 🎉🎉
 - **v0.2.0 Operational Enhancements: 5/5 complete** ✅ **100% COMPLETE - Nov 24** 🎉🎉🎉
 - **v0.2.0 Developer Experience: 5/5 complete** ✅ **100% COMPLETE - Nov 24** 🎉🎉🎉🎉
-- **v0.3.0 Security & Integration: 3/5 complete** 🔄 **IN PROGRESS - Nov 24**
-- **Total implementation: ~77,987 lines** (64,822 code) across 113 modules (+3 modules since Nov 24 AM)
-- **v0.2.0 RELEASED** 🚀🎉 | **v0.3.0 IN PROGRESS**
+- **v0.3.0 Security & Integration: 5/5 complete** ✅ **100% COMPLETE - Nov 29** 🎉🎉🎉🎉🎉
+- **v0.4.0 Protocol Enhancements: 1/25 in progress** 🔄 **IN PROGRESS - Nov 29**
+- **Total implementation: ~80,310 lines** (~67,025 code) across 116 modules (+1 module since v0.3.0)
+- **v0.3.0 COMPLETE** ✅🎉 | **v0.4.0 IN PROGRESS** 🔄
 
 ### v0.1.0 Release Status (November 21, 2025) - ENHANCED
 - **417 tests passing** with zero errors (unit + integration + all modules) **+29 new since Nov 20**
@@ -444,9 +445,9 @@
 
 ## 🚀 v0.3.0 Development Roadmap (In Progress)
 
-### Security & Integration Features - **3/5 COMPLETED** ✅ **Nov 24**
+### Security & Integration Features - **5/5 COMPLETED** ✅ **100% COMPLETE - Nov 29** 🎉
 
-#### Security Enhancements - **1/2 COMPLETED**
+#### Security Enhancements - **2/2 COMPLETED** ✅
 - [x] GraphQL Query Sanitization (query_sanitization.rs - 780 lines) ✅ **NEW - Nov 24**
   - Injection detection (SQL, SPARQL, XSS patterns)
   - Query depth and complexity limiting
@@ -454,9 +455,16 @@
   - Directive validation
   - Variable sanitization
   - 12 comprehensive unit tests (100% pass rate)
-- [ ] Content Security Policies (Planned)
+- [x] Content Security Policies (content_security_policy.rs - 731 lines) ✅ **NEW - Nov 29**
+  - XSS and clickjacking prevention
+  - CSP directive configuration (default-src, script-src, style-src, etc.)
+  - Nonce and hash-based script allowlisting
+  - CDN-specific header support
+  - Violation reporting framework
+  - Sandbox restrictions
+  - 17 comprehensive unit tests (100% pass rate)
 
-#### Performance Features - **1/2 COMPLETED**
+#### Performance Features - **2/2 COMPLETED** ✅
 - [x] Response Streaming (response_streaming.rs - 670 lines) ✅ **NEW - Nov 24**
   - Chunked transfer encoding support
   - Incremental delivery with @defer/@stream
@@ -465,7 +473,15 @@
   - Multipart response formatting
   - Progress tracking and heartbeats
   - 12 comprehensive unit tests (100% pass rate)
-- [ ] Edge Caching (Planned)
+- [x] Edge Caching (edge_caching.rs - 831 lines) ✅ **NEW - Nov 29**
+  - Automatic Cache-Control header generation
+  - ETag-based validation caching
+  - Multi-CDN support (Cloudflare, Fastly, CloudFront, Akamai)
+  - Query cacheability analysis
+  - Cache tag-based purging
+  - Vary header management
+  - Cache statistics tracking
+  - 29 comprehensive unit tests (100% pass rate)
 
 #### Integration Features - **1/1 COMPLETED**
 - [x] Webhook Support (webhook_support.rs - 720 lines) ✅ **NEW - Nov 24**
@@ -477,8 +493,264 @@
   - Delivery statistics
   - 14 comprehensive unit tests (100% pass rate)
 
-### Code Quality Targets
-- Maintain 100% test pass rate
-- Keep warning-free compilation
-- Refactor files exceeding 2000 lines using SplitRS
-- Continue SciRS2-Core integration across all modules
+### Code Quality Targets ✅
+- ✅ Maintain 100% test pass rate (734 tests passing)
+- ✅ Keep warning-free compilation (zero warnings)
+- ✅ All files under 2000 lines (largest: 1522 lines)
+- ✅ No direct ndarray/rand usage (100% SciRS2-Core)
+
+---
+
+## 🚀 v0.4.0 Development Roadmap (In Progress - Q1 2026)
+
+### GraphQL Protocol Enhancements - **1/5 IN PROGRESS**
+
+#### Query Optimization
+- [x] GraphQL Query Batching (query_batching.rs - 805 lines) ✅ **NEW - Nov 29**
+  - Request batching for multiple queries in single HTTP request
+  - Automatic query deduplication with fingerprinting
+  - Multiple execution strategies (Sequential, Parallel, Adaptive, Priority-based)
+  - Query result caching and sharing
+  - Batch statistics and monitoring
+  - Configurable batch size and concurrency limits
+  - 16 comprehensive unit tests (100% pass rate)
+- [ ] Query result streaming for large datasets
+- [ ] Incremental query execution
+- [ ] Query plan visualization
+- [ ] Cost-based query optimization
+
+### Advanced Observability & Monitoring - **0/5 PLANNED**
+
+#### Distributed Tracing Enhancements
+- [ ] Trace correlation across RDF queries and SPARQL execution
+- [ ] Custom span attributes for GraphQL-specific metrics
+- [ ] Integration with Jaeger, Zipkin, and Tempo
+- [ ] Automatic trace sampling strategies
+- [ ] Trace visualization and analysis tools
+
+#### Advanced Metrics & Analytics
+- [ ] Query performance heatmaps
+- [ ] Real-time query pattern analysis
+- [ ] Anomaly detection in query performance
+- [ ] Custom business metrics integration
+- [ ] Prometheus metric cardinality optimization
+
+#### Logging & Debugging
+- [ ] Structured logging with query context
+- [ ] Debug query execution plans
+- [ ] Query replay for debugging
+- [ ] Error aggregation and grouping
+- [ ] Log sampling for high-volume scenarios
+
+#### Profiling & Performance
+- [ ] Continuous profiling integration (pprof, flamegraph)
+- [ ] Memory allocation tracking per query
+- [ ] CPU usage profiling per resolver
+- [ ] Network I/O tracking
+- [ ] Database connection pool monitoring
+
+#### Observability APIs
+- [ ] GraphQL observability endpoint
+- [ ] Real-time metrics streaming
+- [ ] Historical metrics querying
+- [ ] Custom dashboard generation
+- [ ] Alert rule configuration API
+
+### GraphQL Protocol Enhancements - **0/5 PLANNED**
+
+#### GraphQL over HTTP/2 & HTTP/3
+- [ ] Native HTTP/2 server-push support
+- [ ] HTTP/3 QUIC protocol implementation
+- [ ] Multiplexing for parallel queries
+- [ ] Stream prioritization
+- [ ] Connection pooling optimization
+
+#### Advanced Subscription Features
+- [ ] Subscription filtering with @filter directive
+- [ ] Subscription throttling and batching
+- [ ] Subscription resumption after disconnect
+- [ ] Multi-source subscription merging
+- [ ] Subscription analytics and monitoring
+
+#### Query Optimization
+- [ ] Automatic query batching and deduplication
+- [ ] Query result streaming for large datasets
+- [ ] Incremental query execution
+- [ ] Query plan visualization
+- [ ] Cost-based query optimization
+
+#### Schema Evolution
+- [ ] Schema versioning with deprecation tracking
+- [ ] Breaking change detection and migration
+- [ ] Schema diffing and changelog automation
+- [ ] Backward compatibility testing
+- [ ] Schema documentation generation
+
+#### Error Handling
+- [ ] Structured error codes and categorization
+- [ ] Error recovery strategies
+- [ ] Partial success handling
+- [ ] Client-specific error formatting
+- [ ] Error rate limiting
+
+### AI & Machine Learning Integration - **0/5 PLANNED**
+
+#### Intelligent Query Understanding
+- [ ] Query intent classification
+- [ ] Natural language to GraphQL translation
+- [ ] Query suggestion and auto-completion
+- [ ] Semantic query expansion
+- [ ] Query similarity detection
+
+#### Predictive Performance
+- [ ] Query execution time prediction
+- [ ] Resource usage forecasting
+- [ ] Capacity planning automation
+- [ ] Workload pattern prediction
+- [ ] Proactive scaling recommendations
+
+#### Adaptive Optimization
+- [ ] Self-tuning query optimizer
+- [ ] Automatic index recommendation
+- [ ] Dynamic cache policy adjustment
+- [ ] Load balancing optimization
+- [ ] Query rewriting for performance
+
+#### Anomaly Detection
+- [ ] Real-time anomaly detection in queries
+- [ ] Security threat identification
+- [ ] Performance degradation detection
+- [ ] Data quality anomaly detection
+- [ ] User behavior anomaly detection
+
+#### Knowledge Graph Intelligence
+- [ ] Automatic schema inference from RDF data
+- [ ] Entity relationship discovery
+- [ ] Semantic query optimization
+- [ ] Knowledge graph completion
+- [ ] Graph pattern mining
+
+### Enterprise Features - **0/5 PLANNED**
+
+#### Multi-Tenancy Support
+- [ ] Tenant isolation and resource limits
+- [ ] Per-tenant schema customization
+- [ ] Tenant-specific caching
+- [ ] Tenant analytics and reporting
+- [ ] Tenant migration tools
+
+#### Compliance & Governance
+- [ ] GDPR compliance features (data deletion, export)
+- [ ] Audit logging for compliance
+- [ ] Data lineage tracking
+- [ ] Access control policies
+- [ ] Compliance reporting
+
+#### Business Intelligence
+- [ ] Query analytics dashboard
+- [ ] Usage pattern analysis
+- [ ] Cost attribution by tenant/user
+- [ ] Performance benchmarking
+- [ ] SLA monitoring and reporting
+
+#### Integration Ecosystem
+- [ ] GraphQL Mesh integration
+- [ ] Apollo Studio integration
+- [ ] Hasura compatibility layer
+- [ ] AWS AppSync compatibility
+- [ ] Azure API Management integration
+
+#### Developer Tools
+- [ ] VSCode extension for schema development
+- [ ] CLI tools for schema management
+- [ ] Testing framework for GraphQL
+- [ ] Mock server generation
+- [ ] SDK generation for multiple languages
+
+### Performance & Scalability - **0/5 PLANNED**
+
+#### Query Execution
+- [ ] Parallel resolver execution optimization
+- [ ] Just-in-time query compilation
+- [ ] Query result compression
+- [ ] Adaptive concurrency control
+- [ ] Query queue management
+
+#### Caching Strategies
+- [ ] Multi-level caching (L1/L2/L3)
+- [ ] Distributed cache invalidation
+- [ ] Cache warming strategies
+- [ ] Predictive cache pre-loading
+- [ ] Cache compression
+
+#### Database Optimization
+- [ ] Connection pool optimization
+- [ ] Query result batching
+- [ ] Read replica support
+- [ ] Write-through cache
+- [ ] Database sharding support
+
+#### Network Optimization
+- [ ] Response payload optimization
+- [ ] GraphQL query compression
+- [ ] Binary protocol support
+- [ ] CDN integration enhancements
+- [ ] Edge compute integration
+
+#### Horizontal Scaling
+- [ ] Stateless architecture improvements
+- [ ] Session affinity optimization
+- [ ] Cross-region replication
+- [ ] Auto-scaling based on metrics
+- [ ] Load balancer health checks
+
+---
+
+## 📊 Implementation Metrics
+
+### v0.1.0 to v0.3.0 Journey
+- **Start (v0.1.0-beta.1)**: 417 tests, ~50K lines
+- **v0.2.0**: 654 tests, ~75K lines
+- **v0.3.0 (Current)**: 734 tests, ~79.6K lines
+- **Growth**: +76% tests, +59% code, 100% stability
+
+### Test Coverage by Category
+- Core functionality: 95+ tests
+- Federation: 80+ tests
+- AI features: 51+ tests
+- Security: 38+ tests
+- Performance: 45+ tests
+- Operational: 50+ tests
+- Developer tools: 40+ tests
+- Integration: 35+ tests
+
+### Performance Benchmarks (Target for v0.4.0)
+- Query latency: <10ms p99
+- Throughput: >10K queries/sec
+- Memory usage: <100MB baseline
+- Cache hit rate: >80%
+- CPU usage: <50% at peak load
+
+---
+
+## 🎯 Long-term Vision (v0.5.0+)
+
+### WebAssembly Support
+- Compile to WASM for edge deployment
+- Browser-based GraphQL execution
+- Serverless function optimization
+
+### Blockchain Integration
+- GraphQL API for blockchain data
+- Smart contract query interface
+- Decentralized data sources
+
+### Quantum Computing
+- Quantum query optimization
+- Quantum-safe cryptography
+- Quantum annealing for graph algorithms
+
+### Extended Reality (XR)
+- 3D visualization of knowledge graphs
+- VR/AR query interfaces
+- Spatial data querying

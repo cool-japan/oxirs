@@ -1,6 +1,7 @@
 //! Production-ready HTTP server implementation with comprehensive middleware
 
 use crate::{
+    adaptive_execution::{AdaptiveExecutionConfig, AdaptiveExecutionEngine},
     auth::AuthService,
     batch_execution::{BatchConfig, BatchExecutor},
     concurrent::{ConcurrencyConfig, ConcurrencyManager},
@@ -88,6 +89,8 @@ pub struct Runtime {
     certificate_rotation: Option<Arc<CertificateRotation>>,
     http2_manager: Option<Arc<Http2Manager>>,
     http3_manager: Option<Arc<Http3Manager>>,
+    // v0.1.0 Final - Advanced Features
+    adaptive_execution_engine: Option<Arc<AdaptiveExecutionEngine>>,
     // ReBAC (Relationship-Based Access Control)
     rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
     #[cfg(feature = "rate-limit")]
@@ -129,6 +132,8 @@ impl Runtime {
             certificate_rotation: None,
             http2_manager: None,
             http3_manager: None,
+            // v0.1.0 Final modules
+            adaptive_execution_engine: None,
             rebac_manager: None,
             #[cfg(feature = "rate-limit")]
             rate_limiter: None,
@@ -171,6 +176,22 @@ impl Runtime {
             let query_optimizer = QueryOptimizer::new(self.config.performance.clone())?;
             self.query_optimizer = Some(Arc::new(query_optimizer));
         }
+
+        // Initialize adaptive execution engine (v0.1.0 Final)
+        info!("Initializing adaptive execution engine with SciRS2 integration");
+        let adaptive_config = AdaptiveExecutionConfig {
+            enable_adaptive_learning: true,
+            min_sample_size: 10,
+            confidence_level: 0.95,
+            enable_cost_model_tuning: true,
+            enable_ml_prediction: true,
+            ga_population_size: 50,
+            ga_max_generations: 100,
+            enable_parallel_evaluation: true,
+            parallel_workers: num_cpus::get(),
+        };
+        let adaptive_engine = AdaptiveExecutionEngine::new(adaptive_config)?;
+        self.adaptive_execution_engine = Some(Arc::new(adaptive_engine));
 
         // Initialize subscription manager for WebSocket support
         info!("Initializing WebSocket subscription manager");
@@ -497,6 +518,8 @@ impl Runtime {
             certificate_rotation: self.certificate_rotation.clone(),
             http2_manager: self.http2_manager.clone(),
             http3_manager: self.http3_manager.clone(),
+            // v0.1.0 Final - Advanced Features
+            adaptive_execution_engine: self.adaptive_execution_engine.clone(),
             // ReBAC (Relationship-Based Access Control)
             rebac_manager: self.rebac_manager.clone(),
             // Stores and managers
@@ -1279,6 +1302,8 @@ pub struct AppState {
     pub certificate_rotation: Option<Arc<CertificateRotation>>,
     pub http2_manager: Option<Arc<Http2Manager>>,
     pub http3_manager: Option<Arc<Http3Manager>>,
+    // v0.1.0 Final - Advanced Features
+    pub adaptive_execution_engine: Option<Arc<AdaptiveExecutionEngine>>,
     // ReBAC (Relationship-Based Access Control)
     pub rebac_manager: Option<Arc<dyn crate::auth::rebac::RebacEvaluator>>,
     // Stores and managers
@@ -1916,6 +1941,7 @@ mod tests {
             certificate_rotation: None,
             http2_manager: None,
             http3_manager: None,
+            adaptive_execution_engine: None,
             rebac_manager: None,
             // Stores and managers
             prefix_store: Arc::new(handlers::PrefixStore::new()),
