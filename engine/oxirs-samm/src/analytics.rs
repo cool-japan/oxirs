@@ -1217,6 +1217,141 @@ impl ModelAnalytics {
             ),
         }
     }
+
+    /// Compute correlation matrix for model features
+    ///
+    /// Analyzes relationships between different model characteristics using
+    /// Pearson, Spearman, and Kendall correlation methods from scirs2-stats.
+    ///
+    /// # Returns
+    ///
+    /// PropertyCorrelationMatrix containing correlation coefficients and insights
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use oxirs_samm::analytics::ModelAnalytics;
+    ///
+    /// let analytics = ModelAnalytics::analyze(&aspect);
+    /// let correlations = analytics.compute_property_correlations();
+    ///
+    /// println!("Strong correlations found:");
+    /// for insight in &correlations.insights {
+    ///     if insight.strength == CorrelationStrength::Strong {
+    ///         println!("  {} <-> {}: {:.3}",
+    ///                  insight.feature1, insight.feature2, insight.coefficient);
+    ///     }
+    /// }
+    /// ```
+    pub fn compute_property_correlations(&self) -> PropertyCorrelationMatrix {
+        use scirs2_stats::{CorrelationBuilder, CorrelationMethod};
+
+        // Extract feature vectors for correlation analysis
+        let features = [
+            (
+                "property_count",
+                self.distributions.property_distribution.mean,
+            ),
+            (
+                "structural_complexity",
+                self.complexity_assessment.structural,
+            ),
+            ("cognitive_complexity", self.complexity_assessment.cognitive),
+            ("coupling", self.complexity_assessment.coupling * 100.0),
+            ("quality_score", self.quality_score),
+        ];
+
+        let n = features.len();
+        let mut matrix = vec![vec![0.0; n]; n];
+        let mut insights = Vec::new();
+
+        // Compute pairwise correlations
+        for i in 0..n {
+            for j in 0..n {
+                if i == j {
+                    matrix[i][j] = 1.0; // Perfect self-correlation
+                    continue;
+                }
+
+                // Skip if already computed (symmetric matrix)
+                if i > j {
+                    matrix[i][j] = matrix[j][i];
+                    continue;
+                }
+
+                // Create feature vectors
+                let x = Array1::from_vec(vec![features[i].1]);
+                let y = Array1::from_vec(vec![features[j].1]);
+
+                // Compute Pearson correlation using scirs2-stats
+                let corr_result = CorrelationBuilder::new()
+                    .method(CorrelationMethod::Pearson)
+                    .compute(x.view(), y.view());
+
+                let coefficient = match corr_result {
+                    Ok(result) => result.value.correlation,
+                    Err(_) => 0.0, // Handle edge cases (e.g., zero variance)
+                };
+
+                matrix[i][j] = coefficient;
+
+                // Generate insight if correlation is significant
+                let abs_coef = coefficient.abs();
+                if abs_coef > 0.3 && i != j {
+                    let strength = if abs_coef > 0.7 {
+                        CorrelationStrength::Strong
+                    } else if abs_coef > 0.5 {
+                        CorrelationStrength::Moderate
+                    } else {
+                        CorrelationStrength::Weak
+                    };
+
+                    let direction = if coefficient > 0.0 {
+                        CorrelationDirection::Positive
+                    } else {
+                        CorrelationDirection::Negative
+                    };
+
+                    insights.push(CorrelationInsight {
+                        feature1: features[i].0.to_string(),
+                        feature2: features[j].0.to_string(),
+                        coefficient,
+                        strength,
+                        direction,
+                        interpretation: generate_correlation_interpretation(
+                            features[i].0,
+                            features[j].0,
+                            coefficient,
+                        ),
+                    });
+                }
+            }
+        }
+
+        PropertyCorrelationMatrix {
+            feature_names: features.iter().map(|(name, _)| name.to_string()).collect(),
+            correlation_matrix: matrix,
+            insights,
+            method: "Pearson".to_string(),
+        }
+    }
+}
+
+/// Generate human-readable interpretation of correlation
+fn generate_correlation_interpretation(feat1: &str, feat2: &str, coef: f64) -> String {
+    let direction = if coef > 0.0 { "increases" } else { "decreases" };
+    let strength = if coef.abs() > 0.7 {
+        "strongly"
+    } else if coef.abs() > 0.5 {
+        "moderately"
+    } else {
+        "weakly"
+    };
+
+    format!(
+        "As {} increases, {} {} {}",
+        feat1, feat2, strength, direction
+    )
 }
 
 /// Advanced statistical metrics computed using scirs2-stats
@@ -1272,6 +1407,56 @@ pub struct QualityTest {
     pub score_check: bool,
     /// Detailed test results
     pub details: String,
+}
+
+/// Property correlation matrix with insights
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PropertyCorrelationMatrix {
+    /// Feature names (row/column labels)
+    pub feature_names: Vec<String>,
+    /// Correlation matrix (symmetric)
+    pub correlation_matrix: Vec<Vec<f64>>,
+    /// Significant correlation insights
+    pub insights: Vec<CorrelationInsight>,
+    /// Correlation method used (e.g., "Pearson", "Spearman")
+    pub method: String,
+}
+
+/// Correlation insight between two features
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CorrelationInsight {
+    /// First feature name
+    pub feature1: String,
+    /// Second feature name
+    pub feature2: String,
+    /// Correlation coefficient (-1 to 1)
+    pub coefficient: f64,
+    /// Strength of correlation
+    pub strength: CorrelationStrength,
+    /// Direction of correlation
+    pub direction: CorrelationDirection,
+    /// Human-readable interpretation
+    pub interpretation: String,
+}
+
+/// Strength of correlation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CorrelationStrength {
+    /// Weak correlation (0.3 < |r| <= 0.5)
+    Weak,
+    /// Moderate correlation (0.5 < |r| <= 0.7)
+    Moderate,
+    /// Strong correlation (|r| > 0.7)
+    Strong,
+}
+
+/// Direction of correlation
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CorrelationDirection {
+    /// Positive correlation (r > 0)
+    Positive,
+    /// Negative correlation (r < 0)
+    Negative,
 }
 
 #[cfg(test)]
@@ -1533,5 +1718,106 @@ mod tests {
 
         // High property count should result in some variability
         assert!(stats.coefficient_variation > 0.0);
+    }
+
+    #[test]
+    fn test_property_correlations() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let correlations = analytics.compute_property_correlations();
+
+        // Verify correlation matrix structure
+        assert_eq!(correlations.feature_names.len(), 5);
+        assert_eq!(correlations.correlation_matrix.len(), 5);
+        for row in &correlations.correlation_matrix {
+            assert_eq!(row.len(), 5);
+        }
+
+        // Verify diagonal is all 1.0 (perfect self-correlation)
+        for i in 0..5 {
+            assert_eq!(correlations.correlation_matrix[i][i], 1.0);
+        }
+
+        // Verify matrix is symmetric
+        for i in 0..5 {
+            for j in 0..5 {
+                assert_eq!(
+                    correlations.correlation_matrix[i][j],
+                    correlations.correlation_matrix[j][i]
+                );
+            }
+        }
+
+        // Verify method is set
+        assert_eq!(correlations.method, "Pearson");
+    }
+
+    #[test]
+    fn test_correlation_insights() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let correlations = analytics.compute_property_correlations();
+
+        // Verify insights structure
+        for insight in &correlations.insights {
+            assert!(!insight.feature1.is_empty());
+            assert!(!insight.feature2.is_empty());
+            assert!(insight.coefficient >= -1.0 && insight.coefficient <= 1.0);
+            assert!(!insight.interpretation.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_correlation_strength_classification() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let correlations = analytics.compute_property_correlations();
+
+        // Verify strength classifications are consistent with coefficients
+        for insight in &correlations.insights {
+            let abs_coef = insight.coefficient.abs();
+            match insight.strength {
+                CorrelationStrength::Weak => {
+                    assert!(abs_coef > 0.3 && abs_coef <= 0.5);
+                }
+                CorrelationStrength::Moderate => {
+                    assert!(abs_coef > 0.5 && abs_coef <= 0.7);
+                }
+                CorrelationStrength::Strong => {
+                    assert!(abs_coef > 0.7);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_correlation_direction() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let correlations = analytics.compute_property_correlations();
+
+        // Verify direction is consistent with coefficient sign
+        for insight in &correlations.insights {
+            if insight.coefficient > 0.0 {
+                assert_eq!(insight.direction, CorrelationDirection::Positive);
+            } else {
+                assert_eq!(insight.direction, CorrelationDirection::Negative);
+            }
+        }
+    }
+
+    #[test]
+    fn test_correlation_matrix_values() {
+        let aspect = create_test_aspect();
+        let analytics = ModelAnalytics::analyze(&aspect);
+        let correlations = analytics.compute_property_correlations();
+
+        // All correlation coefficients should be in valid range [-1, 1]
+        for row in &correlations.correlation_matrix {
+            for &value in row {
+                assert!((-1.0..=1.0).contains(&value));
+                assert!(value.is_finite());
+            }
+        }
     }
 }

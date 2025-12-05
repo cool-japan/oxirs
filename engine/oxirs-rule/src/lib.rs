@@ -99,6 +99,7 @@ pub mod performance;
 pub mod possibilistic;
 pub mod probabilistic;
 pub mod problog;
+pub mod production_utils;
 pub mod profiler;
 pub mod quantum_optimizer;
 pub mod rdf_integration;

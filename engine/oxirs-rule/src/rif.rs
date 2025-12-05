@@ -23,7 +23,7 @@
 //!     )
 //! "#;
 //!
-//! let parser = RifParser::new(RifDialect::Bld);
+//! let mut parser = RifParser::new(RifDialect::Bld);
 //! let document = parser.parse(rif_text)?;
 //!
 //! // Convert to OxiRS rules

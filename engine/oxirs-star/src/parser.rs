@@ -11,6 +11,8 @@
 mod context;
 #[path = "parser/jsonld.rs"]
 mod jsonld;
+#[path = "parser/simd_scanner.rs"]
+mod simd_scanner;
 #[path = "parser/tokenizer.rs"]
 mod tokenizer;
 
@@ -25,6 +27,7 @@ use crate::{StarConfig, StarError, StarResult};
 
 // Import parser context types
 use context::{ErrorSeverity, ParseContext, TrigParserState};
+use simd_scanner::SimdScanner;
 
 // Re-export public error types
 pub use context::{ErrorSeverity as PublicErrorSeverity, ParseError as PublicParseError};
@@ -66,6 +69,7 @@ impl FromStr for StarFormat {
 /// RDF-star parser with support for multiple formats
 pub struct StarParser {
     config: StarConfig,
+    simd_scanner: SimdScanner,
 }
 
 impl StarParser {
@@ -73,12 +77,16 @@ impl StarParser {
     pub fn new() -> Self {
         Self {
             config: StarConfig::default(),
+            simd_scanner: SimdScanner::new(),
         }
     }
 
     /// Create a new parser with custom configuration
     pub fn with_config(config: StarConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            simd_scanner: SimdScanner::new(),
+        }
     }
 
     /// Set strict mode for parsing
@@ -139,7 +147,8 @@ impl StarParser {
 
         for (line_num, line_result) in buf_reader.lines().enumerate() {
             let line = line_result.map_err(|e| StarError::parse_error(e.to_string()))?;
-            let line = line.trim();
+            // Use SIMD-accelerated trimming
+            let line = self.simd_scanner.trim(&line);
 
             // Update position tracking
             context.update_position(line_num + 1, 0);
@@ -151,7 +160,8 @@ impl StarParser {
 
             // Strip inline comments (but respect strings)
             let line = tokenizer::strip_inline_comment(line);
-            let line = line.trim();
+            // Use SIMD-accelerated trimming
+            let line = self.simd_scanner.trim(line);
 
             // Skip if line becomes empty after comment stripping
             if line.is_empty() {
@@ -161,8 +171,12 @@ impl StarParser {
             // Check if line looks incomplete after comment stripping (no period, not a directive, not in a special block)
             // This handles cases like "ex:charlie ex:knows  # missing object"
             // But allow lines that are part of multi-line blocks (annotation blocks or quoted triples)
-            let in_annotation_block = accumulated_line.contains("{|") || line.contains("{|");
-            let in_quoted_triple = accumulated_line.contains("<<");
+            // Use SIMD-accelerated pattern detection
+            let in_annotation_block = self
+                .simd_scanner
+                .contains_annotation_block(&accumulated_line)
+                || self.simd_scanner.contains_annotation_block(line);
+            let in_quoted_triple = self.simd_scanner.contains_quoted_triple(&accumulated_line);
 
             if !line.ends_with('.')
                 && !line.ends_with('{')
@@ -170,12 +184,11 @@ impl StarParser {
                 && !in_annotation_block
                 && !in_quoted_triple
             {
-                // Check if line contains incomplete quoted triple
-                let has_incomplete_quoted_triple = if line.contains("<<") {
-                    // Count << and >> to see if balanced
-                    let open_count = line.matches("<<").count();
-                    let close_count = line.matches(">>").count();
-                    open_count != close_count
+                // Check if line contains incomplete quoted triple using SIMD
+                let has_incomplete_quoted_triple = if self.simd_scanner.contains_quoted_triple(line)
+                {
+                    // Use SIMD-accelerated counting
+                    !self.simd_scanner.is_quoted_balanced(line)
                 } else {
                     false
                 };

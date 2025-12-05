@@ -1,13 +1,19 @@
 # OxiRS TDB - TODO
 
-*Last Updated: November 25, 2025*
+*Last Updated: December 4, 2025*
 
-## ✅ Current Status: v0.1.0-beta.1+ (Beta.2 Features Complete - November 29, 2025)
+## ✅ Current Status: v0.1.0-beta.3 (Distributed Systems Features Complete - December 4, 2025)
 
-**oxirs-tdb** provides high-performance RDF storage with MVCC and ACID transactions.
+**oxirs-tdb** provides high-performance RDF storage with MVCC, ACID transactions, and comprehensive distributed systems support.
 
-### Beta.2 Release Status (November 29, 2025)
-- **Comprehensive test suite** with 791 tests passing (795 total, 4 ignored) & zero warnings
+### Post-Beta.2 Release Status (December 4, 2025)
+- **Comprehensive test suite** with 932 tests passing (944 total, 4 ignored) & successfully compiling
+- **NEW: Distributed Transaction Support** - Two-Phase Commit, Three-Phase Commit, Paxos consensus
+- **NEW: Transaction Coordinator** - Multi-protocol coordinator service for distributed transactions
+- **NEW: Distributed Deadlock Detection** - WFG-based cycle detection with multiple victim selection strategies
+- **NEW: Database Replication** - Master-slave and master-master replication with conflict resolution
+- **NEW: Join Order Optimization** - Greedy and dynamic programming algorithms for optimal query planning
+- **Latest enhancements** (December 2, 2025): Advanced diagnostics, GPU acceleration, connection pool optimizer, cloud storage integration
 - **Latest enhancements** (November 29, 2025): Backup encryption at rest with AES-256-GCM
 - **Previous enhancements** (November 29, 2025): Memory-mapped file optimization with OS-level hints and huge pages support
 - **Earlier enhancements** (November 25, 2025): Columnar analytics storage, GeoSPARQL integration, LSM-tree engine
@@ -356,7 +362,38 @@
 - [x] **Materialized views** ✅ **NEW (November 15, 2025)** - Query acceleration (`src/materialized_views.rs`, 16 tests)
 - [x] **WAL archiving** ✅ **NEW (November 15, 2025)** - Point-in-time recovery (`src/wal_archive.rs`, 14 tests)
 - [x] **Connection pooling** ✅ **NEW (November 15, 2025)** - Multi-client access (`src/connection_pool.rs`, 13 tests)
-- [ ] Diagnostic tools (advanced)
+- [x] **Advanced Diagnostics Tools** ✅ **NEW (December 2, 2025)** - Comprehensive monitoring and analysis (`src/advanced_diagnostics.rs`, 24 tests)
+  - Query performance analysis with pattern detection and optimization recommendations
+  - Transaction pattern analysis with conflict/deadlock tracking
+  - Storage fragmentation analysis with compaction recommendations
+  - Index usage statistics and missing index detection
+  - Predictive health monitoring with 24h/7d issue forecasts
+  - Anomaly detection using statistical methods (3σ threshold)
+  - Auto-tuning recommendations for configuration optimization
+  - Capacity forecasting with storage exhaustion predictions
+- [x] **GPU-Accelerated Index Scans** ✅ **NEW (December 2, 2025)** - High-performance triple pattern matching (`src/index/gpu_accelerated_scan.rs`, 15 tests)
+  - Multi-backend support: CUDA, Metal, OpenCL, CPU fallback
+  - GPU-accelerated triple pattern matching with wildcards
+  - Join operations (subject, predicate, object) with GPU parallelism
+  - Adaptive execution: automatic GPU vs CPU selection based on batch size
+  - Performance tracking with speedup factor metrics
+  - OpenCL kernels for pattern matching and counting
+- [x] **Connection Pool Optimizer** ✅ **NEW (December 2, 2025)** - Advanced pool management (`src/connection_pool_optimizer.rs`, 18 tests)
+  - Adaptive pool sizing based on utilization (75% target)
+  - Connection affinity for thread-local caching
+  - Connection quality metrics (success rate, response time tracking)
+  - Five load balancing strategies: RoundRobin, LeastConnections, WeightedRoundRobin, Random, LeastResponseTime
+  - Four-level priority queuing: Low, Normal, High, Critical
+  - Connection warming for proactive pre-establishment
+  - Comprehensive optimizer statistics tracking
+- [x] **Cloud Storage Integration** ✅ **NEW (December 2, 2025)** - Multi-provider backup storage (`src/cloud_storage.rs`, 13 tests)
+  - Multi-provider support: AWS S3, Google Cloud Storage, Azure Blob Storage, MinIO
+  - Automated backup upload/download with retry logic
+  - Lifecycle management: automatic expiration and storage class transitions
+  - Server-side encryption with optional custom keys
+  - Multi-region replication for geographic redundancy
+  - Cost estimation calculator for monthly storage costs
+  - Five storage classes: Standard, InfrequentAccess, Archive, Glacier, DeepArchive
 
 ## 🎯 Post-Beta.1 Development Roadmap (v0.1.0-rc.1 / beta.2)
 
@@ -424,14 +461,15 @@
   - ✅ Enabled in `src/transaction/wal_optimizer.rs`
 
 #### Distributed Transaction Support (Target: v0.1.0)
-- [ ] Two-phase commit (2PC) protocol
-- [ ] Three-phase commit (3PC) for reliability
-- [ ] Paxos consensus for distributed coordination
-- [ ] Raft integration with oxirs-cluster
-- [ ] Saga pattern for long-running transactions
-- [ ] Distributed deadlock detection
-- [ ] Transaction coordinator service
-- [ ] Cross-shard transactions
+- [x] Two-phase commit (2PC) protocol ✅ **COMPLETE (December 4, 2025)** - Full 2PC implementation with coordinator and participants (`src/transaction/two_phase_commit.rs`)
+- [x] Three-phase commit (3PC) for reliability ✅ **COMPLETE (December 4, 2025)** - Non-blocking 3PC with pre-commit phase (`src/transaction/three_phase_commit.rs`)
+- [x] Paxos consensus for distributed coordination ✅ **COMPLETE (December 4, 2025)** - Proposer, acceptor, learner roles (`src/consensus/paxos.rs`)
+- [ ] Raft integration with oxirs-cluster (future: requires oxirs-cluster v0.2.0)
+- [x] Saga pattern for long-running transactions ✅ **COMPLETE (December 4, 2025)** - Forward recovery and backward compensation with retry strategies (`src/distributed/saga.rs`)
+- [x] Distributed deadlock detection ✅ **COMPLETE (December 4, 2025)** - WFG-based cycle detection with victim selection (`src/distributed/deadlock.rs`)
+- [x] Transaction coordinator service ✅ **COMPLETE (December 4, 2025)** - Multi-protocol coordinator (2PC/3PC/Paxos) (`src/distributed/coordinator.rs`)
+- [x] Integration layer for distributed features ✅ **COMPLETE (December 4, 2025)** - Unified high-level API with DistributedTdbStore (`src/distributed/integration.rs`)
+- [ ] Cross-shard transactions (future: requires full sharding implementation)
 
 #### Hot Backup Capabilities (Target: v0.1.0)
 - [x] Online backup without downtime ✅ **COMPLETE (November 29, 2025)** - Snapshot-based non-blocking backups
@@ -440,7 +478,7 @@
 - [x] Continuous archiving (WAL shipping) ✅ **COMPLETE (November 29, 2025)** - Multiple destination support, retry logic
 - [x] Snapshot isolation for backups ✅ **COMPLETE (November 29, 2025)** - MVCC-based consistent snapshots
 - [x] Backup verification and validation ✅ **COMPLETE** - CRC32 checksums, metadata validation
-- [ ] Cloud storage integration (S3, GCS, Azure)
+- [x] Cloud storage integration (S3, GCS, Azure) ✅ **COMPLETE (December 2, 2025)** - Multi-provider support with lifecycle management (`src/cloud_storage.rs`)
 - [x] Encryption at rest for backups ✅ **COMPLETE (November 29, 2025)** - AES-256-GCM with PBKDF2 key derivation
 
 #### Query Optimization (Target: v0.1.0)
@@ -449,7 +487,7 @@
 - [x] Index selection strategies ✅ **COMPLETE (2025-11-15)** - Pattern-based selection (SPO, POS, OSP) with cardinality estimates
 - [x] Query result caching ✅ **COMPLETE** (`src/query_cache.rs`)
 - [x] Query plan caching ✅ **COMPLETE (2025-11-15)** - LRU cache for frequently-used query patterns
-- [ ] Join order optimization (requires full SPARQL query planner)
+- [x] Join order optimization ✅ **COMPLETE (December 4, 2025)** - Greedy and dynamic programming algorithms (`src/query_join_optimizer.rs`)
 - [x] Materialized views ✅ **COMPLETE (November 15, 2025)** - Query acceleration with automatic invalidation (`src/materialized_views.rs`)
 - [x] Query plan visualization ✅ **COMPLETE (November 23, 2025)** - ASCII tree, DOT, JSON, and summary formats (`src/query_optimizer.rs`)
 - [x] Adaptive query execution ✅ **COMPLETE (November 23, 2025)** - Runtime plan adjustment based on actual results (`src/adaptive_execution.rs`)
@@ -459,17 +497,18 @@
 - [x] Columnar storage for analytics ✅ **COMPLETE (November 25, 2025)** - OLAP-optimized with predicate pushdown and aggregations
 - [x] Memory-mapped file optimization ✅ **COMPLETE (November 29, 2025)** - OS-level caching hints, huge pages support (`src/storage/mmap_optimizer.rs`)
 - [x] NUMA-aware memory management ✅ **COMPLETE (November 29, 2025)** - Multi-socket optimization with auto-topology detection (`src/storage/numa_allocator.rs`)
-- [ ] GPU-accelerated index scans
+- [x] GPU-accelerated index scans ✅ **COMPLETE (December 2, 2025)** - CUDA/Metal/OpenCL with adaptive execution (`src/index/gpu_accelerated_scan.rs`)
 - [x] Zero-copy I/O operations ✅ **COMPLETE** (`src/storage/zero_copy.rs`)
 - [x] Direct I/O for large datasets ✅ **COMPLETE (November 15, 2025)** (`src/storage/direct_io.rs`)
 - [x] Asynchronous I/O with io_uring ✅ **COMPLETE (November 21, 2025)** (`src/storage/async_io.rs`)
 
 #### Production Features (Target: v0.1.0)
-- [ ] Database replication (master-slave, master-master)
-- [ ] Load balancing across replicas
-- [ ] Automatic failover and recovery
-- [ ] Connection pooling optimization
+- [x] Database replication (master-slave, master-master) ✅ **COMPLETE (December 4, 2025)** - Full replication with conflict resolution (`src/distributed/replication.rs`)
+- [x] Load balancing across replicas ✅ **COMPLETE (December 4, 2025)** - Integrated with replication manager
+- [x] Automatic failover and recovery ✅ **COMPLETE (December 4, 2025)** - Automatic promotion of slaves to master
+- [x] Connection pooling optimization ✅ **COMPLETE (December 2, 2025)** - Adaptive sizing, affinity, quality metrics (`src/connection_pool_optimizer.rs`)
 - [x] Resource quotas per user/query ✅ **COMPLETE (November 15, 2025)** - Per-query resource limiting (`src/query_resource_quota.rs`)
 - [x] Query timeout enforcement ✅ **COMPLETE (November 20, 2025)** - Configurable timeouts with grace periods (`src/query_timeout.rs`)
 - [x] Slow query logging and analysis ✅ **COMPLETE (November 20, 2025)** - Pattern analysis with recommendations (`src/slow_query_log.rs`)
+- [x] Advanced diagnostics tools ✅ **COMPLETE (December 2, 2025)** - Comprehensive monitoring with predictive analysis (`src/advanced_diagnostics.rs`)
 - [x] Database partitioning and sharding ✅ **COMPLETE (November 29, 2025)** - Horizontal scaling with 5 partitioning strategies (`src/storage/partitioning.rs`)

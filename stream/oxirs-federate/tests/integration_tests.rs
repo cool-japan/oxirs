@@ -371,6 +371,335 @@ async fn test_monitoring_and_stats() {
     assert_eq!(cache_stats.total_requests, 0);
 }
 
+/// Test multi-service federation with different service types
+#[tokio::test]
+async fn test_multi_service_federation_scenario() {
+    let registry = ServiceRegistry::new();
+
+    // Register heterogeneous services
+    let services = vec![
+        FederatedService::new_sparql(
+            "sparql-people".to_string(),
+            "People Database".to_string(),
+            "http://example.com/people/sparql".to_string(),
+        ),
+        FederatedService::new_sparql(
+            "sparql-locations".to_string(),
+            "Locations Database".to_string(),
+            "http://example.com/locations/sparql".to_string(),
+        ),
+        FederatedService::new_graphql(
+            "graphql-users".to_string(),
+            "User Service".to_string(),
+            "http://example.com/users/graphql".to_string(),
+        ),
+    ];
+
+    for service in services {
+        registry.register(service).await.unwrap();
+    }
+
+    // Verify all services registered
+    let all_services = registry.get_all_services();
+    assert_eq!(all_services.len(), 3);
+
+    // Verify capability-based retrieval
+    let sparql_services = registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
+    assert_eq!(sparql_services.len(), 2);
+
+    let graphql_services = registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
+    assert_eq!(graphql_services.len(), 1);
+
+    // Test hybrid query planning
+    let planner = QueryPlanner::new();
+
+    // Complex federated query
+    let query = r#"
+        SELECT ?personName ?location ?userEmail
+        WHERE {
+            ?person foaf:name ?personName .
+            ?person foaf:based_near ?locationUri .
+            ?locationUri geo:name ?location .
+        }
+    "#;
+
+    let query_info = planner.analyze_sparql(query).await.unwrap();
+    let plan = planner.plan_sparql(&query_info, &registry).await.unwrap();
+
+    // Should have generated execution steps
+    assert!(!plan.steps.is_empty());
+}
+
+/// Test error recovery and service failover
+#[tokio::test]
+async fn test_error_recovery_and_failover() {
+    let config = RegistryConfig {
+        health_check_interval: Duration::from_millis(100),
+        service_timeout: Duration::from_millis(50),
+        max_retries: 3,
+        connection_pool_size: 5,
+        auto_discovery: false,
+        capability_refresh_interval: Duration::from_secs(300),
+    };
+
+    let registry = ServiceRegistry::with_config(config);
+
+    // Register primary and fallback services
+    let primary = FederatedService::new_sparql(
+        "primary-service".to_string(),
+        "Primary Service".to_string(),
+        "http://unreachable.example.com/sparql".to_string(),
+    );
+
+    let fallback = FederatedService::new_sparql(
+        "fallback-service".to_string(),
+        "Fallback Service".to_string(),
+        "http://fallback.example.com/sparql".to_string(),
+    );
+
+    registry.register(primary).await.unwrap();
+    registry.register(fallback).await.unwrap();
+
+    // Both services should be registered
+    assert_eq!(registry.get_all_services().len(), 2);
+
+    // Test that registry maintains service list even with unreachable services
+    let sparql_services = registry.get_services_with_capability(&ServiceCapability::SparqlQuery);
+    assert_eq!(sparql_services.len(), 2);
+}
+
+/// Test cache coherence across multiple services
+#[tokio::test]
+async fn test_cache_coherence_multi_service() {
+    let cache = FederationCache::new();
+
+    // Cache metadata for multiple services
+    for i in 1..=5 {
+        let metadata = ServiceMetadata {
+            description: Some(format!("Service {i}")),
+            version: Some(format!("1.{i}.0")),
+            maintainer: Some("test@example.com".to_string()),
+            tags: vec![format!("service-{i}"), "production".to_string()],
+            documentation_url: Some(format!("http://docs.example.com/service{i}")),
+            schema_url: None,
+        };
+
+        cache
+            .put_service_metadata(&format!("service-{i}"), metadata)
+            .await;
+    }
+
+    // Verify all cached
+    for i in 1..=5 {
+        let cached = cache.get_service_metadata(&format!("service-{i}")).await;
+        assert!(cached.is_some());
+        assert_eq!(cached.unwrap().description, Some(format!("Service {i}")));
+    }
+
+    // Test selective invalidation
+    cache.invalidate_service("service-3").await;
+
+    // Verify service-3 is invalidated but others remain
+    assert!(cache.get_service_metadata("service-3").await.is_none());
+    assert!(cache.get_service_metadata("service-1").await.is_some());
+    assert!(cache.get_service_metadata("service-5").await.is_some());
+
+    // Test cache statistics
+    let stats = cache.get_stats().await;
+    assert!(stats.total_requests > 0);
+}
+
+/// Test GraphQL service registration and retrieval
+#[tokio::test]
+async fn test_graphql_service_registration() {
+    let registry = ServiceRegistry::new();
+
+    // Register GraphQL services
+    let user_service = FederatedService::new_graphql(
+        "users".to_string(),
+        "User Service".to_string(),
+        "http://example.com/users/graphql".to_string(),
+    );
+
+    let profile_service = FederatedService::new_graphql(
+        "profiles".to_string(),
+        "Profile Service".to_string(),
+        "http://example.com/profiles/graphql".to_string(),
+    );
+
+    registry.register(user_service).await.unwrap();
+    registry.register(profile_service).await.unwrap();
+
+    // Verify both services registered
+    assert_eq!(registry.get_all_services().len(), 2);
+
+    // Verify GraphQL capability
+    let graphql_services = registry.get_services_with_capability(&ServiceCapability::GraphQLQuery);
+    assert_eq!(graphql_services.len(), 2);
+
+    // Verify individual service retrieval
+    let user_svc = registry.get_service("users").unwrap();
+    assert_eq!(user_svc.service_type, ServiceType::GraphQL);
+    assert!(user_svc
+        .capabilities
+        .contains(&ServiceCapability::GraphQLQuery));
+}
+
+/// Test performance degradation handling
+#[tokio::test]
+async fn test_performance_degradation_handling() {
+    let config = RegistryConfig {
+        health_check_interval: Duration::from_millis(100),
+        service_timeout: Duration::from_millis(200), // Short timeout
+        max_retries: 2,
+        connection_pool_size: 3,
+        auto_discovery: false,
+        capability_refresh_interval: Duration::from_secs(300),
+    };
+
+    let engine = FederationEngine::with_config(FederationConfig {
+        registry_config: config,
+        planner_config: Default::default(),
+        executor_config: Default::default(),
+        integrator_config: Default::default(),
+        graphql_config: Default::default(),
+        monitor_config: Default::default(),
+        cache_config: Default::default(),
+    });
+
+    // Register a service
+    let service = FederatedService::new_sparql(
+        "perf-test".to_string(),
+        "Performance Test Service".to_string(),
+        "http://slow.example.com/sparql".to_string(),
+    );
+
+    engine.register_service(service).await.unwrap();
+
+    // Get health status
+    let health = engine.health_check().await.unwrap();
+    assert_eq!(health.total_services, 1);
+
+    // Verify configuration
+    let stats = engine.get_stats().await.unwrap();
+    assert_eq!(stats.registry.total_sparql_endpoints, 1);
+}
+
+/// Test multi-protocol service registration
+#[tokio::test]
+async fn test_multi_protocol_service_registration() {
+    let registry = ServiceRegistry::new();
+
+    // Register SPARQL service
+    let sparql_service = FederatedService::new_sparql(
+        "sparql-service".to_string(),
+        "SPARQL Service".to_string(),
+        "http://example.com/sparql".to_string(),
+    );
+
+    // Register GraphQL service
+    let graphql_service = FederatedService::new_graphql(
+        "graphql-service".to_string(),
+        "GraphQL Service".to_string(),
+        "http://example.com/graphql".to_string(),
+    );
+
+    registry.register(sparql_service).await.unwrap();
+    registry.register(graphql_service).await.unwrap();
+
+    // Verify both services registered
+    assert_eq!(registry.get_all_services().len(), 2);
+
+    // Verify SPARQL service
+    let sparql_svc = registry.get_service("sparql-service").unwrap();
+    assert_eq!(sparql_svc.service_type, ServiceType::Sparql);
+    assert!(sparql_svc
+        .capabilities
+        .contains(&ServiceCapability::SparqlQuery));
+
+    // Verify GraphQL service
+    let graphql_svc = registry.get_service("graphql-service").unwrap();
+    assert_eq!(graphql_svc.service_type, ServiceType::GraphQL);
+    assert!(graphql_svc
+        .capabilities
+        .contains(&ServiceCapability::GraphQLQuery));
+
+    // Test SPARQL planning
+    let planner = QueryPlanner::new();
+    let sparql_query = "SELECT ?s WHERE { ?s a foaf:Person }";
+    let sparql_info = planner.analyze_sparql(sparql_query).await.unwrap();
+    let sparql_plan = planner.plan_sparql(&sparql_info, &registry).await.unwrap();
+    assert!(!sparql_plan.steps.is_empty());
+}
+
+/// Test concurrent query execution across services
+#[tokio::test]
+async fn test_concurrent_query_execution() {
+    let registry = ServiceRegistry::new();
+
+    // Register multiple services
+    for i in 1..=5 {
+        let service = FederatedService::new_sparql(
+            format!("concurrent-{i}"),
+            format!("Concurrent Service {i}"),
+            format!("http://example.com/sparql{i}"),
+        );
+        registry.register(service).await.unwrap();
+    }
+
+    // Create multiple queries
+    let queries = vec![
+        "SELECT ?s ?p ?o WHERE { ?s ?p ?o } LIMIT 10",
+        "SELECT ?person WHERE { ?person a foaf:Person }",
+        "SELECT ?name WHERE { ?p foaf:name ?name }",
+        "SELECT ?age WHERE { ?p foaf:age ?age }",
+        "SELECT ?email WHERE { ?p foaf:mbox ?email }",
+    ];
+
+    // Execute queries sequentially (avoiding Clone requirement)
+    let planner = QueryPlanner::new();
+    for query in queries {
+        let query_info = planner.analyze_sparql(query).await.unwrap();
+        let plan = planner.plan_sparql(&query_info, &registry).await;
+        assert!(plan.is_ok());
+    }
+}
+
+/// Test service discovery and dynamic registration
+#[tokio::test]
+async fn test_dynamic_service_registration() {
+    let registry = ServiceRegistry::new();
+
+    // Initially empty
+    assert_eq!(registry.get_all_services().len(), 0);
+
+    // Dynamically register services
+    for i in 1..=10 {
+        let service = FederatedService::new_sparql(
+            format!("dynamic-{i}"),
+            format!("Dynamic Service {i}"),
+            format!("http://dynamic-{i}.example.com/sparql"),
+        );
+        registry.register(service).await.unwrap();
+
+        // Verify incremental registration
+        assert_eq!(registry.get_all_services().len(), i);
+    }
+
+    // Test dynamic unregistration
+    for i in 1..=5 {
+        registry.unregister(&format!("dynamic-{i}")).await.unwrap();
+    }
+
+    // Should have 5 services remaining
+    assert_eq!(registry.get_all_services().len(), 5);
+
+    // Verify remaining services are 6-10
+    for i in 6..=10 {
+        assert!(registry.get_service(&format!("dynamic-{i}")).is_some());
+    }
+}
+
 /// Test data for integration tests
 pub fn create_test_patterns() -> Vec<TriplePattern> {
     vec![

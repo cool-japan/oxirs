@@ -110,6 +110,7 @@ pub mod privacy;
 pub mod production_hardening;
 pub mod profiling_metrics;
 pub mod query_decomposition;
+pub mod query_plan_explainer;
 pub mod request_batcher;
 pub mod result_streaming;
 pub mod schema_alignment;
@@ -289,29 +290,32 @@ pub use planner::{
     ServiceQuery, StepType, TriplePattern, UnifiedSchema,
 };
 pub use privacy::*;
-// TODO: Re-enable after fixing module exports
-// pub use query_decomposition::advanced_pattern_analysis::{
-//     AdvancedPatternAnalyzer, ComplexityAssessment, OptimizationOpportunity, PatternAnalysisResult,
-//     ServiceRecommendation,
-// };
-// pub use query_decomposition::QueryDecomposer;
-// pub use request_batcher::RequestBatcher;
-// pub use result_streaming::ResultStreamer;
-// pub use semantic_enhancer::SemanticEnhancer;
+// Re-enabled query decomposition exports
+pub use query_decomposition::advanced_pattern_analysis::{
+    AdvancedPatternAnalyzer, ComplexityAssessment, OptimizationOpportunity, PatternAnalysisResult,
+    ServiceRecommendation,
+};
+pub use query_decomposition::types::QueryDecomposer;
+pub use query_plan_explainer::{
+    ExplainFormat, OptimizationSuggestion, PlanExplanation, QueryPlanExplainer, StepExplanation,
+    SuggestionCategory, SuggestionSeverity,
+};
+pub use request_batcher::RequestBatcher;
+pub use result_streaming::ResultStreamingManager;
+pub use semantic_enhancer::SemanticEnhancer;
 // Export main service types (from service.rs)
 pub use service::{
     AuthCredentials, FederatedService, ServiceAuthConfig, ServiceCapability, ServicePerformance,
     ServiceType,
 };
-// TODO: Re-enable after fixing module exports
-// pub use service_client::ServiceClient;
-// pub use service_executor::ServiceExecutionEngine;
-// pub use service_optimizer::ServiceOptimizer;
+// Re-enabled service implementation exports
+pub use service_client::ServiceClient;
+pub use service_executor::ServiceExecutor;
+pub use service_optimizer::ServiceOptimizer;
 // Export specific types from service_registry (non-conflicting types only)
-// pub use service_registry::{
-//     GraphQLService, HealthStatus as ServiceHealthStatus, RegistryConfig, ServiceCapabilities,
-//     SparqlEndpoint,
-// };
+pub use service_registry::{
+    GraphQLService, HealthStatus as ServiceHealthStatus, ServiceCapabilities, SparqlEndpoint,
+};
 // pub use source_selection::SourceSelector;
 // pub use streaming::StreamProcessor;
 // pub use streaming_optimizer::StreamOptimizer;
@@ -871,13 +875,15 @@ impl FederationEngine {
         let assessor = CapabilityAssessor::new();
         let assessment = assessor.assess_service(&service).await?;
 
-        // TODO: Update service with enhanced capabilities
-        // Need to implement proper API in ServiceRegistry to update service capabilities
-        // For now, just return the assessment without updating the registry
+        // Update service with detected capabilities
+        let registry = self.service_registry.read().await;
+        registry.update_service_capabilities(service_id, &assessment.detected_capabilities)?;
+        drop(registry);
 
         info!(
-            "Capability assessment completed for service: {}",
-            service_id
+            "Capability assessment completed for service: {} - Updated with {} detected capabilities",
+            service_id,
+            assessment.detected_capabilities.len()
         );
         Ok(assessment)
     }

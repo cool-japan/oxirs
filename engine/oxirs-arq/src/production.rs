@@ -8,6 +8,90 @@
 //! - SPARQL performance monitoring
 //! - Query result size quotas
 //! - Health checks for query engine components
+//!
+//! ## File Organization (3018 lines)
+//!
+//! This file intentionally exceeds 2000 lines because it contains a cohesive set of
+//! tightly-coupled production components for query lifecycle management. The components
+//! share extensive internal state and are designed to work together.
+//!
+//! ### Module Structure:
+//!
+//! 1. **Error Handling** (lines 18-137)
+//!    - `SparqlProductionError` - Enhanced error types with SPARQL context
+//!    - `QueryErrorContext` - Detailed error metadata
+//!    - `ErrorSeverity` - Severity classification for monitoring
+//!
+//! 2. **Circuit Breakers** (lines 138-224)
+//!    - `QueryCircuitBreaker` - Prevents cascading failures
+//!    - Configurable failure thresholds and recovery timeouts
+//!
+//! 3. **Performance Monitoring** (lines 225-430)
+//!    - `SparqlPerformanceMonitor` - Real-time query performance tracking
+//!    - Latency histograms, slow query detection, statistics collection
+//!
+//! 4. **Resource Quotas** (lines 431-543)
+//!    - `QueryResourceQuota` - Resource limits for queries
+//!    - Result size quotas, pattern complexity limits
+//!
+//! 5. **Health Checks** (lines 544-658)
+//!    - `QueryEngineHealth` - Component health monitoring
+//!    - Configurable health check intervals and timeouts
+//!
+//! 6. **Query Cancellation** (lines 659-782)
+//!    - `QueryCancellationToken` - Cooperative cancellation with callbacks
+//!    - Support for child tokens and cancellation propagation
+//!
+//! 7. **Timeout Management** (lines 783-950)
+//!    - `QueryTimeoutManager` - Soft/hard timeouts with warnings
+//!    - Configurable warning thresholds and timeout actions
+//!
+//! 8. **Memory Tracking** (lines 951-1151)
+//!    - `QueryMemoryTracker` - Per-query memory usage monitoring
+//!    - Memory pressure detection and throttling
+//!
+//! 9. **Session Management** (lines 1152-1398)
+//!    - `QuerySession` - Unified query lifecycle management
+//!    - `QuerySessionManager` - Session pool and coordination
+//!
+//! 10. **Rate Limiting** (lines 1399-1502)
+//!     - `QueryRateLimiter` - Token bucket rate limiting
+//!     - Per-user rate tracking and enforcement
+//!
+//! 11. **Audit Trail** (lines 1503-1642)
+//!     - `QueryAuditTrail` - Circular buffer audit logging
+//!     - Compliance and debugging support
+//!
+//! 12. **Priority Scheduling** (lines 1643-1879) [Beta.2]
+//!     - `QueryPriorityScheduler` - 5-level priority-based execution
+//!     - Aging to prevent starvation
+//!
+//! 13. **Cost Estimation** (lines 1880-2098) [Beta.2]
+//!     - `QueryCostEstimator` - Proactive cost estimation
+//!     - Historical cost tracking and recommendations
+//!
+//! 14. **Performance Baselines** (lines 2099-end) [Beta.2+]
+//!     - `PerformanceBaselineTracker` - Regression detection
+//!     - Statistical trend analysis
+//!
+//! ### Why This File is Large:
+//!
+//! 1. **Cohesive Domain**: All components relate to production query execution
+//! 2. **Tight Coupling**: Components share state and coordinate closely
+//! 3. **Complete Feature Set**: Provides full production-grade query management
+//! 4. **Integration Complexity**: Extensive interaction between components
+//!
+//! ### Future Refactoring Considerations:
+//!
+//! If this file needs to be split, the logical boundaries would be:
+//! - `production/errors.rs` - Error types and handling
+//! - `production/circuit_breaker.rs` - Circuit breaker logic
+//! - `production/monitoring.rs` - Performance monitoring
+//! - `production/resources.rs` - Resource quotas and limits
+//! - `production/session.rs` - Session management
+//! - `production/scheduling.rs` - Priority scheduling [Beta.2]
+//! - `production/cost.rs` - Cost estimation [Beta.2]
+//! - `production/baseline.rs` - Performance baselines [Beta.2+]
 
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;

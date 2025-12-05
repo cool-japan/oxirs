@@ -822,7 +822,7 @@ impl NeuromorphicAnalytics {
             let poisson_lambda = spike_rate / 1000.0; // Convert to per-millisecond rate
             
             // Generate Poisson-distributed spike times
-            let mut rng = rand::Random::default();
+            let mut rng = scirs2_core::random::Random::default();
             let spike_count = if poisson_lambda > 0.0 {
                 // Simple Poisson approximation for small lambda
                 let uniform: f64 = rng.random();

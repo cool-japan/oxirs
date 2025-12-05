@@ -754,7 +754,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_plan_simple_query() {
-        let config = DynamicPlannerConfig::default();
+        // Use max thresholds to prevent real system load from triggering degraded mode
+        let config = DynamicPlannerConfig {
+            cpu_threshold: 1.0,    // Never trigger high load from CPU
+            memory_threshold: 1.0, // Never trigger high load from memory
+            ..Default::default()
+        };
         let planner = DynamicQueryPlanner::new(config);
 
         let plan = planner
@@ -778,7 +783,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_plan_complex_query() {
-        let config = DynamicPlannerConfig::default();
+        // Use max thresholds to prevent real system load from triggering degraded mode
+        let config = DynamicPlannerConfig {
+            cpu_threshold: 1.0,    // Never trigger high load from CPU
+            memory_threshold: 1.0, // Never trigger high load from memory
+            ..Default::default()
+        };
         let planner = DynamicQueryPlanner::new(config);
 
         let complex_query =

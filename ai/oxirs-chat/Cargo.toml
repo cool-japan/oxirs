@@ -95,6 +95,9 @@ governor = "0.10"
 # Random number generation removed - use scirs2-core::random instead
 fastrand = "2.3"
 
+# Excel export
+rust_xlsxwriter = "0.79"
+
 [dev-dependencies]
 criterion.workspace = true
 tempfile = "3.23"

@@ -7,6 +7,7 @@ use crate::{Rule, RuleAtom, RuleEngine, Term};
 use anyhow::Result;
 use oxirs_core::model::{GraphName, Literal, NamedNode, Object, Predicate, Quad, Subject, Triple};
 use oxirs_core::{OxirsError, RdfStore};
+use std::collections::HashMap;
 use tracing::{debug, info};
 
 /// Integration bridge for connecting oxirs-rule with oxirs-core
@@ -15,6 +16,8 @@ pub struct RuleIntegration {
     pub rule_engine: RuleEngine,
     /// Core RDF store
     pub store: RdfStore,
+    /// Namespace prefix mappings for IRI expansion/compression
+    namespace_prefixes: HashMap<String, String>,
 }
 
 impl Default for RuleIntegration {
@@ -26,17 +29,57 @@ impl Default for RuleIntegration {
 impl RuleIntegration {
     /// Create a new rule integration with an empty store
     pub fn new() -> Self {
+        let mut prefixes = HashMap::new();
+        // Initialize with common W3C namespaces
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         Self {
             rule_engine: RuleEngine::new(),
             store: oxirs_core::RdfStore::new().unwrap(),
+            namespace_prefixes: prefixes,
         }
     }
 
     /// Create integration with an existing store
     pub fn with_store(store: RdfStore) -> Self {
+        let mut prefixes = HashMap::new();
+        // Initialize with common W3C namespaces
+        prefixes.insert(
+            "rdf".to_string(),
+            "http://www.w3.org/1999/02/22-rdf-syntax-ns#".to_string(),
+        );
+        prefixes.insert(
+            "rdfs".to_string(),
+            "http://www.w3.org/2000/01/rdf-schema#".to_string(),
+        );
+        prefixes.insert(
+            "owl".to_string(),
+            "http://www.w3.org/2002/07/owl#".to_string(),
+        );
+        prefixes.insert(
+            "xsd".to_string(),
+            "http://www.w3.org/2001/XMLSchema#".to_string(),
+        );
+
         Self {
             rule_engine: RuleEngine::new(),
             store,
+            namespace_prefixes: prefixes,
         }
     }
 
@@ -567,14 +610,22 @@ impl RuleIntegration {
     /// Enhanced namespace management for better IRI handling
     pub fn add_namespace_prefix(&mut self, prefix: &str, namespace_iri: &str) -> Result<()> {
         // Store namespace mappings for efficient rule processing
-        // This enhances the integration with better IRI handling as mentioned in TODO
         info!(
             "Adding namespace prefix '{}' -> '{}'",
             prefix, namespace_iri
         );
 
-        // TODO: In full implementation, this would be stored and used for
-        // efficient IRI expansion/compression during rule processing
+        // Store the prefix mapping
+        self.namespace_prefixes
+            .insert(prefix.to_string(), namespace_iri.to_string());
+
+        debug!(
+            "Namespace prefix '{}' mapped to '{}' (total prefixes: {})",
+            prefix,
+            namespace_iri,
+            self.namespace_prefixes.len()
+        );
+
         Ok(())
     }
 
@@ -584,20 +635,46 @@ impl RuleIntegration {
             let prefix = &prefixed_iri[..colon_pos];
             let local_name = &prefixed_iri[colon_pos + 1..];
 
-            // In a full implementation, this would look up the prefix in stored mappings
-            // For now, return common namespace expansions
-            let expanded = match prefix {
-                "rdf" => format!("http://www.w3.org/1999/02/22-rdf-syntax-ns#{local_name}"),
-                "rdfs" => format!("http://www.w3.org/2000/01/rdf-schema#{local_name}"),
-                "owl" => format!("http://www.w3.org/2002/07/owl#{local_name}"),
-                "xsd" => format!("http://www.w3.org/2001/XMLSchema#{local_name}"),
-                _ => prefixed_iri.to_string(), // Return as-is if prefix not recognized
-            };
-
-            Ok(expanded)
+            // Look up the prefix in stored mappings
+            if let Some(namespace) = self.namespace_prefixes.get(prefix) {
+                let expanded = format!("{}{}", namespace, local_name);
+                debug!("Expanded '{}' to '{}'", prefixed_iri, expanded);
+                Ok(expanded)
+            } else {
+                // Return as-is if prefix not recognized
+                debug!("Unknown prefix '{}', returning prefixed IRI as-is", prefix);
+                Ok(prefixed_iri.to_string())
+            }
         } else {
             Ok(prefixed_iri.to_string())
         }
+    }
+
+    /// Compress full IRI to prefixed form using namespace mappings
+    pub fn compress_to_prefixed_iri(&self, full_iri: &str) -> String {
+        // Try to find a matching namespace prefix
+        for (prefix, namespace) in &self.namespace_prefixes {
+            if full_iri.starts_with(namespace) {
+                let local_name = &full_iri[namespace.len()..];
+                let compressed = format!("{}:{}", prefix, local_name);
+                debug!("Compressed '{}' to '{}'", full_iri, compressed);
+                return compressed;
+            }
+        }
+
+        // Return as-is if no matching prefix found
+        debug!("No matching prefix for '{}', returning as-is", full_iri);
+        full_iri.to_string()
+    }
+
+    /// Get all registered namespace prefixes
+    pub fn get_namespace_prefixes(&self) -> &HashMap<String, String> {
+        &self.namespace_prefixes
+    }
+
+    /// Remove a namespace prefix
+    pub fn remove_namespace_prefix(&mut self, prefix: &str) -> Option<String> {
+        self.namespace_prefixes.remove(prefix)
     }
 
     /// Validate RDF data before rule processing
@@ -1391,11 +1468,48 @@ mod tests {
         let expanded = integration.expand_prefixed_iri("owl:Class").unwrap();
         assert_eq!(expanded, "http://www.w3.org/2002/07/owl#Class");
 
+        let expanded = integration.expand_prefixed_iri("ex:Person").unwrap();
+        assert_eq!(expanded, "http://example.org/Person");
+
         // Test non-prefixed IRI
         let unchanged = integration
             .expand_prefixed_iri("http://example.org/full")
             .unwrap();
         assert_eq!(unchanged, "http://example.org/full");
+
+        // Test IRI compression
+        let compressed =
+            integration.compress_to_prefixed_iri("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
+        assert_eq!(compressed, "rdf:type");
+
+        let compressed =
+            integration.compress_to_prefixed_iri("http://www.w3.org/2000/01/rdf-schema#Class");
+        assert_eq!(compressed, "rdfs:Class");
+
+        let compressed = integration.compress_to_prefixed_iri("http://example.org/Person");
+        assert_eq!(compressed, "ex:Person");
+
+        // Test non-matching IRI (should return as-is)
+        let unchanged = integration.compress_to_prefixed_iri("http://unknown.org/resource");
+        assert_eq!(unchanged, "http://unknown.org/resource");
+
+        // Test get all prefixes
+        let prefixes = integration.get_namespace_prefixes();
+        assert!(prefixes.contains_key("rdf"));
+        assert!(prefixes.contains_key("rdfs"));
+        assert!(prefixes.contains_key("owl"));
+        assert!(prefixes.contains_key("xsd"));
+        assert!(prefixes.contains_key("ex"));
+        assert_eq!(prefixes.len(), 5);
+
+        // Test remove prefix
+        let removed = integration.remove_namespace_prefix("ex");
+        assert_eq!(removed, Some("http://example.org/".to_string()));
+        assert_eq!(integration.get_namespace_prefixes().len(), 4);
+
+        // Try to remove non-existent prefix
+        let not_found = integration.remove_namespace_prefix("nonexistent");
+        assert_eq!(not_found, None);
     }
 
     #[test]

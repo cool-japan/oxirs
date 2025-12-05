@@ -56,6 +56,12 @@ use tracing::{info, instrument, warn};
 // Import SciRS2 components (SCIRS2 POLICY)
 use scirs2_core::profiling::Profiler;
 
+// SIMD-accelerated compression module (v0.4.0 Phase 1)
+#[path = "hdt_star/simd_compression.rs"]
+pub mod simd_compression;
+
+pub use simd_compression::{SimdBitmapOps, SimdCompressionAnalyzer, SimdStringComparator};
+
 /// HDT-star file format version
 pub const HDT_STAR_VERSION: u8 = 1;
 

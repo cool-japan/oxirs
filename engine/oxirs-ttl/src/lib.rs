@@ -132,6 +132,7 @@
 #![warn(missing_docs)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod convenience;
 pub mod error;
 pub mod formats;
 pub mod incremental;
@@ -170,6 +171,8 @@ pub mod nquads {
 pub mod n3 {
     //! N3 format parser and reasoning (experimental)
     pub use crate::formats::n3::*;
+    pub use crate::formats::n3_parser::*;
+    pub use crate::formats::n3_serializer::*;
     pub use crate::formats::n3_types::*;
 
     /// N3 reasoning primitives

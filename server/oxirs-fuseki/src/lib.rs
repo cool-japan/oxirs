@@ -55,6 +55,8 @@ pub mod bind_values_enhanced;
 pub mod clustering;
 pub mod concurrent; // Advanced concurrent request handling
 pub mod config;
+#[cfg(feature = "hot-reload")]
+pub mod config_reload; // Configuration hot-reload support
 pub mod connection_pool; // Connection pooling optimization
 pub mod consciousness;
 pub mod dataset_management; // Enhanced dataset management API
@@ -86,6 +88,7 @@ pub mod security_audit; // Security auditing and vulnerability scanning
 pub mod server;
 pub mod store;
 pub mod store_ext; // Extension trait for Store convenience methods
+pub mod store_health; // Store health monitoring and metrics (v0.1.0 Final)
 pub mod store_impl;
 pub mod streaming;
 pub mod streaming_results; // Memory-efficient result streaming

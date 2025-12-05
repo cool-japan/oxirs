@@ -5,17 +5,21 @@
 //! - Automated failover
 //! - Replication and synchronization
 //! - Recovery testing and validation
+//!
+//! **v0.1.0 Final Enhancement**: Deep integration with StoreHealthMonitor
+//! for intelligent failover decisions based on comprehensive health metrics.
 
 use crate::backup::{BackupManager, BackupMetadata};
 use crate::error::{FusekiError, FusekiResult};
 use crate::store::Store;
+use crate::store_health::{HealthMonitorConfig, HealthStatus, StoreHealthMonitor};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 /// Disaster recovery manager
 pub struct DisasterRecoveryManager {
@@ -23,6 +27,8 @@ pub struct DisasterRecoveryManager {
     store: Arc<Store>,
     /// Backup manager
     backup_manager: Arc<BackupManager>,
+    /// Health monitor for comprehensive health checks
+    health_monitor: Option<Arc<StoreHealthMonitor>>,
     /// DR configuration
     config: DisasterRecoveryConfig,
     /// Recovery state
@@ -128,9 +134,49 @@ impl DisasterRecoveryManager {
         Self {
             store,
             backup_manager,
+            health_monitor: None,
             config,
             state: Arc::new(tokio::sync::RwLock::new(RecoveryState::default())),
         }
+    }
+
+    /// Create a new disaster recovery manager with health monitoring
+    pub fn with_health_monitoring(
+        store: Arc<Store>,
+        backup_manager: Arc<BackupManager>,
+        config: DisasterRecoveryConfig,
+    ) -> Self {
+        // Create health monitor with disaster recovery focused configuration
+        let health_config = HealthMonitorConfig {
+            check_interval: Duration::from_secs(config.health_check_interval_secs),
+            max_history: 100,
+            performance_window: Duration::from_secs(600),
+            error_window: Duration::from_secs(3600),
+            memory_warning_threshold: 3 * 1024 * 1024 * 1024, // 3GB
+            max_connections: 1000,                            // Default for disaster recovery
+            memory_critical_threshold: 7 * 1024 * 1024 * 1024, // 7GB (conservative for DR)
+        };
+
+        let health_monitor = Arc::new(StoreHealthMonitor::with_config(
+            Arc::clone(&store),
+            health_config,
+        ));
+
+        // Start background monitoring
+        Arc::clone(&health_monitor).start_monitoring();
+
+        Self {
+            store,
+            backup_manager,
+            health_monitor: Some(health_monitor),
+            config,
+            state: Arc::new(tokio::sync::RwLock::new(RecoveryState::default())),
+        }
+    }
+
+    /// Get the health monitor reference
+    pub fn health_monitor(&self) -> Option<&Arc<StoreHealthMonitor>> {
+        self.health_monitor.as_ref()
     }
 
     /// Start disaster recovery monitoring
@@ -168,16 +214,105 @@ impl DisasterRecoveryManager {
         }
     }
 
-    /// Perform health check
+    /// Perform comprehensive health check using health monitor
     async fn health_check(&self) -> FusekiResult<()> {
-        // Check primary store health
-        // In real implementation, this would verify:
-        // - Store is accessible
-        // - Recent backup exists within RPO
-        // - Replication targets are healthy
+        debug!("Performing disaster recovery health check");
 
         let mut state = self.state.write().await;
         state.last_health_check = Some(Utc::now());
+
+        // Use health monitor if available for comprehensive checks
+        if let Some(health_monitor) = &self.health_monitor {
+            let health = health_monitor.check_health().await?;
+
+            // Evaluate health status for DR purposes
+            match health.status {
+                HealthStatus::Healthy => {
+                    debug!("Store health: HEALTHY (score: {})", health.health_score);
+                    state.healthy = true;
+                }
+                HealthStatus::Degraded => {
+                    warn!(
+                        "Store health: DEGRADED (score: {}). Monitoring closely.",
+                        health.health_score
+                    );
+
+                    // Degraded but not critical - no failover yet
+                    if health.health_score < 50 {
+                        warn!(
+                            "Health score critically low ({}). Preparing for failover.",
+                            health.health_score
+                        );
+                        state.healthy = false;
+                        return Err(FusekiError::internal(format!(
+                            "Store health degraded below threshold (score: {})",
+                            health.health_score
+                        )));
+                    }
+
+                    state.healthy = true; // Still operational
+                }
+                HealthStatus::Unhealthy | HealthStatus::Down => {
+                    error!(
+                        "Store health: {:?} (score: {}). Failover required!",
+                        health.status, health.health_score
+                    );
+
+                    // Log component failures
+                    for component in &health.components {
+                        if component.status == HealthStatus::Unhealthy
+                            || component.status == HealthStatus::Down
+                        {
+                            error!(
+                                "Component {} is {:?}: {}",
+                                component.name,
+                                component.status,
+                                component.message.as_deref().unwrap_or("Unknown issue")
+                            );
+                        }
+                    }
+
+                    state.healthy = false;
+                    return Err(FusekiError::internal(format!(
+                        "Store is {:?} (score: {})",
+                        health.status, health.health_score
+                    )));
+                }
+            }
+
+            // Check performance metrics
+            if health.performance.avg_query_latency_ms > 5000.0 {
+                warn!(
+                    "Average query latency is very high: {:.2}ms",
+                    health.performance.avg_query_latency_ms
+                );
+            }
+
+            // Check resource utilization
+            if health.resources.memory_usage_percent > 90.0 {
+                warn!(
+                    "Memory usage critical: {:.1}%",
+                    health.resources.memory_usage_percent
+                );
+            }
+
+            // Check error rates
+            if health.errors.errors_last_hour > 100 {
+                warn!(
+                    "High error rate: {} errors in last hour",
+                    health.errors.errors_last_hour
+                );
+            }
+        } else {
+            // Fallback to basic health check
+            debug!("Using basic health check (no health monitor available)");
+
+            // Check if store is ready
+            if !self.store.is_ready() {
+                state.healthy = false;
+                return Err(FusekiError::internal("Store is not ready".to_string()));
+            }
+        }
 
         // Check if backup is within RPO
         if let Some(last_backup) = state.last_backup {
@@ -187,9 +322,18 @@ impl DisasterRecoveryManager {
                     "Backup age ({} min) exceeds RPO ({} min)",
                     age_minutes, self.config.rpo_minutes
                 );
-                state.healthy = false;
-                return Err(FusekiError::internal("RPO violation".to_string()));
+
+                // RPO violation is serious but not immediate failover
+                if age_minutes > self.config.rpo_minutes * 2 {
+                    state.healthy = false;
+                    return Err(FusekiError::internal(format!(
+                        "Critical RPO violation: {} minutes since last backup",
+                        age_minutes
+                    )));
+                }
             }
+        } else {
+            debug!("No backup history available yet");
         }
 
         state.healthy = true;

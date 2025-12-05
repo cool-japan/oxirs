@@ -141,10 +141,16 @@ pub async fn import_batch(
 
     let duration = start_time.elapsed();
 
-    // Get final statistics
-    let completed = *completed_files.lock().unwrap();
-    let quad_count = *total_quads.lock().unwrap();
-    let error_count = *total_errors.lock().unwrap();
+    // Get final statistics (handle poisoned mutexes gracefully)
+    let completed = *completed_files
+        .lock()
+        .map_err(|e| format!("Failed to access completed files counter: {e}"))?;
+    let quad_count = *total_quads
+        .lock()
+        .map_err(|e| format!("Failed to access quad counter: {e}"))?;
+    let error_count = *total_errors
+        .lock()
+        .map_err(|e| format!("Failed to access error counter: {e}"))?;
 
     // Update loggers
     data_logger.update_progress(0, quad_count as u64);
@@ -251,7 +257,9 @@ async fn process_single_file(
                 }
 
                 // Insert quad into store (with lock)
-                let mut store_lock = store.lock().unwrap();
+                let mut store_lock = store
+                    .lock()
+                    .map_err(|e| format!("Mutex poisoned while accessing store: {e}"))?;
                 match store_lock.insert_quad(quad) {
                     Ok(_) => {
                         file_quad_count += 1;
@@ -272,17 +280,23 @@ async fn process_single_file(
         }
     }
 
-    // Update global counters
+    // Update global counters (handle poisoned mutexes gracefully)
     {
-        let mut completed = completed_files.lock().unwrap();
+        let mut completed = completed_files
+            .lock()
+            .map_err(|e| format!("Mutex poisoned while updating completed files: {e}"))?;
         *completed += 1;
     }
     {
-        let mut quads = total_quads.lock().unwrap();
+        let mut quads = total_quads
+            .lock()
+            .map_err(|e| format!("Mutex poisoned while updating quad count: {e}"))?;
         *quads += file_quad_count;
     }
     {
-        let mut errors = total_errors.lock().unwrap();
+        let mut errors = total_errors
+            .lock()
+            .map_err(|e| format!("Mutex poisoned while updating error count: {e}"))?;
         *errors += file_error_count;
     }
 

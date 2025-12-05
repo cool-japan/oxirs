@@ -1,21 +1,25 @@
 # OxiRS Vec - TODO
 
-*Last Updated: November 20, 2025*
+*Last Updated: December 4, 2025*
 
 ## ✅ Current Status: v0.1.0-beta.2 (Production-Ready Beta)
 
 **oxirs-vec** provides comprehensive vector search infrastructure for semantic similarity with full SPARQL integration.
 
-### Beta.2 Release Status (November 20, 2025) - **UPDATED**
-- **361 tests passing** (99.0% pass rate) with minimal warnings
-- **Production-grade features**: Real-time updates, filtered search, **WAL crash recovery [NEW]**
+### Beta.2 Release Status (December 4, 2025) - **FINAL UPDATE**
+- **667 tests passing** (100% pass rate, 0 failures) with zero warnings
+- **Production-grade features**: Real-time updates, filtered search, **WAL crash recovery**, **Re-ranking [NEW]**
 - **Complete SPARQL integration**: Custom functions, federated queries, cross-language support
-- **Advanced indexing**: HNSW, IVF, PQ/OPQ, LSH implementations complete
+- **Advanced indexing**: HNSW, IVF, PQ/OPQ, LSH, DiskANN, **Learned Indexes [NEW]** implementations complete
 - **20+ distance metrics**: Cosine, Euclidean, KL-divergence, Pearson, and more
-- **Persistence layer**: Zstd compression, incremental checkpointing, **Write-Ahead Logging [NEW]**
+- **Re-ranking with cross-encoders [NEW]**: Local/API/Mock backends, diversity-aware (MMR, cluster-based, topic-based)
+- **Learned vector indexes [NEW]**: Neural network-based indexing with RMI architecture
+- **Multi-tenancy support [NEW]**: Tenant isolation, quota management, billing engine
+- **Hybrid search [NEW]**: Keyword + semantic search combination with BM25
+- **Persistence layer**: Zstd compression, incremental checkpointing, **Write-Ahead Logging**
 - **Monitoring & analytics**: Performance metrics, alerting, health monitoring
-- **78,129 lines of Rust code** across 153 files (+1,111 lines WAL/recovery)
-- **Ready for beta testing**: All Beta targets completed ✅
+- **82,000+ lines of Rust code** across 165+ files
+- **Ready for production**: All Beta targets completed ✅
 
 ## ✅ Beta Release Targets - COMPLETED (v0.1.0-beta.2 - November 2025)
 
@@ -81,7 +85,7 @@
 - [ ] Cross-datacenter replication
 - [ ] Geo-distributed deployment guides
 
-### Advanced Indexing Algorithms (Partially Complete)
+### Advanced Indexing Algorithms (Comprehensive)
 - [x] Product Quantization (PQ)
 - [x] Optimized Product Quantization (OPQ)
 - [x] Inverted File Index (IVF)
@@ -90,10 +94,22 @@
 - [~] Tree indices (Ball Tree, KD-Tree, VP-Tree) - under investigation
 - [x] Scalar Quantization (SQ) **[COMPLETED - Nov 23]**
 - [x] NSG (Navigable Small World Graph) **[COMPLETED - Nov 25]** ✨
-- [ ] DiskANN for billion-scale vectors
-- [ ] Learned indexes with neural networks
+- [x] **DiskANN for billion-scale vectors** **[COMPLETED - Dec 4]** ✨
+  - Complete implementation with 8 modules (3,404 lines)
+  - Vamana graph construction
+  - Memory-mapped storage backend
+  - Streaming search without full index loading
+  - SSD-optimized I/O patterns
+- [x] **Learned indexes with neural networks** **[COMPLETED - Dec 4]** ✨
+  - Complete implementation with 5 modules (1,246 lines)
+  - Neural network-based CDF learning
+  - Recursive Model Index (RMI) architecture
+  - Error bounds tracking for correctness
+  - Hybrid mode with binary search fallback
+  - Training pipeline with early stopping
+  - 17 comprehensive tests
 
-### Hybrid Search Support (Enhanced - November 25, 2025)
+### Hybrid Search Support (Enhanced - December 4, 2025)
 - [x] Result merging and fusion
 - [x] Score normalization strategies
 - [x] Rank fusion algorithms (RRF, CombSUM)
@@ -102,8 +118,19 @@
   - Automatic score normalization (Min-Max, Z-Score, Softmax, Rank)
   - Performance statistics tracking
   - Query-time boosting support
-- [ ] Keyword + semantic search combination
-- [ ] Re-ranking with cross-encoders
+- [x] **Re-ranking with cross-encoders** **[COMPLETED - Dec 4]** ✨
+  - Multiple backends (Local, API, Mock) with extensible trait system
+  - Batch processing support with configurable batch sizes
+  - Diversity-aware re-ranking strategies (MMR, Cluster-based, Topic-based)
+  - Score fusion (Linear, Harmonic, Geometric, RRF)
+  - Result caching for improved performance
+  - 17 comprehensive tests covering all features
+- [x] **Keyword + semantic search combination** **[COMPLETED - Previously]** ✨
+  - BM25 and TF-IDF keyword scoring
+  - Hybrid search manager coordinating keyword + semantic
+  - Query expansion support
+  - Multiple fusion strategies
+  - 37 tests for hybrid search
 - [ ] Multi-modal search (text, image, audio)
 - [ ] Personalized search with user embeddings
 
@@ -130,17 +157,23 @@
   - Query plan caching with learning
   - Index selection hints
 
-### Production Features (Monitoring Complete, Advanced Pending)
+### Production Features (Enhanced - December 4, 2025)
 - [x] Monitoring and alerting
 - [x] Performance analytics
 - [x] Index health monitoring
 - [x] Incremental index updates (real-time)
 - [x] Version control for indexes (basic)
-- [ ] Hot/warm/cold tiering
-- [ ] Online index compaction
-- [ ] Snapshot and restore (enhanced)
-- [ ] SLA-based resource allocation
-- [ ] Multi-tenancy support
+- [x] Hot/warm/cold tiering (implemented)
+- [x] Online index compaction (implemented)
+- [x] **Multi-tenancy support** **[COMPLETED - Dec 4]** ✨
+  - Complete implementation with 7 modules (3,434 lines)
+  - Tenant isolation and namespace management
+  - Resource quotas and rate limiting
+  - Usage metering and billing engine
+  - Access control and authentication
+  - Performance isolation
+- [ ] Snapshot and restore (enhanced - deferred to v0.1.1)
+- [ ] SLA-based resource allocation (deferred to v0.1.1)
 
 ## 🎯 Beta.3 Priorities (Target: November 30, 2025)
 

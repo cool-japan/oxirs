@@ -3,11 +3,19 @@
 //! Provides Speech-to-Text (STT) and Text-to-Speech (TTS) capabilities for voice interactions
 //! with the chat system. Supports multiple providers and streaming audio.
 
-use anyhow::Result;
+use anyhow::{Context, Result};
+use async_openai::{
+    config::OpenAIConfig,
+    types::{
+        AudioResponseFormat, CreateSpeechRequest, CreateTranscriptionRequestArgs, SpeechModel,
+        SpeechResponseFormat, Voice,
+    },
+    Client,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 /// Voice interface manager
 pub struct VoiceInterface {
@@ -220,11 +228,13 @@ impl VoiceInterface {
 /// OpenAI STT Provider (Whisper API)
 struct OpenAISttProvider {
     config: VoiceConfig,
+    client: Client<OpenAIConfig>,
 }
 
 impl OpenAISttProvider {
     fn new(config: VoiceConfig) -> Self {
-        Self { config }
+        let client = Client::new();
+        Self { config, client }
     }
 }
 
@@ -236,37 +246,128 @@ impl SpeechToTextProvider for OpenAISttProvider {
             audio_data.len()
         );
 
-        // TODO: Implement actual OpenAI Whisper API call
-        // For now, return a placeholder result
-        warn!("OpenAI Whisper integration not yet implemented");
+        let start_time = std::time::Instant::now();
+
+        // Create transcription request using OpenAI Whisper
+        let request = CreateTranscriptionRequestArgs::default()
+            .file(async_openai::types::AudioInput {
+                source: async_openai::types::InputSource::Bytes {
+                    filename: "audio.mp3".to_string(),
+                    bytes: audio_data.to_vec().into(),
+                },
+            })
+            .model("whisper-1")
+            .language(&config.language[..2]) // Convert "en-US" to "en"
+            .response_format(AudioResponseFormat::VerboseJson)
+            .build()
+            .context("Failed to build transcription request")?;
+
+        // Call OpenAI Whisper API
+        let response = self
+            .client
+            .audio()
+            .transcribe(request)
+            .await
+            .context("Failed to transcribe audio with OpenAI Whisper")?;
+
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        debug!(
+            "OpenAI Whisper transcription completed: '{}' (duration: {}ms)",
+            response.text, duration_ms
+        );
+
+        // Extract word timestamps if available (Whisper verbose JSON includes them)
+        let word_timestamps = vec![]; // OpenAI Whisper API doesn't provide word-level timestamps in the current API
 
         Ok(SttResult {
-            text: "[OpenAI Whisper transcription placeholder]".to_string(),
-            confidence: 0.95,
+            text: response.text,
+            confidence: 0.95, // OpenAI doesn't provide confidence scores
             language: Some(config.language.clone()),
-            duration_ms: 1000,
-            word_timestamps: vec![],
+            duration_ms,
+            word_timestamps,
         })
     }
 
     async fn transcribe_stream(
         &self,
         mut audio_stream: tokio::sync::mpsc::Receiver<Vec<u8>>,
-        _config: &VoiceConfig,
+        config: &VoiceConfig,
     ) -> Result<tokio::sync::mpsc::Receiver<SttStreamResult>> {
         let (tx, rx) = tokio::sync::mpsc::channel(100);
 
+        let client = self.client.clone();
+        let language = config.language.clone();
+
         // Spawn background task for streaming transcription
+        // Note: OpenAI Whisper doesn't natively support streaming, so we accumulate chunks
         tokio::spawn(async move {
-            while let Some(_audio_chunk) = audio_stream.recv().await {
-                // TODO: Implement streaming transcription
-                let _ = tx
-                    .send(SttStreamResult {
-                        text: "[streaming placeholder]".to_string(),
-                        is_final: false,
-                        confidence: 0.9,
+            let mut accumulated_audio = Vec::new();
+
+            while let Some(audio_chunk) = audio_stream.recv().await {
+                accumulated_audio.extend_from_slice(&audio_chunk);
+
+                // Process accumulated audio every 5 seconds worth of data (approx)
+                // Assuming 16kHz, 1 channel, 16-bit = 32KB per second
+                if accumulated_audio.len() >= 160_000 {
+                    // Create transcription request
+                    match CreateTranscriptionRequestArgs::default()
+                        .file(async_openai::types::AudioInput {
+                            source: async_openai::types::InputSource::Bytes {
+                                filename: "audio_chunk.mp3".to_string(),
+                                bytes: accumulated_audio.clone().into(),
+                            },
+                        })
+                        .model("whisper-1")
+                        .language(&language[..2])
+                        .response_format(AudioResponseFormat::Json)
+                        .build()
+                    {
+                        Ok(request) => {
+                            if let Ok(response) = client.audio().transcribe(request).await {
+                                let _ = tx
+                                    .send(SttStreamResult {
+                                        text: response.text,
+                                        is_final: false,
+                                        confidence: 0.95,
+                                    })
+                                    .await;
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to create transcription request: {}", e);
+                        }
+                    }
+
+                    // Clear accumulated audio after processing
+                    accumulated_audio.clear();
+                }
+            }
+
+            // Process any remaining audio
+            if !accumulated_audio.is_empty() {
+                if let Ok(request) = CreateTranscriptionRequestArgs::default()
+                    .file(async_openai::types::AudioInput {
+                        source: async_openai::types::InputSource::Bytes {
+                            filename: "audio_final.mp3".to_string(),
+                            bytes: accumulated_audio.into(),
+                        },
                     })
-                    .await;
+                    .model("whisper-1")
+                    .language(&language[..2])
+                    .response_format(AudioResponseFormat::Json)
+                    .build()
+                {
+                    if let Ok(response) = client.audio().transcribe(request).await {
+                        let _ = tx
+                            .send(SttStreamResult {
+                                text: response.text,
+                                is_final: true,
+                                confidence: 0.95,
+                            })
+                            .await;
+                    }
+                }
             }
         });
 
@@ -379,39 +480,126 @@ impl SpeechToTextProvider for LocalWhisperProvider {
 /// OpenAI TTS Provider
 struct OpenAITtsProvider {
     config: VoiceConfig,
+    client: Client<OpenAIConfig>,
 }
 
 impl OpenAITtsProvider {
     fn new(config: VoiceConfig) -> Self {
-        Self { config }
+        let client = Client::new();
+        Self { config, client }
     }
 }
 
 #[async_trait::async_trait]
 impl TextToSpeechProvider for OpenAITtsProvider {
-    async fn synthesize(&self, text: &str, _config: &VoiceConfig) -> Result<TtsResult> {
+    async fn synthesize(&self, text: &str, config: &VoiceConfig) -> Result<TtsResult> {
         info!(
             "Synthesizing speech with OpenAI TTS (text length: {} chars)",
             text.len()
         );
 
-        // TODO: Implement actual OpenAI TTS API call
-        warn!("OpenAI TTS integration not yet implemented");
+        let start_time = std::time::Instant::now();
+
+        // Map voice string to OpenAI Voice enum
+        let voice = match config.voice.as_str() {
+            "alloy" => Voice::Alloy,
+            "echo" => Voice::Echo,
+            "fable" => Voice::Fable,
+            "onyx" => Voice::Onyx,
+            "nova" => Voice::Nova,
+            "shimmer" => Voice::Shimmer,
+            _ => Voice::Alloy, // Default fallback
+        };
+
+        // Create TTS request
+        let request = CreateSpeechRequest {
+            model: SpeechModel::Tts1,
+            input: text.to_string(),
+            voice,
+            response_format: Some(SpeechResponseFormat::Mp3),
+            speed: Some(1.0),
+        };
+
+        // Call OpenAI TTS API
+        let response = self
+            .client
+            .audio()
+            .speech(request)
+            .await
+            .context("Failed to synthesize speech with OpenAI TTS")?;
+
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        // Read audio bytes from response
+        let audio_data = response.bytes.to_vec();
+
+        debug!(
+            "OpenAI TTS synthesis completed: {} bytes (duration: {}ms)",
+            audio_data.len(),
+            duration_ms
+        );
 
         Ok(TtsResult {
-            audio_data: vec![],
+            audio_data,
             format: AudioFormat::Mp3,
-            duration_ms: (text.len() as u64) * 100, // Rough estimate
+            duration_ms,
         })
     }
 
     async fn synthesize_stream(
         &self,
-        _text: &str,
-        _config: &VoiceConfig,
+        text: &str,
+        config: &VoiceConfig,
     ) -> Result<tokio::sync::mpsc::Receiver<Vec<u8>>> {
-        let (_tx, rx) = tokio::sync::mpsc::channel(100);
-        // TODO: Implement streaming TTS
+        let (tx, rx) = tokio::sync::mpsc::channel(100);
+
+        let client = self.client.clone();
+        let text = text.to_string();
+        let voice_str = config.voice.clone();
+
+        // Spawn background task for streaming TTS
+        tokio::spawn(async move {
+            // Map voice string to OpenAI Voice enum
+            let voice = match voice_str.as_str() {
+                "alloy" => Voice::Alloy,
+                "echo" => Voice::Echo,
+                "fable" => Voice::Fable,
+                "onyx" => Voice::Onyx,
+                "nova" => Voice::Nova,
+                "shimmer" => Voice::Shimmer,
+                _ => Voice::Alloy,
+            };
+
+            // For streaming, we split text into sentences and synthesize each separately
+            let sentences: Vec<&str> = text
+                .split(['.', '!', '?'])
+                .filter(|s| !s.trim().is_empty())
+                .collect();
+
+            for sentence in sentences {
+                let request = CreateSpeechRequest {
+                    model: SpeechModel::Tts1,
+                    input: sentence.trim().to_string(),
+                    voice: voice.clone(),
+                    response_format: Some(SpeechResponseFormat::Mp3),
+                    speed: Some(1.0),
+                };
+
+                match client.audio().speech(request).await {
+                    Ok(response) => {
+                        let audio_chunk = response.bytes.to_vec();
+                        if tx.send(audio_chunk).await.is_err() {
+                            break; // Receiver dropped
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to synthesize sentence in streaming mode: {}", e);
+                        break;
+                    }
+                }
+            }
+        });
+
         Ok(rx)
     }
 }
@@ -525,22 +713,79 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_transcribe_placeholder() {
-        let config = VoiceConfig::default();
+    async fn test_transcribe_disabled() {
+        let config = VoiceConfig {
+            enable_stt: false,
+            ..Default::default()
+        };
+
         let interface = VoiceInterface::new(config);
 
         let audio_data = vec![0u8; 1000];
         let result = interface.transcribe(&audio_data).await;
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("disabled"));
     }
 
     #[tokio::test]
-    async fn test_synthesize_placeholder() {
-        let config = VoiceConfig::default();
+    async fn test_synthesize_disabled() {
+        let config = VoiceConfig {
+            enable_tts: false,
+            ..Default::default()
+        };
+
         let interface = VoiceInterface::new(config);
 
         let text = "Hello, world!";
         let result = interface.synthesize(text).await;
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("disabled"));
+    }
+
+    #[test]
+    fn test_voice_config_custom() {
+        let config = VoiceConfig {
+            enable_stt: true,
+            enable_tts: false,
+            stt_provider: SttProviderType::Google,
+            tts_provider: TtsProviderType::Azure,
+            sample_rate: 48000,
+            channels: 2,
+            max_duration_secs: 600,
+            language: "ja-JP".to_string(),
+            voice: "echo".to_string(),
+        };
+
+        assert_eq!(config.sample_rate, 48000);
+        assert_eq!(config.channels, 2);
+        assert_eq!(config.language, "ja-JP");
+        assert_eq!(config.voice, "echo");
+        assert!(!config.enable_tts);
+    }
+
+    #[test]
+    fn test_audio_format_variants() {
+        assert!(matches!(AudioFormat::Wav, AudioFormat::Wav));
+        assert!(matches!(AudioFormat::Mp3, AudioFormat::Mp3));
+    }
+
+    #[test]
+    fn test_stt_provider_serialization() {
+        let provider = SttProviderType::OpenAI;
+        let serialized = serde_json::to_string(&provider).unwrap();
+        assert_eq!(serialized, "\"open_a_i\""); // Snake case serialization
+
+        let deserialized: SttProviderType = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, SttProviderType::OpenAI);
+    }
+
+    #[test]
+    fn test_tts_provider_serialization() {
+        let provider = TtsProviderType::Google;
+        let serialized = serde_json::to_string(&provider).unwrap();
+        assert_eq!(serialized, "\"google\"");
+
+        let deserialized: TtsProviderType = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, TtsProviderType::Google);
     }
 }

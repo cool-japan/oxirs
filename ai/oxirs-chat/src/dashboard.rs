@@ -5,6 +5,7 @@
 
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
+use rust_xlsxwriter::{Format, Workbook};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -331,19 +332,40 @@ impl DashboardAnalytics {
         health.memory_usage_mb = memory_mb;
         health.active_connections = connections;
 
+        // Calculate requests per second from query metrics
+        let requests_per_second = self.calculate_requests_per_second().await;
+
         // Add to timeline
         health.health_timeline.push(HealthDataPoint {
             timestamp: Utc::now(),
             cpu_percent,
             memory_mb,
             active_connections: connections,
-            requests_per_second: 0.0, // TODO: Calculate from metrics
+            requests_per_second,
         });
 
         // Keep only recent data (last 24 hours at 5-minute intervals = 288 points)
         if health.health_timeline.len() > 288 {
             health.health_timeline.drain(0..100);
         }
+    }
+
+    /// Calculate current requests per second based on recent query activity
+    async fn calculate_requests_per_second(&self) -> f64 {
+        let metrics = self.query_metrics.read().await;
+
+        // Calculate RPS from queries in the last 60 seconds
+        let now = Utc::now();
+        let one_minute_ago = now - Duration::seconds(60);
+
+        let recent_queries = metrics
+            .query_history
+            .iter()
+            .filter(|q| q.timestamp >= one_minute_ago)
+            .count();
+
+        // Return queries per second
+        recent_queries as f64 / 60.0
     }
 
     /// Calculate percentile from sorted values
@@ -479,14 +501,295 @@ impl DashboardAnalytics {
         Ok(serde_json::to_vec_pretty(&export_data)?)
     }
 
-    async fn export_csv(&self, _time_range: TimeRange) -> Result<Vec<u8>> {
-        // TODO: Implement CSV export
-        Ok(b"CSV export not yet implemented".to_vec())
+    async fn export_csv(&self, time_range: TimeRange) -> Result<Vec<u8>> {
+        let query_analytics = self.get_query_analytics(time_range).await;
+        let user_analytics = self.get_user_analytics(time_range).await;
+        let health_analytics = self.get_health_analytics(time_range).await;
+
+        let mut csv_output = String::new();
+
+        // Section 1: Query Analytics Summary
+        csv_output.push_str("=== QUERY ANALYTICS ===\n");
+        csv_output.push_str("Metric,Value\n");
+        csv_output.push_str(&format!(
+            "Total Queries,{}\n",
+            query_analytics.total_queries
+        ));
+        csv_output.push_str(&format!(
+            "Successful Queries,{}\n",
+            query_analytics.successful_queries
+        ));
+        csv_output.push_str(&format!(
+            "Failed Queries,{}\n",
+            query_analytics.failed_queries
+        ));
+        csv_output.push_str(&format!(
+            "Average Response Time (ms),{:.2}\n",
+            query_analytics.avg_response_time_ms
+        ));
+        csv_output.push_str(&format!(
+            "P95 Response Time (ms),{:.2}\n",
+            query_analytics.p95_response_time_ms
+        ));
+        csv_output.push_str(&format!(
+            "P99 Response Time (ms),{:.2}\n",
+            query_analytics.p99_response_time_ms
+        ));
+        csv_output.push('\n');
+
+        // Section 2: Query Type Distribution
+        csv_output.push_str("=== QUERY TYPE DISTRIBUTION ===\n");
+        csv_output.push_str("Query Type,Count\n");
+        for (query_type, count) in &query_analytics.query_type_distribution {
+            csv_output.push_str(&format!("{:?},{}\n", query_type, count));
+        }
+        csv_output.push('\n');
+
+        // Section 3: User Analytics
+        csv_output.push_str("=== USER ANALYTICS ===\n");
+        csv_output.push_str("Metric,Value\n");
+        csv_output.push_str(&format!("Active Users,{}\n", user_analytics.active_users));
+        csv_output.push_str(&format!(
+            "Total Sessions,{}\n",
+            user_analytics.total_sessions
+        ));
+        csv_output.push_str(&format!(
+            "Avg Session Duration (secs),{:.2}\n",
+            user_analytics.avg_session_duration_secs
+        ));
+        csv_output.push('\n');
+
+        // Section 4: Top Users
+        csv_output.push_str("=== TOP USERS ===\n");
+        csv_output.push_str("User ID,Query Count,Session Count,Total Time (secs),Last Active\n");
+        for user in &user_analytics.top_users {
+            csv_output.push_str(&format!(
+                "{},{},{},{},{}\n",
+                user.user_id,
+                user.query_count,
+                user.session_count,
+                user.total_time_secs,
+                user.last_active.to_rfc3339()
+            ));
+        }
+        csv_output.push('\n');
+
+        // Section 5: Health Analytics
+        csv_output.push_str("=== HEALTH ANALYTICS ===\n");
+        csv_output.push_str("Metric,Value\n");
+        csv_output.push_str(&format!(
+            "Current CPU (%),{:.2}\n",
+            health_analytics.current_cpu_percent
+        ));
+        csv_output.push_str(&format!(
+            "Current Memory (MB),{:.2}\n",
+            health_analytics.current_memory_mb
+        ));
+        csv_output.push_str(&format!(
+            "Active Connections,{}\n",
+            health_analytics.active_connections
+        ));
+        csv_output.push_str(&format!(
+            "Cache Hit Rate,{:.2}\n",
+            health_analytics.cache_hit_rate
+        ));
+        csv_output.push_str(&format!("Error Rate,{:.2}\n", health_analytics.error_rate));
+        csv_output.push('\n');
+
+        // Section 6: Health Timeline
+        csv_output.push_str("=== HEALTH TIMELINE ===\n");
+        csv_output.push_str("Timestamp,CPU (%),Memory (MB),Active Connections,Requests/Second\n");
+        for datapoint in &health_analytics.health_timeline {
+            csv_output.push_str(&format!(
+                "{},{:.2},{:.2},{},{:.2}\n",
+                datapoint.timestamp.to_rfc3339(),
+                datapoint.cpu_percent,
+                datapoint.memory_mb,
+                datapoint.active_connections,
+                datapoint.requests_per_second
+            ));
+        }
+        csv_output.push('\n');
+
+        // Section 7: Activity Timeline
+        csv_output.push_str("=== ACTIVITY TIMELINE ===\n");
+        csv_output.push_str("Timestamp,Active Users,Queries/Min,Avg Response Time (ms)\n");
+        for datapoint in &user_analytics.activity_timeline {
+            csv_output.push_str(&format!(
+                "{},{},{:.2},{:.2}\n",
+                datapoint.timestamp.to_rfc3339(),
+                datapoint.active_users,
+                datapoint.queries_per_minute,
+                datapoint.avg_response_time_ms
+            ));
+        }
+
+        Ok(csv_output.into_bytes())
     }
 
-    async fn export_excel(&self, _time_range: TimeRange) -> Result<Vec<u8>> {
-        // TODO: Implement Excel export
-        Ok(b"Excel export not yet implemented".to_vec())
+    async fn export_excel(&self, time_range: TimeRange) -> Result<Vec<u8>> {
+        let query_analytics = self.get_query_analytics(time_range).await;
+        let user_analytics = self.get_user_analytics(time_range).await;
+        let health_analytics = self.get_health_analytics(time_range).await;
+
+        // Create a new workbook
+        let mut workbook = Workbook::new();
+
+        // Create header format
+        let header_format = Format::new().set_bold();
+
+        // Sheet 1: Query Analytics Summary
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("Query Analytics")?;
+
+        worksheet.write_string_with_format(0, 0, "Metric", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "Value", &header_format)?;
+
+        let mut row = 1;
+        worksheet.write_string(row, 0, "Total Queries")?;
+        worksheet.write_number(row, 1, query_analytics.total_queries as f64)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Successful Queries")?;
+        worksheet.write_number(row, 1, query_analytics.successful_queries as f64)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Failed Queries")?;
+        worksheet.write_number(row, 1, query_analytics.failed_queries as f64)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Avg Response Time (ms)")?;
+        worksheet.write_number(row, 1, query_analytics.avg_response_time_ms)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "P95 Response Time (ms)")?;
+        worksheet.write_number(row, 1, query_analytics.p95_response_time_ms)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "P99 Response Time (ms)")?;
+        worksheet.write_number(row, 1, query_analytics.p99_response_time_ms)?;
+
+        // Sheet 2: Query Type Distribution
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("Query Types")?;
+
+        worksheet.write_string_with_format(0, 0, "Query Type", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "Count", &header_format)?;
+
+        let mut row = 1;
+        for (query_type, count) in &query_analytics.query_type_distribution {
+            worksheet.write_string(row, 0, format!("{:?}", query_type))?;
+            worksheet.write_number(row, 1, *count as f64)?;
+            row += 1;
+        }
+
+        // Sheet 3: User Analytics
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("User Analytics")?;
+
+        worksheet.write_string_with_format(0, 0, "Metric", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "Value", &header_format)?;
+
+        let mut row = 1;
+        worksheet.write_string(row, 0, "Active Users")?;
+        worksheet.write_number(row, 1, user_analytics.active_users as f64)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Total Sessions")?;
+        worksheet.write_number(row, 1, user_analytics.total_sessions as f64)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Avg Session Duration (secs)")?;
+        worksheet.write_number(row, 1, user_analytics.avg_session_duration_secs)?;
+
+        // Sheet 4: Top Users
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("Top Users")?;
+
+        worksheet.write_string_with_format(0, 0, "User ID", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "Query Count", &header_format)?;
+        worksheet.write_string_with_format(0, 2, "Session Count", &header_format)?;
+        worksheet.write_string_with_format(0, 3, "Total Time (secs)", &header_format)?;
+        worksheet.write_string_with_format(0, 4, "Last Active", &header_format)?;
+
+        let mut row = 1;
+        for user in &user_analytics.top_users {
+            worksheet.write_string(row, 0, &user.user_id)?;
+            worksheet.write_number(row, 1, user.query_count as f64)?;
+            worksheet.write_number(row, 2, user.session_count as f64)?;
+            worksheet.write_number(row, 3, user.total_time_secs as f64)?;
+            worksheet.write_string(row, 4, user.last_active.to_rfc3339())?;
+            row += 1;
+        }
+
+        // Sheet 5: Health Analytics
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("Health Analytics")?;
+
+        worksheet.write_string_with_format(0, 0, "Metric", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "Value", &header_format)?;
+
+        let mut row = 1;
+        worksheet.write_string(row, 0, "Current CPU (%)")?;
+        worksheet.write_number(row, 1, health_analytics.current_cpu_percent)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Current Memory (MB)")?;
+        worksheet.write_number(row, 1, health_analytics.current_memory_mb)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Active Connections")?;
+        worksheet.write_number(row, 1, health_analytics.active_connections as f64)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Cache Hit Rate")?;
+        worksheet.write_number(row, 1, health_analytics.cache_hit_rate)?;
+        row += 1;
+
+        worksheet.write_string(row, 0, "Error Rate")?;
+        worksheet.write_number(row, 1, health_analytics.error_rate)?;
+
+        // Sheet 6: Health Timeline
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("Health Timeline")?;
+
+        worksheet.write_string_with_format(0, 0, "Timestamp", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "CPU (%)", &header_format)?;
+        worksheet.write_string_with_format(0, 2, "Memory (MB)", &header_format)?;
+        worksheet.write_string_with_format(0, 3, "Active Connections", &header_format)?;
+        worksheet.write_string_with_format(0, 4, "Requests/Second", &header_format)?;
+
+        let mut row = 1;
+        for datapoint in &health_analytics.health_timeline {
+            worksheet.write_string(row, 0, datapoint.timestamp.to_rfc3339())?;
+            worksheet.write_number(row, 1, datapoint.cpu_percent)?;
+            worksheet.write_number(row, 2, datapoint.memory_mb)?;
+            worksheet.write_number(row, 3, datapoint.active_connections as f64)?;
+            worksheet.write_number(row, 4, datapoint.requests_per_second)?;
+            row += 1;
+        }
+
+        // Sheet 7: Activity Timeline
+        let worksheet = workbook.add_worksheet();
+        worksheet.set_name("Activity Timeline")?;
+
+        worksheet.write_string_with_format(0, 0, "Timestamp", &header_format)?;
+        worksheet.write_string_with_format(0, 1, "Active Users", &header_format)?;
+        worksheet.write_string_with_format(0, 2, "Queries/Min", &header_format)?;
+        worksheet.write_string_with_format(0, 3, "Avg Response Time (ms)", &header_format)?;
+
+        let mut row = 1;
+        for datapoint in &user_analytics.activity_timeline {
+            worksheet.write_string(row, 0, datapoint.timestamp.to_rfc3339())?;
+            worksheet.write_number(row, 1, datapoint.active_users as f64)?;
+            worksheet.write_number(row, 2, datapoint.queries_per_minute)?;
+            worksheet.write_number(row, 3, datapoint.avg_response_time_ms)?;
+            row += 1;
+        }
+
+        // Save to bytes
+        let buffer = workbook.save_to_buffer()?;
+        Ok(buffer)
     }
 }
 
@@ -543,5 +846,89 @@ mod tests {
         let values = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
         let p95 = DashboardAnalytics::calculate_percentile(&values, 0.95);
         assert!(p95 >= 9.0);
+    }
+
+    #[tokio::test]
+    async fn test_csv_export_with_data() {
+        let config = DashboardConfig::default();
+        let dashboard = DashboardAnalytics::new(config);
+
+        dashboard
+            .record_query(QueryRecord {
+                query_id: "csv_test".to_string(),
+                query_type: QueryType::VectorSearch,
+                execution_time_ms: 75,
+                result_count: 20,
+                success: true,
+                timestamp: Utc::now(),
+                error: None,
+            })
+            .await;
+
+        let time_range = TimeRange::last_hours(24);
+        let csv_data = dashboard
+            .export_data(ExportFormat::Csv, time_range)
+            .await
+            .unwrap();
+
+        let csv_str = String::from_utf8(csv_data).unwrap();
+        assert!(csv_str.contains("=== QUERY ANALYTICS ==="));
+        assert!(csv_str.contains("Total Queries,1"));
+    }
+
+    #[tokio::test]
+    async fn test_excel_export_with_data() {
+        let config = DashboardConfig::default();
+        let dashboard = DashboardAnalytics::new(config);
+
+        for i in 0..3 {
+            dashboard
+                .record_query(QueryRecord {
+                    query_id: format!("excel_{}", i),
+                    query_type: QueryType::Sparql,
+                    execution_time_ms: 100,
+                    result_count: 10,
+                    success: true,
+                    timestamp: Utc::now(),
+                    error: None,
+                })
+                .await;
+        }
+
+        let time_range = TimeRange::last_days(1);
+        let excel_data = dashboard
+            .export_data(ExportFormat::Excel, time_range)
+            .await
+            .unwrap();
+
+        assert!(!excel_data.is_empty());
+        assert_eq!(&excel_data[0..2], b"PK"); // Excel/ZIP signature
+    }
+
+    #[tokio::test]
+    async fn test_rps_calculation() {
+        let config = DashboardConfig::default();
+        let dashboard = DashboardAnalytics::new(config);
+
+        for _ in 0..5 {
+            dashboard
+                .record_query(QueryRecord {
+                    query_id: format!("rps_{}", fastrand::u32(..)),
+                    query_type: QueryType::Hybrid,
+                    execution_time_ms: 50,
+                    result_count: 5,
+                    success: true,
+                    timestamp: Utc::now(),
+                    error: None,
+                })
+                .await;
+        }
+
+        dashboard.update_health(45.0, 500.0, 8).await;
+
+        let health = dashboard
+            .get_health_analytics(TimeRange::last_hours(1))
+            .await;
+        assert!(!health.health_timeline.is_empty());
     }
 }

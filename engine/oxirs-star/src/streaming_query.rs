@@ -70,6 +70,14 @@ use tracing::{info, instrument};
 // Import SciRS2 components (SCIRS2 POLICY)
 use scirs2_core::profiling::Profiler;
 
+// SIMD-accelerated pattern matching module (v0.4.0 Phase 1)
+#[path = "streaming_query/simd_pattern_matcher.rs"]
+pub mod simd_pattern_matcher;
+
+pub use simd_pattern_matcher::{
+    SimdCepSequenceMatcher, SimdPredicateMatcher, SimdQuotedTripleFilter,
+};
+
 /// Streaming query engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StreamingConfig {

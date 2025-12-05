@@ -774,3 +774,368 @@ mod osm_performance_scenarios {
         );
     }
 }
+
+// ============================================================================
+// OSM Real Data Integration Tests (With Actual OpenStreetMap Data)
+// ============================================================================
+
+#[cfg(test)]
+mod osm_real_data_scenarios {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    /// Test loading real OpenStreetMap GeoJSON export
+    /// Requires: Download OSM data via Overpass API or export from JOSM
+    /// Example: https://overpass-api.de/api/interpreter?data=[out:json];node(around:1000,51.5074,-0.1278);out;
+    #[test]
+    #[ignore] // Run manually with: cargo test --test real_world_datasets osm_real_geojson -- --ignored
+    #[cfg(feature = "geojson-support")]
+    fn test_load_real_osm_geojson() {
+        let test_data_path = "/tmp/osm_test_data.geojson";
+
+        // Skip test if file doesn't exist
+        if !Path::new(test_data_path).exists() {
+            eprintln!(
+                "Skipping test: Place real OSM GeoJSON file at {}",
+                test_data_path
+            );
+            eprintln!("Download example: curl 'https://overpass-api.de/api/interpreter?data=[out:json];node(around:500,37.7749,-122.4194);out;' > /tmp/osm_test_data.geojson");
+            return;
+        }
+
+        let geojson_data =
+            fs::read_to_string(test_data_path).expect("Failed to read OSM GeoJSON file");
+
+        // Parse GeoJSON features
+        let features = oxirs_geosparql::geometry::geojson_parser::parse_geojson_feature_collection(
+            &geojson_data,
+        )
+        .expect("Failed to parse OSM GeoJSON");
+
+        println!("Loaded {} features from real OSM data", features.len());
+        assert!(
+            !features.is_empty(),
+            "Should load at least one feature from OSM data"
+        );
+
+        // Validate geometries
+        for (i, geom) in features.iter().enumerate().take(100) {
+            let validation = oxirs_geosparql::validation::validate_geometry(geom);
+            if !validation.is_valid {
+                eprintln!(
+                    "Warning: Feature {} has invalid geometry: {:?}",
+                    i, validation.errors
+                );
+            }
+        }
+    }
+
+    /// Test loading real OpenStreetMap Shapefile export
+    /// Requires: Download OSM shapefile from https://download.geofabrik.de/
+    #[test]
+    #[ignore] // Run manually with: cargo test --test real_world_datasets osm_real_shapefile -- --ignored
+    #[cfg(feature = "shapefile-support")]
+    fn test_load_real_osm_shapefile() {
+        let test_shapefile = "/tmp/osm_roads.shp";
+
+        if !Path::new(test_shapefile).exists() {
+            eprintln!(
+                "Skipping test: Place real OSM shapefile at {}",
+                test_shapefile
+            );
+            eprintln!("Download from: https://download.geofabrik.de/");
+            return;
+        }
+
+        let geometries =
+            oxirs_geosparql::geometry::shapefile_parser::read_shapefile(test_shapefile)
+                .expect("Failed to read OSM shapefile");
+
+        println!(
+            "Loaded {} road segments from OSM shapefile",
+            geometries.len()
+        );
+        assert!(
+            !geometries.is_empty(),
+            "Should load at least one road segment"
+        );
+
+        // Test spatial indexing with real data
+        let start = std::time::Instant::now();
+        let index = SpatialIndex::bulk_load(geometries.clone()).unwrap();
+        let index_time = start.elapsed();
+
+        println!(
+            "Indexed {} geometries in {:?}",
+            geometries.len(),
+            index_time
+        );
+
+        // Query a bbox (should be fast even with large datasets)
+        if let geo_types::Geometry::LineString(first_line) = &geometries[0].geom {
+            if let Some(first_coord) = first_line.0.first() {
+                let query_start = std::time::Instant::now();
+                let nearby = index.query_bbox(
+                    first_coord.x - 0.01,
+                    first_coord.y - 0.01,
+                    first_coord.x + 0.01,
+                    first_coord.y + 0.01,
+                );
+                let query_time = query_start.elapsed();
+
+                println!("Found {} nearby roads in {:?}", nearby.len(), query_time);
+                assert!(
+                    !nearby.is_empty(),
+                    "Should find roads near first coordinate"
+                );
+            }
+        }
+    }
+
+    /// Test with realistic large dataset (similar to city-scale OSM data)
+    /// Simulates processing 100,000 POIs (typical medium-sized city)
+    #[test]
+    fn test_city_scale_poi_dataset() {
+        // Generate realistic distribution (clustered around multiple centers)
+        let city_centers = vec![
+            (37.7749, -122.4194), // San Francisco
+            (37.8044, -122.2712), // Oakland
+            (37.3382, -121.8863), // San Jose
+        ];
+
+        let mut pois = Vec::new();
+        let start = std::time::Instant::now();
+
+        for (center_lat, center_lon) in &city_centers {
+            // Generate ~33k POIs around each city center
+            for i in 0..33_333 {
+                // Random offset within ~10km radius
+                let offset_lat = (i % 200) as f64 * 0.0005 - 0.05;
+                let offset_lon = (i / 200) as f64 * 0.0005 - 0.05;
+
+                let lat = center_lat + offset_lat;
+                let lon = center_lon + offset_lon;
+
+                pois.push(Geometry::from_wkt(&format!("POINT({} {})", lon, lat)).unwrap());
+            }
+        }
+
+        let generation_time = start.elapsed();
+        println!("Generated {} POIs in {:?}", pois.len(), generation_time);
+
+        // Test bulk loading performance
+        let index_start = std::time::Instant::now();
+        let index = SpatialIndex::bulk_load(pois.clone()).unwrap();
+        let index_time = index_start.elapsed();
+
+        println!("Bulk loaded {} POIs in {:?}", pois.len(), index_time);
+
+        // Performance requirement: Should index 100k POIs in <5 seconds
+        assert!(
+            index_time.as_secs() < 5,
+            "Should index 100k POIs in <5s, took {:?}",
+            index_time
+        );
+
+        // Test query performance on large dataset
+        let query_start = std::time::Instant::now();
+        let downtown_sf = index.query_bbox(-122.42, 37.77, -122.41, 37.78);
+        let query_time = query_start.elapsed();
+
+        println!(
+            "Queried downtown SF viewport in {:?}, found {} POIs",
+            query_time,
+            downtown_sf.len()
+        );
+
+        // Performance requirement: Viewport query should be <100ms even with 100k POIs
+        assert!(
+            query_time.as_millis() < 100,
+            "Viewport query should take <100ms, took {:?}",
+            query_time
+        );
+        assert!(!downtown_sf.is_empty(), "Should find POIs in downtown SF");
+    }
+
+    /// Test with OSM building footprints (polygon heavy dataset)
+    /// Simulates 10,000 building polygons (typical downtown area)
+    #[test]
+    fn test_building_footprint_dataset() {
+        let buildings: Vec<Geometry> = (0..10_000)
+            .map(|i| {
+                // Generate realistic building footprints (rectangles)
+                let base_x = 37.7 + (i / 100) as f64 * 0.001;
+                let base_y = -122.4 + (i % 100) as f64 * 0.001;
+
+                // Buildings are 20-50m wide (0.0002-0.0005 degrees)
+                let width = 0.0002 + (i % 3) as f64 * 0.0001;
+                let height = 0.0002 + ((i + 1) % 3) as f64 * 0.0001;
+
+                Geometry::from_wkt(&format!(
+                    "POLYGON(({} {}, {} {}, {} {}, {} {}, {} {}))",
+                    base_x,
+                    base_y,
+                    base_x + width,
+                    base_y,
+                    base_x + width,
+                    base_y + height,
+                    base_x,
+                    base_y + height,
+                    base_x,
+                    base_y
+                ))
+                .unwrap()
+            })
+            .collect();
+
+        let start = std::time::Instant::now();
+        let index = SpatialIndex::bulk_load(buildings.clone()).unwrap();
+        let index_time = start.elapsed();
+
+        println!(
+            "Indexed {} building polygons in {:?}",
+            buildings.len(),
+            index_time
+        );
+
+        // Test area calculations on real-scale buildings
+        let mut total_area = 0.0;
+        for building in buildings.iter().take(100) {
+            total_area += area(building).unwrap();
+        }
+
+        println!(
+            "Average building area (first 100): {:.6} sq degrees",
+            total_area / 100.0
+        );
+
+        // Test spatial query: Find all buildings in a city block
+        let block_bbox = index.query_bbox(37.7, -122.4, 37.701, -122.399);
+        println!("Found {} buildings in city block", block_bbox.len());
+
+        assert!(
+            !block_bbox.is_empty(),
+            "Should find buildings in city block"
+        );
+    }
+
+    /// Test with realistic road network (LineString heavy dataset)
+    /// Simulates 50,000 road segments (typical metro area)
+    #[test]
+    fn test_road_network_dataset() {
+        let mut roads = Vec::new();
+
+        // Generate grid-based road network with some curved roads
+        for i in 0..50_000 {
+            let start_x = 37.5 + (i % 500) as f64 * 0.0005;
+            let start_y = -122.5 + (i / 500) as f64 * 0.0005;
+
+            // Most roads are short segments (100-500m)
+            let end_x = start_x + 0.0003;
+            let end_y = start_y + if i % 7 == 0 { 0.0003 } else { 0.0 };
+
+            let road = if i % 10 == 0 {
+                // 10% curved roads (with midpoint)
+                let mid_x = (start_x + end_x) / 2.0;
+                let mid_y = (start_y + end_y) / 2.0 + 0.0001;
+                Geometry::from_wkt(&format!(
+                    "LINESTRING({} {}, {} {}, {} {})",
+                    start_x, start_y, mid_x, mid_y, end_x, end_y
+                ))
+                .unwrap()
+            } else {
+                // 90% straight roads
+                Geometry::from_wkt(&format!(
+                    "LINESTRING({} {}, {} {})",
+                    start_x, start_y, end_x, end_y
+                ))
+                .unwrap()
+            };
+
+            roads.push(road);
+        }
+
+        let start = std::time::Instant::now();
+        let _index = SpatialIndex::bulk_load(roads.clone()).unwrap();
+        let index_time = start.elapsed();
+
+        println!("Indexed {} road segments in {:?}", roads.len(), index_time);
+
+        // Test length calculations
+        let mut total_length = 0.0;
+        for road in roads.iter().take(1000) {
+            total_length += length(road).unwrap();
+        }
+
+        println!(
+            "Average road segment length (first 1000): {:.6} degrees",
+            total_length / 1000.0
+        );
+
+        // Test finding intersecting roads
+        let query_road = Geometry::from_wkt("LINESTRING(37.5 -122.5, 37.6 -122.4)").unwrap();
+        let mut intersecting_count = 0;
+
+        for road in roads.iter().take(10_000) {
+            if sf_intersects(&query_road, road).unwrap() {
+                intersecting_count += 1;
+            }
+        }
+
+        println!(
+            "Found {} roads intersecting query route (checked 10k roads)",
+            intersecting_count
+        );
+    }
+
+    /// Test memory efficiency with large dataset
+    /// Verifies that oxirs-geosparql can handle datasets that approach memory limits
+    #[test]
+    #[ignore] // Run manually: cargo test --test real_world_datasets memory_stress -- --ignored
+    fn test_memory_efficiency_stress() {
+        use std::time::Instant;
+
+        // Generate 500,000 points (approaches typical laptop memory limits)
+        println!("Generating 500,000 point dataset...");
+        let points: Vec<Geometry> = (0..500_000)
+            .map(|i| {
+                let x = (i % 1000) as f64 * 0.001;
+                let y = (i / 1000) as f64 * 0.001;
+                Geometry::from_wkt(&format!("POINT({} {})", x, y)).unwrap()
+            })
+            .collect();
+
+        println!("Testing bulk load performance...");
+        let start = Instant::now();
+        let index = SpatialIndex::bulk_load(points.clone()).unwrap();
+        let index_time = start.elapsed();
+
+        println!("Indexed 500k points in {:?}", index_time);
+
+        // Should complete in reasonable time (<30 seconds)
+        assert!(
+            index_time.as_secs() < 30,
+            "Should index 500k points in <30s, took {:?}",
+            index_time
+        );
+
+        // Test query performance
+        let query_start = Instant::now();
+        let results = index.query_bbox(0.0, 0.0, 0.1, 0.1);
+        let query_time = query_start.elapsed();
+
+        println!(
+            "Query returned {} results in {:?}",
+            results.len(),
+            query_time
+        );
+
+        // Query should still be fast even with 500k points
+        assert!(
+            query_time.as_millis() < 200,
+            "Query should take <200ms, took {:?}",
+            query_time
+        );
+    }
+}

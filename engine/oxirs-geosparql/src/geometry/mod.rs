@@ -550,7 +550,8 @@ impl Geometry {
     /// let geometries = vec![geom];
     ///
     /// let topojson = Geometry::to_topojson(&geometries).unwrap();
-    /// assert!(topojson.contains("\"type\":\"Topology\""));
+    /// // Pretty-printed JSON has spaces: "type": "Topology"
+    /// assert!(topojson.contains("\"type\": \"Topology\""));
     /// # }
     /// ```
     #[cfg(feature = "topojson-support")]

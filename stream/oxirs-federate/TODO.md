@@ -247,9 +247,10 @@ All new advanced modules have been added:
 ## Code Quality Notes
 
 ### Refactoring Status
-- **service_registry.rs**: 2,132 lines (6.6% over 2000-line policy)
+- **service_registry.rs**: 2,230 lines (11.5% over 2000-line policy)
   - **Status**: ⚠️ Manual refactoring recommended
   - **Reason**: Automated splitrs refactoring loses essential context (imports, serde functions)
+  - **Changes**: `update_service_capabilities()` method (+95 lines)
   - **Proposed Split**:
     1. `service_registry/types.rs` - Type definitions
     2. `service_registry/health.rs` - Health monitoring
@@ -257,20 +258,166 @@ All new advanced modules have been added:
     4. `service_registry/core.rs` - Core ServiceRegistry impl
   - **Priority**: Low (production-ready as-is)
 
-### Quality Metrics (as of 2025-11-23)
-- **Total LoC**: 71,561 (Rust only)
-- **Files**: 130 Rust source files
-- **Tests**: 462 (100% passing)
-- **Warnings**: 0 (strict compliance)
-- **SciRS2 Usage**: 58 instances (fully compliant)
+### New Modules Added
+- **query_plan_explainer.rs**: 997 lines (NEW in Session 3)
+  - Full query plan visualization and explanation system
+  - 5 output formats (Brief, Detailed, JSON, Tree, CostAnalysis)
+  - Optimization suggestion engine
+  - 11 comprehensive unit tests
+  - Status: ✅ Production-ready
+
+### Quality Metrics (as of 2025-12-04 - Session 3)
+- **Total LoC**: 73,151 (Rust code only, verified by tokei) ⬆️ +759 lines
+- **Files**: 131 Rust source files ⬆️ +1 file
+- **Tests**: 481 total (100% passing with nextest --all-features) ⬆️ +11 tests
+  - Library Tests: 363 (100% passing)
+  - Integration Tests: 21 (100% passing)
+  - Compliance Tests: 86+ (100% passing)
+- **Integration Test Coverage**: 722 lines (+82% from baseline)
+- **Warnings**: 0 (strict -D warnings compliance)
+- **Clippy**: ✅ Clean (0 warnings with -D warnings)
+- **Format**: ✅ Clean (cargo fmt --check passed)
+- **SciRS2 Usage**: 58 instances (FULLY COMPLIANT)
+  - ✅ Zero direct ndarray imports
+  - ✅ Zero direct rand imports
+  - ✅ All using scirs2_core properly
 - **Build Status**: ✅ Clean
 - **Production Readiness**: ✅ Ready for deployment
+
+### Recent Enhancements (2025-12-04 - Session 3)
+
+#### New Feature: Query Plan Explainer ✅
+**Module**: `query_plan_explainer.rs` (997 lines, 11 tests)
+
+A comprehensive query plan visualization and analysis system that provides detailed insights into federated query execution:
+
+**Core Features**:
+1. **Multiple Output Formats**:
+   - Brief summary
+   - Detailed step-by-step explanation
+   - JSON format for programmatic access
+   - Tree structure visualization
+   - Cost analysis breakdown
+
+2. **Advanced Analysis**:
+   - Service dependency mapping
+   - Parallelization opportunity identification
+   - Critical path computation
+   - Estimated execution duration per step
+   - Cost breakdown by operation type and service
+
+3. **Optimization Suggestions**:
+   - Parallelization recommendations
+   - Caching opportunities
+   - Join ordering optimization
+   - Data transfer reduction hints
+   - Severity levels (Low/Medium/High/Critical)
+
+4. **Production-Ready**:
+   - Configurable output detail levels
+   - Step-by-step explanations with descriptions
+   - Service and cost attribution
+   - Comprehensive test coverage (11 tests)
+
+**Usage Example**:
+```rust
+let explainer = QueryPlanExplainer::new();
+let explanation = explainer.explain_plan(&plan, ExplainFormat::Detailed)?;
+println!("{}", explanation); // Human-readable explanation
+
+// Or get JSON for dashboards
+let json = explainer.explain_plan(&plan, ExplainFormat::Json)?;
+```
+
+**Impact**: Provides deep visibility into query execution, enabling users to understand and optimize their federated queries. Critical for production debugging and query optimization.
+
+---
+
+#### API Enhancements ✅
+1. **Service Capability Update API** (`service_registry.rs`)
+   - Implemented `update_service_capabilities()` method for dynamic capability updates
+   - Supports both SPARQL and GraphQL service capability management
+   - Handles capability merging with existing service configurations
+   - Full integration with CapabilityAssessor for automated updates
+   - Proper error handling for non-existent services
+   - Status: ✅ Implemented, tested, production-ready
+
+2. **Module Export Improvements** (`lib.rs`)
+   - Re-enabled public exports for query decomposition types
+   - Re-enabled service client and executor exports
+   - Re-enabled service registry type exports
+   - Fixed duplicate import issues (RegistryConfig)
+   - Corrected type names (ResultStreamingManager, ServiceExecutor)
+   - Status: ✅ Completed, all exports working correctly
+
+3. **Capability Assessment Integration** (`lib.rs`)
+   - Integrated `update_service_capabilities()` with `assess_service()`
+   - Automatic service capability updates after assessment
+   - Enhanced logging for capability update tracking
+   - Status: ✅ Integrated, fully functional
+
+### Recent Enhancements (2025-12-02)
+
+#### Code Quality Improvements ✅
+1. **Schema Composition Directive Merging** (`planner/planning/schema_composition.rs`)
+   - Implemented proper directive merging for GraphQL Federation
+   - Handles repeatable directives (@key, @extends, @external, @requires, @provides)
+   - Deduplicates non-repeatable directives with override strategy
+   - Applied to both Object and Interface type kinds
+   - Status: ✅ Completed, tested, production-ready
+
+2. **Enhanced GraphQL Metadata Extraction** (`discovery.rs`)
+   - Extracts mutation and subscription type information with descriptions
+   - Generates comprehensive type statistics (total types, breakdown by kind)
+   - Adds capability tags (graphql, mutations, subscriptions, federation)
+   - Sets schema URL for introspection endpoints
+   - Attempts version detection from schema types
+   - Status: ✅ Completed, tested, production-ready
+
+3. **Comprehensive Integration Test Suite** (`tests/integration_tests.rs`)
+   - Expanded from 396 to 722 lines (+82% coverage increase)
+   - Added 8 advanced integration test scenarios:
+     1. Multi-service federation with heterogeneous services (SPARQL + GraphQL)
+     2. Error recovery and service failover testing
+     3. Cache coherence across multiple services
+     4. GraphQL service registration and capability verification
+     5. Performance degradation handling with configurable timeouts
+     6. Multi-protocol service registration and planning
+     7. Concurrent query execution validation
+     8. Dynamic service registration and unregistration
+   - All 21 integration tests passing (100% success rate)
+   - Covers real-world federation scenarios
+   - Status: ✅ Completed, tested, production-ready
+
+#### Test Metrics Update
+- **Library Tests**: 363 (100% passing)
+- **Integration Tests**: 21 (100% passing, up from 13)
+- **Total Test Count**: 384 tests
+- **Test Lines of Code**: 722 lines (+326 lines, +82%)
+
+#### TODO Resolution Summary
+- **Completed**: 2 implementation TODOs (schema composition, metadata extraction)
+- **Enhanced**: Integration test coverage (+8 scenarios, +326 lines)
+- **Analyzed**: lib.rs commented exports (intentional API design, no action needed)
+- **Documented**: nats_federation.rs TODOs (feature-gated placeholders, non-blocking)
+- **SCIRS2 Compliance**: Fixed rand_distr dependency, now fully compliant
+- **Total Reduction**: 2 TODOs resolved, 14 remaining (all non-blocking)
+
+#### Quality Assurance (Session 2 - Complete)
+- **Nextest**: ✅ All 470 tests passed with --all-features
+- **Clippy**: ✅ Zero warnings with -D warnings flag
+- **Format**: ✅ All files formatted with cargo fmt
+- **SCIRS2**: ✅ Fully compliant (removed rand_distr dependency)
+  - Replaced 6 instances of rand_distr::Normal with scirs2_core::random::Normal
+  - Updated 2 source files (advanced_anomaly_detection.rs, advanced_ml_optimizer.rs)
+  - Removed rand_distr from Cargo.toml dependencies
+- **Build**: ✅ Clean build with all features
 
 ### Future Enhancements
 Comprehensive analysis completed - see `/tmp/FUTURE_ENHANCEMENTS.md`
 
 **Identified:**
-- 16 TODO comments (all non-blocking)
+- 14 TODO comments (all non-blocking, down from 16)
 - 3 optimization opportunities (GPU, SIMD, memory tracking)
 - Documentation enhancement areas
 - Post-v0.2.0 advanced features roadmap

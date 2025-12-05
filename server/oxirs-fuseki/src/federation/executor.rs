@@ -888,25 +888,252 @@ impl FederatedResultMerger {
     }
 
     /// Merge results using union
-    async fn merge_union(&self, results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
-        // TODO: Implement proper result union
-        Ok(results.into_iter().next().unwrap())
+    async fn merge_union(&self, mut results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
+        use oxirs_core::query::Solution;
+        use std::collections::HashSet;
+
+        if results.is_empty() {
+            return Ok(QueryResult::new_empty());
+        }
+
+        if results.len() == 1 {
+            return Ok(results.pop().unwrap());
+        }
+
+        // Extract the first result as base
+        let mut base = results.remove(0);
+
+        // Merge each additional result
+        for result in results {
+            match (&mut base.results, &result.results) {
+                // Boolean: OR operation
+                (QueryResults::Boolean(ref mut b1), QueryResults::Boolean(b2)) => {
+                    *b1 = *b1 || *b2;
+                }
+                // Solutions: Union of all solutions (remove duplicates)
+                (QueryResults::Solutions(ref mut sols1), QueryResults::Solutions(sols2)) => {
+                    // Use HashSet to track unique solutions
+                    let mut seen = HashSet::new();
+                    for sol in sols1.iter() {
+                        seen.insert(format!("{:?}", sol)); // Simple string-based dedup
+                    }
+
+                    for sol in sols2 {
+                        let key = format!("{:?}", sol);
+                        if !seen.contains(&key) {
+                            sols1.push(sol.clone());
+                            seen.insert(key);
+                        }
+                    }
+
+                    base.metadata.result_count = sols1.len();
+                }
+                // Graph: Union of triples (remove duplicates)
+                (QueryResults::Graph(ref mut triples1), QueryResults::Graph(triples2)) => {
+                    let mut seen = HashSet::new();
+                    for triple in triples1.iter() {
+                        seen.insert(format!("{:?}", triple));
+                    }
+
+                    for triple in triples2 {
+                        let key = format!("{:?}", triple);
+                        if !seen.contains(&key) {
+                            triples1.push(triple.clone());
+                            seen.insert(key);
+                        }
+                    }
+
+                    base.metadata.result_count = triples1.len();
+                }
+                // Incompatible types
+                _ => {
+                    return Err(FusekiError::QueryExecution {
+                        message: "Cannot union incompatible result types".to_string(),
+                    });
+                }
+            }
+
+            // Update execution time
+            if let (Some(t1), Some(t2)) =
+                (base.metadata.execution_time, result.metadata.execution_time)
+            {
+                base.metadata.execution_time = Some(t1 + t2);
+            }
+        }
+
+        Ok(base)
     }
 
     /// Merge results using intersection
-    async fn merge_intersection(&self, results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
-        // TODO: Implement proper result intersection
-        Ok(results.into_iter().next().unwrap())
+    async fn merge_intersection(&self, mut results: Vec<QueryResult>) -> FusekiResult<QueryResult> {
+        use std::collections::HashSet;
+
+        if results.is_empty() {
+            return Ok(QueryResult::new_empty());
+        }
+
+        if results.len() == 1 {
+            return Ok(results.pop().unwrap());
+        }
+
+        // Extract the first result as base
+        let mut base = results.remove(0);
+
+        // Compute intersection with each additional result
+        for result in results {
+            match (&mut base.results, &result.results) {
+                // Boolean: AND operation
+                (QueryResults::Boolean(ref mut b1), QueryResults::Boolean(b2)) => {
+                    *b1 = *b1 && *b2;
+                }
+                // Solutions: Intersection of solutions
+                (QueryResults::Solutions(ref mut sols1), QueryResults::Solutions(sols2)) => {
+                    // Build set of solutions from sols2
+                    let set2: HashSet<String> =
+                        sols2.iter().map(|sol| format!("{:?}", sol)).collect();
+
+                    // Keep only solutions that exist in both
+                    sols1.retain(|sol| {
+                        let key = format!("{:?}", sol);
+                        set2.contains(&key)
+                    });
+
+                    base.metadata.result_count = sols1.len();
+                }
+                // Graph: Intersection of triples
+                (QueryResults::Graph(ref mut triples1), QueryResults::Graph(triples2)) => {
+                    // Build set of triples from triples2
+                    let set2: HashSet<String> = triples2
+                        .iter()
+                        .map(|triple| format!("{:?}", triple))
+                        .collect();
+
+                    // Keep only triples that exist in both
+                    triples1.retain(|triple| {
+                        let key = format!("{:?}", triple);
+                        set2.contains(&key)
+                    });
+
+                    base.metadata.result_count = triples1.len();
+                }
+                // Incompatible types
+                _ => {
+                    return Err(FusekiError::QueryExecution {
+                        message: "Cannot intersect incompatible result types".to_string(),
+                    });
+                }
+            }
+
+            // Update execution time
+            if let (Some(t1), Some(t2)) =
+                (base.metadata.execution_time, result.metadata.execution_time)
+            {
+                base.metadata.execution_time = Some(t1 + t2);
+            }
+        }
+
+        Ok(base)
     }
 
     /// Merge results using join
     async fn merge_join(
         &self,
-        results: Vec<QueryResult>,
-        _vars: &[String],
+        mut results: Vec<QueryResult>,
+        join_vars: &[String],
     ) -> FusekiResult<QueryResult> {
-        // TODO: Implement proper result join
-        Ok(results.into_iter().next().unwrap())
+        use oxirs_core::model::Variable;
+        use std::collections::HashMap;
+
+        if results.is_empty() {
+            return Ok(QueryResult::new_empty());
+        }
+
+        if results.len() == 1 {
+            return Ok(results.pop().unwrap());
+        }
+
+        // Only solutions can be joined (Boolean and Graph don't support join)
+        let mut base = results.remove(0);
+
+        if let QueryResults::Solutions(ref mut sols1) = base.results {
+            for result in results {
+                if let QueryResults::Solutions(sols2) = result.results {
+                    // Perform natural join on specified variables
+                    let mut joined_solutions = Vec::new();
+
+                    // Convert join_vars to Variable objects for comparison
+                    let join_variables: Vec<Variable> = join_vars
+                        .iter()
+                        .map(|v| Variable::new(v).unwrap_or_else(|_| Variable::new("_").unwrap()))
+                        .collect();
+
+                    // If no join variables specified, use all common variables
+                    let actual_join_vars = if join_variables.is_empty() {
+                        // Find common variables between solutions (simplified)
+                        Vec::new() // Fallback to Cartesian product if no common vars
+                    } else {
+                        join_variables
+                    };
+
+                    // Perform join: for each solution in sols1, find matching solutions in sols2
+                    for sol1 in sols1.iter() {
+                        for sol2 in &sols2 {
+                            // Check if join variables match
+                            let mut matches = true;
+
+                            if !actual_join_vars.is_empty() {
+                                for join_var in &actual_join_vars {
+                                    // Both solutions must have the variable with the same value
+                                    let val1_opt = sol1.get(join_var);
+                                    let val2_opt = sol2.get(join_var);
+
+                                    match (val1_opt, val2_opt) {
+                                        (Some(v1), Some(v2)) if v1 == v2 => {
+                                            // Values match, continue checking
+                                        }
+                                        (None, None) => {
+                                            // Neither has the variable, that's ok
+                                        }
+                                        _ => {
+                                            // Mismatch or only one has the variable
+                                            matches = false;
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+
+                            if matches {
+                                // Merge the two solutions
+                                if let Some(merged) = sol1.merge(sol2) {
+                                    joined_solutions.push(merged);
+                                }
+                            }
+                        }
+                    }
+
+                    *sols1 = joined_solutions;
+                    base.metadata.result_count = sols1.len();
+
+                    // Update execution time
+                    if let (Some(t1), Some(t2)) =
+                        (base.metadata.execution_time, result.metadata.execution_time)
+                    {
+                        base.metadata.execution_time = Some(t1 + t2);
+                    }
+                } else {
+                    return Err(FusekiError::QueryExecution {
+                        message: "Can only join Solutions result types".to_string(),
+                    });
+                }
+            }
+
+            Ok(base)
+        } else {
+            Err(FusekiError::QueryExecution {
+                message: "Join operation requires Solutions result type".to_string(),
+            })
+        }
     }
 }
 

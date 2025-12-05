@@ -681,10 +681,10 @@ mod tests {
     #[tokio::test]
     async fn test_checkpoint_save_load() {
         let config = DistributedTrainingConfig::default();
-        let mut coordinator = DistributedTrainingCoordinator::new(config).await.unwrap();
+        let coordinator = DistributedTrainingCoordinator::new(config).await.unwrap();
 
         let model_config = ModelConfig::default();
-        let mut model = TransE::new(model_config);
+        let model = TransE::new(model_config);
 
         // Register a worker
         let worker = WorkerInfo {

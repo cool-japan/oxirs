@@ -350,7 +350,21 @@ pub mod response_streaming;
 pub mod webhook_support;
 
 // v0.4.0 Advanced Observability & Protocol Features (November 29, 2025)
+pub mod cost_based_optimizer;
+pub mod incremental_execution;
 pub mod query_batching;
+pub mod query_plan_visualizer;
+pub mod query_result_streaming;
+
+// v0.5.0 Advanced Observability & Monitoring (December 2, 2025)
+pub mod graphql_span_attributes;
+pub mod performance_anomaly_detector;
+pub mod performance_heatmap;
+pub mod query_pattern_analyzer;
+pub mod trace_correlation;
+pub mod trace_sampling;
+pub mod trace_visualization;
+pub mod tracing_exporters;
 
 // Advanced performance modules
 pub mod advanced_cache;

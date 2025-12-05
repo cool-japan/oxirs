@@ -10,7 +10,8 @@ pub use utils::ChunkedIterator;
 
 /// RDF-star serializer with support for multiple formats
 pub struct StarSerializer {
-    config: StarConfig,
+    pub(super) config: StarConfig,
+    pub(super) simd_escaper: super::simd_escape::SimdEscaper,
 }
 
 impl Default for StarSerializer {

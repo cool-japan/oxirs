@@ -178,6 +178,7 @@
 pub mod aas_parser;
 pub mod analytics;
 pub mod cache;
+pub mod cloud_storage;
 pub mod comparison;
 pub mod documentation;
 pub mod error;
@@ -201,13 +202,18 @@ pub mod validator;
 // Re-exports for convenience
 pub use analytics::{
     Anomaly, AnomalyType, BenchmarkComparison, BenchmarkLevel, BestPracticeCheck,
-    BestPracticeReport, CheckCategory, ComplexityAssessment, ComplexityLevel, DependencyMetrics,
-    DistributionAnalysis, DistributionStats, ModelAnalytics, QualityTest, Recommendation,
+    BestPracticeReport, CheckCategory, ComplexityAssessment, ComplexityLevel, CorrelationDirection,
+    CorrelationInsight, CorrelationStrength, DependencyMetrics, DistributionAnalysis,
+    DistributionStats, ModelAnalytics, PropertyCorrelationMatrix, QualityTest, Recommendation,
     RecommendationType, Severity, StatisticalAnomaly, StatisticalMetrics,
 };
 pub use cache::{
     AspectCache, CacheStatistics, CharacteristicCache, EntityCache, LruModelCache, OperationCache,
     PropertyCache, TtlCache, TtlCacheStatistics,
+};
+pub use cloud_storage::{
+    BatchResult, CacheStats, CloudModelStorage, CloudStorageBackend, MemoryBackend, ModelInfo,
+    ObjectMetadata,
 };
 pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, PropertyChange};
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};

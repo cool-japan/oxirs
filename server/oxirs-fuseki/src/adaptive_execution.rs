@@ -289,8 +289,8 @@ impl AdaptiveExecutionEngine {
         // Calculate subquery depth
         let subquery_depth = self.calculate_subquery_depth(query);
 
-        // Estimate average selectivity (simplified)
-        let avg_selectivity = 0.5; // TODO: Improve with actual statistics
+        // Estimate average selectivity using historical data and statistical analysis
+        let avg_selectivity = self.estimate_selectivity(query, &query_lower).await?;
 
         // Calculate graph complexity using scirs2-graph metrics
         let graph_complexity = self.calculate_graph_complexity(query).await?;
@@ -616,6 +616,81 @@ impl AdaptiveExecutionEngine {
     fn extract_predicates(&self, query: &str) -> Vec<String> {
         // Simplified predicate extraction
         vec!["pred1".to_string(), "pred2".to_string()]
+    }
+
+    /// Estimate query selectivity using historical data and statistical analysis
+    async fn estimate_selectivity(&self, query: &str, query_lower: &str) -> FusekiResult<f64> {
+        // Extract query pattern for historical lookup
+        let query_pattern = self.extract_query_pattern(query);
+        let history = self.performance_history.read().await;
+
+        // Try to get selectivity from historical data
+        if let Some(stats) = history.statistics.get(&query_pattern) {
+            if stats.sample_count >= 5 {
+                // Minimum 5 samples for reliable statistics
+                // Calculate selectivity from mean cardinality
+                // Selectivity ≈ (actual results / estimated total triples)
+                // Normalized to 0-1 range using logarithmic scale
+                let selectivity = if stats.mean_cardinality > 0.0 {
+                    // Use logarithmic scale for better distribution
+                    (stats.mean_cardinality.ln() / 10.0).min(1.0).max(0.01)
+                } else {
+                    0.01 // Very selective if no results
+                };
+
+                debug!(
+                    "Estimated selectivity from history: {:.4} (based on {} samples)",
+                    selectivity, stats.sample_count
+                );
+                return Ok(selectivity);
+            }
+        }
+
+        // Fallback: estimate based on query patterns using heuristics
+        let mut selectivity = 0.5; // Default: moderately selective
+
+        // Adjust based on query patterns
+        if query_lower.contains("distinct") {
+            selectivity *= 0.7; // DISTINCT reduces results
+        }
+
+        if query_lower.contains("filter") {
+            let filter_count = query_lower.matches("filter").count();
+            selectivity *= 0.6_f64.powi(filter_count as i32); // Each filter reduces selectivity
+        }
+
+        if query_lower.contains("optional") {
+            selectivity *= 1.3; // OPTIONAL can increase results
+        }
+
+        if query_lower.contains("union") {
+            let union_count = query_lower.matches("union").count();
+            selectivity *= 1.5_f64.powi(union_count as i32); // UNION increases results
+        }
+
+        // Check for LIMIT clause which indicates high selectivity
+        if query_lower.contains("limit") {
+            // Extract limit value if possible (simplified)
+            if let Some(limit_pos) = query_lower.find("limit") {
+                let after_limit = &query_lower[limit_pos + 5..];
+                if let Some(number_str) = after_limit.split_whitespace().next() {
+                    if let Ok(limit) = number_str.parse::<f64>() {
+                        // Assume total dataset size ~10000 for selectivity calculation
+                        selectivity = (limit / 10000.0).min(selectivity);
+                    }
+                }
+            }
+        }
+
+        // Bound selectivity to reasonable range
+        selectivity = selectivity.min(0.95).max(0.01);
+
+        debug!(
+            "Estimated selectivity from patterns: {:.4} (heuristic)",
+            selectivity
+        );
+
+        Ok(selectivity)
     }
 
     fn calculate_subquery_depth(&self, query: &str) -> f64 {

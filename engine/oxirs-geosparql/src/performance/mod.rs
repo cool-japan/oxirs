@@ -43,6 +43,7 @@
 
 pub mod batch;
 pub mod parallel;
+pub mod profiling;
 pub mod simd;
 
 #[cfg(feature = "gpu")]
@@ -50,6 +51,7 @@ pub mod gpu;
 
 pub use self::batch::BatchProcessor;
 pub use self::parallel::{parallel_distance_matrix, parallel_nearest_neighbors};
+pub use self::profiling::{ProfileScope, Profiler, TimingStats};
 pub use self::simd::{euclidean_distance, euclidean_distance_squared};
 
 #[cfg(feature = "gpu")]

@@ -101,8 +101,13 @@ pub mod cost_model_calibration; // Cost model calibration for adaptive learning 
 pub mod query_execution_history; // Query execution history tracking (Beta.2+)
 pub mod query_fingerprinting; // Advanced query fingerprinting for caching and analysis (Beta.2+)
 pub mod query_hints; // Query hints system for optimizer guidance (Beta.2+)
+pub mod query_optimization_advisor; // Automatic query optimization suggestions (Beta.2+)
+pub mod query_pagination; // Query result pagination for large datasets (Beta.2+)
+pub mod query_plan_diff; // Query plan comparison and diff utilities (Beta.2+++)
 pub mod query_plan_export;
-pub mod query_regression_testing; // Query regression testing framework (Beta.2+) // Query plan export to various formats (Beta.2+)
+pub mod query_regression_testing;
+pub mod query_result_cache; // Query result caching with fingerprint keys (Beta.2++++)
+pub mod query_templates; // SPARQL query template system (Beta.2+++) // Query regression testing framework (Beta.2+) // Query plan export to various formats (Beta.2+)
 
 // RDF-star / SPARQL-star integration
 #[cfg(feature = "star")]
@@ -312,6 +317,10 @@ pub use query_regression_testing::{
     GoldenQuery, QueryRegressionAnalysis, RegressionConfig,
     RegressionReport as QueryRegressionReport, RegressionStatus, RegressionTestSuite,
     RegressionTestSuiteBuilder, ReportComparison, ReportSummary, SuiteExport, SuiteStatistics,
+};
+pub use query_result_cache::{
+    CacheConfig as ResultCacheConfig, CacheStatistics as ResultCacheStatistics, QueryResultCache,
+    QueryResultCacheBuilder,
 };
 pub use simd_query_ops::{
     ComparisonOp, JoinStats, SimdAggregations, SimdConfig, SimdFilterEvaluator, SimdHashJoin,

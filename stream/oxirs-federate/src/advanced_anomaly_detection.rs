@@ -16,9 +16,7 @@ use tokio::sync::RwLock;
 use tracing::{debug, info};
 
 use scirs2_core::ndarray_ext::{Array1, Array2};
-
-use rand_distr;
-use scirs2_core::random::Random;
+use scirs2_core::random::{Normal, Random};
 
 /// Configuration for advanced anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -276,25 +274,25 @@ impl LSTMPredictor {
         weights.insert(
             "Wf".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(rand_distr::Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).unwrap())
             }),
         );
         weights.insert(
             "Wi".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(rand_distr::Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).unwrap())
             }),
         );
         weights.insert(
             "Wo".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(rand_distr::Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).unwrap())
             }),
         );
         weights.insert(
             "Wc".to_string(),
             Array2::from_shape_fn((hidden_size, input_size + hidden_size), |_| {
-                rng.sample(rand_distr::Normal::new(0.0, 0.1).unwrap())
+                rng.sample(Normal::new(0.0, 0.1).unwrap())
             }),
         );
 

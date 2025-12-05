@@ -175,6 +175,27 @@ impl FunctionRegistry {
         self.register_native("LOG10", Arc::new(fn_log10));
         self.register_native("POW", Arc::new(fn_pow));
 
+        // Hyperbolic functions (SPARQL Extension)
+        self.register_native("SINH", Arc::new(fn_sinh));
+        self.register_native("COSH", Arc::new(fn_cosh));
+        self.register_native("TANH", Arc::new(fn_tanh));
+        self.register_native("ASINH", Arc::new(fn_asinh));
+        self.register_native("ACOSH", Arc::new(fn_acosh));
+        self.register_native("ATANH", Arc::new(fn_atanh));
+
+        // Mathematical constants (SPARQL Extension)
+        self.register_native("PI", Arc::new(fn_pi));
+        self.register_native("E", Arc::new(fn_e));
+        self.register_native("TAU", Arc::new(fn_tau));
+
+        // Bitwise operations (SPARQL Extension)
+        self.register_native("BITAND", Arc::new(fn_bitand));
+        self.register_native("BITOR", Arc::new(fn_bitor));
+        self.register_native("BITXOR", Arc::new(fn_bitxor));
+        self.register_native("BITNOT", Arc::new(fn_bitnot));
+        self.register_native("LSHIFT", Arc::new(fn_lshift));
+        self.register_native("RSHIFT", Arc::new(fn_rshift));
+
         // Date/time functions
         self.register_native("NOW", Arc::new(fn_now));
         self.register_native("YEAR", Arc::new(fn_year));
@@ -235,6 +256,27 @@ impl FunctionRegistry {
         // List functions (SPARQL 1.2)
         self.register_native("IN", Arc::new(fn_in));
         self.register_native("NOT_IN", Arc::new(fn_not_in));
+
+        // Advanced string utility functions
+        self.register_native("TRIM", Arc::new(fn_trim));
+        self.register_native("LTRIM", Arc::new(fn_ltrim));
+        self.register_native("RTRIM", Arc::new(fn_rtrim));
+        self.register_native("REVERSE", Arc::new(fn_reverse));
+        self.register_native("REPEAT", Arc::new(fn_repeat));
+
+        // String inspection functions (SPARQL Extension)
+        self.register_native("CAPITALIZE", Arc::new(fn_capitalize));
+        self.register_native("ISALPHA", Arc::new(fn_isalpha));
+        self.register_native("ISDIGIT", Arc::new(fn_isdigit));
+        self.register_native("ISALNUM", Arc::new(fn_isalnum));
+        self.register_native("ISWHITESPACE", Arc::new(fn_iswhitespace));
+
+        // Advanced numeric utility functions
+        self.register_native("SIGN", Arc::new(fn_sign));
+        self.register_native("MOD", Arc::new(fn_mod));
+        self.register_native("TRUNC", Arc::new(fn_trunc));
+        self.register_native("GCD", Arc::new(fn_gcd));
+        self.register_native("LCM", Arc::new(fn_lcm));
     }
 
     /// Register a native function
@@ -1296,6 +1338,809 @@ fn fn_pow(args: &[Term]) -> Result<Term, OxirsError> {
         }
         _ => Err(OxirsError::Query(
             "POW requires numeric literals".to_string(),
+        )),
+    }
+}
+
+// Hyperbolic Mathematical Functions (SPARQL Extension)
+
+/// SINH - Hyperbolic sine
+fn fn_sinh(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "SINH requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("SINH requires numeric argument".to_string()))?;
+            let result = num.sinh();
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "SINH requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// COSH - Hyperbolic cosine
+fn fn_cosh(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "COSH requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("COSH requires numeric argument".to_string()))?;
+            let result = num.cosh();
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "COSH requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// TANH - Hyperbolic tangent
+fn fn_tanh(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "TANH requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("TANH requires numeric argument".to_string()))?;
+            let result = num.tanh();
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "TANH requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// ASINH - Inverse hyperbolic sine
+fn fn_asinh(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ASINH requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("ASINH requires numeric argument".to_string()))?;
+            let result = num.asinh();
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ASINH requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// ACOSH - Inverse hyperbolic cosine
+fn fn_acosh(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ACOSH requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("ACOSH requires numeric argument".to_string()))?;
+            // acosh is only defined for x >= 1
+            if num < 1.0 {
+                return Err(OxirsError::Query(
+                    "ACOSH requires argument >= 1".to_string(),
+                ));
+            }
+            let result = num.acosh();
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ACOSH requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// ATANH - Inverse hyperbolic tangent
+fn fn_atanh(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ATANH requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("ATANH requires numeric argument".to_string()))?;
+            // atanh is only defined for |x| < 1
+            if num <= -1.0 || num >= 1.0 {
+                return Err(OxirsError::Query(
+                    "ATANH requires argument in range (-1, 1)".to_string(),
+                ));
+            }
+            let result = num.atanh();
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ATANH requires numeric literal".to_string(),
+        )),
+    }
+}
+
+// Mathematical Constants (SPARQL Extension)
+
+/// PI - Return the mathematical constant π (pi)
+fn fn_pi(_args: &[Term]) -> Result<Term, OxirsError> {
+    Ok(Term::Literal(Literal::new_typed(
+        std::f64::consts::PI.to_string(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+    )))
+}
+
+/// E - Return the mathematical constant e (Euler's number)
+fn fn_e(_args: &[Term]) -> Result<Term, OxirsError> {
+    Ok(Term::Literal(Literal::new_typed(
+        std::f64::consts::E.to_string(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+    )))
+}
+
+/// TAU - Return the mathematical constant τ (tau = 2π)
+fn fn_tau(_args: &[Term]) -> Result<Term, OxirsError> {
+    Ok(Term::Literal(Literal::new_typed(
+        std::f64::consts::TAU.to_string(),
+        NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+    )))
+}
+
+// Bitwise Operations (SPARQL Extension)
+
+/// BITAND - Bitwise AND operation on integers
+fn fn_bitand(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "BITAND requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(lit1), Term::Literal(lit2)) => {
+            let num1 = lit1
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITAND requires integer arguments".to_string()))?;
+            let num2 = lit2
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITAND requires integer arguments".to_string()))?;
+            let result = num1 & num2;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "BITAND requires integer literals".to_string(),
+        )),
+    }
+}
+
+/// BITOR - Bitwise OR operation on integers
+fn fn_bitor(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "BITOR requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(lit1), Term::Literal(lit2)) => {
+            let num1 = lit1
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITOR requires integer arguments".to_string()))?;
+            let num2 = lit2
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITOR requires integer arguments".to_string()))?;
+            let result = num1 | num2;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "BITOR requires integer literals".to_string(),
+        )),
+    }
+}
+
+/// BITXOR - Bitwise XOR operation on integers
+fn fn_bitxor(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "BITXOR requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(lit1), Term::Literal(lit2)) => {
+            let num1 = lit1
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITXOR requires integer arguments".to_string()))?;
+            let num2 = lit2
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITXOR requires integer arguments".to_string()))?;
+            let result = num1 ^ num2;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "BITXOR requires integer literals".to_string(),
+        )),
+    }
+}
+
+/// BITNOT - Bitwise NOT operation on integer
+fn fn_bitnot(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "BITNOT requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let num = lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("BITNOT requires integer argument".to_string()))?;
+            let result = !num;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "BITNOT requires integer literal".to_string(),
+        )),
+    }
+}
+
+/// LSHIFT - Left bit shift operation
+fn fn_lshift(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "LSHIFT requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(lit1), Term::Literal(lit2)) => {
+            let num = lit1
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("LSHIFT requires integer value".to_string()))?;
+            let shift = lit2.value().parse::<u32>().map_err(|_| {
+                OxirsError::Query("LSHIFT requires non-negative integer shift".to_string())
+            })?;
+            // Prevent excessive shifts
+            if shift > 63 {
+                return Err(OxirsError::Query(
+                    "LSHIFT shift amount must be <= 63".to_string(),
+                ));
+            }
+            let result = num << shift;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "LSHIFT requires integer literals".to_string(),
+        )),
+    }
+}
+
+/// RSHIFT - Right bit shift operation (arithmetic shift)
+fn fn_rshift(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "RSHIFT requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(lit1), Term::Literal(lit2)) => {
+            let num = lit1
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("RSHIFT requires integer value".to_string()))?;
+            let shift = lit2.value().parse::<u32>().map_err(|_| {
+                OxirsError::Query("RSHIFT requires non-negative integer shift".to_string())
+            })?;
+            // Prevent excessive shifts
+            if shift > 63 {
+                return Err(OxirsError::Query(
+                    "RSHIFT shift amount must be <= 63".to_string(),
+                ));
+            }
+            let result = num >> shift;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "RSHIFT requires integer literals".to_string(),
+        )),
+    }
+}
+
+// Advanced String Utility Functions
+
+/// TRIM - Remove leading and trailing whitespace
+fn fn_trim(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "TRIM requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let trimmed = lit.value().trim();
+            Ok(Term::Literal(Literal::new(trimmed)))
+        }
+        _ => Err(OxirsError::Query(
+            "TRIM requires string literal".to_string(),
+        )),
+    }
+}
+
+/// LTRIM - Remove leading whitespace
+fn fn_ltrim(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "LTRIM requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let trimmed = lit.value().trim_start();
+            Ok(Term::Literal(Literal::new(trimmed)))
+        }
+        _ => Err(OxirsError::Query(
+            "LTRIM requires string literal".to_string(),
+        )),
+    }
+}
+
+/// RTRIM - Remove trailing whitespace
+fn fn_rtrim(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "RTRIM requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let trimmed = lit.value().trim_end();
+            Ok(Term::Literal(Literal::new(trimmed)))
+        }
+        _ => Err(OxirsError::Query(
+            "RTRIM requires string literal".to_string(),
+        )),
+    }
+}
+
+/// REVERSE - Reverse a string
+fn fn_reverse(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "REVERSE requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let reversed: String = lit.value().chars().rev().collect();
+            Ok(Term::Literal(Literal::new(&reversed)))
+        }
+        _ => Err(OxirsError::Query(
+            "REVERSE requires string literal".to_string(),
+        )),
+    }
+}
+
+/// REPEAT - Repeat a string n times
+fn fn_repeat(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "REPEAT requires exactly 2 arguments (string, count)".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(text), Term::Literal(count_lit)) => {
+            let count = count_lit
+                .value()
+                .parse::<usize>()
+                .map_err(|_| OxirsError::Query("REPEAT count must be numeric".to_string()))?;
+
+            if count > 10000 {
+                return Err(OxirsError::Query(
+                    "REPEAT count too large (maximum 10000)".to_string(),
+                ));
+            }
+
+            let result = text.value().repeat(count);
+            Ok(Term::Literal(Literal::new(&result)))
+        }
+        _ => Err(OxirsError::Query(
+            "REPEAT requires string and numeric arguments".to_string(),
+        )),
+    }
+}
+
+// String Inspection Functions (SPARQL Extension)
+
+/// CAPITALIZE - Capitalize first letter of each word
+fn fn_capitalize(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "CAPITALIZE requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let capitalized: String = lit
+                .value()
+                .split_whitespace()
+                .map(|word| {
+                    let mut chars = word.chars();
+                    match chars.next() {
+                        None => String::new(),
+                        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                    }
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
+            Ok(Term::Literal(Literal::new(&capitalized)))
+        }
+        _ => Err(OxirsError::Query(
+            "CAPITALIZE requires string literal".to_string(),
+        )),
+    }
+}
+
+/// ISALPHA - Check if string contains only alphabetic characters
+fn fn_isalpha(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ISALPHA requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let value = lit.value();
+            let result = !value.is_empty() && value.chars().all(|c| c.is_alphabetic());
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ISALPHA requires string literal".to_string(),
+        )),
+    }
+}
+
+/// ISDIGIT - Check if string contains only numeric digits
+fn fn_isdigit(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ISDIGIT requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let value = lit.value();
+            let result = !value.is_empty() && value.chars().all(|c| c.is_ascii_digit());
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ISDIGIT requires string literal".to_string(),
+        )),
+    }
+}
+
+/// ISALNUM - Check if string contains only alphanumeric characters
+fn fn_isalnum(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ISALNUM requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let value = lit.value();
+            let result = !value.is_empty() && value.chars().all(|c| c.is_alphanumeric());
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ISALNUM requires string literal".to_string(),
+        )),
+    }
+}
+
+/// ISWHITESPACE - Check if string contains only whitespace
+fn fn_iswhitespace(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "ISWHITESPACE requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let value = lit.value();
+            let result = !value.is_empty() && value.chars().all(|c| c.is_whitespace());
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#boolean").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "ISWHITESPACE requires string literal".to_string(),
+        )),
+    }
+}
+
+// Advanced Numeric Utility Functions
+
+/// SIGN - Return the sign of a number (-1, 0, or 1)
+fn fn_sign(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "SIGN requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let value = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("SIGN requires numeric argument".to_string()))?;
+
+            let sign = if value > 0.0 {
+                1
+            } else if value < 0.0 {
+                -1
+            } else {
+                0
+            };
+
+            Ok(Term::Literal(Literal::new_typed(
+                sign.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "SIGN requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// MOD - Modulo operation
+fn fn_mod(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "MOD requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(a_lit), Term::Literal(b_lit)) => {
+            let a = a_lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("MOD requires integer arguments".to_string()))?;
+            let b = b_lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("MOD requires integer arguments".to_string()))?;
+
+            if b == 0 {
+                return Err(OxirsError::Query("MOD by zero".to_string()));
+            }
+
+            let result = a % b;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "MOD requires numeric literals".to_string(),
+        )),
+    }
+}
+
+/// TRUNC - Truncate to integer (towards zero)
+fn fn_trunc(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 1 {
+        return Err(OxirsError::Query(
+            "TRUNC requires exactly 1 argument".to_string(),
+        ));
+    }
+
+    match &args[0] {
+        Term::Literal(lit) => {
+            let value = lit
+                .value()
+                .parse::<f64>()
+                .map_err(|_| OxirsError::Query("TRUNC requires numeric argument".to_string()))?;
+            let result = value.trunc() as i64;
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "TRUNC requires numeric literal".to_string(),
+        )),
+    }
+}
+
+/// GCD - Greatest Common Divisor using Euclidean algorithm
+fn fn_gcd(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "GCD requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(a_lit), Term::Literal(b_lit)) => {
+            let mut a = a_lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("GCD requires integer arguments".to_string()))?
+                .abs();
+            let mut b = b_lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("GCD requires integer arguments".to_string()))?
+                .abs();
+
+            // Euclidean algorithm
+            while b != 0 {
+                let temp = b;
+                b = a % b;
+                a = temp;
+            }
+
+            Ok(Term::Literal(Literal::new_typed(
+                a.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "GCD requires numeric literals".to_string(),
+        )),
+    }
+}
+
+/// LCM - Least Common Multiple
+fn fn_lcm(args: &[Term]) -> Result<Term, OxirsError> {
+    if args.len() != 2 {
+        return Err(OxirsError::Query(
+            "LCM requires exactly 2 arguments".to_string(),
+        ));
+    }
+
+    match (&args[0], &args[1]) {
+        (Term::Literal(a_lit), Term::Literal(b_lit)) => {
+            let a = a_lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("LCM requires integer arguments".to_string()))?
+                .abs();
+            let b = b_lit
+                .value()
+                .parse::<i64>()
+                .map_err(|_| OxirsError::Query("LCM requires integer arguments".to_string()))?
+                .abs();
+
+            if a == 0 || b == 0 {
+                return Ok(Term::Literal(Literal::new_typed(
+                    "0",
+                    NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+                )));
+            }
+
+            // Calculate GCD first
+            let mut gcd_a = a;
+            let mut gcd_b = b;
+            while gcd_b != 0 {
+                let temp = gcd_b;
+                gcd_b = gcd_a % gcd_b;
+                gcd_a = temp;
+            }
+
+            // LCM = (a * b) / GCD(a, b)
+            let result = (a / gcd_a) * b;
+
+            Ok(Term::Literal(Literal::new_typed(
+                result.to_string(),
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )))
+        }
+        _ => Err(OxirsError::Query(
+            "LCM requires numeric literals".to_string(),
         )),
     }
 }
@@ -2382,6 +3227,838 @@ mod tests {
         match result {
             Term::Literal(lit) => assert_eq!(lit.value(), "toolong"),
             _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_trim_functions() {
+        let registry = FunctionRegistry::new();
+
+        // Test TRIM
+        let args = vec![Term::Literal(Literal::new("  Hello World  "))];
+        let result = registry.execute("TRIM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Hello World"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LTRIM
+        let args = vec![Term::Literal(Literal::new("  Hello  "))];
+        let result = registry.execute("LTRIM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Hello  "),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test RTRIM
+        let args = vec![Term::Literal(Literal::new("  Hello  "))];
+        let result = registry.execute("RTRIM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "  Hello"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test REVERSE
+        let args = vec![Term::Literal(Literal::new("SPARQL"))];
+        let result = registry.execute("REVERSE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "LQRAPS"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test REVERSE with unicode
+        let args = vec![Term::Literal(Literal::new("Hello 世界"))];
+        let result = registry.execute("REVERSE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "界世 olleH"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test REPEAT
+        let args = vec![
+            Term::Literal(Literal::new("abc")),
+            Term::Literal(Literal::new_typed(
+                "3",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("REPEAT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "abcabcabc"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test REPEAT with zero count
+        let args = vec![
+            Term::Literal(Literal::new("test")),
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("REPEAT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), ""),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_advanced_numeric_functions() {
+        let registry = FunctionRegistry::new();
+
+        // Test SIGN positive
+        let args = vec![Term::Literal(Literal::new_typed(
+            "42.5",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("SIGN", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "1"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test SIGN negative
+        let args = vec![Term::Literal(Literal::new_typed(
+            "-15.2",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("SIGN", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "-1"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test SIGN zero
+        let args = vec![Term::Literal(Literal::new_typed(
+            "0.0",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("SIGN", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "0"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test MOD
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "17",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("MOD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "2"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test MOD with negative
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "-17",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("MOD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "-2"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test TRUNC positive
+        let args = vec![Term::Literal(Literal::new_typed(
+            "42.7",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("TRUNC", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "42"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test TRUNC negative
+        let args = vec![Term::Literal(Literal::new_typed(
+            "-42.7",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("TRUNC", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "-42"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test GCD
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "48",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "18",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("GCD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "6"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test GCD with one zero
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "42",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("GCD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "42"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LCM
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "12",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "18",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("LCM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "36"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LCM with zero
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("LCM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "0"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_utility_functions_edge_cases() {
+        let registry = FunctionRegistry::new();
+
+        // Test TRIM with only whitespace
+        let args = vec![Term::Literal(Literal::new("   "))];
+        let result = registry.execute("TRIM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), ""),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test REVERSE with empty string
+        let args = vec![Term::Literal(Literal::new(""))];
+        let result = registry.execute("REVERSE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), ""),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test REPEAT count limit (should error)
+        let args = vec![
+            Term::Literal(Literal::new("x")),
+            Term::Literal(Literal::new_typed(
+                "20000",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        assert!(registry.execute("REPEAT", &args).is_err());
+
+        // Test MOD by zero (should error)
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "10",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        assert!(registry.execute("MOD", &args).is_err());
+
+        // Test GCD with both zeros
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("GCD", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "0"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_hyperbolic_functions() {
+        let registry = FunctionRegistry::new();
+
+        // Test SINH
+        let args = vec![Term::Literal(Literal::new_typed(
+            "1",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("SINH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - 1.1752011936438014).abs() < 1e-10); // sinh(1) ≈ 1.175201
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test COSH
+        let args = vec![Term::Literal(Literal::new_typed(
+            "1",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("COSH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - 1.5430806348152437).abs() < 1e-10); // cosh(1) ≈ 1.543081
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test TANH
+        let args = vec![Term::Literal(Literal::new_typed(
+            "1",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("TANH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - 0.7615941559557649).abs() < 1e-10); // tanh(1) ≈ 0.761594
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ASINH
+        let args = vec![Term::Literal(Literal::new_typed(
+            "1",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("ASINH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - 0.881373587019543).abs() < 1e-10); // asinh(1) ≈ 0.881374
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ACOSH
+        let args = vec![Term::Literal(Literal::new_typed(
+            "2",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("ACOSH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - 1.3169578969248166).abs() < 1e-10); // acosh(2) ≈ 1.316958
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ATANH
+        let args = vec![Term::Literal(Literal::new_typed(
+            "0.5",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("ATANH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - 0.5493061443340548).abs() < 1e-10); // atanh(0.5) ≈ 0.549306
+            }
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_hyperbolic_functions_edge_cases() {
+        let registry = FunctionRegistry::new();
+
+        // Test ACOSH with value < 1 (should error)
+        let args = vec![Term::Literal(Literal::new_typed(
+            "0.5",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        assert!(registry.execute("ACOSH", &args).is_err());
+
+        // Test ATANH with value = 1 (should error)
+        let args = vec![Term::Literal(Literal::new_typed(
+            "1",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        assert!(registry.execute("ATANH", &args).is_err());
+
+        // Test ATANH with value = -1 (should error)
+        let args = vec![Term::Literal(Literal::new_typed(
+            "-1",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        assert!(registry.execute("ATANH", &args).is_err());
+
+        // Test ATANH with value > 1 (should error)
+        let args = vec![Term::Literal(Literal::new_typed(
+            "1.5",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        assert!(registry.execute("ATANH", &args).is_err());
+
+        // Test SINH with zero
+        let args = vec![Term::Literal(Literal::new_typed(
+            "0",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("SINH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert_eq!(value, 0.0); // sinh(0) = 0
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test COSH with zero
+        let args = vec![Term::Literal(Literal::new_typed(
+            "0",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#double").unwrap(),
+        ))];
+        let result = registry.execute("COSH", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert_eq!(value, 1.0); // cosh(0) = 1
+            }
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_bitwise_operations() {
+        let registry = FunctionRegistry::new();
+
+        // Test BITAND (12 AND 10 = 8)
+        // 12 = 1100, 10 = 1010, 12 AND 10 = 1000 = 8
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "12",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "10",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("BITAND", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "8"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test BITOR (12 OR 10 = 14)
+        // 12 = 1100, 10 = 1010, 12 OR 10 = 1110 = 14
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "12",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "10",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("BITOR", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "14"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test BITXOR (12 XOR 10 = 6)
+        // 12 = 1100, 10 = 1010, 12 XOR 10 = 0110 = 6
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "12",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "10",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("BITXOR", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "6"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test BITNOT (NOT 5 = -6)
+        // 5 = 00000101, NOT 5 = 11111010 = -6 (two's complement)
+        let args = vec![Term::Literal(Literal::new_typed(
+            "5",
+            NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+        ))];
+        let result = registry.execute("BITNOT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "-6"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test LSHIFT (5 << 2 = 20)
+        // 5 = 101, 5 << 2 = 10100 = 20
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "2",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("LSHIFT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "20"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test RSHIFT (20 >> 2 = 5)
+        // 20 = 10100, 20 >> 2 = 101 = 5
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "20",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "2",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("RSHIFT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "5"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_bitwise_operations_edge_cases() {
+        let registry = FunctionRegistry::new();
+
+        // Test LSHIFT with excessive shift (should error)
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "64",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        assert!(registry.execute("LSHIFT", &args).is_err());
+
+        // Test RSHIFT with excessive shift (should error)
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "5",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "64",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        assert!(registry.execute("RSHIFT", &args).is_err());
+
+        // Test BITAND with zero
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "255",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("BITAND", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "0"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test BITOR with zero
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "42",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "0",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("BITOR", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "42"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test BITXOR with self (should be 0)
+        let args = vec![
+            Term::Literal(Literal::new_typed(
+                "42",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+            Term::Literal(Literal::new_typed(
+                "42",
+                NamedNode::new("http://www.w3.org/2001/XMLSchema#integer").unwrap(),
+            )),
+        ];
+        let result = registry.execute("BITXOR", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "0"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_string_inspection_functions() {
+        let registry = FunctionRegistry::new();
+
+        // Test CAPITALIZE
+        let args = vec![Term::Literal(Literal::new("hello world from rust"))];
+        let result = registry.execute("CAPITALIZE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Hello World From Rust"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALPHA - only alphabetic characters
+        let args = vec![Term::Literal(Literal::new("HelloWorld"))];
+        let result = registry.execute("ISALPHA", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "true"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALPHA - with numbers (should be false)
+        let args = vec![Term::Literal(Literal::new("Hello123"))];
+        let result = registry.execute("ISALPHA", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISDIGIT - only digits
+        let args = vec![Term::Literal(Literal::new("123456"))];
+        let result = registry.execute("ISDIGIT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "true"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISDIGIT - with letters (should be false)
+        let args = vec![Term::Literal(Literal::new("123abc"))];
+        let result = registry.execute("ISDIGIT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALNUM - alphanumeric
+        let args = vec![Term::Literal(Literal::new("Hello123"))];
+        let result = registry.execute("ISALNUM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "true"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALNUM - with special characters (should be false)
+        let args = vec![Term::Literal(Literal::new("Hello-123"))];
+        let result = registry.execute("ISALNUM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISWHITESPACE - only whitespace
+        let args = vec![Term::Literal(Literal::new("   \t\n"))];
+        let result = registry.execute("ISWHITESPACE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "true"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISWHITESPACE - with text (should be false)
+        let args = vec![Term::Literal(Literal::new("  hello  "))];
+        let result = registry.execute("ISWHITESPACE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_string_inspection_edge_cases() {
+        let registry = FunctionRegistry::new();
+
+        // Test CAPITALIZE with empty string
+        let args = vec![Term::Literal(Literal::new(""))];
+        let result = registry.execute("CAPITALIZE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), ""),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test CAPITALIZE with single word
+        let args = vec![Term::Literal(Literal::new("hello"))];
+        let result = registry.execute("CAPITALIZE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Hello"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALPHA with empty string (should be false)
+        let args = vec![Term::Literal(Literal::new(""))];
+        let result = registry.execute("ISALPHA", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISDIGIT with empty string (should be false)
+        let args = vec![Term::Literal(Literal::new(""))];
+        let result = registry.execute("ISDIGIT", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALNUM with empty string (should be false)
+        let args = vec![Term::Literal(Literal::new(""))];
+        let result = registry.execute("ISALNUM", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISWHITESPACE with empty string (should be false)
+        let args = vec![Term::Literal(Literal::new(""))];
+        let result = registry.execute("ISWHITESPACE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "false"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test CAPITALIZE with multiple spaces
+        let args = vec![Term::Literal(Literal::new("hello    world"))];
+        let result = registry.execute("CAPITALIZE", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "Hello World"),
+            _ => panic!("Expected literal"),
+        }
+
+        // Test ISALPHA with Unicode (should work)
+        let args = vec![Term::Literal(Literal::new("Helloλ世界"))];
+        let result = registry.execute("ISALPHA", &args).unwrap();
+        match result {
+            Term::Literal(lit) => assert_eq!(lit.value(), "true"),
+            _ => panic!("Expected literal"),
+        }
+    }
+
+    #[test]
+    fn test_mathematical_constants() {
+        let registry = FunctionRegistry::new();
+
+        // Test PI
+        let args = vec![];
+        let result = registry.execute("PI", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - std::f64::consts::PI).abs() < 1e-15); // π ≈ 3.14159265358979323846
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test E
+        let args = vec![];
+        let result = registry.execute("E", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - std::f64::consts::E).abs() < 1e-15); // e ≈ 2.718281828459045
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Test TAU
+        let args = vec![];
+        let result = registry.execute("TAU", &args).unwrap();
+        match result {
+            Term::Literal(lit) => {
+                let value: f64 = lit.value().parse().unwrap();
+                assert!((value - std::f64::consts::TAU).abs() < 1e-15); // τ ≈ 6.283185307179586
+                assert!((value - (2.0 * std::f64::consts::PI)).abs() < 1e-15); // τ = 2π
+            }
+            _ => panic!("Expected literal"),
+        }
+
+        // Verify relationship: TAU = 2 * PI
+        let pi_result = registry.execute("PI", &[]).unwrap();
+        let tau_result = registry.execute("TAU", &[]).unwrap();
+        match (pi_result, tau_result) {
+            (Term::Literal(pi_lit), Term::Literal(tau_lit)) => {
+                let pi: f64 = pi_lit.value().parse().unwrap();
+                let tau: f64 = tau_lit.value().parse().unwrap();
+                assert!((tau - 2.0 * pi).abs() < 1e-14); // TAU = 2*PI
+            }
+            _ => panic!("Expected literals"),
         }
     }
 }

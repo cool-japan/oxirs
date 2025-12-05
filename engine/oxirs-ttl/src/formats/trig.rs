@@ -163,7 +163,9 @@ use std::io::{BufRead, BufReader, Read, Write};
 ///
 /// let trig = r#"
 /// @prefix ex: <http://example.org/> .
-/// ex:graph1 { ex:s ex:p ex:o . }
+/// ex:graph1 {
+///     ex:s ex:p ex:o .
+/// }
 /// "#;
 ///
 /// let parser = TriGParser::new();

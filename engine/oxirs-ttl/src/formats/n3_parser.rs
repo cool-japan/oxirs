@@ -531,6 +531,54 @@ pub struct N3Document {
     pub base_iri: Option<String>,
 }
 
+impl N3Document {
+    /// Create a new empty N3 document
+    pub fn new() -> Self {
+        Self {
+            statements: Vec::new(),
+            implications: Vec::new(),
+            prefixes: HashMap::new(),
+            base_iri: None,
+        }
+    }
+
+    /// Add a statement to the document
+    pub fn add_statement(&mut self, statement: N3Statement) {
+        self.statements.push(statement);
+    }
+
+    /// Add an implication to the document
+    pub fn add_implication(&mut self, implication: N3Implication) {
+        self.implications.push(implication);
+    }
+
+    /// Add a prefix declaration
+    pub fn add_prefix(&mut self, prefix: String, namespace: String) {
+        self.prefixes.insert(prefix, namespace);
+    }
+
+    /// Set the base IRI
+    pub fn set_base_iri(&mut self, base_iri: String) {
+        self.base_iri = Some(base_iri);
+    }
+
+    /// Check if the document is empty
+    pub fn is_empty(&self) -> bool {
+        self.statements.is_empty() && self.implications.is_empty()
+    }
+
+    /// Get the total number of statements and implications
+    pub fn len(&self) -> usize {
+        self.statements.len() + self.implications.len()
+    }
+}
+
+impl Default for N3Document {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

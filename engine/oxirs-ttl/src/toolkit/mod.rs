@@ -13,6 +13,7 @@ pub mod error;
 pub mod error_reporter;
 pub mod fast_scanner;
 pub mod format_detector;
+pub mod iri_normalizer;
 pub mod iri_validator;
 pub mod lazy_iri;
 pub mod lexer;
@@ -31,6 +32,10 @@ pub use error_reporter::{
 };
 pub use fast_scanner::FastScanner;
 pub use format_detector::{DetectionMethod, DetectionResult, FormatDetector, RdfFormat};
+pub use iri_normalizer::{
+    iris_equivalent, normalize_iri, normalize_iri_cow, NormalizationError, NormalizationResult,
+    NormalizedIri,
+};
 pub use iri_validator::{
     validate_iri, validate_iri_reference, IriValidationError, IriValidationResult,
 };

@@ -5,7 +5,6 @@
 use anyhow::Result;
 use oxirs_stream::StreamConfig;
 use tracing::info;
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {

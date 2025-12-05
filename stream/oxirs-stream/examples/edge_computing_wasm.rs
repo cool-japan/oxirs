@@ -13,7 +13,6 @@ use oxirs_stream::{
     WasmEdgeProcessor, WasmPlugin, WasmResourceLimits,
 };
 use tracing::info;
-use tracing_subscriber;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -82,7 +81,7 @@ async fn basic_edge_processing_example() -> Result<()> {
         let event = create_test_event(i);
         let result = processor.process(event).await?;
 
-        if let Some(processed) = result.output {
+        if let Some(_processed) = result.output {
             info!(
                 "Edge processed event {}: latency={:.2}ms",
                 i, result.latency_ms
@@ -176,10 +175,10 @@ async fn multi_region_edge_example() -> Result<()> {
         ..Default::default()
     };
 
-    let mut processor = WasmEdgeProcessor::new(config)?;
+    let processor = WasmEdgeProcessor::new(config)?;
 
     // Simulate client requests from different regions
-    let client_locations = vec![
+    let client_locations = [
         (37.7749, -122.4194), // San Francisco
         (51.5074, -0.1278),   // London
         (1.3521, 103.8198),   // Singapore
@@ -196,7 +195,7 @@ async fn multi_region_edge_example() -> Result<()> {
         // Process at selected edge
         let event = create_test_event(i as u64);
         let result = processor
-            .process_at_location(event, &optimal_location)
+            .process_at_location(event, optimal_location)
             .await?;
         info!(
             "Processed at {} edge: total latency={:.2}ms",
@@ -308,7 +307,7 @@ async fn specialized_processing_example() -> Result<()> {
         ..Default::default()
     };
 
-    let mut rdf_processor = WasmEdgeProcessor::new(rdf_config)?;
+    let _rdf_processor = WasmEdgeProcessor::new(rdf_config)?;
 
     // Load RDF-specialized plugin
     let _rdf_plugin = WasmPlugin {

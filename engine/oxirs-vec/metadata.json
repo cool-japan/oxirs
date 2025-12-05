@@ -1,0 +1,22 @@
+{
+  "version": "0.1.0-beta.1",
+  "config": {
+    "dimension": 3,
+    "max_degree": 64,
+    "build_beam_width": 100,
+    "search_beam_width": 75,
+    "alpha": 1.2,
+    "pruning_strategy": "Robust",
+    "search_mode": "Cached",
+    "max_vectors_in_memory": 100000,
+    "use_pq_compression": false,
+    "pq_subvectors": null,
+    "pq_bits": null,
+    "enable_incremental_updates": false,
+    "num_entry_points": 1,
+    "io_buffer_size": 1048576
+  },
+  "num_vectors": 3,
+  "created_at": "2025-12-04T10:46:20.672494Z",
+  "updated_at": "2025-12-04T10:46:20.672494Z"
+}

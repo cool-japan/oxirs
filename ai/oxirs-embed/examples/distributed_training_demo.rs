@@ -171,7 +171,7 @@ async fn main() -> Result<()> {
         model.predict_objects("http://example.org/Alice", "http://example.org/knows", 3)?;
 
     for (i, (entity, score)) in predictions.iter().enumerate() {
-        let name = entity.split('/').last().unwrap_or(entity);
+        let name = entity.split('/').next_back().unwrap_or(entity);
         println!("  {}. {} (score: {:.4})", i + 1, name, score);
     }
 
@@ -181,7 +181,7 @@ async fn main() -> Result<()> {
         model.predict_relations("http://example.org/Alice", "http://example.org/Company", 3)?;
 
     for (i, (relation, score)) in relations.iter().enumerate() {
-        let name = relation.split('/').last().unwrap_or(relation);
+        let name = relation.split('/').next_back().unwrap_or(relation);
         println!("  {}. {} (score: {:.4})", i + 1, name, score);
     }
 

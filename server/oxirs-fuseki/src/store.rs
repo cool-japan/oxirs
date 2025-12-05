@@ -1771,6 +1771,102 @@ impl Store {
             latest_change_id: metadata.last_change_id,
         })
     }
+
+    /// Count triples in a specific dataset or the default dataset
+    /// Returns 0 if the dataset doesn't exist or on error
+    pub fn count_triples(&self, dataset_name: &str) -> usize {
+        let dataset_opt = if dataset_name == "default" || dataset_name.is_empty() {
+            Some(Arc::clone(&self.default_store))
+        } else {
+            self.datasets
+                .read()
+                .ok()
+                .and_then(|datasets| datasets.get(dataset_name).cloned())
+        };
+
+        match dataset_opt {
+            Some(store) => store
+                .read()
+                .ok()
+                .and_then(|guard| guard.len().ok())
+                .unwrap_or(0),
+            None => 0,
+        }
+    }
+
+    /// Import RDF data into a dataset from a string
+    pub async fn import_data(
+        &self,
+        data: &str,
+        format: RdfSerializationFormat,
+        dataset_name: Option<&str>,
+    ) -> FusekiResult<usize> {
+        let store = self.get_dataset(dataset_name)?;
+        let store_guard = store
+            .write()
+            .map_err(|e| FusekiError::store(format!("Failed to acquire store write lock: {e}")))?;
+
+        let core_format = match format {
+            RdfSerializationFormat::Turtle => CoreRdfFormat::Turtle,
+            RdfSerializationFormat::NTriples => CoreRdfFormat::NTriples,
+            RdfSerializationFormat::RdfXml => CoreRdfFormat::RdfXml,
+            RdfSerializationFormat::JsonLd => {
+                return Err(FusekiError::unsupported_media_type(
+                    "JSON-LD import not supported yet",
+                ))
+            }
+            RdfSerializationFormat::NQuads => CoreRdfFormat::NQuads,
+        };
+
+        // Parse the data
+        let parser = Parser::new(core_format);
+        let quads = parser
+            .parse_str_to_quads(data)
+            .map_err(|e| FusekiError::parse(format!("Failed to parse RDF data: {e}")))?;
+
+        // Insert quads into store
+        let mut inserted_count = 0;
+        for quad in quads {
+            store_guard
+                .insert_quad(quad)
+                .map_err(|e| FusekiError::store(format!("Failed to insert quad: {e}")))?;
+            inserted_count += 1;
+        }
+
+        // Update metadata
+        let mut metadata = self.metadata.write().map_err(|e| {
+            FusekiError::store(format!("Failed to acquire metadata write lock: {e}"))
+        })?;
+        metadata.last_modified = Some(Instant::now());
+        metadata.total_updates += 1;
+
+        // Record change for WebSocket notifications
+        let change_id = metadata.last_change_id + 1;
+        metadata.last_change_id = change_id;
+
+        metadata.change_log.push(StoreChange {
+            id: change_id,
+            timestamp: chrono::Utc::now(),
+            operation_type: "import".to_string(),
+            affected_graphs: vec![dataset_name.unwrap_or("default").to_string()],
+            triple_count: inserted_count,
+            dataset_name: dataset_name.map(|s| s.to_string()),
+        });
+
+        // Limit change log size
+        let change_log_len = metadata.change_log.len();
+        if change_log_len > 1000 {
+            metadata.change_log.drain(0..change_log_len - 1000);
+        }
+
+        info!(
+            "Imported {} triples into dataset '{}'",
+            inserted_count,
+            dataset_name.unwrap_or("default")
+        );
+
+        Ok(inserted_count)
+    }
 }
 
 impl Default for Store {

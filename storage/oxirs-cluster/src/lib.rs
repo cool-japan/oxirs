@@ -120,6 +120,7 @@ pub mod read_replica;
 pub mod region_manager;
 pub mod replication;
 pub mod replication_lag_monitor;
+pub mod rl_consensus_optimizer;
 pub mod rolling_upgrade;
 pub mod visualization_dashboard;
 pub mod zero_downtime_migration;

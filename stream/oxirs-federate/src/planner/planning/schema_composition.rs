@@ -115,6 +115,49 @@ impl SchemaComposer {
         Ok(())
     }
 
+    /// Merge directives from two type definitions
+    ///
+    /// Federation directives like @key can appear multiple times with different arguments.
+    /// Other directives should be deduplicated based on name and arguments.
+    fn merge_directives(
+        existing_directives: &[DirectiveUsage],
+        new_directives: &[DirectiveUsage],
+    ) -> Vec<DirectiveUsage> {
+        let mut merged = existing_directives.to_vec();
+
+        // Federation directives that can appear multiple times
+        const REPEATABLE_DIRECTIVES: &[&str] =
+            &["key", "extends", "external", "requires", "provides"];
+
+        for new_directive in new_directives {
+            // Check if this directive is repeatable or if it doesn't exist yet
+            let is_repeatable = REPEATABLE_DIRECTIVES.contains(&new_directive.name.as_str());
+
+            if is_repeatable {
+                // For repeatable directives, check if this exact combination exists
+                let exact_match = merged.iter().any(|existing| {
+                    existing.name == new_directive.name
+                        && existing.arguments == new_directive.arguments
+                });
+
+                if !exact_match {
+                    merged.push(new_directive.clone());
+                }
+            } else {
+                // For non-repeatable directives, replace if exists or add if new
+                if let Some(pos) = merged.iter().position(|d| d.name == new_directive.name) {
+                    // Update existing directive with new arguments (override)
+                    merged[pos] = new_directive.clone();
+                } else {
+                    // Add new directive
+                    merged.push(new_directive.clone());
+                }
+            }
+        }
+
+        merged
+    }
+
     /// Merge two type definitions
     fn merge_type_definitions(
         existing: &TypeDefinition,
@@ -153,13 +196,17 @@ impl SchemaComposer {
                     }
                 }
 
+                // Properly merge directives from both type definitions
+                let merged_directives =
+                    Self::merge_directives(&existing.directives, &new.directives);
+
                 Ok(TypeDefinition {
                     name: existing.name.clone(),
                     description: existing.description.clone(),
                     kind: TypeKind::Object {
                         fields: merged_fields,
                     },
-                    directives: existing.directives.clone(), // TODO: Merge directives
+                    directives: merged_directives,
                 })
             }
             (
@@ -172,13 +219,17 @@ impl SchemaComposer {
                 let mut merged_fields = existing_fields.clone();
                 merged_fields.extend(new_fields.clone());
 
+                // Properly merge directives from both type definitions
+                let merged_directives =
+                    Self::merge_directives(&existing.directives, &new.directives);
+
                 Ok(TypeDefinition {
                     name: existing.name.clone(),
                     description: existing.description.clone(),
                     kind: TypeKind::Interface {
                         fields: merged_fields,
                     },
-                    directives: existing.directives.clone(),
+                    directives: merged_directives,
                 })
             }
             _ => {

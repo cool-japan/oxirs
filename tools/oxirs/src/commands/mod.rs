@@ -62,8 +62,17 @@ pub mod explain;
 /// Query optimization analyzer
 pub mod query_optimizer;
 
+/// Intelligent query advisor with best practices
+pub mod query_advisor;
+
 /// Advanced statistical performance analyzer (SciRS2-powered)
 pub mod performance_analyzer;
+
+/// Performance optimization utilities (SciRS2-powered)
+pub mod performance_optimizer;
+
+/// ML-powered query performance predictor (SciRS2-powered)
+pub mod query_predictor;
 
 /// Query similarity detection and analysis
 pub mod query_similarity;

@@ -49,6 +49,16 @@ pub struct SerializationConfig {
     pub max_line_length: Option<usize>,
     /// Indentation string (typically spaces or tabs)
     pub indent: String,
+    /// Whether to normalize IRIs per RFC 3987 during serialization
+    ///
+    /// When enabled, IRIs are normalized to canonical form for consistent output:
+    /// - Case normalization (scheme and host to lowercase)
+    /// - Percent-encoding normalization (decode unreserved characters)
+    /// - Path normalization (remove dot segments)
+    /// - Default port removal (http:80, https:443, etc.)
+    ///
+    /// This helps ensure consistent IRI representation across different systems.
+    pub normalize_iris: bool,
 }
 
 impl Default for SerializationConfig {
@@ -60,6 +70,7 @@ impl Default for SerializationConfig {
             use_prefixes: true,
             max_line_length: Some(80),
             indent: "  ".to_string(),
+            normalize_iris: false, // Disabled by default for backward compatibility
         }
     }
 }
@@ -103,6 +114,26 @@ impl SerializationConfig {
     /// Set the indentation string
     pub fn with_indent(mut self, indent: String) -> Self {
         self.indent = indent;
+        self
+    }
+
+    /// Enable or disable IRI normalization
+    ///
+    /// When enabled, all IRIs in serialized output are normalized per RFC 3987
+    /// for consistent canonical representation.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use oxirs_ttl::toolkit::SerializationConfig;
+    ///
+    /// let config = SerializationConfig::new()
+    ///     .with_normalize_iris(true);
+    ///
+    /// assert!(config.normalize_iris);
+    /// ```
+    pub fn with_normalize_iris(mut self, normalize: bool) -> Self {
+        self.normalize_iris = normalize;
         self
     }
 }

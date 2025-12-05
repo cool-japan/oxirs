@@ -344,6 +344,21 @@ pub use utils::{
 pub use advanced_scirs2_optimization::{
     AdvancedOptimizerConfig, AdvancedStreamOptimizer, MovingStats, OptimizerMetrics,
 };
+pub use cdc_processor::{
+    CdcConfig, CdcConnector, CdcEvent, CdcEventBuilder, CdcMetrics, CdcOperation, CdcProcessor,
+    CdcSource,
+};
+
+// Adaptive load shedding exports
+pub use adaptive_load_shedding::{
+    DropStrategy, LoadMetrics, LoadSheddingConfig, LoadSheddingManager, LoadSheddingStats,
+};
+
+// Stream fusion optimizer exports
+pub use stream_fusion::{
+    FusableChain, FusedOperation, FusedType, FusionAnalysis, FusionConfig, FusionOptimizer,
+    FusionStats, Operation,
+};
 
 pub mod backend;
 pub mod backend_optimizer;
@@ -437,6 +452,13 @@ pub mod utils;
 
 // Advanced SciRS2 optimization module
 pub mod advanced_scirs2_optimization;
+pub mod cdc_processor;
+
+// Adaptive load shedding module
+pub mod adaptive_load_shedding;
+
+// Stream fusion optimizer module
+pub mod stream_fusion;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -6,9 +6,13 @@
 //! - Connection pool recovery
 //! - Query timeout recovery
 //! - Memory leak detection and mitigation
+//!
+//! **v0.1.0 Final Enhancement**: Deep integration with StoreHealthMonitor
+//! for comprehensive health metrics and proactive recovery.
 
 use crate::error::{FusekiError, FusekiResult};
 use crate::store::Store;
+use crate::store_health::{HealthMonitorConfig, HealthStatus, StoreHealthMonitor};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
@@ -19,6 +23,8 @@ use tracing::{debug, error, info, warn};
 pub struct RecoveryManager {
     /// Store to monitor and recover
     store: Arc<Store>,
+    /// Health monitor for comprehensive metrics
+    health_monitor: Option<Arc<StoreHealthMonitor>>,
     /// Recovery state
     state: Arc<RwLock<RecoveryState>>,
     /// Configuration
@@ -104,9 +110,40 @@ impl RecoveryManager {
     pub fn new(store: Arc<Store>, config: RecoveryConfig) -> Self {
         Self {
             store,
+            health_monitor: None,
             state: Arc::new(RwLock::new(RecoveryState::default())),
             config,
         }
+    }
+
+    /// Create a new recovery manager with health monitoring
+    pub fn with_health_monitoring(store: Arc<Store>, config: RecoveryConfig) -> Self {
+        let health_config = HealthMonitorConfig {
+            check_interval: config.health_check_interval,
+            memory_warning_threshold: config.memory_threshold_mb * 1024 * 1024,
+            memory_critical_threshold: config.memory_threshold_mb * 2 * 1024 * 1024,
+            ..Default::default()
+        };
+
+        let health_monitor = Arc::new(StoreHealthMonitor::with_config(
+            Arc::clone(&store),
+            health_config,
+        ));
+
+        // Start background monitoring
+        Arc::clone(&health_monitor).start_monitoring();
+
+        Self {
+            store,
+            health_monitor: Some(health_monitor),
+            state: Arc::new(RwLock::new(RecoveryState::default())),
+            config,
+        }
+    }
+
+    /// Get the health monitor reference
+    pub fn health_monitor(&self) -> Option<&Arc<StoreHealthMonitor>> {
+        self.health_monitor.as_ref()
     }
 
     /// Start automatic recovery monitoring
@@ -152,19 +189,68 @@ impl RecoveryManager {
         Ok(())
     }
 
-    /// Check store health
+    /// Check store health using comprehensive health monitor
     async fn check_store_health(&self) -> FusekiResult<()> {
         debug!("Checking store health");
 
-        // Check if store is ready
-        if !self.store.is_ready() {
-            warn!("Store is not ready");
-            return Err(FusekiError::internal("Store is not ready".to_string()));
-        }
+        // Use health monitor if available for comprehensive checks
+        if let Some(health_monitor) = &self.health_monitor {
+            let health = health_monitor.check_health().await?;
 
-        // Store is ready and responsive
-        debug!("Store health check passed");
-        Ok(())
+            match health.status {
+                HealthStatus::Healthy => {
+                    debug!("Store health check passed (score: {})", health.health_score);
+                    Ok(())
+                }
+                HealthStatus::Degraded => {
+                    warn!(
+                        "Store health degraded (score: {}). Components: {:?}",
+                        health.health_score,
+                        health
+                            .components
+                            .iter()
+                            .map(|c| &c.name)
+                            .collect::<Vec<_>>()
+                    );
+
+                    // Degraded is not a failure, but log a warning
+                    if health.health_score < 60 {
+                        warn!("Health score below 60, considering recovery actions");
+                    }
+                    Ok(())
+                }
+                HealthStatus::Unhealthy => {
+                    error!(
+                        "Store is unhealthy (score: {}). Issues detected: {}",
+                        health.health_score,
+                        health
+                            .components
+                            .iter()
+                            .filter(|c| c.status == HealthStatus::Unhealthy)
+                            .map(|c| c.message.as_deref().unwrap_or("Unknown"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                    Err(FusekiError::internal(format!(
+                        "Store unhealthy (score: {})",
+                        health.health_score
+                    )))
+                }
+                HealthStatus::Down => {
+                    error!("Store is down (score: {})", health.health_score);
+                    Err(FusekiError::internal("Store is down".to_string()))
+                }
+            }
+        } else {
+            // Fallback to basic check if health monitor not available
+            if !self.store.is_ready() {
+                warn!("Store is not ready");
+                return Err(FusekiError::internal("Store is not ready".to_string()));
+            }
+
+            debug!("Store health check passed (basic)");
+            Ok(())
+        }
     }
 
     /// Check memory usage

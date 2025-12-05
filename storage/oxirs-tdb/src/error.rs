@@ -77,6 +77,14 @@ pub enum TdbError {
     #[error("Invalid input: {0}")]
     InvalidInput(String),
 
+    /// Invalid configuration
+    #[error("Invalid configuration: {0}")]
+    InvalidConfiguration(String),
+
+    /// Unsupported feature or operation
+    #[error("Unsupported: {0}")]
+    Unsupported(String),
+
     /// Generic error
     #[error("{0}")]
     Other(String),

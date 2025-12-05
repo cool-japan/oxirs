@@ -33,6 +33,9 @@ use crate::realtime_notifications::NotificationManager;
 use crate::recovery::{RecoveryConfig, RecoveryManager};
 use crate::security_audit::{SecurityAuditConfig, SecurityAuditManager};
 use crate::tls_rotation::CertificateRotation;
+
+#[cfg(feature = "hot-reload")]
+use crate::config_reload::ConfigReloadManager;
 use axum::{
     extract::{Path, Query, Request, State},
     http::StatusCode,
@@ -97,6 +100,8 @@ pub struct Runtime {
     rate_limiter: Option<Arc<governor::DefaultKeyedRateLimiter<String>>>,
     #[cfg(feature = "hot-reload")]
     config_watcher: Option<watch::Receiver<ServerConfig>>,
+    #[cfg(feature = "hot-reload")]
+    config_reload_manager: Option<Arc<parking_lot::Mutex<ConfigReloadManager>>>,
 }
 
 impl Runtime {
@@ -139,6 +144,8 @@ impl Runtime {
             rate_limiter: None,
             #[cfg(feature = "hot-reload")]
             config_watcher: None,
+            #[cfg(feature = "hot-reload")]
+            config_reload_manager: None,
         }
     }
 
@@ -216,14 +223,22 @@ impl Runtime {
 
         // Initialize federation manager
         info!("Initializing federation manager");
-        let federation_config = FederationConfig::default(); // TODO: Load from server config
+        let federation_config = self
+            .config
+            .federation
+            .clone()
+            .unwrap_or_else(FederationConfig::default);
         let federation_manager = FederationManager::new(federation_config);
         federation_manager.start().await?;
         self.federation_manager = Some(Arc::new(federation_manager));
 
         // Initialize streaming manager
         info!("Initializing streaming manager");
-        let streaming_config = StreamingConfig::default(); // TODO: Load from server config
+        let streaming_config = self
+            .config
+            .streaming
+            .clone()
+            .unwrap_or_else(StreamingConfig::default);
         let streaming_manager = StreamingManager::new(streaming_config);
         streaming_manager.initialize().await?;
         self.streaming_manager = Some(Arc::new(streaming_manager));
@@ -277,7 +292,7 @@ impl Runtime {
             analyze_dependencies: true,
             max_parallel_queries: 20,
         };
-        let batch_executor = BatchExecutor::new(batch_config);
+        let batch_executor = BatchExecutor::new(batch_config, Arc::new(self.store.clone()));
         self.batch_executor = Some(batch_executor.clone());
 
         // Initialize stream manager for efficient result streaming
@@ -397,8 +412,8 @@ impl Runtime {
         let recovery_manager = RecoveryManager::new(store_arc.clone(), recovery_config);
         self.recovery_manager = Some(Arc::new(recovery_manager));
 
-        // Initialize disaster recovery manager
-        info!("Initializing RC.1 Disaster Recovery Manager");
+        // Initialize disaster recovery manager with health monitoring
+        info!("Initializing RC.1 Disaster Recovery Manager with Health Monitoring");
         let disaster_recovery_config = DisasterRecoveryConfig {
             enabled: true,
             rpo_minutes: 60,
@@ -409,12 +424,13 @@ impl Runtime {
             enable_recovery_testing: false,
             recovery_test_interval_days: 30,
         };
-        let disaster_recovery = DisasterRecoveryManager::new(
+        let disaster_recovery = DisasterRecoveryManager::with_health_monitoring(
             store_arc.clone(),
             backup_manager.clone(),
             disaster_recovery_config,
         );
         self.disaster_recovery = Some(Arc::new(disaster_recovery));
+        info!("Disaster Recovery Manager initialized with comprehensive health monitoring");
 
         // Initialize TLS rotation manager (if TLS is configured)
         // Note: TLS rotation requires TlsManager initialization, which is complex
@@ -425,26 +441,47 @@ impl Runtime {
             self.certificate_rotation = None;
         }
 
-        // Initialize HTTP/2 manager
+        // Initialize HTTP/2 manager from configuration
         info!("Initializing RC.1 HTTP/2 Manager");
         let http_protocol_config = HttpProtocolConfig {
-            http2_enabled: true,
-            http3_enabled: false, // HTTP/3 requires additional setup
-            http2_initial_connection_window_size: 1024 * 1024,
-            http2_initial_stream_window_size: 512 * 1024,
-            http2_max_concurrent_streams: 100,
-            http2_max_frame_size: 16384,
-            http2_keep_alive_interval: Duration::from_secs(60),
-            http2_keep_alive_timeout: Duration::from_secs(20),
-            enable_server_push: false,
-            enable_header_compression: true,
+            http2_enabled: self.config.http_protocol.http2_enabled,
+            http3_enabled: self.config.http_protocol.http3_enabled,
+            http2_initial_connection_window_size: self
+                .config
+                .http_protocol
+                .http2_initial_connection_window_size,
+            http2_initial_stream_window_size: self
+                .config
+                .http_protocol
+                .http2_initial_stream_window_size,
+            http2_max_concurrent_streams: self.config.http_protocol.http2_max_concurrent_streams,
+            http2_max_frame_size: self.config.http_protocol.http2_max_frame_size,
+            http2_keep_alive_interval: Duration::from_secs(
+                self.config.http_protocol.http2_keep_alive_interval_secs,
+            ),
+            http2_keep_alive_timeout: Duration::from_secs(
+                self.config.http_protocol.http2_keep_alive_timeout_secs,
+            ),
+            enable_server_push: self.config.http_protocol.enable_server_push,
+            enable_header_compression: self.config.http_protocol.enable_header_compression,
         };
-        let http2_manager = Http2Manager::new(http_protocol_config.clone());
+
+        let mut http2_manager = Http2Manager::new(http_protocol_config.clone());
+
+        // Optimize for SPARQL if enabled
+        if self.config.http_protocol.sparql_optimized {
+            http2_manager.optimize_for_sparql();
+        }
+
         self.http2_manager = Some(Arc::new(http2_manager));
+        info!(
+            "HTTP/2 enabled: {}, SPARQL optimized: {}",
+            http_protocol_config.http2_enabled, self.config.http_protocol.sparql_optimized
+        );
 
         // Initialize HTTP/3 manager (if enabled)
         if http_protocol_config.http3_enabled {
-            info!("Initializing RC.1 HTTP/3 Manager");
+            info!("Initializing RC.1 HTTP/3 Manager (experimental)");
             let http3_manager = Http3Manager::new(http_protocol_config.clone());
             self.http3_manager = Some(Arc::new(http3_manager));
         }
@@ -471,9 +508,34 @@ impl Runtime {
         // Initialize configuration hot-reload watcher
         #[cfg(feature = "hot-reload")]
         {
-            // TODO: Implement hot-reload configuration
-            // For now, hot-reload is available but not automatically enabled
-            info!("Hot-reload feature is available");
+            if let Some(config_file) = &self.config.server.config_file {
+                info!(
+                    "Initializing configuration hot-reload manager for {:?}",
+                    config_file
+                );
+
+                // Create shared config wrapped in RwLock for hot-reload
+                let shared_config = Arc::new(tokio::sync::RwLock::new(self.config.clone()));
+
+                // Create config reload manager
+                match ConfigReloadManager::new(config_file.clone(), shared_config.clone()) {
+                    Ok(mut manager) => {
+                        // Start watching for file changes
+                        if let Err(e) = manager.start_watching() {
+                            warn!("Failed to start config file watching: {}", e);
+                        } else {
+                            info!("Configuration hot-reload is now active");
+                            self.config_reload_manager =
+                                Some(Arc::new(parking_lot::Mutex::new(manager)));
+                        }
+                    }
+                    Err(e) => {
+                        warn!("Failed to initialize config reload manager: {}", e);
+                    }
+                }
+            } else {
+                info!("Hot-reload feature is available but no config file path specified");
+            }
         }
 
         info!("Server services initialized successfully");

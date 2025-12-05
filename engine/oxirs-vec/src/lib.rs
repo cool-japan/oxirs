@@ -75,6 +75,7 @@ pub mod content_processing;
 pub mod crash_recovery;
 pub mod cross_language_alignment;
 pub mod cross_modal_embeddings;
+pub mod diskann;
 pub mod distance_metrics;
 pub mod distributed_vector_search;
 pub mod dynamic_index_selector;
@@ -102,9 +103,11 @@ pub mod index;
 pub mod ivf;
 pub mod joint_embedding_spaces;
 pub mod kg_embeddings;
+pub mod learned_index;
 pub mod lsh;
 pub mod mmap_advanced;
 pub mod mmap_index;
+pub mod multi_tenancy;
 pub mod nsg;
 pub mod opq;
 pub mod oxirs_arq_integration;
@@ -121,6 +124,7 @@ pub mod rdf_integration;
 pub mod real_time_analytics;
 pub mod real_time_embedding_pipeline;
 pub mod real_time_updates;
+pub mod reranking;
 pub mod result_fusion;
 pub mod similarity;
 pub mod sparql_integration;
@@ -205,6 +209,12 @@ pub use cross_modal_embeddings::{
     FusionStrategy, GraphData, GraphEncoder, ImageData, ImageEncoder, Modality, ModalityData,
     MultiModalContent, TextEncoder, VideoData, VideoEncoder,
 };
+pub use diskann::{
+    DiskAnnBuildStats, DiskAnnBuilder, DiskAnnConfig, DiskAnnError, DiskAnnIndex, DiskAnnResult,
+    DiskStorage, IndexMetadata as DiskAnnIndexMetadata, MemoryMappedStorage, NodeId,
+    PruningStrategy, SearchMode as DiskAnnSearchMode, SearchStats as DiskAnnSearchStats,
+    StorageBackend, VamanaGraph, VamanaNode, VectorId as DiskAnnVectorId,
+};
 pub use distributed_vector_search::{
     ConsistencyLevel, DistributedClusterStats, DistributedNodeConfig, DistributedQuery,
     DistributedSearchResponse, DistributedVectorSearch, LoadBalancingAlgorithm, NodeHealthStatus,
@@ -279,6 +289,13 @@ pub use kg_embeddings::{
 };
 pub use lsh::{LshConfig, LshFamily, LshIndex, LshStats};
 pub use mmap_index::{MemoryMappedIndexStats, MemoryMappedVectorIndex};
+pub use multi_tenancy::{
+    AccessControl, AccessPolicy, BillingEngine, BillingMetrics, BillingPeriod, IsolationLevel,
+    IsolationStrategy, MultiTenancyError, MultiTenancyResult, MultiTenantManager, NamespaceManager,
+    Permission, PricingModel, QuotaEnforcer, QuotaLimits, QuotaUsage, RateLimiter, ResourceQuota,
+    ResourceType, Role, Tenant, TenantConfig, TenantContext, TenantId, TenantManagerConfig,
+    TenantMetadata, TenantOperation, TenantStatistics, TenantStatus, UsageRecord,
+};
 pub use nsg::{DistanceMetric as NsgDistanceMetric, NsgConfig, NsgIndex, NsgStats};
 pub use performance_insights::{
     AlertingSystem, OptimizationRecommendations, PerformanceInsightsAnalyzer,
@@ -326,6 +343,13 @@ pub use real_time_embedding_pipeline::{
 pub use real_time_updates::{
     BatchProcessor, RealTimeConfig, RealTimeVectorSearch, RealTimeVectorUpdater, UpdateBatch,
     UpdateOperation, UpdatePriority, UpdateStats,
+};
+pub use reranking::{
+    CrossEncoder, CrossEncoderBackend, CrossEncoderModel, CrossEncoderReranker, DiversityReranker,
+    DiversityStrategy, FusionStrategy as RerankingFusionStrategy, ModelBackend, ModelConfig,
+    RerankingCache, RerankingCacheConfig, RerankingConfig, RerankingError, RerankingMode,
+    RerankingOutput, RerankingStats, Result as RerankingResult, ScoreFusion, ScoreFusionConfig,
+    ScoredCandidate,
 };
 pub use result_fusion::{
     FusedResults, FusionAlgorithm, FusionConfig, FusionQualityMetrics, FusionStats,

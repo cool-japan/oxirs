@@ -312,6 +312,45 @@ WHERE {{
         )
     }
 
+    /// Generate optimized batch SPARQL query using UNION
+    /// This allows checking multiple relationships in a single query
+    fn generate_batch_ask_query(requests: &[CheckRequest]) -> String {
+        let union_clauses: Vec<String> = requests
+            .iter()
+            .enumerate()
+            .map(|(idx, request)| {
+                let subject = Self::uri_escape(&request.subject);
+                let relation = Self::relation_to_property(&request.relation);
+                let object = Self::uri_escape(&request.object);
+
+                format!(
+                    r#"    {{
+      # Request {}
+      BIND({} AS ?request_id)
+      <{}> {} <{}>
+    }}"#,
+                    idx, idx, subject, relation, object
+                )
+            })
+            .collect();
+
+        format!(
+            r#"
+PREFIX auth: <{}>
+
+SELECT ?request_id
+WHERE {{
+  GRAPH <{}> {{
+{}
+  }}
+}}
+"#,
+            AUTH_NS,
+            AUTH_GRAPH,
+            union_clauses.join("\n    UNION\n")
+        )
+    }
+
     /// Convert relation string to RDF property URI
     fn relation_to_property(relation: &str) -> String {
         match relation {
@@ -426,14 +465,39 @@ impl RebacEvaluator for RdfRebacManager {
         Ok(tuples)
     }
 
+    /// Optimized batch check using SPARQL UNION query
+    /// This is significantly more efficient than individual queries
     async fn batch_check(&self, requests: &[CheckRequest]) -> Result<Vec<CheckResponse>> {
-        // TODO: Optimize with SPARQL UNION query
-        let mut responses = Vec::with_capacity(requests.len());
-
-        for request in requests {
-            let response = self.check(request).await?;
-            responses.push(response);
+        if requests.is_empty() {
+            return Ok(Vec::new());
         }
+
+        // Generate optimized SPARQL query with UNION clauses
+        let query = Self::generate_batch_ask_query(requests);
+
+        debug!(
+            "Executing batch ReBAC check with {} requests",
+            requests.len()
+        );
+
+        let store = self.store.read().await;
+        let batch_results = store.execute_batch_ask(&query, requests.len()).await?;
+
+        // Convert boolean results to CheckResponse
+        let responses = batch_results
+            .into_iter()
+            .zip(requests.iter())
+            .map(|(allowed, request)| {
+                if allowed {
+                    CheckResponse::allow()
+                } else {
+                    CheckResponse::deny(format!(
+                        "{} does not have {} on {}",
+                        request.subject, request.relation, request.object
+                    ))
+                }
+            })
+            .collect();
 
         Ok(responses)
     }
@@ -620,6 +684,12 @@ impl MockRdfStore {
     async fn execute_select(&self, _query: &str) -> Result<Vec<(String, String)>> {
         // Mock implementation - in production, use OxiRdfStore
         Ok(vec![])
+    }
+
+    async fn execute_batch_ask(&self, _query: &str, count: usize) -> Result<Vec<bool>> {
+        // Mock implementation - returns false for all requests
+        // In production, use OxiRdfStore to execute the UNION query
+        Ok(vec![false; count])
     }
 }
 

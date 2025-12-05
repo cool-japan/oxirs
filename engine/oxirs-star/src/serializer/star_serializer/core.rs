@@ -19,12 +19,16 @@ impl StarSerializer {
     pub fn new() -> Self {
         Self {
             config: StarConfig::default(),
+            simd_escaper: super::super::simd_escape::SimdEscaper::new(),
         }
     }
 
     /// Create a new serializer with custom configuration
     pub fn with_config(config: StarConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            simd_escaper: super::super::simd_escape::SimdEscaper::new(),
+        }
     }
 
     /// Serialize a StarGraph to a writer in the specified format
@@ -753,7 +757,7 @@ impl StarSerializer {
             StarTerm::NamedNode(node) => Ok(context.compress_iri(&node.iri)),
             StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
             StarTerm::Literal(literal) => {
-                let mut result = format!("\"{}\"", Self::escape_literal(&literal.value));
+                let mut result = format!("\"{}\"", Self::escape_literal_static(&literal.value));
 
                 if let Some(ref lang) = literal.language {
                     result.push_str(&format!("@{lang}"));
@@ -779,7 +783,7 @@ impl StarSerializer {
             StarTerm::NamedNode(node) => Ok(format!("<{}>", node.iri)),
             StarTerm::BlankNode(node) => Ok(format!("_:{}", node.id)),
             StarTerm::Literal(literal) => {
-                let mut result = format!("\"{}\"", Self::escape_literal(&literal.value));
+                let mut result = format!("\"{}\"", Self::escape_literal_static(&literal.value));
 
                 if let Some(ref lang) = literal.language {
                     result.push_str(&format!("@{lang}"));
@@ -799,14 +803,16 @@ impl StarSerializer {
         }
     }
 
-    /// Escape special characters in literals
-    pub fn escape_literal(value: &str) -> String {
-        value
-            .replace('\\', "\\\\")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-            .replace('\t', "\\t")
-            .replace('"', "\\\"")
+    /// Escape special characters in literals (SIMD-accelerated)
+    pub fn escape_literal(&self, value: &str) -> String {
+        self.simd_escaper.escape_literal(value)
+    }
+
+    /// Static escape function for backward compatibility
+    pub fn escape_literal_static(value: &str) -> String {
+        // Use a temporary escaper for static calls
+        let escaper = super::super::simd_escape::SimdEscaper::new();
+        escaper.escape_literal(value)
     }
 
     /// Add common namespace prefixes

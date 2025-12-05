@@ -217,22 +217,98 @@ impl ServiceDiscovery {
             });
         }
 
-        // Parse SPARQL results and build capabilities
-        // For now, return basic capabilities
-        // TODO: Parse actual SPARQL JSON results
-        let capabilities = ServiceCapabilities {
-            sparql_features: vec![
+        // Parse SPARQL results JSON
+        let json_text = response.text().await.map_err(|e| FusekiError::Internal {
+            message: format!("Failed to read response body: {e}"),
+        })?;
+
+        let capabilities = Self::parse_sparql_json_results(&json_text)?;
+
+        Ok(capabilities)
+    }
+
+    /// Parse SPARQL JSON results format
+    /// See: https://www.w3.org/TR/sparql11-results-json/
+    fn parse_sparql_json_results(json_text: &str) -> Result<ServiceCapabilities> {
+        // Parse JSON
+        let json: serde_json::Value =
+            serde_json::from_str(json_text).map_err(|e| FusekiError::Internal {
+                message: format!("Failed to parse SPARQL JSON results: {e}"),
+            })?;
+
+        let mut sparql_features = Vec::new();
+        let mut triple_count = None;
+
+        // Extract bindings from SPARQL results
+        if let Some(bindings) = json["results"]["bindings"].as_array() {
+            for binding in bindings {
+                // Extract feature (supported SPARQL language)
+                if let Some(feature_value) = binding["feature"]["value"].as_str() {
+                    // Parse feature URI to get readable name
+                    let feature_name = Self::parse_feature_uri(feature_value);
+                    if !sparql_features.contains(&feature_name) {
+                        sparql_features.push(feature_name);
+                    }
+                }
+
+                // Extract triple count
+                if let Some(triples_value) = binding["triples"]["value"].as_str() {
+                    if let Ok(count) = triples_value.parse::<usize>() {
+                        triple_count = Some(count);
+                    }
+                }
+            }
+        }
+
+        // Set default features if none found
+        if sparql_features.is_empty() {
+            sparql_features = vec![
                 "SPARQL 1.1 Query".to_string(),
                 "SPARQL 1.1 Update".to_string(),
-            ],
+            ];
+        }
+
+        Ok(ServiceCapabilities {
+            sparql_features,
             result_formats: vec![
                 "application/sparql-results+json".to_string(),
                 "application/sparql-results+xml".to_string(),
+                "text/turtle".to_string(),
+                "application/rdf+xml".to_string(),
             ],
-            ..Default::default()
-        };
+            dataset_size: triple_count.map(|c| c as u64),
+            avg_response_time: None, // Can be measured over time
+            max_result_size: None,   // Unknown from service description
+        })
+    }
 
-        Ok(capabilities)
+    /// Parse SPARQL feature URI to readable name
+    fn parse_feature_uri(uri: &str) -> String {
+        // Common SPARQL feature URIs
+        match uri {
+            "http://www.w3.org/ns/sparql-service-description#SPARQL11Query" => {
+                "SPARQL 1.1 Query".to_string()
+            }
+            "http://www.w3.org/ns/sparql-service-description#SPARQL11Update" => {
+                "SPARQL 1.1 Update".to_string()
+            }
+            "http://www.w3.org/ns/sparql-service-description#SPARQL10Query" => {
+                "SPARQL 1.0 Query".to_string()
+            }
+            "http://www.w3.org/ns/sparql-service-description#DereferencesURIs" => {
+                "Dereferences URIs".to_string()
+            }
+            "http://www.w3.org/ns/sparql-service-description#UnionDefaultGraph" => {
+                "Union Default Graph".to_string()
+            }
+            "http://www.w3.org/ns/sparql-service-description#BasicFederatedQuery" => {
+                "Basic Federated Query".to_string()
+            }
+            _ => {
+                // Extract last part of URI as feature name
+                uri.rsplit('/').next().unwrap_or(uri).to_string()
+            }
+        }
     }
 
     /// Discover services via DNS SRV records

@@ -222,6 +222,7 @@ pub mod graph_diff;
 pub mod graphql_star;
 pub mod hdt_star;
 pub mod index;
+pub mod jit_query_engine;
 pub mod lsm_annotation_store;
 pub mod materialized_views;
 pub mod memory_efficient_store;

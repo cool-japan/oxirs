@@ -30,6 +30,9 @@ use aes_gcm::{
 use base64::{engine::general_purpose, Engine};
 use zstd::{Decoder, Encoder};
 
+// Cryptographically secure RNG (SCIRS2 POLICY)
+use scirs2_core::random::SecureRandom;
+
 use crate::{
     analytics::{
         ComplexityMetrics, ConfidenceMetrics, ConversationAnalytics, ConversationQuality,
@@ -908,8 +911,9 @@ impl SessionPersistenceManager {
         let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
         let cipher = Aes256Gcm::new(key);
 
-        // Generate random nonce
-        let nonce_bytes = (0..12).map(|_| fastrand::u8(..)).collect::<Vec<_>>();
+        // Generate cryptographically secure random nonce (SCIRS2 POLICY: use SecureRandom)
+        let mut secure_rng = SecureRandom::new();
+        let nonce_bytes = secure_rng.random_bytes(12);
         let nonce = Nonce::from_slice(&nonce_bytes);
 
         // Encrypt data
@@ -963,12 +967,13 @@ impl SessionPersistenceManager {
     }
 
     /// Generate a new encryption key for configuration
+    /// Uses cryptographically secure RNG (SCIRS2 POLICY: SecureRandom for cryptographic operations)
     pub fn generate_encryption_key() -> String {
-        let key_bytes: [u8; 32] = (0..32)
-            .map(|_| fastrand::u8(..))
-            .collect::<Vec<_>>()
+        let mut secure_rng = SecureRandom::new();
+        let key_bytes: [u8; 32] = secure_rng
+            .random_bytes(32)
             .try_into()
-            .unwrap();
+            .expect("Generated exactly 32 bytes");
         general_purpose::STANDARD.encode(key_bytes)
     }
 

@@ -5,12 +5,17 @@
 //! for GeoSPARQL geospatial queries.
 
 pub mod bloom_filter;
+pub mod gpu_accelerated_scan;
 pub mod quad;
 pub mod spatial;
 pub mod triple;
 pub mod triple_index;
 
 pub use bloom_filter::{BloomFilter, BloomFilterConfig, BloomFilterStats, CountingBloomFilter};
+pub use gpu_accelerated_scan::{
+    GpuAccelerationConfig, GpuBackendType, GpuIndexScanner, GpuScanStats, JoinComponent,
+    TriplePattern,
+};
 pub use quad::{GospKey, GposKey, GspoKey, Quad, QuadIndexes};
 pub use spatial::{
     BoundingBox, Geometry, LineString, Point, Polygon, SpatialIndex, SpatialQuery,

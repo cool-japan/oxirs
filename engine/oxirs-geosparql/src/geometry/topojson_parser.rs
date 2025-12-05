@@ -483,7 +483,8 @@ fn apply_transform(x: f64, y: f64, transform: Option<&Value>) -> (f64, f64) {
 /// let geometries = vec![geom];
 ///
 /// let topojson = geometries_to_topojson(&geometries).unwrap();
-/// assert!(topojson.contains("\"type\":\"Topology\""));
+/// // Pretty-printed JSON has spaces: "type": "Topology"
+/// assert!(topojson.contains("\"type\": \"Topology\""));
 /// # }
 /// ```
 #[cfg(feature = "topojson-support")]

@@ -12,7 +12,7 @@
 //! ## Example
 //!
 //! ```rust
-//! use oxirs_rule::chr::{ChrEngine, ChrRule, Constraint};
+//! use oxirs_rule::chr::{ChrEngine, ChrRule, ChrTerm, Constraint};
 //!
 //! let mut engine = ChrEngine::new();
 //!
@@ -25,12 +25,13 @@
 //! ));
 //!
 //! // Add constraints
-//! engine.add_constraint(Constraint::binary("leq", "a", "b"));
-//! engine.add_constraint(Constraint::binary("leq", "b", "a"));
+//! engine.add_constraint(Constraint::new("leq", vec![ChrTerm::const_("a"), ChrTerm::const_("b")]));
+//! engine.add_constraint(Constraint::new("leq", vec![ChrTerm::const_("b"), ChrTerm::const_("a")]));
 //!
 //! // Solve
 //! let result = engine.solve()?;
-//! assert!(result.contains(&Constraint::eq("a", "b")));
+//! // Should produce equality constraint
+//! assert!(result.iter().any(|c| c.name == "="));
 //! # Ok::<(), anyhow::Error>(())
 //! ```
 //!

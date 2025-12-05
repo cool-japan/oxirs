@@ -16,11 +16,13 @@
 
 pub mod config;
 pub mod parallel;
+pub mod simd_escape;
 pub mod star_serializer;
 pub mod streaming;
 
 // Re-export main types
 pub use config::{CompressionType, SerializationOptions, StreamingConfig};
 pub use parallel::ParallelSerializer;
+pub use simd_escape::SimdEscaper;
 pub use star_serializer::StarSerializer;
 pub use streaming::StreamingSerializer;

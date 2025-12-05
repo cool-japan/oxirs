@@ -27,17 +27,18 @@
 //! ## Example
 //!
 //! ```rust
-//! use oxirs_rule::asp::{AspSolver, AspRule, ChoiceRule, IntegrityConstraint};
+//! use oxirs_rule::asp::AspSolver;
 //!
 //! let mut solver = AspSolver::new();
 //!
 //! // Add facts
-//! solver.add_fact("node(a)");
-//! solver.add_fact("node(b)");
-//! solver.add_fact("edge(a, b)");
+//! solver.add_fact("node(a)").unwrap();
+//! solver.add_fact("node(b)").unwrap();
+//! solver.add_fact("edge(a, b)").unwrap();
 //!
 //! // Solve and get answer sets
 //! let answer_sets = solver.solve().unwrap();
+//! assert!(!answer_sets.is_empty());
 //! ```
 
 use std::collections::{HashMap, HashSet};

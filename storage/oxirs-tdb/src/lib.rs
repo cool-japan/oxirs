@@ -100,6 +100,12 @@ pub mod dictionary;
 // Transaction management
 pub mod transaction;
 
+// Consensus algorithms for distributed coordination
+pub mod consensus;
+
+// Distributed coordination and replication
+pub mod distributed;
+
 // Compression and optimization
 pub mod compression;
 
@@ -131,6 +137,9 @@ pub mod query_cache;
 // TODO(v0.1.0-rc.1): Complete StatisticsSnapshot API integration for full functionality
 pub mod query_optimizer;
 
+// Join order optimization for query planning
+pub mod query_join_optimizer;
+
 // Adaptive query execution with runtime plan adjustment
 pub mod adaptive_execution;
 
@@ -149,6 +158,9 @@ pub mod query_monitor;
 // Advanced diagnostic tools
 pub mod diagnostics;
 
+// Advanced diagnostic tools (monitoring and analysis)
+pub mod advanced_diagnostics;
+
 // High-performance operations using SciRS2-Core
 pub mod performance;
 
@@ -157,6 +169,9 @@ pub mod rdf_star;
 
 // Connection pooling for multi-client access
 pub mod connection_pool;
+
+// Connection pool optimizer (advanced pool management)
+pub mod connection_pool_optimizer;
 
 // Query resource quotas for per-query resource limiting
 pub mod query_resource_quota;
@@ -169,6 +184,9 @@ pub mod wal_archive;
 
 // WAL shipping for continuous archiving
 pub mod wal_shipping;
+
+// Cloud storage integration (S3, GCS, Azure)
+pub mod cloud_storage;
 
 // Re-export commonly used types
 pub use backup_encryption::{BackupEncryption, EncryptedData, EncryptionConfig};

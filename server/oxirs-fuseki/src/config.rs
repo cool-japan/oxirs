@@ -40,6 +40,20 @@ pub struct ServerConfig {
 
     #[validate(nested)]
     pub logging: LoggingConfig,
+
+    /// Federation configuration for distributed query execution
+    /// Note: Currently not serializable, uses defaults at runtime
+    #[serde(skip)]
+    pub federation: Option<crate::federation::FederationConfig>,
+
+    /// Streaming configuration for event processing
+    /// Note: Currently not serializable, uses defaults at runtime
+    #[serde(skip)]
+    pub streaming: Option<crate::streaming::StreamingConfig>,
+
+    /// HTTP protocol configuration (HTTP/2, HTTP/3)
+    #[validate(nested)]
+    pub http_protocol: HttpProtocolSettings,
 }
 
 /// Server-level settings with validation
@@ -86,6 +100,106 @@ pub struct TlsConfig {
     pub require_client_cert: bool,
 
     pub ca_cert_path: Option<PathBuf>,
+}
+
+/// HTTP protocol configuration
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct HttpProtocolSettings {
+    /// Enable HTTP/2
+    #[serde(default = "default_true")]
+    pub http2_enabled: bool,
+
+    /// Enable HTTP/3 (QUIC) - experimental
+    #[serde(default)]
+    pub http3_enabled: bool,
+
+    /// HTTP/2 initial connection window size (bytes)
+    #[serde(default = "default_http2_connection_window")]
+    #[validate(range(min = 65535, max = 16777216))]
+    pub http2_initial_connection_window_size: u32,
+
+    /// HTTP/2 initial stream window size (bytes)
+    #[serde(default = "default_http2_stream_window")]
+    #[validate(range(min = 65535, max = 16777216))]
+    pub http2_initial_stream_window_size: u32,
+
+    /// HTTP/2 max concurrent streams
+    #[serde(default = "default_http2_max_streams")]
+    #[validate(range(min = 1, max = 1000))]
+    pub http2_max_concurrent_streams: u32,
+
+    /// HTTP/2 max frame size (bytes)
+    #[serde(default = "default_http2_frame_size")]
+    #[validate(range(min = 16384, max = 16777215))]
+    pub http2_max_frame_size: u32,
+
+    /// HTTP/2 keep alive interval (seconds)
+    #[serde(default = "default_http2_keepalive")]
+    #[validate(range(min = 1))]
+    pub http2_keep_alive_interval_secs: u64,
+
+    /// HTTP/2 keep alive timeout (seconds)
+    #[serde(default = "default_http2_keepalive_timeout")]
+    #[validate(range(min = 1))]
+    pub http2_keep_alive_timeout_secs: u64,
+
+    /// Enable server push for SPARQL results
+    #[serde(default)]
+    pub enable_server_push: bool,
+
+    /// Enable header compression (HPACK for HTTP/2, QPACK for HTTP/3)
+    #[serde(default = "default_true")]
+    pub enable_header_compression: bool,
+
+    /// Optimize for SPARQL workloads
+    #[serde(default = "default_true")]
+    pub sparql_optimized: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_http2_connection_window() -> u32 {
+    1024 * 1024 // 1MB
+}
+
+fn default_http2_stream_window() -> u32 {
+    256 * 1024 // 256KB
+}
+
+fn default_http2_max_streams() -> u32 {
+    100
+}
+
+fn default_http2_frame_size() -> u32 {
+    16384 // 16KB
+}
+
+fn default_http2_keepalive() -> u64 {
+    60 // seconds
+}
+
+fn default_http2_keepalive_timeout() -> u64 {
+    20 // seconds
+}
+
+impl Default for HttpProtocolSettings {
+    fn default() -> Self {
+        Self {
+            http2_enabled: true,
+            http3_enabled: false,
+            http2_initial_connection_window_size: default_http2_connection_window(),
+            http2_initial_stream_window_size: default_http2_stream_window(),
+            http2_max_concurrent_streams: default_http2_max_streams(),
+            http2_max_frame_size: default_http2_frame_size(),
+            http2_keep_alive_interval_secs: default_http2_keepalive(),
+            http2_keep_alive_timeout_secs: default_http2_keepalive_timeout(),
+            enable_server_push: false,
+            enable_header_compression: true,
+            sparql_optimized: true,
+        }
+    }
 }
 
 /// Dataset configuration with validation
@@ -1209,6 +1323,9 @@ impl Default for ServerConfig {
                 output: LogOutput::Stdout,
                 file_config: None,
             },
+            federation: None,
+            streaming: None,
+            http_protocol: HttpProtocolSettings::default(),
         }
     }
 }
