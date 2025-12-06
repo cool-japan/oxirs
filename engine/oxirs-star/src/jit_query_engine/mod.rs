@@ -47,15 +47,18 @@
 //! # }
 //! ```
 
+// Sub-modules
+pub mod compiler;
+pub mod ir;
+
 use crate::{StarResult, StarStore, StarTriple};
+use compiler::SparqlJitCompiler;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, info, instrument};
-
-// Note: scirs2_core::jit will be used for actual JIT compilation in production
 
 /// JIT query engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,6 +222,8 @@ pub struct JitQueryEngine {
     stats: Arc<RwLock<QueryStats>>,
     /// Compilation strategy
     strategy: CompilationStrategy,
+    /// Actual JIT compiler (scirs2_core::jit)
+    jit_compiler: Arc<RwLock<SparqlJitCompiler>>,
 }
 
 impl JitQueryEngine {
@@ -229,12 +234,19 @@ impl JitQueryEngine {
 
     /// Create a JIT query engine with custom configuration
     pub fn with_config(config: JitConfig) -> Self {
+        // Initialize the actual JIT compiler
+        let jit_compiler = SparqlJitCompiler::new().unwrap_or_else(|e| {
+            tracing::warn!("Failed to initialize JIT compiler: {}, using fallback", e);
+            SparqlJitCompiler::default()
+        });
+
         Self {
             config,
             plan_cache: Arc::new(RwLock::new(HashMap::new())),
             compiled_cache: Arc::new(RwLock::new(HashMap::new())),
             stats: Arc::new(RwLock::new(QueryStats::default())),
             strategy: CompilationStrategy::Adaptive,
+            jit_compiler: Arc::new(RwLock::new(jit_compiler)),
         }
     }
 
@@ -322,8 +334,11 @@ impl JitQueryEngine {
             if self.config.enable_background_compilation {
                 let compiled_cache = self.compiled_cache.clone();
                 let stats = self.stats.clone();
+                let jit_compiler = self.jit_compiler.clone();
                 tokio::spawn(async move {
-                    if let Ok(compiled) = Self::compile_query_internal(plan_for_compilation).await {
+                    if let Ok(compiled) =
+                        Self::compile_query_internal(plan_for_compilation, jit_compiler).await
+                    {
                         let mut cache = compiled_cache.write().await;
                         let mut stats_guard = stats.write().await;
                         stats_guard.total_compilation_time += compiled.compilation_time;
@@ -333,7 +348,9 @@ impl JitQueryEngine {
                 });
             } else {
                 // Synchronous compilation
-                let compiled = Self::compile_query_internal(plan_for_compilation).await?;
+                let compiled =
+                    Self::compile_query_internal(plan_for_compilation, self.jit_compiler.clone())
+                        .await?;
                 let mut cache = self.compiled_cache.write().await;
                 let mut stats = self.stats.write().await;
                 stats.total_compilation_time += compiled.compilation_time;
@@ -372,33 +389,78 @@ impl JitQueryEngine {
         Ok(store.all_triples())
     }
 
-    /// Execute compiled query
+    /// Execute compiled query using JIT-compiled native code
     async fn execute_compiled(
         &self,
         plan: &QueryPlan,
         store: &StarStore,
     ) -> StarResult<Vec<StarTriple>> {
         debug!(
-            "Executing compiled query (executions: {})",
+            "Executing JIT-compiled query (executions: {})",
             plan.execution_count
         );
 
-        // In production, this would execute the compiled native code
-        // For now, fall back to interpreted mode with optimization hints
+        // Get kernel ID from compiled cache
+        let hash = plan.hash;
+        let compiled = self.compiled_cache.read().await;
+
+        if let Some(compiled_query) = compiled.get(&hash) {
+            if let Some(compiled_code) = &compiled_query.compiled_code {
+                // Convert bytes back to kernel ID
+                let kernel_id = String::from_utf8_lossy(compiled_code).to_string();
+                drop(compiled); // Release lock
+
+                // Execute compiled kernel
+                let compiler = self.jit_compiler.read().await;
+                return compiler.execute_compiled(&kernel_id, store);
+            }
+        }
+
+        drop(compiled);
+
+        // Fallback to interpreted if compilation not ready
+        debug!("Compiled code not available, falling back to interpreted mode");
         self.execute_interpreted(&plan.query, store).await
     }
 
-    /// Compile a query to native code
-    async fn compile_query_internal(plan: QueryPlan) -> StarResult<CompiledQuery> {
+    /// Compile a query to native code using scirs2_core::jit
+    async fn compile_query_internal(
+        plan: QueryPlan,
+        jit_compiler: Arc<RwLock<SparqlJitCompiler>>,
+    ) -> StarResult<CompiledQuery> {
         let start = Instant::now();
 
-        debug!("Compiling query: {}", plan.query);
+        debug!("Compiling query with scirs2_core::jit: {}", plan.query);
 
-        // In production, this would use scirs2_core::jit for LLVM compilation
-        // For now, create a placeholder compiled query
-        let compiled_code = Some(Arc::new(Vec::new()));
+        // Parse query to IR
+        let mut compiler = jit_compiler.write().await;
+        let ir_plan =
+            compiler
+                .parse_to_ir(&plan.query)
+                .map_err(|e| crate::StarError::QueryError {
+                    message: format!("IR parsing failed: {}", e),
+                    query_fragment: Some(plan.query.clone()),
+                    position: None,
+                    suggestion: None,
+                })?;
+
+        // Compile IR to native code
+        let kernel_id =
+            compiler
+                .compile_ir(&ir_plan)
+                .map_err(|e| crate::StarError::QueryError {
+                    message: format!("JIT compilation failed: {}", e),
+                    query_fragment: Some(plan.query.clone()),
+                    position: None,
+                    suggestion: Some("Check query syntax or disable JIT compilation".to_string()),
+                })?;
+
+        info!("Successfully compiled query to kernel: {}", kernel_id);
 
         let compilation_time = start.elapsed();
+
+        // Store kernel ID as compiled code
+        let compiled_code = Some(Arc::new(kernel_id.into_bytes()));
 
         Ok(CompiledQuery {
             plan: QueryPlan {
@@ -466,7 +528,7 @@ impl JitQueryEngine {
         let hash = QueryPlan::compute_hash(query);
         let plan = QueryPlan::new(query.to_string());
 
-        let compiled = Self::compile_query_internal(plan).await?;
+        let compiled = Self::compile_query_internal(plan, self.jit_compiler.clone()).await?;
 
         let mut cache = self.compiled_cache.write().await;
         let mut stats = self.stats.write().await;

@@ -5,11 +5,12 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use anyhow::{anyhow, Result};
+use std::time::Duration;
 
 impl ServiceRegistry {
     /// Helper method to test a specific result format
-    async fn test_result_format(
+    pub(super) async fn test_result_format(
         &self,
         endpoint_url: &str,
         query: &str,

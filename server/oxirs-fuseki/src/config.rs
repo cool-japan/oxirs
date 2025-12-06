@@ -1,31 +1,27 @@
 //! Advanced server configuration management with validation and hot-reload
-
 use crate::error::{FusekiError, FusekiResult};
 use figment::{
     providers::{Env, Format, Toml, Yaml},
     Figment,
 };
+#[cfg(feature = "hot-reload")]
+use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
-use tracing::{info, warn};
-use validator::{Validate, ValidationError};
-
-#[cfg(feature = "hot-reload")]
-use notify::{Config, Event, RecommendedWatcher, RecursiveMode, Watcher};
 #[cfg(feature = "hot-reload")]
 use std::sync::mpsc;
+use std::time::Duration;
 #[cfg(feature = "hot-reload")]
 use tokio::sync::watch;
-
+use tracing::{info, warn};
+use validator::{Validate, ValidationError};
 /// Main server configuration with validation
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ServerConfig {
     #[validate(nested)]
     pub server: ServerSettings,
-
     #[validate(nested)]
     pub datasets: HashMap<String, DatasetConfig>,
 

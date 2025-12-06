@@ -5,11 +5,12 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use anyhow::{anyhow, Result};
+use std::time::Duration;
 
 impl ServiceRegistry {
     /// Fetch GraphQL schema using introspection
-    async fn fetch_graphql_schema(&self, endpoint_url: &str) -> Result<String> {
+    pub(super) async fn fetch_graphql_schema(&self, endpoint_url: &str) -> Result<String> {
         let introspection_query = r#"
         query IntrospectionQuery {
             __schema {

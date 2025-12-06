@@ -5,7 +5,8 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::{HealthState, RegistryStats};
+use anyhow::Result;
 
 impl ServiceRegistry {
     /// Get registry statistics

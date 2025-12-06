@@ -961,4 +961,326 @@ mod tests {
         geom.coord3d = crate::geometry::coord3d::Coord3D::xyz(vec![3.0]);
         assert!(geom.is_3d());
     }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_round_trip_point() {
+        use std::env::temp_dir;
+
+        // Create test geometry
+        let point = Point::new(10.5, 20.3);
+        let geom = Geometry::new(GeoGeometry::Point(point));
+        let geometries = vec![geom];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_point.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(
+            result.is_ok(),
+            "Failed to write FlatGeobuf: {:?}",
+            result.err()
+        );
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify
+        assert_eq!(read_geometries.len(), 1);
+        if let geo_types::Geometry::Point(read_point) = &read_geometries[0].geom {
+            assert!((read_point.x() - 10.5).abs() < 1e-10);
+            assert!((read_point.y() - 20.3).abs() < 1e-10);
+        } else {
+            panic!("Expected Point geometry");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_round_trip_linestring() {
+        use geo_types::LineString;
+        use std::env::temp_dir;
+
+        // Create test geometry
+        let coords = vec![
+            geo_types::coord! { x: 0.0, y: 0.0 },
+            geo_types::coord! { x: 1.0, y: 1.0 },
+            geo_types::coord! { x: 2.0, y: 0.0 },
+        ];
+        let linestring = LineString::new(coords);
+        let geom = Geometry::new(GeoGeometry::LineString(linestring));
+        let geometries = vec![geom];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_linestring.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify
+        assert_eq!(read_geometries.len(), 1);
+        if let geo_types::Geometry::LineString(read_ls) = &read_geometries[0].geom {
+            assert_eq!(read_ls.0.len(), 3);
+            assert!((read_ls.0[0].x - 0.0).abs() < 1e-10);
+            assert!((read_ls.0[1].x - 1.0).abs() < 1e-10);
+            assert!((read_ls.0[2].x - 2.0).abs() < 1e-10);
+        } else {
+            panic!("Expected LineString geometry");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_round_trip_polygon() {
+        use geo_types::{LineString, Polygon};
+        use std::env::temp_dir;
+
+        // Create test geometry with hole
+        let exterior = LineString::new(vec![
+            geo_types::coord! { x: 0.0, y: 0.0 },
+            geo_types::coord! { x: 10.0, y: 0.0 },
+            geo_types::coord! { x: 10.0, y: 10.0 },
+            geo_types::coord! { x: 0.0, y: 10.0 },
+            geo_types::coord! { x: 0.0, y: 0.0 },
+        ]);
+        let hole = LineString::new(vec![
+            geo_types::coord! { x: 2.0, y: 2.0 },
+            geo_types::coord! { x: 8.0, y: 2.0 },
+            geo_types::coord! { x: 8.0, y: 8.0 },
+            geo_types::coord! { x: 2.0, y: 8.0 },
+            geo_types::coord! { x: 2.0, y: 2.0 },
+        ]);
+        let polygon = Polygon::new(exterior, vec![hole]);
+        let geom = Geometry::new(GeoGeometry::Polygon(polygon));
+        let geometries = vec![geom];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_polygon.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify
+        assert_eq!(read_geometries.len(), 1);
+        if let geo_types::Geometry::Polygon(read_poly) = &read_geometries[0].geom {
+            assert_eq!(read_poly.exterior().0.len(), 5);
+            assert_eq!(read_poly.interiors().len(), 1);
+            assert_eq!(read_poly.interiors()[0].0.len(), 5);
+        } else {
+            panic!("Expected Polygon geometry");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_round_trip_multipoint() {
+        use geo_types::MultiPoint;
+        use std::env::temp_dir;
+
+        // Create test geometry
+        let points = vec![
+            Point::new(0.0, 0.0),
+            Point::new(1.0, 1.0),
+            Point::new(2.0, 2.0),
+        ];
+        let multipoint = MultiPoint(points);
+        let geom = Geometry::new(GeoGeometry::MultiPoint(multipoint));
+        let geometries = vec![geom];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_multipoint.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify
+        assert_eq!(read_geometries.len(), 1);
+        if let geo_types::Geometry::MultiPoint(read_mp) = &read_geometries[0].geom {
+            assert_eq!(read_mp.0.len(), 3);
+            assert!((read_mp.0[0].x() - 0.0).abs() < 1e-10);
+            assert!((read_mp.0[1].x() - 1.0).abs() < 1e-10);
+            assert!((read_mp.0[2].x() - 2.0).abs() < 1e-10);
+        } else {
+            panic!("Expected MultiPoint geometry");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_round_trip_multilinestring() {
+        use geo_types::{LineString, MultiLineString};
+        use std::env::temp_dir;
+
+        // Create test geometry
+        let ls1 = LineString::new(vec![
+            geo_types::coord! { x: 0.0, y: 0.0 },
+            geo_types::coord! { x: 1.0, y: 1.0 },
+        ]);
+        let ls2 = LineString::new(vec![
+            geo_types::coord! { x: 2.0, y: 2.0 },
+            geo_types::coord! { x: 3.0, y: 3.0 },
+        ]);
+        let multilinestring = MultiLineString(vec![ls1, ls2]);
+        let geom = Geometry::new(GeoGeometry::MultiLineString(multilinestring));
+        let geometries = vec![geom];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_multilinestring.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify
+        assert_eq!(read_geometries.len(), 1);
+        if let geo_types::Geometry::MultiLineString(read_mls) = &read_geometries[0].geom {
+            assert_eq!(read_mls.0.len(), 2);
+            assert_eq!(read_mls.0[0].0.len(), 2);
+            assert_eq!(read_mls.0[1].0.len(), 2);
+        } else {
+            panic!("Expected MultiLineString geometry");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_round_trip_multipolygon() {
+        use geo_types::{LineString, MultiPolygon, Polygon};
+        use std::env::temp_dir;
+
+        // Create test geometry
+        let poly1 = Polygon::new(
+            LineString::new(vec![
+                geo_types::coord! { x: 0.0, y: 0.0 },
+                geo_types::coord! { x: 5.0, y: 0.0 },
+                geo_types::coord! { x: 5.0, y: 5.0 },
+                geo_types::coord! { x: 0.0, y: 5.0 },
+                geo_types::coord! { x: 0.0, y: 0.0 },
+            ]),
+            vec![],
+        );
+        let poly2 = Polygon::new(
+            LineString::new(vec![
+                geo_types::coord! { x: 10.0, y: 10.0 },
+                geo_types::coord! { x: 15.0, y: 10.0 },
+                geo_types::coord! { x: 15.0, y: 15.0 },
+                geo_types::coord! { x: 10.0, y: 15.0 },
+                geo_types::coord! { x: 10.0, y: 10.0 },
+            ]),
+            vec![],
+        );
+        let multipolygon = MultiPolygon(vec![poly1, poly2]);
+        let geom = Geometry::new(GeoGeometry::MultiPolygon(multipolygon));
+        let geometries = vec![geom];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_multipolygon.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify
+        assert_eq!(read_geometries.len(), 1);
+        if let geo_types::Geometry::MultiPolygon(read_mp) = &read_geometries[0].geom {
+            assert_eq!(read_mp.0.len(), 2);
+            assert_eq!(read_mp.0[0].exterior().0.len(), 5);
+            assert_eq!(read_mp.0[1].exterior().0.len(), 5);
+        } else {
+            panic!("Expected MultiPolygon geometry");
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
+
+    #[test]
+    #[cfg(feature = "flatgeobuf-support")]
+    fn test_flatgeobuf_multiple_geometries() {
+        use std::env::temp_dir;
+
+        // Create multiple point geometries
+        let geometries = vec![
+            Geometry::new(GeoGeometry::Point(Point::new(0.0, 0.0))),
+            Geometry::new(GeoGeometry::Point(Point::new(1.0, 1.0))),
+            Geometry::new(GeoGeometry::Point(Point::new(2.0, 2.0))),
+            Geometry::new(GeoGeometry::Point(Point::new(3.0, 3.0))),
+        ];
+
+        // Write to temp file
+        let temp_path = temp_dir().join("test_multiple.fgb");
+        let result = write_flatgeobuf_to_file(&geometries, temp_path.to_str().unwrap());
+        assert!(result.is_ok());
+
+        // Read back
+        let file = std::fs::File::open(&temp_path).unwrap();
+        let reader = std::io::BufReader::new(file);
+        let read_geometries = parse_flatgeobuf(reader).unwrap();
+
+        // Verify count
+        assert_eq!(read_geometries.len(), 4);
+
+        // Verify all geometries are points
+        for geom in &read_geometries {
+            assert!(matches!(&geom.geom, geo_types::Geometry::Point(_)));
+        }
+
+        // Collect coordinates and verify they match expected values
+        let mut coords: Vec<(f64, f64)> = read_geometries
+            .iter()
+            .filter_map(|g| {
+                if let geo_types::Geometry::Point(pt) = &g.geom {
+                    Some((pt.x(), pt.y()))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Sort for comparison (FlatGeobuf may not preserve order)
+        coords.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+
+        assert_eq!(coords.len(), 4);
+        for (i, (x, y)) in coords.iter().enumerate() {
+            assert!((*x - i as f64).abs() < 1e-10, "Expected x={}, got {}", i, x);
+            assert!((*y - i as f64).abs() < 1e-10, "Expected y={}, got {}", i, y);
+        }
+
+        // Cleanup
+        let _ = std::fs::remove_file(&temp_path);
+    }
 }

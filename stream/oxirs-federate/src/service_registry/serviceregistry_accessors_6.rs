@@ -5,7 +5,6 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
 
 impl ServiceRegistry {
     /// Get a specific service by ID

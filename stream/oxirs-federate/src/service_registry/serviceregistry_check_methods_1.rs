@@ -5,11 +5,17 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::{GraphQLService, HealthState, HealthStatus};
+use chrono::Utc;
+use reqwest::Client;
+use std::time::Instant;
 
 impl ServiceRegistry {
     /// Check GraphQL service health
-    async fn check_graphql_health(client: &Client, service: &GraphQLService) -> HealthStatus {
+    pub(super) async fn check_graphql_health(
+        client: &Client,
+        service: &GraphQLService,
+    ) -> HealthStatus {
         let start = Instant::now();
         let service_id = service.id.clone();
         let query = r#"{ __schema { queryType { name } } }"#;

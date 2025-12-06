@@ -5,7 +5,10 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use anyhow::Result;
+use chrono::Utc;
+use std::sync::Arc;
+use tracing::info;
 
 impl ServiceRegistry {
     /// Start the service registry with health monitoring
@@ -53,7 +56,7 @@ impl ServiceRegistry {
             loop {
                 interval_timer.tick().await;
                 let now = Utc::now();
-                let mut cache = capabilities_cache.write().await;
+                let mut cache = capabilities_cache.write();
                 cache.retain(|_, entry| entry.expires_at > now);
             }
         });

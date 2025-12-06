@@ -1,5 +1,4 @@
 //! Production-ready HTTP server implementation with comprehensive middleware
-
 use crate::{
     adaptive_execution::{AdaptiveExecutionConfig, AdaptiveExecutionEngine},
     auth::AuthService,
@@ -20,9 +19,10 @@ use crate::{
     tls::TlsManager,
     websocket::{SubscriptionManager, WebSocketConfig},
 };
-
 // RC.1 modules - optional imports
 use crate::backup::{BackupConfig, BackupManager};
+#[cfg(feature = "hot-reload")]
+use crate::config_reload::ConfigReloadManager;
 use crate::ddos_protection::{DDoSProtectionConfig, DDoSProtectionManager};
 use crate::disaster_recovery::{DisasterRecoveryConfig, DisasterRecoveryManager};
 use crate::edge_caching::{EdgeCacheConfig, EdgeCacheManager};
@@ -33,9 +33,6 @@ use crate::realtime_notifications::NotificationManager;
 use crate::recovery::{RecoveryConfig, RecoveryManager};
 use crate::security_audit::{SecurityAuditConfig, SecurityAuditManager};
 use crate::tls_rotation::CertificateRotation;
-
-#[cfg(feature = "hot-reload")]
-use crate::config_reload::ConfigReloadManager;
 use axum::{
     extract::{Path, Query, Request, State},
     http::StatusCode,
@@ -44,23 +41,20 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+#[cfg(feature = "rate-limit")]
+use governor::{Quota, RateLimiter};
 use std::collections::HashMap;
 use std::net::SocketAddr;
+#[cfg(feature = "rate-limit")]
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::signal;
+#[cfg(feature = "hot-reload")]
+use tokio::sync::watch;
 use tower_http::request_id::{MakeRequestId, RequestId};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-
-#[cfg(feature = "rate-limit")]
-use governor::{Quota, RateLimiter};
-#[cfg(feature = "rate-limit")]
-use std::num::NonZeroU32;
-
-#[cfg(feature = "hot-reload")]
-use tokio::sync::watch;
-
 /// HTTP server runtime with comprehensive middleware and services
 pub struct Runtime {
     addr: SocketAddr,
@@ -103,7 +97,6 @@ pub struct Runtime {
     #[cfg(feature = "hot-reload")]
     config_reload_manager: Option<Arc<parking_lot::Mutex<ConfigReloadManager>>>,
 }
-
 impl Runtime {
     /// Create a new runtime instance
     pub fn new(addr: SocketAddr, store: Store, config: ServerConfig) -> Self {
@@ -148,42 +141,35 @@ impl Runtime {
             config_reload_manager: None,
         }
     }
-
     /// Initialize services based on configuration
     pub async fn initialize_services(&mut self) -> FusekiResult<()> {
         info!("Initializing server services...");
-
         // Initialize authentication service
         if self.config.security.auth_required {
             info!("Initializing authentication service");
             let auth_service = AuthService::new(self.config.security.clone()).await?;
             self.auth_service = Some(auth_service);
         }
-
         // Initialize ReBAC manager for relationship-based access control
         info!("Initializing ReBAC manager");
         let rebac_manager = Arc::new(crate::auth::rebac::InMemoryRebacManager::new());
         self.rebac_manager = Some(rebac_manager as Arc<dyn crate::auth::rebac::RebacEvaluator>);
-
         // Initialize metrics service
         if self.config.monitoring.metrics.enabled {
             info!("Initializing metrics service");
             let metrics_service = MetricsService::new(self.config.monitoring.clone())?;
             self.metrics_service = Some(Arc::new(metrics_service));
         }
-
         // Initialize performance service
         info!("Initializing performance optimization service");
         let performance_service = PerformanceService::new(self.config.performance.clone())?;
         self.performance_service = Some(Arc::new(performance_service));
-
         // Initialize query optimizer
         if self.config.performance.query_optimization.enabled {
             info!("Initializing advanced query optimizer");
             let query_optimizer = QueryOptimizer::new(self.config.performance.clone())?;
             self.query_optimizer = Some(Arc::new(query_optimizer));
         }
-
         // Initialize adaptive execution engine (v0.1.0 Final)
         info!("Initializing adaptive execution engine with SciRS2 integration");
         let adaptive_config = AdaptiveExecutionConfig {
@@ -199,7 +185,6 @@ impl Runtime {
         };
         let adaptive_engine = AdaptiveExecutionEngine::new(adaptive_config)?;
         self.adaptive_execution_engine = Some(Arc::new(adaptive_engine));
-
         // Initialize subscription manager for WebSocket support
         info!("Initializing WebSocket subscription manager");
         let ws_config = WebSocketConfig::default();
@@ -212,15 +197,12 @@ impl Runtime {
             }
         };
         let subscription_manager = SubscriptionManager::new(store, metrics, ws_config);
-
         // Start the subscription manager
         let manager_clone = subscription_manager.clone();
         tokio::spawn(async move {
             manager_clone.start().await;
         });
-
         self.subscription_manager = Some(Arc::new(subscription_manager));
-
         // Initialize federation manager
         info!("Initializing federation manager");
         let federation_config = self
@@ -231,7 +213,6 @@ impl Runtime {
         let federation_manager = FederationManager::new(federation_config);
         federation_manager.start().await?;
         self.federation_manager = Some(Arc::new(federation_manager));
-
         // Initialize streaming manager
         info!("Initializing streaming manager");
         let streaming_config = self
@@ -242,9 +223,7 @@ impl Runtime {
         let streaming_manager = StreamingManager::new(streaming_config);
         streaming_manager.initialize().await?;
         self.streaming_manager = Some(Arc::new(streaming_manager));
-
         // ========== Beta.2 Performance & Scalability Features ==========
-
         // Initialize memory manager (used by other Beta.2 components)
         info!("Initializing Beta.2 Memory Manager");
         let memory_config = MemoryPoolConfig {
@@ -262,7 +241,6 @@ impl Runtime {
         };
         let memory_manager = MemoryManager::new(memory_config)?;
         self.memory_manager = Some(memory_manager.clone());
-
         // Initialize concurrency manager for advanced request handling
         info!("Initializing Beta.2 Concurrency Manager");
         let concurrency_config = ConcurrencyConfig {
@@ -279,7 +257,6 @@ impl Runtime {
         };
         let concurrency_manager = ConcurrencyManager::new(concurrency_config);
         self.concurrency_manager = Some(concurrency_manager.clone());
-
         // Initialize batch executor for query batching
         info!("Initializing Beta.2 Batch Executor");
         let batch_config = BatchConfig {
@@ -294,7 +271,6 @@ impl Runtime {
         };
         let batch_executor = BatchExecutor::new(batch_config, Arc::new(self.store.clone()));
         self.batch_executor = Some(batch_executor.clone());
-
         // Initialize stream manager for efficient result streaming
         info!("Initializing Beta.2 Stream Manager");
         let stream_config = StreamConfig {
@@ -308,7 +284,6 @@ impl Runtime {
         };
         let stream_manager = StreamManager::new(stream_config, Some(memory_manager.clone()));
         self.stream_manager = Some(stream_manager);
-
         // Initialize dataset manager
         info!("Initializing Beta.2 Dataset Manager");
         let dataset_config = DatasetConfig {
@@ -321,12 +296,9 @@ impl Runtime {
         };
         let dataset_manager = DatasetManager::new(dataset_config).await?;
         self.dataset_manager = Some(dataset_manager);
-
         info!("Beta.2 Performance & Scalability modules initialized successfully");
         // ========== End Beta.2 Features ==========
-
         // ========== RC.1 Production & Advanced Features ==========
-
         // Initialize security auditor
         info!("Initializing RC.1 Security Auditor");
         let audit_config = SecurityAuditConfig {
@@ -339,7 +311,6 @@ impl Runtime {
         };
         let security_auditor = SecurityAuditManager::new(audit_config);
         self.security_auditor = Some(Arc::new(security_auditor));
-
         // Initialize DDoS protector
         info!("Initializing RC.1 DDoS Protector");
         let ddos_config = DDoSProtectionConfig {
@@ -354,13 +325,11 @@ impl Runtime {
         };
         let ddos_protector = DDoSProtectionManager::new(ddos_config);
         self.ddos_protector = Some(Arc::new(ddos_protector));
-
         // Initialize load balancer
         info!("Initializing RC.1 Load Balancer");
         let load_balancer_config = LoadBalancerConfig::default();
         let load_balancer = LoadBalancer::new(load_balancer_config);
         self.load_balancer = Some(Arc::new(load_balancer));
-
         // Initialize edge cache manager
         info!("Initializing RC.1 Edge Cache Manager");
         let edge_cache_config = EdgeCacheConfig::default();

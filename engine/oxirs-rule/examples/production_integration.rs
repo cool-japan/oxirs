@@ -160,8 +160,8 @@ fn supply_chain_optimization() -> Result<()> {
     asp_solver.add_fact("capacity(truck2, 600)")?;
 
     // Choice rule: Each order assigned to exactly one vehicle
-    let orders = vec!["o1", "o2", "o3"];
-    let vehicles = vec!["truck1", "truck2"];
+    let orders = ["o1", "o2", "o3"];
+    let vehicles = ["truck1", "truck2"];
 
     for order in &orders {
         let choices: Vec<_> = vehicles

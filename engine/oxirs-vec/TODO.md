@@ -1,12 +1,27 @@
 # OxiRS Vec - TODO
 
-*Last Updated: December 4, 2025*
+*Last Updated: December 6, 2025*
+
+## 📚 NEW: Comprehensive Documentation Available (December 6, 2025)
+
+**Five production-ready guides now available in `/docs` directory**:
+- 📘 [Production Deployment Guide](docs/oxirs-vec-deployment-guide.md) (23 KB)
+- 🚀 [Performance Tuning Guide](docs/oxirs-vec-performance-tuning-guide.md) (20 KB)
+- 📖 [Best Practices Guide](docs/oxirs-vec-best-practices.md) (21 KB)
+- 💾 [WAL Configuration Guide](docs/oxirs-vec-wal-guide.md) (19 KB)
+- ⚡ [GPU Acceleration Guide](docs/oxirs-vec-gpu-acceleration-guide.md) (17 KB)
+
+**Total: 100 KB of comprehensive production documentation**
+
+See [docs/README.md](docs/README.md) for complete documentation index.
+
+---
 
 ## ✅ Current Status: v0.1.0-beta.2 (Production-Ready Beta)
 
 **oxirs-vec** provides comprehensive vector search infrastructure for semantic similarity with full SPARQL integration.
 
-### Beta.2 Release Status (December 4, 2025) - **FINAL UPDATE**
+### Beta.2 Release Status (December 6, 2025) - **DOCUMENTATION COMPLETE**
 - **667 tests passing** (100% pass rate, 0 failures) with zero warnings
 - **Production-grade features**: Real-time updates, filtered search, **WAL crash recovery**, **Re-ranking [NEW]**
 - **Complete SPARQL integration**: Custom functions, federated queries, cross-language support
@@ -219,18 +234,19 @@
 
 ### 🔜 Remaining Priorities (Target: December 2025)
 
-1. **Documentation**: Production deployment guide
-   - Tuning guide for different workloads
-   - Migration guide from FAISS/Annoy
-   - Best practices and performance tips
-   - WAL configuration and recovery guide
-   - **GPU acceleration setup and benchmarking guide [NEW]**
-   - Query planning and strategy selection guide
+1. **Documentation**: ✅ **COMPLETED (December 6, 2025)**
+   - ✅ Production deployment guide (23 KB, comprehensive)
+   - ✅ Performance tuning guide (20 KB, workload-specific)
+   - ✅ Best practices guide (21 KB, production-proven)
+   - ✅ WAL configuration and recovery guide (19 KB, complete)
+   - ✅ GPU acceleration setup and benchmarking guide (17 KB, detailed)
+   - 📋 Migration guide from FAISS/Annoy (planned - detailed version)
+   - 📋 Query planning and strategy selection guide (covered in performance tuning guide)
 
 2. **Testing**: Comprehensive GPU benchmarks
-   - Run benchmarks across all distance metrics
-   - Document performance improvements (expected 5-50x speedup depending on metric and dataset size)
-   - Publish benchmark results and recommendations
+   - 📋 Run benchmarks across all distance metrics (requires CUDA setup)
+   - 📋 Document performance improvements (expected 5-50x speedup depending on metric and dataset size)
+   - 📋 Publish benchmark results and recommendations
 
 3. **New Features Completed (November 23, 2025)**:
    - ✅ **Scalar Quantization (SQ)** - Memory-efficient vector storage

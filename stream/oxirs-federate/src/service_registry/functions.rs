@@ -2,17 +2,20 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
-use dashmap::DashMap;
-use reqwest::Client;
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
-use tracing::{debug, info, warn};
+use serde::Deserialize;
 use url::Url;
+
+#[cfg(test)]
+use super::serviceregistry_type::ServiceRegistry;
+#[cfg(test)]
+use super::types::{
+    ConnectionConfig, PerformanceStats, RegistryConfig, SparqlCapabilities, SparqlEndpoint,
+    SparqlVersion,
+};
+#[cfg(test)]
+use chrono::Utc;
+#[cfg(test)]
+use std::collections::{HashMap, HashSet};
 pub(super) fn serialize_url<S>(url: &Url, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,

@@ -38,6 +38,9 @@ pub mod migrate;
 /// Dataset generation commands
 pub mod generate;
 
+/// Advanced RDF graph analytics using scirs2-graph
+pub mod graph_analytics;
+
 /// Index management commands
 pub mod index;
 

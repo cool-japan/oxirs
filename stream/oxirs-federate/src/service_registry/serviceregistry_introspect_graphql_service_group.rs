@@ -5,11 +5,13 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::{GraphQLCapabilities, GraphQLService};
+use anyhow::Result;
+use tracing::{info, warn};
 
 impl ServiceRegistry {
     /// Introspect GraphQL service
-    async fn introspect_graphql_service(
+    pub(super) async fn introspect_graphql_service(
         &self,
         service: &GraphQLService,
     ) -> Result<(GraphQLCapabilities, Option<String>)> {

@@ -13,6 +13,9 @@ rust-version.workspace = true
 
 [dependencies]
 scirs2-core = { workspace = true }
+# SCIRS2 POLICY: Full use of SciRS2 ecosystem for advanced analytics
+scirs2-graph = { workspace = true }  # Graph algorithms (betweenness, closeness, etc.)
+# scirs2-linalg, scirs2-optimize will be added when needed
 oxirs-core.workspace = true
 oxirs-arq.workspace = true
 oxirs-fuseki.workspace = true

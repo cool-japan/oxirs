@@ -5,11 +5,12 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::GraphQLService;
+use anyhow::{anyhow, Result};
 
 impl ServiceRegistry {
     /// Validate GraphQL service
-    async fn validate_graphql_service(&self, service: &GraphQLService) -> Result<()> {
+    pub(super) async fn validate_graphql_service(&self, service: &GraphQLService) -> Result<()> {
         if service.url.scheme() != "http" && service.url.scheme() != "https" {
             return Err(anyhow!("Invalid URL scheme: {}", service.url.scheme()));
         }

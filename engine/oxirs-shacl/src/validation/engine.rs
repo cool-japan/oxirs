@@ -183,6 +183,41 @@ impl<'a> ValidationEngine<'a> {
         self.inheritance_cache.clear();
     }
 
+    /// Get the number of shapes in the engine
+    ///
+    /// Returns the total count of shapes that this engine is configured to validate against.
+    pub fn shape_count(&self) -> usize {
+        self.shapes.len()
+    }
+
+    /// Get a reference to all shapes
+    ///
+    /// Returns a reference to the IndexMap containing all shapes indexed by ShapeId.
+    pub fn get_shapes(&self) -> &IndexMap<ShapeId, Shape> {
+        self.shapes
+    }
+
+    /// Get a specific shape by ID
+    ///
+    /// Returns a reference to the shape with the given ID, or None if no such shape exists.
+    pub fn get_shape(&self, shape_id: &ShapeId) -> Option<&Shape> {
+        self.shapes.get(shape_id)
+    }
+
+    /// Get all shape IDs
+    ///
+    /// Returns an iterator over all shape IDs in the engine.
+    pub fn shape_ids(&self) -> impl Iterator<Item = &ShapeId> {
+        self.shapes.keys()
+    }
+
+    /// Check if a shape with the given ID exists
+    ///
+    /// Returns true if the engine contains a shape with the given ID.
+    pub fn has_shape(&self, shape_id: &ShapeId) -> bool {
+        self.shapes.contains_key(shape_id)
+    }
+
     /// Validate that the shapes graph is well-formed according to SHACL specification
     ///
     /// This method validates the shapes themselves before they are used to validate data.

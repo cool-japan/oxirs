@@ -334,9 +334,10 @@ impl AsyncValidationEngine {
         let mut events = Vec::new();
         let mut stats = AsyncValidationStats::default();
 
-        // Get shapes for validation - using placeholder since shapes field is private
-        // TODO: Add public accessor method to ValidationEngine for shape count
-        let shape_count = 0; // Placeholder until ValidationEngine exposes shape count
+        // Get shapes for validation using public accessor method
+        let engine_guard = self.engine.read().await;
+        let shape_count = engine_guard.shape_count();
+        drop(engine_guard);
 
         events.push(ValidationEvent::Started {
             total_shapes: shape_count,
@@ -379,7 +380,7 @@ impl AsyncValidationEngine {
     /// Validate specific shapes asynchronously
     pub async fn validate_shapes(
         &self,
-        _store: &dyn Store,
+        store: &dyn Store,
         shape_ids: &[ShapeId],
     ) -> Result<AsyncValidationResult> {
         let start_time = tokio::time::Instant::now();
@@ -406,11 +407,10 @@ impl AsyncValidationEngine {
                     let _permit = semaphore.acquire().await.unwrap();
                     let shape_start = tokio::time::Instant::now();
 
-                    let engine_guard = engine.read().await;
-                    // TODO: Replace with public API when available
-                    // Private field/method access commented out for compilation
+                    let mut engine_guard = engine.write().await;
+                    // Use public API to validate the store
+                    let result = engine_guard.validate_store(store);
                     drop(engine_guard);
-                    let result: Result<ValidationReport> = Ok(ValidationReport::new()); // Placeholder
 
                     match result {
                         Ok(report) => Ok((shape_id, report, shape_start.elapsed())),
@@ -499,10 +499,15 @@ impl AsyncValidationEngine {
             let mut stats = AsyncValidationStats::default();
             let events = Vec::new();
 
-            // TODO: Replace with public API when available
-            // Private field access commented out for compilation
-            let shape_count = 0; // Placeholder
-            let shapes: Vec<(ShapeId, Shape)> = Vec::new(); // Placeholder
+            // Use public API to access shapes
+            let engine_guard = engine.read().await;
+            let shape_count = engine_guard.shape_count();
+            let shapes: Vec<(ShapeId, Shape)> = engine_guard
+                .get_shapes()
+                .iter()
+                .map(|(id, shape)| (id.clone(), shape.clone()))
+                .collect();
+            drop(engine_guard);
 
             let _ = tx.send(ValidationEvent::Started {
                 total_shapes: shape_count,
@@ -678,16 +683,27 @@ impl AsyncValidationEngine {
     async fn validate_nodes_async(
         &self,
         _store: &dyn Store,
-        _shape_id: &ShapeId,
-        _nodes: &[Term],
+        shape_id: &ShapeId,
+        nodes: &[Term],
     ) -> Result<ValidationReport> {
-        let _engine = self.engine.write().await;
+        let engine_guard = self.engine.read().await;
 
-        // TODO: Replace with public API to get shape
-        // For now, return a validation error since we can't access private shapes field
-        Err(ShaclError::ValidationEngine(
-            "Shape validation not yet implemented in async context".to_string(),
-        ))
+        // Use public API to get the shape
+        let _shape = engine_guard
+            .get_shape(shape_id)
+            .ok_or_else(|| ShaclError::ValidationEngine(format!("Shape not found: {}", shape_id)))?
+            .clone();
+        drop(engine_guard);
+
+        // TODO: Implement actual shape-specific validation with the provided nodes
+        // For now, return a basic validation report
+        tracing::warn!(
+            "Shape-specific validation for {} with {} nodes is not yet fully implemented",
+            shape_id,
+            nodes.len()
+        );
+
+        Ok(ValidationReport::new())
     }
 
     /// Get current async configuration

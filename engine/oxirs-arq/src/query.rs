@@ -2,6 +2,28 @@
 //!
 //! This module provides comprehensive SPARQL 1.1/1.2 query parsing capabilities,
 //! converting SPARQL query strings into algebraic expressions for execution.
+//!
+//! ## File Organization (2383 lines)
+//!
+//! This file contains a large `impl QueryParser` block (1958 lines) that implements
+//! a hand-written recursive descent parser for SPARQL 1.1/1.2. The impl block is
+//! intentionally large due to:
+//!
+//! 1. **Parser Cohesion**: All parsing logic is tightly coupled and shares state
+//! 2. **Recursive Grammar**: SPARQL grammar requires many mutually recursive methods
+//! 3. **Lookahead Logic**: Complex lookahead and backtracking require shared position tracking
+//! 4. **Performance**: Inlining and method locality provide better parsing performance
+//!
+//! ### Future Refactoring Considerations:
+//!
+//! Manual refactoring (not SplitRS) would be required due to complex method interdependencies.
+//! Potential structure:
+//! - `query/parser/core.rs` - Core parser infrastructure and state
+//! - `query/parser/expressions.rs` - Expression parsing (logical, relational, arithmetic)
+//! - `query/parser/patterns.rs` - Graph pattern parsing (BGP, OPTIONAL, UNION)
+//! - `query/parser/property_paths.rs` - Property path parsing
+//! - `query/parser/aggregates.rs` - Aggregation and grouping
+//! - `query/parser/update.rs` - UPDATE operation parsing
 
 use crate::algebra::{
     Algebra, BinaryOperator, Expression, GroupCondition, Iri, Literal, OrderCondition,

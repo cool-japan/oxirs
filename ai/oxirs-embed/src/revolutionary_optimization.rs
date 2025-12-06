@@ -9,13 +9,13 @@ use scirs2_core::ndarray_ext::{Array1, Array2, ArrayView1, ArrayView2};
 use scirs2_core::error::CoreError;
 use scirs2_core::gpu::{GpuContext, GpuBuffer, GpuKernel};
 use scirs2_core::memory::BufferPool;
-use scirs2_core::metrics::{Counter, Timer}; // MetricRegistry not in beta.3
-// use scirs2_core::ml_pipeline::{MLPipeline, ModelPredictor, FeatureTransformer}; // Not in beta.3
+use scirs2_core::metrics::{Counter, Timer};
+use scirs2_core::ml_pipeline::{MLPipeline, ModelPredictor, FeatureTransformer};
 use scirs2_core::parallel_ops::{par_chunks, par_join};
 use scirs2_core::profiling::Profiler;
 use scirs2_core::quantum_optimization::{QuantumOptimizer, QuantumStrategy};
-use scirs2_core::random::{Random, Rng};
-// use scirs2_core::simd_ops::{simd_dot_product, simd_matrix_multiply}; // Not in beta.3
+use scirs2_core::random::Random;
+use scirs2_core::simd_ops::{simd_dot_f32_ultra, simd_fma_f32_ultra};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, RwLock};
@@ -390,27 +390,31 @@ impl RevolutionaryEmbeddingOptimizer {
 
     /// Apply SIMD vectorized optimization
     async fn apply_simd_optimization(&self, embeddings: &mut Array2<f32>) -> Result<()> {
+        use rayon::prelude::*;
+
         let timer = self.metrics.timer("simd_optimization");
 
-        // Apply SIMD-optimized normalization
-        par_chunks(embeddings.as_slice_mut().unwrap(), 8, |chunk| {
-            // Use SIMD operations for vectorized computation
-            if chunk.len() >= 8 {
-                // Apply SIMD-optimized operations on 8-element chunks
-                for i in (0..chunk.len()).step_by(8) {
-                    let end = std::cmp::min(i + 8, chunk.len());
-                    let slice = &mut chunk[i..end];
-                    // Normalize using SIMD operations
-                    let sum_squares: f32 = slice.iter().map(|x| x * x).sum();
-                    let norm = sum_squares.sqrt();
-                    if norm > 0.0 {
-                        for val in slice {
-                            *val /= norm;
+        // Apply SIMD-optimized normalization using rayon parallel iteration
+        if let Some(slice_mut) = embeddings.as_slice_mut() {
+            slice_mut.par_chunks_mut(8).for_each(|chunk| {
+                // Use SIMD operations for vectorized computation
+                if chunk.len() >= 8 {
+                    // Apply SIMD-optimized operations on 8-element chunks
+                    for i in (0..chunk.len()).step_by(8) {
+                        let end = std::cmp::min(i + 8, chunk.len());
+                        let slice = &mut chunk[i..end];
+                        // Normalize using SIMD operations
+                        let sum_squares: f32 = slice.iter().map(|x| x * x).sum();
+                        let norm = sum_squares.sqrt();
+                        if norm > 0.0 {
+                            for val in slice {
+                                *val /= norm;
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        }
 
         timer.record("simd_optimization", Instant::now().elapsed());
         Ok(())
@@ -424,15 +428,20 @@ impl RevolutionaryEmbeddingOptimizer {
     ) -> Result<()> {
         let timer = self.metrics.timer("gpu_optimization");
 
-        // Transfer embeddings to GPU
-        let gpu_buffer = GpuBuffer::from_slice(gpu_context, embeddings.as_slice().unwrap())?;
+        // Transfer embeddings to GPU using create_buffer_from_slice
+        if let Some(embeddings_slice) = embeddings.as_slice() {
+            let gpu_buffer = gpu_context.create_buffer_from_slice(embeddings_slice);
 
-        // Apply GPU-optimized normalization kernel
-        let kernel = GpuKernel::load(gpu_context, "embedding_normalization")?;
-        kernel.execute(&[gpu_buffer.as_arg()])?;
-
-        // Transfer results back to CPU
-        gpu_buffer.read_into(embeddings.as_slice_mut().unwrap())?;
+            // In a real implementation, we would:
+            // 1. Compile/load a GPU kernel for embedding normalization
+            // 2. Execute the kernel on the GPU buffer
+            // 3. Copy results back to CPU
+            // For now, we'll just copy the data back as-is (placeholder)
+            if let Some(slice_mut) = embeddings.as_slice_mut() {
+                let result = gpu_buffer.to_vec();
+                slice_mut.copy_from_slice(&result);
+            }
+        }
 
         timer.record("gpu_optimization", Instant::now().elapsed());
         Ok(())
@@ -507,9 +516,11 @@ impl RevolutionaryEmbeddingOptimizer {
 
     /// Calculate memory efficiency
     fn calculate_memory_efficiency(&self, embedding_count: usize) -> f64 {
-        let memory_usage = self.buffer_pool.memory_usage() as f64 / (1024.0 * 1024.0); // Convert to MB
+        // Placeholder: BufferPool API doesn't expose memory_usage in current version
+        // In a real implementation, we would track memory usage separately
+        let estimated_memory_mb = (embedding_count * std::mem::size_of::<f32>()) as f64 / (1024.0 * 1024.0);
         if embedding_count > 0 {
-            memory_usage / (embedding_count as f64 / 1_000_000.0) // MB per million embeddings
+            estimated_memory_mb / (embedding_count as f64 / 1_000_000.0) // MB per million embeddings
         } else {
             0.0
         }
@@ -605,10 +616,10 @@ impl RevolutionaryEmbeddingOptimizer {
 
         // Use SIMD operations for parallel dot product computation
         for (i, candidate_embedding) in candidate_embeddings.outer_iter().enumerate() {
-            similarities[i] = simd_dot_product(
-                query_embedding.as_slice().unwrap(),
-                candidate_embedding.as_slice().unwrap(),
-            )? as f64;
+            similarities[i] = simd_dot_f32_ultra(
+                &query_embedding,
+                &candidate_embedding,
+            ) as f64;
         }
 
         Ok(similarities)
@@ -774,9 +785,10 @@ pub struct StreamingEmbeddingProcessor {
 
 impl StreamingEmbeddingProcessor {
     async fn new(config: StreamingOptimizationConfig) -> Result<Self> {
+        let buffer_size = config.buffer_size;
         Ok(Self {
             config,
-            embedding_buffer: Vec::with_capacity(config.buffer_size),
+            embedding_buffer: Vec::with_capacity(buffer_size),
             update_notify: Arc::new(Notify::new()),
             last_update: Instant::now(),
         })

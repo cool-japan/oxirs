@@ -5,11 +5,14 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::{ServiceDescription, SparqlCapabilities, SparqlEndpoint, SparqlVersion};
+use anyhow::Result;
+use std::time::Duration;
+use tracing::{debug, info};
 
 impl ServiceRegistry {
     /// Detect SPARQL endpoint capabilities
-    async fn detect_sparql_capabilities(
+    pub(super) async fn detect_sparql_capabilities(
         &self,
         endpoint: &SparqlEndpoint,
     ) -> Result<SparqlCapabilities> {

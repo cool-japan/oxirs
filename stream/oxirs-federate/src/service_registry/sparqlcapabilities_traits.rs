@@ -8,7 +8,8 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
-use super::types::SparqlCapabilities;
+use super::types::{SparqlCapabilities, SparqlVersion};
+use std::collections::HashSet;
 
 impl Default for SparqlCapabilities {
     fn default() -> Self {

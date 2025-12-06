@@ -34,37 +34,6 @@ pub mod serviceregistry_validate_sparql_endpoint_group;
 pub mod sparqlcapabilities_traits;
 pub mod types;
 
-// Re-export all types
-pub use connectionconfig_traits::*;
-pub use functions::*;
-pub use graphqlcapabilities_traits::*;
-pub use performancestats_traits::*;
-pub use registryconfig_traits::*;
-pub use serviceregistry_accessors::*;
-pub use serviceregistry_accessors_1::*;
-pub use serviceregistry_accessors_2::*;
-pub use serviceregistry_accessors_3::*;
-pub use serviceregistry_accessors_4::*;
-pub use serviceregistry_accessors_5::*;
-pub use serviceregistry_accessors_6::*;
-pub use serviceregistry_check_methods::*;
-pub use serviceregistry_check_methods_1::*;
-pub use serviceregistry_detect_graphql_version_group::*;
-pub use serviceregistry_detect_sparql_capabilities_group::*;
-pub use serviceregistry_enable_extended_metadata_group::*;
-pub use serviceregistry_fetch_graphql_schema_group::*;
-pub use serviceregistry_introspect_graphql_service_group::*;
-pub use serviceregistry_new_group::*;
-pub use serviceregistry_populate_service_capabilities_group::*;
-pub use serviceregistry_remove_service_group::*;
-pub use serviceregistry_start_group::*;
-pub use serviceregistry_stop_group::*;
-pub use serviceregistry_test_methods::*;
-pub use serviceregistry_test_methods_1::*;
-pub use serviceregistry_traits::*;
+// Re-export only the main types that are used externally
 pub use serviceregistry_type::*;
-pub use serviceregistry_update_service_capabilities_group::*;
-pub use serviceregistry_validate_graphql_service_group::*;
-pub use serviceregistry_validate_sparql_endpoint_group::*;
-pub use sparqlcapabilities_traits::*;
 pub use types::*;

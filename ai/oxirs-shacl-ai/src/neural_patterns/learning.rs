@@ -99,6 +99,7 @@ impl NeuralPatternLearner {
         validation_patterns: &[Pattern],
         target_correlations: &HashMap<(String, String), CorrelationType>,
     ) -> Result<ModelMetrics> {
+        let training_start_time = Instant::now();
         let mut best_validation_loss = f64::INFINITY;
         let mut epochs_without_improvement = 0;
         let patience = 10; // Early stopping patience
@@ -159,21 +160,10 @@ impl NeuralPatternLearner {
             );
         }
 
-        Ok(ModelMetrics {
-            accuracy: self
-                .training_history
-                .accuracy_history
-                .last()
-                .copied()
-                .unwrap_or(1.0 - best_validation_loss), // Use accuracy history if available, otherwise convert loss
-            precision: 0.0, // TODO: Implement proper precision computation
-            recall: 0.0,    // TODO: Implement proper recall computation
-            f1_score: 0.0,  // TODO: Implement proper F1 computation
-            auc_roc: 0.0,   // TODO: Implement proper AUC computation
-            confusion_matrix: vec![vec![0; 2]; 2], // TODO: Implement proper confusion matrix
-            per_class_metrics: std::collections::HashMap::new(), // TODO: Implement per-class metrics
-            training_time: std::time::Duration::from_secs(0),    // TODO: Track actual training time
-        })
+        // Compute comprehensive metrics on validation set
+        let training_time = training_start_time.elapsed();
+        self.compute_comprehensive_metrics(validation_patterns, target_correlations, training_time)
+            .await
     }
 
     /// Train for one epoch
@@ -774,6 +764,277 @@ impl NeuralPatternLearner {
             6 => CorrelationType::Contextual,
             7 => CorrelationType::CrossDomain,
             _ => CorrelationType::Structural, // Default fallback
+        }
+    }
+
+    /// Convert correlation type to index
+    fn correlation_type_to_index(&self, corr_type: &CorrelationType) -> usize {
+        match corr_type {
+            CorrelationType::Structural => 0,
+            CorrelationType::Semantic => 1,
+            CorrelationType::Temporal => 2,
+            CorrelationType::Causal => 3,
+            CorrelationType::Hierarchical => 4,
+            CorrelationType::Functional => 5,
+            CorrelationType::Contextual => 6,
+            CorrelationType::CrossDomain => 7,
+        }
+    }
+
+    /// Compute comprehensive metrics including precision, recall, F1, AUC, and confusion matrix
+    async fn compute_comprehensive_metrics(
+        &self,
+        patterns: &[Pattern],
+        target_correlations: &HashMap<(String, String), CorrelationType>,
+        training_time: std::time::Duration,
+    ) -> Result<ModelMetrics> {
+        let predictions = self.forward_pass(patterns).await?;
+
+        // Collect predictions and ground truth labels for all pattern pairs
+        let mut all_predictions = Vec::new();
+        let mut all_true_labels = Vec::new();
+        let mut all_prediction_scores = Vec::new();
+
+        for (i, pattern) in patterns.iter().enumerate() {
+            for (j, other_pattern) in patterns.iter().enumerate() {
+                if i != j {
+                    let pattern_pair = (pattern.id().to_string(), other_pattern.id().to_string());
+                    if let Some(expected_correlation) = target_correlations.get(&pattern_pair) {
+                        // Get predicted correlation type (argmax of prediction)
+                        let pred_row = predictions.row(i);
+                        let predicted_type_idx = pred_row
+                            .iter()
+                            .enumerate()
+                            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
+                            .map(|(idx, _)| idx)
+                            .unwrap_or(0);
+
+                        let predicted_correlation =
+                            self.index_to_correlation_type(predicted_type_idx);
+                        let true_label_idx = self.correlation_type_to_index(expected_correlation);
+
+                        all_predictions.push(predicted_type_idx);
+                        all_true_labels.push(true_label_idx);
+                        all_prediction_scores.push(pred_row.to_vec());
+                    }
+                }
+            }
+        }
+
+        // Number of classes (correlation types)
+        let num_classes = 8;
+
+        // Compute confusion matrix
+        let confusion_matrix =
+            self.compute_confusion_matrix(&all_predictions, &all_true_labels, num_classes);
+
+        // Compute per-class metrics
+        let (per_class_metrics, macro_precision, macro_recall, macro_f1) =
+            self.compute_per_class_metrics(&confusion_matrix, num_classes);
+
+        // Compute overall accuracy
+        let total_correct: usize = confusion_matrix
+            .iter()
+            .enumerate()
+            .map(|(i, row)| row[i])
+            .sum();
+        let total_samples: usize = confusion_matrix
+            .iter()
+            .map(|row| row.iter().sum::<usize>())
+            .sum();
+        let accuracy = if total_samples > 0 {
+            total_correct as f64 / total_samples as f64
+        } else {
+            0.0
+        };
+
+        // Compute AUC-ROC using one-vs-rest approach
+        let auc_roc = self.compute_auc_roc(&all_prediction_scores, &all_true_labels, num_classes);
+
+        Ok(ModelMetrics {
+            accuracy,
+            precision: macro_precision,
+            recall: macro_recall,
+            f1_score: macro_f1,
+            auc_roc,
+            confusion_matrix,
+            per_class_metrics,
+            training_time,
+        })
+    }
+
+    /// Compute confusion matrix
+    fn compute_confusion_matrix(
+        &self,
+        predictions: &[usize],
+        true_labels: &[usize],
+        num_classes: usize,
+    ) -> Vec<Vec<usize>> {
+        let mut matrix = vec![vec![0; num_classes]; num_classes];
+
+        for (pred, true_label) in predictions.iter().zip(true_labels.iter()) {
+            if *pred < num_classes && *true_label < num_classes {
+                matrix[*true_label][*pred] += 1;
+            }
+        }
+
+        matrix
+    }
+
+    /// Compute per-class metrics (precision, recall, F1) and macro-averaged values
+    fn compute_per_class_metrics(
+        &self,
+        confusion_matrix: &[Vec<usize>],
+        num_classes: usize,
+    ) -> (HashMap<String, crate::ml::ClassMetrics>, f64, f64, f64) {
+        use crate::ml::ClassMetrics;
+
+        let mut per_class_metrics = HashMap::new();
+        let mut precision_sum = 0.0;
+        let mut recall_sum = 0.0;
+        let mut f1_sum = 0.0;
+        let mut valid_classes = 0;
+
+        for class_idx in 0..num_classes {
+            // True positives: diagonal element
+            let tp = confusion_matrix[class_idx][class_idx];
+
+            // False positives: sum of column excluding diagonal
+            let fp: usize = (0..num_classes)
+                .filter(|&i| i != class_idx)
+                .map(|i| confusion_matrix[i][class_idx])
+                .sum();
+
+            // False negatives: sum of row excluding diagonal
+            let fn_count: usize = (0..num_classes)
+                .filter(|&j| j != class_idx)
+                .map(|j| confusion_matrix[class_idx][j])
+                .sum();
+
+            // Support: total number of actual instances of this class
+            let support = tp + fn_count;
+
+            // Precision: tp / (tp + fp)
+            let precision = if tp + fp > 0 {
+                tp as f64 / (tp + fp) as f64
+            } else {
+                0.0
+            };
+
+            // Recall: tp / (tp + fn)
+            let recall = if tp + fn_count > 0 {
+                tp as f64 / (tp + fn_count) as f64
+            } else {
+                0.0
+            };
+
+            // F1 score: 2 * (precision * recall) / (precision + recall)
+            let f1_score = if precision + recall > 0.0 {
+                2.0 * (precision * recall) / (precision + recall)
+            } else {
+                0.0
+            };
+
+            let class_name = format!("{:?}", self.index_to_correlation_type(class_idx));
+            per_class_metrics.insert(
+                class_name,
+                ClassMetrics {
+                    precision,
+                    recall,
+                    f1_score,
+                    support,
+                },
+            );
+
+            if support > 0 {
+                precision_sum += precision;
+                recall_sum += recall;
+                f1_sum += f1_score;
+                valid_classes += 1;
+            }
+        }
+
+        // Macro-averaged metrics
+        let macro_precision = if valid_classes > 0 {
+            precision_sum / valid_classes as f64
+        } else {
+            0.0
+        };
+        let macro_recall = if valid_classes > 0 {
+            recall_sum / valid_classes as f64
+        } else {
+            0.0
+        };
+        let macro_f1 = if valid_classes > 0 {
+            f1_sum / valid_classes as f64
+        } else {
+            0.0
+        };
+
+        (per_class_metrics, macro_precision, macro_recall, macro_f1)
+    }
+
+    /// Compute AUC-ROC using one-vs-rest approach for multi-class classification
+    fn compute_auc_roc(
+        &self,
+        prediction_scores: &[Vec<f64>],
+        true_labels: &[usize],
+        num_classes: usize,
+    ) -> f64 {
+        let mut auc_sum = 0.0;
+        let mut valid_classes = 0;
+
+        for class_idx in 0..num_classes {
+            // For each class, compute binary classification AUC
+            let mut positive_scores = Vec::new();
+            let mut negative_scores = Vec::new();
+
+            for (scores, &true_label) in prediction_scores.iter().zip(true_labels.iter()) {
+                if class_idx < scores.len() {
+                    let score = scores[class_idx];
+                    if true_label == class_idx {
+                        positive_scores.push(score);
+                    } else {
+                        negative_scores.push(score);
+                    }
+                }
+            }
+
+            // Compute AUC for this class using the trapezoidal rule
+            if !positive_scores.is_empty() && !negative_scores.is_empty() {
+                let auc = self.compute_binary_auc(&positive_scores, &negative_scores);
+                auc_sum += auc;
+                valid_classes += 1;
+            }
+        }
+
+        // Return macro-averaged AUC
+        if valid_classes > 0 {
+            auc_sum / valid_classes as f64
+        } else {
+            0.5 // Random performance
+        }
+    }
+
+    /// Compute binary AUC using the Wilcoxon-Mann-Whitney statistic
+    fn compute_binary_auc(&self, positive_scores: &[f64], negative_scores: &[f64]) -> f64 {
+        let mut comparison_sum = 0.0;
+
+        for &pos_score in positive_scores {
+            for &neg_score in negative_scores {
+                if pos_score > neg_score {
+                    comparison_sum += 1.0;
+                } else if (pos_score - neg_score).abs() < 1e-10 {
+                    comparison_sum += 0.5; // Tie
+                }
+            }
+        }
+
+        let total_comparisons = (positive_scores.len() * negative_scores.len()) as f64;
+        if total_comparisons > 0.0 {
+            comparison_sum / total_comparisons
+        } else {
+            0.5
         }
     }
 

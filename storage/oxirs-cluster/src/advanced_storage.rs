@@ -169,7 +169,6 @@ impl Drop for AtomicFile {
 }
 
 /// Write-Ahead Log with atomic operations and crash recovery
-// TODO: Implement Debug for MessageSerializer to re-enable derive(Debug)
 struct WriteAheadLog {
     config: StorageConfig,
     current_sequence: AtomicU64,

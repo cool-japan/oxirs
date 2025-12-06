@@ -3,8 +3,10 @@
 //! This module provides the core geometry types and operations for GeoSPARQL,
 //! wrapping the `geo` crate and providing WKT/GML serialization support.
 
+pub mod compressed_storage;
 pub mod coord3d;
 pub mod memory_pool;
+pub mod streaming;
 pub mod wkt_parser;
 pub mod zero_copy_wkt;
 

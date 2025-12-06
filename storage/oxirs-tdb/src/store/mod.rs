@@ -3,6 +3,12 @@
 //! Provides the main TDBStore interface for interacting with the storage engine.
 //! Integrates all components: dictionary, indexes, transactions, compression.
 
+pub mod store_params;
+
+pub use store_params::{
+    CompressionAlgorithm, ReplicationMode, StoreParams, StoreParamsBuilder, StorePresets,
+};
+
 use crate::compression::{BloomFilter, PrefixCompressor};
 use crate::diagnostics::{DiagnosticContext, DiagnosticEngine, DiagnosticLevel, DiagnosticReport};
 use crate::dictionary::{Dictionary, Term};

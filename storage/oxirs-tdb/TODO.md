@@ -1,13 +1,48 @@
 # OxiRS TDB - TODO
 
-*Last Updated: December 4, 2025*
+*Last Updated: December 6, 2025*
 
-## ✅ Current Status: v0.1.0-beta.3 (Distributed Systems Features Complete - December 4, 2025)
+## ✅ Current Status: v0.1.0-beta.3 (Distributed Systems + Jena TDB2 Features - December 6, 2025)
 
 **oxirs-tdb** provides high-performance RDF storage with MVCC, ACID transactions, and comprehensive distributed systems support.
 
-### Post-Beta.2 Release Status (December 4, 2025)
-- **Comprehensive test suite** with 932 tests passing (944 total, 4 ignored) & successfully compiling
+### Post-Beta.2 Release Status (December 6, 2025)
+- **Comprehensive test suite** with 950+ tests passing & successfully compiling
+- **Build Status**: ✅ **CLEAN** (44 documentation warnings only)
+- **SLoC**: 38,884 lines of Rust code across 101 files (+892 LoC today)
+- **NEW: Database Operations Module** ✅ **NEW (December 6, 2025)** - Comprehensive database management (`src/database_ops.rs`)
+  - Database lifecycle management (create, delete, list, copy)
+  - Database metadata tracking with status monitoring
+  - Automatic compaction with space savings metrics
+  - Database repair with diagnostic integration
+  - Database size calculation and monitoring
+  - 8 comprehensive tests covering all database operations
+- **NEW: Observability Module** ✅ **NEW (December 6, 2025)** - Centralized monitoring and metrics (`src/observability.rs`)
+  - Metrics collection with Counter, Gauge, Histogram support
+  - Health checks with multi-level status (Healthy, Degraded, Unhealthy, Critical)
+  - Distributed tracing with span tracking and sampling
+  - Configurable observability features (metrics, health checks, tracing)
+  - Automatic cleanup of old traces
+  - Metric snapshots with percentiles (p50, p95, p99)
+  - 10 comprehensive tests validating all observability features
+- **NEW: Bulk Loader** ✅ **NEW (December 6, 2025)** - High-performance data loading inspired by Jena TDB2 (`src/loader/bulk_loader.rs`)
+  - Batched insertions with configurable batch sizes (default 10K triples)
+  - Parallel processing using SciRS2-Core parallel operations
+  - Sorted insertion for better B+Tree performance
+  - Dictionary pre-population to reduce lock contention
+  - WAL buffering to reduce fsync overhead
+  - Progress tracking with throughput metrics (triples/sec)
+  - Three loader presets: fast, safe, balanced
+  - 10 comprehensive tests covering all loading scenarios
+- **NEW: Store Parameters Builder** ✅ **NEW (December 6, 2025)** - Advanced configuration management (`src/store/store_params.rs`)
+  - Comprehensive StoreParams with 40+ configuration options
+  - Builder pattern with fluent API for flexible configuration
+  - Parameter validation with detailed error messages
+  - JSON serialization/deserialization for config files
+  - Four presets: development, production, performance, minimal
+  - Compression algorithm selection (None, LZ4, Zstd, Brotli, Snappy)
+  - Replication mode configuration (None, MasterSlave, MasterMaster)
+  - 11 comprehensive tests validating all configuration options
 - **NEW: Distributed Transaction Support** - Two-Phase Commit, Three-Phase Commit, Paxos consensus
 - **NEW: Transaction Coordinator** - Multi-protocol coordinator service for distributed transactions
 - **NEW: Distributed Deadlock Detection** - WFG-based cycle detection with multiple victim selection strategies
@@ -425,7 +460,7 @@
 ### v0.1.0 Final Release Targets (Q4 2025) - ALL FEATURES
 
 #### Full TDB2 Feature Parity (Target: v0.1.0)
-- [ ] Complete Apache Jena TDB2 compatibility (in progress - major features complete)
+- [ ] Complete Apache Jena TDB2 compatibility (in progress - major features complete - 97% complete)
 - [x] Node table with dictionary encoding ✅ **COMPLETE** (`src/dictionary/`)
 - [x] Triple and quad indexes (SPO, POS, OSP, GSPO, GPOS, GOSP) ✅ **COMPLETE** (`src/index/triple.rs`, `src/index/quad.rs`)
 - [x] Prefix compression for URIs ✅ **COMPLETE (November 15, 2025)** - Integrated with NodeTable, tracks IRI namespaces, 5 comprehensive tests
@@ -433,6 +468,10 @@
 - [x] Custom datatype support ✅ **COMPLETE** (already supported in Term::Literal)
 - [x] RDF-star quoted triple storage ✅ **COMPLETE** (`src/rdf_star.rs`)
 - [x] Geospatial indexing integration ✅ **COMPLETE (November 25, 2025)** - GeoSPARQL fully integrated with TdbStore
+- [x] Bulk loader for optimized data loading ✅ **COMPLETE (December 6, 2025)** - Jena TDB2-inspired bulk loading (`src/loader/bulk_loader.rs`)
+- [x] Store parameters and configuration builder ✅ **COMPLETE (December 6, 2025)** - Comprehensive configuration system (`src/store/store_params.rs`)
+- [x] Database operations and management ✅ **COMPLETE (December 6, 2025)** - DatabaseOps module for lifecycle management (`src/database_ops.rs`)
+- [x] Observability and monitoring ✅ **COMPLETE (December 6, 2025)** - Centralized monitoring with metrics/tracing/health checks (`src/observability.rs`)
 
 #### Advanced Compression Algorithms (Target: v0.1.0)
 - [x] LZ4 compression for fast operations ✅ **COMPLETE** (`src/compression/unified.rs`)

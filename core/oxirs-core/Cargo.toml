@@ -149,3 +149,7 @@ harness = false
 name = "parallel_batch_bench"
 harness = false
 
+[[bench]]
+name = "query_visualization_bench"
+harness = false
+

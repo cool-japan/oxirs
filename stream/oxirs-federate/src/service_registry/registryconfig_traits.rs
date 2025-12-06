@@ -9,6 +9,7 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::types::RegistryConfig;
+use std::time::Duration;
 
 impl Default for RegistryConfig {
     fn default() -> Self {

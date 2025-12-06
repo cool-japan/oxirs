@@ -106,6 +106,9 @@ pub mod consensus;
 // Distributed coordination and replication
 pub mod distributed;
 
+// Data loading utilities
+pub mod loader;
+
 // Compression and optimization
 pub mod compression;
 
@@ -188,13 +191,27 @@ pub mod wal_shipping;
 // Cloud storage integration (S3, GCS, Azure)
 pub mod cloud_storage;
 
+// Database operations and management
+pub mod database_ops;
+
+// Observability and monitoring
+pub mod observability;
+
 // Re-export commonly used types
 pub use backup_encryption::{BackupEncryption, EncryptedData, EncryptionConfig};
 pub use connection_pool::{ConnectionPool, ConnectionPoolConfig, ConnectionPoolStatsSnapshot};
+pub use database_ops::{
+    CompactionStats, DatabaseMetadata, DatabaseOps, DatabaseStatus, RepairReport,
+};
 pub use error::{Result, TdbError};
+pub use loader::{BulkLoadStats, BulkLoader, BulkLoaderConfig, BulkLoaderFactory};
 pub use materialized_views::{
     MaterializedView, MaterializedViewConfig, MaterializedViewManager,
     MaterializedViewManagerStats, RefreshStrategy, ViewInfo,
+};
+pub use observability::{
+    HealthCheck, HealthCheckResult, HealthCheckResults, HealthStatus, MetricSnapshot,
+    ObservabilityConfig, ObservabilityManager, TraceSpan, TraceSpanId,
 };
 pub use online_backup::{
     OnlineBackupManager, OnlineBackupStats, Snapshot, SnapshotConfig, SnapshotId, SnapshotStatus,
@@ -203,7 +220,10 @@ pub use query_resource_quota::{
     QueryQuotaStats, QueryResourceQuotaConfig, QueryResourceQuotaManager, QueryResourceTracker,
     QueryResourceUsage,
 };
-pub use store::{TdbConfig, TdbStats, TdbStore};
+pub use store::{
+    CompressionAlgorithm, ReplicationMode, StoreParams, StoreParamsBuilder, StorePresets,
+    TdbConfig, TdbStats, TdbStore,
+};
 pub use wal_archive::{
     WalArchiveConfig, WalArchiveMetadata, WalArchiver, WalArchiverStatsSnapshot,
 };

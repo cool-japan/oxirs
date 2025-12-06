@@ -1,5 +1,6 @@
 //! SPARQL query processing module with full SciRS2 integration
 
+pub mod advanced_statistics;
 pub mod algebra;
 pub mod binding_optimizer;
 pub mod cost_based_optimizer;
@@ -14,7 +15,9 @@ pub mod pattern_optimizer;
 pub mod pattern_unification;
 pub mod plan;
 pub mod plan_cache;
+pub mod profiled_plan_builder;
 pub mod property_paths;
+pub mod query_plan_visualizer;
 pub mod query_profiler;
 pub mod result_cache;
 pub mod sparql_algebra;
@@ -34,6 +37,9 @@ pub use sparql_query::*;
 
 // Re-export execution plan types
 pub use plan::ExecutionPlan;
+
+// Re-export advanced statistics types
+pub use advanced_statistics::{AdvancedStatistics, AdvancedStatisticsCollector, PatternExecution};
 
 // Re-export algebra types (without Query to avoid conflict)
 // Use explicit aliases to avoid conflicts
@@ -56,6 +62,13 @@ pub use pattern_unification::{
     UnifiedTriplePattern,
 };
 pub use plan_cache::{CacheConfig, CacheStatistics, CachedPlan, QueryPlanCache, SerializablePlan};
+pub use profiled_plan_builder::{
+    CacheEffectiveness, ExecutionComparison, ImprovementLevel, PerformanceAnalysis,
+    PerformanceGrade, ProfiledPlanBuilder, ProfilingReport,
+};
+pub use query_plan_visualizer::{
+    HintSeverity, OptimizationHint, QueryPlanNode, QueryPlanSummary, QueryPlanVisualizer,
+};
 pub use query_profiler::{
     ProfiledQuery, ProfilerConfig, ProfilingStatistics, QueryProfiler, QueryProfilingSession,
     QueryStatistics,

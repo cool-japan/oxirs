@@ -213,6 +213,7 @@ development = ["admin-ui", "tracing"]
 production = ["metrics", "auth", "rate-limit", "tls", "ldap"]
 k8s = ["kube", "k8s-openapi", "schemars"]  # Kubernetes operator support
 acme = ["instant-acme", "rcgen"]  # ACME/Let's Encrypt certificate automation
+memory_management = []  # SciRS2-Core advanced memory leak detection
 
 [[bin]]
 name = "oxirs-fuseki"

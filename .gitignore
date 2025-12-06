@@ -112,3 +112,4 @@ perf.data*
 ai/oxirs-embed/target/*
 # Rust specific
 *.rlib
+engine/oxirs-samm/vehicle*.dot

@@ -176,6 +176,7 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 
 // Core modules
+// pub mod advanced_observability; // FUTURE: Advanced observability with audit trails (requires scirs2-core beta.4+)
 pub mod analytics;
 pub mod cache;
 pub mod chat;
@@ -192,6 +193,7 @@ pub mod error;
 pub mod explanation;
 pub mod exploration_guidance; // NEW: Data exploration guidance
 pub mod external_services;
+// pub mod gpu_embedding_cache; // FUTURE: GPU-accelerated embedding cache (requires scirs2-core beta.4+)
 pub mod graph_exploration;
 pub mod health_monitoring;
 pub mod i18n; // NEW: Internationalization and multi-language support
@@ -202,6 +204,7 @@ pub mod messages;
 pub mod nl2sparql;
 pub mod nlp; // Natural Language Processing (NEW: intent, sentiment, entities, coreference)
 pub mod performance;
+// pub mod performance_profiler; // FUTURE: Advanced performance profiling (requires scirs2-core beta.4+)
 pub mod persistence;
 pub mod query_refinement; // NEW: Query refinement system
 pub mod rag;

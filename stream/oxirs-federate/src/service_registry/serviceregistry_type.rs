@@ -2,7 +2,14 @@
 //!
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
+use super::types::{
+    GraphQLService, HealthStatus, RegistryConfig, ServiceCapabilities, SparqlEndpoint,
+};
+use dashmap::DashMap;
+use parking_lot::RwLock;
+use reqwest::Client;
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Service registry for managing federated endpoints
 #[derive(Debug)]
@@ -25,4 +32,21 @@ pub struct ServiceRegistry {
     pub(super) config: RegistryConfig,
     /// Health monitoring task handle
     pub(super) health_monitor_handle: Option<tokio::task::JoinHandle<()>>,
+}
+
+// Manual Clone implementation that skips the non-cloneable join handle
+impl Clone for ServiceRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            sparql_endpoints: Arc::clone(&self.sparql_endpoints),
+            graphql_services: Arc::clone(&self.graphql_services),
+            health_status: Arc::clone(&self.health_status),
+            capabilities_cache: Arc::clone(&self.capabilities_cache),
+            extended_metadata: Arc::clone(&self.extended_metadata),
+            service_patterns: Arc::clone(&self.service_patterns),
+            http_client: self.http_client.clone(),
+            config: self.config.clone(),
+            health_monitor_handle: None, // Don't clone the join handle
+        }
+    }
 }

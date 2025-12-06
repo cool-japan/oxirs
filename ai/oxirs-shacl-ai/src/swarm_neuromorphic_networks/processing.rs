@@ -203,7 +203,7 @@ impl SwarmNeuromorphicNetwork {
     ) -> Result<SwarmValidationResult> {
         info!(
             "Starting swarm-based validation with {} nodes",
-            0 // TODO: Access swarm_nodes through public method
+            self.node_count()
         );
 
         let start_time = Instant::now();
@@ -285,32 +285,35 @@ impl SwarmNeuromorphicNetwork {
 
     /// Get swarm network statistics
     pub async fn get_swarm_statistics(&self) -> Result<SwarmStatistics> {
-        // TODO: Access swarm_metrics through public method
-        // let metrics = self.swarm_metrics.read().await;
+        let metrics = self.swarm_metrics();
+        let metrics_read = metrics.read().await;
 
         Ok(SwarmStatistics {
-            total_swarm_nodes: 0,       // TODO: Access swarm_nodes through public method
-            total_swarm_validations: 0, // Simplified - would track from metrics
-            average_processing_efficiency: 0.85, // Simplified
-            total_processing_time: Duration::from_secs(0),
-            swarm_network_uptime: Duration::from_secs(3600), // Simplified
-            communication_efficiency: 0.92,                  // Simplified
-            fault_tolerance_level: 0.95,                     // Simplified
-            learning_convergence_rate: 0.88,                 // Simplified
+            total_swarm_nodes: self.node_count(),
+            total_swarm_validations: metrics_read.total_swarm_validations,
+            average_processing_efficiency: metrics_read.average_processing_efficiency,
+            total_processing_time: metrics_read.total_processing_time,
+            swarm_network_uptime: metrics_read.uptime,
+            communication_efficiency: metrics_read.communication_efficiency,
+            fault_tolerance_level: 0.95,     // Simplified
+            learning_convergence_rate: 0.88, // Simplified
         })
     }
 
     // Private helper methods (simplified implementations)
 
     async fn deploy_swarm_nodes(&self) -> Result<SwarmNodeDeployment> {
+        let node_count = self.node_count();
+        let total_capacity = self.total_processing_capacity();
+
         Ok(SwarmNodeDeployment {
-            nodes_deployed: 0,   // TODO: Access config through public method
-            total_capacity: 0.0, // TODO: Access config through public method
+            nodes_deployed: node_count,
+            total_capacity,
         })
     }
 
     async fn calculate_total_swarm_capacity(&self) -> Result<f64> {
-        Ok(0.0) // TODO: Access config through public method
+        Ok(self.total_processing_capacity())
     }
 
     async fn distribute_validation_tasks(

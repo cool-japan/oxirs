@@ -5,11 +5,11 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::SparqlCapabilities;
 
 impl ServiceRegistry {
     /// Helper method to populate service capabilities from SPARQL capabilities
-    fn populate_service_capabilities(
+    pub(super) fn populate_service_capabilities(
         &self,
         service: &mut crate::FederatedService,
         capabilities: &SparqlCapabilities,

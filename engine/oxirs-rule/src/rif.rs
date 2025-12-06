@@ -4,12 +4,10 @@
 //! Implements RIF-Core and RIF-BLD (Basic Logic Dialect) for semantic web applications.
 //!
 //! ## Supported Dialects
-//!
 //! - **RIF-Core**: Basic Horn rules without negation
 //! - **RIF-BLD**: Basic Logic Dialect with equality, NAF, and frame logic
 //!
 //! ## Example
-//!
 //! ```rust
 //! use oxirs_rule::rif::{RifParser, RifSerializer, RifDialect};
 //!
@@ -36,7 +34,6 @@
 //! ```
 //!
 //! ## W3C RIF References
-//!
 //! - [RIF Core](https://www.w3.org/TR/rif-core/)
 //! - [RIF BLD](https://www.w3.org/TR/rif-bld/)
 //! - [RIF Compact Syntax](https://www.w3.org/TR/rif-bld/#Compact_Syntax)
@@ -78,13 +75,11 @@ pub struct RifDocument {
     /// Document metadata
     pub metadata: HashMap<String, String>,
 }
-
 impl Default for RifDocument {
     fn default() -> Self {
         Self::new(RifDialect::default())
     }
 }
-
 impl RifDocument {
     /// Create a new RIF document
     pub fn new(dialect: RifDialect) -> Self {

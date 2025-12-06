@@ -830,6 +830,33 @@ pub enum Commands {
         #[arg(short, long)]
         lesson: Option<String>,
     },
+
+    /// Advanced RDF graph analytics using scirs2-graph
+    GraphAnalytics {
+        /// Dataset name or path
+        dataset: String,
+        /// Analytics operation (pagerank, community, betweenness, closeness, degree, paths, stats)
+        #[arg(short, long, default_value = "pagerank")]
+        operation: String,
+        /// Damping factor for PageRank
+        #[arg(long, default_value = "0.85")]
+        damping: f64,
+        /// Maximum iterations for iterative algorithms
+        #[arg(long, default_value = "100")]
+        max_iter: usize,
+        /// Convergence tolerance
+        #[arg(long, default_value = "0.000001")]
+        tolerance: f64,
+        /// Source node URI for shortest paths
+        #[arg(long)]
+        source: Option<String>,
+        /// Target node URI for shortest paths
+        #[arg(long)]
+        target: Option<String>,
+        /// Top K results to display
+        #[arg(short = 'k', long, default_value = "20")]
+        top: usize,
+    },
 }
 
 /// Run the CLI application
@@ -1625,6 +1652,51 @@ pub async fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
             manager.start().map_err(|e| {
                 std::io::Error::new(std::io::ErrorKind::Other, format!("Tutorial error: {}", e))
             })?;
+
+            Ok(())
+        }
+
+        Commands::GraphAnalytics {
+            dataset,
+            operation,
+            damping,
+            max_iter,
+            tolerance,
+            source,
+            target,
+            top,
+        } => {
+            use commands::graph_analytics::{
+                execute_graph_analytics, AnalyticsConfig, AnalyticsOperation,
+            };
+            use std::path::Path;
+
+            // Parse operation
+            let op: AnalyticsOperation = operation
+                .parse()
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+
+            // Build configuration
+            let config = AnalyticsConfig {
+                operation: op,
+                damping_factor: damping,
+                max_iterations: max_iter,
+                tolerance,
+                source_node: source.clone(),
+                target_node: target.clone(),
+                top_k: top,
+                katz_alpha: 0.1,       // Default Katz centrality alpha parameter
+                katz_beta: 1.0,        // Default Katz centrality beta parameter
+                k_core_value: None,    // Auto-detect all cores
+                enable_simd: true,     // Auto-enable SIMD optimizations
+                enable_parallel: true, // Auto-enable parallel processing
+                enable_gpu: false,     // GPU is opt-in (requires hardware)
+            };
+
+            // Execute analytics
+            let dataset_path = Path::new(dataset.as_str());
+            execute_graph_analytics(dataset_path, &config)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
             Ok(())
         }

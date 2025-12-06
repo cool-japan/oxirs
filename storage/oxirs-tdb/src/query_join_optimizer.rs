@@ -472,6 +472,7 @@ impl JoinOptimizer {
     }
 
     /// Recursive helper for subset generation
+    #[allow(clippy::only_used_in_recursion)]
     fn generate_subsets_recursive(
         &self,
         n: usize,

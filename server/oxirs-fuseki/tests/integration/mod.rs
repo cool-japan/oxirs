@@ -2,9 +2,9 @@
 
 mod concurrent_tests;
 mod memory_pool_tests;
-// mod batch_execution_tests;
-// mod streaming_results_tests;
-// mod dataset_management_tests;
+mod batch_execution_tests;
+mod streaming_results_tests;
+mod dataset_management_tests;
 
 // Common test utilities
 pub mod common {

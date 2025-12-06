@@ -736,86 +736,524 @@ impl OptimizationEngine {
         Ok(shapes)
     }
 
-    fn analyze_graph_for_optimization(&self, _store: &dyn Store) -> Result<GraphAnalysis> {
-        // TODO: Implement graph analysis
+    fn analyze_graph_for_optimization(&self, store: &dyn Store) -> Result<GraphAnalysis> {
+        let start_time = std::time::Instant::now();
+
+        // Analyze graph statistics
+        let mut unique_subjects = std::collections::HashSet::new();
+        let mut unique_predicates = std::collections::HashSet::new();
+        let mut unique_objects = std::collections::HashSet::new();
+        let mut triple_count = 0;
+
+        // Collect graph data using oxirs-core API
+        let quads = store.quads()?;
+        for quad in quads {
+            triple_count += 1;
+            unique_subjects.insert(quad.subject().to_string());
+            unique_predicates.insert(quad.predicate().to_string());
+            unique_objects.insert(quad.object().to_string());
+        }
+
+        let num_subjects = unique_subjects.len();
+        let num_predicates = unique_predicates.len();
+        let num_objects = unique_objects.len();
+
+        // Calculate graph density
+        let max_possible_triples = num_subjects * num_predicates * num_objects;
+        let density = if max_possible_triples > 0 {
+            triple_count as f64 / max_possible_triples as f64
+        } else {
+            0.0
+        };
+
+        // Estimate clustering coefficient (simplified)
+        let avg_degree = if num_subjects > 0 {
+            triple_count as f64 / num_subjects as f64
+        } else {
+            0.0
+        };
+        let clustering_coefficient = (avg_degree / (num_subjects as f64 + 1.0)).min(1.0);
+
+        // Connectivity analysis (simplified)
+        let connected_components = self.estimate_connected_components(num_subjects, triple_count);
+        let largest_component_size = (num_subjects as f64 * 0.8) as usize; // Estimate
+        let diameter = self.estimate_graph_diameter(num_subjects, avg_degree);
+
+        // Identify optimization opportunities
+        let mut optimization_opportunities = Vec::new();
+
+        if density < 0.01 {
+            optimization_opportunities.push(crate::shape_management::OptimizationOpportunity {
+                id: format!("sparse_graph_{}", uuid::Uuid::new_v4()),
+                optimization_type:
+                    crate::shape_management::OptimizationType::PerformanceOptimization,
+                expected_improvement: 0.3,
+                confidence: 0.8,
+                description: "Sparse graph: Consider using sparse matrix representations"
+                    .to_string(),
+                effort_level: crate::shape_management::EffortLevel::Medium,
+                priority: crate::shape_management::OptimizationPriority::High,
+            });
+        }
+        if num_predicates > 100 {
+            optimization_opportunities.push(crate::shape_management::OptimizationOpportunity {
+                id: format!("predicate_indexing_{}", uuid::Uuid::new_v4()),
+                optimization_type:
+                    crate::shape_management::OptimizationType::PerformanceOptimization,
+                expected_improvement: 0.25,
+                confidence: 0.7,
+                description: "Many predicates: Consider predicate indexing".to_string(),
+                effort_level: crate::shape_management::EffortLevel::Medium,
+                priority: crate::shape_management::OptimizationPriority::Medium,
+            });
+        }
+        if triple_count > 1_000_000 {
+            optimization_opportunities.push(crate::shape_management::OptimizationOpportunity {
+                id: format!("parallel_processing_{}", uuid::Uuid::new_v4()),
+                optimization_type:
+                    crate::shape_management::OptimizationType::PerformanceOptimization,
+                expected_improvement: 0.5,
+                confidence: 0.9,
+                description: "Large graph: Enable parallel processing and streaming".to_string(),
+                effort_level: crate::shape_management::EffortLevel::High,
+                priority: crate::shape_management::OptimizationPriority::Critical,
+            });
+        }
+        if avg_degree > 50.0 {
+            optimization_opportunities.push(crate::shape_management::OptimizationOpportunity {
+                id: format!("hub_optimization_{}", uuid::Uuid::new_v4()),
+                optimization_type:
+                    crate::shape_management::OptimizationType::PerformanceOptimization,
+                expected_improvement: 0.2,
+                confidence: 0.6,
+                description: "High degree nodes: Consider hub optimization".to_string(),
+                effort_level: crate::shape_management::EffortLevel::Low,
+                priority: crate::shape_management::OptimizationPriority::Medium,
+            });
+        }
+
         Ok(GraphAnalysis {
             statistics: GraphStatistics {
-                triple_count: 1000,
-                unique_subjects: 100,
-                unique_predicates: 20,
-                unique_objects: 500,
-                density: 0.1,
-                clustering_coefficient: 0.3,
+                triple_count: triple_count as u64,
+                unique_subjects: num_subjects as u64,
+                unique_predicates: num_predicates as u64,
+                unique_objects: num_objects as u64,
+                density,
+                clustering_coefficient,
             },
             connectivity_analysis: ConnectivityAnalysis {
-                connected_components: 1,
-                largest_component_size: 100,
-                average_degree: 5.0,
-                diameter: 6,
+                connected_components: connected_components as u32,
+                largest_component_size: largest_component_size as u32,
+                average_degree: avg_degree,
+                diameter: diameter as u32,
             },
-            optimization_opportunities: Vec::new(),
-            analysis_time: Duration::from_millis(100),
+            optimization_opportunities,
+            analysis_time: start_time.elapsed(),
         })
+    }
+
+    fn estimate_connected_components(&self, num_nodes: usize, num_edges: usize) -> usize {
+        // Simple heuristic: if edges < nodes, likely disconnected
+        if num_edges < num_nodes {
+            (num_nodes - num_edges).max(1)
+        } else {
+            1
+        }
+    }
+
+    fn estimate_graph_diameter(&self, num_nodes: usize, avg_degree: f64) -> usize {
+        // Estimate using logarithmic model for random graphs
+        if avg_degree > 1.0 && num_nodes > 1 {
+            ((num_nodes as f64).ln() / avg_degree.ln()).ceil() as usize
+        } else {
+            num_nodes
+        }
     }
 
     fn optimize_execution_order(
         &self,
         shapes: &[Shape],
-        _store: &dyn Store,
+        store: &dyn Store,
     ) -> Result<Vec<ShapeExecutionPlan>> {
-        // TODO: Implement execution order optimization
-        let mut plans = Vec::new();
-        for (i, shape) in shapes.iter().enumerate() {
-            plans.push(ShapeExecutionPlan {
-                shape_id: shape.id.clone(),
-                execution_order: i,
-                estimated_complexity: 100,
-                estimated_selectivity: 0.5,
-                dependencies: Vec::new(),
-                parallel_eligible: true,
-            });
+        // Build dependency graph
+        let mut shape_dependencies: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        let mut selectivity_estimates: std::collections::HashMap<String, f64> =
+            std::collections::HashMap::new();
+        let mut complexity_estimates: std::collections::HashMap<String, usize> =
+            std::collections::HashMap::new();
+
+        // Analyze each shape
+        for shape in shapes {
+            let deps = self.analyze_shape_dependencies(shape, shapes);
+            shape_dependencies.insert(shape.id.to_string(), deps);
+
+            // Estimate selectivity (ratio of matching instances)
+            let selectivity = self.estimate_selectivity(shape, store)?;
+            selectivity_estimates.insert(shape.id.to_string(), selectivity);
+
+            // Estimate complexity (number of constraints)
+            let complexity = shape.constraints.len();
+            complexity_estimates.insert(shape.id.to_string(), complexity);
         }
+
+        // Topological sort with cost-based ordering
+        let mut execution_order = Vec::new();
+        let mut visited = std::collections::HashSet::new();
+        let mut temp_mark = std::collections::HashSet::new();
+
+        // Sort shapes by selectivity (most selective first)
+        let mut sorted_shapes: Vec<_> = shapes.iter().collect();
+        sorted_shapes.sort_by(|a, b| {
+            let sel_a = selectivity_estimates.get(&a.id.to_string()).unwrap_or(&0.5);
+            let sel_b = selectivity_estimates.get(&b.id.to_string()).unwrap_or(&0.5);
+            sel_a
+                .partial_cmp(sel_b)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        for shape in sorted_shapes {
+            if !visited.contains(&shape.id.to_string()) {
+                Self::topological_visit(
+                    &shape.id.to_string(),
+                    &shape_dependencies,
+                    &mut visited,
+                    &mut temp_mark,
+                    &mut execution_order,
+                )?;
+            }
+        }
+
+        // Create execution plans
+        let mut plans = Vec::new();
+        for (order, shape_id) in execution_order.iter().enumerate() {
+            if let Some(shape) = shapes.iter().find(|s| s.id.as_str() == shape_id) {
+                let complexity = complexity_estimates.get(shape_id).copied().unwrap_or(100);
+                let selectivity = selectivity_estimates.get(shape_id).copied().unwrap_or(0.5);
+                let dependencies = shape_dependencies
+                    .get(shape_id)
+                    .cloned()
+                    .unwrap_or_default();
+
+                // Shape is parallel eligible if it has no dependencies or all deps are resolved
+                let parallel_eligible = dependencies.is_empty()
+                    || dependencies
+                        .iter()
+                        .all(|dep| execution_order[..order].contains(dep));
+
+                plans.push(ShapeExecutionPlan {
+                    shape_id: ShapeId::new(shape_id.clone()),
+                    execution_order: order,
+                    estimated_complexity: complexity as u32,
+                    estimated_selectivity: selectivity,
+                    dependencies: dependencies.into_iter().map(ShapeId::new).collect(),
+                    parallel_eligible,
+                });
+            }
+        }
+
         Ok(plans)
+    }
+
+    fn analyze_shape_dependencies(&self, shape: &Shape, all_shapes: &[Shape]) -> Vec<String> {
+        let mut dependencies = Vec::new();
+
+        // Check if this shape references other shapes via sh:node or sh:property
+        for (_, constraint) in &shape.constraints {
+            // Check for Node constraints that reference other shapes
+            if let oxirs_shacl::Constraint::Node(node_constraint) = constraint {
+                // Node constraints may reference other shapes
+                let node_id = node_constraint.shape.to_string();
+                if all_shapes.iter().any(|s| s.id.as_str() == node_id) {
+                    dependencies.push(node_id);
+                }
+            }
+        }
+
+        dependencies
+    }
+
+    fn estimate_selectivity(&self, shape: &Shape, store: &dyn Store) -> Result<f64> {
+        // Estimate how selective this shape is (lower = more selective)
+        let total_subjects = self.count_subjects_in_store(store)?;
+        if total_subjects == 0 {
+            return Ok(1.0);
+        }
+
+        // More constraints = more selective
+        let constraint_count = shape.constraints.len();
+        let selectivity: f64 = 1.0 / (constraint_count as f64 + 1.0);
+
+        Ok(selectivity.min(1.0))
+    }
+
+    fn count_subjects_in_store(&self, store: &dyn Store) -> Result<usize> {
+        let mut subjects = std::collections::HashSet::new();
+        let quads = store.quads()?;
+        for quad in quads {
+            subjects.insert(quad.subject().to_string());
+        }
+        Ok(subjects.len())
+    }
+
+    fn topological_visit(
+        shape_id: &str,
+        dependencies: &std::collections::HashMap<String, Vec<String>>,
+        visited: &mut std::collections::HashSet<String>,
+        temp_mark: &mut std::collections::HashSet<String>,
+        result: &mut Vec<String>,
+    ) -> Result<()> {
+        if temp_mark.contains(shape_id) {
+            // Cycle detected - break it by skipping
+            return Ok(());
+        }
+
+        if !visited.contains(shape_id) {
+            temp_mark.insert(shape_id.to_string());
+
+            if let Some(deps) = dependencies.get(shape_id) {
+                for dep in deps {
+                    Self::topological_visit(dep, dependencies, visited, temp_mark, result)?;
+                }
+            }
+
+            temp_mark.remove(shape_id);
+            visited.insert(shape_id.to_string());
+            result.push(shape_id.to_string());
+        }
+
+        Ok(())
     }
 
     fn optimize_parallel_execution(
         &self,
-        _shapes: &[Shape],
-        _store: &dyn Store,
+        shapes: &[Shape],
+        store: &dyn Store,
     ) -> Result<ParallelExecutionStrategy> {
-        // TODO: Implement parallel execution optimization
+        let num_cpus = num_cpus::get();
+
+        // Get execution plans to understand dependencies
+        let execution_plans = self.optimize_execution_order(shapes, store)?;
+
+        // Group shapes into parallel execution groups (Vec<Vec<ShapeId>>)
+        let mut parallel_groups: Vec<Vec<oxirs_shacl::ShapeId>> = Vec::new();
+        let mut current_group: Vec<oxirs_shacl::ShapeId> = Vec::new();
+        let mut processed_shapes = std::collections::HashSet::new();
+
+        for plan in &execution_plans {
+            // Check if all dependencies are processed
+            let dependencies_met = plan
+                .dependencies
+                .iter()
+                .all(|dep| processed_shapes.contains(dep));
+
+            if dependencies_met && plan.parallel_eligible {
+                // Can execute in parallel with current group
+                current_group.push(plan.shape_id.clone());
+
+                // Start new group if current group is full
+                if current_group.len() >= num_cpus {
+                    parallel_groups.push(current_group.clone());
+                    current_group.clear();
+                }
+            } else {
+                // Dependencies not met - need synchronization point
+                if !current_group.is_empty() {
+                    parallel_groups.push(current_group.clone());
+                    current_group.clear();
+                }
+                current_group.push(plan.shape_id.clone());
+            }
+
+            processed_shapes.insert(plan.shape_id.clone());
+        }
+
+        // Add remaining shapes
+        if !current_group.is_empty() {
+            parallel_groups.push(current_group);
+        }
+
+        // Determine synchronization points (between groups)
+        let synchronization_points: Vec<SynchronizationPoint> = (0..parallel_groups.len())
+            .filter_map(|i| {
+                // Synchronize if next group has dependencies on current group
+                if i + 1 < parallel_groups.len() {
+                    let current_shapes: std::collections::HashSet<_> =
+                        parallel_groups[i].iter().cloned().collect();
+                    let has_deps = parallel_groups[i + 1].iter().any(|shape_id| {
+                        execution_plans
+                            .iter()
+                            .find(|p| &p.shape_id == shape_id)
+                            .map(|p| {
+                                p.dependencies
+                                    .iter()
+                                    .any(|dep| current_shapes.contains(dep))
+                            })
+                            .unwrap_or(false)
+                    });
+
+                    if has_deps {
+                        Some(SynchronizationPoint {
+                            execution_point: format!("After parallel group {}", i),
+                            waiting_shapes: parallel_groups[i + 1].clone(),
+                            required_shapes: parallel_groups[i].clone(),
+                        })
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        // Recommend thread count based on workload
+        let max_group_size = parallel_groups.iter().map(|g| g.len()).max().unwrap_or(1);
+        let recommended_thread_count = max_group_size.min(num_cpus) as u32;
+
         Ok(ParallelExecutionStrategy {
-            parallel_groups: Vec::new(),
-            recommended_thread_count: num_cpus::get() as u32,
+            parallel_groups,
+            recommended_thread_count,
             load_balancing_strategy: LoadBalancingStrategy::WorkStealing,
-            synchronization_points: Vec::new(),
+            synchronization_points,
         })
     }
 
     fn optimize_memory_usage(
         &self,
-        _shapes: &[Shape],
-        _store: &dyn Store,
+        shapes: &[Shape],
+        store: &dyn Store,
     ) -> Result<MemoryOptimization> {
-        // TODO: Implement memory optimization
+        // Estimate total memory needed
+        let store_size_estimate = self.estimate_store_memory_usage(store)?;
+        let shapes_size_estimate = self.estimate_shapes_memory_usage(shapes);
+
+        // Calculate heap size (150% of estimated usage)
+        let total_estimate_mb = (store_size_estimate + shapes_size_estimate) / 1_000_000;
+        let heap_size_mb = ((total_estimate_mb as f64 * 1.5) as usize).max(512);
+
+        // Create memory pools for different components
+        let memory_pools = vec![
+            MemoryPool {
+                pool_type: PoolType::LargeObjects,
+                size_mb: ((store_size_estimate / 1_000_000).max(256)) as u64,
+                object_size_bytes: 200, // Average triple size
+            },
+            MemoryPool {
+                pool_type: PoolType::Results,
+                size_mb: 128,
+                object_size_bytes: 1024,
+            },
+            MemoryPool {
+                pool_type: PoolType::Constraints,
+                size_mb: 256,
+                object_size_bytes: 512,
+            },
+        ];
+
+        // Determine GC strategy based on workload
+        let gc_strategy = if shapes.len() > 100 || total_estimate_mb > 1000 {
+            GcStrategy::Concurrent // For large workloads
+        } else {
+            GcStrategy::Generational // For normal workloads
+        };
+
+        // Set streaming threshold to 10% of heap size
+        let streaming_threshold_mb = (heap_size_mb / 10).max(50);
+
         Ok(MemoryOptimization {
-            heap_size_mb: 1024,
-            memory_pools: Vec::new(),
-            gc_strategy: GcStrategy::Generational,
-            streaming_threshold_mb: 100,
+            heap_size_mb: heap_size_mb as u64,
+            memory_pools,
+            gc_strategy,
+            streaming_threshold_mb: streaming_threshold_mb as u64,
         })
+    }
+
+    fn estimate_store_memory_usage(&self, store: &dyn Store) -> Result<usize> {
+        // Rough estimate: each triple ~200 bytes in memory
+        let quads_result = store.quads();
+        let triple_count = match quads_result {
+            Ok(quads) => quads.len(),
+            Err(_) => 0,
+        };
+        Ok(triple_count * 200)
+    }
+
+    fn estimate_shapes_memory_usage(&self, shapes: &[Shape]) -> usize {
+        // Rough estimate: each shape ~1KB base + constraints
+        shapes
+            .iter()
+            .map(|shape| 1024 + (shape.constraints.len() * 512))
+            .sum()
     }
 
     fn calculate_performance_improvements(
         &self,
-        _strategy: &OptimizedValidationStrategy,
+        strategy: &OptimizedValidationStrategy,
     ) -> Result<PerformanceImprovements> {
-        // TODO: Implement performance calculation
+        // Calculate improvements based on optimization strategy
+
+        // Execution order optimization: 10-30% improvement
+        let execution_order_improvement = if strategy.shape_execution_order.is_empty() {
+            0.0
+        } else {
+            // Simplified improvement calculation based on number of shapes
+            10.0 + (20.0 * (strategy.shape_execution_order.len() as f64 / 10.0).min(1.0))
+        };
+
+        // Parallel execution: improvement based on parallelism
+        let parallel_improvement = if let Some(ref parallel_exec) = strategy.parallel_execution {
+            let avg_parallelism: f64 = parallel_exec
+                .parallel_groups
+                .iter()
+                .map(|g| g.len() as f64)
+                .sum::<f64>()
+                / parallel_exec.parallel_groups.len().max(1) as f64;
+
+            // Cap at 80% improvement (Amdahl's law)
+            (avg_parallelism * 15.0).min(80.0)
+        } else {
+            0.0
+        };
+
+        // Memory optimization: 10-25% improvement
+        let memory_improvement: f64 = if let Some(ref memory_opt) = strategy.memory_optimization {
+            // Better memory management = less GC overhead
+            match memory_opt.gc_strategy {
+                GcStrategy::Concurrent => 25.0,
+                GcStrategy::Generational => 15.0,
+                GcStrategy::LowLatency => 20.0,
+                GcStrategy::Throughput => 18.0,
+            }
+        } else {
+            0.0
+        };
+
+        // Index optimization: 5-20% improvement
+        let index_improvement = if strategy.cache_strategy.is_some() {
+            20.0
+        } else {
+            5.0
+        };
+
+        // Total execution time improvement (compound benefits)
+        let execution_time_improvement =
+            execution_order_improvement + parallel_improvement * 0.5 + index_improvement * 0.3;
+
+        // Memory usage reduction
+        let memory_usage_reduction = memory_improvement;
+
+        // Throughput increase (slightly higher than execution time due to parallelism)
+        let throughput_increase = execution_time_improvement * 1.2 + parallel_improvement * 0.3;
+
+        // Latency reduction (execution order + caching)
+        let latency_reduction = execution_order_improvement + index_improvement;
+
         Ok(PerformanceImprovements {
-            execution_time_improvement: 20.0,
-            memory_usage_reduction: 15.0,
-            throughput_increase: 25.0,
-            latency_reduction: 10.0,
+            execution_time_improvement: execution_time_improvement.min(90.0), // Cap at 90%
+            memory_usage_reduction: memory_usage_reduction.min(50.0),         // Cap at 50%
+            throughput_increase: throughput_increase.min(200.0),              // Cap at 200%
+            latency_reduction: latency_reduction.min(80.0),                   // Cap at 80%
         })
     }
 

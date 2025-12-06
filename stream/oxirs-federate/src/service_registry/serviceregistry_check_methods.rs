@@ -5,11 +5,17 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::{HealthState, HealthStatus, SparqlEndpoint};
+use chrono::Utc;
+use reqwest::Client;
+use std::time::Instant;
 
 impl ServiceRegistry {
     /// Check SPARQL endpoint health
-    async fn check_sparql_health(client: &Client, endpoint: &SparqlEndpoint) -> HealthStatus {
+    pub(super) async fn check_sparql_health(
+        client: &Client,
+        endpoint: &SparqlEndpoint,
+    ) -> HealthStatus {
         let start = Instant::now();
         let service_id = endpoint.id.clone();
         let query = "ASK { ?s ?p ?o }";

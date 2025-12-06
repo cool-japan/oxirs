@@ -155,6 +155,12 @@ pub struct ProbLogEngine {
     probabilistic_rules: Vec<ProbabilisticRule>,
     /// Cached query results
     query_cache: HashMap<RuleAtom, f64>,
+    /// Recursion stack for cycle detection
+    recursion_stack: HashSet<RuleAtom>,
+    /// Maximum recursion depth
+    max_depth: usize,
+    /// Current recursion depth
+    current_depth: usize,
     /// Statistics
     pub stats: ProbLogStats,
 }
@@ -181,8 +187,18 @@ impl ProbLogEngine {
             deterministic_facts: HashSet::new(),
             probabilistic_rules: Vec::new(),
             query_cache: HashMap::new(),
+            recursion_stack: HashSet::new(),
+            max_depth: 100,
+            current_depth: 0,
             stats: ProbLogStats::default(),
         }
+    }
+
+    /// Create a new engine with custom max recursion depth
+    pub fn with_max_depth(max_depth: usize) -> Self {
+        let mut engine = Self::new();
+        engine.max_depth = max_depth;
+        engine
     }
 
     /// Add a probabilistic fact
@@ -214,6 +230,24 @@ impl ProbLogEngine {
         self.stats.queries += 1;
         PROBLOG_QUERIES.inc();
 
+        // Check recursion depth
+        if self.current_depth > self.max_depth {
+            return Err(anyhow!(
+                "Maximum recursion depth exceeded: {}",
+                self.max_depth
+            ));
+        }
+
+        // Check for cycles
+        if self.recursion_stack.contains(query) {
+            // Cycle detected - return 0.0 to prevent infinite recursion
+            // NOTE: This prevents stack overflow but doesn't compute the correct
+            // probability for transitive/recursive rules. A proper solution would
+            // require fixpoint iteration with bottom-up materialization.
+            // See: https://github.com/ML-KULeuven/problog for reference implementation
+            return Ok(0.0);
+        }
+
         // Check cache
         if let Some(&prob) = self.query_cache.get(query) {
             self.stats.cache_hits += 1;
@@ -233,9 +267,17 @@ impl ProbLogEngine {
             return Ok(prob);
         }
 
+        // Add to recursion stack
+        self.recursion_stack.insert(query.clone());
+        self.current_depth += 1;
+
         // Try to derive using rules
         let prob = self.derive_probability(query)?;
         self.query_cache.insert(query.clone(), prob);
+
+        // Remove from recursion stack
+        self.recursion_stack.remove(query);
+        self.current_depth -= 1;
 
         Ok(prob)
     }
@@ -877,6 +919,49 @@ mod tests {
         let prob = engine.query_probability(&create_triple("john", "related", "mary"))?;
 
         assert!((prob - 0.95).abs() < 0.001, "Expected 0.95, got {}", prob);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_cycle_detection() -> Result<()> {
+        let mut engine = ProbLogEngine::new();
+
+        // Add facts for cycle: a->b, b->c, c->a
+        engine.add_fact(create_triple("a", "edge", "b"));
+        engine.add_fact(create_triple("b", "edge", "c"));
+        engine.add_fact(create_triple("c", "edge", "a"));
+
+        // Add recursive rule: edge(X,Y), path(Y,Z) -> path(X,Z)
+        engine.add_rule(ProbabilisticRule::deterministic(Rule {
+            name: "path_transitive".to_string(),
+            body: vec![
+                RuleAtom::Triple {
+                    subject: Term::Variable("X".to_string()),
+                    predicate: Term::Constant("edge".to_string()),
+                    object: Term::Variable("Y".to_string()),
+                },
+                RuleAtom::Triple {
+                    subject: Term::Variable("Y".to_string()),
+                    predicate: Term::Constant("path".to_string()),
+                    object: Term::Variable("Z".to_string()),
+                },
+            ],
+            head: vec![RuleAtom::Triple {
+                subject: Term::Variable("X".to_string()),
+                predicate: Term::Constant("path".to_string()),
+                object: Term::Variable("Z".to_string()),
+            }],
+        }));
+
+        // Query should not crash (cycle detection prevents stack overflow)
+        let prob = engine.query_probability(&create_triple("a", "path", "a"))?;
+
+        // Due to cycle detection, this will return 0.0 (not the correct answer, but prevents crash)
+        assert_eq!(
+            prob, 0.0,
+            "Cycle detection should return 0.0 for cyclic queries"
+        );
 
         Ok(())
     }

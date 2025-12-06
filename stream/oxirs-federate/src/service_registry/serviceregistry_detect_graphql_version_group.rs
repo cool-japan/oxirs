@@ -5,11 +5,12 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use anyhow::Result;
+use std::time::Duration;
 
 impl ServiceRegistry {
     /// Detect GraphQL specification version from schema features
-    async fn detect_graphql_version(&self, schema: &str) -> String {
+    pub(super) async fn detect_graphql_version(&self, schema: &str) -> String {
         if schema.contains("@oneOf") || schema.contains("__DirectiveLocation.ARGUMENT_DEFINITION") {
             return "October 2021".to_string();
         }
@@ -22,11 +23,11 @@ impl ServiceRegistry {
         "October 2015".to_string()
     }
     /// Detect subscription support from schema
-    async fn detect_subscription_support(&self, schema: &str) -> bool {
+    pub(super) async fn detect_subscription_support(&self, schema: &str) -> bool {
         schema.contains("subscriptionType") && !schema.contains("\"subscriptionType\": null")
     }
     /// Detect federation version from schema directives
-    async fn detect_federation_version(&self, schema: &str) -> Option<String> {
+    pub(super) async fn detect_federation_version(&self, schema: &str) -> Option<String> {
         if schema.contains("@federation__") || schema.contains("_service") {
             if schema.contains("@shareable") || schema.contains("@inaccessible") {
                 return Some("v2.0".to_string());
@@ -37,7 +38,7 @@ impl ServiceRegistry {
         None
     }
     /// Estimate maximum query depth by testing increasingly deep queries
-    async fn estimate_max_query_depth(&self, endpoint_url: &str) -> Result<u32> {
+    pub(super) async fn estimate_max_query_depth(&self, endpoint_url: &str) -> Result<u32> {
         for depth in 1u32..=20u32 {
             let mut query = String::from("query { __schema { ");
             for _ in 0..depth {
@@ -73,7 +74,7 @@ impl ServiceRegistry {
         Ok(20)
     }
     /// Estimate maximum query complexity by testing increasingly complex queries
-    async fn estimate_max_query_complexity(&self, endpoint_url: &str) -> Result<u32> {
+    pub(super) async fn estimate_max_query_complexity(&self, endpoint_url: &str) -> Result<u32> {
         for complexity in &[10, 50, 100, 500, 1000, 5000] {
             let mut query = String::from("query { __schema { types { name kind description ");
             for i in 0..*complexity / 10 {

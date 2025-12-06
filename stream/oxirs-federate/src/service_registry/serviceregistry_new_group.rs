@@ -5,7 +5,19 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
+use super::types::{
+    ConnectionConfig, FederationDirectives, GraphQLCapabilities, GraphQLService, HealthState,
+    HealthStatus, PerformanceStats, RegistryConfig, SparqlCapabilities, SparqlEndpoint,
+};
+use anyhow::{anyhow, Result};
+use chrono::Utc;
+use dashmap::DashMap;
+use parking_lot::RwLock;
+use reqwest::Client;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use tracing::{debug, info};
+use url::Url;
 
 impl ServiceRegistry {
     /// Create a new service registry with default configuration
@@ -159,7 +171,10 @@ impl ServiceRegistry {
         Ok(())
     }
     /// Test different result formats
-    async fn detect_result_formats(&self, endpoint_url: &str) -> Result<HashSet<String>> {
+    pub(super) async fn detect_result_formats(
+        &self,
+        endpoint_url: &str,
+    ) -> Result<HashSet<String>> {
         let mut formats = HashSet::new();
         let test_query = "SELECT ?s WHERE { ?s ?p ?o } LIMIT 1";
         let format_types = vec![
@@ -184,7 +199,10 @@ impl ServiceRegistry {
         Ok(formats)
     }
     /// Test supported graph formats
-    async fn detect_graph_formats(&self, _endpoint_url: &str) -> Result<HashSet<String>> {
+    pub(super) async fn detect_graph_formats(
+        &self,
+        _endpoint_url: &str,
+    ) -> Result<HashSet<String>> {
         let mut formats = HashSet::new();
         formats.insert("text/turtle".to_string());
         formats.insert("application/rdf+xml".to_string());
@@ -193,7 +211,10 @@ impl ServiceRegistry {
         Ok(formats)
     }
     /// Discover custom functions available
-    async fn discover_custom_functions(&self, endpoint_url: &str) -> Result<HashSet<String>> {
+    pub(super) async fn discover_custom_functions(
+        &self,
+        endpoint_url: &str,
+    ) -> Result<HashSet<String>> {
         let mut functions = HashSet::new();
         let sd_query = r#"
             SELECT DISTINCT ?function WHERE {

@@ -5,11 +5,16 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use anyhow::{anyhow, Result};
+use std::time::Duration;
 
 impl ServiceRegistry {
     /// Helper method to test a SPARQL query
-    async fn test_sparql_query(&self, endpoint_url: &str, query: &str) -> Result<String> {
+    pub(super) async fn test_sparql_query(
+        &self,
+        endpoint_url: &str,
+        query: &str,
+    ) -> Result<String> {
         let response = self
             .http_client
             .post(endpoint_url)

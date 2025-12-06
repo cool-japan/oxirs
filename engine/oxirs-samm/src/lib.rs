@@ -183,7 +183,7 @@ pub mod comparison;
 pub mod documentation;
 pub mod error;
 pub mod generators;
-// pub mod graph_analytics;  // TODO: Enable when scirs2-graph API stabilizes (v1.0.0)
+pub mod graph_analytics;
 pub mod metamodel;
 pub mod migration;
 pub mod package;
@@ -219,9 +219,9 @@ pub use comparison::{MetadataChange, MetadataChangeType, ModelComparison, Proper
 pub use documentation::{DocumentationFormat, DocumentationGenerator, DocumentationStyle};
 pub use error::{ErrorCategory, Result, SammError, SourceLocation};
 pub use generators::{GeneratedFile, MultiFileGenerator, MultiFileOptions, OutputLayout};
-// pub use graph_analytics::{
-//     CentralityMetrics, Community, Cycle, GraphMetrics, ModelGraph,
-// };
+pub use graph_analytics::{
+    CentralityMetrics, ColorScheme, Community, Cycle, GraphMetrics, ModelGraph, VisualizationStyle,
+};
 pub use metamodel::{Aspect, Characteristic, Entity, Operation, Property};
 pub use migration::{MigrationOptions, MigrationResult, ModelMigrator, SammVersion};
 pub use parser::{ErrorRecoveryStrategy, RecoveryAction, RecoveryContext, StreamingParser};

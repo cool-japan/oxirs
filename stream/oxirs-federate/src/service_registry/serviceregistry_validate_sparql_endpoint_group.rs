@@ -5,11 +5,12 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use super::types::SparqlEndpoint;
+use anyhow::{anyhow, Result};
 
 impl ServiceRegistry {
     /// Validate SPARQL endpoint
-    async fn validate_sparql_endpoint(&self, endpoint: &SparqlEndpoint) -> Result<()> {
+    pub(super) async fn validate_sparql_endpoint(&self, endpoint: &SparqlEndpoint) -> Result<()> {
         if endpoint.url.scheme() != "http" && endpoint.url.scheme() != "https" {
             return Err(anyhow!("Invalid URL scheme: {}", endpoint.url.scheme()));
         }

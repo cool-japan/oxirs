@@ -200,6 +200,95 @@ pub struct MLModelWeights {
     pub trained_at: SystemTime,
 }
 
+/// Query result tracking for success rate calculation
+#[derive(Debug, Clone, Default)]
+struct QueryMetrics {
+    /// Total queries executed
+    total_queries: u64,
+    /// Successful queries
+    successful_queries: u64,
+    /// Failed queries
+    failed_queries: u64,
+}
+
+impl QueryMetrics {
+    /// Calculate success rate (0.0-1.0)
+    fn success_rate(&self) -> f64 {
+        if self.total_queries == 0 {
+            1.0 // No queries yet, assume healthy
+        } else {
+            self.successful_queries as f64 / self.total_queries as f64
+        }
+    }
+
+    /// Record a successful query
+    fn record_success(&mut self) {
+        self.total_queries += 1;
+        self.successful_queries += 1;
+    }
+
+    /// Record a failed query
+    fn record_failure(&mut self) {
+        self.total_queries += 1;
+        self.failed_queries += 1;
+    }
+}
+
+/// System metrics for CPU and memory utilization
+#[derive(Debug, Clone, Default)]
+struct SystemMetrics {
+    /// CPU utilization samples
+    cpu_samples: Vec<f64>,
+    /// Memory utilization samples
+    mem_samples: Vec<f64>,
+    /// Maximum samples to keep
+    max_samples: usize,
+}
+
+impl SystemMetrics {
+    fn new() -> Self {
+        Self {
+            cpu_samples: Vec::new(),
+            mem_samples: Vec::new(),
+            max_samples: 60, // Keep last 60 samples (1 minute at 1 sample/sec)
+        }
+    }
+
+    /// Record CPU utilization sample
+    fn record_cpu(&mut self, cpu_util: f64) {
+        self.cpu_samples.push(cpu_util.clamp(0.0, 1.0));
+        if self.cpu_samples.len() > self.max_samples {
+            self.cpu_samples.remove(0);
+        }
+    }
+
+    /// Record memory utilization sample
+    fn record_mem(&mut self, mem_util: f64) {
+        self.mem_samples.push(mem_util.clamp(0.0, 1.0));
+        if self.mem_samples.len() > self.max_samples {
+            self.mem_samples.remove(0);
+        }
+    }
+
+    /// Get average CPU utilization
+    fn avg_cpu(&self) -> f64 {
+        if self.cpu_samples.is_empty() {
+            0.0
+        } else {
+            self.cpu_samples.iter().sum::<f64>() / self.cpu_samples.len() as f64
+        }
+    }
+
+    /// Get average memory utilization
+    fn avg_mem(&self) -> f64 {
+        if self.mem_samples.is_empty() {
+            0.0
+        } else {
+            self.mem_samples.iter().sum::<f64>() / self.mem_samples.len() as f64
+        }
+    }
+}
+
 /// Read replica manager
 pub struct ReadReplicaManager {
     config: ReadReplicaConfig,
@@ -215,6 +304,10 @@ pub struct ReadReplicaManager {
     ml_selection_counter: Counter,
     /// Historical performance data for ML model
     performance_history: Arc<RwLock<Vec<ReplicaPerformanceSnapshot>>>,
+    /// Query metrics per replica for success rate tracking
+    query_metrics: Arc<RwLock<HashMap<OxirsNodeId, QueryMetrics>>>,
+    /// System metrics per replica for CPU/memory tracking
+    system_metrics: Arc<RwLock<HashMap<OxirsNodeId, SystemMetrics>>>,
 }
 
 impl ReadReplicaManager {
@@ -228,6 +321,8 @@ impl ReadReplicaManager {
             stats: Arc::new(RwLock::new(ReplicationStats::default())),
             ml_selection_counter: Counter::new("ml_replica_selections".to_string()),
             performance_history: Arc::new(RwLock::new(Vec::new())),
+            query_metrics: Arc::new(RwLock::new(HashMap::new())),
+            system_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -409,15 +504,33 @@ impl ReadReplicaManager {
 
     /// Record performance snapshot for ML model training
     async fn record_performance_snapshot(&self, info: &ReadReplicaInfo) {
+        // Get actual system metrics for this replica
+        let system_metrics = self.system_metrics.read().await;
+        let (cpu_util, mem_util) = if let Some(metrics) = system_metrics.get(&info.node_id) {
+            (metrics.avg_cpu(), metrics.avg_mem())
+        } else {
+            (0.0, 0.0)
+        };
+        drop(system_metrics);
+
+        // Get actual query success rate for this replica
+        let query_metrics = self.query_metrics.read().await;
+        let success_rate = if let Some(metrics) = query_metrics.get(&info.node_id) {
+            metrics.success_rate()
+        } else {
+            1.0
+        };
+        drop(query_metrics);
+
         let snapshot = ReplicaPerformanceSnapshot {
             node_id: info.node_id,
             timestamp: SystemTime::now(),
             latency_ms: info.avg_query_latency_ms,
             connections: info.active_connections,
             lag_ms: info.replication_lag_ms,
-            cpu_util: 0.0,     // TODO: Integrate with system metrics
-            mem_util: 0.0,     // TODO: Integrate with system metrics
-            success_rate: 1.0, // TODO: Track query success rate
+            cpu_util,
+            mem_util,
+            success_rate,
         };
 
         let mut history = self.performance_history.write().await;
@@ -695,6 +808,71 @@ impl ReadReplicaManager {
         if let Some(info) = replicas.get_mut(&node_id) {
             info.last_health_check = Some(SystemTime::now());
         }
+    }
+
+    /// Record a successful query for a replica (for success rate tracking)
+    pub async fn record_query_success(&self, node_id: OxirsNodeId) {
+        let mut metrics = self.query_metrics.write().await;
+        metrics
+            .entry(node_id)
+            .or_insert_with(QueryMetrics::default)
+            .record_success();
+    }
+
+    /// Record a failed query for a replica (for success rate tracking)
+    pub async fn record_query_failure(&self, node_id: OxirsNodeId) {
+        let mut metrics = self.query_metrics.write().await;
+        metrics
+            .entry(node_id)
+            .or_insert_with(QueryMetrics::default)
+            .record_failure();
+    }
+
+    /// Update CPU utilization for a replica
+    ///
+    /// # Arguments
+    /// * `node_id` - The replica node ID
+    /// * `cpu_util` - CPU utilization percentage (0.0-1.0)
+    pub async fn update_cpu_utilization(&self, node_id: OxirsNodeId, cpu_util: f64) {
+        let mut metrics = self.system_metrics.write().await;
+        metrics
+            .entry(node_id)
+            .or_insert_with(SystemMetrics::new)
+            .record_cpu(cpu_util);
+    }
+
+    /// Update memory utilization for a replica
+    ///
+    /// # Arguments
+    /// * `node_id` - The replica node ID
+    /// * `mem_util` - Memory utilization percentage (0.0-1.0)
+    pub async fn update_memory_utilization(&self, node_id: OxirsNodeId, mem_util: f64) {
+        let mut metrics = self.system_metrics.write().await;
+        metrics
+            .entry(node_id)
+            .or_insert_with(SystemMetrics::new)
+            .record_mem(mem_util);
+    }
+
+    /// Get query success rate for a replica
+    pub async fn get_query_success_rate(&self, node_id: OxirsNodeId) -> f64 {
+        let metrics = self.query_metrics.read().await;
+        metrics
+            .get(&node_id)
+            .map(|m| m.success_rate())
+            .unwrap_or(1.0)
+    }
+
+    /// Get average CPU utilization for a replica
+    pub async fn get_avg_cpu_utilization(&self, node_id: OxirsNodeId) -> f64 {
+        let metrics = self.system_metrics.read().await;
+        metrics.get(&node_id).map(|m| m.avg_cpu()).unwrap_or(0.0)
+    }
+
+    /// Get average memory utilization for a replica
+    pub async fn get_avg_memory_utilization(&self, node_id: OxirsNodeId) -> f64 {
+        let metrics = self.system_metrics.read().await;
+        metrics.get(&node_id).map(|m| m.avg_mem()).unwrap_or(0.0)
     }
 }
 

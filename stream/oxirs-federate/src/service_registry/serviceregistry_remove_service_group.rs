@@ -5,7 +5,8 @@
 //! 🤖 Generated with [SplitRS](https://github.com/cool-japan/splitrs)
 
 use super::serviceregistry_type::ServiceRegistry;
-use std::collections::{HashMap, HashSet};
+use anyhow::{anyhow, Result};
+use tracing::info;
 
 impl ServiceRegistry {
     /// Remove a service
@@ -16,7 +17,7 @@ impl ServiceRegistry {
         self.health_status.remove(service_id);
         self.extended_metadata.remove(service_id);
         self.service_patterns.remove(service_id);
-        let mut cache = self.capabilities_cache.write().await;
+        let mut cache = self.capabilities_cache.write();
         cache.remove(service_id);
         Ok(())
     }

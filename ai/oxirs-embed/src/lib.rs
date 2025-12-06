@@ -171,7 +171,7 @@ pub mod quantum_circuits;
 pub mod real_time_fine_tuning;
 pub mod real_time_optimization;
 pub mod research_networks;
-// pub mod revolutionary_optimization; // Temporarily disabled - requires scirs2-core beta.4 APIs
+// pub mod revolutionary_optimization; // Partially enabled - requires additional API updates
 pub mod sparql_extension;
 pub mod storage_backend;
 pub mod temporal_embeddings;
@@ -751,14 +751,14 @@ pub use crate::performance_profiler::{
 };
 
 // Re-export revolutionary optimization types
-// Temporarily disabled - requires scirs2-core beta.4 APIs
+// Temporarily disabled - requires additional scirs2-core API updates
 /*
 pub use revolutionary_optimization::{
-    RevolutionaryEmbeddingOptimizer, RevolutionaryOptimizationConfig, QuantumOptimizationStrategy,
-    StreamingOptimizationConfig, AdvancedMemoryConfig, PerformanceTargets,
-    EmbeddingOptimizationResult, SimilarityOptimizationResult, OptimizationStrategy,
-    OptimizationStatistics, RevolutionaryEmbeddingOptimizerFactory, QuantumEmbeddingState,
-    SimilarityComputationMethod, OptimizationPriority,
+    AdvancedMemoryConfig, EmbeddingOptimizationResult, OptimizationPriority, OptimizationStatistics,
+    OptimizationStrategy, PerformanceTargets, QuantumEmbeddingState, QuantumOptimizationStrategy,
+    RevolutionaryEmbeddingOptimizer, RevolutionaryEmbeddingOptimizerFactory,
+    RevolutionaryOptimizationConfig, SimilarityComputationMethod, SimilarityOptimizationResult,
+    StreamingOptimizationConfig,
 };
 */
 
@@ -902,7 +902,7 @@ pub mod quick_start {
         duration
     }
 
-    // Temporarily disabled - requires revolutionary_optimization module (scirs2-core beta.4)
+    // Revolutionary optimizer functions temporarily disabled - requires API updates
     /*
     /// Create a revolutionary embedding optimizer with quantum focus
     pub async fn create_quantum_optimizer() -> anyhow::Result<RevolutionaryEmbeddingOptimizer> {

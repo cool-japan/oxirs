@@ -360,6 +360,28 @@ pub use stream_fusion::{
     FusionStats, Operation,
 };
 
+// Complex Event Processing (CEP) engine exports
+pub use cep_engine::{
+    CepAggregationFunction, CepConfig, CepEngine, CepMetrics, CepStatistics, CompleteMatch,
+    CorrelationFunction, CorrelationResult, CorrelationStats, DetectedPattern, DetectionAlgorithm,
+    DetectionStats, EnrichmentData, EnrichmentService, EnrichmentSource, EnrichmentSourceType,
+    EnrichmentStats, EventBuffer, EventCorrelator, EventPattern, FieldPredicate, PartialMatch,
+    PatternDetector, ProcessingRule, RuleAction, RuleCondition, RuleEngine, RuleExecutionStats,
+    State, StateMachine, TemporalOperator, TimestampedEvent,
+};
+
+// Data quality and validation framework exports
+pub use data_quality::{
+    AlertCondition as QualityAlertCondition, AlertManager as QualityAlertManager,
+    AlertRule as QualityAlertRule, AlertSeverity as QualityAlertSeverity,
+    AlertStats as QualityAlertStats, AlertType as QualityAlertType, AuditAction, AuditEntry,
+    AuditStats, AuditTrail, CleansingRule, CleansingStats, CorrectionType, DataCleanser,
+    DataCorrection, DataProfiler, DataQualityValidator, DuplicateDetector, DuplicateStats,
+    FailureSeverity, FieldProfile, OutlierMethod, ProfileStats, ProfiledEvent, QualityAlert,
+    QualityConfig, QualityDimension, QualityMetrics, QualityReport, QualityScorer, ScoringStats,
+    ValidationFailure, ValidationResult as QualityValidationResult, ValidationRule,
+};
+
 pub mod backend;
 pub mod backend_optimizer;
 pub mod backpressure;
@@ -459,6 +481,12 @@ pub mod adaptive_load_shedding;
 
 // Stream fusion optimizer module
 pub mod stream_fusion;
+
+// Complex Event Processing (CEP) engine module
+pub mod cep_engine;
+
+// Data quality and validation framework module
+pub mod data_quality;
 
 /// Enhanced stream configuration with advanced features
 #[derive(Debug, Clone, Serialize, Deserialize)]
