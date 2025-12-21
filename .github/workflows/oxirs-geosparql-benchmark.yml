@@ -76,7 +76,7 @@ jobs:
 
       # Upload raw benchmark results as artifacts
       - name: Upload benchmark artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-results-${{ github.sha }}
           path: |
@@ -136,7 +136,7 @@ jobs:
           echo "Note: Use \`cargo bench --package oxirs-geosparql compare_benchmarks\` for detailed comparison" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload comparison
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: benchmark-comparison-${{ github.sha }}
           path: |
@@ -171,7 +171,7 @@ jobs:
           cargo flamegraph --bench spatial_operations -- --bench || true
 
       - name: Upload flamegraphs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: flamegraphs-${{ github.sha }}
           path: |
